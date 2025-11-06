@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import NotificationManager from "../components/notifications/NotificationManager";
 
 export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState("all");
@@ -66,6 +68,8 @@ export default function Tasks() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
+      <NotificationManager />
+      
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

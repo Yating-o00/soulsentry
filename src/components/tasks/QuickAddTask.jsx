@@ -8,8 +8,10 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Plus, Sparkles } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Sparkles, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import NotificationSettings from "../notifications/NotificationSettings";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const CATEGORIES = [
   { value: "work", label: "工作", color: "bg-blue-500" },
@@ -31,6 +33,7 @@ const PRIORITIES = [
 
 export default function QuickAddTask({ onAdd }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [task, setTask] = useState({
     title: "",
     description: "",
@@ -40,6 +43,10 @@ export default function QuickAddTask({ onAdd }) {
     category: "personal",
     repeat_rule: "none",
     is_all_day: false,
+    notification_sound: "default",
+    persistent_reminder: false,
+    notification_interval: 15,
+    advance_reminders: [],
   });
 
   const handleSubmit = (e) => {
@@ -67,8 +74,13 @@ export default function QuickAddTask({ onAdd }) {
       category: "personal",
       repeat_rule: "none",
       is_all_day: false,
+      notification_sound: "default",
+      persistent_reminder: false,
+      notification_interval: 15,
+      advance_reminders: [],
     });
     setIsExpanded(false);
+    setShowSettings(false);
   };
 
   return (
@@ -201,6 +213,25 @@ export default function QuickAddTask({ onAdd }) {
                 </Select>
               </div>
 
+              <Collapsible open={showSettings} onOpenChange={setShowSettings}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-0 bg-slate-50 hover:bg-slate-100 rounded-xl"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    {showSettings ? "收起" : "展开"}通知设置
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4">
+                  <NotificationSettings
+                    taskDefaults={task}
+                    onUpdate={(settings) => setTask({ ...task, ...settings })}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+
               <div className="flex items-center gap-3 pt-2">
                 <Button
                   type="submit"
@@ -213,7 +244,10 @@ export default function QuickAddTask({ onAdd }) {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsExpanded(false)}
+                  onClick={() => {
+                    setIsExpanded(false);
+                    setShowSettings(false);
+                  }}
                   className="rounded-xl"
                 >
                   取消

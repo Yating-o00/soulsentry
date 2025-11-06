@@ -18,7 +18,10 @@ import {
   Users,
   ShoppingCart,
   Wallet,
-  MoreHorizontal
+  MoreHorizontal,
+  Bell,
+  Volume2,
+  Snooze
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -61,7 +64,8 @@ const PRIORITY_LABELS = {
 export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
   const CategoryIcon = CATEGORY_ICONS[task.category] || MoreHorizontal;
   const isCompleted = task.status === "completed";
-  const isPast = new Date(task.reminder_time) < new Date() && !isCompleted;
+  const isSnoozed = task.status === "snoozed";
+  const isPast = new Date(task.reminder_time) < new Date() && !isCompleted && !isSnoozed;
 
   return (
     <motion.div
@@ -73,6 +77,8 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
       <Card className={`group p-5 border-0 shadow-lg hover:shadow-xl transition-all duration-300 ${
         isCompleted 
           ? 'bg-slate-50/50 opacity-70' 
+          : isSnoozed
+          ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400'
           : isPast 
           ? 'bg-red-50/50 border-l-4 border-l-red-400' 
           : 'bg-white hover:scale-[1.02]'
@@ -131,7 +137,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
                 className="rounded-lg"
               >
                 <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[task.priority]}`} />
-                {format(new Date(task.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
+                {format(new Date(isSnoozed ? task.snooze_until : task.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
               </Badge>
 
               {task.repeat_rule !== "none" && (
@@ -150,7 +156,28 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
                 {PRIORITY_LABELS[task.priority]}
               </Badge>
 
-              {isPast && !isCompleted && (
+              {task.persistent_reminder && (
+                <Badge className="bg-purple-500 text-white rounded-lg">
+                  <Bell className="w-3 h-3 mr-1" />
+                  持续提醒
+                </Badge>
+              )}
+
+              {task.advance_reminders && task.advance_reminders.length > 0 && (
+                <Badge variant="outline" className="rounded-lg text-blue-600 border-blue-300">
+                  <Volume2 className="w-3 h-3 mr-1" />
+                  提前{task.advance_reminders.length}次
+                </Badge>
+              )}
+
+              {isSnoozed && (
+                <Badge className="bg-yellow-500 text-white rounded-lg">
+                  <Snooze className="w-3 h-3 mr-1" />
+                  已推迟 {task.snooze_count}次
+                </Badge>
+              )}
+
+              {isPast && !isCompleted && !isSnoozed && (
                 <Badge className="bg-red-500 text-white rounded-lg">
                   已过期
                 </Badge>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCard from "../components/tasks/TaskCard";
 import QuickAddTask from "../components/tasks/QuickAddTask";
+import NotificationManager from "../components/notifications/NotificationManager";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("");
@@ -86,6 +88,8 @@ export default function Dashboard() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
+      <NotificationManager />
+      
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

@@ -21,7 +21,7 @@ import {
   MoreHorizontal,
   Bell,
   Volume2,
-  Snooze
+  TimerReset
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -172,7 +172,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
 
               {isSnoozed && (
                 <Badge className="bg-yellow-500 text-white rounded-lg">
-                  <Snooze className="w-3 h-3 mr-1" />
+                  <TimerReset className="w-3 h-3 mr-1" />
                   已推迟 {task.snooze_count}次
                 </Badge>
               )}

@@ -16,11 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import NotificationManager from "../components/notifications/NotificationManager";
+import TaskDetailModal from "../components/tasks/TaskDetailModal";
 
 export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTask, setSelectedTask] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: tasks = [], isLoading } = useQuery({
@@ -149,6 +151,7 @@ export default function Tasks() {
               onComplete={() => handleComplete(task)}
               onDelete={() => deleteTaskMutation.mutate(task.id)}
               onEdit={() => {}}
+              onClick={() => setSelectedTask(task)}
             />
           ))}
         </AnimatePresence>
@@ -167,6 +170,12 @@ export default function Tasks() {
           </motion.div>
         )}
       </motion.div>
+
+      <TaskDetailModal
+        task={selectedTask}
+        open={!!selectedTask}
+        onClose={() => setSelectedTask(null)}
+      />
     </div>
   );
 }

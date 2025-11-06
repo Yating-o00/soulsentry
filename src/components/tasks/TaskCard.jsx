@@ -1,8 +1,10 @@
+
 import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress"; // New import
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { 
@@ -21,7 +23,9 @@ import {
   MoreHorizontal,
   Bell,
   Volume2,
-  TimerReset
+  TimerReset,
+  FileText, // New import
+  StickyNote // New import
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -61,11 +65,30 @@ const PRIORITY_LABELS = {
   urgent: "紧急",
 };
 
-export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
+export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick }) {
   const CategoryIcon = CATEGORY_ICONS[task.category] || MoreHorizontal;
   const isCompleted = task.status === "completed";
   const isSnoozed = task.status === "snoozed";
   const isPast = new Date(task.reminder_time) < new Date() && !isCompleted && !isSnoozed;
+  const hasSubtasks = task.progress > 0 || false; // New derived value
+
+  const getRecurrenceText = () => { // New helper function
+    if (task.repeat_rule === "custom" && task.custom_recurrence) {
+      const rec = task.custom_recurrence;
+      if (rec.frequency === "weekly" && rec.days_of_week?.length > 0) {
+        return `每周${rec.days_of_week.length > 1 ? `${rec.days_of_week.length}天` : "一次"}`;
+      }
+      if (rec.frequency === "monthly" && rec.days_of_month?.length > 0) {
+        return `每月${rec.days_of_month.length > 1 ? `${rec.days_of_month.length}天` : "一次"}`;
+      }
+    }
+    return {
+      none: null,
+      daily: "每天",
+      weekly: "每周",
+      monthly: "每月",
+    }[task.repeat_rule];
+  };
 
   return (
     <motion.div
@@ -74,19 +97,26 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
       exit={{ opacity: 0, x: -100 }}
       layout
     >
-      <Card className={`group p-5 border-0 shadow-lg hover:shadow-xl transition-all duration-300 ${
-        isCompleted 
-          ? 'bg-slate-50/50 opacity-70' 
-          : isSnoozed
-          ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400'
-          : isPast 
-          ? 'bg-red-50/50 border-l-4 border-l-red-400' 
-          : 'bg-white hover:scale-[1.02]'
-      }`}>
+      <Card 
+        className={`group p-5 border-0 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer ${ // Added cursor-pointer
+          isCompleted 
+            ? 'bg-slate-50/50 opacity-70' 
+            : isSnoozed
+            ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400'
+            : isPast 
+            ? 'bg-red-50/50 border-l-4 border-l-red-400' 
+            : 'bg-white hover:scale-[1.02]'
+        }`}
+        onClick={onClick} // Added onClick handler
+      >
         <div className="flex items-start gap-4">
           <Checkbox
             checked={isCompleted}
-            onCheckedChange={onComplete}
+            onCheckedChange={(e) => { // Modified onCheckedChange
+              e.stopPropagation();
+              onComplete();
+            }}
+            onClick={(e) => e.stopPropagation()} // Added onClick to prevent card click
             className="mt-1 h-5 w-5 rounded-lg data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-green-500 data-[state=checked]:to-emerald-500"
           />
 
@@ -101,7 +131,10 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={onEdit}
+                  onClick={(e) => { // Modified onClick
+                    e.stopPropagation();
+                    onEdit();
+                  }}
                   className="h-8 w-8 hover:bg-blue-100 hover:text-blue-600 rounded-lg"
                 >
                   <Edit className="h-4 w-4" />
@@ -109,7 +142,10 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={onDelete}
+                  onClick={(e) => { // Modified onClick
+                    e.stopPropagation();
+                    onDelete();
+                  }}
                   className="h-8 w-8 hover:bg-red-100 hover:text-red-600 rounded-lg"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -121,6 +157,16 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
               <p className="text-sm text-slate-600 mb-3 line-clamp-2">
                 {task.description}
               </p>
+            )}
+
+            {hasSubtasks && ( // New conditional block for subtasks
+              <div className="mb-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs text-slate-500">进度</span>
+                  <span className="text-xs font-semibold text-purple-600">{task.progress}%</span>
+                </div>
+                <Progress value={task.progress} className="h-1.5" />
+              </div>
             )}
 
             <div className="flex flex-wrap items-center gap-2">
@@ -140,11 +186,10 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
                 {format(new Date(isSnoozed ? task.snooze_until : task.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
               </Badge>
 
-              {task.repeat_rule !== "none" && (
+              {getRecurrenceText() && ( // Modified condition and content
                 <Badge variant="outline" className="rounded-lg">
                   <Repeat className="w-3 h-3 mr-1 text-purple-500" />
-                  {task.repeat_rule === "daily" ? "每天" : 
-                   task.repeat_rule === "weekly" ? "每周" : "每月"}
+                  {getRecurrenceText()}
                 </Badge>
               )}
 
@@ -167,6 +212,20 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit }) {
                 <Badge variant="outline" className="rounded-lg text-blue-600 border-blue-300">
                   <Volume2 className="w-3 h-3 mr-1" />
                   提前{task.advance_reminders.length}次
+                </Badge>
+              )}
+
+              {task.attachments && task.attachments.length > 0 && ( // New badge
+                <Badge variant="outline" className="rounded-lg text-green-600 border-green-300">
+                  <FileText className="w-3 h-3 mr-1" />
+                  {task.attachments.length}个附件
+                </Badge>
+              )}
+
+              {task.notes && task.notes.length > 0 && ( // New badge
+                <Badge variant="outline" className="rounded-lg text-amber-600 border-amber-300">
+                  <StickyNote className="w-3 h-3 mr-1" />
+                  {task.notes.length}条笔记
                 </Badge>
               )}
 

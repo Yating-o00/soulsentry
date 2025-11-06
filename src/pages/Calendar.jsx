@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,9 +10,11 @@ import { zhCN } from "date-fns/locale";
 import { motion } from "framer-motion";
 import { Clock, CheckCircle2 } from "lucide-react";
 import TaskCard from "../components/tasks/TaskCard";
+import TaskDetailModal from "../components/tasks/TaskDetailModal";
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedTask, setSelectedTask] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: tasks = [] } = useQuery({
@@ -154,6 +157,7 @@ export default function CalendarPage() {
                   onComplete={() => handleComplete(task)}
                   onDelete={() => deleteTaskMutation.mutate(task.id)}
                   onEdit={() => {}}
+                  onClick={() => setSelectedTask(task)}
                 />
               ))
             ) : (
@@ -167,6 +171,12 @@ export default function CalendarPage() {
           </div>
         </motion.div>
       </div>
+
+      <TaskDetailModal
+        task={selectedTask}
+        open={!!selectedTask}
+        onClose={() => setSelectedTask(null)}
+      />
     </div>
   );
 }

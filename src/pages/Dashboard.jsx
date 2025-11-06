@@ -22,9 +22,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import TaskCard from "../components/tasks/TaskCard";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import NotificationManager from "../components/notifications/NotificationManager";
+import TaskDetailModal from "../components/tasks/TaskDetailModal";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("");
+  const [selectedTask, setSelectedTask] = useState(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -198,6 +200,7 @@ export default function Dashboard() {
                   onComplete={() => handleComplete(task)}
                   onDelete={() => deleteTaskMutation.mutate(task.id)}
                   onEdit={() => {}}
+                  onClick={() => setSelectedTask(task)}
                 />
               ))}
             </AnimatePresence>
@@ -224,6 +227,7 @@ export default function Dashboard() {
                   onComplete={() => handleComplete(task)}
                   onDelete={() => deleteTaskMutation.mutate(task.id)}
                   onEdit={() => {}}
+                  onClick={() => setSelectedTask(task)}
                 />
               ))}
             </AnimatePresence>
@@ -244,6 +248,12 @@ export default function Dashboard() {
           <p className="text-slate-600">暂时没有待办任务，享受轻松时光吧</p>
         </motion.div>
       )}
+
+      <TaskDetailModal
+        task={selectedTask}
+        open={!!selectedTask}
+        onClose={() => setSelectedTask(null)}
+      />
     </div>
   );
 }

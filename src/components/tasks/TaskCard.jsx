@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -300,42 +301,80 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
               exit={{ opacity: 0, height: 0 }}
               className="border-t-2 border-purple-100 bg-purple-50/30"
             >
-              {subtasks.map((subtask) => (
-                <motion.div
-                  key={subtask.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="px-5 py-3 ml-9 border-l-2 border-purple-300 hover:bg-white/50 transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <Checkbox
-                      checked={subtask.status === "completed"}
-                      onCheckedChange={(e) => {
-                        e?.stopPropagation?.();
-                        onSubtaskToggle?.(subtask);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-4 w-4 rounded data-[state=checked]:bg-green-500"
-                    />
-                    <span className={`flex-1 text-sm ${
-                      subtask.status === "completed" 
-                        ? 'line-through text-slate-400' 
-                        : 'text-slate-700'
-                    }`}>
-                      {subtask.title}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">
-                        <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[subtask.priority]}`} />
-                        {format(new Date(subtask.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
-                      </Badge>
-                      {subtask.status === "completed" && (
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      )}
+              {subtasks.map((subtask, subIndex) => {
+                const isSubtaskCompleted = subtask.status === "completed";
+                // 尝试从标题中提取序号，如果没有则使用索引
+                const titleMatch = subtask.title.match(/^(\d+)\.\s*/);
+                const orderNumber = titleMatch ? titleMatch[1] : (subIndex + 1);
+                const cleanTitle = titleMatch ? subtask.title.replace(/^\d+\.\s*/, '') : subtask.title;
+                
+                return (
+                  <motion.div
+                    key={subtask.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`px-5 py-3 ml-9 border-l-2 transition-all ${
+                      isSubtaskCompleted 
+                        ? 'border-green-300 bg-green-50/30' 
+                        : 'border-purple-300 hover:bg-white/50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* 子任务序号标识 */}
+                      <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        isSubtaskCompleted 
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-purple-500 text-white'
+                      }`}>
+                        {isSubtaskCompleted ? '✓' : orderNumber}
+                      </div>
+                      
+                      <Checkbox
+                        checked={isSubtaskCompleted}
+                        onCheckedChange={(e) => {
+                          e?.stopPropagation?.();
+                          onSubtaskToggle?.(subtask);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 rounded data-[state=checked]:bg-green-500 mt-0.5"
+                      />
+                      
+                      <div className="flex-1">
+                        <span className={`block text-sm font-medium mb-1 ${
+                          isSubtaskCompleted
+                            ? 'line-through text-slate-400' 
+                            : 'text-slate-700'
+                        }`}>
+                          {cleanTitle}
+                        </span>
+                        
+                        {subtask.description && (
+                          <p className="text-xs text-slate-500 mb-2">{subtask.description}</p>
+                        )}
+                        
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className="text-xs">
+                            <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[subtask.priority]}`} />
+                            {format(new Date(subtask.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
+                          </Badge>
+                          <Badge className={`text-xs ${
+                            isSubtaskCompleted 
+                              ? 'bg-green-500 text-white' 
+                              : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {isSubtaskCompleted ? '✅ 已完成' : '📌 待完成'}
+                          </Badge>
+                          {isSubtaskCompleted && subtask.completed_at && (
+                            <Badge variant="outline" className="text-xs text-green-600">
+                              {format(new Date(subtask.completed_at), "M月d日 完成", { locale: zhCN })}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </motion.div>
           )}
         </AnimatePresence>

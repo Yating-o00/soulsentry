@@ -116,7 +116,9 @@ export default function Tasks() {
       toast.loading("正在创建任务...", { id: 'bulk-create' });
 
       for (const taskData of parsedTasks) {
-        // 创建主任务，确保包含所有字段
+        const hasSubtasks = taskData.subtasks && taskData.subtasks.length > 0;
+        
+        // 创建主任务，确保包含所有字段和初始进度
         const mainTaskData = {
           title: taskData.title,
           description: taskData.description || "",
@@ -124,7 +126,7 @@ export default function Tasks() {
           priority: taskData.priority || "medium",
           category: taskData.category || "personal",
           status: "pending",
-          // 保留其他通知设置字段（如果存在）
+          progress: 0, // 初始进度为0
           notification_sound: taskData.notification_sound || "default",
           persistent_reminder: taskData.persistent_reminder || false,
           notification_interval: taskData.notification_interval || 15,
@@ -135,17 +137,18 @@ export default function Tasks() {
         createdCount++;
         
         // 如果有子任务，创建子任务
-        if (taskData.subtasks && taskData.subtasks.length > 0) {
-          for (const subtask of taskData.subtasks) {
+        if (hasSubtasks) {
+          for (let i = 0; i < taskData.subtasks.length; i++) {
+            const subtask = taskData.subtasks[i];
             const subtaskData = {
-              title: subtask.title,
+              title: `${subtask.order || i + 1}. ${subtask.title}`, // 添加序号到标题
               description: subtask.description || "",
               reminder_time: subtask.reminder_time,
               priority: subtask.priority || taskData.priority || "medium",
               category: taskData.category, // 子任务继承父任务的类别
               status: "pending",
               parent_task_id: createdMainTask.id, // 关联父任务
-              // 子任务继承父任务的通知设置
+              progress: 0, // 子任务也有progress字段
               notification_sound: taskData.notification_sound || "default",
               persistent_reminder: false, // 子任务默认不持续提醒
               advance_reminders: [],
@@ -158,7 +161,7 @@ export default function Tasks() {
       }
       
       toast.success(
-        `成功创建 ${createdCount} 个主任务${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子任务` : ''}！`,
+        `✅ 成功创建 ${createdCount} 个主任务${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子任务` : ''}！`,
         { id: 'bulk-create' }
       );
     } catch (error) {

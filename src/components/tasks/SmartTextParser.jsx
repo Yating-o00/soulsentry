@@ -36,6 +36,7 @@ ${text}
 2. 为每个任务提取：标题、描述、提醒时间、优先级、类别
 3. 子任务的提醒时间应该早于或等于父任务的提醒时间
 4. 如果文本中没有明确的层级关系，但任务可以拆解，请智能拆解
+5. 为子任务添加序号标识（如：步骤1、步骤2等）
 
 提醒时间规则：
 - 如果提到具体时间，转换为ISO格式
@@ -90,7 +91,8 @@ ${text}
                         priority: { 
                           type: "string",
                           enum: ["low", "medium", "high", "urgent"]
-                        }
+                        },
+                        order: { type: "number", description: "子任务的顺序序号" }
                       },
                       required: ["title", "reminder_time"]
                     }
@@ -341,7 +343,7 @@ ${text}
                         </Badge>
                         {task.subtasks && task.subtasks.length > 0 && (
                           <Badge className="bg-purple-500 text-white">
-                            {task.subtasks.length} 个子任务
+                            📋 {task.subtasks.length} 个子任务
                           </Badge>
                         )}
                       </div>
@@ -358,46 +360,56 @@ ${text}
                         {task.subtasks.map((subtask, subIndex) => (
                           <div
                             key={subIndex}
-                            className="p-3 ml-8 border-l-2 border-purple-300 hover:bg-white/50 transition-all"
+                            className="p-3 ml-8 border-l-2 border-purple-300 hover:bg-white/50 transition-all flex items-start gap-3"
                           >
-                            <div className="flex items-start justify-between gap-3 mb-2">
-                              <input
-                                type="text"
-                                value={subtask.title}
-                                onChange={(e) => handleEditSubtask(index, subIndex, 'title', e.target.value)}
-                                className="flex-1 font-medium text-slate-700 bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-sm"
-                              />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveSubtask(index, subIndex)}
-                                className="h-6 w-6 hover:bg-red-100 hover:text-red-600 rounded"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
+                            {/* 子任务序号标识 */}
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold mt-0.5">
+                              {subtask.order || subIndex + 1}
                             </div>
+                            
+                            <div className="flex-1">
+                              <div className="flex items-start justify-between gap-3 mb-2">
+                                <input
+                                  type="text"
+                                  value={subtask.title}
+                                  onChange={(e) => handleEditSubtask(index, subIndex, 'title', e.target.value)}
+                                  className="flex-1 font-medium text-slate-700 bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-sm"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRemoveSubtask(index, subIndex)}
+                                  className="h-6 w-6 hover:bg-red-100 hover:text-red-600 rounded"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </div>
 
-                            {subtask.description && (
-                              <textarea
-                                value={subtask.description}
-                                onChange={(e) => handleEditSubtask(index, subIndex, 'description', e.target.value)}
-                                className="text-xs text-slate-600 w-full bg-white rounded p-2 border-0 focus:ring-1 focus:ring-purple-300 mb-2 resize-none"
-                                rows={1}
-                              />
-                            )}
+                              {subtask.description && (
+                                <textarea
+                                  value={subtask.description}
+                                  onChange={(e) => handleEditSubtask(index, subIndex, 'description', e.target.value)}
+                                  className="text-xs text-slate-600 w-full bg-white rounded p-2 border-0 focus:ring-1 focus:ring-purple-300 mb-2 resize-none"
+                                  rows={1}
+                                />
+                              )}
 
-                            <div className="flex flex-wrap gap-1.5">
-                              <Badge className={`${PRIORITY_LABELS[subtask.priority]?.color} text-xs`}>
-                                {PRIORITY_LABELS[subtask.priority]?.label || subtask.priority}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                {new Date(subtask.reminder_time).toLocaleString('zh-CN', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </Badge>
+                              <div className="flex flex-wrap gap-1.5">
+                                <Badge className={`${PRIORITY_LABELS[subtask.priority]?.color} text-xs`}>
+                                  {PRIORITY_LABELS[subtask.priority]?.label || subtask.priority}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  ⏰ {new Date(subtask.reminder_time).toLocaleString('zh-CN', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs bg-slate-50">
+                                  📌 待完成
+                                </Badge>
+                              </div>
                             </div>
                           </div>
                         ))}

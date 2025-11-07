@@ -27,11 +27,14 @@ export default function Tasks() {
   const [selectedTask, setSelectedTask] = useState(null);
   const queryClient = useQueryClient();
 
-  const { data: tasks = [], isLoading } = useQuery({
+  const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-reminder_time'),
     initialData: [],
   });
+
+  // 只显示主任务（没有 parent_task_id 的任务）
+  const tasks = allTasks.filter(task => !task.parent_task_id);
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
@@ -68,6 +71,36 @@ export default function Tasks() {
       id: task.id,
       data: { status: newStatus }
     });
+  };
+
+  const handleSubtaskToggle = async (subtask) => {
+    const newStatus = subtask.status === "completed" ? "pending" : "completed";
+    
+    // 更新子任务状态
+    await updateTaskMutation.mutateAsync({
+      id: subtask.id,
+      data: { 
+        status: newStatus,
+        completed_at: newStatus === "completed" ? new Date().toISOString() : null
+      }
+    });
+
+    // 重新计算父任务进度
+    if (subtask.parent_task_id) {
+      const parentTask = allTasks.find(t => t.id === subtask.parent_task_id);
+      if (parentTask) {
+        const siblings = allTasks.filter(t => t.parent_task_id === subtask.parent_task_id);
+        const completed = siblings.filter(s => 
+          s.id === subtask.id ? newStatus === "completed" : s.status === "completed"
+        ).length;
+        const progress = siblings.length > 0 ? Math.round((completed / siblings.length) * 100) : 0;
+
+        await updateTaskMutation.mutateAsync({
+          id: parentTask.id,
+          data: { progress }
+        });
+      }
+    }
   };
 
   const handleBulkCreate = async (parsedTasks) => {
@@ -224,6 +257,7 @@ export default function Tasks() {
               onDelete={() => deleteTaskMutation.mutate(task.id)}
               onEdit={() => {}}
               onClick={() => setSelectedTask(task)}
+              onSubtaskToggle={handleSubtaskToggle}
             />
           ))}
         </AnimatePresence>

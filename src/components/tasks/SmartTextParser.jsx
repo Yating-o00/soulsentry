@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,19 +123,11 @@ ${text}
   const handleCreateAll = async () => {
     if (parsedTasks.length === 0) return;
     
-    // 转换为扁平结构，创建父子关系
-    const tasksToCreate = [];
-    for (const task of parsedTasks) {
-      const mainTask = {
-        ...task,
-        subtasks: undefined, // 移除subtasks字段，因为实体不需要它
-      };
-      tasksToCreate.push(mainTask);
-    }
-    
-    onTasksGenerated(tasksToCreate, parsedTasks); // 传递原始结构用于创建子任务
+    // 直接传递完整的解析结果，包含主任务和子任务的层级结构
+    onTasksGenerated(parsedTasks);
     setParsedTasks([]);
     setText("");
+    setExpandedTasks(new Set());
   };
 
   const handleRemoveTask = (index) => {

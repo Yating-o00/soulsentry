@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/select";
 import NotificationManager from "../components/notifications/NotificationManager";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import SmartTextParser from "../components/tasks/SmartTextParser";
+import { toast } from "sonner";
 
 export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState("all");
@@ -68,6 +70,17 @@ export default function Tasks() {
     });
   };
 
+  const handleBulkCreate = async (tasksToCreate) => {
+    try {
+      for (const task of tasksToCreate) {
+        await createTaskMutation.mutateAsync(task);
+      }
+      toast.success(`成功创建 ${tasksToCreate.length} 个任务！`);
+    } catch (error) {
+      toast.error("创建任务时出错");
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
       <NotificationManager />
@@ -82,7 +95,10 @@ export default function Tasks() {
         <p className="text-slate-600">管理您的所有任务和提醒</p>
       </motion.div>
 
-      <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+        <SmartTextParser onTasksGenerated={handleBulkCreate} />
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

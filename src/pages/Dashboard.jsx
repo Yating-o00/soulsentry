@@ -23,6 +23,9 @@ import TaskCard from "../components/tasks/TaskCard";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import NotificationManager from "../components/notifications/NotificationManager";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import SmartTextParser from "../components/tasks/SmartTextParser"; // Added import
+import { toast } from "sonner"; // Added import for toast notifications
+
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("");
@@ -86,6 +89,18 @@ export default function Dashboard() {
       id: task.id,
       data: { status: newStatus }
     });
+  };
+
+  const handleBulkCreate = async (tasks) => {
+    try {
+      for (const task of tasks) {
+        await createTaskMutation.mutateAsync(task);
+      }
+      toast.success(`成功创建 ${tasks.length} 个任务！`);
+    } catch (error) {
+      toast.error("创建任务时出错");
+      console.error("Error creating bulk tasks:", error);
+    }
   };
 
   return (
@@ -179,7 +194,10 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
-      <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+        <SmartTextParser onTasksGenerated={handleBulkCreate} />
+      </div>
 
       {todayTasks.length > 0 && (
         <motion.div

@@ -70,14 +70,53 @@ export default function Tasks() {
     });
   };
 
-  const handleBulkCreate = async (tasksToCreate) => {
+  const handleBulkCreate = async (tasksData, originalStructure) => {
     try {
-      for (const task of tasksToCreate) {
-        await createTaskMutation.mutateAsync(task);
+      // 如果有原始结构（包含子任务），则处理层级关系
+      if (originalStructure && originalStructure.length > 0) {
+        for (const taskWithSubs of originalStructure) {
+          // 创建主任务
+          const mainTaskData = {
+            title: taskWithSubs.title,
+            description: taskWithSubs.description,
+            reminder_time: taskWithSubs.reminder_time,
+            priority: taskWithSubs.priority,
+            category: taskWithSubs.category,
+            status: "pending",
+          };
+          
+          const createdMainTask = await createTaskMutation.mutateAsync(mainTaskData);
+          
+          // 如果有子任务，创建子任务
+          if (taskWithSubs.subtasks && taskWithSubs.subtasks.length > 0) {
+            for (const subtask of taskWithSubs.subtasks) {
+              await createTaskMutation.mutateAsync({
+                title: subtask.title,
+                description: subtask.description,
+                reminder_time: subtask.reminder_time,
+                priority: subtask.priority,
+                category: taskWithSubs.category, // 继承父任务的类别
+                status: "pending",
+                parent_task_id: createdMainTask.id, // 关联父任务
+              });
+            }
+          }
+        }
+        
+        const totalSubtasks = originalStructure.reduce((sum, task) => 
+          sum + (task.subtasks?.length || 0), 0
+        );
+        toast.success(`成功创建 ${originalStructure.length} 个主任务${totalSubtasks > 0 ? `和 ${totalSubtasks} 个子任务` : ''}！`);
+      } else {
+        // 简单批量创建
+        for (const task of tasksData) {
+          await createTaskMutation.mutateAsync(task);
+        }
+        toast.success(`成功创建 ${tasksData.length} 个任务！`);
       }
-      toast.success(`成功创建 ${tasksToCreate.length} 个任务！`);
     } catch (error) {
       toast.error("创建任务时出错");
+      console.error("Error creating bulk tasks:", error);
     }
   };
 

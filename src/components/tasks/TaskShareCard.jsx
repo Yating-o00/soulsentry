@@ -8,10 +8,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target } from "lucide-react";
+import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2 } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const CATEGORY_COLORS = {
   work: { accent: "#3B82F6", bg: "#EFF6FF" },
@@ -45,6 +47,8 @@ const PRIORITY_LABELS = {
 export default function TaskShareCard({ task, open, onClose }) {
   const cardRef = useRef(null);
   const [generating, setGenerating] = useState(false);
+  const [showAllSubtasks, setShowAllSubtasks] = useState(false);
+  const [expandedView, setExpandedView] = useState(false);
 
   // 查询子任务
   const { data: subtasks = [] } = useQuery({
@@ -74,17 +78,24 @@ export default function TaskShareCard({ task, open, onClose }) {
     setGenerating(true);
     try {
       const html2canvas = await loadHtml2Canvas();
+      
+      // 计算卡片高度，长内容时增加 scale
+      const cardHeight = cardRef.current.scrollHeight;
+      const scaleFactor = cardHeight > 1000 ? 1.5 : 2;
+      
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#ffffff',
-        scale: 2,
+        scale: scaleFactor,
         logging: false,
         useCORS: true,
         allowTaint: true,
+        windowWidth: cardRef.current.scrollWidth,
+        windowHeight: cardRef.current.scrollHeight,
       });
 
       const link = document.createElement('a');
       link.download = `任务-${task.title}-${Date.now()}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = canvas.toDataURL('image/png', 0.95);
       link.click();
       
       toast.success("任务卡片已保存到本地");
@@ -101,12 +112,18 @@ export default function TaskShareCard({ task, open, onClose }) {
     setGenerating(true);
     try {
       const html2canvas = await loadHtml2Canvas();
+      
+      const cardHeight = cardRef.current.scrollHeight;
+      const scaleFactor = cardHeight > 1000 ? 1.5 : 2;
+      
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#ffffff',
-        scale: 2,
+        scale: scaleFactor,
         logging: false,
         useCORS: true,
         allowTaint: true,
+        windowWidth: cardRef.current.scrollWidth,
+        windowHeight: cardRef.current.scrollHeight,
       });
 
       canvas.toBlob(async (blob) => {
@@ -124,7 +141,7 @@ export default function TaskShareCard({ task, open, onClose }) {
           toast.error("复制失败，请使用下载功能");
         }
         setGenerating(false);
-      });
+      }, 'image/png', 0.95);
     } catch (error) {
       console.error("Copy error:", error);
       toast.error(error.message || "复制失败，请重试");
@@ -143,10 +160,16 @@ ${task.description ? `📝 ${task.description}\n` : ''}
 🏷️ 类别：${CATEGORY_LABELS[task.category]}
 ⚡ 优先级：${PRIORITY_LABELS[task.priority]}
 📊 完成进度：${progress}%
-${subtasks.length > 0 ? `\n📌 子任务 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => `${i + 1}. ${s.title.replace(/^\d+\.\s*/, '')} ${s.status === "completed" ? "✅" : "⭕"}`).join('\n')}` : ''}
+${task.status === "completed" ? "✅ 已完成" : "🔵 进行中"}
+${subtasks.length > 0 ? `\n📌 子任务清单 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => {
+  const titleMatch = s.title.match(/^(\d+)\.\s*/);
+  const cleanTitle = titleMatch ? s.title.replace(/^\d+\.\s*/, '') : s.title;
+  return `${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`;
+}).join('\n')}` : ''}
 
 ---
 来自「任务管家」智能提醒系统
+${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
     `.trim();
 
     navigator.clipboard.writeText(taskText).then(() => {
@@ -159,21 +182,55 @@ ${subtasks.length > 0 ? `\n📌 子任务 (${completedSubtasks}/${subtasks.lengt
   if (!task) return null;
 
   const categoryColor = CATEGORY_COLORS[task.category] || CATEGORY_COLORS.other;
+  
+  // 决定显示多少子任务
+  const displayedSubtasks = showAllSubtasks || expandedView ? subtasks : subtasks.slice(0, 6);
+  const hasMoreSubtasks = subtasks.length > 6 && !showAllSubtasks && !expandedView;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className={`${expandedView ? 'max-w-4xl' : 'max-w-2xl'} max-h-[90vh] overflow-y-auto`}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Share2 className="w-5 h-5 text-blue-600" />
-            分享任务卡片
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Share2 className="w-5 h-5 text-blue-600" />
+              分享任务卡片
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setExpandedView(!expandedView)}
+              className="h-8 w-8"
+            >
+              {expandedView ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </Button>
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* 控制选项 */}
+          {subtasks.length > 6 && (
+            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-blue-600" />
+                <div>
+                  <Label className="text-sm font-semibold text-blue-800">显示所有子任务</Label>
+                  <p className="text-xs text-blue-600 mt-0.5">
+                    共 {subtasks.length} 个子任务，当前显示 {displayedSubtasks.length} 个
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={showAllSubtasks}
+                onCheckedChange={setShowAllSubtasks}
+                className="data-[state=checked]:bg-blue-600"
+              />
+            </div>
+          )}
+
           {/* 预览区域 */}
-          <div className="flex justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-8 rounded-2xl">
-            <div ref={cardRef} className="w-[520px] relative">
+          <div className="flex justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-8 rounded-2xl max-h-[60vh] overflow-y-auto">
+            <div ref={cardRef} className={`${expandedView ? 'w-[720px]' : 'w-[520px]'} relative`}>
               {/* 主卡片 */}
               <div className="relative bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
                 {/* 科技感背景装饰 */}
@@ -251,11 +308,11 @@ ${subtasks.length > 0 ? `\n📌 子任务 (${completedSubtasks}/${subtasks.lengt
 
                   {/* 任务标题 */}
                   <div className="mb-6">
-                    <h2 className="text-3xl font-bold text-slate-800 mb-3 leading-tight tracking-tight">
+                    <h2 className={`${expandedView ? 'text-4xl' : 'text-3xl'} font-bold text-slate-800 mb-3 leading-tight tracking-tight`}>
                       {task.title}
                     </h2>
                     {task.description && (
-                      <p className="text-slate-600 text-sm leading-relaxed line-clamp-2">
+                      <p className="text-slate-600 text-sm leading-relaxed">
                         {task.description}
                       </p>
                     )}
@@ -335,16 +392,18 @@ ${subtasks.length > 0 ? `\n📌 子任务 (${completedSubtasks}/${subtasks.lengt
                   )}
 
                   {/* 子任务列表 */}
-                  {subtasks.length > 0 && (
+                  {displayedSubtasks.length > 0 && (
                     <div className="space-y-3 mb-6">
                       <div className="flex items-center gap-2 mb-3">
                         <div className="h-px flex-1 bg-slate-200" />
-                        <span className="text-xs text-slate-400 font-medium">子任务清单</span>
+                        <span className="text-xs text-slate-400 font-medium">
+                          子任务清单 ({completedSubtasks}/{subtasks.length})
+                        </span>
                         <div className="h-px flex-1 bg-slate-200" />
                       </div>
                       
-                      <div className="space-y-2 max-h-44 overflow-y-auto custom-scrollbar">
-                        {subtasks.slice(0, 6).map((subtask, index) => {
+                      <div className="space-y-2">
+                        {displayedSubtasks.map((subtask, index) => {
                           const isCompleted = subtask.status === "completed";
                           const titleMatch = subtask.title.match(/^(\d+)\.\s*/);
                           const orderNumber = titleMatch ? titleMatch[1] : (index + 1);
@@ -368,20 +427,30 @@ ${subtasks.length > 0 ? `\n📌 子任务 (${completedSubtasks}/${subtasks.lengt
                               >
                                 {isCompleted ? '✓' : orderNumber}
                               </div>
-                              <span className={`text-sm flex-1 ${
-                                isCompleted 
-                                  ? 'line-through text-slate-400' 
-                                  : 'text-slate-700 font-medium'
-                              }`}>
-                                {cleanTitle}
-                              </span>
+                              <div className="flex-1 min-w-0">
+                                <span className={`text-sm block ${
+                                  isCompleted 
+                                    ? 'line-through text-slate-400' 
+                                    : 'text-slate-700 font-medium'
+                                }`}>
+                                  {cleanTitle}
+                                </span>
+                                {subtask.description && (
+                                  <p className="text-xs text-slate-500 mt-1">{subtask.description}</p>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
-                        {subtasks.length > 6 && (
-                          <p className="text-xs text-slate-400 text-center py-2">
-                            + {subtasks.length - 6} 个子任务
-                          </p>
+                        {hasMoreSubtasks && (
+                          <div className="text-center py-2 border border-dashed border-slate-300 rounded-lg">
+                            <p className="text-xs text-slate-400">
+                              还有 {subtasks.length - 6} 个子任务...
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              💡 开启"显示所有子任务"查看完整列表
+                            </p>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -458,9 +527,20 @@ ${subtasks.length > 0 ? `\n📌 子任务 (${completedSubtasks}/${subtasks.lengt
             </Button>
           </div>
 
-          <p className="text-xs text-slate-500 text-center">
-            💡 提示：可以下载图片、复制图片或复制文本分享给他人
-          </p>
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
+            <div className="flex gap-3">
+              <Sparkles className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-blue-800 mb-1">智能生成提示</p>
+                <ul className="text-xs text-blue-700 space-y-1">
+                  <li>• 长任务列表将自动优化图片质量以保证清晰度</li>
+                  <li>• 开启"显示所有子任务"可以生成包含完整列表的长图</li>
+                  <li>• 复制文本功能会包含所有子任务信息</li>
+                  <li>• 点击右上角展开按钮可以获得更大的预览视图</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
 
         <style jsx>{`

@@ -8,21 +8,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2, Sparkles } from "lucide-react";
+import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 
-const CATEGORY_GRADIENTS = {
-  work: "from-blue-400 via-blue-500 to-indigo-600",
-  personal: "from-purple-400 via-purple-500 to-pink-600",
-  health: "from-green-400 via-emerald-500 to-teal-600",
-  study: "from-yellow-400 via-amber-500 to-orange-600",
-  family: "from-pink-400 via-rose-500 to-red-600",
-  shopping: "from-orange-400 via-orange-500 to-red-600",
-  finance: "from-red-400 via-red-500 to-rose-600",
-  other: "from-gray-400 via-slate-500 to-gray-600",
+const CATEGORY_COLORS = {
+  work: { accent: "#3B82F6", bg: "#EFF6FF" },
+  personal: { accent: "#8B5CF6", bg: "#F5F3FF" },
+  health: { accent: "#10B981", bg: "#ECFDF5" },
+  study: { accent: "#F59E0B", bg: "#FFFBEB" },
+  family: { accent: "#EC4899", bg: "#FDF2F8" },
+  shopping: { accent: "#F97316", bg: "#FFF7ED" },
+  finance: { accent: "#EF4444", bg: "#FEF2F2" },
+  other: { accent: "#6B7280", bg: "#F9FAFB" },
 };
 
 const CATEGORY_LABELS = {
@@ -114,98 +114,193 @@ export default function TaskShareCard({ task, open, onClose }) {
 
   if (!task) return null;
 
-  const gradient = CATEGORY_GRADIENTS[task.category] || CATEGORY_GRADIENTS.other;
+  const categoryColor = CATEGORY_COLORS[task.category] || CATEGORY_COLORS.other;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Share2 className="w-5 h-5 text-purple-600" />
+            <Share2 className="w-5 h-5 text-blue-600" />
             分享任务卡片
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* 预览区域 */}
-          <div className="flex justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-8 rounded-2xl">
-            <div ref={cardRef} className="w-[500px] relative">
+          <div className="flex justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-8 rounded-2xl">
+            <div ref={cardRef} className="w-[520px] relative">
               {/* 主卡片 */}
-              <div className={`relative bg-gradient-to-br ${gradient} rounded-3xl shadow-2xl overflow-hidden`}>
-                {/* 装饰性背景图案 */}
-                <div className="absolute inset-0 opacity-10">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
-                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-white rounded-full blur-3xl transform -translate-x-1/2 translate-y-1/2"></div>
+              <div className="relative bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
+                {/* 科技感背景装饰 */}
+                <div className="absolute inset-0 opacity-[0.03]">
+                  {/* 网格背景 */}
+                  <div 
+                    className="absolute inset-0" 
+                    style={{
+                      backgroundImage: `
+                        linear-gradient(to right, #94a3b8 1px, transparent 1px),
+                        linear-gradient(to bottom, #94a3b8 1px, transparent 1px)
+                      `,
+                      backgroundSize: '20px 20px'
+                    }}
+                  />
                 </div>
 
+                {/* 顶部色带 */}
+                <div 
+                  className="h-1.5" 
+                  style={{ backgroundColor: categoryColor.accent }}
+                />
+
                 {/* 内容区域 */}
-                <div className="relative z-10 p-8 text-white">
-                  {/* 顶部信息 */}
+                <div className="relative z-10 p-8">
+                  {/* 顶部标识 */}
                   <div className="flex items-start justify-between mb-6">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium">
-                          {CATEGORY_LABELS[task.category]}
-                        </div>
-                        <div className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium">
-                          {PRIORITY_LABELS[task.priority]}
-                        </div>
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-12 h-12 rounded-xl flex items-center justify-center"
+                        style={{ backgroundColor: categoryColor.bg }}
+                      >
+                        <Target 
+                          className="w-6 h-6" 
+                          style={{ color: categoryColor.accent }}
+                        />
                       </div>
-                      <h2 className="text-3xl font-bold mb-2 leading-tight">
-                        {task.title}
-                      </h2>
-                      {task.description && (
-                        <p className="text-white/90 text-sm leading-relaxed line-clamp-2">
-                          {task.description}
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span 
+                            className="text-xs font-semibold px-2.5 py-1 rounded-md"
+                            style={{ 
+                              backgroundColor: categoryColor.bg,
+                              color: categoryColor.accent 
+                            }}
+                          >
+                            {CATEGORY_LABELS[task.category]}
+                          </span>
+                          <span className="text-xs text-slate-400">·</span>
+                          <span className="text-xs text-slate-500 font-medium">
+                            {PRIORITY_LABELS[task.priority]}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          ID: {task.id.slice(0, 8).toUpperCase()}
                         </p>
-                      )}
+                      </div>
                     </div>
-                    <div className="ml-4">
-                      <Sparkles className="w-10 h-10 text-white/60" />
+                    
+                    {/* 状态指示器 */}
+                    <div className="text-right">
+                      {task.status === "completed" ? (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <span className="text-xs font-semibold text-green-700">已完成</span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200">
+                          <Circle className="w-4 h-4 text-blue-600" />
+                          <span className="text-xs font-semibold text-blue-700">进行中</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* 时间信息 */}
-                  <div className="mb-6 p-4 bg-white/10 backdrop-blur-sm rounded-2xl">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-white/70 text-xs mb-1">提醒时间</p>
-                        <p className="text-lg font-semibold">
-                          {format(new Date(task.reminder_time), "yyyy年M月d日", { locale: zhCN })}
-                        </p>
-                        <p className="text-sm text-white/90">
-                          {format(new Date(task.reminder_time), "EEEE HH:mm", { locale: zhCN })}
-                        </p>
+                  {/* 任务标题 */}
+                  <div className="mb-6">
+                    <h2 className="text-3xl font-bold text-slate-800 mb-3 leading-tight tracking-tight">
+                      {task.title}
+                    </h2>
+                    {task.description && (
+                      <p className="text-slate-600 text-sm leading-relaxed line-clamp-2">
+                        {task.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 时间和进度信息 */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    {/* 时间卡片 */}
+                    <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="w-4 h-4 text-slate-500" />
+                        <span className="text-xs text-slate-500 font-medium">提醒时间</span>
                       </div>
-                      {task.status === "completed" ? (
-                        <div className="text-center">
-                          <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center mb-1">
-                            <span className="text-3xl">✓</span>
-                          </div>
-                          <p className="text-xs text-white/80">已完成</p>
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center mb-1">
-                            <span className="text-2xl font-bold">{progress}%</span>
-                          </div>
-                          <p className="text-xs text-white/80">进度</p>
-                        </div>
+                      <p className="text-lg font-bold text-slate-800">
+                        {format(new Date(task.reminder_time), "M月d日", { locale: zhCN })}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {format(new Date(task.reminder_time), "EEEE HH:mm", { locale: zhCN })}
+                      </p>
+                    </div>
+
+                    {/* 进度卡片 */}
+                    <div 
+                      className="rounded-xl p-4 border"
+                      style={{ 
+                        backgroundColor: categoryColor.bg,
+                        borderColor: categoryColor.accent + '20'
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles 
+                          className="w-4 h-4" 
+                          style={{ color: categoryColor.accent }}
+                        />
+                        <span 
+                          className="text-xs font-medium"
+                          style={{ color: categoryColor.accent }}
+                        >
+                          完成进度
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <p 
+                          className="text-3xl font-bold"
+                          style={{ color: categoryColor.accent }}
+                        >
+                          {progress}
+                        </p>
+                        <span 
+                          className="text-lg font-semibold"
+                          style={{ color: categoryColor.accent }}
+                        >
+                          %
+                        </span>
+                      </div>
+                      {subtasks.length > 0 && (
+                        <p className="text-xs text-slate-500 mt-1">
+                          {completedSubtasks}/{subtasks.length} 项已完成
+                        </p>
                       )}
                     </div>
                   </div>
+
+                  {/* 进度条 */}
+                  {subtasks.length > 0 && (
+                    <div className="mb-6">
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full transition-all duration-500 rounded-full"
+                          style={{ 
+                            width: `${progress}%`,
+                            backgroundColor: categoryColor.accent
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* 子任务列表 */}
                   {subtasks.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-white/70 text-xs mb-3 flex items-center gap-2">
-                        <span>子任务清单</span>
-                        <span className="text-white/90 font-semibold">
-                          {completedSubtasks}/{subtasks.length}
-                        </span>
-                      </p>
-                      <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                        {subtasks.slice(0, 5).map((subtask, index) => {
+                    <div className="space-y-3 mb-6">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-px flex-1 bg-slate-200" />
+                        <span className="text-xs text-slate-400 font-medium">子任务清单</span>
+                        <div className="h-px flex-1 bg-slate-200" />
+                      </div>
+                      
+                      <div className="space-y-2 max-h-44 overflow-y-auto custom-scrollbar">
+                        {subtasks.slice(0, 6).map((subtask, index) => {
                           const isCompleted = subtask.status === "completed";
                           const titleMatch = subtask.title.match(/^(\d+)\.\s*/);
                           const orderNumber = titleMatch ? titleMatch[1] : (index + 1);
@@ -214,43 +309,77 @@ export default function TaskShareCard({ task, open, onClose }) {
                           return (
                             <div
                               key={subtask.id}
-                              className="flex items-center gap-3 p-2 bg-white/10 backdrop-blur-sm rounded-xl"
+                              className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                                isCompleted 
+                                  ? 'bg-slate-50 border-slate-200' 
+                                  : 'bg-white border-slate-200'
+                              }`}
                             >
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                                isCompleted ? 'bg-white/30' : 'bg-white/20'
-                              }`}>
+                              <div 
+                                className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold flex-shrink-0 border-2 ${
+                                  isCompleted 
+                                    ? 'bg-slate-100 border-slate-300 text-slate-400' 
+                                    : 'border-slate-300 text-slate-600'
+                                }`}
+                              >
                                 {isCompleted ? '✓' : orderNumber}
                               </div>
-                              <span className={`text-sm flex-1 ${isCompleted ? 'line-through text-white/60' : 'text-white'}`}>
+                              <span className={`text-sm flex-1 ${
+                                isCompleted 
+                                  ? 'line-through text-slate-400' 
+                                  : 'text-slate-700 font-medium'
+                              }`}>
                                 {cleanTitle}
                               </span>
                             </div>
                           );
                         })}
-                        {subtasks.length > 5 && (
-                          <p className="text-xs text-white/60 text-center py-2">
-                            还有 {subtasks.length - 5} 个子任务...
+                        {subtasks.length > 6 && (
+                          <p className="text-xs text-slate-400 text-center py-2">
+                            + {subtasks.length - 6} 个子任务
                           </p>
                         )}
                       </div>
                     </div>
                   )}
 
-                  {/* 底部水印 */}
-                  <div className="mt-6 pt-4 border-t border-white/20 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                        <Sparkles className="w-4 h-4" />
+                  {/* 底部信息 */}
+                  <div className="pt-4 border-t border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="w-10 h-10 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: categoryColor.bg }}
+                        >
+                          <Sparkles 
+                            className="w-5 h-5" 
+                            style={{ color: categoryColor.accent }}
+                          />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">任务管家</p>
+                          <p className="text-xs text-slate-400">智能提醒 · 高效管理</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold">任务管家</p>
-                        <p className="text-[10px] text-white/70">智能提醒，贴心陪伴</p>
+                      <div className="text-right">
+                        <p className="text-xs text-slate-400 font-mono">
+                          {format(new Date(), "yyyy.MM.dd", { locale: zhCN })}
+                        </p>
+                        <p className="text-xs text-slate-400 font-mono">
+                          {format(new Date(), "HH:mm", { locale: zhCN })}
+                        </p>
                       </div>
                     </div>
-                    <p className="text-xs text-white/60">
-                      {format(new Date(), "yyyy.MM.dd", { locale: zhCN })}
-                    </p>
                   </div>
+                </div>
+
+                {/* 右侧装饰线条 */}
+                <div className="absolute right-0 top-1/4 w-32 h-32 opacity-[0.03]">
+                  <svg viewBox="0 0 100 100" className="w-full h-full">
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-slate-400"/>
+                    <circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-slate-400"/>
+                    <circle cx="50" cy="50" r="20" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-slate-400"/>
+                  </svg>
                 </div>
               </div>
             </div>
@@ -261,7 +390,7 @@ export default function TaskShareCard({ task, open, onClose }) {
             <Button
               onClick={handleDownload}
               disabled={generating}
-              className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:shadow-lg"
+              className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg"
             >
               <Download className="w-4 h-4 mr-2" />
               {generating ? "生成中..." : "下载图片"}
@@ -270,7 +399,7 @@ export default function TaskShareCard({ task, open, onClose }) {
               onClick={handleCopyImage}
               disabled={generating}
               variant="outline"
-              className="flex-1"
+              className="flex-1 border-slate-300 hover:bg-slate-50"
             >
               <Copy className="w-4 h-4 mr-2" />
               复制图片
@@ -287,12 +416,15 @@ export default function TaskShareCard({ task, open, onClose }) {
             width: 4px;
           }
           .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
+            background: #f1f5f9;
             border-radius: 10px;
           }
           .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.3);
+            background: #cbd5e1;
             border-radius: 10px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
           }
         `}</style>
       </DialogContent>

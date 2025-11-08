@@ -12,7 +12,6 @@ import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target }
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { toast } from "sonner";
-import html2canvas from "html2canvas";
 
 const CATEGORY_COLORS = {
   work: { accent: "#3B82F6", bg: "#EFF6FF" },
@@ -58,16 +57,29 @@ export default function TaskShareCard({ task, open, onClose }) {
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 100;
 
+  // 使用动态导入 html2canvas
+  const loadHtml2Canvas = async () => {
+    try {
+      const html2canvas = (await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/+esm')).default;
+      return html2canvas;
+    } catch (error) {
+      console.error("Failed to load html2canvas:", error);
+      throw new Error("图片生成库加载失败");
+    }
+  };
+
   const handleDownload = async () => {
     if (!cardRef.current) return;
     
     setGenerating(true);
     try {
+      const html2canvas = await loadHtml2Canvas();
       const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: null,
+        backgroundColor: '#ffffff',
         scale: 2,
         logging: false,
         useCORS: true,
+        allowTaint: true,
       });
 
       const link = document.createElement('a');
@@ -78,7 +90,7 @@ export default function TaskShareCard({ task, open, onClose }) {
       toast.success("任务卡片已保存到本地");
     } catch (error) {
       console.error("Download error:", error);
-      toast.error("生成卡片失败，请重试");
+      toast.error(error.message || "生成卡片失败，请重试");
     }
     setGenerating(false);
   };
@@ -88,28 +100,60 @@ export default function TaskShareCard({ task, open, onClose }) {
     
     setGenerating(true);
     try {
+      const html2canvas = await loadHtml2Canvas();
       const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: null,
+        backgroundColor: '#ffffff',
         scale: 2,
         logging: false,
         useCORS: true,
+        allowTaint: true,
       });
 
       canvas.toBlob(async (blob) => {
         try {
-          await navigator.clipboard.write([
-            new ClipboardItem({ 'image/png': blob })
-          ]);
-          toast.success("任务卡片已复制到剪贴板");
+          if (navigator.clipboard && ClipboardItem) {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ]);
+            toast.success("任务卡片已复制到剪贴板");
+          } else {
+            throw new Error("浏览器不支持复制图片");
+          }
         } catch (err) {
+          console.error("Copy error:", err);
           toast.error("复制失败，请使用下载功能");
         }
+        setGenerating(false);
       });
     } catch (error) {
       console.error("Copy error:", error);
-      toast.error("复制失败，请重试");
+      toast.error(error.message || "复制失败，请重试");
+      setGenerating(false);
     }
-    setGenerating(false);
+  };
+
+  const handleCopyText = () => {
+    const taskText = `
+【任务卡片】
+
+📋 ${task.title}
+
+${task.description ? `📝 ${task.description}\n` : ''}
+📅 提醒时间：${format(new Date(task.reminder_time), "yyyy年M月d日 EEEE HH:mm", { locale: zhCN })}
+🏷️ 类别：${CATEGORY_LABELS[task.category]}
+⚡ 优先级：${PRIORITY_LABELS[task.priority]}
+📊 完成进度：${progress}%
+${subtasks.length > 0 ? `\n📌 子任务 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => `${i + 1}. ${s.title.replace(/^\d+\.\s*/, '')} ${s.status === "completed" ? "✅" : "⭕"}`).join('\n')}` : ''}
+
+---
+来自「任务管家」智能提醒系统
+    `.trim();
+
+    navigator.clipboard.writeText(taskText).then(() => {
+      toast.success("任务文本已复制到剪贴板");
+    }).catch(() => {
+      toast.error("复制失败");
+    });
   };
 
   if (!task) return null;
@@ -118,7 +162,7 @@ export default function TaskShareCard({ task, open, onClose }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Share2 className="w-5 h-5 text-blue-600" />
@@ -386,11 +430,11 @@ export default function TaskShareCard({ task, open, onClose }) {
           </div>
 
           {/* 操作按钮 */}
-          <div className="flex gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Button
               onClick={handleDownload}
               disabled={generating}
-              className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg"
+              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg"
             >
               <Download className="w-4 h-4 mr-2" />
               {generating ? "生成中..." : "下载图片"}
@@ -399,15 +443,23 @@ export default function TaskShareCard({ task, open, onClose }) {
               onClick={handleCopyImage}
               disabled={generating}
               variant="outline"
-              className="flex-1 border-slate-300 hover:bg-slate-50"
+              className="border-slate-300 hover:bg-slate-50"
             >
               <Copy className="w-4 h-4 mr-2" />
               复制图片
             </Button>
+            <Button
+              onClick={handleCopyText}
+              variant="outline"
+              className="border-slate-300 hover:bg-slate-50"
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              复制文本
+            </Button>
           </div>
 
           <p className="text-xs text-slate-500 text-center">
-            💡 提示：生成的图片可以分享到社交媒体或保存到相册
+            💡 提示：可以下载图片、复制图片或复制文本分享给他人
           </p>
         </div>
 

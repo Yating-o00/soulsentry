@@ -1,3 +1,4 @@
+
 import React, { useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -76,12 +77,28 @@ export default function TaskShareCard({ task, open, onClose }) {
     if (!cardRef.current) return;
     
     setGenerating(true);
+    let previewContainer = null;
+    let originalMaxHeight = '';
+    let originalOverflow = '';
+
     try {
       const html2canvas = await loadHtml2Canvas();
       
-      // 计算卡片高度，长内容时增加 scale
+      // 临时移除预览区域的高度限制，确保捕获完整内容
+      previewContainer = cardRef.current.parentElement;
+      if (previewContainer) {
+        originalMaxHeight = previewContainer.style.maxHeight;
+        originalOverflow = previewContainer.style.overflow;
+        previewContainer.style.maxHeight = 'none';
+        previewContainer.style.overflow = 'visible';
+      }
+      
+      // 等待DOM更新
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 计算卡片高度，长内容时调整 scale
       const cardHeight = cardRef.current.scrollHeight;
-      const scaleFactor = cardHeight > 1000 ? 1.5 : 2;
+      const scaleFactor = cardHeight > 1500 ? 1.2 : cardHeight > 1000 ? 1.5 : 2;
       
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#ffffff',
@@ -92,6 +109,12 @@ export default function TaskShareCard({ task, open, onClose }) {
         windowWidth: cardRef.current.scrollWidth,
         windowHeight: cardRef.current.scrollHeight,
       });
+
+      // 恢复原始样式
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
 
       const link = document.createElement('a');
       link.download = `任务-${task.title}-${Date.now()}.png`;
@@ -102,19 +125,41 @@ export default function TaskShareCard({ task, open, onClose }) {
     } catch (error) {
       console.error("Download error:", error);
       toast.error(error.message || "生成卡片失败，请重试");
+    } finally {
+      // Ensure styles are restored even if an error occurs
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
+      setGenerating(false);
     }
-    setGenerating(false);
   };
 
   const handleCopyImage = async () => {
     if (!cardRef.current) return;
     
     setGenerating(true);
+    let previewContainer = null;
+    let originalMaxHeight = '';
+    let originalOverflow = '';
+
     try {
       const html2canvas = await loadHtml2Canvas();
       
+      // 临时移除预览区域的高度限制
+      previewContainer = cardRef.current.parentElement;
+      if (previewContainer) {
+        originalMaxHeight = previewContainer.style.maxHeight;
+        originalOverflow = previewContainer.style.overflow;
+        previewContainer.style.maxHeight = 'none';
+        previewContainer.style.overflow = 'visible';
+      }
+      
+      // 等待DOM更新
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const cardHeight = cardRef.current.scrollHeight;
-      const scaleFactor = cardHeight > 1000 ? 1.5 : 2;
+      const scaleFactor = cardHeight > 1500 ? 1.2 : cardHeight > 1000 ? 1.5 : 2;
       
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#ffffff',
@@ -125,6 +170,12 @@ export default function TaskShareCard({ task, open, onClose }) {
         windowWidth: cardRef.current.scrollWidth,
         windowHeight: cardRef.current.scrollHeight,
       });
+
+      // 恢复原始样式
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
 
       canvas.toBlob(async (blob) => {
         try {
@@ -139,13 +190,23 @@ export default function TaskShareCard({ task, open, onClose }) {
         } catch (err) {
           console.error("Copy error:", err);
           toast.error("复制失败，请使用下载功能");
+        } finally {
+          setGenerating(false);
         }
-        setGenerating(false);
       }, 'image/png', 0.95);
     } catch (error) {
       console.error("Copy error:", error);
       toast.error(error.message || "复制失败，请重试");
-      setGenerating(false);
+    } finally {
+      // Ensure styles are restored even if an error occurs
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
+      // setGenerating(false) is handled in canvas.toBlob callback
+      if (!navigator.clipboard || !ClipboardItem) {
+        setGenerating(false); // If clipboard isn't supported, set generating to false here
+      }
     }
   };
 
@@ -402,6 +463,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         <div className="h-px flex-1 bg-slate-200" />
                       </div>
                       
+                      {/* 移除 max-h 限制，让所有内容可见以便截图 */}
                       <div className="space-y-2">
                         {displayedSubtasks.map((subtask, index) => {
                           const isCompleted = subtask.status === "completed";
@@ -445,7 +507,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         {hasMoreSubtasks && (
                           <div className="text-center py-2 border border-dashed border-slate-300 rounded-lg">
                             <p className="text-xs text-slate-400">
-                              还有 {subtasks.length - 6} 个子任务...
+                              还有 {subtasks.length - displayedSubtasks.length} 个子任务...
                             </p>
                             <p className="text-xs text-slate-400 mt-1">
                               💡 开启"显示所有子任务"查看完整列表

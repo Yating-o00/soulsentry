@@ -25,6 +25,7 @@ import NotificationManager from "../components/notifications/NotificationManager
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import SmartTextParser from "../components/tasks/SmartTextParser"; // Added import
 import { toast } from "sonner"; // Added import for toast notifications
+import VoiceTaskInput from "../components/tasks/VoiceTaskInput";
 
 
 export default function Dashboard() {
@@ -287,9 +288,10 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
         <SmartTextParser onTasksGenerated={handleBulkCreate} />
+        <VoiceTaskInput onTasksGenerated={handleBulkCreate} />
       </div>
 
       {todayTasks.length > 0 && (
@@ -370,3 +372,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

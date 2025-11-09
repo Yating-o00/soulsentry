@@ -19,6 +19,7 @@ import NotificationManager from "../components/notifications/NotificationManager
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import SmartTextParser from "../components/tasks/SmartTextParser";
 import { toast } from "sonner";
+import VoiceTaskInput from "../components/tasks/VoiceTaskInput";
 
 export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState("all");
@@ -187,9 +188,10 @@ export default function Tasks() {
         <p className="text-slate-600">管理您的所有任务和提醒</p>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
         <SmartTextParser onTasksGenerated={handleBulkCreate} />
+        <VoiceTaskInput onTasksGenerated={handleBulkCreate} />
       </div>
 
       <motion.div

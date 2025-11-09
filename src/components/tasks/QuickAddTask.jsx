@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -201,7 +202,7 @@ export default function QuickAddTask({ onAdd }) {
         
         // 如果有多个任务或子任务，批量创建
         if (response.tasks.length > 1 || response.tasks.some(t => t.subtasks?.length > 0)) {
-          await handleBulkCreate(response.tasks);
+          await handleBulkCreateDirect(response.tasks);
         } else {
           // 单个简单任务，填充到表单
           const firstTask = response.tasks[0];
@@ -236,7 +237,7 @@ export default function QuickAddTask({ onAdd }) {
     setIsProcessing(false);
   };
 
-  const handleBulkCreate = async (parsedTasks) => {
+  const handleBulkCreateDirect = async (parsedTasks) => {
     let createdCount = 0;
     let createdSubtasksCount = 0;
 
@@ -260,7 +261,8 @@ export default function QuickAddTask({ onAdd }) {
           advance_reminders: [],
         };
         
-        const createdMainTask = await onAdd(mainTaskData);
+        // 直接调用 API 创建主任务
+        const createdMainTask = await base44.entities.Task.create(mainTaskData);
         createdCount++;
         
         if (hasSubtasks) {
@@ -273,14 +275,15 @@ export default function QuickAddTask({ onAdd }) {
               priority: subtask.priority || taskData.priority || "medium",
               category: taskData.category,
               status: "pending",
-              parent_task_id: createdMainTask?.id || createdMainTask,
+              parent_task_id: createdMainTask.id,
               progress: 0,
               notification_sound: "default",
               persistent_reminder: false,
               advance_reminders: [],
             };
             
-            await onAdd(subtaskData);
+            // 直接调用 API 创建子任务
+            await base44.entities.Task.create(subtaskData);
             createdSubtasksCount++;
           }
         }
@@ -290,6 +293,14 @@ export default function QuickAddTask({ onAdd }) {
         `✅ 创建 ${createdCount} 个任务${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子任务` : ''}！`,
         { id: 'bulk-create' }
       );
+      
+      // 触发 onAdd 回调以刷新列表（但不传数据，因为已经创建了）
+      if (onAdd) {
+        // 触发父组件刷新
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
     } catch (error) {
       console.error("Error creating tasks:", error);
       toast.error("创建任务时出错", { id: 'bulk-create' });

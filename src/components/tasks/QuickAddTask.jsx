@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Plus, Sparkles, Settings, Repeat, Mic, MicOff, Loader2, Wand2 } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -24,21 +24,21 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 const CATEGORIES = [
-  { value: "work", label: "工作", color: "bg-slate-500" },
-  { value: "personal", label: "个人", color: "bg-slate-600" },
-  { value: "health", label: "健康", color: "bg-slate-500" },
-  { value: "study", label: "学习", color: "bg-slate-600" },
-  { value: "family", label: "家庭", color: "bg-slate-500" },
-  { value: "shopping", label: "购物", color: "bg-slate-600" },
-  { value: "finance", label: "财务", color: "bg-slate-500" },
-  { value: "other", label: "其他", color: "bg-slate-400" },
+  { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
+  { value: "personal", label: "个人", icon: "👤", color: "bg-purple-50 text-purple-700 border-purple-200" },
+  { value: "health", label: "健康", icon: "❤️", color: "bg-green-50 text-green-700 border-green-200" },
+  { value: "study", label: "学习", icon: "📚", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  { value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦", color: "bg-pink-50 text-pink-700 border-pink-200" },
+  { value: "shopping", label: "购物", icon: "🛒", color: "bg-orange-50 text-orange-700 border-orange-200" },
+  { value: "finance", label: "财务", icon: "💰", color: "bg-red-50 text-red-700 border-red-200" },
+  { value: "other", label: "其他", icon: "📌", color: "bg-gray-50 text-gray-700 border-gray-200" },
 ];
 
 const PRIORITIES = [
-  { value: "low", label: "低", color: "text-slate-400" },
-  { value: "medium", label: "中", color: "text-slate-600" },
-  { value: "high", label: "高", color: "text-slate-700" },
-  { value: "urgent", label: "紧急", color: "text-slate-900" },
+  { value: "low", label: "低", icon: "○", color: "text-slate-400" },
+  { value: "medium", label: "中", icon: "◐", color: "text-blue-600" },
+  { value: "high", label: "高", icon: "◉", color: "text-orange-600" },
+  { value: "urgent", label: "紧急", icon: "⚠️", color: "text-red-600" },
 ];
 
 export default function QuickAddTask({ onAdd }) {
@@ -68,7 +68,6 @@ export default function QuickAddTask({ onAdd }) {
     advance_reminders: [],
   });
 
-  // 初始化语音识别
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -128,7 +127,7 @@ export default function QuickAddTask({ onAdd }) {
     setTimeout(() => {
       setIsRecording(true);
       recognitionRef.current?.start();
-      toast.success("开始录音");
+      toast.success("🎤 开始录音");
     }, 300);
   };
 
@@ -199,11 +198,9 @@ export default function QuickAddTask({ onAdd }) {
         setTranscript("");
         setIsProcessing(false);
         
-        // 如果有多个任务或子任务，批量创建
         if (response.tasks.length > 1 || response.tasks.some(t => t.subtasks?.length > 0)) {
           await handleBulkCreateDirect(response.tasks);
         } else {
-          // 单个简单任务，填充到表单
           const firstTask = response.tasks[0];
           setTask({
             title: firstTask.title,
@@ -260,7 +257,6 @@ export default function QuickAddTask({ onAdd }) {
           advance_reminders: [],
         };
         
-        // 直接调用 API 创建主任务
         const createdMainTask = await base44.entities.Task.create(mainTaskData);
         createdCount++;
         
@@ -281,7 +277,6 @@ export default function QuickAddTask({ onAdd }) {
               advance_reminders: [],
             };
             
-            // 直接调用 API 创建子任务
             await base44.entities.Task.create(subtaskData);
             createdSubtasksCount++;
           }
@@ -293,9 +288,7 @@ export default function QuickAddTask({ onAdd }) {
         { id: 'bulk-create' }
       );
       
-      // 触发 onAdd 回调以刷新列表（但不传数据，因为已经创建了）
       if (onAdd) {
-        // 触发父组件刷新
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -363,37 +356,94 @@ export default function QuickAddTask({ onAdd }) {
     return null;
   };
 
+  const selectedCategory = CATEGORIES.find(c => c.value === task.category);
+  const selectedPriority = PRIORITIES.find(p => p.value === task.priority);
+
   return (
     <>
-      <Card className="overflow-hidden border border-slate-200/60 shadow-sm bg-white">
-        <div className="p-5">
+      <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm">
+        <div className="p-6">
           {!isExpanded ? (
-            <div className="space-y-3">
-              {/* 极简标题栏 */}
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-slate-500 tracking-wide">快速创建</h3>
+            <div className="space-y-4">
+              {/* AI 智能助手标识 */}
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs font-medium text-blue-600 tracking-wide">AI 助手</span>
+                  </div>
+                  <span className="text-xs text-slate-400">·</span>
+                  <span className="text-xs text-slate-500">智能创建任务</span>
+                </div>
                 {browserSupported && (
                   <Button
                     size="icon"
                     variant="ghost"
                     onClick={startVoiceInput}
-                    className="h-8 w-8 hover:bg-slate-100 rounded-full group transition-all"
+                    className="h-9 w-9 hover:bg-blue-50 rounded-full group transition-all relative"
                     title="语音输入"
                   >
-                    <Mic className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                    <Mic className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                    <motion.div
+                      className="absolute inset-0 rounded-full bg-blue-100"
+                      initial={{ scale: 0, opacity: 0 }}
+                      whileHover={{ scale: 1.2, opacity: 0.3 }}
+                      transition={{ duration: 0.3 }}
+                    />
                   </Button>
                 )}
               </div>
               
-              {/* 极简新建按钮 */}
+              {/* 超大新建任务按钮 */}
               <button
                 onClick={() => setIsExpanded(true)}
-                className="w-full flex items-center gap-3 px-5 py-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/60 transition-all duration-200 group"
+                className="w-full group relative overflow-hidden"
               >
-                <div className="h-9 w-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center group-hover:border-slate-300 transition-colors">
-                  <Plus className="w-5 h-5 text-slate-600" />
+                <div className="relative flex items-center gap-4 px-6 py-5 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/50 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300">
+                  {/* 图标 */}
+                  <div className="relative">
+                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 group-hover:scale-105 transition-all duration-300">
+                      <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
+                    </div>
+                    <motion.div
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: [0, 1.2, 1] }}
+                      transition={{ duration: 0.5, delay: 0.2 }}
+                    >
+                      <Sparkles className="w-3 h-3 text-white" />
+                    </motion.div>
+                  </div>
+                  
+                  {/* 文字 */}
+                  <div className="flex-1 text-left">
+                    <div className="text-lg font-semibold text-slate-800 mb-0.5">
+                      创建新任务
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      开始输入或使用语音快速创建
+                    </div>
+                  </div>
+                  
+                  {/* 右侧提示 */}
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <kbd className="px-2 py-1 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded">
+                      Ctrl
+                    </kbd>
+                    <span className="text-sm">+</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded">
+                      N
+                    </kbd>
+                  </div>
                 </div>
-                <span className="text-base font-normal text-slate-700">新建任务</span>
+                
+                {/* 背景动画 */}
+                <motion.div
+                  className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/5 to-purple-500/5"
+                  initial={{ opacity: 0 }}
+                  whileHover={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                />
               </button>
             </div>
           ) : (
@@ -404,37 +454,54 @@ export default function QuickAddTask({ onAdd }) {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
                 onSubmit={handleSubmit}
-                className="space-y-4"
+                className="space-y-5"
               >
-                <Input
-                  placeholder="任务标题"
-                  value={task.title}
-                  onChange={(e) => setTask({ ...task, title: e.target.value })}
-                  className="text-base border-slate-200 bg-white focus-visible:ring-1 focus-visible:ring-slate-300 rounded-lg"
-                  autoFocus
-                />
+                {/* 标题输入 - 超大字体 */}
+                <div className="relative">
+                  <Input
+                    placeholder="输入任务标题..."
+                    value={task.title}
+                    onChange={(e) => setTask({ ...task, title: e.target.value })}
+                    className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors"
+                    autoFocus
+                  />
+                  <motion.div
+                    className="absolute bottom-0 left-0 h-0.5 bg-blue-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: task.title ? "100%" : "0%" }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
 
+                {/* 描述输入 */}
                 <Textarea
-                  placeholder="添加描述..."
+                  placeholder="添加详细描述（可选）"
                   value={task.description}
                   onChange={(e) => setTask({ ...task, description: e.target.value })}
-                  className="border-slate-200 bg-white focus-visible:ring-1 focus-visible:ring-slate-300 rounded-lg resize-none"
+                  className="border-slate-200 bg-slate-50/50 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 rounded-xl resize-none text-sm"
                   rows={2}
                 />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* 快速设置栏 - 图标化 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* 日期 */}
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
-                        className="justify-start text-left font-normal border-slate-200 bg-white hover:bg-slate-50 rounded-lg"
+                        className="justify-start text-left font-normal border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 rounded-xl h-auto py-3 transition-all"
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
-                        {task.reminder_time ? (
-                          <span className="text-slate-700">{format(task.reminder_time, "PPP", { locale: zhCN })}</span>
-                        ) : (
-                          <span className="text-slate-400">选择日期</span>
-                        )}
+                        <div className="flex flex-col items-start gap-1 w-full">
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <CalendarIcon className="h-4 w-4" />
+                            <span className="text-xs font-medium">日期</span>
+                          </div>
+                          {task.reminder_time ? (
+                            <span className="text-sm font-semibold text-slate-800">{format(task.reminder_time, "M月d日", { locale: zhCN })}</span>
+                          ) : (
+                            <span className="text-xs text-slate-400">选择日期</span>
+                          )}
+                        </div>
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -448,55 +515,85 @@ export default function QuickAddTask({ onAdd }) {
                     </PopoverContent>
                   </Popover>
 
+                  {/* 时间 */}
                   {!task.is_all_day && (
-                    <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 bg-white rounded-lg">
-                      <Clock className="h-4 w-4 text-slate-500" />
-                      <Input
-                        type="time"
-                        value={task.time}
-                        onChange={(e) => setTask({ ...task, time: e.target.value })}
-                        className="border-0 bg-transparent focus-visible:ring-0 p-0 text-slate-700"
-                      />
+                    <div className="border border-slate-200 bg-white hover:border-blue-300 rounded-xl py-3 px-3 transition-all">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Clock className="h-4 w-4" />
+                          <span className="text-xs font-medium">时间</span>
+                        </div>
+                        <Input
+                          type="time"
+                          value={task.time}
+                          onChange={(e) => setTask({ ...task, time: e.target.value })}
+                          className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0"
+                        />
+                      </div>
                     </div>
                   )}
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* 类别 */}
                   <Select
                     value={task.category}
                     onValueChange={(value) => setTask({ ...task, category: value })}
                   >
-                    <SelectTrigger className="border-slate-200 bg-white rounded-lg">
-                      <SelectValue placeholder="类别" />
+                    <SelectTrigger className="border-slate-200 bg-white hover:border-blue-300 rounded-xl h-auto py-3 transition-all">
+                      <div className="flex flex-col items-start gap-1 w-full">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Tag className="h-4 w-4" />
+                          <span className="text-xs font-medium">类别</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-base">{selectedCategory?.icon}</span>
+                          <span className="text-sm font-semibold text-slate-800">{selectedCategory?.label}</span>
+                        </div>
+                      </div>
                     </SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map((cat) => (
                         <SelectItem key={cat.value} value={cat.value}>
                           <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${cat.color}`} />
-                            <span className="text-slate-700">{cat.label}</span>
+                            <span className="text-base">{cat.icon}</span>
+                            <span>{cat.label}</span>
                           </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
 
+                  {/* 优先级 */}
                   <Select
                     value={task.priority}
                     onValueChange={(value) => setTask({ ...task, priority: value })}
                   >
-                    <SelectTrigger className="border-slate-200 bg-white rounded-lg">
-                      <SelectValue placeholder="优先级" />
+                    <SelectTrigger className="border-slate-200 bg-white hover:border-blue-300 rounded-xl h-auto py-3 transition-all">
+                      <div className="flex flex-col items-start gap-1 w-full">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Circle className="h-4 w-4" />
+                          <span className="text-xs font-medium">优先级</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-base ${selectedPriority?.color}`}>{selectedPriority?.icon}</span>
+                          <span className={`text-sm font-semibold ${selectedPriority?.color}`}>{selectedPriority?.label}</span>
+                        </div>
+                      </div>
                     </SelectTrigger>
                     <SelectContent>
                       {PRIORITIES.map((pri) => (
                         <SelectItem key={pri.value} value={pri.value}>
-                          <span className={pri.color}>{pri.label}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`${pri.color}`}>{pri.icon}</span>
+                            <span>{pri.label}</span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
 
+                {/* 重复设置 */}
+                <div className="flex items-center gap-2">
                   <Select
                     value={task.repeat_rule}
                     onValueChange={(value) => {
@@ -508,8 +605,11 @@ export default function QuickAddTask({ onAdd }) {
                       }
                     }}
                   >
-                    <SelectTrigger className="border-slate-200 bg-white rounded-lg">
-                      <SelectValue placeholder="重复" />
+                    <SelectTrigger className="w-auto border-slate-200 bg-white hover:border-blue-300 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Repeat className="h-4 w-4 text-slate-500" />
+                        <SelectValue placeholder="重复" />
+                      </div>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">不重复</SelectItem>
@@ -519,41 +619,31 @@ export default function QuickAddTask({ onAdd }) {
                       <SelectItem value="custom">自定义...</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  {getRecurrenceLabel() && task.repeat_rule !== "none" && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                    >
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                        <Repeat className="w-3 h-3 mr-1" />
+                        {getRecurrenceLabel()}
+                      </Badge>
+                    </motion.div>
+                  )}
                 </div>
 
-                {getRecurrenceLabel() && task.repeat_rule !== "none" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2"
-                  >
-                    <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-300">
-                      <Repeat className="w-3 h-3 mr-1" />
-                      {getRecurrenceLabel()}
-                    </Badge>
-                    {(task.repeat_rule === "custom" || (task.repeat_rule !== "none" && !task.custom_recurrence)) && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowRecurrence(true)}
-                        className="text-xs text-slate-500 hover:text-slate-700"
-                      >
-                        编辑
-                      </Button>
-                    )}
-                  </motion.div>
-                )}
-
+                {/* 高级设置 */}
                 <Collapsible open={showSettings} onOpenChange={setShowSettings}>
                   <CollapsibleTrigger asChild>
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full border-slate-200 bg-white hover:bg-slate-50 rounded-lg text-slate-600"
+                      className="w-full border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 rounded-xl text-slate-600 transition-all"
                     >
                       <Settings className="w-4 h-4 mr-2" />
-                      {showSettings ? "收起" : "展开"}通知设置
+                      <span>{showSettings ? "收起" : "展开"}高级设置</span>
+                      <Bell className="w-4 h-4 ml-auto text-slate-400" />
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-4">
@@ -564,13 +654,14 @@ export default function QuickAddTask({ onAdd }) {
                   </CollapsibleContent>
                 </Collapsible>
 
+                {/* 操作按钮 */}
                 <div className="flex items-center gap-3 pt-2">
                   <Button
                     type="submit"
-                    className="flex-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg shadow-sm transition-all"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all"
                     disabled={!task.title.trim() || !task.reminder_time}
                   >
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="w-5 h-5 mr-2" strokeWidth={2.5} />
                     创建任务
                   </Button>
                   <Button
@@ -581,7 +672,7 @@ export default function QuickAddTask({ onAdd }) {
                       setShowSettings(false);
                       setShowRecurrence(false);
                     }}
-                    className="rounded-lg border-slate-200 text-slate-600 hover:bg-slate-50"
+                    className="rounded-xl h-12 px-6 border-slate-200 text-slate-600 hover:bg-slate-50"
                   >
                     取消
                   </Button>
@@ -613,19 +704,20 @@ export default function QuickAddTask({ onAdd }) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-800">
-              <Mic className="w-5 h-5 text-slate-600" />
-              语音创建任务
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-500" />
+                <span>AI 语音助手</span>
+              </div>
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            {/* 录音按钮 */}
             <div className="flex justify-center">
               <Button
                 size="lg"
                 onClick={stopRecording}
                 disabled={isProcessing}
-                className="relative h-32 w-32 rounded-full bg-slate-100 hover:bg-slate-200 border-4 border-slate-200 hover:border-slate-300 transition-all duration-300 shadow-lg"
+                className="relative h-32 w-32 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 border-4 border-blue-200 hover:border-blue-300 transition-all duration-300 shadow-2xl shadow-blue-500/30"
               >
                 <AnimatePresence mode="wait">
                   {isRecording && !isProcessing && (
@@ -636,8 +728,8 @@ export default function QuickAddTask({ onAdd }) {
                       exit={{ scale: 0 }}
                       className="absolute inset-0 flex flex-col items-center justify-center gap-2"
                     >
-                      <MicOff className="w-12 h-12 text-slate-600" />
-                      <span className="text-xs font-medium text-slate-600">点击完成</span>
+                      <MicOff className="w-12 h-12 text-white" />
+                      <span className="text-xs font-medium text-white">点击完成</span>
                     </motion.div>
                   )}
                   {isProcessing && (
@@ -648,20 +740,19 @@ export default function QuickAddTask({ onAdd }) {
                       exit={{ scale: 0 }}
                       className="absolute inset-0 flex flex-col items-center justify-center gap-2"
                     >
-                      <Loader2 className="w-12 h-12 text-slate-600 animate-spin" />
-                      <span className="text-xs font-medium text-slate-600">解析中</span>
+                      <Loader2 className="w-12 h-12 text-white animate-spin" />
+                      <span className="text-xs font-medium text-white">AI解析中</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                {/* 脉动动画 */}
                 {isRecording && !isProcessing && (
                   <>
                     <motion.div
-                      className="absolute inset-0 rounded-full bg-slate-300"
+                      className="absolute inset-0 rounded-full bg-blue-400"
                       animate={{
                         scale: [1, 1.3, 1],
-                        opacity: [0.4, 0, 0.4],
+                        opacity: [0.5, 0, 0.5],
                       }}
                       transition={{
                         duration: 2,
@@ -670,7 +761,7 @@ export default function QuickAddTask({ onAdd }) {
                       }}
                     />
                     <motion.div
-                      className="absolute inset-0 rounded-full bg-slate-400"
+                      className="absolute inset-0 rounded-full bg-blue-300"
                       animate={{
                         scale: [1, 1.5, 1],
                         opacity: [0.3, 0, 0.3],
@@ -687,41 +778,47 @@ export default function QuickAddTask({ onAdd }) {
               </Button>
             </div>
 
-            {/* 实时识别文本 */}
             <AnimatePresence>
               {transcript && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="bg-slate-50 rounded-xl p-4 border border-slate-200"
+                  className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200"
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <motion.div
                       animate={{ scale: [1, 1.2, 1] }}
                       transition={{ duration: 1, repeat: Infinity }}
-                      className="w-2 h-2 rounded-full bg-slate-500"
+                      className="w-2 h-2 rounded-full bg-blue-500"
                     />
-                    <span className="text-sm font-medium text-slate-700">正在识别</span>
+                    <span className="text-sm font-semibold text-blue-700">实时识别</span>
                   </div>
-                  <p className="text-sm text-slate-600 leading-relaxed max-h-32 overflow-y-auto">
+                  <p className="text-base text-slate-700 leading-relaxed max-h-32 overflow-y-auto font-medium">
                     {transcript}
                   </p>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* 提示信息 */}
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
               <div className="flex gap-3">
-                <Wand2 className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
+                <Wand2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-slate-700 mb-1">使用说明</p>
-                  <ul className="text-xs text-slate-600 space-y-1">
-                    <li>• 开始说话，AI 实时识别您的语音</li>
-                    <li>• 支持自然语言："明天下午3点提醒我开会"</li>
-                    <li>• 可以一次创建多个任务或子任务</li>
-                    <li>• 完成后点击按钮自动解析和创建</li>
+                  <p className="text-sm font-semibold text-blue-800 mb-2">💡 使用提示</p>
+                  <ul className="text-xs text-blue-700 space-y-1.5">
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>直接说出任务内容，AI 自动识别</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>例如："明天下午3点提醒我开会"</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>支持创建多个任务和子任务</span>
+                    </li>
                   </ul>
                 </div>
               </div>

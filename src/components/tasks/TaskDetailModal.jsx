@@ -30,6 +30,7 @@ import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import TaskComments from "./TaskComments";
 
 export default function TaskDetailModal({ task, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -208,7 +209,7 @@ export default function TaskDetailModal({ task, open, onClose }) {
           )}
 
           <Tabs defaultValue="subtasks" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="subtasks">
                 子任务 ({totalSubtasks})
               </TabsTrigger>
@@ -217,6 +218,9 @@ export default function TaskDetailModal({ task, open, onClose }) {
               </TabsTrigger>
               <TabsTrigger value="notes">
                 笔记 ({task.notes?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="comments">
+                评论
               </TabsTrigger>
             </TabsList>
 
@@ -423,6 +427,11 @@ export default function TaskDetailModal({ task, open, onClose }) {
                   </div>
                 )}
               </div>
+            </TabsContent>
+
+            {/* Comments Tab */}
+            <TabsContent value="comments" className="space-y-4">
+              <TaskComments taskId={task.id} />
             </TabsContent>
           </Tabs>
         </div>

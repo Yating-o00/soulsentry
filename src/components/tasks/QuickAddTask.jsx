@@ -9,11 +9,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import RecurrenceEditor from "./RecurrenceEditor";
+import TaskAssignment from "./TaskAssignment";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ export default function QuickAddTask({ onAdd }) {
   const recognitionRef = useRef(null);
   const [browserSupported, setBrowserSupported] = useState(true);
   
+  const [showAssignment, setShowAssignment] = useState(false);
   const [task, setTask] = useState({
     title: "",
     description: "",
@@ -66,6 +68,9 @@ export default function QuickAddTask({ onAdd }) {
     persistent_reminder: false,
     notification_interval: 15,
     advance_reminders: [],
+    assigned_to: [],
+    is_shared: false,
+    team_visibility: "private",
   });
 
   useEffect(() => {
@@ -592,8 +597,8 @@ export default function QuickAddTask({ onAdd }) {
                   </Select>
                 </div>
 
-                {/* 重复设置 */}
-                <div className="flex items-center gap-2">
+                {/* 重复设置和团队分配 */}
+                <div className="flex items-center gap-2 flex-wrap">
                   <Select
                     value={task.repeat_rule}
                     onValueChange={(value) => {
@@ -631,6 +636,21 @@ export default function QuickAddTask({ onAdd }) {
                       </Badge>
                     </motion.div>
                   )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAssignment(true)}
+                    className="border-slate-200 bg-white hover:border-purple-300 rounded-lg"
+                  >
+                    <Users className="h-4 w-4 mr-2 text-slate-500" />
+                    <span className="text-slate-600">团队分配</span>
+                    {task.assigned_to && task.assigned_to.length > 0 && (
+                      <Badge className="ml-2 bg-purple-500 text-white">
+                        {task.assigned_to.length}
+                      </Badge>
+                    )}
+                  </Button>
                 </div>
 
                 {/* 高级设置 */}
@@ -695,6 +715,19 @@ export default function QuickAddTask({ onAdd }) {
               setTask({ ...task, custom_recurrence: recurrence, repeat_rule: "custom" });
             }}
             onClose={() => setShowRecurrence(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* 团队分配 */}
+      <Dialog open={showAssignment} onOpenChange={setShowAssignment}>
+        <DialogContent>
+          <TaskAssignment
+            selectedUsers={task.assigned_to}
+            onUpdate={(settings) => {
+              setTask({ ...task, ...settings });
+            }}
+            onClose={() => setShowAssignment(false)}
           />
         </DialogContent>
       </Dialog>

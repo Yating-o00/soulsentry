@@ -32,6 +32,11 @@ const navigationItems = [
     icon: Calendar,
   },
   {
+    title: "团队",
+    url: createPageUrl("Teams"),
+    icon: Bell,
+  },
+  {
     title: "我的账户",
     url: createPageUrl("Account"),
     icon: User,

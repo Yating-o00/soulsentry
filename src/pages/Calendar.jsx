@@ -1,20 +1,43 @@
-
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Calendar as BigCalendar } from "@/components/ui/calendar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { format, isSameDay } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  format, 
+  isSameDay, 
+  startOfWeek, 
+  endOfWeek, 
+  eachDayOfInterval,
+  addWeeks,
+  subWeeks,
+  startOfMonth,
+  endOfMonth,
+  isSameMonth
+} from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { motion } from "framer-motion";
-import { Clock, CheckCircle2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Clock, CheckCircle2, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon } from "lucide-react";
 import TaskCard from "../components/tasks/TaskCard";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import QuickAddTask from "../components/tasks/QuickAddTask";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTask, setSelectedTask] = useState(null);
+  const [viewMode, setViewMode] = useState("month"); // "month" or "week"
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAddDate, setQuickAddDate] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: allTasks = [] } = useQuery({
@@ -23,8 +46,15 @@ export default function CalendarPage() {
     initialData: [],
   });
 
-  // 只显示主任务（没有 parent_task_id 的任务）
   const tasks = allTasks.filter(task => !task.parent_task_id);
+
+  const createTaskMutation = useMutation({
+    mutationFn: (taskData) => base44.entities.Task.create(taskData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setShowQuickAdd(false);
+    },
+  });
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
@@ -62,7 +92,6 @@ export default function CalendarPage() {
   const handleSubtaskToggle = async (subtask) => {
     const newStatus = subtask.status === "completed" ? "pending" : "completed";
     
-    // 更新子任务状态
     await updateTaskMutation.mutateAsync({
       id: subtask.id,
       data: { 
@@ -71,17 +100,13 @@ export default function CalendarPage() {
       }
     });
 
-    // 重新计算父任务进度
     if (subtask.parent_task_id) {
       const parentTask = allTasks.find(t => t.id === subtask.parent_task_id);
       if (parentTask) {
-        // Find all siblings including the current subtask
         const siblings = allTasks.filter(t => t.parent_task_id === subtask.parent_task_id);
-        
         const completed = siblings.filter(s => 
           s.id === subtask.id ? newStatus === "completed" : s.status === "completed"
         ).length;
-        
         const progress = siblings.length > 0 ? Math.round((completed / siblings.length) * 100) : 0;
 
         await updateTaskMutation.mutateAsync({
@@ -92,16 +117,95 @@ export default function CalendarPage() {
     }
   };
 
+  const handleDateClick = (date) => {
+    setSelectedDate(date);
+    setQuickAddDate(date);
+    setShowQuickAdd(true);
+  };
+
+  const handleNavigate = (direction) => {
+    if (viewMode === "week") {
+      setCurrentDate(prev => direction === "next" ? addWeeks(prev, 1) : subWeeks(prev, 1));
+    } else {
+      setCurrentDate(prev => {
+        const newDate = new Date(prev);
+        newDate.setMonth(prev.getMonth() + (direction === "next" ? 1 : -1));
+        return newDate;
+      });
+    }
+  };
+
+  const handleToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedDate(today);
+  };
+
+  // 周视图日期范围
+  const weekDays = viewMode === "week" 
+    ? eachDayOfInterval({
+        start: startOfWeek(currentDate, { locale: zhCN }),
+        end: endOfWeek(currentDate, { locale: zhCN })
+      })
+    : [];
+
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
       >
-        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-          日历视图
-        </h1>
-        <p className="text-slate-600">查看您的任务时间线</p>
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+            日历视图
+          </h1>
+          <p className="text-slate-600">查看和管理您的任务时间线</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Tabs value={viewMode} onValueChange={setViewMode}>
+            <TabsList className="bg-white shadow-lg">
+              <TabsTrigger value="month">月视图</TabsTrigger>
+              <TabsTrigger value="week">周视图</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button onClick={handleToday} variant="outline" className="shadow-lg">
+            今天
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* 导航栏 */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex items-center justify-between bg-white rounded-xl shadow-lg p-4"
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => handleNavigate("prev")}
+          className="hover:bg-blue-50"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </Button>
+
+        <h2 className="text-xl font-bold text-slate-800">
+          {viewMode === "week" 
+            ? `${format(startOfWeek(currentDate, { locale: zhCN }), "M月d日", { locale: zhCN })} - ${format(endOfWeek(currentDate, { locale: zhCN }), "M月d日", { locale: zhCN })}`
+            : format(currentDate, "yyyy年 M月", { locale: zhCN })
+          }
+        </h2>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => handleNavigate("next")}
+          className="hover:bg-blue-50"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </Button>
       </motion.div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -111,50 +215,136 @@ export default function CalendarPage() {
           transition={{ delay: 0.1 }}
           className="lg:col-span-2"
         >
-          <Card className="p-6 border-0 shadow-xl bg-white">
-            <BigCalendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              locale={zhCN}
-              className="rounded-xl"
-              modifiers={{
-                hasTask: (date) => {
-                  const dateKey = format(date, 'yyyy-MM-dd');
-                  return taskDates[dateKey] && taskDates[dateKey].length > 0;
-                }
-              }}
-              modifiersStyles={{
-                hasTask: {
-                  fontWeight: 'bold',
-                  position: 'relative',
-                }
-              }}
-              components={{
-                DayContent: ({ date }) => {
-                  const dateKey = format(date, 'yyyy-MM-dd');
+          {viewMode === "month" ? (
+            <Card className="p-6 border-0 shadow-xl bg-white">
+              <BigCalendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={setSelectedDate}
+                month={currentDate}
+                onMonthChange={setCurrentDate}
+                locale={zhCN}
+                className="rounded-xl"
+                modifiers={{
+                  hasTask: (date) => {
+                    const dateKey = format(date, 'yyyy-MM-dd');
+                    return taskDates[dateKey] && taskDates[dateKey].length > 0;
+                  }
+                }}
+                modifiersStyles={{
+                  hasTask: {
+                    fontWeight: 'bold',
+                    position: 'relative',
+                  }
+                }}
+                components={{
+                  DayContent: ({ date }) => {
+                    const dateKey = format(date, 'yyyy-MM-dd');
+                    const dayTasks = taskDates[dateKey] || [];
+                    const hasTasks = dayTasks.length > 0;
+                    const isSelected = isSameDay(date, selectedDate);
+                    
+                    return (
+                      <button
+                        onClick={() => handleDateClick(date)}
+                        className={`relative w-full h-full flex flex-col items-center justify-center p-2 rounded-lg transition-all hover:bg-blue-50 ${
+                          isSelected ? 'bg-blue-100 ring-2 ring-blue-500' : ''
+                        }`}
+                      >
+                        <span className={!isSameMonth(date, currentDate) ? 'text-slate-300' : ''}>
+                          {format(date, 'd')}
+                        </span>
+                        {hasTasks && (
+                          <div className="absolute bottom-1 flex gap-0.5">
+                            {dayTasks.slice(0, 3).map((task, idx) => (
+                              <div 
+                                key={idx}
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  task.status === 'completed' ? 'bg-green-500' : 'bg-purple-500'
+                                }`}
+                              />
+                            ))}
+                            {dayTasks.length > 3 && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                            )}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  }
+                }}
+              />
+            </Card>
+          ) : (
+            <Card className="border-0 shadow-xl bg-white overflow-hidden">
+              <div className="grid grid-cols-7">
+                {["日", "一", "二", "三", "四", "五", "六"].map((day, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 text-center font-semibold text-slate-600 bg-slate-50 border-b"
+                  >
+                    {day}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 divide-x">
+                {weekDays.map((day) => {
+                  const dateKey = format(day, 'yyyy-MM-dd');
                   const dayTasks = taskDates[dateKey] || [];
-                  const hasTasks = dayTasks.length > 0;
-                  
+                  const isSelected = isSameDay(day, selectedDate);
+                  const isToday = isSameDay(day, new Date());
+
                   return (
-                    <div className="relative w-full h-full flex flex-col items-center justify-center">
-                      <span>{format(date, 'd')}</span>
-                      {hasTasks && (
-                        <div className="absolute bottom-1 flex gap-0.5">
-                          {dayTasks.slice(0, 3).map((_, idx) => (
-                            <div 
-                              key={idx}
-                              className="w-1 h-1 rounded-full bg-purple-500"
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      key={dateKey}
+                      onClick={() => handleDateClick(day)}
+                      className={`min-h-[120px] p-2 hover:bg-blue-50 transition-all ${
+                        isSelected ? 'bg-blue-100' : ''
+                      }`}
+                    >
+                      <div className={`text-sm font-semibold mb-2 ${
+                        isToday ? 'text-blue-600' : 'text-slate-700'
+                      }`}>
+                        {format(day, 'd')}
+                        {isToday && (
+                          <span className="ml-1 text-xs bg-blue-500 text-white px-1.5 py-0.5 rounded">
+                            今
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        {dayTasks.slice(0, 3).map((task) => (
+                          <div
+                            key={task.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTask(task);
+                            }}
+                            className={`text-xs p-1.5 rounded truncate text-left ${
+                              task.status === 'completed'
+                                ? 'bg-green-100 text-green-700 line-through'
+                                : task.priority === 'urgent'
+                                ? 'bg-red-100 text-red-700'
+                                : task.priority === 'high'
+                                ? 'bg-orange-100 text-orange-700'
+                                : 'bg-purple-100 text-purple-700'
+                            }`}
+                          >
+                            {task.title}
+                          </div>
+                        ))}
+                        {dayTasks.length > 3 && (
+                          <div className="text-xs text-slate-500 text-center">
+                            +{dayTasks.length - 3} 更多
+                          </div>
+                        )}
+                      </div>
+                    </button>
                   );
-                }
-              }}
-            />
-          </Card>
+                })}
+              </div>
+            </Card>
+          )}
         </motion.div>
 
         <motion.div
@@ -164,50 +354,111 @@ export default function CalendarPage() {
           className="space-y-4"
         >
           <Card className="p-6 border-0 shadow-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-            <h3 className="text-lg font-semibold mb-2">
-              {format(selectedDate, "M月d日", { locale: zhCN })}
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">
+                {format(selectedDate, "M月d日 EEEE", { locale: zhCN })}
+              </h3>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => handleDateClick(selectedDate)}
+                className="text-white hover:bg-white/20"
+              >
+                <Plus className="w-5 h-5" />
+              </Button>
+            </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5" />
                 <span className="text-2xl font-bold">
                   {tasksOnSelectedDate.filter(t => t.status === "pending").length}
                 </span>
+                <span className="text-sm opacity-90">待办</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5" />
                 <span className="text-2xl font-bold">
                   {tasksOnSelectedDate.filter(t => t.status === "completed").length}
                 </span>
+                <span className="text-sm opacity-90">完成</span>
               </div>
             </div>
           </Card>
 
           <div className="space-y-3">
-            <h3 className="font-semibold text-slate-800">当日任务</h3>
-            {tasksOnSelectedDate.length > 0 ? (
-              tasksOnSelectedDate.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onComplete={() => handleComplete(task)}
-                  onDelete={() => deleteTaskMutation.mutate(task.id)}
-                  onEdit={() => {}}
-                  onClick={() => setSelectedTask(task)}
-                  onSubtaskToggle={handleSubtaskToggle}
-                />
-              ))
-            ) : (
-              <Card className="p-8 border-0 shadow-lg bg-white text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                  <Clock className="w-8 h-8 text-slate-400" />
-                </div>
-                <p className="text-slate-600">这一天没有安排任务</p>
-              </Card>
-            )}
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-800">当日任务</h3>
+              <Badge variant="outline" className="bg-purple-50 text-purple-700">
+                {tasksOnSelectedDate.length} 个任务
+              </Badge>
+            </div>
+            <div className="max-h-[600px] overflow-y-auto space-y-3">
+              <AnimatePresence mode="popLayout">
+                {tasksOnSelectedDate.length > 0 ? (
+                  tasksOnSelectedDate.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onComplete={() => handleComplete(task)}
+                      onDelete={() => deleteTaskMutation.mutate(task.id)}
+                      onEdit={() => setSelectedTask(task)}
+                      onClick={() => setSelectedTask(task)}
+                      onSubtaskToggle={handleSubtaskToggle}
+                    />
+                  ))
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <Card className="p-8 border-0 shadow-lg bg-white text-center">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                        <CalendarIcon className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <p className="text-slate-600 mb-3">这一天还没有任务</p>
+                      <Button
+                        onClick={() => handleDateClick(selectedDate)}
+                        variant="outline"
+                        size="sm"
+                        className="border-purple-300 text-purple-600 hover:bg-purple-50"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        添加任务
+                      </Button>
+                    </Card>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </motion.div>
       </div>
+
+      {/* 快速添加任务对话框 */}
+      <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5 text-blue-600" />
+              为 {quickAddDate && format(quickAddDate, "M月d日", { locale: zhCN })} 添加任务
+            </DialogTitle>
+          </DialogHeader>
+          <QuickAddTask
+            onAdd={(taskData) => {
+              const reminderDateTime = quickAddDate ? new Date(quickAddDate) : new Date();
+              if (taskData.reminder_time) {
+                const taskTime = new Date(taskData.reminder_time);
+                reminderDateTime.setHours(taskTime.getHours(), taskTime.getMinutes());
+              }
+              createTaskMutation.mutate({
+                ...taskData,
+                reminder_time: reminderDateTime.toISOString()
+              });
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       <TaskDetailModal
         task={selectedTask}

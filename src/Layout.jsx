@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,

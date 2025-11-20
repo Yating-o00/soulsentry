@@ -712,6 +712,7 @@ export default function QuickAddTask({ onAdd }) {
           </DialogHeader>
 
           <div className="space-y-6 py-4">
+            {/* 录音按钮区域 */}
             <div className="flex justify-center">
               <Button
                 size="lg"
@@ -778,29 +779,57 @@ export default function QuickAddTask({ onAdd }) {
               </Button>
             </div>
 
-            <AnimatePresence>
-              {transcript && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <motion.div
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                      className="w-2 h-2 rounded-full bg-blue-500"
-                    />
-                    <span className="text-sm font-semibold text-blue-700">实时识别</span>
-                  </div>
-                  <p className="text-base text-slate-700 leading-relaxed max-h-32 overflow-y-auto font-medium">
-                    {transcript}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* 识别文本区域 - 固定高度避免跳动 */}
+            <div className="min-h-[140px]">
+              <AnimatePresence mode="wait">
+                {transcript ? (
+                  <motion.div
+                    key="transcript"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="w-2 h-2 rounded-full bg-blue-500"
+                      />
+                      <span className="text-sm font-semibold text-blue-700">实时识别</span>
+                    </div>
+                    <p className="text-base text-slate-700 leading-relaxed max-h-24 overflow-y-auto font-medium">
+                      {transcript}
+                    </p>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="placeholder"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border-2 border-dashed border-slate-200"
+                  >
+                    <div className="flex items-center justify-center h-full min-h-[100px]">
+                      <div className="text-center">
+                        <motion.div
+                          animate={{ scale: [1, 1.1, 1] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                          className="mb-2"
+                        >
+                          <Mic className="w-8 h-8 text-slate-300 mx-auto" />
+                        </motion.div>
+                        <p className="text-sm text-slate-400 font-medium">等待语音输入...</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
+            {/* 使用提示 */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
               <div className="flex gap-3">
                 <Wand2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />

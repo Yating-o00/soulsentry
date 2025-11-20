@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, Bell } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -30,6 +30,11 @@ const navigationItems = [
     title: "日历",
     url: createPageUrl("Calendar"),
     icon: Calendar,
+  },
+  {
+    title: "我的账户",
+    url: createPageUrl("Account"),
+    icon: User,
   },
 ];
 

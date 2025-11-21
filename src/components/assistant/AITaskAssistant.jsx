@@ -192,57 +192,49 @@ export default function AITaskAssistant({ isOpen, onClose }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+      initial={{ opacity: 0, scale: 0.9, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 20 }}
-      className="fixed bottom-6 right-6 z-50 w-96 max-w-[calc(100vw-3rem)]"
+      exit={{ opacity: 0, scale: 0.9, y: 20 }}
+      className="fixed bottom-20 right-6 z-50 w-80 max-w-[calc(100vw-3rem)]"
     >
-      <Card className="shadow-2xl border-2 border-purple-200 bg-white overflow-hidden">
-        {/* 头部 */}
-        <div className="bg-gradient-to-r from-purple-500 to-blue-500 p-4 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center">
-                  <Bot className="w-6 h-6 text-purple-600" />
-                </div>
-                <motion.div
-                  className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white"
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                />
+      <Card className="shadow-2xl border border-purple-200 bg-white overflow-hidden">
+        {/* 头部 - 精简版 */}
+        <div className="bg-gradient-to-r from-purple-500 to-blue-500 p-3 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <Bot className="w-4 h-4 text-purple-600" />
               </div>
               <div>
-                <h3 className="font-semibold flex items-center gap-2">
+                <h3 className="text-sm font-semibold flex items-center gap-1.5">
                   小助
-                  <Sparkles className="w-4 h-4" />
+                  <Sparkles className="w-3 h-3" />
                 </h3>
-                <p className="text-xs opacity-90">您的智能任务管家</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
                 size="icon"
                 variant="ghost"
                 onClick={toggleVoice}
-                className="h-8 w-8 text-white hover:bg-white/20"
+                className="h-7 w-7 text-white hover:bg-white/20"
               >
-                {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                {voiceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
               </Button>
               <Button
                 size="icon"
                 variant="ghost"
                 onClick={onClose}
-                className="h-8 w-8 text-white hover:bg-white/20"
+                className="h-7 w-7 text-white hover:bg-white/20"
               >
-                ✕
+                <span className="text-sm">✕</span>
               </Button>
             </div>
           </div>
         </div>
 
-        {/* 消息区域 */}
-        <div className="h-96 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-purple-50/30 to-blue-50/30">
+        {/* 消息区域 - 缩小版 */}
+        <div className="h-64 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-purple-50/30 to-blue-50/30">
           <AnimatePresence mode="popLayout">
             {messages.map((message, index) => (
               <MessageBubble
@@ -257,24 +249,24 @@ export default function AITaskAssistant({ isOpen, onClose }) {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 text-sm text-purple-600"
+              className="flex items-center gap-2 text-xs text-purple-600"
             >
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>小助正在思考...</span>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>思考中...</span>
             </motion.div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* 输入区域 */}
-        <div className="border-t border-purple-100 p-4 bg-white">
-          <form onSubmit={handleSubmit} className="flex gap-2">
+        {/* 输入区域 - 精简版 */}
+        <div className="border-t border-purple-100 p-2.5 bg-white">
+          <form onSubmit={handleSubmit} className="flex gap-1.5">
             <Input
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="告诉小助你的想法..."
-              className="flex-1 border-purple-200 focus-visible:ring-purple-500"
+              placeholder="说说你的想法..."
+              className="flex-1 text-sm h-9 border-purple-200 focus-visible:ring-purple-500"
               disabled={isLoading}
             />
             <Button
@@ -283,17 +275,17 @@ export default function AITaskAssistant({ isOpen, onClose }) {
               variant="outline"
               onClick={startVoiceInput}
               disabled={isLoading}
-              className={`border-purple-200 ${isRecording ? 'bg-red-50 border-red-300' : 'hover:bg-purple-50'}`}
+              className={`h-9 w-9 border-purple-200 ${isRecording ? 'bg-red-50 border-red-300' : 'hover:bg-purple-50'}`}
             >
-              {isRecording ? <MicOff className="w-4 h-4 text-red-600" /> : <Mic className="w-4 h-4 text-purple-600" />}
+              {isRecording ? <MicOff className="w-3.5 h-3.5 text-red-600" /> : <Mic className="w-3.5 h-3.5 text-purple-600" />}
             </Button>
             <Button
               type="submit"
               size="icon"
               disabled={!inputText.trim() || isLoading}
-              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+              className="h-9 w-9 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
             >
-              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             </Button>
           </form>
         </div>
@@ -313,33 +305,33 @@ function MessageBubble({ message, isSpeaking }) {
       className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
     >
       {!isUser && (
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex-shrink-0 flex items-center justify-center">
-          <Bot className="w-5 h-5 text-white" />
+        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex-shrink-0 flex items-center justify-center">
+          <Bot className="w-3.5 h-3.5 text-white" />
         </div>
       )}
 
-      <div className={`max-w-[75%] ${isUser ? "order-first" : ""}`}>
+      <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
         <div
-          className={`rounded-2xl px-4 py-2.5 ${
+          className={`rounded-xl px-3 py-2 ${
             isUser
               ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white"
-              : "bg-white border-2 border-purple-200 text-slate-800"
+              : "bg-white border border-purple-200 text-slate-800"
           }`}
         >
           {isUser ? (
-            <p className="text-sm leading-relaxed">{message.content}</p>
+            <p className="text-xs leading-relaxed">{message.content}</p>
           ) : (
             <div className="relative">
-              <ReactMarkdown className="text-sm prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+              <ReactMarkdown className="text-xs prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
                 {message.content}
               </ReactMarkdown>
               {isSpeaking && (
                 <motion.div
-                  className="absolute -right-2 -top-2"
+                  className="absolute -right-1.5 -top-1.5"
                   animate={{ scale: [1, 1.2, 1] }}
                   transition={{ duration: 0.5, repeat: Infinity }}
                 >
-                  <Volume2 className="w-4 h-4 text-purple-600" />
+                  <Volume2 className="w-3 h-3 text-purple-600" />
                 </motion.div>
               )}
             </div>
@@ -348,7 +340,7 @@ function MessageBubble({ message, isSpeaking }) {
 
         {/* 工具调用显示 */}
         {message.tool_calls?.length > 0 && (
-          <div className="mt-2 space-y-1">
+          <div className="mt-1.5 space-y-1">
             {message.tool_calls.map((tool, idx) => (
               <ToolCallDisplay key={idx} toolCall={tool} />
             ))}
@@ -357,7 +349,7 @@ function MessageBubble({ message, isSpeaking }) {
       </div>
 
       {isUser && (
-        <div className="h-8 w-8 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center text-slate-600 text-sm font-semibold">
+        <div className="h-6 w-6 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center text-slate-600 text-[10px] font-semibold">
           我
         </div>
       )}
@@ -386,7 +378,7 @@ function ToolCallDisplay({ toolCall }) {
   return (
     <Badge
       variant="outline"
-      className="text-xs bg-purple-50 text-purple-700 border-purple-300 gap-1"
+      className="text-[10px] bg-purple-50 text-purple-700 border-purple-300 gap-0.5 px-1.5 py-0.5"
     >
       {getIcon()}
       {getLabel()}

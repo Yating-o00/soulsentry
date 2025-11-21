@@ -64,86 +64,56 @@ export default function FloatingAssistantButton() {
         transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 20 }}
       >
         <div className="relative">
-          {/* 提示气泡 */}
+          {/* 轻量提示气泡 */}
           <AnimatePresence>
             {shouldPrompt && !isOpen && (
               <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.8 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.8 }}
-                className="absolute bottom-full right-0 mb-3 w-64"
+                initial={{ opacity: 0, x: 10, scale: 0.9 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 10, scale: 0.9 }}
+                className="absolute bottom-0 right-16 w-56"
               >
-                <div className="bg-white rounded-2xl shadow-2xl p-4 border-2 border-purple-200">
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-slate-800 mb-2">
-                        嗨！我注意到你今天有 <strong className="text-purple-600">{pendingCount} 个任务</strong>
-                      </p>
-                      <p className="text-xs text-slate-600">
-                        需要我帮你检查一下进度吗？ 😊
-                      </p>
-                    </div>
+                <button
+                  onClick={() => setIsOpen(true)}
+                  className="bg-white rounded-xl shadow-lg p-3 border border-purple-200 hover:border-purple-300 transition-all text-left w-full group"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    <span className="text-xs font-semibold text-slate-800">小助提醒</span>
                   </div>
-                  <div className="absolute bottom-0 right-6 transform translate-y-1/2 rotate-45 w-3 h-3 bg-white border-r-2 border-b-2 border-purple-200"></div>
-                </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    今天有 <strong className="text-purple-600">{pendingCount}</strong> 个任务等你完成 💪
+                  </p>
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* 主按钮 */}
-          <Button
-            size="lg"
+          {/* 小助按钮 - 缩小版 */}
+          <motion.button
             onClick={() => setIsOpen(!isOpen)}
-            className="h-16 w-16 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 shadow-2xl relative overflow-hidden group"
+            className="h-12 w-12 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 shadow-lg hover:shadow-xl transition-all relative group"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
-            <motion.div
-              animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.5, 0, 0.5],
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-              className="absolute inset-0 bg-purple-400 rounded-full"
-            />
-            <div className="relative">
-              <Bot className="w-7 h-7 text-white" />
+            <div className="h-full w-full flex items-center justify-center">
+              <Bot className="w-5 h-5 text-white" />
             </div>
             
-            {/* 未读消息徽章 */}
-            {pendingCount > 0 && (
+            {/* 在线状态 */}
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white" />
+            
+            {/* 待办数量 */}
+            {pendingCount > 0 && !shouldPrompt && (
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute -top-1 -right-1"
+                className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] font-bold"
               >
-                <Badge className="h-6 w-6 rounded-full bg-red-500 text-white flex items-center justify-center p-0 text-xs">
-                  {pendingCount > 9 ? '9+' : pendingCount}
-                </Badge>
+                {pendingCount}
               </motion.div>
             )}
-          </Button>
-
-          {/* 脉动效果 */}
-          {shouldPrompt && (
-            <motion.div
-              className="absolute inset-0 rounded-full border-4 border-purple-400"
-              animate={{
-                scale: [1, 1.3],
-                opacity: [0.6, 0],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Infinity,
-                ease: "easeOut",
-              }}
-            />
-          )}
+          </motion.button>
         </div>
       </motion.div>
 

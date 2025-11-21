@@ -3,7 +3,6 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { 
   Bot, 
@@ -204,11 +203,9 @@ export default function AITaskAssistant({ isOpen, onClose }) {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <Avatar className="h-10 w-10 bg-white">
-                  <div className="h-full w-full flex items-center justify-center">
-                    <Bot className="w-6 h-6 text-purple-600" />
-                  </div>
-                </Avatar>
+                <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center">
+                  <Bot className="w-6 h-6 text-purple-600" />
+                </div>
                 <motion.div
                   className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white"
                   animate={{ scale: [1, 1.2, 1] }}
@@ -316,9 +313,9 @@ function MessageBubble({ message, isSpeaking }) {
       className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
     >
       {!isUser && (
-        <Avatar className="h-8 w-8 bg-gradient-to-br from-purple-500 to-blue-500 flex-shrink-0">
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex-shrink-0 flex items-center justify-center">
           <Bot className="w-5 h-5 text-white" />
-        </Avatar>
+        </div>
       )}
 
       <div className={`max-w-[75%] ${isUser ? "order-first" : ""}`}>
@@ -360,11 +357,9 @@ function MessageBubble({ message, isSpeaking }) {
       </div>
 
       {isUser && (
-        <Avatar className="h-8 w-8 bg-slate-200 flex-shrink-0">
-          <div className="h-full w-full flex items-center justify-center text-slate-600 text-sm font-semibold">
-            我
-          </div>
-        </Avatar>
+        <div className="h-8 w-8 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center text-slate-600 text-sm font-semibold">
+          我
+        </div>
       )}
     </motion.div>
   );

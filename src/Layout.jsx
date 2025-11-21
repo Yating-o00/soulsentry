@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { LayoutDashboard, ListTodo, Calendar, User, Bell } from "lucide-react";
+import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import {
   Sidebar,
   SidebarContent,
@@ -105,7 +106,8 @@ export default function Layout({ children }) {
           </SidebarContent>
         </Sidebar>
 
-        <main className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30">
+        <main className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 relative">
+          <FloatingAssistantButton />
           <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">
             <div className="flex items-center gap-4">
               <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-all duration-200" />

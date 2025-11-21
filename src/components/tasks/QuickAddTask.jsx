@@ -15,6 +15,7 @@ import NotificationSettings from "../notifications/NotificationSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import RecurrenceEditor from "./RecurrenceEditor";
 import TaskAssignment from "./TaskAssignment";
+import SmartReminderSuggestion from "./SmartReminderSuggestion";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,7 @@ export default function QuickAddTask({ onAdd }) {
   const [browserSupported, setBrowserSupported] = useState(true);
   
   const [showAssignment, setShowAssignment] = useState(false);
+  const [showSmartSuggestion, setShowSmartSuggestion] = useState(false);
   const [task, setTask] = useState({
     title: "",
     description: "",
@@ -596,6 +598,54 @@ export default function QuickAddTask({ onAdd }) {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* AI 智能推荐按钮 */}
+                {task.title && task.category && task.priority && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowSmartSuggestion(!showSmartSuggestion)}
+                      className={`border-2 ${
+                        showSmartSuggestion 
+                          ? 'border-purple-400 bg-purple-50 text-purple-700' 
+                          : 'border-purple-300 text-purple-600 hover:bg-purple-50'
+                      }`}
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      <span>AI 智能推荐</span>
+                    </Button>
+                  </motion.div>
+                )}
+
+                {/* 智能提醒建议 */}
+                <AnimatePresence>
+                  {showSmartSuggestion && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="col-span-full"
+                    >
+                      <SmartReminderSuggestion
+                        task={task}
+                        onApply={(datetime) => {
+                          const newDate = new Date(datetime);
+                          setTask({
+                            ...task,
+                            reminder_time: newDate,
+                            time: format(newDate, "HH:mm"),
+                            optimal_reminder_time: datetime
+                          });
+                          setShowSmartSuggestion(false);
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* 重复设置和团队分配 */}
                 <div className="flex items-center gap-2 flex-wrap">

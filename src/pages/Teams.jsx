@@ -119,14 +119,14 @@ export default function Teams() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-0 shadow-md bg-gradient-to-br from-[#e0f2fe] to-[#bae6fd] rounded-[16px]">
+        <Card className="border-0 shadow-md bg-gradient-to-br from-[#E8F4F8] to-[#D4E9F2] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[15px] text-[#0891b2] font-semibold mb-1">分配给我的</p>
-                <p className="text-3xl font-bold text-[#0c4a6e]">{myAssignedTasks.length}</p>
+                <p className="text-[15px] text-[#0A7EA4] font-semibold mb-1">分配给我的</p>
+                <p className="text-3xl font-bold text-[#075A7A]">{myAssignedTasks.length}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#06b6d4] to-[#0891b2] flex items-center justify-center shadow-lg">
+              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#1BA1CD] to-[#0D8AB5] flex items-center justify-center shadow-lg">
                 <Users className="w-6 h-6 text-white" />
               </div>
             </div>
@@ -147,14 +147,14 @@ export default function Teams() {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-[#d1fae5] to-[#a7f3d0] rounded-[16px]">
+        <Card className="border-0 shadow-md bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[15px] text-[#059669] font-semibold mb-1">团队共享</p>
-                <p className="text-3xl font-bold text-[#065f46]">{sharedTasks.length}</p>
+                <p className="text-[15px] text-[#2E7D32] font-semibold mb-1">团队共享</p>
+                <p className="text-3xl font-bold text-[#1B5E20]">{sharedTasks.length}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#10b981] to-[#059669] flex items-center justify-center shadow-lg">
+              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#43A047] to-[#388E3C] flex items-center justify-center shadow-lg">
                 <CheckCircle2 className="w-6 h-6 text-white" />
               </div>
             </div>
@@ -192,7 +192,7 @@ export default function Teams() {
                   </Badge>
                 )}
                 {user.id === currentUser?.id && (
-                  <Badge variant="outline" className="text-[13px] bg-[#e0f2fe] text-[#0891b2] border-[#bae6fd] rounded-[6px]">
+                  <Badge variant="outline" className="text-[13px] bg-[#E8F4F8] text-[#0A7EA4] border-[#D4E9F2] rounded-[6px]">
                     我
                   </Badge>
                 )}
@@ -223,10 +223,10 @@ export default function Teams() {
             <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#5a647d] data-[state=active]:to-[#4a5670] data-[state=active]:text-white data-[state=active]:shadow-sm">
               全部任务 ({sharedTasks.length})
             </TabsTrigger>
-            <TabsTrigger value="assigned" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <TabsTrigger value="assigned" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#1BA1CD] data-[state=active]:to-[#0D8AB5] data-[state=active]:text-white data-[state=active]:shadow-sm">
               分配给我 ({myAssignedTasks.length})
             </TabsTrigger>
-            <TabsTrigger value="created" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <TabsTrigger value="created" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#43A047] data-[state=active]:to-[#388E3C] data-[state=active]:text-white data-[state=active]:shadow-sm">
               我创建的 ({myCreatedTasks.length})
             </TabsTrigger>
           </TabsList>

@@ -252,16 +252,16 @@ export default function Dashboard() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}
         >
-          <Card className="border-0 shadow-md bg-gradient-to-br from-[#d1fae5] to-[#a7f3d0] rounded-[16px]">
+          <Card className="border-0 shadow-md bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9] rounded-[16px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-[#059669]" />
-                <span className="text-[#059669]">今日完成</span>
+                <CheckCircle2 className="w-5 h-5 text-[#2E7D32]" />
+                <span className="text-[#2E7D32]">今日完成</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold mb-1 text-[#065f46]">{completedToday}</div>
-              <p className="text-[15px] text-[#059669]">个任务已完成</p>
+              <div className="text-4xl font-bold mb-1 text-[#1B5E20]">{completedToday}</div>
+              <p className="text-[15px] text-[#2E7D32]">个任务已完成</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -271,16 +271,16 @@ export default function Dashboard() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.3 }}
         >
-          <Card className="border-0 shadow-md bg-gradient-to-br from-[#e0f2fe] to-[#bae6fd] rounded-[16px]">
+          <Card className="border-0 shadow-md bg-gradient-to-br from-[#E8F4F8] to-[#D4E9F2] rounded-[16px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#0891b2]" />
-                <span className="text-[#0891b2]">待办总数</span>
+                <TrendingUp className="w-5 h-5 text-[#0A7EA4]" />
+                <span className="text-[#0A7EA4]">待办总数</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold mb-1 text-[#0c4a6e]">{totalPending}</div>
-              <p className="text-[15px] text-[#0891b2]">个任务进行中</p>
+              <div className="text-4xl font-bold mb-1 text-[#075A7A]">{totalPending}</div>
+              <p className="text-[15px] text-[#0A7EA4]">个任务进行中</p>
             </CardContent>
           </Card>
         </motion.div>

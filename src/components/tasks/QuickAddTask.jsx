@@ -387,14 +387,14 @@ export default function QuickAddTask({ onAdd }) {
                     size="icon"
                     variant="ghost"
                     onClick={startVoiceInput}
-                    className="h-9 w-9 hover:bg-blue-50 rounded-full group transition-all relative"
+                    className="h-9 w-9 hover:bg-[#e0f2fe] rounded-full group transition-all relative"
                     title="语音输入"
                   >
-                    <Mic className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                    <Mic className="w-4 h-4 text-[#52525b] group-hover:text-[#0891b2] transition-colors" />
                     <motion.div
-                      className="absolute inset-0 rounded-full bg-blue-100"
+                      className="absolute inset-0 rounded-full bg-[#06b6d4]"
                       initial={{ scale: 0, opacity: 0 }}
-                      whileHover={{ scale: 1.2, opacity: 0.3 }}
+                      whileHover={{ scale: 1.2, opacity: 0.15 }}
                       transition={{ duration: 0.3 }}
                     />
                   </Button>
@@ -409,11 +409,11 @@ export default function QuickAddTask({ onAdd }) {
                 <div className="relative flex items-center gap-4 px-6 py-5 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/50 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300">
                   {/* 图标 */}
                   <div className="relative">
-                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] flex items-center justify-center shadow-lg shadow-[#5a647d]/25 group-hover:shadow-[#5a647d]/40 group-hover:scale-105 transition-all duration-300">
+                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#06b6d4] to-[#0891b2] flex items-center justify-center shadow-lg shadow-[#06b6d4]/30 group-hover:shadow-[#06b6d4]/50 group-hover:scale-105 transition-all duration-300">
                       <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
                     </div>
                     <motion.div
-                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center"
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#10b981] flex items-center justify-center shadow-md"
                       initial={{ scale: 0 }}
                       animate={{ scale: [0, 1.2, 1] }}
                       transition={{ duration: 0.5, delay: 0.2 }}
@@ -424,10 +424,10 @@ export default function QuickAddTask({ onAdd }) {
                   
                   {/* 文字 */}
                   <div className="flex-1 text-left">
-                    <div className="text-lg font-semibold text-slate-800 mb-0.5">
+                    <div className="text-[17px] font-semibold text-[#222222] mb-0.5 tracking-tight">
                       创建新任务
                     </div>
-                    <div className="text-sm text-slate-500">
+                    <div className="text-[15px] text-[#52525b]">
                       开始输入或使用语音快速创建
                     </div>
                   </div>
@@ -609,14 +609,14 @@ export default function QuickAddTask({ onAdd }) {
                       type="button"
                       variant="outline"
                       onClick={() => setShowSmartSuggestion(!showSmartSuggestion)}
-                      className={`border-2 ${
+                      className={`border ${
                         showSmartSuggestion 
-                          ? 'border-purple-400 bg-purple-50 text-purple-700' 
-                          : 'border-purple-300 text-purple-600 hover:bg-purple-50'
-                      }`}
+                          ? 'border-[#06b6d4] bg-[#e0f2fe] text-[#0891b2] shadow-sm' 
+                          : 'border-[#bae6fd] text-[#0284c7] hover:bg-[#f0f9ff] hover:border-[#7dd3fc]'
+                      } rounded-[10px]`}
                     >
                       <Sparkles className="w-4 h-4 mr-2" />
-                      <span>AI 智能推荐</span>
+                      <span className="font-medium">AI 智能推荐</span>
                     </Button>
                   </motion.div>
                 )}
@@ -691,12 +691,12 @@ export default function QuickAddTask({ onAdd }) {
                     type="button"
                     variant="outline"
                     onClick={() => setShowAssignment(true)}
-                    className="border-slate-200 bg-white hover:border-purple-300 rounded-lg"
+                    className="border border-[#dce4ed] bg-white hover:bg-[#f9fafb] hover:border-[#5a647d] rounded-[10px]"
                   >
-                    <Users className="h-4 w-4 mr-2 text-slate-500" />
-                    <span className="text-slate-600">团队分配</span>
+                    <Users className="h-4 w-4 mr-2 text-[#52525b]" />
+                    <span className="text-[#222222] font-medium">团队分配</span>
                     {task.assigned_to && task.assigned_to.length > 0 && (
-                      <Badge className="ml-2 bg-purple-500 text-white">
+                      <Badge className="ml-2 bg-[#06b6d4] text-white rounded-md">
                         {task.assigned_to.length}
                       </Badge>
                     )}
@@ -709,7 +709,7 @@ export default function QuickAddTask({ onAdd }) {
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 rounded-xl text-slate-600 transition-all"
+                      className="w-full border border-[#dce4ed] bg-white hover:bg-[#f9fafb] hover:border-[#c8d1e0] rounded-[12px] text-[#222222] transition-all"
                     >
                       <Settings className="w-4 h-4 mr-2" />
                       <span>{showSettings ? "收起" : "展开"}高级设置</span>
@@ -742,7 +742,7 @@ export default function QuickAddTask({ onAdd }) {
                       setShowSettings(false);
                       setShowRecurrence(false);
                     }}
-                    className="rounded-xl h-12 px-6 border-slate-200 text-slate-600 hover:bg-slate-50"
+                    className="rounded-[12px] h-12 px-6 border border-[#dce4ed] text-[#222222] hover:bg-[#f9fafb] font-medium"
                   >
                     取消
                   </Button>
@@ -915,20 +915,20 @@ export default function QuickAddTask({ onAdd }) {
             {/* 使用提示 */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
               <div className="flex gap-3">
-                <Wand2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <Wand2 className="w-5 h-5 text-[#0891b2] flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-blue-800 mb-2">💡 使用提示</p>
-                  <ul className="text-xs text-blue-700 space-y-1.5">
+                  <p className="text-[15px] font-semibold text-[#222222] mb-2">💡 使用提示</p>
+                  <ul className="text-[13px] text-[#52525b] space-y-1.5 leading-relaxed">
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span className="text-[#06b6d4] mt-0.5">•</span>
                       <span>直接说出任务内容，AI 自动识别</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span className="text-[#06b6d4] mt-0.5">•</span>
                       <span>例如："明天下午3点提醒我开会"</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span className="text-[#06b6d4] mt-0.5">•</span>
                       <span>支持创建多个任务和子任务</span>
                     </li>
                   </ul>

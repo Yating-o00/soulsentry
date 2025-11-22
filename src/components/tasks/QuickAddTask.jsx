@@ -409,7 +409,7 @@ export default function QuickAddTask({ onAdd }) {
                 <div className="relative flex items-center gap-4 px-6 py-5 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/50 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300">
                   {/* 图标 */}
                   <div className="relative">
-                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 group-hover:scale-105 transition-all duration-300">
+                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] flex items-center justify-center shadow-lg shadow-[#5a647d]/25 group-hover:shadow-[#5a647d]/40 group-hover:scale-105 transition-all duration-300">
                       <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
                     </div>
                     <motion.div
@@ -728,7 +728,7 @@ export default function QuickAddTask({ onAdd }) {
                 <div className="flex items-center gap-3 pt-2">
                   <Button
                     type="submit"
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all"
+                    className="flex-1 bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] hover:from-[#4a5670] hover:to-[#152e50] text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-[#5a647d]/25 hover:shadow-[#5a647d]/40 transition-all"
                     disabled={!task.title.trim() || !task.reminder_time}
                   >
                     <Plus className="w-5 h-5 mr-2" strokeWidth={2.5} />

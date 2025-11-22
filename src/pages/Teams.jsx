@@ -111,7 +111,7 @@ export default function Teams() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] bg-clip-text text-transparent mb-2">
           团队协作
         </h1>
         <p className="text-slate-600">查看和管理团队共享的任务</p>

@@ -227,11 +227,11 @@ export default function AITaskAssistant({ isOpen, onClose }) {
     >
       <Card className="shadow-2xl border border-purple-200 bg-white overflow-hidden">
         {/* 头部 - 精简版 */}
-        <div className="bg-gradient-to-r from-purple-500 to-blue-500 p-3 text-white">
+        <div className="bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] p-3 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <Bot className="w-4 h-4 text-purple-600" />
+                <Bot className="w-4 h-4 text-[#5a647d]" />
               </div>
               <div>
                 <h3 className="text-sm font-semibold flex items-center gap-1.5">
@@ -262,17 +262,17 @@ export default function AITaskAssistant({ isOpen, onClose }) {
         </div>
 
         {/* 消息区域 - 缩小版 */}
-        <div className="h-64 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-purple-50/30 to-blue-50/30">
+        <div className="h-64 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-[#f9fafb] to-white">
           {messages.length === 0 && isLoading && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="flex flex-col items-center justify-center h-full text-center"
             >
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center mb-3 relative">
-                <Sparkles className="w-6 h-6 text-purple-600" />
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#e5e9ef] to-[#dce3eb] flex items-center justify-center mb-3 relative">
+                <Sparkles className="w-6 h-6 text-[#5a647d]" />
                 <motion.div
-                  className="absolute inset-0 rounded-full border-2 border-purple-400"
+                  className="absolute inset-0 rounded-full border-2 border-[#5a647d]"
                   animate={{
                     scale: [1, 1.3],
                     opacity: [0.6, 0],
@@ -331,7 +331,7 @@ export default function AITaskAssistant({ isOpen, onClose }) {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 text-xs text-purple-600"
+              className="flex items-center gap-2 text-xs text-[#5a647d]"
             >
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               <span>思考中...</span>
@@ -348,7 +348,7 @@ export default function AITaskAssistant({ isOpen, onClose }) {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder="说说你的想法..."
-              className="flex-1 text-sm h-9 border-purple-200 focus-visible:ring-purple-500"
+              className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#5a647d]"
               disabled={isLoading}
             />
             <Button
@@ -387,7 +387,7 @@ function MessageBubble({ message, isSpeaking }) {
       className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
     >
       {!isUser && (
-        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex-shrink-0 flex items-center justify-center">
+        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] flex-shrink-0 flex items-center justify-center">
           <Bot className="w-3.5 h-3.5 text-white" />
         </div>
       )}
@@ -396,8 +396,8 @@ function MessageBubble({ message, isSpeaking }) {
         <div
           className={`rounded-xl px-3 py-2 ${
             isUser
-              ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white"
-              : "bg-white border border-purple-200 text-slate-800"
+              ? "bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] text-white"
+              : "bg-white border border-[#e5e9ef] text-[#222222]"
           }`}
         >
           {isUser ? (
@@ -413,7 +413,7 @@ function MessageBubble({ message, isSpeaking }) {
                   animate={{ scale: [1, 1.2, 1] }}
                   transition={{ duration: 0.5, repeat: Infinity }}
                 >
-                  <Volume2 className="w-3 h-3 text-purple-600" />
+                  <Volume2 className="w-3 h-3 text-[#5a647d]" />
                 </motion.div>
               )}
             </div>
@@ -460,7 +460,7 @@ function ToolCallDisplay({ toolCall }) {
   return (
     <Badge
       variant="outline"
-      className="text-[10px] bg-purple-50 text-purple-700 border-purple-300 gap-0.5 px-1.5 py-0.5"
+      className="text-[10px] bg-[#f9fafb] text-[#5a647d] border-[#dce4ed] gap-0.5 px-1.5 py-0.5"
     >
       {getIcon()}
       {getLabel()}

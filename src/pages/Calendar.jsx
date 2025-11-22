@@ -157,7 +157,7 @@ export default function CalendarPage() {
         className="flex flex-col md:flex-row md:items-center justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] bg-clip-text text-transparent mb-2">
             日历视图
           </h1>
           <p className="text-slate-600">查看和管理您的任务时间线</p>
@@ -353,7 +353,7 @@ export default function CalendarPage() {
           transition={{ delay: 0.2 }}
           className="space-y-4"
         >
-          <Card className="p-6 border-0 shadow-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+          <Card className="p-6 border-0 shadow-xl bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] text-white">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">
                 {format(selectedDate, "M月d日 EEEE", { locale: zhCN })}

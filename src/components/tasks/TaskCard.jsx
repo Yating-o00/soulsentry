@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -49,21 +48,21 @@ const CATEGORY_ICONS = {
 };
 
 const CATEGORY_COLORS = {
-  work: "bg-blue-100 text-blue-700 border-blue-200",
-  personal: "bg-purple-100 text-purple-700 border-purple-200",
-  health: "bg-green-100 text-green-700 border-green-200",
-  study: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  family: "bg-pink-100 text-pink-700 border-pink-200",
-  shopping: "bg-orange-100 text-orange-700 border-orange-200",
-  finance: "bg-red-100 text-red-700 border-red-200",
-  other: "bg-gray-100 text-gray-700 border-gray-200",
+  work: "bg-[#e5e9ef] text-[#5a647d] border-[#dce4ed]",
+  personal: "bg-[#eef4ff] text-[#5a647d] border-[#dce4ed]",
+  health: "bg-[#e0f7f4] text-[#0891b2] border-[#b3e5dd]",
+  study: "bg-[#fef3e2] text-[#d97706] border-[#fde8c3]",
+  family: "bg-[#fce7f3] text-[#be185d] border-[#fbcfe8]",
+  shopping: "bg-[#fff7ed] text-[#ea580c] border-[#fed7aa]",
+  finance: "bg-[#fef2f2] text-[#dc2626] border-[#fecaca]",
+  other: "bg-[#f9fafb] text-[#52525b] border-[#e5e7eb]",
 };
 
 const PRIORITY_COLORS = {
-  low: "text-slate-500",
-  medium: "text-blue-500",
-  high: "text-orange-500",
-  urgent: "text-red-500",
+  low: "text-[#a1a1aa]",
+  medium: "text-[#5a647d]",
+  high: "text-[#ea580c]",
+  urgent: "text-[#dc2626]",
 };
 
 const PRIORITY_LABELS = {
@@ -122,14 +121,14 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
         layout
       >
         <Card
-          className={`group border-0 shadow-lg hover:shadow-xl transition-all duration-300 ${
+          className={`group border shadow-md hover:shadow-lg transition-all duration-200 ${
             isCompleted
-              ? 'bg-slate-50/50 opacity-70'
+              ? 'bg-[#f9fafb] opacity-60 border-[#e5e9ef]'
               : isSnoozed
-              ? 'bg-yellow-50/50 border-l-4 border-l-yellow-400'
+              ? 'bg-[#fffbeb] border-l-4 border-l-[#fbbf24] border border-[#fde8c3]'
               : isPast
-              ? 'bg-red-50/50 border-l-4 border-l-red-400'
-              : 'bg-white hover:scale-[1.01]'
+              ? 'bg-[#fef2f2] border-l-4 border-l-[#ef4444] border border-[#fecaca]'
+              : 'bg-white border-[#e5e9ef] hover:border-[#5a647d]/20'
           }`}
         >
           {/* 主任务 */}
@@ -154,12 +153,12 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                           e.stopPropagation();
                           setExpanded(!expanded);
                         }}
-                        className="hover:bg-purple-100 rounded p-1 transition-colors"
+                        className="hover:bg-[#f4f6f8] rounded-lg p-1 transition-colors"
                       >
                         {expanded ? (
-                          <ChevronDown className="w-4 h-4 text-purple-600" />
+                          <ChevronDown className="w-4 h-4 text-[#5a647d]" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-purple-600" />
+                          <ChevronRight className="w-4 h-4 text-[#5a647d]" />
                         )}
                       </button>
                     )}
@@ -177,7 +176,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         setShowShareCard(true);
                       }}
-                      className="h-8 w-8 hover:bg-purple-100 hover:text-purple-600 rounded-lg"
+                      className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#5a647d] rounded-lg"
                       title="分享任务"
                     >
                       <Share2 className="h-4 w-4" />
@@ -189,7 +188,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         onEdit();
                       }}
-                      className="h-8 w-8 hover:bg-blue-100 hover:text-blue-600 rounded-lg"
+                      className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#5a647d] rounded-lg"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -200,7 +199,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         onDelete();
                       }}
-                      className="h-8 w-8 hover:bg-red-100 hover:text-red-600 rounded-lg"
+                      className="h-8 w-8 hover:bg-[#fef2f2] hover:text-[#dc2626] rounded-lg"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -216,8 +215,8 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                 {hasSubtasks && (
                   <div className="mb-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-slate-500">子任务进度</span>
-                      <span className="text-xs font-semibold text-purple-600">
+                      <span className="text-xs text-[#52525b]">子任务进度</span>
+                      <span className="text-xs font-semibold text-[#5a647d]">
                         {completedSubtasks}/{subtasks.length} 已完成 ({progress}%)
                       </span>
                     </div>
@@ -243,8 +242,8 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                   </Badge>
 
                   {getRecurrenceText() && (
-                    <Badge variant="outline" className="rounded-lg">
-                      <Repeat className="w-3 h-3 mr-1 text-purple-500" />
+                    <Badge variant="outline" className="rounded-lg border-[#dce4ed] text-[#5a647d]">
+                      <Repeat className="w-3 h-3 mr-1" />
                       {getRecurrenceText()}
                     </Badge>
                   )}
@@ -258,20 +257,20 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                   </Badge>
 
                   {hasSubtasks && (
-                    <Badge className="bg-purple-500 text-white rounded-lg">
+                    <Badge className="bg-[#5a647d] text-white rounded-lg">
                       {subtasks.length} 个子任务
                     </Badge>
                   )}
 
                   {task.persistent_reminder && (
-                    <Badge className="bg-purple-500 text-white rounded-lg">
+                    <Badge className="bg-[#5a647d] text-white rounded-lg">
                       <Bell className="w-3 h-3 mr-1" />
                       持续提醒
                     </Badge>
                   )}
 
                   {task.advance_reminders && task.advance_reminders.length > 0 && (
-                    <Badge variant="outline" className="rounded-lg text-blue-600 border-blue-300">
+                    <Badge variant="outline" className="rounded-lg text-[#0891b2] border-[#b3e5dd]">
                       <Volume2 className="w-3 h-3 mr-1" />
                       提前{task.advance_reminders.length}次
                     </Badge>
@@ -315,7 +314,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="border-t-2 border-purple-100 bg-purple-50/30"
+                className="border-t border-[#e5e9ef] bg-[#f9fafb]/50"
               >
                 {subtasks.map((subtask, subIndex) => {
                   const isSubtaskCompleted = subtask.status === "completed";
@@ -331,16 +330,16 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                       animate={{ opacity: 1, x: 0 }}
                       className={`px-5 py-3 ml-9 border-l-2 transition-all ${
                         isSubtaskCompleted
-                          ? 'border-green-300 bg-green-50/30'
-                          : 'border-purple-300 hover:bg-white/50'
+                          ? 'border-[#10b981] bg-[#e0f7f4]/30'
+                          : 'border-[#dce4ed] hover:bg-white/80'
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         {/* 子任务序号标识 */}
                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                           isSubtaskCompleted
-                            ? 'bg-green-500 text-white'
-                            : 'bg-purple-500 text-white'
+                            ? 'bg-[#10b981] text-white'
+                            : 'bg-[#5a647d] text-white'
                         }`}>
                           {isSubtaskCompleted ? '✓' : orderNumber}
                         </div>

@@ -138,14 +138,14 @@ ${behaviors.length > 0 ? behaviors.map(b => `
   };
 
   return (
-    <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4">
+    <Card className="border shadow-md bg-gradient-to-br from-[#f9fafb] to-white border-[#dce4ed] p-4">
       <div className="flex items-start gap-3 mb-3">
-        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0">
+        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] flex items-center justify-center flex-shrink-0">
           <Brain className="w-5 h-5 text-white" />
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-600" />
+          <h3 className="font-semibold text-[#222222] mb-1 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#5a647d]" />
             AI 智能提醒建议
           </h3>
           <p className="text-sm text-slate-600">
@@ -158,7 +158,7 @@ ${behaviors.length > 0 ? behaviors.map(b => `
         <Button
           onClick={analyzeBehavior}
           disabled={loading}
-          className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white"
+          className="w-full bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] hover:from-[#4a5670] hover:to-[#152e50] text-white"
         >
           {loading ? (
             <>
@@ -182,21 +182,21 @@ ${behaviors.length > 0 ? behaviors.map(b => `
             exit={{ opacity: 0, height: 0 }}
             className="mt-3 space-y-2"
           >
-            <div className="flex items-center gap-2 text-sm text-purple-600">
+            <div className="flex items-center gap-2 text-sm text-[#5a647d]">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>AI 正在分析您的使用习惯...</span>
             </div>
             <div className="space-y-1 text-xs text-slate-500">
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#5a647d] animate-pulse" />
                 分析任务类型和优先级
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#93c5fd] animate-pulse" />
                 评估历史完成率
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#5a647d] animate-pulse" />
                 生成个性化建议
               </div>
             </div>
@@ -211,15 +211,15 @@ ${behaviors.length > 0 ? behaviors.map(b => `
           >
             {/* 洞察卡片 */}
             {suggestions.insights && suggestions.insights.length > 0 && (
-              <div className="bg-white rounded-lg p-3 border border-purple-200">
+              <div className="bg-white rounded-lg p-3 border border-[#dce4ed]">
                 <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="w-4 h-4 text-purple-600" />
+                  <TrendingUp className="w-4 h-4 text-[#5a647d]" />
                   <span className="text-sm font-semibold text-slate-800">行为洞察</span>
                 </div>
                 <ul className="space-y-1 text-xs text-slate-600">
                   {suggestions.insights.map((insight, idx) => (
                     <li key={idx} className="flex items-start gap-2">
-                      <span className="text-purple-500 mt-0.5">•</span>
+                      <span className="text-[#5a647d] mt-0.5">•</span>
                       <span>{insight}</span>
                     </li>
                   ))}
@@ -238,13 +238,13 @@ ${behaviors.length > 0 ? behaviors.map(b => `
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.1 }}
-                    className="bg-white rounded-lg p-3 border-2 border-purple-200 hover:border-purple-400 transition-all group cursor-pointer"
+                    className="bg-white rounded-lg p-3 border border-[#dce4ed] hover:border-[#5a647d] transition-all group cursor-pointer shadow-sm hover:shadow-md"
                     onClick={() => handleApplySuggestion(suggestion.datetime)}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <Clock className="w-4 h-4 text-purple-600" />
+                          <Clock className="w-4 h-4 text-[#5a647d]" />
                           <span className="font-semibold text-slate-800">
                             {format(datetime, "M月d日 EEEE HH:mm", { locale: zhCN })}
                           </span>
@@ -259,7 +259,7 @@ ${behaviors.length > 0 ? behaviors.map(b => `
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-purple-100 hover:bg-purple-200 text-purple-700"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-[#e5e9ef] hover:bg-[#dce4ed] text-[#5a647d]"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleApplySuggestion(suggestion.datetime);
@@ -277,7 +277,7 @@ ${behaviors.length > 0 ? behaviors.map(b => `
               variant="outline"
               size="sm"
               onClick={analyzeBehavior}
-              className="w-full border-purple-300 text-purple-600 hover:bg-purple-50"
+              className="w-full border-[#dce4ed] text-[#5a647d] hover:bg-[#f9fafb]"
             >
               重新分析
             </Button>

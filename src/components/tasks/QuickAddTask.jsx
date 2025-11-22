@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import RecurrenceEditor from "./RecurrenceEditor";
 import TaskAssignment from "./TaskAssignment";
 import SmartReminderSuggestion from "./SmartReminderSuggestion";
+import AITaskEnhancer from "./AITaskEnhancer";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +57,7 @@ export default function QuickAddTask({ onAdd }) {
   
   const [showAssignment, setShowAssignment] = useState(false);
   const [showSmartSuggestion, setShowSmartSuggestion] = useState(false);
+  const [showAIEnhancer, setShowAIEnhancer] = useState(false);
   const [task, setTask] = useState({
     title: "",
     description: "",
@@ -479,6 +481,21 @@ export default function QuickAddTask({ onAdd }) {
                     transition={{ duration: 0.3 }}
                   />
                 </div>
+
+                {/* AI智能增强 */}
+                <AITaskEnhancer
+                  taskTitle={task.title}
+                  currentDescription={task.description}
+                  onApply={(aiSuggestions) => {
+                    setTask({
+                      ...task,
+                      description: aiSuggestions.description,
+                      category: aiSuggestions.category,
+                      priority: aiSuggestions.priority,
+                      tags: aiSuggestions.tags || [],
+                    });
+                  }}
+                />
 
                 {/* 描述输入 */}
                 <Textarea

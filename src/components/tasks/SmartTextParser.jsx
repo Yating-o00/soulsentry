@@ -181,21 +181,21 @@ ${text}
   };
 
   const PRIORITY_LABELS = {
-    low: { label: "低", color: "bg-slate-100 text-slate-700" },
-    medium: { label: "中", color: "bg-blue-100 text-blue-700" },
-    high: { label: "高", color: "bg-orange-100 text-orange-700" },
-    urgent: { label: "紧急", color: "bg-red-100 text-red-700" },
+    low: { label: "低", color: "bg-[#f4f6f8] text-[#52525b]" },
+    medium: { label: "中", color: "bg-[#e5e9ef] text-[#5a647d]" },
+    high: { label: "高", color: "bg-[#fed7aa] text-[#ea580c]" },
+    urgent: { label: "紧急", color: "bg-[#fecaca] text-[#dc2626]" },
   };
 
   const CATEGORY_LABELS = {
-    work: { label: "工作", color: "bg-blue-100 text-blue-700" },
-    personal: { label: "个人", color: "bg-purple-100 text-purple-700" },
-    health: { label: "健康", color: "bg-green-100 text-green-700" },
-    study: { label: "学习", color: "bg-yellow-100 text-yellow-700" },
-    family: { label: "家庭", color: "bg-pink-100 text-pink-700" },
-    shopping: { label: "购物", color: "bg-orange-100 text-orange-700" },
-    finance: { label: "财务", color: "bg-red-100 text-red-700" },
-    other: { label: "其他", color: "bg-gray-100 text-gray-700" },
+    work: { label: "工作", color: "bg-[#e5e9ef] text-[#5a647d]" },
+    personal: { label: "个人", color: "bg-[#e0f2fe] text-[#0891b2]" },
+    health: { label: "健康", color: "bg-[#d1fae5] text-[#059669]" },
+    study: { label: "学习", color: "bg-[#fef3c7] text-[#d97706]" },
+    family: { label: "家庭", color: "bg-[#fce7f3] text-[#db2777]" },
+    shopping: { label: "购物", color: "bg-[#fed7aa] text-[#ea580c]" },
+    finance: { label: "财务", color: "bg-[#fecaca] text-[#dc2626]" },
+    other: { label: "其他", color: "bg-[#f4f6f8] text-[#52525b]" },
   };
 
   return (
@@ -282,18 +282,18 @@ ${text}
                     className="bg-white rounded-[12px] border border-[#dce4ed] overflow-hidden hover:border-[#c8d1e0] transition-all"
                   >
                     {/* 主任务 */}
-                    <div className="p-4 hover:bg-purple-50/50 transition-all">
+                    <div className="p-4 hover:bg-[#f9fafb] transition-all">
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="flex items-start gap-2 flex-1">
                           {task.subtasks && task.subtasks.length > 0 && (
                             <button
                               onClick={() => toggleExpanded(index)}
-                              className="mt-1 hover:bg-purple-100 rounded p-0.5 transition-colors"
+                              className="mt-1 hover:bg-[#e5e9ef] rounded-lg p-0.5 transition-colors"
                             >
                               {expandedTasks.has(index) ? (
-                                <ChevronDown className="w-4 h-4 text-purple-600" />
+                                <ChevronDown className="w-4 h-4 text-[#5a647d]" />
                               ) : (
-                                <ChevronRight className="w-4 h-4 text-purple-600" />
+                                <ChevronRight className="w-4 h-4 text-[#5a647d]" />
                               )}
                             </button>
                           )}
@@ -302,7 +302,7 @@ ${text}
                               type="text"
                               value={task.title}
                               onChange={(e) => handleEditTask(index, 'title', e.target.value)}
-                              className="font-semibold text-slate-800 w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0"
+                              className="font-semibold text-[#222222] w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-[17px] tracking-tight"
                             />
                           </div>
                         </div>
@@ -320,7 +320,7 @@ ${text}
                         <textarea
                           value={task.description}
                           onChange={(e) => handleEditTask(index, 'description', e.target.value)}
-                          className="text-sm text-slate-600 w-full bg-slate-50 rounded-lg p-2 border-0 focus:ring-2 focus:ring-purple-300 mb-2 resize-none ml-6"
+                          className="text-[15px] text-[#222222] w-full bg-[#f9fafb] rounded-[10px] p-2 border border-[#e5e9ef] focus:ring-2 focus:ring-[#5a647d]/20 focus:border-[#5a647d] mb-2 resize-none ml-6"
                           rows={2}
                         />
                       )}
@@ -341,7 +341,7 @@ ${text}
                           })}
                         </Badge>
                         {task.subtasks && task.subtasks.length > 0 && (
-                          <Badge className="bg-purple-500 text-white">
+                          <Badge className="bg-[#5a647d] text-white rounded-[6px]">
                             📋 {task.subtasks.length} 个子任务
                           </Badge>
                         )}
@@ -354,15 +354,15 @@ ${text}
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="bg-purple-50/30 border-t-2 border-purple-200"
+                        className="bg-[#f9fafb] border-t border-[#e5e9ef]"
                       >
                         {task.subtasks.map((subtask, subIndex) => (
                           <div
                             key={subIndex}
-                            className="p-3 ml-8 border-l-2 border-purple-300 hover:bg-white/50 transition-all flex items-start gap-3"
+                            className="p-3 ml-8 border-l-2 border-[#dce4ed] hover:bg-white transition-all flex items-start gap-3"
                           >
                             {/* 子任务序号标识 */}
-                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold mt-0.5">
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#5a647d] text-white flex items-center justify-center text-xs font-bold mt-0.5">
                               {subtask.order || subIndex + 1}
                             </div>
                             
@@ -372,7 +372,7 @@ ${text}
                                   type="text"
                                   value={subtask.title}
                                   onChange={(e) => handleEditSubtask(index, subIndex, 'title', e.target.value)}
-                                  className="flex-1 font-medium text-slate-700 bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-sm"
+                                  className="flex-1 font-medium text-[#222222] bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-[15px]"
                                 />
                                 <Button
                                   variant="ghost"
@@ -388,7 +388,7 @@ ${text}
                                 <textarea
                                   value={subtask.description}
                                   onChange={(e) => handleEditSubtask(index, subIndex, 'description', e.target.value)}
-                                  className="text-xs text-slate-600 w-full bg-white rounded p-2 border-0 focus:ring-1 focus:ring-purple-300 mb-2 resize-none"
+                                  className="text-[13px] text-[#52525b] w-full bg-white rounded-[8px] p-2 border border-[#e5e9ef] focus:ring-2 focus:ring-[#5a647d]/20 focus:border-[#5a647d] mb-2 resize-none"
                                   rows={1}
                                 />
                               )}

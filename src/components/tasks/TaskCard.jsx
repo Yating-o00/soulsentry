@@ -153,12 +153,12 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                           e.stopPropagation();
                           setExpanded(!expanded);
                         }}
-                        className="hover:bg-purple-100 rounded p-1 transition-colors"
+                        className="hover:bg-[#e5e9ef] rounded-lg p-1 transition-colors"
                       >
                         {expanded ? (
-                          <ChevronDown className="w-4 h-4 text-purple-600" />
+                          <ChevronDown className="w-4 h-4 text-[#5a647d]" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-purple-600" />
+                          <ChevronRight className="w-4 h-4 text-[#5a647d]" />
                         )}
                       </button>
                     )}
@@ -176,7 +176,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         setShowShareCard(true);
                       }}
-                      className="h-8 w-8 hover:bg-purple-100 hover:text-purple-600 rounded-lg"
+                      className="h-8 w-8 hover:bg-[#e0f2fe] hover:text-[#0891b2] rounded-lg"
                       title="分享任务"
                     >
                       <Share2 className="h-4 w-4" />
@@ -188,7 +188,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         onEdit();
                       }}
-                      className="h-8 w-8 hover:bg-blue-100 hover:text-blue-600 rounded-lg"
+                      className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#5a647d] rounded-lg"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -199,7 +199,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         onDelete();
                       }}
-                      className="h-8 w-8 hover:bg-red-100 hover:text-red-600 rounded-lg"
+                      className="h-8 w-8 hover:bg-[#fee2e2] hover:text-[#dc2626] rounded-lg"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -263,21 +263,21 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                   )}
 
                   {task.persistent_reminder && (
-                    <Badge className="bg-purple-500 text-white rounded-lg">
+                    <Badge className="bg-[#06b6d4] text-white rounded-[8px] text-[13px]">
                       <Bell className="w-3 h-3 mr-1" />
                       持续提醒
                     </Badge>
                   )}
 
                   {task.advance_reminders && task.advance_reminders.length > 0 && (
-                    <Badge variant="outline" className="rounded-lg text-blue-600 border-blue-300">
+                    <Badge variant="outline" className="rounded-[8px] text-[13px] text-[#0891b2] border-[#bae6fd] bg-[#f0f9ff]">
                       <Volume2 className="w-3 h-3 mr-1" />
                       提前{task.advance_reminders.length}次
                     </Badge>
                   )}
 
                   {task.attachments && task.attachments.length > 0 && (
-                    <Badge variant="outline" className="rounded-lg text-green-600 border-green-300">
+                    <Badge variant="outline" className="rounded-[8px] text-[13px] text-[#10b981] border-[#86efac] bg-[#f0fdf4]">
                       <FileText className="w-3 h-3 mr-1" />
                       {task.attachments.length}个附件
                     </Badge>
@@ -291,14 +291,14 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                   )}
 
                   {isSnoozed && (
-                    <Badge className="bg-yellow-500 text-white rounded-lg">
+                    <Badge className="bg-[#f59e0b] text-white rounded-[8px] text-[13px] shadow-sm">
                       <TimerReset className="w-3 h-3 mr-1" />
                       已推迟 {task.snooze_count}次
                     </Badge>
                   )}
 
                   {isPast && !isCompleted && !isSnoozed && (
-                    <Badge className="bg-red-500 text-white rounded-lg">
+                    <Badge className="bg-[#ef4444] text-white rounded-[8px] text-[13px] shadow-sm">
                       已过期
                     </Badge>
                   )}
@@ -314,7 +314,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="border-t-2 border-purple-100 bg-purple-50/30"
+                className="border-t border-[#e5e9ef] bg-[#f9fafb]"
               >
                 {subtasks.map((subtask, subIndex) => {
                   const isSubtaskCompleted = subtask.status === "completed";
@@ -330,16 +330,16 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                       animate={{ opacity: 1, x: 0 }}
                       className={`px-5 py-3 ml-9 border-l-2 transition-all ${
                         isSubtaskCompleted
-                          ? 'border-green-300 bg-green-50/30'
-                          : 'border-purple-300 hover:bg-white/50'
+                          ? 'border-[#86efac] bg-[#ecfdf5]/50'
+                          : 'border-[#dce4ed] hover:bg-white'
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         {/* 子任务序号标识 */}
                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                           isSubtaskCompleted
-                            ? 'bg-green-500 text-white'
-                            : 'bg-purple-500 text-white'
+                            ? 'bg-[#10b981] text-white'
+                            : 'bg-[#5a647d] text-white'
                         }`}>
                           {isSubtaskCompleted ? '✓' : orderNumber}
                         </div>
@@ -351,14 +351,14 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                             onSubtaskToggle?.(subtask);
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          className="h-4 w-4 rounded data-[state=checked]:bg-green-500 mt-0.5"
+                          className="h-4 w-4 rounded data-[state=checked]:bg-[#10b981] mt-0.5"
                         />
 
                         <div className="flex-1">
-                          <span className={`block text-sm font-medium mb-1 ${
+                          <span className={`block text-[15px] font-medium mb-1 ${
                             isSubtaskCompleted
-                              ? 'line-through text-slate-400'
-                              : 'text-slate-700'
+                              ? 'line-through text-[#a1a1aa]'
+                              : 'text-[#222222]'
                           }`}>
                             {cleanTitle}
                           </span>
@@ -372,15 +372,15 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                               <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[subtask.priority]}`} />
                               {format(new Date(subtask.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
                             </Badge>
-                            <Badge className={`text-xs ${
+                            <Badge className={`text-[13px] ${
                               isSubtaskCompleted
-                                ? 'bg-green-500 text-white'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}>
+                                ? 'bg-[#10b981] text-white'
+                                : 'bg-[#f9fafb] text-[#222222] border border-[#dce4ed]'
+                            } rounded-[6px]`}>
                               {isSubtaskCompleted ? '✅ 已完成' : '📌 待完成'}
                             </Badge>
                             {isSubtaskCompleted && subtask.completed_at && (
-                              <Badge variant="outline" className="text-xs text-green-600">
+                              <Badge variant="outline" className="text-[13px] text-[#10b981] border-[#86efac] bg-[#f0fdf4] rounded-[6px]">
                                 {format(new Date(subtask.completed_at), "M月d日 完成", { locale: zhCN })}
                               </Badge>
                             )}

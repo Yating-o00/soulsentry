@@ -165,11 +165,11 @@ export default function CalendarPage() {
 
         <div className="flex items-center gap-3">
           <Tabs value={viewMode} onValueChange={setViewMode}>
-            <TabsList className="bg-white shadow-lg">
-              <TabsTrigger value="month">月视图</TabsTrigger>
-              <TabsTrigger value="week">周视图</TabsTrigger>
-            </TabsList>
-          </Tabs>
+              <TabsList className="bg-white shadow-md rounded-[12px]">
+                <TabsTrigger value="month" className="rounded-[10px] data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">月视图</TabsTrigger>
+                <TabsTrigger value="week" className="rounded-[10px] data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">周视图</TabsTrigger>
+              </TabsList>
+            </Tabs>
           <Button onClick={handleToday} variant="outline" className="shadow-lg">
             今天
           </Button>

@@ -104,13 +104,41 @@ export default function AITaskAssistant({ isOpen, onClose }) {
       });
       setConversationId(conversation.id);
 
-      // 发送初始问候
+      // 触发AI主动分析
       setTimeout(() => {
-        sendMessage("嗨！我来帮你检查一下今天的任务进度吧 👋");
-      }, 500);
+        triggerSmartAnalysis(conversation.id);
+      }, 800);
     } catch (error) {
       console.error("Failed to create conversation:", error);
       toast.error("初始化对话失败");
+    }
+  };
+
+  const triggerSmartAnalysis = async (convId) => {
+    if (!convId) return;
+    
+    setIsLoading(true);
+    try {
+      const conversation = await base44.agents.getConversation(convId);
+      
+      const analysisPrompt = `你好！请主动帮我分析当前任务状况：
+
+1. 查看我今天和近期（3天内）的待办任务
+2. 分析我的历史完成模式（查询UserBehavior数据）
+3. 识别哪些任务需要优先处理，并说明理由
+4. 基于截止时间、任务类型、我的习惯等因素提供智能优先级建议
+5. 用友好亲切的方式询问我目前的状态和需要的帮助
+
+请像朋友一样关心我，直接展示分析结果和建议，不要只是打招呼。`;
+
+      await base44.agents.addMessage(conversation, {
+        role: "user",
+        content: analysisPrompt
+      });
+    } catch (error) {
+      console.error("Smart analysis failed:", error);
+      setIsLoading(false);
+      toast.error("分析失败，请重试");
     }
   };
 
@@ -235,17 +263,71 @@ export default function AITaskAssistant({ isOpen, onClose }) {
 
         {/* 消息区域 - 缩小版 */}
         <div className="h-64 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-purple-50/30 to-blue-50/30">
+          {messages.length === 0 && isLoading && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center h-full text-center"
+            >
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center mb-3 relative">
+                <Sparkles className="w-6 h-6 text-purple-600" />
+                <motion.div
+                  className="absolute inset-0 rounded-full border-2 border-purple-400"
+                  animate={{
+                    scale: [1, 1.3],
+                    opacity: [0.6, 0],
+                  }}
+                  transition={{
+                    duration: 1.5,
+                    repeat: Infinity,
+                  }}
+                />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
+                小助正在分析中
+              </h3>
+              <p className="text-xs text-slate-600 mb-3">
+                正在查看你的任务和习惯...
+              </p>
+              <div className="text-[10px] text-slate-500 space-y-0.5">
+                <motion.p
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  ✓ 检查待办任务
+                </motion.p>
+                <motion.p
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 }}
+                >
+                  ✓ 分析完成模式
+                </motion.p>
+                <motion.p
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.6 }}
+                >
+                  ✓ 准备智能建议
+                </motion.p>
+              </div>
+            </motion.div>
+          )}
+
           <AnimatePresence mode="popLayout">
-            {messages.map((message, index) => (
-              <MessageBubble
-                key={index}
-                message={message}
-                isSpeaking={isSpeaking && index === messages.length - 1}
-              />
-            ))}
+            {messages
+              .filter(msg => !msg.content.includes("请主动帮我分析当前任务状况"))
+              .map((message, index) => (
+                <MessageBubble
+                  key={index}
+                  message={message}
+                  isSpeaking={isSpeaking && index === messages.length - 1}
+                />
+              ))}
           </AnimatePresence>
 
-          {isLoading && (
+          {messages.length > 0 && isLoading && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

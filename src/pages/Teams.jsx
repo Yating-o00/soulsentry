@@ -254,7 +254,7 @@ export default function Teams() {
                     return user ? (
                       <Avatar
                         key={userId}
-                        className="h-8 w-8 border-2 border-white bg-gradient-to-br from-[#06b6d4] to-[#0891b2] text-white text-xs shadow-md"
+                        className="h-8 w-8 border-2 border-white bg-gradient-to-br from-[#1BA1CD] to-[#0D8AB5] text-white text-xs shadow-md"
                         title={user.full_name}
                       >
                         <AvatarFallback className="bg-transparent">

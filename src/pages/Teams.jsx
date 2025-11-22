@@ -119,42 +119,42 @@ export default function Teams() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-blue-100">
+        <Card className="border-0 shadow-md bg-gradient-to-br from-[#e0f2fe] to-[#bae6fd] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600 font-medium mb-1">分配给我的</p>
-                <p className="text-3xl font-bold text-blue-700">{myAssignedTasks.length}</p>
+                <p className="text-[15px] text-[#0891b2] font-semibold mb-1">分配给我的</p>
+                <p className="text-3xl font-bold text-[#0c4a6e]">{myAssignedTasks.length}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-blue-500 flex items-center justify-center">
+              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#06b6d4] to-[#0891b2] flex items-center justify-center shadow-lg">
                 <Users className="w-6 h-6 text-white" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-50 to-purple-100">
+        <Card className="border-0 shadow-md bg-gradient-to-br from-[#f1f5f9] to-[#e2e8f0] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-purple-600 font-medium mb-1">我创建的</p>
-                <p className="text-3xl font-bold text-purple-700">{myCreatedTasks.length}</p>
+                <p className="text-[15px] text-[#5a647d] font-semibold mb-1">我创建的</p>
+                <p className="text-3xl font-bold text-[#334155]">{myCreatedTasks.length}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-purple-500 flex items-center justify-center">
+              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#5a647d] to-[#4a5670] flex items-center justify-center shadow-lg">
                 <Clock className="w-6 h-6 text-white" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-green-50 to-green-100">
+        <Card className="border-0 shadow-md bg-gradient-to-br from-[#d1fae5] to-[#a7f3d0] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600 font-medium mb-1">团队共享</p>
-                <p className="text-3xl font-bold text-green-700">{sharedTasks.length}</p>
+                <p className="text-[15px] text-[#059669] font-semibold mb-1">团队共享</p>
+                <p className="text-3xl font-bold text-[#065f46]">{sharedTasks.length}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center">
+              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#10b981] to-[#059669] flex items-center justify-center shadow-lg">
                 <CheckCircle2 className="w-6 h-6 text-white" />
               </div>
             </div>
@@ -163,11 +163,11 @@ export default function Teams() {
       </div>
 
       {/* 团队成员 */}
-      <Card className="border-0 shadow-lg">
+      <Card className="border border-[#e5e9ef] shadow-md rounded-[16px]">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-600" />
-            团队成员 ({allUsers.length})
+          <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
+            <Users className="w-5 h-5 text-[#5a647d]" />
+            <span className="text-[#222222]">团队成员 ({allUsers.length})</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -175,24 +175,24 @@ export default function Teams() {
             {allUsers.map((user) => (
               <div
                 key={user.id}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 bg-[#f9fafb] rounded-[12px] hover:bg-[#f1f5f9] transition-colors border border-[#e5e9ef]"
               >
-                <Avatar className="h-8 w-8 bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs">
+                <Avatar className="h-8 w-8 bg-gradient-to-br from-[#5a647d] to-[#4a5670] text-white text-xs">
                   <AvatarFallback className="bg-transparent">
                     {getInitials(user.full_name)}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{user.full_name}</p>
-                  <p className="text-xs text-slate-500">{user.email}</p>
+                  <p className="text-[15px] font-medium text-[#222222]">{user.full_name}</p>
+                  <p className="text-[13px] text-[#52525b]">{user.email}</p>
                 </div>
                 {user.role === 'admin' && (
-                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                  <Badge variant="outline" className="text-[13px] bg-[#f1f5f9] text-[#5a647d] border-[#dce4ed] rounded-[6px]">
                     管理员
                   </Badge>
                 )}
                 {user.id === currentUser?.id && (
-                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                  <Badge variant="outline" className="text-[13px] bg-[#e0f2fe] text-[#0891b2] border-[#bae6fd] rounded-[6px]">
                     我
                   </Badge>
                 )}
@@ -214,19 +214,19 @@ export default function Teams() {
             placeholder="搜索团队任务..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 border-0 bg-white shadow-lg rounded-xl"
+            className="pl-10 border-0 bg-white shadow-md rounded-[12px]"
           />
         </div>
 
         <Tabs value={filterView} onValueChange={setFilterView}>
-          <TabsList className="grid w-full md:w-auto grid-cols-3 bg-white shadow-lg rounded-xl p-1">
-            <TabsTrigger value="all" className="rounded-lg">
+          <TabsList className="grid w-full md:w-auto grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
+            <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#5a647d] data-[state=active]:to-[#4a5670] data-[state=active]:text-white data-[state=active]:shadow-sm">
               全部任务 ({sharedTasks.length})
             </TabsTrigger>
-            <TabsTrigger value="assigned" className="rounded-lg">
+            <TabsTrigger value="assigned" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
               分配给我 ({myAssignedTasks.length})
             </TabsTrigger>
-            <TabsTrigger value="created" className="rounded-lg">
+            <TabsTrigger value="created" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
               我创建的 ({myCreatedTasks.length})
             </TabsTrigger>
           </TabsList>
@@ -254,7 +254,7 @@ export default function Teams() {
                     return user ? (
                       <Avatar
                         key={userId}
-                        className="h-8 w-8 border-2 border-white bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs"
+                        className="h-8 w-8 border-2 border-white bg-gradient-to-br from-[#06b6d4] to-[#0891b2] text-white text-xs shadow-md"
                         title={user.full_name}
                       >
                         <AvatarFallback className="bg-transparent">
@@ -264,7 +264,7 @@ export default function Teams() {
                     ) : null;
                   })}
                   {task.assigned_to.length > 3 && (
-                    <div className="h-8 w-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-xs font-medium text-slate-600">
+                    <div className="h-8 w-8 rounded-full bg-[#e5e9ef] border-2 border-white flex items-center justify-center text-xs font-medium text-[#5a647d] shadow-md">
                       +{task.assigned_to.length - 3}
                     </div>
                   )}

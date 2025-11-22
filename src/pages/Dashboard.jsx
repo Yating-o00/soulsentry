@@ -211,7 +211,7 @@ export default function Dashboard() {
             ) : (
               <Moon className="w-8 h-8 text-indigo-500" />
             )}
-            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] bg-clip-text text-transparent">
               {greeting}
             </h1>
           </div>
@@ -233,7 +233,7 @@ export default function Dashboard() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] text-white">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium opacity-90 flex items-center gap-2">
                 <Clock className="w-4 h-4" />
@@ -252,7 +252,7 @@ export default function Dashboard() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}
         >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-green-500 to-emerald-600 text-white">
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-[#06b6d4] to-[#0891b2] text-white">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium opacity-90 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4" />
@@ -271,7 +271,7 @@ export default function Dashboard() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.3 }}
         >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-[#93c5fd] to-[#60a5fa] text-white">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium opacity-90 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
@@ -298,7 +298,7 @@ export default function Dashboard() {
           transition={{ delay: 0.4 }}
         >
           <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-5 h-5 text-purple-500" />
+            <Sparkles className="w-5 h-5 text-[#5a647d]" />
             <h2 className="text-2xl font-bold text-slate-800">今日聚焦</h2>
           </div>
           <div className="space-y-3">
@@ -326,7 +326,7 @@ export default function Dashboard() {
           transition={{ delay: 0.5 }}
         >
           <div className="flex items-center gap-2 mb-4">
-            <CalendarIcon className="w-5 h-5 text-blue-500" />
+            <CalendarIcon className="w-5 h-5 text-[#5a647d]" />
             <h2 className="text-2xl font-bold text-slate-800">即将到来</h2>
           </div>
           <div className="space-y-3">
@@ -353,8 +353,8 @@ export default function Dashboard() {
           animate={{ opacity: 1 }}
           className="text-center py-16"
         >
-          <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
-            <CheckCircle2 className="w-12 h-12 text-purple-500" />
+          <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-[#f9fafb] to-[#e5e9ef] flex items-center justify-center">
+            <CheckCircle2 className="w-12 h-12 text-[#5a647d]" />
           </div>
           <h3 className="text-2xl font-bold text-slate-800 mb-2">太棒了！</h3>
           <p className="text-slate-600">暂时没有待办任务，享受轻松时光吧</p>

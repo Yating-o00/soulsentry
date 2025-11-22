@@ -75,14 +75,14 @@ export default function FloatingAssistantButton() {
               >
                 <button
                   onClick={() => setIsOpen(true)}
-                  className="bg-white rounded-xl shadow-lg p-3 border border-purple-200 hover:border-purple-300 transition-all text-left w-full group"
+                  className="bg-white rounded-xl shadow-lg p-3 border border-[#dce4ed] hover:border-[#c8d1e0] transition-all text-left w-full group"
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                    <span className="text-xs font-semibold text-slate-800">小助提醒</span>
+                    <Sparkles className="w-3.5 h-3.5 text-[#5a647d]" />
+                    <span className="text-xs font-semibold text-[#222222]">小助提醒</span>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    今天有 <strong className="text-purple-600">{pendingCount}</strong> 个任务等你完成 💪
+                    今天有 <strong className="text-[#5a647d]">{pendingCount}</strong> 个任务等你完成 💪
                   </p>
                 </button>
               </motion.div>
@@ -92,7 +92,7 @@ export default function FloatingAssistantButton() {
           {/* 小助按钮 - 缩小版 */}
           <motion.button
             onClick={() => setIsOpen(!isOpen)}
-            className="h-12 w-12 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 shadow-lg hover:shadow-xl transition-all relative group"
+            className="h-12 w-12 rounded-full bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] hover:from-[#4a5670] hover:to-[#152e50] shadow-lg hover:shadow-xl transition-all relative group"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -108,7 +108,7 @@ export default function FloatingAssistantButton() {
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] font-bold"
+                className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-[#06b6d4] text-white flex items-center justify-center text-[10px] font-bold"
               >
                 {pendingCount}
               </motion.div>

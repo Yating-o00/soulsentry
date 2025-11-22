@@ -48,21 +48,21 @@ const CATEGORY_ICONS = {
 };
 
 const CATEGORY_COLORS = {
-  work: "bg-[#e5e9ef] text-[#5a647d] border-[#dce4ed]",
-  personal: "bg-[#eef4ff] text-[#5a647d] border-[#dce4ed]",
-  health: "bg-[#e0f7f4] text-[#0891b2] border-[#b3e5dd]",
-  study: "bg-[#fef3e2] text-[#d97706] border-[#fde8c3]",
-  family: "bg-[#fce7f3] text-[#be185d] border-[#fbcfe8]",
-  shopping: "bg-[#fff7ed] text-[#ea580c] border-[#fed7aa]",
-  finance: "bg-[#fef2f2] text-[#dc2626] border-[#fecaca]",
-  other: "bg-[#f9fafb] text-[#52525b] border-[#e5e7eb]",
+  work: "bg-[#f9fafb] text-[#5a647d] border-[#dce4ed]",
+  personal: "bg-[#f4f6f8] text-[#5a647d] border-[#dce4ed]",
+  health: "bg-[#ecfdf5] text-[#10b981] border-[#86efac]",
+  study: "bg-[#fef3c7] text-[#f59e0b] border-[#fcd34d]",
+  family: "bg-[#fce7f3] text-[#ec4899] border-[#f9a8d4]",
+  shopping: "bg-[#fff7ed] text-[#f97316] border-[#fdba74]",
+  finance: "bg-[#fee2e2] text-[#ef4444] border-[#fca5a5]",
+  other: "bg-[#f4f6f8] text-[#52525b] border-[#e4e4e7]",
 };
 
 const PRIORITY_COLORS = {
   low: "text-[#a1a1aa]",
   medium: "text-[#5a647d]",
-  high: "text-[#ea580c]",
-  urgent: "text-[#dc2626]",
+  high: "text-[#f97316]",
+  urgent: "text-[#ef4444]",
 };
 
 const PRIORITY_LABELS = {
@@ -121,27 +121,27 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
         layout
       >
         <Card
-          className={`group border shadow-md hover:shadow-lg transition-all duration-200 ${
+          className={`group border border-[#e5e9ef] hover:border-[#c8d1e0] hover:shadow-lg transition-all duration-200 bg-white rounded-[16px] ${
             isCompleted
-              ? 'bg-[#f9fafb] opacity-60 border-[#e5e9ef]'
+              ? 'opacity-60'
               : isSnoozed
-              ? 'bg-[#fffbeb] border-l-4 border-l-[#fbbf24] border border-[#fde8c3]'
+              ? 'border-l-[3px] border-l-[#fbbf24]'
               : isPast
-              ? 'bg-[#fef2f2] border-l-4 border-l-[#ef4444] border border-[#fecaca]'
-              : 'bg-white border-[#e5e9ef] hover:border-[#5a647d]/20'
+              ? 'border-l-[3px] border-l-[#ef4444]'
+              : 'hover:translate-y-[-1px]'
           }`}
         >
           {/* 主任务 */}
           <div className="p-5">
             <div className="flex items-start gap-4">
               <Checkbox
-                checked={isCompleted}
-                onCheckedChange={(e) => {
-                  e?.stopPropagation?.();
-                  onComplete();
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="mt-1 h-5 w-5 rounded-lg data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-green-500 data-[state=checked]:to-emerald-500"
+              checked={isCompleted}
+              onCheckedChange={(e) => {
+                e?.stopPropagation?.();
+                onComplete();
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="mt-1 h-5 w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed]"
               />
 
               <div className="flex-1 min-w-0">
@@ -153,17 +153,17 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                           e.stopPropagation();
                           setExpanded(!expanded);
                         }}
-                        className="hover:bg-[#f4f6f8] rounded-lg p-1 transition-colors"
+                        className="hover:bg-purple-100 rounded p-1 transition-colors"
                       >
                         {expanded ? (
-                          <ChevronDown className="w-4 h-4 text-[#5a647d]" />
+                          <ChevronDown className="w-4 h-4 text-purple-600" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-[#5a647d]" />
+                          <ChevronRight className="w-4 h-4 text-purple-600" />
                         )}
                       </button>
                     )}
-                    <h3 className={`text-lg font-semibold ${
-                      isCompleted ? 'line-through text-slate-400' : 'text-slate-800'
+                    <h3 className={`text-[17px] font-semibold tracking-tight ${
+                      isCompleted ? 'line-through text-[#a1a1aa]' : 'text-[#222222]'
                     }`}>
                       {task.title}
                     </h3>
@@ -176,7 +176,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         setShowShareCard(true);
                       }}
-                      className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#5a647d] rounded-lg"
+                      className="h-8 w-8 hover:bg-purple-100 hover:text-purple-600 rounded-lg"
                       title="分享任务"
                     >
                       <Share2 className="h-4 w-4" />
@@ -188,7 +188,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         onEdit();
                       }}
-                      className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#5a647d] rounded-lg"
+                      className="h-8 w-8 hover:bg-blue-100 hover:text-blue-600 rounded-lg"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -199,7 +199,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         onDelete();
                       }}
-                      className="h-8 w-8 hover:bg-[#fef2f2] hover:text-[#dc2626] rounded-lg"
+                      className="h-8 w-8 hover:bg-red-100 hover:text-red-600 rounded-lg"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -207,7 +207,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                 </div>
 
                 {task.description && (
-                  <p className="text-sm text-slate-600 mb-3 line-clamp-2 cursor-pointer" onClick={onClick}>
+                  <p className="text-[15px] text-[#52525b] mb-3 line-clamp-2 cursor-pointer leading-relaxed" onClick={onClick}>
                     {task.description}
                   </p>
                 )}
@@ -215,8 +215,8 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                 {hasSubtasks && (
                   <div className="mb-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-[#52525b]">子任务进度</span>
-                      <span className="text-xs font-semibold text-[#5a647d]">
+                      <span className="text-[13px] text-[#a1a1aa]">子任务进度</span>
+                      <span className="text-[13px] font-semibold text-[#5a647d]">
                         {completedSubtasks}/{subtasks.length} 已完成 ({progress}%)
                       </span>
                     </div>
@@ -227,7 +227,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge
                     variant="outline"
-                    className={`${CATEGORY_COLORS[task.category]} border rounded-lg`}
+                    className={`${CATEGORY_COLORS[task.category]} border rounded-[8px] text-[13px] font-medium`}
                   >
                     <CategoryIcon className="w-3 h-3 mr-1" />
                     {task.category}
@@ -235,42 +235,42 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
 
                   <Badge
                     variant="outline"
-                    className="rounded-lg"
+                    className="rounded-[8px] text-[13px] border-[#dce4ed]"
                   >
                     <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[task.priority]}`} />
                     {format(new Date(isSnoozed ? task.snooze_until : task.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
                   </Badge>
 
                   {getRecurrenceText() && (
-                    <Badge variant="outline" className="rounded-lg border-[#dce4ed] text-[#5a647d]">
-                      <Repeat className="w-3 h-3 mr-1" />
+                    <Badge variant="outline" className="rounded-[8px] text-[13px] border-[#dce4ed]">
+                      <Repeat className="w-3 h-3 mr-1 text-[#5a647d]" />
                       {getRecurrenceText()}
                     </Badge>
                   )}
 
                   <Badge
                     variant="outline"
-                    className={`${PRIORITY_COLORS[task.priority]} border-current rounded-lg`}
+                    className={`${PRIORITY_COLORS[task.priority]} border-current rounded-[8px] text-[13px]`}
                   >
                     <AlertCircle className="w-3 h-3 mr-1" />
                     {PRIORITY_LABELS[task.priority]}
                   </Badge>
 
                   {hasSubtasks && (
-                    <Badge className="bg-[#5a647d] text-white rounded-lg">
+                    <Badge className="bg-[#5a647d] text-white rounded-[8px] text-[13px]">
                       {subtasks.length} 个子任务
                     </Badge>
                   )}
 
                   {task.persistent_reminder && (
-                    <Badge className="bg-[#5a647d] text-white rounded-lg">
+                    <Badge className="bg-purple-500 text-white rounded-lg">
                       <Bell className="w-3 h-3 mr-1" />
                       持续提醒
                     </Badge>
                   )}
 
                   {task.advance_reminders && task.advance_reminders.length > 0 && (
-                    <Badge variant="outline" className="rounded-lg text-[#0891b2] border-[#b3e5dd]">
+                    <Badge variant="outline" className="rounded-lg text-blue-600 border-blue-300">
                       <Volume2 className="w-3 h-3 mr-1" />
                       提前{task.advance_reminders.length}次
                     </Badge>
@@ -314,7 +314,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="border-t border-[#e5e9ef] bg-[#f9fafb]/50"
+                className="border-t-2 border-purple-100 bg-purple-50/30"
               >
                 {subtasks.map((subtask, subIndex) => {
                   const isSubtaskCompleted = subtask.status === "completed";
@@ -330,16 +330,16 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                       animate={{ opacity: 1, x: 0 }}
                       className={`px-5 py-3 ml-9 border-l-2 transition-all ${
                         isSubtaskCompleted
-                          ? 'border-[#10b981] bg-[#e0f7f4]/30'
-                          : 'border-[#dce4ed] hover:bg-white/80'
+                          ? 'border-green-300 bg-green-50/30'
+                          : 'border-purple-300 hover:bg-white/50'
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         {/* 子任务序号标识 */}
                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                           isSubtaskCompleted
-                            ? 'bg-[#10b981] text-white'
-                            : 'bg-[#5a647d] text-white'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-purple-500 text-white'
                         }`}>
                           {isSubtaskCompleted ? '✓' : orderNumber}
                         </div>

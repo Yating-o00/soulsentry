@@ -183,7 +183,7 @@ export default function TaskDetailModal({ task, open, onClose }) {
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          <DialogTitle className="text-[20px] font-semibold tracking-tight text-[#222222]">
             {task.title}
           </DialogTitle>
         </DialogHeader>
@@ -192,9 +192,9 @@ export default function TaskDetailModal({ task, open, onClose }) {
           {/* Progress */}
           {totalSubtasks > 0 && (
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">完成进度</span>
-                <span className="font-semibold text-purple-600">
+              <div className="flex justify-between text-[15px]">
+                <span className="text-[#52525b]">完成进度</span>
+                <span className="font-semibold text-[#5a647d]">
                   {completedSubtasks}/{totalSubtasks} 子任务
                 </span>
               </div>
@@ -203,8 +203,8 @@ export default function TaskDetailModal({ task, open, onClose }) {
           )}
 
           {task.description && (
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-slate-700">{task.description}</p>
+            <div className="bg-[#f9fafb] rounded-[12px] p-4 border border-[#e5e9ef]">
+              <p className="text-[15px] text-[#222222] leading-relaxed">{task.description}</p>
             </div>
           )}
 
@@ -237,7 +237,7 @@ export default function TaskDetailModal({ task, open, onClose }) {
                 <Button
                   onClick={handleAddSubtask}
                   disabled={!newSubtask.trim()}
-                  className="bg-gradient-to-r from-blue-500 to-purple-600"
+                  className="bg-[#5a647d] hover:bg-[#4a5670] rounded-[10px]"
                 >
                   <Plus className="w-4 h-4" />
                 </Button>
@@ -251,10 +251,10 @@ export default function TaskDetailModal({ task, open, onClose }) {
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -100 }}
-                      className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
+                      className={`flex items-center gap-3 p-3 rounded-[10px] border transition-all ${
                         subtask.status === "completed"
-                          ? "bg-green-50 border-green-200"
-                          : "bg-white border-slate-200 hover:border-purple-300"
+                          ? "bg-[#ecfdf5] border-[#86efac]"
+                          : "bg-white border-[#e5e9ef] hover:border-[#c8d1e0]"
                       }`}
                     >
                       <Checkbox
@@ -263,10 +263,10 @@ export default function TaskDetailModal({ task, open, onClose }) {
                         className="h-5 w-5"
                       />
                       <span
-                        className={`flex-1 ${
+                        className={`flex-1 text-[15px] ${
                           subtask.status === "completed"
-                            ? "line-through text-slate-400"
-                            : "text-slate-800"
+                            ? "line-through text-[#a1a1aa]"
+                            : "text-[#222222]"
                         }`}
                       >
                         {subtask.title}
@@ -385,7 +385,7 @@ export default function TaskDetailModal({ task, open, onClose }) {
               <Button
                 onClick={handleAddNote}
                 disabled={!newNote.trim()}
-                className="w-full bg-gradient-to-r from-blue-500 to-purple-600"
+                className="w-full bg-[#5a647d] hover:bg-[#4a5670] rounded-[10px]"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 添加笔记

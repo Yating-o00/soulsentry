@@ -199,14 +199,14 @@ ${text}
   };
 
   return (
-    <Card className="border shadow-md bg-gradient-to-br from-[#f9fafb] to-white border-[#e5e9ef]">
+    <Card className="border border-[#e5e9ef] shadow-md hover:shadow-lg transition-all bg-white rounded-[16px]">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
+        <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
           <Wand2 className="w-5 h-5 text-[#5a647d]" />
-          智能文本解析
+          <span className="text-[#222222]">智能文本解析</span>
         </CardTitle>
-        <p className="text-sm text-slate-600 mt-1">
-          粘贴任何文本，AI 将自动提取任务并智能拆解
+        <p className="text-[15px] text-[#52525b] mt-1.5">
+          粘贴任何文本，AI 自动提取并智能拆解任务
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -215,14 +215,14 @@ ${text}
             placeholder="粘贴文本，例如：&#10;明天晚上准备家庭聚餐，需要买菜、做三道菜和一个汤&#10;本周完成项目报告，包括数据收集、分析和撰写..."
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="min-h-[120px] border border-[#dce4ed] bg-white focus-visible:ring-2 focus-visible:ring-[#5a647d] rounded-xl"
+            className="min-h-[120px] border border-[#e5e9ef] bg-[#f9fafb] focus-visible:ring-2 focus-visible:ring-[#5a647d]/20 focus-visible:border-[#5a647d] rounded-[12px] text-[15px]"
           />
           
           <div className="flex gap-2">
             <Button
               onClick={handleParse}
               disabled={parsing || !text.trim()}
-              className="flex-1 bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] hover:shadow-lg hover:shadow-[#5a647d]/25 transition-all duration-200 rounded-xl"
+              className="flex-1 bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] hover:from-[#4a5670] hover:to-[#152e50] shadow-md hover:shadow-lg transition-all duration-200 rounded-[12px]"
             >
               {parsing ? (
                 <>
@@ -241,7 +241,7 @@ ${text}
               <Button
                 variant="outline"
                 onClick={() => setText("")}
-                className="rounded-xl"
+                className="rounded-[12px] border-[#dce4ed]"
               >
                 清空
               </Button>
@@ -266,7 +266,7 @@ ${text}
                 </div>
                 <Button
                   onClick={handleCreateAll}
-                  className="bg-gradient-to-r from-[#06b6d4] to-[#0891b2] hover:shadow-lg rounded-xl"
+                  className="bg-[#10b981] hover:bg-[#059669] shadow-md hover:shadow-lg transition-all rounded-[12px]"
                 >
                   创建全部任务
                 </Button>
@@ -279,21 +279,21 @@ ${text}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="bg-white rounded-xl border border-[#dce4ed] overflow-hidden shadow-sm"
+                    className="bg-white rounded-[12px] border border-[#dce4ed] overflow-hidden hover:border-[#c8d1e0] transition-all"
                   >
                     {/* 主任务 */}
-                    <div className="p-4 hover:bg-[#f9fafb] transition-all">
+                    <div className="p-4 hover:bg-purple-50/50 transition-all">
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="flex items-start gap-2 flex-1">
                           {task.subtasks && task.subtasks.length > 0 && (
                             <button
                               onClick={() => toggleExpanded(index)}
-                              className="mt-1 hover:bg-[#e5e9ef] rounded-lg p-0.5 transition-colors"
+                              className="mt-1 hover:bg-purple-100 rounded p-0.5 transition-colors"
                             >
                               {expandedTasks.has(index) ? (
-                                <ChevronDown className="w-4 h-4 text-[#5a647d]" />
+                                <ChevronDown className="w-4 h-4 text-purple-600" />
                               ) : (
-                                <ChevronRight className="w-4 h-4 text-[#5a647d]" />
+                                <ChevronRight className="w-4 h-4 text-purple-600" />
                               )}
                             </button>
                           )}
@@ -341,7 +341,7 @@ ${text}
                           })}
                         </Badge>
                         {task.subtasks && task.subtasks.length > 0 && (
-                          <Badge className="bg-[#5a647d] text-white">
+                          <Badge className="bg-purple-500 text-white">
                             📋 {task.subtasks.length} 个子任务
                           </Badge>
                         )}
@@ -354,15 +354,15 @@ ${text}
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="bg-[#f9fafb]/50 border-t border-[#e5e9ef]"
+                        className="bg-purple-50/30 border-t-2 border-purple-200"
                       >
                         {task.subtasks.map((subtask, subIndex) => (
                           <div
                             key={subIndex}
-                            className="p-3 ml-8 border-l-2 border-[#dce4ed] hover:bg-white/80 transition-all flex items-start gap-3"
+                            className="p-3 ml-8 border-l-2 border-purple-300 hover:bg-white/50 transition-all flex items-start gap-3"
                           >
                             {/* 子任务序号标识 */}
-                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#5a647d] text-white flex items-center justify-center text-xs font-bold mt-0.5">
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold mt-0.5">
                               {subtask.order || subIndex + 1}
                             </div>
                             
@@ -421,9 +421,9 @@ ${text}
           )}
         </AnimatePresence>
 
-        <div className="bg-[#f0f9ff] border border-[#bfdbfe] rounded-lg p-3">
-          <p className="text-xs text-[#1e40af]">
-            💡 <strong>提示：</strong>AI 会自动识别任务的层级关系。例如"准备晚餐"会被拆解为"购买食材"、"做菜"等子任务。支持自然语言，如"明天下午3点"、"本周五前"等。
+        <div className="bg-[#f9fafb] border border-[#e5e9ef] rounded-[12px] p-3">
+          <p className="text-[13px] text-[#52525b] leading-relaxed">
+            💡 <strong className="text-[#222222]">提示：</strong>AI 自动识别任务层级关系。例如"准备晚餐"会被拆解为"购买食材"、"做菜"等子任务。支持自然语言，如"明天下午3点"、"本周五前"等。
           </p>
         </div>
       </CardContent>

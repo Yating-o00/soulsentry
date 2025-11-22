@@ -233,16 +233,16 @@ export default function Dashboard() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-[#5a647d] to-[#4a5670] text-white">
+          <Card className="border-0 shadow-md bg-gradient-to-br from-[#f1f5f9] to-[#e2e8f0] rounded-[16px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                今日待办
+                <Clock className="w-5 h-5 text-[#5a647d]" />
+                <span className="text-[#5a647d]">今日待办</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold mb-1">{todayTasks.length}</div>
-              <p className="text-[15px] opacity-95">个任务等待完成</p>
+              <div className="text-4xl font-bold mb-1 text-[#334155]">{todayTasks.length}</div>
+              <p className="text-[15px] text-[#5a647d]">个任务等待完成</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -252,16 +252,16 @@ export default function Dashboard() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}
         >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-[#10b981] to-[#059669] text-white">
+          <Card className="border-0 shadow-md bg-gradient-to-br from-[#d1fae5] to-[#a7f3d0] rounded-[16px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5" />
-                今日完成
+                <CheckCircle2 className="w-5 h-5 text-[#059669]" />
+                <span className="text-[#059669]">今日完成</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold mb-1">{completedToday}</div>
-              <p className="text-[15px] opacity-95">个任务已完成</p>
+              <div className="text-4xl font-bold mb-1 text-[#065f46]">{completedToday}</div>
+              <p className="text-[15px] text-[#059669]">个任务已完成</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -271,16 +271,16 @@ export default function Dashboard() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.3 }}
         >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-[#06b6d4] to-[#0284c7] text-white">
+          <Card className="border-0 shadow-md bg-gradient-to-br from-[#e0f2fe] to-[#bae6fd] rounded-[16px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-[15px] font-semibold flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
-                待办总数
+                <TrendingUp className="w-5 h-5 text-[#0891b2]" />
+                <span className="text-[#0891b2]">待办总数</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold mb-1">{totalPending}</div>
-              <p className="text-[15px] opacity-95">个任务进行中</p>
+              <div className="text-4xl font-bold mb-1 text-[#0c4a6e]">{totalPending}</div>
+              <p className="text-[15px] text-[#0891b2]">个任务进行中</p>
             </CardContent>
           </Card>
         </motion.div>

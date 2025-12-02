@@ -174,6 +174,29 @@ ${text}
     );
   };
 
+  const handleAddSubtask = (taskIndex) => {
+    setParsedTasks(tasks => 
+      tasks.map((task, i) => {
+        if (i === taskIndex) {
+          const newSubtask = {
+            title: "",
+            description: "",
+            reminder_time: task.reminder_time, // Default to parent's time
+            priority: "medium",
+            order: (task.subtasks?.length || 0) + 1
+          };
+          return {
+            ...task,
+            subtasks: [...(task.subtasks || []), newSubtask]
+          };
+        }
+        return task;
+      })
+    );
+    // Automatically expand the task to show the new subtask
+    setExpandedTasks(prev => new Set(prev).add(taskIndex));
+  };
+
   const toggleExpanded = (index) => {
     setExpandedTasks(prev => {
       const next = new Set(prev);

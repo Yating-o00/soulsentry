@@ -311,27 +311,36 @@ ${text}
                     className="bg-white rounded-[12px] border border-[#dce4ed] overflow-hidden hover:border-[#c8d1e0] transition-all"
                   >
                     {/* 主任务 */}
-                    <div className="p-4 hover:bg-[#f9fafb] transition-all">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="flex items-start gap-2 flex-1">
-                          {task.subtasks && task.subtasks.length > 0 && (
-                            <button
-                              onClick={() => toggleExpanded(index)}
-                              className="mt-1 hover:bg-[#e5e9ef] rounded-lg p-0.5 transition-colors"
-                            >
-                              {expandedTasks.has(index) ? (
+                    <div className="p-4 hover:bg-[#f9fafb] transition-all group">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-start gap-3 flex-1">
+                          <button
+                            onClick={() => toggleExpanded(index)}
+                            className="mt-1 hover:bg-[#e5e9ef] rounded-lg p-1 transition-colors flex-shrink-0"
+                          >
+                            {(task.subtasks && task.subtasks.length > 0) || expandedTasks.has(index) ? (
+                              expandedTasks.has(index) ? (
                                 <ChevronDown className="w-4 h-4 text-[#5a647d]" />
                               ) : (
                                 <ChevronRight className="w-4 h-4 text-[#5a647d]" />
-                              )}
-                            </button>
-                          )}
-                          <div className="flex-1">
-                            <input
-                              type="text"
+                              )
+                            ) : (
+                              <div className="w-4 h-4" /> 
+                            )}
+                          </button>
+                          <div className="flex-1 space-y-2">
+                            <Input
                               value={task.title}
                               onChange={(e) => handleEditTask(index, 'title', e.target.value)}
-                              className="font-semibold text-[#222222] w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-[17px] tracking-tight"
+                              className="font-semibold text-[#222222] text-lg border-none p-0 h-auto focus-visible:ring-0 bg-transparent placeholder:text-slate-300 shadow-none"
+                              placeholder="任务标题"
+                            />
+                            <Textarea
+                              value={task.description || ""}
+                              onChange={(e) => handleEditTask(index, 'description', e.target.value)}
+                              className="text-[14px] text-[#52525b] min-h-[24px] border-none p-0 focus-visible:ring-0 bg-transparent resize-none placeholder:text-slate-300 shadow-none"
+                              placeholder="添加描述..."
+                              rows={1}
                             />
                           </div>
                         </div>
@@ -339,41 +348,89 @@ ${text}
                           variant="ghost"
                           size="icon"
                           onClick={() => handleRemoveTask(index)}
-                          className="h-8 w-8 hover:bg-red-100 hover:text-red-600 rounded-lg"
+                          className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <X className="w-4 h-4" />
                         </Button>
                       </div>
 
-                      {task.description && (
-                        <textarea
-                          value={task.description}
-                          onChange={(e) => handleEditTask(index, 'description', e.target.value)}
-                          className="text-[15px] text-[#222222] w-full bg-[#f9fafb] rounded-[10px] p-2 border border-[#e5e9ef] focus:ring-2 focus:ring-[#5a647d]/20 focus:border-[#5a647d] mb-2 resize-none ml-6"
-                          rows={2}
-                        />
-                      )}
+                      <div className="flex flex-wrap items-center gap-2 ml-9">
+                        <Select
+                          value={task.priority}
+                          onValueChange={(value) => handleEditTask(index, 'priority', value)}
+                        >
+                          <SelectTrigger className="h-7 w-auto gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#5a647d] shadow-none focus:ring-0">
+                            <AlertCircle className="w-3 h-3" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(PRIORITY_LABELS).map(([key, config]) => (
+                              <SelectItem key={key} value={key}>
+                                {config.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
 
-                      <div className="flex flex-wrap gap-2 ml-6">
-                        <Badge className={PRIORITY_LABELS[task.priority]?.color}>
-                          {PRIORITY_LABELS[task.priority]?.label || task.priority}
-                        </Badge>
-                        <Badge className={CATEGORY_LABELS[task.category]?.color}>
-                          {CATEGORY_LABELS[task.category]?.label || task.category}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {new Date(task.reminder_time).toLocaleString('zh-CN', {
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </Badge>
-                        {task.subtasks && task.subtasks.length > 0 && (
-                          <Badge className="bg-[#5a647d] text-white rounded-[6px]">
-                            📋 {task.subtasks.length} 个子任务
-                          </Badge>
-                        )}
+                        <Select
+                          value={task.category}
+                          onValueChange={(value) => handleEditTask(index, 'category', value)}
+                        >
+                          <SelectTrigger className="h-7 w-auto gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#5a647d] shadow-none focus:ring-0">
+                            <TagIcon className="w-3 h-3" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(CATEGORY_LABELS).map(([key, config]) => (
+                              <SelectItem key={key} value={key}>
+                                {config.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" className="h-7 gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#5a647d] shadow-none">
+                              <CalendarIcon className="w-3 h-3" />
+                              {task.reminder_time ? format(new Date(task.reminder_time), "MM-dd HH:mm") : "设置时间"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={task.reminder_time ? new Date(task.reminder_time) : undefined}
+                              onSelect={(date) => date && handleEditTask(index, 'reminder_time', date.toISOString())}
+                              locale={zhCN}
+                              initialFocus
+                            />
+                            <div className="p-3 border-t border-slate-100">
+                              <Input
+                                type="time"
+                                value={task.reminder_time ? format(new Date(task.reminder_time), "HH:mm") : "09:00"}
+                                onChange={(e) => {
+                                  const [hours, minutes] = e.target.value.split(':');
+                                  const date = task.reminder_time ? new Date(task.reminder_time) : new Date();
+                                  date.setHours(parseInt(hours), parseInt(minutes));
+                                  handleEditTask(index, 'reminder_time', date.toISOString());
+                                }}
+                                className="h-8"
+                              />
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+
+                        <div className="flex-1" />
+                        
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleAddSubtask(index)}
+                          className="h-7 gap-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          添加子任务
+                        </Button>
                       </div>
                     </div>
 

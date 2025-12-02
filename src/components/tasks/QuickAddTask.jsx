@@ -411,7 +411,7 @@ export default function QuickAddTask({ onAdd }) {
                 <div className="relative flex items-center gap-4 px-6 py-5 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/50 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300">
                   {/* 图标 */}
                   <div className="relative">
-                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#384877] to-[#2a3659] flex items-center justify-center shadow-lg shadow-[#384877]/25 group-hover:shadow-[#384877]/40 group-hover:scale-105 transition-all duration-300">
+                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] flex items-center justify-center shadow-lg shadow-[#3b5aa2]/25 group-hover:shadow-[#3b5aa2]/40 group-hover:scale-105 transition-all duration-300">
                       <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
                     </div>
                     <motion.div

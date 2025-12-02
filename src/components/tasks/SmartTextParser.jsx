@@ -440,64 +440,97 @@ ${text}
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="bg-[#f9fafb] border-t border-[#e5e9ef]"
+                        className="bg-[#f9fafb] border-t border-[#e5e9ef] pl-9 pr-4 py-2"
                       >
-                        {task.subtasks.map((subtask, subIndex) => (
-                          <div
-                            key={subIndex}
-                            className="p-3 ml-8 border-l-2 border-[#dce4ed] hover:bg-white transition-all flex items-start gap-3"
-                          >
-                            {/* 子任务序号标识 */}
-                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#5a647d] text-white flex items-center justify-center text-xs font-bold mt-0.5">
-                              {subtask.order || subIndex + 1}
-                            </div>
-                            
-                            <div className="flex-1">
-                              <div className="flex items-start justify-between gap-3 mb-2">
-                                <input
-                                  type="text"
-                                  value={subtask.title}
-                                  onChange={(e) => handleEditSubtask(index, subIndex, 'title', e.target.value)}
-                                  className="flex-1 font-medium text-[#222222] bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-[15px]"
-                                />
+                        <div className="space-y-2">
+                          {task.subtasks.map((subtask, subIndex) => (
+                            <div
+                              key={subIndex}
+                              className="group relative p-3 bg-white rounded-lg border border-[#e5e9ef] hover:border-[#dce4ed] hover:shadow-sm transition-all"
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#5a647d]/10 text-[#5a647d] flex items-center justify-center text-[10px] font-bold mt-1">
+                                  {subIndex + 1}
+                                </div>
+                                
+                                <div className="flex-1 space-y-2">
+                                  <Input
+                                    value={subtask.title}
+                                    onChange={(e) => handleEditSubtask(index, subIndex, 'title', e.target.value)}
+                                    className="font-medium text-[#222222] border-none p-0 h-auto focus-visible:ring-0 bg-transparent shadow-none placeholder:text-slate-300 text-sm"
+                                    placeholder="子任务标题"
+                                  />
+                                  <Textarea
+                                    value={subtask.description || ""}
+                                    onChange={(e) => handleEditSubtask(index, subIndex, 'description', e.target.value)}
+                                    className="text-xs text-[#52525b] min-h-[20px] border-none p-0 focus-visible:ring-0 bg-transparent resize-none shadow-none placeholder:text-slate-300"
+                                    placeholder="添加描述..."
+                                    rows={1}
+                                  />
+                                  
+                                  <div className="flex items-center gap-2 pt-1">
+                                    <Select
+                                      value={subtask.priority}
+                                      onValueChange={(value) => handleEditSubtask(index, subIndex, 'priority', value)}
+                                    >
+                                      <SelectTrigger className="h-6 w-auto gap-1 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded px-1.5 text-[10px] font-medium text-[#5a647d] shadow-none focus:ring-0">
+                                        <div className={`w-1.5 h-1.5 rounded-full ${PRIORITY_LABELS[subtask.priority]?.color.split(' ')[0].replace('bg-', 'bg-')}`} />
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Object.entries(PRIORITY_LABELS).map(([key, config]) => (
+                                          <SelectItem key={key} value={key} className="text-xs">
+                                            {config.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <Button variant="ghost" className="h-6 gap-1 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded px-1.5 text-[10px] font-medium text-[#5a647d] shadow-none">
+                                          <Clock className="w-3 h-3" />
+                                          {subtask.reminder_time ? format(new Date(subtask.reminder_time), "MM-dd HH:mm") : "设置时间"}
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                          mode="single"
+                                          selected={subtask.reminder_time ? new Date(subtask.reminder_time) : undefined}
+                                          onSelect={(date) => date && handleEditSubtask(index, subIndex, 'reminder_time', date.toISOString())}
+                                          locale={zhCN}
+                                          initialFocus
+                                        />
+                                        <div className="p-3 border-t border-slate-100">
+                                          <Input
+                                            type="time"
+                                            value={subtask.reminder_time ? format(new Date(subtask.reminder_time), "HH:mm") : "09:00"}
+                                            onChange={(e) => {
+                                              const [hours, minutes] = e.target.value.split(':');
+                                              const date = subtask.reminder_time ? new Date(subtask.reminder_time) : new Date();
+                                              date.setHours(parseInt(hours), parseInt(minutes));
+                                              handleEditSubtask(index, subIndex, 'reminder_time', date.toISOString());
+                                            }}
+                                            className="h-8"
+                                          />
+                                        </div>
+                                      </PopoverContent>
+                                    </Popover>
+                                  </div>
+                                </div>
+
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleRemoveSubtask(index, subIndex)}
-                                  className="h-6 w-6 hover:bg-red-100 hover:text-red-600 rounded"
+                                  className="h-6 w-6 text-slate-300 hover:bg-red-50 hover:text-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2"
                                 >
-                                  <X className="w-3 h-3" />
+                                  <X className="w-3.5 h-3.5" />
                                 </Button>
                               </div>
-
-                              {subtask.description && (
-                                <textarea
-                                  value={subtask.description}
-                                  onChange={(e) => handleEditSubtask(index, subIndex, 'description', e.target.value)}
-                                  className="text-[13px] text-[#52525b] w-full bg-white rounded-[8px] p-2 border border-[#e5e9ef] focus:ring-2 focus:ring-[#5a647d]/20 focus:border-[#5a647d] mb-2 resize-none"
-                                  rows={1}
-                                />
-                              )}
-
-                              <div className="flex flex-wrap gap-1.5">
-                                <Badge className={`${PRIORITY_LABELS[subtask.priority]?.color} text-xs`}>
-                                  {PRIORITY_LABELS[subtask.priority]?.label || subtask.priority}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  ⏰ {new Date(subtask.reminder_time).toLocaleString('zh-CN', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs bg-slate-50">
-                                  📌 待完成
-                                </Badge>
-                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </motion.div>
                     )}
                   </motion.div>

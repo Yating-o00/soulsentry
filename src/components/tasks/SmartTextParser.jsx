@@ -490,7 +490,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                           className="h-7 gap-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          添加子任务
+                          查看并添加子任务
                         </Button>
                       </div>
                     </div>

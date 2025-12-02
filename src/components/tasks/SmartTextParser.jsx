@@ -210,6 +210,66 @@ ${text}
     });
   };
 
+  const handleSmartRefineSubtask = async (taskIndex, subtaskIndex) => {
+    const task = parsedTasks[taskIndex];
+    const subtask = task.subtasks[subtaskIndex];
+    
+    if (!subtask.title.trim()) {
+      toast.error("请先输入子任务内容");
+      return;
+    }
+
+    setRefiningState({ taskIndex, subIndex: subtaskIndex });
+    try {
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt: `请分析并完善以下子任务。
+        
+当前子任务内容：${subtask.title}
+${subtask.description ? `当前描述：${subtask.description}` : ""}
+所属主任务：${task.title} (时间: ${task.reminder_time})
+
+请执行以下操作：
+1. 【语义识别】：如果标题包含时间（如"明天"）或优先级（如"紧急"），请提取并清洗标题。
+2. 【内容完善】：优化标题使其更清晰；如果描述为空，生成简短实用的执行步骤；如果已有描述，进行润色。
+3. 【属性推断】：基于主任务时间和子任务内容，推断合理的提醒时间（应早于主任务）和优先级。
+
+当前时间：${new Date().toISOString()}`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string" },
+            reminder_time: { type: "string" },
+            priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
+          },
+          required: ["title", "description", "reminder_time", "priority"]
+        }
+      });
+
+      if (response) {
+        setParsedTasks(tasks => 
+          tasks.map((t, i) => 
+            i === taskIndex 
+              ? {
+                  ...t,
+                  subtasks: t.subtasks.map((st, j) => 
+                    j === subtaskIndex 
+                      ? { ...st, ...response } 
+                      : st
+                  )
+                }
+              : t
+          )
+        );
+        toast.success("子任务已智能完善 ✨");
+      }
+    } catch (error) {
+      console.error("Refine error:", error);
+      toast.error("智能完善失败");
+    }
+    setRefiningState(null);
+  };
+
   const PRIORITY_LABELS = {
     low: { label: "低", color: "bg-[#f4f6f8] text-[#52525b]" },
     medium: { label: "中", color: "bg-[#e5e9ef] text-[#5a647d]" },

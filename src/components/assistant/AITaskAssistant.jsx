@@ -121,15 +121,11 @@ export default function AITaskAssistant({ isOpen, onClose }) {
     try {
       const conversation = await base44.agents.getConversation(convId);
       
-      const analysisPrompt = `你好！请主动帮我分析当前任务状况：
+      const analysisPrompt = `你好！请帮我分析当前任务状况。
 
-1. 查看我今天和近期（3天内）的待办任务
-2. 分析我的历史完成模式（查询UserBehavior数据）
-3. 识别哪些任务需要优先处理，并说明理由
-4. 基于截止时间、任务类型、我的习惯等因素提供智能优先级建议
-5. 用友好亲切的方式询问我目前的状态和需要的帮助
-
-请像朋友一样关心我，直接展示分析结果和建议，不要只是打招呼。`;
+重点关注任务的【建设】（是否有缺失细节）、【执行】（优先级和进度建议）和【检查】（复盘提醒）。
+请以最简单、最精准的方式直接给出建议，并保持温暖、人性化的语气。
+像个老朋友一样直接说重点，不要客套。如果发现需要调整优先级的任务，直接建议。`;
 
       await base44.agents.addMessage(conversation, {
         role: "user",

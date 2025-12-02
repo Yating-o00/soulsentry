@@ -89,19 +89,50 @@ export default function FloatingAssistantButton() {
             )}
           </AnimatePresence>
 
-          {/* 小助按钮 - 缩小版 */}
+          {/* 小助按钮 - 呼吸动画版 */}
           <motion.button
             onClick={() => setIsOpen(!isOpen)}
-            className="h-12 w-12 rounded-full bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] hover:from-[#4a5670] hover:to-[#152e50] shadow-lg hover:shadow-xl transition-all relative group"
-            whileHover={{ scale: 1.05 }}
+            className={`h-12 w-12 rounded-full shadow-lg hover:shadow-xl transition-all relative group ${
+              shouldPrompt 
+                ? 'bg-gradient-to-br from-[#0284c7] to-[#0369a1]' // 提示状态使用强调色
+                : 'bg-gradient-to-br from-[#5a647d] to-[#1e3a5f]' // 正常状态
+            }`}
+            animate={shouldPrompt 
+              ? { 
+                  scale: [1, 1.15, 1],
+                  boxShadow: [
+                    "0 10px 15px -3px rgba(2, 132, 199, 0.2)", 
+                    "0 20px 25px -5px rgba(2, 132, 199, 0.5)", 
+                    "0 10px 15px -3px rgba(2, 132, 199, 0.2)"
+                  ]
+                } 
+              : { 
+                  scale: [1, 1.05, 1],
+                  boxShadow: [
+                    "0 4px 6px -1px rgba(0, 0, 0, 0.1)", 
+                    "0 10px 15px -3px rgba(0, 0, 0, 0.1)", 
+                    "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                  ]
+                }
+            }
+            transition={{ 
+              duration: shouldPrompt ? 1.5 : 3, 
+              repeat: Infinity, 
+              ease: "easeInOut" 
+            }}
+            whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
           >
             <div className="h-full w-full flex items-center justify-center">
               <Bot className="w-5 h-5 text-white" />
             </div>
             
-            {/* 在线状态 */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white" />
+            {/* 在线状态 - 持续闪烁表示连接/在线 */}
+            <motion.div 
+              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white"
+              animate={{ opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
             
             {/* 待办数量 */}
             {pendingCount > 0 && !shouldPrompt && (

@@ -1,468 +1,468 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Bot, 
-  Mic, 
-  MicOff, 
-  Send, 
-  Volume2, 
-  VolumeX,
-  Sparkles,
-  Loader2,
-  MessageCircle,
-  CheckCircle2,
-  AlertCircle,
-  Calendar,
-  Clock
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
-import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
-
-export default function AITaskAssistant({ isOpen, onClose }) {
-  const [conversationId, setConversationId] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [inputText, setInputText] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const messagesEndRef = useRef(null);
-  const recognitionRef = useRef(null);
-  const synthRef = useRef(null);
-
-  useEffect(() => {
-    if (isOpen && !conversationId) {
-      initConversation();
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if ('speechSynthesis' in window) {
-      synthRef.current = window.speechSynthesis;
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'zh-CN';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setInputText(transcript);
-        setIsRecording(false);
-      };
-
-      recognition.onerror = () => {
-        setIsRecording(false);
-        toast.error("语音识别失败");
-      };
-
-      recognitionRef.current = recognition;
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      if (synthRef.current) {
-        synthRef.current.cancel();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
-    if (!conversationId) return;
-
-    const unsubscribe = base44.agents.subscribeToConversation(conversationId, (data) => {
-      setMessages(data.messages || []);
-    });
-
-    return () => unsubscribe();
-  }, [conversationId]);
-
-  const initConversation = async () => {
-    try {
-      const conversation = await base44.agents.createConversation({
-        agent_name: "task_assistant",
-        metadata: {
-          name: "任务检查对话",
-          type: "task_check"
-        }
-      });
-      setConversationId(conversation.id);
-
-      // 触发AI主动分析
-      setTimeout(() => {
-        triggerSmartAnalysis(conversation.id);
-      }, 800);
-    } catch (error) {
-      console.error("Failed to create conversation:", error);
-      toast.error("初始化对话失败");
-    }
-  };
-
-  const triggerSmartAnalysis = async (convId) => {
-    if (!convId) return;
-    
-    setIsLoading(true);
-    try {
-      const conversation = await base44.agents.getConversation(convId);
-      
-      const analysisPrompt = `请以“温柔的背后顶梁柱”的身份，像老朋友一样直接帮我分析当前任务状况，不要客套打招呼。
-
-直接切入重点，关注三个方面：
-1. 【建设】：有没有任务缺少时间或描述？直接指出来。
-2. 【执行】：根据截止时间，直接建议我哪个任务应该调高优先级，或者建议我现在的重点应该放在哪。
-3. 【检查】：有没有过期未完成的？温柔地问我是否需要调整。
-
-语气要稳重、温暖、直接。不要问“需要我做什么”，而是直接给出你的分析和建议。`;
-
-      await base44.agents.addMessage(conversation, {
-        role: "user",
-        content: analysisPrompt
-      });
-    } catch (error) {
-      console.error("Smart analysis failed:", error);
-      setIsLoading(false);
-      toast.error("分析失败，请重试");
-    }
-  };
-
-  const sendMessage = async (text) => {
-    if (!conversationId || !text.trim()) return;
-
-    setIsLoading(true);
-    try {
-      const conversation = await base44.agents.getConversation(conversationId);
-      await base44.agents.addMessage(conversation, {
-        role: "user",
-        content: text
-      });
-      setInputText("");
-
-      // 等待AI响应
-      setTimeout(async () => {
-        const updatedConversation = await base44.agents.getConversation(conversationId);
-        const lastMessage = updatedConversation.messages[updatedConversation.messages.length - 1];
-        
-        if (lastMessage.role === "assistant" && voiceEnabled) {
-          speakText(lastMessage.content);
-        }
-        setIsLoading(false);
-      }, 1000);
-    } catch (error) {
-      console.error("Failed to send message:", error);
-      toast.error("发送消息失败");
-      setIsLoading(false);
-    }
-  };
-
-  const speakText = (text) => {
-    if (!synthRef.current || !text) return;
-
-    synthRef.current.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 0.9;
-    utterance.pitch = 1.1;
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-
-    synthRef.current.speak(utterance);
-  };
-
-  const toggleVoice = () => {
-    setVoiceEnabled(!voiceEnabled);
-    if (isSpeaking) {
-      synthRef.current?.cancel();
-      setIsSpeaking(false);
-    }
-  };
-
-  const startVoiceInput = () => {
-    if (!recognitionRef.current) {
-      toast.error("您的浏览器不支持语音识别");
-      return;
-    }
-
-    if (isRecording) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-    } else {
-      recognitionRef.current.start();
-      setIsRecording(true);
-      toast.success("🎤 开始录音");
-    }
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    sendMessage(inputText);
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.9, y: 20 }}
-      className="fixed bottom-20 right-6 z-50 w-80 max-w-[calc(100vw-3rem)]"
-    >
-      <Card className="shadow-2xl border border-purple-200 bg-white overflow-hidden">
-        {/* 头部 - 精简版 */}
-        <div className="bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] p-3 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <Bot className="w-4 h-4 text-[#5a647d]" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold flex items-center gap-1.5">
-                  小助
-                  <Sparkles className="w-3 h-3" />
-                </h3>
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={toggleVoice}
-                className="h-7 w-7 text-white hover:bg-white/20"
-              >
-                {voiceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={onClose}
-                className="h-7 w-7 text-white hover:bg-white/20"
-              >
-                <span className="text-sm">✕</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* 消息区域 - 缩小版 */}
-        <div className="h-64 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-[#f9fafb] to-white">
-          {messages.length === 0 && isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center h-full text-center"
-            >
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#e5e9ef] to-[#dce3eb] flex items-center justify-center mb-3 relative">
-                <Sparkles className="w-6 h-6 text-[#5a647d]" />
-                <motion.div
-                  className="absolute inset-0 rounded-full border-2 border-[#5a647d]"
-                  animate={{
-                    scale: [1, 1.3],
-                    opacity: [0.6, 0],
-                  }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: Infinity,
-                  }}
-                />
-              </div>
-              <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
-                小助正在分析中
-              </h3>
-              <p className="text-xs text-slate-600 mb-3">
-                正在查看你的任务和习惯...
-              </p>
-              <div className="text-[10px] text-slate-500 space-y-0.5">
-                <motion.p
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  ✓ 检查待办任务
-                </motion.p>
-                <motion.p
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  ✓ 分析完成模式
-                </motion.p>
-                <motion.p
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.6 }}
-                >
-                  ✓ 准备智能建议
-                </motion.p>
-              </div>
-            </motion.div>
-          )}
-
-          <AnimatePresence mode="popLayout">
-            {messages
-              .filter(msg => !msg.content.includes("请主动帮我分析当前任务状况"))
-              .map((message, index) => (
-                <MessageBubble
-                  key={index}
-                  message={message}
-                  isSpeaking={isSpeaking && index === messages.length - 1}
-                />
-              ))}
-          </AnimatePresence>
-
-          {messages.length > 0 && isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 text-xs text-[#5a647d]"
-            >
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>思考中...</span>
-            </motion.div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* 输入区域 - 精简版 */}
-        <div className="border-t border-purple-100 p-2.5 bg-white">
-          <form onSubmit={handleSubmit} className="flex gap-1.5">
-            <Input
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="说说你的想法..."
-              className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#5a647d]"
-              disabled={isLoading}
-            />
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              onClick={startVoiceInput}
-              disabled={isLoading}
-              className={`h-9 w-9 border-purple-200 ${isRecording ? 'bg-red-50 border-red-300' : 'hover:bg-purple-50'}`}
-            >
-              {isRecording ? <MicOff className="w-3.5 h-3.5 text-red-600" /> : <Mic className="w-3.5 h-3.5 text-purple-600" />}
-            </Button>
-            <Button
-              type="submit"
-              size="icon"
-              disabled={!inputText.trim() || isLoading}
-              className="h-9 w-9 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
-            >
-              {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            </Button>
-          </form>
-        </div>
-      </Card>
-    </motion.div>
-  );
-}
-
-function MessageBubble({ message, isSpeaking }) {
-  const isUser = message.role === "user";
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
-    >
-      {!isUser && (
-        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] flex-shrink-0 flex items-center justify-center">
-          <Bot className="w-3.5 h-3.5 text-white" />
-        </div>
-      )}
-
-      <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
-        <div
-          className={`rounded-xl px-3 py-2 ${
-            isUser
-              ? "bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] text-white"
-              : "bg-white border border-[#e5e9ef] text-[#222222]"
-          }`}
-        >
-          {isUser ? (
-            <p className="text-xs leading-relaxed">{message.content}</p>
-          ) : (
-            <div className="relative">
-              <ReactMarkdown className="text-xs prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
-                {message.content}
-              </ReactMarkdown>
-              {isSpeaking && (
-                <motion.div
-                  className="absolute -right-1.5 -top-1.5"
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 0.5, repeat: Infinity }}
-                >
-                  <Volume2 className="w-3 h-3 text-[#5a647d]" />
-                </motion.div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 工具调用显示 */}
-        {message.tool_calls?.length > 0 && (
-          <div className="mt-1.5 space-y-1">
-            {message.tool_calls.map((tool, idx) => (
-              <ToolCallDisplay key={idx} toolCall={tool} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {isUser && (
-        <div className="h-6 w-6 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center text-slate-600 text-[10px] font-semibold">
-          我
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-function ToolCallDisplay({ toolCall }) {
-  const getIcon = () => {
-    if (toolCall.name.includes("Task")) {
-      if (toolCall.name.includes("create")) return <CheckCircle2 className="w-3 h-3" />;
-      if (toolCall.name.includes("update")) return <Clock className="w-3 h-3" />;
-      if (toolCall.name.includes("read")) return <Calendar className="w-3 h-3" />;
-    }
-    return <AlertCircle className="w-3 h-3" />;
-  };
-
-  const getLabel = () => {
-    if (toolCall.name.includes("create")) return "创建任务";
-    if (toolCall.name.includes("update")) return "更新任务";
-    if (toolCall.name.includes("read")) return "查询任务";
-    if (toolCall.name.includes("delete")) return "删除任务";
-    return "执行操作";
-  };
-
-  return (
-    <Badge
-      variant="outline"
-      className="text-[10px] bg-[#f9fafb] text-[#5a647d] border-[#dce4ed] gap-0.5 px-1.5 py-0.5"
-    >
-      {getIcon()}
-      {getLabel()}
-    </Badge>
-  );
-}
+   import { base44 } from "@/api/base44Client";
+   import { Button } from "@/components/ui/button";
+   import { Card } from "@/components/ui/card";
+   import { Input } from "@/components/ui/input";
+   import { Badge } from "@/components/ui/badge";
+   import { 
+     Bot, 
+     Mic, 
+     MicOff, 
+     Send, 
+     Volume2, 
+     VolumeX,
+     Sparkles,
+     Loader2,
+     MessageCircle,
+     CheckCircle2,
+     AlertCircle,
+     Calendar,
+     Clock
+   } from "lucide-react";
+   import { motion, AnimatePresence } from "framer-motion";
+   import { toast } from "sonner";
+   import ReactMarkdown from "react-markdown";
+   import { format } from "date-fns";
+   import { zhCN } from "date-fns/locale";
+   
+   export default function AITaskAssistant({ isOpen, onClose }) {
+     const [conversationId, setConversationId] = useState(null);
+     const [messages, setMessages] = useState([]);
+     const [inputText, setInputText] = useState("");
+     const [isRecording, setIsRecording] = useState(false);
+     const [isSpeaking, setIsSpeaking] = useState(false);
+     const [isLoading, setIsLoading] = useState(false);
+     const [voiceEnabled, setVoiceEnabled] = useState(false);
+     const messagesEndRef = useRef(null);
+     const recognitionRef = useRef(null);
+     const synthRef = useRef(null);
+   
+     useEffect(() => {
+       if (isOpen && !conversationId) {
+         initConversation();
+       }
+     }, [isOpen]);
+   
+     useEffect(() => {
+       if ('speechSynthesis' in window) {
+         synthRef.current = window.speechSynthesis;
+       }
+   
+       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+       if (SpeechRecognition) {
+         const recognition = new SpeechRecognition();
+         recognition.lang = 'zh-CN';
+         recognition.continuous = false;
+         recognition.interimResults = false;
+   
+         recognition.onresult = (event) => {
+           const transcript = event.results[0][0].transcript;
+           setInputText(transcript);
+           setIsRecording(false);
+         };
+   
+         recognition.onerror = () => {
+           setIsRecording(false);
+           toast.error("语音识别失败");
+         };
+   
+         recognitionRef.current = recognition;
+       }
+   
+       return () => {
+         if (recognitionRef.current) {
+           recognitionRef.current.stop();
+         }
+         if (synthRef.current) {
+           synthRef.current.cancel();
+         }
+       };
+     }, []);
+   
+     useEffect(() => {
+       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+     }, [messages]);
+   
+     useEffect(() => {
+       if (!conversationId) return;
+   
+       const unsubscribe = base44.agents.subscribeToConversation(conversationId, (data) => {
+         setMessages(data.messages || []);
+       });
+   
+       return () => unsubscribe();
+     }, [conversationId]);
+   
+     const initConversation = async () => {
+       try {
+         const conversation = await base44.agents.createConversation({
+           agent_name: "task_assistant",
+           metadata: {
+             name: "任务检查对话",
+             type: "task_check"
+           }
+         });
+         setConversationId(conversation.id);
+   
+         // 触发AI主动分析
+         setTimeout(() => {
+           triggerSmartAnalysis(conversation.id);
+         }, 800);
+       } catch (error) {
+         console.error("Failed to create conversation:", error);
+         toast.error("初始化对话失败");
+       }
+     };
+   
+     const triggerSmartAnalysis = async (convId) => {
+       if (!convId) return;
+       
+       setIsLoading(true);
+       try {
+         const conversation = await base44.agents.getConversation(convId);
+         
+         const analysisPrompt = `请以“温柔的背后顶梁柱”的身份，像老朋友一样直接帮我分析当前任务状况，不要客套打招呼。
+   
+   直接切入重点，关注三个方面：
+   1. 【建设】：有没有任务缺少时间或描述？直接指出来。
+   2. 【执行】：根据截止时间，直接建议我哪个任务应该调高优先级，或者建议我现在的重点应该放在哪。
+   3. 【检查】：有没有过期未完成的？温柔地问我是否需要调整。
+   
+   语气要稳重、温暖、直接。不要问“需要我做什么”，而是直接给出你的分析和建议。`;
+   
+         await base44.agents.addMessage(conversation, {
+           role: "user",
+           content: analysisPrompt
+         });
+       } catch (error) {
+         console.error("Smart analysis failed:", error);
+         setIsLoading(false);
+         toast.error("分析失败，请重试");
+       }
+     };
+   
+     const sendMessage = async (text) => {
+       if (!conversationId || !text.trim()) return;
+   
+       setIsLoading(true);
+       try {
+         const conversation = await base44.agents.getConversation(conversationId);
+         await base44.agents.addMessage(conversation, {
+           role: "user",
+           content: text
+         });
+         setInputText("");
+   
+         // 等待AI响应
+         setTimeout(async () => {
+           const updatedConversation = await base44.agents.getConversation(conversationId);
+           const lastMessage = updatedConversation.messages[updatedConversation.messages.length - 1];
+           
+           if (lastMessage.role === "assistant" && voiceEnabled) {
+             speakText(lastMessage.content);
+           }
+           setIsLoading(false);
+         }, 1000);
+       } catch (error) {
+         console.error("Failed to send message:", error);
+         toast.error("发送消息失败");
+         setIsLoading(false);
+       }
+     };
+   
+     const speakText = (text) => {
+       if (!synthRef.current || !text) return;
+   
+       synthRef.current.cancel();
+       const utterance = new SpeechSynthesisUtterance(text);
+       utterance.lang = 'zh-CN';
+       utterance.rate = 0.9;
+       utterance.pitch = 1.1;
+   
+       utterance.onstart = () => setIsSpeaking(true);
+       utterance.onend = () => setIsSpeaking(false);
+       utterance.onerror = () => setIsSpeaking(false);
+   
+       synthRef.current.speak(utterance);
+     };
+   
+     const toggleVoice = () => {
+       setVoiceEnabled(!voiceEnabled);
+       if (isSpeaking) {
+         synthRef.current?.cancel();
+         setIsSpeaking(false);
+       }
+     };
+   
+     const startVoiceInput = () => {
+       if (!recognitionRef.current) {
+         toast.error("您的浏览器不支持语音识别");
+         return;
+       }
+   
+       if (isRecording) {
+         recognitionRef.current.stop();
+         setIsRecording(false);
+       } else {
+         recognitionRef.current.start();
+         setIsRecording(true);
+         toast.success("🎤 开始录音");
+       }
+     };
+   
+     const handleSubmit = (e) => {
+       e.preventDefault();
+       sendMessage(inputText);
+     };
+   
+     if (!isOpen) return null;
+   
+     return (
+       <motion.div
+         initial={{ opacity: 0, scale: 0.9, y: 20 }}
+         animate={{ opacity: 1, scale: 1, y: 0 }}
+         exit={{ opacity: 0, scale: 0.9, y: 20 }}
+         className="fixed bottom-20 right-6 z-50 w-80 max-w-[calc(100vw-3rem)]"
+       >
+         <Card className="shadow-2xl border border-purple-200 bg-white overflow-hidden">
+           {/* 头部 - 精简版 */}
+           <div className="bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] p-3 text-white">
+             <div className="flex items-center justify-between">
+               <div className="flex items-center gap-2">
+                 <div className="h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                   <Bot className="w-4 h-4 text-[#5a647d]" />
+                 </div>
+                 <div>
+                   <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                     小助
+                     <Sparkles className="w-3 h-3" />
+                   </h3>
+                 </div>
+               </div>
+               <div className="flex items-center gap-1">
+                 <Button
+                   size="icon"
+                   variant="ghost"
+                   onClick={toggleVoice}
+                   className="h-7 w-7 text-white hover:bg-white/20"
+                 >
+                   {voiceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                 </Button>
+                 <Button
+                   size="icon"
+                   variant="ghost"
+                   onClick={onClose}
+                   className="h-7 w-7 text-white hover:bg-white/20"
+                 >
+                   <span className="text-sm">✕</span>
+                 </Button>
+               </div>
+             </div>
+           </div>
+   
+           {/* 消息区域 - 缩小版 */}
+           <div className="h-64 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-[#f9fafb] to-white">
+             {messages.length === 0 && isLoading && (
+               <motion.div
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 className="flex flex-col items-center justify-center h-full text-center"
+               >
+                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#e5e9ef] to-[#dce3eb] flex items-center justify-center mb-3 relative">
+                   <Sparkles className="w-6 h-6 text-[#5a647d]" />
+                   <motion.div
+                     className="absolute inset-0 rounded-full border-2 border-[#5a647d]"
+                     animate={{
+                       scale: [1, 1.3],
+                       opacity: [0.6, 0],
+                     }}
+                     transition={{
+                       duration: 1.5,
+                       repeat: Infinity,
+                     }}
+                   />
+                 </div>
+                 <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
+                   小助正在分析中
+                 </h3>
+                 <p className="text-xs text-slate-600 mb-3">
+                   正在查看你的任务和习惯...
+                 </p>
+                 <div className="text-[10px] text-slate-500 space-y-0.5">
+                   <motion.p
+                     initial={{ opacity: 0, x: -10 }}
+                     animate={{ opacity: 1, x: 0 }}
+                     transition={{ delay: 0.2 }}
+                   >
+                     ✓ 检查待办任务
+                   </motion.p>
+                   <motion.p
+                     initial={{ opacity: 0, x: -10 }}
+                     animate={{ opacity: 1, x: 0 }}
+                     transition={{ delay: 0.4 }}
+                   >
+                     ✓ 分析完成模式
+                   </motion.p>
+                   <motion.p
+                     initial={{ opacity: 0, x: -10 }}
+                     animate={{ opacity: 1, x: 0 }}
+                     transition={{ delay: 0.6 }}
+                   >
+                     ✓ 准备智能建议
+                   </motion.p>
+                 </div>
+               </motion.div>
+             )}
+   
+             <AnimatePresence mode="popLayout">
+               {messages
+                 .filter(msg => !msg.content.includes("请以“温柔的背后顶梁柱”的身份"))
+                 .map((message, index) => (
+                   <MessageBubble
+                     key={index}
+                     message={message}
+                     isSpeaking={isSpeaking && index === messages.length - 1}
+                   />
+                 ))}
+             </AnimatePresence>
+   
+             {messages.length > 0 && isLoading && (
+               <motion.div
+                 initial={{ opacity: 0, y: 10 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 className="flex items-center gap-2 text-xs text-[#5a647d]"
+               >
+                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                 <span>思考中...</span>
+               </motion.div>
+             )}
+   
+             <div ref={messagesEndRef} />
+           </div>
+   
+           {/* 输入区域 - 精简版 */}
+           <div className="border-t border-purple-100 p-2.5 bg-white">
+             <form onSubmit={handleSubmit} className="flex gap-1.5">
+               <Input
+                 value={inputText}
+                 onChange={(e) => setInputText(e.target.value)}
+                 placeholder="说说你的想法..."
+                 className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#5a647d]"
+                 disabled={isLoading}
+               />
+               <Button
+                 type="button"
+                 size="icon"
+                 variant="outline"
+                 onClick={startVoiceInput}
+                 disabled={isLoading}
+                 className={`h-9 w-9 border-purple-200 ${isRecording ? 'bg-red-50 border-red-300' : 'hover:bg-purple-50'}`}
+               >
+                 {isRecording ? <MicOff className="w-3.5 h-3.5 text-red-600" /> : <Mic className="w-3.5 h-3.5 text-purple-600" />}
+               </Button>
+               <Button
+                 type="submit"
+                 size="icon"
+                 disabled={!inputText.trim() || isLoading}
+                 className="h-9 w-9 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+               >
+                 {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+               </Button>
+             </form>
+           </div>
+         </Card>
+       </motion.div>
+     );
+   }
+   
+   function MessageBubble({ message, isSpeaking }) {
+     const isUser = message.role === "user";
+   
+     return (
+       <motion.div
+         initial={{ opacity: 0, y: 10 }}
+         animate={{ opacity: 1, y: 0 }}
+         exit={{ opacity: 0, y: -10 }}
+         className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
+       >
+         {!isUser && (
+           <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] flex-shrink-0 flex items-center justify-center">
+             <Bot className="w-3.5 h-3.5 text-white" />
+           </div>
+         )}
+   
+         <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
+           <div
+             className={`rounded-xl px-3 py-2 ${
+               isUser
+                 ? "bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] text-white"
+                 : "bg-white border border-[#e5e9ef] text-[#222222]"
+             }`}
+           >
+             {isUser ? (
+               <p className="text-xs leading-relaxed">{message.content}</p>
+             ) : (
+               <div className="relative">
+                 <ReactMarkdown className="text-xs prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
+                   {message.content}
+                 </ReactMarkdown>
+                 {isSpeaking && (
+                   <motion.div
+                     className="absolute -right-1.5 -top-1.5"
+                     animate={{ scale: [1, 1.2, 1] }}
+                     transition={{ duration: 0.5, repeat: Infinity }}
+                   >
+                     <Volume2 className="w-3 h-3 text-[#5a647d]" />
+                   </motion.div>
+                 )}
+               </div>
+             )}
+           </div>
+   
+           {/* 工具调用显示 */}
+           {message.tool_calls?.length > 0 && (
+             <div className="mt-1.5 space-y-1">
+               {message.tool_calls.map((tool, idx) => (
+                 <ToolCallDisplay key={idx} toolCall={tool} />
+               ))}
+             </div>
+           )}
+         </div>
+   
+         {isUser && (
+           <div className="h-6 w-6 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center text-slate-600 text-[10px] font-semibold">
+             我
+           </div>
+         )}
+       </motion.div>
+     );
+   }
+   
+   function ToolCallDisplay({ toolCall }) {
+     const getIcon = () => {
+       if (toolCall.name.includes("Task")) {
+         if (toolCall.name.includes("create")) return <CheckCircle2 className="w-3 h-3" />;
+         if (toolCall.name.includes("update")) return <Clock className="w-3 h-3" />;
+         if (toolCall.name.includes("read")) return <Calendar className="w-3 h-3" />;
+       }
+       return <AlertCircle className="w-3 h-3" />;
+     };
+   
+     const getLabel = () => {
+       if (toolCall.name.includes("create")) return "创建任务";
+       if (toolCall.name.includes("update")) return "更新任务";
+       if (toolCall.name.includes("read")) return "查询任务";
+       if (toolCall.name.includes("delete")) return "删除任务";
+       return "执行操作";
+     };
+   
+     return (
+       <Badge
+         variant="outline"
+         className="text-[10px] bg-[#f9fafb] text-[#5a647d] border-[#dce4ed] gap-0.5 px-1.5 py-0.5"
+       >
+         {getIcon()}
+         {getLabel()}
+       </Badge>
+     );
+   }

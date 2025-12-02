@@ -133,7 +133,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
         type="button"
         onClick={handleAnalyze}
         disabled={isAnalyzing || !taskTitle.trim()}
-        className="w-full bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#0284c7] hover:to-[#0369a1] text-white rounded-xl h-11 shadow-lg shadow-[#384877]/25"
+        className="w-full bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#0ea5e9] hover:to-[#0284c7] text-white rounded-xl h-11 shadow-lg shadow-[#384877]/25"
       >
         {isAnalyzing ? (
           <>
@@ -289,7 +289,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
               <div className="flex gap-2 pt-2">
                 <Button
                   onClick={handleApplySuggestions}
-                  className="flex-1 bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#0284c7] hover:to-[#0369a1] text-white rounded-lg"
+                  className="flex-1 bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#0ea5e9] hover:to-[#0284c7] text-white rounded-lg"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
                   应用所有建议

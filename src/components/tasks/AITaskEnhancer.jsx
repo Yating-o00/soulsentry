@@ -3,7 +3,10 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle, X, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
@@ -28,6 +31,7 @@ const PRIORITIES = [
 export default function AITaskEnhancer({ taskTitle, currentDescription, onApply }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
+  const [newTag, setNewTag] = useState("");
 
   const handleAnalyze = async () => {
     if (!taskTitle.trim()) {
@@ -108,6 +112,21 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
     return PRIORITIES.find(p => p.value === value);
   };
 
+  const updateSuggestion = (field, value) => {
+    setSuggestions(prev => ({ ...prev, [field]: value }));
+  };
+
+  const addTag = () => {
+    if (newTag.trim() && !suggestions.tags.includes(newTag.trim())) {
+      updateSuggestion('tags', [...suggestions.tags, newTag.trim()]);
+      setNewTag("");
+    }
+  };
+
+  const removeTag = (tagToRemove) => {
+    updateSuggestion('tags', suggestions.tags.filter(t => t !== tagToRemove));
+  };
+
   return (
     <div className="space-y-4">
       <Button
@@ -145,27 +164,44 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                 <h3 className="text-[16px] font-semibold text-[#222222]">AI智能建议</h3>
               </div>
 
-              {/* 描述建议 */}
+              {/* 描述建议 - 可编辑 */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
                   <Tag className="w-4 h-4 text-[#384877]" />
                   <span>完善描述</span>
                 </div>
-                <div className="bg-white rounded-lg p-3 border border-[#e5e9ef]">
-                  <p className="text-[14px] text-[#222222] leading-relaxed">{suggestions.description}</p>
-                </div>
+                <Textarea
+                  value={suggestions.description}
+                  onChange={(e) => updateSuggestion('description', e.target.value)}
+                  className="bg-white min-h-[80px] text-[14px] border-[#e5e9ef] focus-visible:ring-[#384877]"
+                />
               </div>
 
-              {/* 分类和优先级 */}
+              {/* 分类和优先级 - 可编辑 */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
                     <Tag className="w-4 h-4 text-[#384877]" />
                     <span>推荐分类</span>
                   </div>
-                  <Badge className="bg-white border-2 border-[#384877] text-[#384877] text-[14px] px-3 py-1.5">
-                    {getCategoryLabel(suggestions.category)?.icon} {getCategoryLabel(suggestions.category)?.label}
-                  </Badge>
+                  <Select
+                    value={suggestions.category}
+                    onValueChange={(val) => updateSuggestion('category', val)}
+                  >
+                    <SelectTrigger className="bg-white border-[#e5e9ef]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map(cat => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          <div className="flex items-center gap-2">
+                            <span>{cat.icon}</span>
+                            <span>{cat.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -173,28 +209,68 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                     <AlertCircle className="w-4 h-4 text-[#384877]" />
                     <span>推荐优先级</span>
                   </div>
-                  <Badge className={`${getPriorityLabel(suggestions.priority)?.color} border-2 text-[14px] px-3 py-1.5`}>
-                    {getPriorityLabel(suggestions.priority)?.label}
-                  </Badge>
+                  <Select
+                    value={suggestions.priority}
+                    onValueChange={(val) => updateSuggestion('priority', val)}
+                  >
+                    <SelectTrigger className="bg-white border-[#e5e9ef]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRIORITIES.map(pri => (
+                        <SelectItem key={pri.value} value={pri.value}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${pri.color.split(' ')[0].replace('bg-', 'bg-')}`} />
+                            <span>{pri.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              {/* 标签建议 */}
+              {/* 标签建议 - 可编辑 */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
                   <TrendingUp className="w-4 h-4 text-[#384877]" />
                   <span>推荐标签</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {suggestions.tags.map((tag, index) => (
-                    <Badge
-                      key={index}
-                      variant="outline"
-                      className="bg-white border-[#384877]/40 text-[#384877] text-[13px] px-2.5 py-1"
+                <div className="bg-white p-3 rounded-lg border border-[#e5e9ef] space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.tags.map((tag, index) => (
+                      <Badge
+                        key={index}
+                        variant="outline"
+                        className="bg-[#f0f9ff] border-[#384877]/20 text-[#384877] text-[13px] pl-2.5 pr-1.5 py-1 flex items-center gap-1"
+                      >
+                        #{tag}
+                        <button
+                          onClick={() => removeTag(tag)}
+                          className="hover:bg-[#384877]/10 rounded-full p-0.5 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newTag}
+                      onChange={(e) => setNewTag(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                      placeholder="添加新标签..."
+                      className="h-8 text-sm border-[#e5e9ef]"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={addTag}
+                      disabled={!newTag.trim()}
+                      className="h-8 bg-[#f0f9ff] text-[#384877] hover:bg-[#e0f2fe] border border-[#384877]/20"
                     >
-                      #{tag}
-                    </Badge>
-                  ))}
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
 

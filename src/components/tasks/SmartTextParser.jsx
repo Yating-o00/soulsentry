@@ -19,6 +19,7 @@ export default function SmartTextParser({ onTasksGenerated }) {
   const [parsing, setParsing] = useState(false);
   const [parsedTasks, setParsedTasks] = useState([]);
   const [expandedTasks, setExpandedTasks] = useState(new Set());
+  const [refiningState, setRefiningState] = useState(null); // { taskIndex, subIndex }
 
   const handleParse = async () => {
     if (!text.trim()) {

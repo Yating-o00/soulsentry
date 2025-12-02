@@ -580,14 +580,30 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                   </div>
                                 </div>
 
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleRemoveSubtask(index, subIndex)}
-                                  className="h-6 w-6 text-slate-300 hover:bg-red-50 hover:text-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </Button>
+                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleSmartRefineSubtask(index, subIndex)}
+                                    disabled={refiningState?.taskIndex === index && refiningState?.subIndex === subIndex}
+                                    className="h-6 w-6 text-blue-400 hover:bg-blue-50 hover:text-blue-600 rounded"
+                                    title="AI 智能完善：自动提取时间、优先级并生成描述"
+                                  >
+                                    {refiningState?.taskIndex === index && refiningState?.subIndex === subIndex ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Sparkles className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleRemoveSubtask(index, subIndex)}
+                                    className="h-6 w-6 text-slate-300 hover:bg-red-50 hover:text-red-600 rounded"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           ))}

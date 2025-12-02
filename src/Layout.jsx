@@ -66,15 +66,15 @@ export default function Layout({ children }) {
             --violet-accent: 139 92 246;
           }
 
-          .bg-gradient-to-r.from-blue-500 { background-image: linear-gradient(to right, rgb(90, 100, 125), rgb(30, 58, 95)) !important; }
-          .bg-gradient-to-br.from-blue-500 { background-image: linear-gradient(to bottom right, rgb(90, 100, 125), rgb(30, 58, 95)) !important; }
-          .from-purple-500.to-blue-500 { background-image: linear-gradient(to right, rgb(90, 100, 125), rgb(30, 58, 95)) !important; }
-          .from-purple-500.to-blue-600 { background-image: linear-gradient(to right, rgb(90, 100, 125), rgb(30, 58, 95)) !important; }
+          .bg-gradient-to-r.from-blue-500 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
+          .bg-gradient-to-br.from-blue-500 { background-image: linear-gradient(to bottom right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
+          .from-purple-500.to-blue-500 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
+          .from-purple-500.to-blue-600 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
           .from-purple-600.to-blue-600 { background-image: linear-gradient(to right, rgb(75, 85, 110), rgb(25, 48, 80)) !important; }
-          .from-blue-600.to-purple-600 { background-image: linear-gradient(to right, rgb(30, 58, 95), rgb(90, 100, 125)) !important; }
+          .from-blue-600.to-purple-600 { background-image: linear-gradient(to right, rgb(30, 58, 95), rgb(56, 72, 119)) !important; }
 
-          .text-blue-500, .text-blue-600 { color: rgb(90, 100, 125) !important; }
-          .text-purple-500, .text-purple-600, .text-purple-700 { color: rgb(90, 100, 125) !important; }
+          .text-blue-500, .text-blue-600 { color: rgb(56, 72, 119) !important; }
+          .text-purple-500, .text-purple-600, .text-purple-700 { color: rgb(56, 72, 119) !important; }
           .bg-blue-50, .bg-purple-50 { background-color: rgb(249, 250, 251) !important; }
           .bg-blue-100, .bg-purple-100 { background-color: rgb(239, 242, 247) !important; }
           .border-blue-200, .border-purple-200 { border-color: rgb(220, 225, 235) !important; }
@@ -91,11 +91,11 @@ export default function Layout({ children }) {
         <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
           <SidebarHeader className="border-b border-slate-200/50 p-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] flex items-center justify-center shadow-lg">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#202a44] flex items-center justify-center shadow-lg">
                 <Bell className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="font-bold text-lg bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] bg-clip-text text-transparent">
+                <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#202a44] bg-clip-text text-transparent">
                   任务管家
                 </h2>
                 <p className="text-xs text-slate-500">智能提醒，贴心陪伴</p>
@@ -115,7 +115,7 @@ export default function Layout({ children }) {
                           asChild 
                           className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
                             isActive 
-                              ? 'bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] text-white shadow-lg shadow-[#5a647d]/25' 
+                              ? 'bg-gradient-to-r from-[#384877] to-[#202a44] text-white shadow-lg shadow-[#384877]/25' 
                               : 'hover:bg-[#f9fafb] text-slate-700'
                           }`}
                         >
@@ -140,7 +140,7 @@ export default function Layout({ children }) {
           <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">
             <div className="flex items-center gap-4">
               <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-all duration-200" />
-              <h1 className="text-lg font-semibold bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] bg-clip-text text-transparent">
+              <h1 className="text-lg font-semibold bg-gradient-to-r from-[#384877] to-[#202a44] bg-clip-text text-transparent">
                 任务管家
               </h1>
             </div>

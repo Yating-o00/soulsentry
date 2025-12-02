@@ -114,7 +114,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
         type="button"
         onClick={handleAnalyze}
         disabled={isAnalyzing || !taskTitle.trim()}
-        className="w-full bg-gradient-to-r from-[#4FC3F7] to-[#1BA1CD] hover:from-[#3FB3E7] hover:to-[#0A91BD] text-white rounded-xl h-11 shadow-lg shadow-[#4FC3F7]/25"
+        className="w-full bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#3FB3E7] hover:to-[#0A91BD] text-white rounded-xl h-11 shadow-lg shadow-[#384877]/25"
       >
         {isAnalyzing ? (
           <>
@@ -136,10 +136,10 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
-            <Card className="border-2 border-[#4FC3F7]/30 bg-gradient-to-br from-[#f0f9ff] to-white p-5 space-y-4">
+            <Card className="border-2 border-[#384877]/30 bg-gradient-to-br from-[#f0f9ff] to-white p-5 space-y-4">
               {/* AI建议标题 */}
               <div className="flex items-center gap-2 mb-3">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#4FC3F7] to-[#1BA1CD] flex items-center justify-center">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#384877] to-[#2a3659] flex items-center justify-center">
                   <Wand2 className="w-4 h-4 text-white" />
                 </div>
                 <h3 className="text-[16px] font-semibold text-[#222222]">AI智能建议</h3>
@@ -148,7 +148,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
               {/* 描述建议 */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                  <Tag className="w-4 h-4 text-[#4FC3F7]" />
+                  <Tag className="w-4 h-4 text-[#384877]" />
                   <span>完善描述</span>
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-[#e5e9ef]">
@@ -160,17 +160,17 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                    <Tag className="w-4 h-4 text-[#4FC3F7]" />
+                    <Tag className="w-4 h-4 text-[#384877]" />
                     <span>推荐分类</span>
                   </div>
-                  <Badge className="bg-white border-2 border-[#4FC3F7] text-[#1BA1CD] text-[14px] px-3 py-1.5">
+                  <Badge className="bg-white border-2 border-[#384877] text-[#384877] text-[14px] px-3 py-1.5">
                     {getCategoryLabel(suggestions.category)?.icon} {getCategoryLabel(suggestions.category)?.label}
                   </Badge>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                    <AlertCircle className="w-4 h-4 text-[#4FC3F7]" />
+                    <AlertCircle className="w-4 h-4 text-[#384877]" />
                     <span>推荐优先级</span>
                   </div>
                   <Badge className={`${getPriorityLabel(suggestions.priority)?.color} border-2 text-[14px] px-3 py-1.5`}>
@@ -182,7 +182,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
               {/* 标签建议 */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                  <TrendingUp className="w-4 h-4 text-[#4FC3F7]" />
+                  <TrendingUp className="w-4 h-4 text-[#384877]" />
                   <span>推荐标签</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -190,7 +190,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                     <Badge
                       key={index}
                       variant="outline"
-                      className="bg-white border-[#4FC3F7]/40 text-[#1BA1CD] text-[13px] px-2.5 py-1"
+                      className="bg-white border-[#384877]/40 text-[#384877] text-[13px] px-2.5 py-1"
                     >
                       #{tag}
                     </Badge>
@@ -199,11 +199,11 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
               </div>
 
               {/* AI分析原因 */}
-              <div className="bg-gradient-to-r from-[#4FC3F7]/10 to-[#1BA1CD]/10 rounded-lg p-3 border border-[#4FC3F7]/20">
+              <div className="bg-gradient-to-r from-[#4FC3F7]/10 to-[#1BA1CD]/10 rounded-lg p-3 border border-[#384877]/20">
                 <div className="flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-[#1BA1CD] flex-shrink-0 mt-0.5" />
+                  <Sparkles className="w-4 h-4 text-[#384877] flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-[13px] font-medium text-[#1BA1CD] mb-1">AI分析</p>
+                    <p className="text-[13px] font-medium text-[#384877] mb-1">AI分析</p>
                     <p className="text-[13px] text-[#52525b] leading-relaxed">{suggestions.reasoning}</p>
                   </div>
                 </div>
@@ -213,7 +213,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
               <div className="flex gap-2 pt-2">
                 <Button
                   onClick={handleApplySuggestions}
-                  className="flex-1 bg-gradient-to-r from-[#4FC3F7] to-[#1BA1CD] hover:from-[#3FB3E7] hover:to-[#0A91BD] text-white rounded-lg"
+                  className="flex-1 bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#3FB3E7] hover:to-[#0A91BD] text-white rounded-lg"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
                   应用所有建议

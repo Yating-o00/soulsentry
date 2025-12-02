@@ -121,11 +121,14 @@ export default function AITaskAssistant({ isOpen, onClose }) {
     try {
       const conversation = await base44.agents.getConversation(convId);
       
-      const analysisPrompt = `你好！请帮我分析当前任务状况。
+      const analysisPrompt = `请以“温柔的背后顶梁柱”的身份，像老朋友一样直接帮我分析当前任务状况，不要客套打招呼。
 
-重点关注任务的【建设】（是否有缺失细节）、【执行】（优先级和进度建议）和【检查】（复盘提醒）。
-请以最简单、最精准的方式直接给出建议，并保持温暖、人性化的语气。
-像个老朋友一样直接说重点，不要客套。如果发现需要调整优先级的任务，直接建议。`;
+直接切入重点，关注三个方面：
+1. 【建设】：有没有任务缺少时间或描述？直接指出来。
+2. 【执行】：根据截止时间，直接建议我哪个任务应该调高优先级，或者建议我现在的重点应该放在哪。
+3. 【检查】：有没有过期未完成的？温柔地问我是否需要调整。
+
+语气要稳重、温暖、直接。不要问“需要我做什么”，而是直接给出你的分析和建议。`;
 
       await base44.agents.addMessage(conversation, {
         role: "user",

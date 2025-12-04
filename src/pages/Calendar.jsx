@@ -47,7 +47,14 @@ export default function CalendarPage() {
     initialData: [],
   });
 
+  const { data: allNotes = [] } = useQuery({
+    queryKey: ['notes'],
+    queryFn: () => base44.entities.Note.list('-created_date'),
+    initialData: [],
+  });
+
   const tasks = allTasks.filter(task => !task.parent_task_id && !task.deleted_at);
+  const notes = allNotes.filter(note => !note.deleted_at);
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
@@ -72,16 +79,48 @@ export default function CalendarPage() {
     },
   });
 
-  const tasksOnSelectedDate = tasks.filter(task => 
-    isSameDay(new Date(task.reminder_time), selectedDate)
-  );
+  const updateNoteMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Note.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
 
-  const taskDates = tasks.reduce((acc, task) => {
-    const dateKey = format(new Date(task.reminder_time), 'yyyy-MM-dd');
-    if (!acc[dateKey]) acc[dateKey] = [];
-    acc[dateKey].push(task);
-    return acc;
-  }, {});
+  const deleteNoteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Note.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      toast.success("便签已删除");
+    },
+  });
+
+  // Merge Tasks and Notes into events
+  const eventsByDate = useMemo(() => {
+    const map = {};
+    
+    tasks.forEach(task => {
+      const dateKey = format(new Date(task.reminder_time), 'yyyy-MM-dd');
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push({ type: 'task', data: task, date: new Date(task.reminder_time) });
+    });
+
+    notes.forEach(note => {
+      const dateKey = format(new Date(note.created_date), 'yyyy-MM-dd');
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push({ type: 'note', data: note, date: new Date(note.created_date) });
+    });
+
+    // Sort events by time/date within each day
+    Object.keys(map).forEach(key => {
+      map[key].sort((a, b) => a.date - b.date);
+    });
+
+    return map;
+  }, [tasks, notes]);
+
+  const eventsOnSelectedDate = eventsByDate[format(selectedDate, 'yyyy-MM-dd')] || [];
+  const tasksOnSelectedDate = eventsOnSelectedDate.filter(e => e.type === 'task').map(e => e.data);
+  const notesOnSelectedDate = eventsOnSelectedDate.filter(e => e.type === 'note').map(e => e.data);
 
   const handleComplete = (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";

@@ -17,6 +17,7 @@ export default function Account() {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     full_name: "",
+    assistant_name: "小雅"
   });
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export default function Account() {
       setUser(currentUser);
       setFormData({
         full_name: currentUser.full_name || "",
+        assistant_name: currentUser.assistant_name || "小雅",
       });
     } catch (error) {
       console.error("Load user error:", error);
@@ -194,6 +196,32 @@ export default function Account() {
                   ) : (
                     <p className="text-lg font-semibold text-slate-800">
                       {user.full_name || "未设置"}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="assistant_name" className="flex items-center gap-2 text-slate-700">
+                    <User className="w-4 h-4" />
+                    助手昵称 (SoulSentry-...)
+                  </Label>
+                  {editing ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500 font-medium">SoulSentry-</span>
+                      <Input
+                        id="assistant_name"
+                        value={formData.assistant_name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, assistant_name: e.target.value })
+                        }
+                        placeholder="小雅"
+                        className="flex-1 border-slate-200 focus-visible:ring-blue-500"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-lg font-semibold text-slate-800 flex items-center gap-1">
+                      <span className="text-slate-400">SoulSentry-</span>
+                      {user.assistant_name || "小雅"}
                     </p>
                   )}
                 </div>

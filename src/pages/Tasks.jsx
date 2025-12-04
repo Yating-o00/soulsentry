@@ -149,21 +149,20 @@ export default function Tasks() {
           persistent_reminder: taskData.persistent_reminder || false,
           notification_interval: taskData.notification_interval || 15,
           advance_reminders: taskData.advance_reminders || [],
+          assigned_to: taskData.assigned_to || [],
         };
         
         const createdMainTask = await createTaskMutation.mutateAsync(mainTaskData);
         createdCount++;
         
         // 如果有子任务，创建子任务
-        const subtasksToCreate = taskData.subtasks || [];
-        if (subtasksToCreate.length > 0) {
-          for (let i = 0; i < subtasksToCreate.length; i++) {
-            const subtask = subtasksToCreate[i];
+        if (hasSubtasks) {
+          for (let i = 0; i < taskData.subtasks.length; i++) {
             const subtask = taskData.subtasks[i];
             const subtaskData = {
               title: `${subtask.order || i + 1}. ${subtask.title}`, // 添加序号到标题
               description: subtask.description || "",
-              reminder_time: subtask.reminder_time,
+              reminder_time: subtask.reminder_time || taskData.reminder_time,
               priority: subtask.priority || taskData.priority || "medium",
               category: taskData.category, // 子任务继承父任务的类别
               status: "pending",
@@ -172,6 +171,7 @@ export default function Tasks() {
               notification_sound: taskData.notification_sound || "default",
               persistent_reminder: false, // 子任务默认不持续提醒
               advance_reminders: [],
+              assigned_to: taskData.assigned_to || [],
             };
             
             await createTaskMutation.mutateAsync(subtaskData);

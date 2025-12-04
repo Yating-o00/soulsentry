@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, Trash2 } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import {
   Sidebar,
@@ -14,7 +14,9 @@ import {
   SidebarHeader,
   SidebarProvider,
   SidebarTrigger,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Trash2 } from "lucide-react";
 
 const navigationItems = [
   {
@@ -150,32 +152,29 @@ export default function Layout({ children }) {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-
-            <div className="mt-auto">
-              <SidebarGroup>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton 
-                        asChild
-                        className={`group relative overflow-hidden transition-all duration-300 rounded-xl ${
-                          location.search.includes('filter=trash')
-                            ? 'bg-red-50 text-[#d5495f] border border-red-100' 
-                            : 'hover:bg-red-50 text-slate-600 hover:text-[#d5495f]'
-                        }`}
-                      >
-                        <Link to={createPageUrl("Tasks") + "?filter=trash"} className="flex items-center gap-3 px-4 py-3">
-                          <Trash2 className="w-5 h-5 text-[#d5495f] transition-transform duration-300 group-hover:scale-110" />
-                          <span className="font-medium">垃圾箱</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </div>
           </SidebarContent>
-        </Sidebar>
+          <SidebarFooter className="p-3 border-t border-slate-200/50">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  asChild 
+                  className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
+                    location.pathname === createPageUrl("Trash") 
+                      ? 'bg-[#fff1f2] text-[#d5495f] shadow-sm border border-[#e0919e]' 
+                      : 'hover:bg-[#fff1f2] hover:text-[#d5495f] text-slate-700'
+                  }`}
+                >
+                  <Link to={createPageUrl("Trash")} className="flex items-center gap-3 px-4 py-3">
+                    <Trash2 className={`w-5 h-5 transition-transform duration-300 ${
+                      location.pathname === createPageUrl("Trash") ? 'scale-110 text-[#d5495f]' : 'group-hover:scale-110 group-hover:text-[#d5495f] text-slate-500'
+                    }`} />
+                    <span className="font-medium">回收站</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+          </Sidebar>
 
         <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative">
           <FloatingAssistantButton />

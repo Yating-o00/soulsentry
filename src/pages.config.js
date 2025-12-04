@@ -3,6 +3,7 @@ import Tasks from './pages/Tasks';
 import Calendar from './pages/Calendar';
 import Account from './pages/Account';
 import Teams from './pages/Teams';
+import Trash from './pages/Trash';
 import __Layout from './Layout.jsx';
 
 
@@ -12,6 +13,7 @@ export const PAGES = {
     "Calendar": Calendar,
     "Account": Account,
     "Teams": Teams,
+    "Trash": Trash,
 }
 
 export const pagesConfig = {

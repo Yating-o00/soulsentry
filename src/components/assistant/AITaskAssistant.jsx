@@ -239,7 +239,7 @@ import React, { useState, useEffect, useRef } from "react";
          exit={{ opacity: 0, scale: 0.9, y: 20 }}
          className="fixed bottom-20 right-6 z-50 w-80 max-w-[calc(100vw-3rem)]"
        >
-         <Card className="shadow-2xl border border-[#e0919e] bg-white overflow-hidden">
+         <Card className="shadow-2xl border border-[#222222] bg-white overflow-hidden">
            {/* 头部 - 精简版 */}
            <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] p-3 text-white">
              <div className="flex items-center justify-between">
@@ -370,7 +370,7 @@ import React, { useState, useEffect, useRef } from "react";
                  <button
                    key={action.label}
                    onClick={() => sendMessage(action.text)}
-                   className="flex-shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-[#fff1f2] text-[#d5495f] border border-[#e0919e]/30 hover:bg-[#ffe4e6] transition-colors whitespace-nowrap"
+                   className="flex-shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-[#f9fafb] text-[#d5495f] border border-[#e5e9ef] hover:bg-[#e0919e] hover:text-white transition-colors whitespace-nowrap"
                  >
                    {action.label}
                  </button>

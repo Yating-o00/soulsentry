@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Calendar as BigCalendar } from "@/components/ui/calendar";
@@ -20,8 +20,9 @@ import {
 } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, CheckCircle2, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon } from "lucide-react";
+import { Clock, CheckCircle2, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, StickyNote } from "lucide-react";
 import TaskCard from "../components/tasks/TaskCard";
+import NoteCard from "../components/notes/NoteCard";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import {
@@ -63,14 +64,6 @@ export default function CalendarPage() {
     },
   });
 
-  const createNoteMutation = useMutation({
-    mutationFn: (noteData) => base44.entities.Note.create(noteData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      setShowQuickAdd(false);
-    },
-  });
-
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => {
@@ -86,30 +79,48 @@ export default function CalendarPage() {
     },
   });
 
-  const itemsByDate = useMemo(() => {
+  const updateNoteMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Note.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+
+  const deleteNoteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Note.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      toast.success("便签已删除");
+    },
+  });
+
+  // Merge Tasks and Notes into events
+  const eventsByDate = useMemo(() => {
     const map = {};
     
-    // Process Tasks
     tasks.forEach(task => {
       const dateKey = format(new Date(task.reminder_time), 'yyyy-MM-dd');
-      if (!map[dateKey]) map[dateKey] = { tasks: [], notes: [] };
-      map[dateKey].tasks.push(task);
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push({ type: 'task', data: task, date: new Date(task.reminder_time) });
     });
 
-    // Process Notes (using created_date as the event date)
     notes.forEach(note => {
       const dateKey = format(new Date(note.created_date), 'yyyy-MM-dd');
-      if (!map[dateKey]) map[dateKey] = { tasks: [], notes: [] };
-      map[dateKey].notes.push(note);
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push({ type: 'note', data: note, date: new Date(note.created_date) });
+    });
+
+    // Sort events by time/date within each day
+    Object.keys(map).forEach(key => {
+      map[key].sort((a, b) => a.date - b.date);
     });
 
     return map;
   }, [tasks, notes]);
 
-  const selectedDateKey = format(selectedDate, 'yyyy-MM-dd');
-  const currentDayItems = itemsByDate[selectedDateKey] || { tasks: [], notes: [] };
-  const tasksOnSelectedDate = currentDayItems.tasks;
-  const notesOnSelectedDate = currentDayItems.notes;
+  const eventsOnSelectedDate = eventsByDate[format(selectedDate, 'yyyy-MM-dd')] || [];
+  const tasksOnSelectedDate = eventsOnSelectedDate.filter(e => e.type === 'task').map(e => e.data);
+  const notesOnSelectedDate = eventsOnSelectedDate.filter(e => e.type === 'note').map(e => e.data);
 
   const handleComplete = (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";
@@ -256,22 +267,22 @@ export default function CalendarPage() {
                 locale={zhCN}
                 className="rounded-xl"
                 modifiers={{
-                  hasItems: (date) => {
+                  hasEvent: (date) => {
                     const dateKey = format(date, 'yyyy-MM-dd');
-                    const items = itemsByDate[dateKey];
-                    return items && (items.tasks.length > 0 || items.notes.length > 0);
+                    return eventsByDate[dateKey] && eventsByDate[dateKey].length > 0;
                   }
                 }}
                 modifiersStyles={{
-                  hasItems: {
+                  hasEvent: {
                     fontWeight: 'bold',
+                    position: 'relative',
                   }
                 }}
                 components={{
                   DayContent: ({ date }) => {
                     const dateKey = format(date, 'yyyy-MM-dd');
-                    const items = itemsByDate[dateKey] || { tasks: [], notes: [] };
-                    const hasItems = items.tasks.length > 0 || items.notes.length > 0;
+                    const dayEvents = eventsByDate[dateKey] || [];
+                    const hasEvents = dayEvents.length > 0;
                     const isSelected = isSameDay(date, selectedDate);
                     
                     return (
@@ -284,23 +295,19 @@ export default function CalendarPage() {
                         <span className={!isSameMonth(date, currentDate) ? 'text-slate-300' : ''}>
                           {format(date, 'd')}
                         </span>
-                        {hasItems && (
+                        {hasEvents && (
                           <div className="absolute bottom-1 flex gap-0.5">
-                            {items.tasks.slice(0, 3).map((task, idx) => (
+                            {dayEvents.slice(0, 3).map((event, idx) => (
                               <div 
-                                key={`t-${idx}`}
+                                key={idx}
                                 className={`w-1.5 h-1.5 rounded-full ${
-                                  task.status === 'completed' ? 'bg-green-500' : 'bg-blue-500'
+                                  event.type === 'task' 
+                                    ? (event.data.status === 'completed' ? 'bg-green-500' : 'bg-purple-500')
+                                    : 'bg-yellow-400'
                                 }`}
                               />
                             ))}
-                            {items.notes.slice(0, 2).map((note, idx) => (
-                                <div 
-                                key={`n-${idx}`}
-                                className="w-1.5 h-1.5 rounded-full bg-yellow-400"
-                              />
-                            ))}
-                            {(items.tasks.length + items.notes.length) > 4 && (
+                            {dayEvents.length > 3 && (
                               <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                             )}
                           </div>

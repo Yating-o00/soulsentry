@@ -87,8 +87,8 @@ export default function FloatingAssistantButton() {
                   <div className="flex items-center gap-2 mb-1">
                     <Sparkles className="w-3.5 h-3.5 text-[#5a647d]" />
                     <span className="text-xs font-semibold text-[#222222]">{assistantName}提醒</span>
-                  </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
                     今天有 <strong className="text-[#5a647d]">{pendingCount}</strong> 个任务等你完成 💪
                   </p>
                 </button>

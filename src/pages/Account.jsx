@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -17,7 +17,7 @@ export default function Account() {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     full_name: "",
-    assistant_name: "小雅"
+    assistant_name: "小雅",
   });
 
   useEffect(() => {
@@ -202,12 +202,12 @@ export default function Account() {
 
                 <div className="space-y-2">
                   <Label htmlFor="assistant_name" className="flex items-center gap-2 text-slate-700">
-                    <User className="w-4 h-4" />
+                    <Bot className="w-4 h-4" />
                     助手昵称 (SoulSentry-...)
                   </Label>
                   {editing ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-slate-500 font-medium">SoulSentry-</span>
+                      <span className="text-sm font-medium text-slate-500">SoulSentry-</span>
                       <Input
                         id="assistant_name"
                         value={formData.assistant_name}
@@ -215,15 +215,16 @@ export default function Account() {
                           setFormData({ ...formData, assistant_name: e.target.value })
                         }
                         placeholder="小雅"
-                        className="flex-1 border-slate-200 focus-visible:ring-blue-500"
+                        className="border-slate-200 focus-visible:ring-blue-500"
                       />
                     </div>
                   ) : (
                     <p className="text-lg font-semibold text-slate-800 flex items-center gap-1">
-                      <span className="text-slate-400">SoulSentry-</span>
+                      <span className="text-slate-400 text-base font-normal">SoulSentry-</span>
                       {user.assistant_name || "小雅"}
                     </p>
                   )}
+                  <p className="text-xs text-slate-400">您可以自定义助手的名字，例如：小雅、Jarvis 等</p>
                 </div>
 
                 <div className="space-y-2">

@@ -52,55 +52,68 @@ export default function Layout({ children }) {
       <div className="min-h-screen flex w-full">
         <style>{`
           :root {
-            --color-primary: 211 24% 42%;
-            --color-secondary: 210 40% 24%;
-            --color-accent: 199 89% 48%;
-            --color-success: 158 64% 52%;
+            /* Main Primary Colors - Tech Blue */
+            --primary-main: 56 72 119;      /* #384877 */
+            --primary-enhance: 59 90 162;   /* #3b5aa2 */
 
-            --slate-50: 249 250 251;
-            --slate-900: 34 34 34;
-            --steel-blue: 90 100 125;
-            --navy-blue: 30 58 95;
-            --sky-blue: 147 197 253;
-            --cyan-accent: 6 182 212;
-            --violet-accent: 139 92 246;
+            /* Secondary Colors - Vibrant Red/Rose */
+            --secondary-main: 213 73 95;    /* #d5495f */
+            --secondary-light: 222 109 126; /* #de6d7e */
+            --secondary-lighter: 224 145 158; /* #e0919e */
 
-            /* Rose Theme Colors */
-            --rose-primary: 213 73 95;   /* #d5495f */
-            --rose-light: 222 109 126;   /* #de6d7e */
-            --rose-lighter: 224 145 158; /* #e0919e */
-            }
+            /* Neutral/Background Colors */
+            --bg-white: 255 255 255;
+            --bg-grey-minimal: 249 250 251; /* #f9fafb */
+            --text-dark: 34 34 34;          /* #222222 */
 
-            .bg-gradient-to-r.from-blue-500 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
-          .bg-gradient-to-br.from-blue-500 { background-image: linear-gradient(to bottom right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
-          .from-purple-500.to-blue-500 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
-          .from-purple-500.to-blue-600 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
-          .from-purple-600.to-blue-600 { background-image: linear-gradient(to right, rgb(75, 85, 110), rgb(25, 48, 80)) !important; }
-          .from-blue-600.to-purple-600 { background-image: linear-gradient(to right, rgb(30, 58, 95), rgb(56, 72, 119)) !important; }
+            /* Legacy Variables Mapped to New System */
+            --color-primary: var(--primary-main);
+            --color-secondary: var(--text-dark);
+            --slate-50: var(--bg-grey-minimal);
+            --slate-900: var(--text-dark);
+          }
 
-          .text-blue-500, .text-blue-600 { color: rgb(56, 72, 119) !important; }
-          .text-purple-500, .text-purple-600, .text-purple-700 { color: rgb(56, 72, 119) !important; }
-          .bg-blue-50, .bg-purple-50 { background-color: rgb(249, 250, 251) !important; }
-          .bg-blue-100, .bg-purple-100 { background-color: rgb(239, 242, 247) !important; }
-          .border-blue-200, .border-purple-200 { border-color: rgb(220, 225, 235) !important; }
-          .border-blue-300, .border-purple-300 { border-color: rgb(200, 210, 225) !important; }
-          .hover\\:border-blue-300:hover, .hover\\:border-purple-300:hover { border-color: rgb(200, 210, 225) !important; }
-          .hover\\:bg-blue-50:hover, .hover\\:bg-purple-50:hover { background-color: rgb(249, 250, 251) !important; }
+          /* Global Overrides for Cinematic/Tech Feel */
+          body {
+            color: rgb(34, 34, 34);
+            background-color: rgb(249, 250, 251);
+          }
 
-          .bg-slate-50 { background-color: rgb(249, 250, 251) !important; }
-          .from-slate-50 { --tw-gradient-from: rgb(249, 250, 251) !important; }
-          .to-blue-50\\/30 { --tw-gradient-to: rgba(249, 250, 251, 0.3) !important; }
-          .to-purple-50\\/30 { --tw-gradient-to: rgba(249, 250, 251, 0.3) !important; }
+          /* Override Blue/Purple classes to use our new Primary Tech Blue */
+          .bg-blue-600, .bg-blue-500, .bg-purple-600 { background-color: rgb(56, 72, 119) !important; }
+          .text-blue-600, .text-blue-500, .text-purple-600 { color: rgb(56, 72, 119) !important; }
+          .border-blue-600, .border-purple-600 { border-color: rgb(56, 72, 119) !important; }
+
+          /* Hover states */
+          .hover\\:bg-blue-700:hover { background-color: rgb(44, 56, 95) !important; }
+
+          /* Gradients - Primary */
+          .bg-gradient-to-r.from-blue-500, 
+          .bg-gradient-to-r.from-blue-600,
+          .from-purple-500 { 
+            background-image: linear-gradient(135deg, rgb(56, 72, 119) 0%, rgb(59, 90, 162) 100%) !important; 
+          }
+
+          .bg-gradient-to-br.from-blue-500 {
+            background-image: linear-gradient(135deg, rgb(56, 72, 119) 0%, rgb(59, 90, 162) 100%) !important;
+          }
+
+          /* Secondary Accents (Red) where needed specifically */
+          .text-red-500, .text-rose-500 { color: rgb(213, 73, 95) !important; }
+
+          /* Soft Backgrounds */
+          .bg-blue-50, .bg-purple-50 { background-color: rgba(56, 72, 119, 0.05) !important; }
+          .bg-blue-100 { background-color: rgba(56, 72, 119, 0.1) !important; }
         `}</style>
         
         <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
           <SidebarHeader className="border-b border-slate-200/50 p-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#d5495f] to-[#de6d7e] flex items-center justify-center shadow-lg shadow-[#d5495f]/20">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
                 <Bell className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="font-bold text-lg bg-gradient-to-r from-[#d5495f] to-[#de6d7e] bg-clip-text text-transparent">
+                <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
                   任务管家
                 </h2>
                 <p className="text-xs text-slate-500">智能提醒，贴心陪伴</p>
@@ -120,7 +133,7 @@ export default function Layout({ children }) {
                           asChild 
                           className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
                             isActive 
-                              ? 'bg-gradient-to-r from-[#d5495f] to-[#de6d7e] text-white shadow-lg shadow-[#d5495f]/25' 
+                              ? 'bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white shadow-lg shadow-[#384877]/25' 
                               : 'hover:bg-[#f9fafb] text-slate-700'
                           }`}
                         >
@@ -145,7 +158,7 @@ export default function Layout({ children }) {
           <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">
             <div className="flex items-center gap-4">
               <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-all duration-200" />
-              <h1 className="text-lg font-semibold bg-gradient-to-r from-[#d5495f] to-[#de6d7e] bg-clip-text text-transparent">
+              <h1 className="text-lg font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
                 任务管家
               </h1>
             </div>

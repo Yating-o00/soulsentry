@@ -35,6 +35,11 @@ const navigationItems = [
     icon: Calendar,
   },
   {
+    title: "便签",
+    url: createPageUrl("Notes"),
+    icon: StickyNote,
+  },
+  {
     title: "团队",
     url: createPageUrl("Teams"),
     icon: Bell,

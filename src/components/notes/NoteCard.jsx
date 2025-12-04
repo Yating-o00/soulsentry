@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pin, Trash2, Edit, Copy, MoreHorizontal } from "lucide-react";
+import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import {
@@ -25,7 +25,7 @@ const COLORS = {
   pink: "bg-pink-50 hover:border-pink-300",
 };
 
-export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy }) {
+export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask }) {
   const colorClass = COLORS[note.color] || COLORS.white;
 
   const handleCopy = () => {
@@ -49,6 +49,16 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy }) {
             className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]"
             dangerouslySetInnerHTML={{ __html: note.content }}
           />
+          
+          {note.ai_analysis?.summary && (
+            <div className="mb-3 p-2 bg-black/5 rounded text-xs text-slate-600 border-l-2 border-purple-400">
+                <div className="flex items-center gap-1 mb-1 font-medium opacity-75">
+                    <Sparkles className="w-3 h-3" />
+                    摘要
+                </div>
+                {note.ai_analysis.summary}
+            </div>
+          )}
 
           {/* Tags */}
           {note.tags && note.tags.length > 0 && (
@@ -102,6 +112,10 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy }) {
                   <DropdownMenuItem onClick={handleCopy}>
                     <Copy className="w-4 h-4 mr-2" />
                     复制文本
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onConvertToTask(note); }}>
+                    <ListTodo className="w-4 h-4 mr-2" />
+                    转为任务
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={(e) => { e.stopPropagation(); onDelete(note); }}

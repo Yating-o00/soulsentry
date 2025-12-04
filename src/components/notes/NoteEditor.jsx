@@ -2,8 +2,7 @@ import React, { useState, useRef } from "react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
-import { Loader2, Sparkles, X, Save } from "lucide-react";
-import AINoteAssistant from "./AINoteAssistant";
+import { Loader2, Sparkles, X, Save, ListTodo } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,12 +23,99 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [content, setContent] = useState(initialData?.content || "");
   const [tags, setTags] = useState(initialData?.tags || []);
   const [color, setColor] = useState(initialData?.color || "white");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState(initialData?.ai_analysis || null);
   const quillRef = useRef(null);
-  
-  const getPlainText = () => {
-    if (!quillRef.current) return "";
+
+  const handleAnalyze = async () => {
     const editor = quillRef.current.getEditor();
-    return editor.getText().trim();
+    const text = editor.getText().trim();
+    // Preserve formatting while getting HTML
+    const currentHtml = editor.root.innerHTML;
+
+    if (!text) {
+      toast.error("请先输入一些内容");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const res = await base44.integrations.Core.InvokeLLM({
+        prompt: `Analyze this note content for:
+        1. Key entities (names, locations, dates, organizations, websites) to extract.
+        2. A concise summary (bullet points or short paragraph).
+        3. Relevant tags (3-5).
+
+        Content:
+        "${text}"
+
+        Return ONLY JSON:
+        {
+          "tags": ["string"],
+          "entities": [{"text": "entity text", "type": "person|location|date|org|url"}],
+          "summary": "string"
+        }`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            tags: { type: "array", items: { type: "string" } },
+            summary: { type: "string" },
+            entities: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string" },
+                  type: { type: "string", enum: ["person", "location", "date", "org", "url"] }
+                },
+                required: ["text", "type"]
+              }
+            }
+          },
+          required: ["tags", "summary", "entities"]
+        }
+      });
+
+      if (res) {
+        const newTags = Array.from(new Set([...tags, ...(res.tags || [])]));
+        setTags(newTags);
+        setAiAnalysis({
+          summary: res.summary,
+          entities: res.entities
+        });
+
+        // Highlight entities in editor content (simple string replacement on HTML)
+        let newHtml = currentHtml;
+        res.entities.forEach(entity => {
+            // Simple case-insensitive replacement, avoiding tags
+            // Note: This is a naive implementation. Proper HTML manipulation is complex.
+            // We wrap found entities in a span with background color
+            const regex = new RegExp(`(${entity.text})(?![^<]*>)`, "gi");
+            const colorMap = {
+                person: "#dbeafe", // blue-100
+                location: "#dcfce7", // green-100
+                date: "#fef9c3", // yellow-100
+                org: "#f3e8ff", // purple-100
+                url: "#ffedd5" // orange-100
+            };
+            // Only replace if not already highlighted (basic check)
+            if (!newHtml.includes(`style="background-color: ${colorMap[entity.type]}`)) {
+               newHtml = newHtml.replace(regex, `<span style="background-color: ${colorMap[entity.type] || '#f1f5f9'}; border-radius: 4px; padding: 0 2px;">$1</span>`);
+            }
+        });
+        
+        if (newHtml !== currentHtml) {
+            setContent(newHtml);
+        }
+
+        toast.success("AI 分析完成");
+      }
+    } catch (error) {
+      console.error("AI Analysis failed", error);
+      toast.error("AI 分析失败");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleSave = () => {
@@ -49,7 +135,8 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
       plain_text: plainText,
       tags,
       color,
-      is_pinned: initialData?.is_pinned || false
+      is_pinned: initialData?.is_pinned || false,
+      ai_analysis: aiAnalysis
     });
     
     if (!initialData) {
@@ -104,20 +191,19 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 </motion.div>
             ))}
             </AnimatePresence>
+            <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleAnalyze}
+                disabled={isAnalyzing}
+                className="h-7 text-xs text-[#384877] hover:bg-[#384877]/10 rounded-full gap-1.5 border border-[#384877]/20"
+            >
+                {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                AI 智能标签
+            </Button>
         </div>
 
-        <AINoteAssistant 
-            noteContent={getPlainText()}
-            onTagsGenerated={(newTags) => {
-                const mergedTags = Array.from(new Set([...tags, ...newTags]));
-                setTags(mergedTags);
-            }}
-            onSummaryGenerated={(summary) => {
-                // Optional: Save summary to note if you update the entity schema
-            }}
-        />
-
-        <div className="flex items-center justify-between pt-4 mt-2 border-t border-black/5">
+        <div className="flex items-center justify-between pt-2 border-t border-black/5">
             <div className="flex gap-1">
                 {COLORS.map(c => (
                     <button

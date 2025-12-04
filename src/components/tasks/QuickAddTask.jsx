@@ -44,8 +44,8 @@ const PRIORITIES = [
   { value: "urgent", label: "紧急", icon: "⚠️", color: "text-[#d5495f]" },
 ];
 
-export default function QuickAddTask({ onAdd }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export default function QuickAddTask({ onAdd, initialData = null }) {
+  const [isExpanded, setIsExpanded] = useState(!!initialData);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
@@ -59,12 +59,12 @@ export default function QuickAddTask({ onAdd }) {
   const [showSmartSuggestion, setShowSmartSuggestion] = useState(false);
   const [showAIEnhancer, setShowAIEnhancer] = useState(false);
   const [task, setTask] = useState({
-    title: "",
-    description: "",
-    reminder_time: null,
-    time: "09:00",
-    priority: "medium",
-    category: "personal",
+    title: initialData?.title || "",
+    description: initialData?.description || "",
+    reminder_time: initialData?.reminder_time ? new Date(initialData.reminder_time) : null,
+    time: initialData?.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : "09:00",
+    priority: initialData?.priority || "medium",
+    category: initialData?.category || "personal",
     repeat_rule: "none",
     custom_recurrence: null,
     is_all_day: false,
@@ -76,6 +76,18 @@ export default function QuickAddTask({ onAdd }) {
     is_shared: false,
     team_visibility: "private",
   });
+
+  // Update task if initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setTask(prev => ({
+        ...prev,
+        title: initialData.title || prev.title,
+        description: initialData.description || prev.description,
+      }));
+      setIsExpanded(true);
+    }
+  }, [initialData]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;

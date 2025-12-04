@@ -394,7 +394,7 @@ import React, { useState, useEffect, useRef } from "react";
                  variant="outline"
                  onClick={startVoiceInput}
                  disabled={isLoading}
-                 className={`h-9 w-9 border-slate-200 ${isRecording ? 'bg-red-50 border-red-200 text-red-500' : 'hover:bg-slate-50 text-[#384877]'}`}
+                 className={`h-9 w-9 border-slate-200 ${isRecording ? 'bg-[#384877]/10 border-[#384877]/20 text-[#384877] animate-pulse' : 'hover:bg-slate-50 text-[#384877]'}`}
                >
                  {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
                </Button>

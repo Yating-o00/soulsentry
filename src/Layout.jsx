@@ -64,9 +64,14 @@ export default function Layout({ children }) {
             --sky-blue: 147 197 253;
             --cyan-accent: 6 182 212;
             --violet-accent: 139 92 246;
-          }
 
-          .bg-gradient-to-r.from-blue-500 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
+            /* Rose Theme Colors */
+            --rose-primary: 213 73 95;   /* #d5495f */
+            --rose-light: 222 109 126;   /* #de6d7e */
+            --rose-lighter: 224 145 158; /* #e0919e */
+            }
+
+            .bg-gradient-to-r.from-blue-500 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
           .bg-gradient-to-br.from-blue-500 { background-image: linear-gradient(to bottom right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
           .from-purple-500.to-blue-500 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
           .from-purple-500.to-blue-600 { background-image: linear-gradient(to right, rgb(56, 72, 119), rgb(30, 58, 95)) !important; }
@@ -91,11 +96,11 @@ export default function Layout({ children }) {
         <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
           <SidebarHeader className="border-b border-slate-200/50 p-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#202a44] flex items-center justify-center shadow-lg">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#d5495f] to-[#de6d7e] flex items-center justify-center shadow-lg shadow-[#d5495f]/20">
                 <Bell className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#202a44] bg-clip-text text-transparent">
+                <h2 className="font-bold text-lg bg-gradient-to-r from-[#d5495f] to-[#de6d7e] bg-clip-text text-transparent">
                   任务管家
                 </h2>
                 <p className="text-xs text-slate-500">智能提醒，贴心陪伴</p>

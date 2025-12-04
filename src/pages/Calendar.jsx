@@ -421,60 +421,81 @@ export default function CalendarPage() {
                 <span className="text-sm opacity-90">待办</span>
               </div>
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5" />
+                <StickyNote className="w-5 h-5" />
                 <span className="text-2xl font-bold">
-                  {tasksOnSelectedDate.filter(t => t.status === "completed").length}
+                  {notesOnSelectedDate.length}
                 </span>
-                <span className="text-sm opacity-90">完成</span>
+                <span className="text-sm opacity-90">便签</span>
               </div>
             </div>
           </Card>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">当日任务</h3>
-              <Badge variant="outline" className="bg-purple-50 text-purple-700">
-                {tasksOnSelectedDate.length} 个任务
-              </Badge>
-            </div>
-            <div className="max-h-[600px] overflow-y-auto space-y-3">
-              <AnimatePresence mode="popLayout">
-                {tasksOnSelectedDate.length > 0 ? (
-                  tasksOnSelectedDate.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onComplete={() => handleComplete(task)}
-                      onDelete={() => deleteTaskMutation.mutate(task.id)}
-                      onEdit={() => setSelectedTask(task)}
-                      onClick={() => setSelectedTask(task)}
-                      onSubtaskToggle={handleSubtaskToggle}
-                    />
-                  ))
-                ) : (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <Card className="p-8 border-0 shadow-lg bg-white text-center">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                        <CalendarIcon className="w-8 h-8 text-slate-400" />
-                      </div>
-                      <p className="text-slate-600 mb-3">这一天还没有任务</p>
-                      <Button
-                        onClick={() => handleDateClick(selectedDate)}
-                        variant="outline"
-                        size="sm"
-                        className="border-purple-300 text-purple-600 hover:bg-purple-50"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        添加任务
-                      </Button>
-                    </Card>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+          <div className="space-y-6">
+            <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-800">当日事项</h3>
+                <div className="flex gap-2">
+                     <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                        {tasksOnSelectedDate.length} 任务
+                    </Badge>
+                     <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+                        {notesOnSelectedDate.length} 便签
+                    </Badge>
+                </div>
+                </div>
+                <div className="max-h-[600px] overflow-y-auto space-y-3">
+                <AnimatePresence mode="popLayout">
+                    {/* Notes Section */}
+                    {notesOnSelectedDate.map(note => (
+                         <NoteCard
+                            key={note.id}
+                            note={note}
+                            onEdit={() => {}}
+                            onDelete={() => {}}
+                            onPin={() => {}}
+                            onCopy={() => {}}
+                            onConvertToTask={() => {}}
+                          />
+                    ))}
+
+                    {/* Tasks Section */}
+                    {tasksOnSelectedDate.map((task) => (
+                        <TaskCard
+                        key={task.id}
+                        task={task}
+                        onComplete={() => handleComplete(task)}
+                        onDelete={() => deleteTaskMutation.mutate(task.id)}
+                        onEdit={() => setSelectedTask(task)}
+                        onClick={() => setSelectedTask(task)}
+                        onSubtaskToggle={handleSubtaskToggle}
+                        />
+                    ))}
+                    
+                    {tasksOnSelectedDate.length === 0 && notesOnSelectedDate.length === 0 && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <Card className="p-8 border-0 shadow-lg bg-white text-center">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                            <CalendarIcon className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <p className="text-slate-600 mb-3">这一天还没有安排</p>
+                        <Button
+                            onClick={() => handleDateClick(selectedDate)}
+                            variant="outline"
+                            size="sm"
+                            className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                        >
+                            <Plus className="w-4 h-4 mr-2" />
+                            快速创建
+                        </Button>
+                        </Card>
+                    </motion.div>
+                    )}
+                </AnimatePresence>
+                </div>
             </div>
           </div>
         </motion.div>

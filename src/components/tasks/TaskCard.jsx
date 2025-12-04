@@ -31,7 +31,8 @@ import {
   ChevronRight,
   Circle,
   CheckCircle2,
-  Share2 // Added Share2 icon
+  Share2,
+  RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskShareCard from "./TaskShareCard"; // Added import for TaskShareCard
@@ -72,7 +73,7 @@ const PRIORITY_LABELS = {
   urgent: "紧急",
 };
 
-export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle }) {
+export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle, isTrash, onRestore }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false); // Added state for share card
 
@@ -134,15 +135,17 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
           {/* 主任务 */}
           <div className="p-5">
             <div className="flex items-start gap-4">
-              <Checkbox
-              checked={isCompleted}
-              onCheckedChange={(e) => {
-                e?.stopPropagation?.();
-                onComplete();
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="mt-1 h-5 w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed]"
-              />
+              {!isTrash && (
+                <Checkbox
+                checked={isCompleted}
+                onCheckedChange={(e) => {
+                  e?.stopPropagation?.();
+                  onComplete();
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 h-5 w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed]"
+                />
+              )}
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-3 mb-2">
@@ -169,40 +172,72 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                     </h3>
                   </div>
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowShareCard(true);
-                      }}
-                      className="h-8 w-8 hover:bg-[#e0f2fe] hover:text-[#0891b2] rounded-lg"
-                      title="分享任务"
-                    >
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit();
-                      }}
-                      className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#384877] rounded-lg"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete();
-                      }}
-                      className="h-8 w-8 hover:bg-[#fee2e2] hover:text-[#dc2626] rounded-lg"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {!isTrash ? (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowShareCard(true);
+                          }}
+                          className="h-8 w-8 hover:bg-[#e0f2fe] hover:text-[#0891b2] rounded-lg"
+                          title="分享任务"
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit();
+                          }}
+                          className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#384877] rounded-lg"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete();
+                          }}
+                          className="h-8 w-8 hover:bg-[#fee2e2] hover:text-[#dc2626] rounded-lg"
+                          title="移至回收站"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRestore();
+                          }}
+                          className="h-8 w-8 hover:bg-[#ecfdf5] hover:text-[#059669] rounded-lg"
+                          title="恢复任务"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete();
+                          }}
+                          className="h-8 w-8 bg-[#fee2e2] text-[#dc2626] hover:bg-[#fecaca] rounded-lg"
+                          title="彻底删除"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
 

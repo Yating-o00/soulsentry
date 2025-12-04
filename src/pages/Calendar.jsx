@@ -46,7 +46,7 @@ export default function CalendarPage() {
     initialData: [],
   });
 
-  const tasks = allTasks.filter(task => !task.parent_task_id);
+  const tasks = allTasks.filter(task => !task.parent_task_id && !task.deleted_at);
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
@@ -64,7 +64,7 @@ export default function CalendarPage() {
   });
 
   const deleteTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.delete(id),
+    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },

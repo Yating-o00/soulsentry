@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search, Filter } from "lucide-react";
+import { Search, Filter, Trash2, ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCard from "../components/tasks/TaskCard";
 import QuickAddTask from "../components/tasks/QuickAddTask";
@@ -25,6 +25,7 @@ export default function Tasks() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTask, setSelectedTask] = useState(null);
+  const [viewMode, setViewMode] = useState("active"); // 'active' or 'trash'
   const queryClient = useQueryClient();
 
   const { data: allTasks = [], isLoading } = useQuery({
@@ -33,8 +34,14 @@ export default function Tasks() {
     initialData: [],
   });
 
-  // 只显示主任务（没有 parent_task_id 的任务）
-  const tasks = allTasks.filter(task => !task.parent_task_id);
+  // 根据视图模式过滤任务
+  const tasks = allTasks.filter(task => {
+    const isMainTask = !task.parent_task_id;
+    if (viewMode === 'trash') {
+      return isMainTask && task.deleted_at;
+    }
+    return isMainTask && !task.deleted_at;
+  });
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
@@ -50,10 +57,30 @@ export default function Tasks() {
     },
   });
 
-  const deleteTaskMutation = useMutation({
+  // 软删除
+  const softDeleteTaskMutation = useMutation({
+    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success("任务已移至回收站");
+    },
+  });
+
+  // 恢复任务
+  const restoreTaskMutation = useMutation({
+    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success("任务已恢复");
+    },
+  });
+
+  // 永久删除
+  const permanentDeleteTaskMutation = useMutation({
     mutationFn: (id) => base44.entities.Task.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success("任务已永久删除");
     },
   });
 
@@ -66,6 +93,7 @@ export default function Tasks() {
   });
 
   const handleComplete = (task) => {
+    if (viewMode === 'trash') return;
     const newStatus = task.status === "completed" ? "pending" : "completed";
     updateTaskMutation.mutate({
       id: task.id,
@@ -181,16 +209,46 @@ export default function Tasks() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
-          全部任务
-        </h1>
-        <p className="text-slate-600">管理您的所有任务和提醒</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
+              {viewMode === 'trash' ? '回收站' : '全部任务'}
+            </h1>
+            <p className="text-slate-600">
+              {viewMode === 'trash' ? '管理已删除的任务' : '管理您的所有任务和提醒'}
+            </p>
+          </div>
+          
+          <div className="flex gap-3">
+            {viewMode === 'trash' ? (
+              <Button 
+                variant="outline" 
+                onClick={() => setViewMode('active')}
+                className="gap-2 border-[#dce4ed] text-[#384877]"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                返回任务
+              </Button>
+            ) : (
+              <Button 
+                variant="outline" 
+                onClick={() => setViewMode('trash')}
+                className="gap-2 border-[#dce4ed] text-[#52525b] hover:text-[#d5495f] hover:border-[#e0919e] hover:bg-[#fff1f2]"
+              >
+                <Trash2 className="w-4 h-4" />
+                回收站
+              </Button>
+            )}
+          </div>
+        </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
-        <SmartTextParser onTasksGenerated={handleBulkCreate} />
-      </div>
+      {viewMode === 'active' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+          <SmartTextParser onTasksGenerated={handleBulkCreate} />
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -257,10 +315,20 @@ export default function Tasks() {
               key={task.id}
               task={task}
               onComplete={() => handleComplete(task)}
-              onDelete={() => deleteTaskMutation.mutate(task.id)}
+              onDelete={() => {
+                if (viewMode === 'trash') {
+                  if (window.confirm('确定要永久删除这个任务吗？此操作无法撤销。')) {
+                    permanentDeleteTaskMutation.mutate(task.id);
+                  }
+                } else {
+                  softDeleteTaskMutation.mutate(task.id);
+                }
+              }}
+              onRestore={() => restoreTaskMutation.mutate(task.id)}
               onEdit={() => {}}
               onClick={() => setSelectedTask(task)}
               onSubtaskToggle={handleSubtaskToggle}
+              isTrash={viewMode === 'trash'}
             />
           ))}
         </AnimatePresence>

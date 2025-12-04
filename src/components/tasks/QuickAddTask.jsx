@@ -745,7 +745,7 @@ export default function QuickAddTask({ onAdd }) {
                 <div className="flex items-center gap-3 pt-2">
                   <Button
                     type="submit"
-                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#4a5670] hover:to-[#152e50] text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-[#5a647d]/25 hover:shadow-[#5a647d]/40 transition-all"
+                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all"
                     disabled={!task.title.trim() || !task.reminder_time}
                   >
                     <Plus className="w-5 h-5 mr-2" strokeWidth={2.5} />

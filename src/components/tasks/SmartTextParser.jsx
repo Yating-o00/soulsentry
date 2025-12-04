@@ -272,13 +272,13 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
 
   const PRIORITY_LABELS = {
     low: { label: "低", color: "bg-[#f4f6f8] text-[#52525b]" },
-    medium: { label: "中", color: "bg-[#e5e9ef] text-[#5a647d]" },
+    medium: { label: "中", color: "bg-[#e5e9ef] text-[#384877]" },
     high: { label: "高", color: "bg-[#fed7aa] text-[#ea580c]" },
     urgent: { label: "紧急", color: "bg-[#fecaca] text-[#dc2626]" },
   };
 
   const CATEGORY_LABELS = {
-    work: { label: "工作", color: "bg-[#e5e9ef] text-[#5a647d]" },
+    work: { label: "工作", color: "bg-[#e5e9ef] text-[#384877]" },
     personal: { label: "个人", color: "bg-[#e0f2fe] text-[#0891b2]" },
     health: { label: "健康", color: "bg-[#d1fae5] text-[#059669]" },
     study: { label: "学习", color: "bg-[#fef3c7] text-[#d97706]" },
@@ -292,7 +292,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
     <Card className="border border-[#e5e9ef] shadow-md hover:shadow-lg transition-all bg-white rounded-[16px]">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
-          <Wand2 className="w-5 h-5 text-[#5a647d]" />
+          <Wand2 className="w-5 h-5 text-[#384877]" />
           <span className="text-[#222222]">智能文本解析</span>
         </CardTitle>
         <p className="text-[15px] text-[#52525b] mt-1.5">
@@ -305,14 +305,14 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
             placeholder="粘贴文本，例如：&#10;明天晚上准备家庭聚餐，需要买菜、做三道菜和一个汤&#10;本周完成项目报告，包括数据收集、分析和撰写..."
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="min-h-[120px] border border-[#e5e9ef] bg-[#f9fafb] focus-visible:ring-2 focus-visible:ring-[#5a647d]/20 focus-visible:border-[#5a647d] rounded-[12px] text-[15px]"
+            className="min-h-[120px] border border-[#e5e9ef] bg-[#f9fafb] focus-visible:ring-2 focus-visible:ring-[#5a647d]/20 focus-visible:border-[#384877] rounded-[12px] text-[15px]"
           />
           
           <div className="flex gap-2">
             <Button
               onClick={handleParse}
               disabled={parsing || !text.trim()}
-              className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#4a5670] hover:to-[#152e50] shadow-md hover:shadow-lg transition-all duration-200 rounded-[12px]"
+              className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] shadow-md hover:shadow-lg transition-all duration-200 rounded-[12px]"
             >
               {parsing ? (
                 <>
@@ -381,9 +381,9 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                           >
                             {(task.subtasks && task.subtasks.length > 0) || expandedTasks.has(index) ? (
                               expandedTasks.has(index) ? (
-                                <ChevronDown className="w-4 h-4 text-[#5a647d]" />
+                                <ChevronDown className="w-4 h-4 text-[#384877]" />
                               ) : (
-                                <ChevronRight className="w-4 h-4 text-[#5a647d]" />
+                                <ChevronRight className="w-4 h-4 text-[#384877]" />
                               )
                             ) : (
                               <div className="w-4 h-4" /> 
@@ -420,7 +420,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                           value={task.priority}
                           onValueChange={(value) => handleEditTask(index, 'priority', value)}
                         >
-                          <SelectTrigger className="h-7 w-auto gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#5a647d] shadow-none focus:ring-0">
+                          <SelectTrigger className="h-7 w-auto gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#384877] shadow-none focus:ring-0">
                             <AlertCircle className="w-3 h-3" />
                             <SelectValue />
                           </SelectTrigger>
@@ -437,7 +437,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                           value={task.category}
                           onValueChange={(value) => handleEditTask(index, 'category', value)}
                         >
-                          <SelectTrigger className="h-7 w-auto gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#5a647d] shadow-none focus:ring-0">
+                          <SelectTrigger className="h-7 w-auto gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#384877] shadow-none focus:ring-0">
                             <TagIcon className="w-3 h-3" />
                             <SelectValue />
                           </SelectTrigger>
@@ -452,7 +452,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
 
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="ghost" className="h-7 gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#5a647d] shadow-none">
+                            <Button variant="ghost" className="h-7 gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#384877] shadow-none">
                               <CalendarIcon className="w-3 h-3" />
                               {task.reminder_time ? format(new Date(task.reminder_time), "MM-dd HH:mm") : "设置时间"}
                             </Button>
@@ -510,7 +510,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                               className="group relative p-3 bg-white rounded-lg border border-[#e5e9ef] hover:border-[#dce4ed] hover:shadow-sm transition-all"
                             >
                               <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#5a647d]/10 text-[#5a647d] flex items-center justify-center text-[10px] font-bold mt-1">
+                                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#384877]/10 text-[#384877] flex items-center justify-center text-[10px] font-bold mt-1">
                                   {subIndex + 1}
                                 </div>
                                 
@@ -534,7 +534,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                       value={subtask.priority}
                                       onValueChange={(value) => handleEditSubtask(index, subIndex, 'priority', value)}
                                     >
-                                      <SelectTrigger className="h-6 w-auto gap-1 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded px-1.5 text-[10px] font-medium text-[#5a647d] shadow-none focus:ring-0">
+                                      <SelectTrigger className="h-6 w-auto gap-1 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded px-1.5 text-[10px] font-medium text-[#384877] shadow-none focus:ring-0">
                                         <div className={`w-1.5 h-1.5 rounded-full ${PRIORITY_LABELS[subtask.priority]?.color.split(' ')[0].replace('bg-', 'bg-')}`} />
                                         <SelectValue />
                                       </SelectTrigger>
@@ -549,7 +549,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
 
                                     <Popover>
                                       <PopoverTrigger asChild>
-                                        <Button variant="ghost" className="h-6 gap-1 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded px-1.5 text-[10px] font-medium text-[#5a647d] shadow-none">
+                                        <Button variant="ghost" className="h-6 gap-1 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded px-1.5 text-[10px] font-medium text-[#384877] shadow-none">
                                           <Clock className="w-3 h-3" />
                                           {subtask.reminder_time ? format(new Date(subtask.reminder_time), "MM-dd HH:mm") : "设置时间"}
                                         </Button>

@@ -48,8 +48,8 @@ const CATEGORY_ICONS = {
 };
 
 const CATEGORY_COLORS = {
-  work: "bg-[#f9fafb] text-[#5a647d] border-[#dce4ed]",
-  personal: "bg-[#f4f6f8] text-[#5a647d] border-[#dce4ed]",
+  work: "bg-[#f9fafb] text-[#384877] border-[#dce4ed]",
+  personal: "bg-[#f4f6f8] text-[#384877] border-[#dce4ed]",
   health: "bg-[#ecfdf5] text-[#10b981] border-[#86efac]",
   study: "bg-[#fef3c7] text-[#f59e0b] border-[#fcd34d]",
   family: "bg-[#fce7f3] text-[#ec4899] border-[#f9a8d4]",
@@ -60,7 +60,7 @@ const CATEGORY_COLORS = {
 
 const PRIORITY_COLORS = {
   low: "text-[#a1a1aa]",
-  medium: "text-[#5a647d]",
+  medium: "text-[#384877]",
   high: "text-[#f97316]",
   urgent: "text-[#ef4444]",
 };
@@ -156,9 +156,9 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         className="hover:bg-[#e5e9ef] rounded-lg p-1 transition-colors"
                       >
                         {expanded ? (
-                          <ChevronDown className="w-4 h-4 text-[#5a647d]" />
+                          <ChevronDown className="w-4 h-4 text-[#384877]" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-[#5a647d]" />
+                          <ChevronRight className="w-4 h-4 text-[#384877]" />
                         )}
                       </button>
                     )}
@@ -188,7 +188,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         e.stopPropagation();
                         onEdit();
                       }}
-                      className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#5a647d] rounded-lg"
+                      className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#384877] rounded-lg"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -216,7 +216,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                   <div className="mb-3">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[13px] text-[#a1a1aa]">子任务进度</span>
-                      <span className="text-[13px] font-semibold text-[#5a647d]">
+                      <span className="text-[13px] font-semibold text-[#384877]">
                         {completedSubtasks}/{subtasks.length} 已完成 ({progress}%)
                       </span>
                     </div>
@@ -243,7 +243,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
 
                   {getRecurrenceText() && (
                     <Badge variant="outline" className="rounded-[8px] text-[13px] border-[#dce4ed]">
-                      <Repeat className="w-3 h-3 mr-1 text-[#5a647d]" />
+                      <Repeat className="w-3 h-3 mr-1 text-[#384877]" />
                       {getRecurrenceText()}
                     </Badge>
                   )}
@@ -257,7 +257,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                   </Badge>
 
                   {hasSubtasks && (
-                    <Badge className="bg-[#5a647d] text-white rounded-[8px] text-[13px]">
+                    <Badge className="bg-[#384877] text-white rounded-[8px] text-[13px]">
                       {subtasks.length} 个子任务
                     </Badge>
                   )}
@@ -339,7 +339,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                           isSubtaskCompleted
                             ? 'bg-[#10b981] text-white'
-                            : 'bg-[#5a647d] text-white'
+                            : 'bg-[#384877] text-white'
                         }`}>
                           {isSubtaskCompleted ? '✓' : orderNumber}
                         </div>

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +21,12 @@ export default function SmartTextParser({ onTasksGenerated }) {
   const [parsedTasks, setParsedTasks] = useState([]);
   const [expandedTasks, setExpandedTasks] = useState(new Set());
   const [refiningState, setRefiningState] = useState(null); // { taskIndex, subIndex }
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => base44.entities.User.list(),
+    initialData: [],
+  });
 
   const handleParse = async () => {
     if (!text.trim()) {
@@ -43,6 +50,7 @@ ${text}
 3. 子任务的提醒时间应该早于或等于父任务的提醒时间
 4. 如果文本中没有明确的层级关系，但任务可以拆解，请智能拆解
 5. 为子任务添加序号标识（如：步骤1、步骤2等）
+6. 提取参与者/负责人：从文本中识别提到的人名（如"和张三"、"交给李四"），返回名字列表
 
 提醒时间规则：
 - 如果提到具体时间，转换为ISO格式
@@ -86,6 +94,11 @@ ${text}
                     type: "string",
                     enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"]
                   },
+                  participants: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "提到的参与者姓名"
+                  },
                   subtasks: {
                     type: "array",
                     items: {
@@ -113,8 +126,24 @@ ${text}
       });
 
       if (response.tasks && response.tasks.length > 0) {
-        setParsedTasks(response.tasks);
-        const totalSubtasks = response.tasks.reduce((sum, task) => 
+        // Map participants to users
+        const tasksWithAssignments = response.tasks.map(task => {
+          let assignedIds = [];
+          if (task.participants && task.participants.length > 0) {
+             assignedIds = task.participants.map(name => {
+               // Simple fuzzy match: check if user full_name or email contains the name
+               const match = users.find(u => 
+                 (u.full_name && u.full_name.toLowerCase().includes(name.toLowerCase())) ||
+                 (u.email && u.email.toLowerCase().includes(name.toLowerCase()))
+               );
+               return match ? match.id : null;
+             }).filter(Boolean);
+          }
+          return { ...task, assigned_to: assignedIds };
+        });
+
+        setParsedTasks(tasksWithAssignments);
+        const totalSubtasks = tasksWithAssignments.reduce((sum, task) => 
           sum + (task.subtasks?.length || 0), 0
         );
         toast.success(`成功解析出 ${response.tasks.length} 个主任务${totalSubtasks > 0 ? `和 ${totalSubtasks} 个子任务` : ''}！`);
@@ -493,6 +522,21 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                           查看并添加子任务
                         </Button>
                       </div>
+                      {task.assigned_to && task.assigned_to.length > 0 && (
+                        <div className="mt-2 flex items-center gap-2">
+                           <span className="text-xs text-slate-500">分配给:</span>
+                           <div className="flex -space-x-2">
+                             {task.assigned_to.map(userId => {
+                               const user = users.find(u => u.id === userId);
+                               return user ? (
+                                 <div key={userId} className="w-6 h-6 rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] text-blue-700" title={user.full_name || user.email}>
+                                    {(user.full_name || user.email || "?")[0].toUpperCase()}
+                                 </div>
+                               ) : null;
+                             })}
+                           </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* 子任务列表 */}

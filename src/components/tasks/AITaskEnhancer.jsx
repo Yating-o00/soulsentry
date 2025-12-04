@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle, X, Plus } from "lucide-react";
+import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle, X, Plus, ListTodo } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
@@ -52,13 +52,15 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
 2. 推荐的任务分类（从以下选项中选择最合适的：work, personal, health, study, family, shopping, finance, other）
 3. 推荐的优先级（从以下选项中选择：low, medium, high, urgent）
 4. 建议的标签（3-5个简短的标签，帮助快速识别任务）
-5. 分析原因（简要说明为什么做出这些建议）
+5. 推荐的子任务（如果任务较复杂，建议拆分为3-5个子任务）
+6. 分析原因（简要说明为什么做出这些建议）
 
 注意：
 - 描述要具体、可执行，包含关键要点
 - 优先级判断要考虑紧迫性和重要性
 - 标签要简洁有用
-- 分类要准确反映任务性质`,
+- 分类要准确反映任务性质
+- 子任务要按执行顺序排列`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -77,14 +79,8 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
             },
             subtasks: {
                 type: "array",
-                items: {
-                    type: "object",
-                    properties: {
-                        title: { type: "string" },
-                        description: { type: "string" }
-                    },
-                    required: ["title"]
-                }
+                items: { type: "string" },
+                description: "建议的子任务列表"
             },
             reasoning: { type: "string" }
           },
@@ -109,7 +105,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
       category: suggestions.category,
       priority: suggestions.priority,
       tags: suggestions.tags,
-      subtasks: suggestions.subtasks // Pass subtasks if parent component supports it
+      subtasks: suggestions.subtasks || []
     });
     
     toast.success("已应用AI建议");
@@ -285,6 +281,23 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                   </div>
                 </div>
               </div>
+
+              {suggestions.subtasks && suggestions.subtasks.length > 0 && (
+                  <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
+                          <ListTodo className="w-4 h-4 text-[#384877]" />
+                          <span>建议子任务</span>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg border border-[#e5e9ef] space-y-2">
+                          {suggestions.subtasks.map((st, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-sm text-slate-600">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                                  <span>{st}</span>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )}
 
               {/* AI分析原因 */}
               <div className="bg-gradient-to-r from-[#4FC3F7]/10 to-[#1BA1CD]/10 rounded-lg p-3 border border-[#384877]/20">

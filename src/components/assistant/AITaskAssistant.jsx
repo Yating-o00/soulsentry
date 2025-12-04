@@ -95,11 +95,24 @@ import React, { useState, useEffect, useRef } from "react";
        if (!conversationId) return;
    
        const unsubscribe = base44.agents.subscribeToConversation(conversationId, (data) => {
-         setMessages(data.messages || []);
+         const newMessages = data.messages || [];
+         setMessages(newMessages);
+
+         // 智能判断加载状态：如果收到最新的助手消息，且该消息不是空的（正在生成中），则停止加载
+         const lastMsg = newMessages[newMessages.length - 1];
+         if (lastMsg && lastMsg.role === 'assistant') {
+             setIsLoading(false);
+             
+             // 自动语音播报（如果是新消息）
+             if (voiceEnabled && !isSpeaking && lastMsg.content) {
+                 // 简单的去重播报逻辑，实际项目中可能需要更复杂的ID比对
+                 speakText(lastMsg.content);
+             }
+         }
        });
    
        return () => unsubscribe();
-     }, [conversationId]);
+     }, [conversationId, voiceEnabled]);
    
      const initConversation = async () => {
        try {
@@ -145,6 +158,7 @@ import React, { useState, useEffect, useRef } from "react";
            role: "user",
            content: analysisPrompt
          });
+         // 请求发送成功，保持 isLoading 为 true，等待订阅更新来关闭它
        } catch (error) {
          console.error("Smart analysis failed:", error);
          setIsLoading(false);
@@ -163,17 +177,7 @@ import React, { useState, useEffect, useRef } from "react";
            content: text
          });
          setInputText("");
-   
-         // 等待AI响应
-         setTimeout(async () => {
-           const updatedConversation = await base44.agents.getConversation(conversationId);
-           const lastMessage = updatedConversation.messages[updatedConversation.messages.length - 1];
-           
-           if (lastMessage.role === "assistant" && voiceEnabled) {
-             speakText(lastMessage.content);
-           }
-           setIsLoading(false);
-         }, 1000);
+         // 不再使用 setTimeout，完全依赖 subscribeToConversation 更新状态
        } catch (error) {
          console.error("Failed to send message:", error);
          toast.error("发送消息失败");

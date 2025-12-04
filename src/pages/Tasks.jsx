@@ -259,12 +259,6 @@ export default function Tasks() {
             <TabsTrigger value="completed" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
               已完成 ({tasks.filter(t => t.status === "completed").length})
             </TabsTrigger>
-            <TabsTrigger value="trash" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <div className="flex items-center gap-1.5">
-                <Trash2 className="w-3.5 h-3.5" />
-                垃圾箱 ({trashTasks.length})
-              </div>
-            </TabsTrigger>
           </TabsList>
         </Tabs>
       </motion.div>
@@ -276,33 +270,30 @@ export default function Tasks() {
         className="space-y-3"
       >
         <AnimatePresence mode="popLayout">
-          {statusFilter === "trash" ? (
-            trashTasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                isTrash={true}
-                onRestore={() => restoreTaskMutation.mutate(task.id)}
-                onDeleteForever={() => permanentDeleteTaskMutation.mutate(task.id)}
-                onClick={() => {}}
-              />
-            ))
-          ) : (
-            filteredTasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onComplete={() => handleComplete(task)}
-                onDelete={() => deleteTaskMutation.mutate(task.id)}
-                onEdit={() => {}}
-                onClick={() => setSelectedTask(task)}
-                onSubtaskToggle={handleSubtaskToggle}
-              />
-            ))
-          )}
+          {filteredTasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              isTrash={viewMode === 'trash'}
+              onComplete={() => handleComplete(task)}
+              onDelete={() => {
+                if (viewMode === 'trash') {
+                  if (window.confirm('确定要永久删除这个任务吗？此操作无法撤销。')) {
+                    permanentDeleteTaskMutation.mutate(task.id);
+                  }
+                } else {
+                  softDeleteTaskMutation.mutate(task.id);
+                }
+              }}
+              onRestore={() => restoreTaskMutation.mutate(task.id)}
+              onEdit={() => {}}
+              onClick={() => setSelectedTask(task)}
+              onSubtaskToggle={handleSubtaskToggle}
+            />
+          ))}
         </AnimatePresence>
 
-        {((statusFilter === "trash" && trashTasks.length === 0) || (statusFilter !== "trash" && filteredTasks.length === 0)) && (
+        {filteredTasks.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

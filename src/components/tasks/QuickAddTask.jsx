@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2 } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -55,6 +55,13 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const recognitionRef = useRef(null);
   const [browserSupported, setBrowserSupported] = useState(true);
   
+  // Fetch users for AI matching
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => base44.entities.User.list(),
+    initialData: [],
+  });
+
   const [showAssignment, setShowAssignment] = useState(false);
   const [showSmartSuggestion, setShowSmartSuggestion] = useState(false);
   const [showAIEnhancer, setShowAIEnhancer] = useState(false);
@@ -73,9 +80,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     notification_interval: 15,
     advance_reminders: [],
     assigned_to: [],
+    subtasks: [],
     is_shared: false,
     team_visibility: "private",
-    subtasks: [],
   });
 
   // Update task if initialData changes
@@ -165,18 +172,25 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     }
   };
 
-  const parseVoiceInput = async () => {
+  const parseNaturalLanguage = async (inputText, isVoice = false) => {
     setIsProcessing(true);
     try {
+      const userListText = allUsers.map(u => `${u.full_name} (ID: ${u.id})`).join(", ");
+      
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `从以下语音内容中提取任务信息，识别主任务和子任务。
+        prompt: `从以下内容中提取任务信息。识别主任务、子任务和参与者。
 
-语音内容：${transcript}
+内容：${inputText}
 
-提取：标题、描述、时间、优先级、类别、子任务。
-时间规则：具体时间转ISO格式，相对时间（明天/下周）计算日期，默认明天9点。
-优先级：urgent/high/medium/low
-类别：work/personal/health/study/family/shopping/finance/other
+任务要求：
+1. 提取：标题、描述、时间、优先级、类别、子任务、参与者(assigned_to)。
+2. 时间规则：具体时间转ISO格式，相对时间（明天/下周）计算日期，默认明天9点。
+3. 参与者：根据以下用户列表匹配名字（模糊匹配），提取对应的用户ID列表。
+   用户列表: [${userListText}]
+   如果提到的人名不在列表中，请忽略或放在描述中。
+4. 子任务：如果内容包含多个步骤或待办事项，请生成子任务。
+5. 优先级：urgent/high/medium/low
+6. 类别：work/personal/health/study/family/shopping/finance/other
 
 当前时间：${new Date().toISOString()}`,
         response_json_schema: {
@@ -192,6 +206,11 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   reminder_time: { type: "string" },
                   priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
                   category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                  assigned_to: { 
+                    type: "array", 
+                    items: { type: "string" },
+                    description: "List of User IDs"
+                  },
                   subtasks: {
                     type: "array",
                     items: {
@@ -216,43 +235,72 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       });
 
       if (response.tasks && response.tasks.length > 0) {
-        setShowVoiceDialog(false);
-        setTranscript("");
+        if (isVoice) {
+            setShowVoiceDialog(false);
+            setTranscript("");
+        }
         setIsProcessing(false);
         
+        // If it's a complex task structure (multiple tasks or subtasks) AND we are in voice mode or explicit parse mode
+        // we might want to auto-create OR fill the form.
+        // If there are multiple tasks, we MUST use bulk create.
+        // If single task with subtasks, we can fill form BUT form UI needs to support subtasks preview? 
+        // Currently QuickAddTask doesn't show subtasks in UI before creation (it does in SmartTextParser but that's separate).
+        // So if subtasks exist, we better use handleBulkCreateDirect to ensure they are created correctly.
+        
         if (response.tasks.length > 1 || response.tasks.some(t => t.subtasks?.length > 0)) {
-          await handleBulkCreateDirect(response.tasks);
+          // If explicitly typing in title, maybe we just want to fill the main task and ignore subtasks? 
+          // No, user asked for "generate subtasks".
+          // Let's ask user or just create? 
+          // For now, auto-create if complex.
+          if (window.confirm(`识别到 ${response.tasks.length} 个任务和子任务。是否直接创建？\n点击"取消"仅填充第一个主任务到表单。`)) {
+             await handleBulkCreateDirect(response.tasks);
+          } else {
+             const firstTask = response.tasks[0];
+             fillTaskForm(firstTask);
+             toast.success("已填充主任务信息");
+          }
         } else {
           const firstTask = response.tasks[0];
-          setTask({
-            title: firstTask.title,
-            description: firstTask.description || "",
-            reminder_time: new Date(firstTask.reminder_time),
-            time: format(new Date(firstTask.reminder_time), "HH:mm"),
-            priority: firstTask.priority || "medium",
-            category: firstTask.category || "personal",
-            repeat_rule: "none",
-            custom_recurrence: null,
-            is_all_day: false,
-            notification_sound: "default",
-            persistent_reminder: false,
-            notification_interval: 15,
-            advance_reminders: [],
-          });
-          setIsExpanded(true);
-          toast.success("✨ 语音内容已填充到表单");
+          fillTaskForm(firstTask);
+          toast.success("✨ 任务信息已识别并填充");
         }
       } else {
         toast.error("未能识别任务信息");
-        setShowVoiceDialog(false);
-        setTranscript("");
+        if (isVoice) {
+            setShowVoiceDialog(false);
+            setTranscript("");
+        }
       }
     } catch (error) {
       console.error("Parse error:", error);
       toast.error("解析失败");
-      setShowVoiceDialog(false);
+      if (isVoice) setShowVoiceDialog(false);
     }
     setIsProcessing(false);
+  };
+
+  const fillTaskForm = (taskData) => {
+      setTask({
+        title: taskData.title,
+        description: taskData.description || "",
+        reminder_time: new Date(taskData.reminder_time),
+        time: format(new Date(taskData.reminder_time), "HH:mm"),
+        priority: taskData.priority || "medium",
+        category: taskData.category || "personal",
+        repeat_rule: "none",
+        custom_recurrence: null,
+        is_all_day: false,
+        notification_sound: "default",
+        persistent_reminder: false,
+        notification_interval: 15,
+        advance_reminders: [],
+        assigned_to: taskData.assigned_to || [],
+        subtasks: taskData.subtasks || [],
+        is_shared: (taskData.assigned_to && taskData.assigned_to.length > 0) || false,
+        team_visibility: (taskData.assigned_to && taskData.assigned_to.length > 0) ? 'team' : 'private',
+      });
+      setIsExpanded(true);
   };
 
   const handleBulkCreateDirect = async (parsedTasks) => {
@@ -337,6 +385,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       reminder_time: reminderDateTime.toISOString(),
     });
 
+    // Reset form
     setTask({
       title: "",
       description: "",
@@ -478,21 +527,40 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                 onSubmit={handleSubmit}
                 className="space-y-5"
               >
-                {/* 标题输入 - 超大字体 */}
-                <div className="relative">
-                  <Input
-                    placeholder="输入任务标题..."
-                    value={task.title}
-                    onChange={(e) => setTask({ ...task, title: e.target.value })}
-                    className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors"
-                    autoFocus
-                  />
-                  <motion.div
-                    className="absolute bottom-0 left-0 h-0.5 bg-blue-500"
-                    initial={{ width: 0 }}
-                    animate={{ width: task.title ? "100%" : "0%" }}
-                    transition={{ duration: 0.3 }}
-                  />
+                {/* 标题输入 - 超大字体 & 智能解析 */}
+                <div className="relative flex items-center gap-2">
+                  <div className="flex-1 relative">
+                    <Input
+                        placeholder="输入任务标题 (如: 下周一上午10点与John开会)..."
+                        value={task.title}
+                        onChange={(e) => setTask({ ...task, title: e.target.value })}
+                        className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors pr-8"
+                        autoFocus
+                    />
+                    <motion.div
+                        className="absolute bottom-0 left-0 h-0.5 bg-blue-500"
+                        initial={{ width: 0 }}
+                        animate={{ width: task.title ? "100%" : "0%" }}
+                        transition={{ duration: 0.3 }}
+                    />
+                  </div>
+                  {task.title && !isProcessing && (
+                    <Button 
+                        type="button"
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => parseNaturalLanguage(task.title)}
+                        className="text-blue-600 hover:bg-blue-50 hover:text-blue-700 absolute right-0 top-1/2 -translate-y-1/2"
+                        title="智能识别时间、人员和子任务"
+                    >
+                        <Wand2 className="w-5 h-5" />
+                    </Button>
+                  )}
+                  {isProcessing && (
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                      </div>
+                  )}
                 </div>
 
                 {/* AI智能增强 */}
@@ -506,12 +574,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                       category: aiSuggestions.category,
                       priority: aiSuggestions.priority,
                       tags: aiSuggestions.tags || [],
-                      subtasks: aiSuggestions.subtasks ? aiSuggestions.subtasks.map(st => ({
-                          title: st,
-                          description: "",
-                          reminder_time: task.reminder_time || new Date().toISOString(),
-                          priority: "medium"
-                      })) : (task.subtasks || [])
+                      subtasks: aiSuggestions.subtasks || [],
                     });
                   }}
                 />
@@ -524,43 +587,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   className="border-slate-200 bg-slate-50/50 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 rounded-xl resize-none text-sm"
                   rows={2}
                 />
-
-                {/* 子任务列表 */}
-                <div className="space-y-2">
-                    {task.subtasks && task.subtasks.length > 0 && (
-                        <div className="space-y-2 pl-2 border-l-2 border-slate-100">
-                            {task.subtasks.map((st, idx) => (
-                                <div key={idx} className="flex items-center gap-2 text-sm">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                                    <Input 
-                                        value={st.title} 
-                                        onChange={(e) => {
-                                            const newSubtasks = [...task.subtasks];
-                                            newSubtasks[idx].title = e.target.value;
-                                            setTask({...task, subtasks: newSubtasks});
-                                        }}
-                                        className="h-8 border-none bg-transparent focus-visible:ring-0 p-0"
-                                    />
-                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => {
-                                        const newSubtasks = task.subtasks.filter((_, i) => i !== idx);
-                                        setTask({...task, subtasks: newSubtasks});
-                                    }}>
-                                        <Trash2 className="w-3 h-3" />
-                                    </Button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    <Button type="button" variant="ghost" size="sm" className="text-xs text-slate-500 hover:text-blue-600" onClick={() => {
-                        setTask({
-                            ...task, 
-                            subtasks: [...(task.subtasks || []), { title: "", description: "", priority: "medium", reminder_time: task.reminder_time }]
-                        });
-                    }}>
-                        <ListTodo className="w-3.5 h-3.5 mr-1.5" />
-                        添加子任务
-                    </Button>
-                </div>
 
                 {/* 快速设置栏 - 图标化 */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

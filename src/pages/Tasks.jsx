@@ -155,8 +155,10 @@ export default function Tasks() {
         createdCount++;
         
         // 如果有子任务，创建子任务
-        if (hasSubtasks) {
-          for (let i = 0; i < taskData.subtasks.length; i++) {
+        const subtasksToCreate = taskData.subtasks || [];
+        if (subtasksToCreate.length > 0) {
+          for (let i = 0; i < subtasksToCreate.length; i++) {
+            const subtask = subtasksToCreate[i];
             const subtask = taskData.subtasks[i];
             const subtaskData = {
               title: `${subtask.order || i + 1}. ${subtask.title}`, // 添加序号到标题

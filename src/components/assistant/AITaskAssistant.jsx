@@ -18,20 +18,17 @@ import React, { useState, useEffect, useRef } from "react";
      CheckCircle2,
      AlertCircle,
      Calendar,
-     Clock,
-     ExternalLink
+     Clock
    } from "lucide-react";
    import { motion, AnimatePresence } from "framer-motion";
    import { toast } from "sonner";
    import ReactMarkdown from "react-markdown";
    import { format } from "date-fns";
    import { zhCN } from "date-fns/locale";
-   import TaskDetailModal from "../tasks/TaskDetailModal"; // 引入任务详情弹窗
-
+   
    export default function AITaskAssistant({ isOpen, onClose }) {
      const [conversationId, setConversationId] = useState(null);
      const [messages, setMessages] = useState([]);
-     const [selectedTask, setSelectedTask] = useState(null); // 用于显示任务详情
      const [inputText, setInputText] = useState("");
      const [isRecording, setIsRecording] = useState(false);
      const [isSpeaking, setIsSpeaking] = useState(false);
@@ -334,40 +331,19 @@ import React, { useState, useEffect, useRef } from "react";
    
              <AnimatePresence mode="popLayout">
                {messages
-                 .filter(msg => !msg.content.includes("请以“温柔的背后顶梁柱”的身份") && !msg.content.includes("请启动后台推理程序"))
+                 .filter(msg => 
+                   !msg.content.includes("请以“温柔的背后顶梁柱”的身份") && 
+                   !msg.content.includes("请启动后台推理程序") &&
+                   !msg.content.includes("调用工具读取我的所有任务数据")
+                 )
                  .map((message, index) => (
                    <MessageBubble
                      key={index}
                      message={message}
                      isSpeaking={isSpeaking && index === messages.length - 1}
-                     onTaskClick={(taskId) => {
-                       // 这里我们需要获取任务的完整信息，虽然这里只有ID
-                       // 我们可以先设置一个只有ID的对象，让TaskDetailModal去fetch或者在Modal内部处理
-                       // 但目前的TaskDetailModal需要完整的task对象或者自行fetch。
-                       // 简单起见，我们可以让Agent返回足够的信息，或者在这里做一个快速查询（如果需要）
-                       // 为了响应速度，我们先尝试用ID打开，假设Modal支持或者我们传入一个占位符
-                       // 查看 TaskDetailModal 源码，它主要依赖 task prop。
-                       // 我们可以去 fetch 一下这个 task
-                       base44.entities.Task.list({id: taskId}).then(res => {
-                           if(res && res.length > 0) {
-                               setSelectedTask(res[0]);
-                           } else {
-                               toast.error("找不到该任务");
-                           }
-                       });
-                     }}
                    />
                  ))}
              </AnimatePresence>
-
-             {/* 任务详情弹窗 */}
-             {selectedTask && (
-               <TaskDetailModal
-                 task={selectedTask}
-                 open={!!selectedTask}
-                 onClose={() => setSelectedTask(null)}
-               />
-             )}
    
              {messages.length > 0 && isLoading && (
                <motion.div
@@ -383,6 +359,25 @@ import React, { useState, useEffect, useRef } from "react";
              <div ref={messagesEndRef} />
            </div>
    
+           {/* 快捷建议芯片 */}
+           {messages.length > 0 && !isLoading && (
+             <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white/50 border-t border-purple-50">
+               {[
+                 { label: "📅 今日任务", text: "今天有哪些任务？" },
+                 { label: "⚠️ 紧急事项", text: "列出紧急和过期的任务" },
+                 { label: "📊 进度分析", text: "分析当前任务状况并给出建议" },
+               ].map((action) => (
+                 <button
+                   key={action.label}
+                   onClick={() => sendMessage(action.text)}
+                   className="flex-shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-100 hover:bg-purple-100 transition-colors whitespace-nowrap"
+                 >
+                   {action.label}
+                 </button>
+               ))}
+             </div>
+           )}
+
            {/* 输入区域 - 精简版 */}
            <div className="border-t border-purple-100 p-2.5 bg-white">
              <form onSubmit={handleSubmit} className="flex gap-1.5">
@@ -418,9 +413,9 @@ import React, { useState, useEffect, useRef } from "react";
      );
    }
    
-   function MessageBubble({ message, isSpeaking, onTaskClick }) {
+   function MessageBubble({ message, isSpeaking }) {
      const isUser = message.role === "user";
-
+   
      return (
        <motion.div
          initial={{ opacity: 0, y: 10 }}
@@ -433,7 +428,7 @@ import React, { useState, useEffect, useRef } from "react";
              <Bot className="w-3.5 h-3.5 text-white" />
            </div>
          )}
-
+   
          <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
            <div
              className={`rounded-xl px-3 py-2 ${
@@ -446,30 +441,7 @@ import React, { useState, useEffect, useRef } from "react";
                <p className="text-xs leading-relaxed">{message.content}</p>
              ) : (
                <div className="relative">
-                 <ReactMarkdown 
-                   className="text-xs prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1"
-                   components={{
-                     a: ({node, ...props}) => {
-                       // 检查链接是否是任务链接 #task-{id}
-                       if (props.href && props.href.startsWith('#task-')) {
-                         const taskId = props.href.replace('#task-', '');
-                         return (
-                           <span 
-                             className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-medium bg-blue-50 px-1.5 py-0.5 rounded"
-                             onClick={(e) => {
-                               e.preventDefault();
-                               onTaskClick && onTaskClick(taskId);
-                             }}
-                           >
-                             <ExternalLink className="w-3 h-3" />
-                             {props.children}
-                           </span>
-                         );
-                       }
-                       return <a {...props} target="_blank" className="text-blue-600 hover:underline" />;
-                     }
-                   }}
-                 >
+                 <ReactMarkdown className="text-xs prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
                    {message.content}
                  </ReactMarkdown>
                  {isSpeaking && (
@@ -484,7 +456,7 @@ import React, { useState, useEffect, useRef } from "react";
                </div>
              )}
            </div>
-
+   
            {/* 工具调用显示 */}
            {message.tool_calls?.length > 0 && (
              <div className="mt-1.5 space-y-1">
@@ -494,7 +466,7 @@ import React, { useState, useEffect, useRef } from "react";
              </div>
            )}
          </div>
-
+   
          {isUser && (
            <div className="h-6 w-6 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center text-slate-600 text-[10px] font-semibold">
              我

@@ -67,6 +67,7 @@ export default function CalendarPage() {
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success("任务已移至垃圾箱");
     },
   });
 

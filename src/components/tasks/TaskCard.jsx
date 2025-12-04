@@ -31,8 +31,8 @@ import {
   ChevronRight,
   Circle,
   CheckCircle2,
-  Share2,
-  RefreshCw
+  Share2, // Added Share2 icon
+  RotateCcw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskShareCard from "./TaskShareCard"; // Added import for TaskShareCard
@@ -73,7 +73,7 @@ const PRIORITY_LABELS = {
   urgent: "紧急",
 };
 
-export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle, isTrash, onRestore }) {
+export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false); // Added state for share card
 
@@ -172,7 +172,36 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                     </h3>
                   </div>
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    {!isTrash ? (
+                    {isTrash ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRestore();
+                          }}
+                          className="h-8 px-2 hover:bg-[#f0fdf4] hover:text-[#16a34a] rounded-lg text-xs font-medium"
+                          title="恢复任务"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                          恢复
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteForever();
+                          }}
+                          className="h-8 px-2 hover:bg-[#fee2e2] hover:text-[#dc2626] rounded-lg text-xs font-medium"
+                          title="永久删除"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                          彻底删除
+                        </Button>
+                      </>
+                    ) : (
                       <>
                         <Button
                           size="icon"
@@ -205,34 +234,6 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                             onDelete();
                           }}
                           className="h-8 w-8 hover:bg-[#fee2e2] hover:text-[#dc2626] rounded-lg"
-                          title="移至回收站"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onRestore();
-                          }}
-                          className="h-8 w-8 hover:bg-[#ecfdf5] hover:text-[#059669] rounded-lg"
-                          title="恢复任务"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete();
-                          }}
-                          className="h-8 w-8 bg-[#fee2e2] text-[#dc2626] hover:bg-[#fecaca] rounded-lg"
-                          title="彻底删除"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

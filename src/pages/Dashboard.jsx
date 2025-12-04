@@ -44,7 +44,7 @@ export default function Dashboard() {
     initialData: [],
   });
 
-  // 只显示未删除的主任务（没有 parent_task_id 且 deleted_at 为空）
+  // 只显示主任务（没有 parent_task_id 的任务）
   const tasks = allTasks.filter(task => !task.parent_task_id && !task.deleted_at);
 
   const createTaskMutation = useMutation({
@@ -65,7 +65,7 @@ export default function Dashboard() {
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已移至回收站");
+      toast.success("任务已移至垃圾箱");
     },
   });
 

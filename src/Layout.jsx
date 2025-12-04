@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import {
   Sidebar,
@@ -42,7 +42,7 @@ const navigationItems = [
   {
     title: "团队",
     url: createPageUrl("Teams"),
-    icon: Bell,
+    icon: Users,
   },
   {
     title: "我的账户",

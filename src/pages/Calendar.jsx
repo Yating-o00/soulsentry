@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Calendar as BigCalendar } from "@/components/ui/calendar";
@@ -20,8 +20,9 @@ import {
 } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, CheckCircle2, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon } from "lucide-react";
+import { Clock, CheckCircle2, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, StickyNote } from "lucide-react";
 import TaskCard from "../components/tasks/TaskCard";
+import NoteCard from "../components/notes/NoteCard";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import {

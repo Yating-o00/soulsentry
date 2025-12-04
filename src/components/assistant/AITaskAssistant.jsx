@@ -361,7 +361,7 @@ import React, { useState, useEffect, useRef } from "react";
                <Input
                  value={inputText}
                  onChange={(e) => setInputText(e.target.value)}
-                 placeholder="说说你的想法..."
+                 placeholder="输入任务（如：明天10点开会）或 询问进度..."
                  className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#5a647d]"
                  disabled={isLoading}
                />

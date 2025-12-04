@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon } from "lucide-react";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
+import QuickAddTask from "../components/tasks/QuickAddTask"; // Added import
 import { toast } from "sonner";
 import {
   Dialog,
@@ -19,6 +20,7 @@ export default function Notes() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
+  const [taskCreationNote, setTaskCreationNote] = useState(null); // State for task creation
   const [viewMode, setViewMode] = useState("grid"); // grid | list
   const queryClient = useQueryClient();
 
@@ -35,6 +37,18 @@ export default function Notes() {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       setIsCreating(false);
       toast.success("便签已创建");
+    }
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: (taskData) => base44.entities.Task.create(taskData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] }); // Ideally invalidate tasks, but might not be mounted
+      setTaskCreationNote(null);
+      toast.success("任务已创建");
+    },
+    onError: () => {
+        toast.error("任务创建失败");
     }
   });
 
@@ -151,6 +165,7 @@ export default function Notes() {
               onEdit={setEditingNote}
               onDelete={(n) => deleteNoteMutation.mutate(n.id)}
               onPin={handlePin}
+              onConvertToTask={(n) => setTaskCreationNote(n)}
             />
           ))}
         </AnimatePresence>
@@ -182,6 +197,34 @@ export default function Notes() {
               initialData={editingNote}
               onSave={(data) => updateNoteMutation.mutate({ id: editingNote.id, data })}
               onClose={() => setEditingNote(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Task Dialog */}
+      <Dialog open={!!taskCreationNote} onOpenChange={(open) => !open && setTaskCreationNote(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-blue-600" />
+                从便签创建任务
+            </DialogTitle>
+          </DialogHeader>
+          {taskCreationNote && (
+            <QuickAddTask
+              initialData={{
+                title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新任务",
+                description: taskCreationNote.plain_text || "",
+              }}
+              onAdd={(taskData) => {
+                  // Ensure reminder_time is set if QuickAddTask doesn't enforce it strictly or if user didn't change it
+                  const dataToSubmit = {
+                      ...taskData,
+                      reminder_time: taskData.reminder_time || new Date().toISOString()
+                  };
+                  createTaskMutation.mutate(dataToSubmit);
+              }}
             />
           )}
         </DialogContent>

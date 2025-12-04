@@ -108,7 +108,7 @@ export default function FloatingAssistantButton() {
             </div>
             
             {/* 在线状态 */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white" />
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#d5495f] rounded-full border-2 border-white" />
             
             {/* 待办数量 */}
             {pendingCount > 0 && !shouldPrompt && (

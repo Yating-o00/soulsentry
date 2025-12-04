@@ -349,17 +349,17 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <CheckCircle2 className="w-5 h-5 text-[#d5495f]" />
                   <span className="font-semibold text-slate-800">
                     解析结果 ({parsedTasks.length} 个主任务)
                   </span>
                 </div>
                 <Button
                   onClick={handleCreateAll}
-                  className="bg-[#10b981] hover:bg-[#059669] shadow-md hover:shadow-lg transition-all rounded-[12px]"
-                >
+                  className="bg-[#d5495f] hover:bg-[#c03d50] shadow-md hover:shadow-lg transition-all rounded-[12px]"
+                  >
                   创建全部任务
-                </Button>
+                  </Button>
               </div>
 
               <div className="space-y-2">

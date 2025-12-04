@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, Trash2 } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import {
   Sidebar,
@@ -150,6 +150,30 @@ export default function Layout({ children }) {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
+
+            <div className="mt-auto">
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton 
+                        asChild
+                        className={`group relative overflow-hidden transition-all duration-300 rounded-xl ${
+                          location.search.includes('filter=trash')
+                            ? 'bg-red-50 text-[#d5495f] border border-red-100' 
+                            : 'hover:bg-red-50 text-slate-600 hover:text-[#d5495f]'
+                        }`}
+                      >
+                        <Link to={createPageUrl("Tasks") + "?filter=trash"} className="flex items-center gap-3 px-4 py-3">
+                          <Trash2 className="w-5 h-5 text-[#d5495f] transition-transform duration-300 group-hover:scale-110" />
+                          <span className="font-medium">垃圾箱</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </div>
           </SidebarContent>
         </Sidebar>
 

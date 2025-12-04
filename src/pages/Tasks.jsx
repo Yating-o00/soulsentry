@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Search, Filter, Trash2, RotateCcw, AlertTriangle } from "lucide-react";
@@ -21,6 +22,10 @@ import { toast } from "sonner";
 
 
 export default function Tasks() {
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const isTrashView = queryParams.get("filter") === "trash";
+
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -200,15 +205,19 @@ export default function Tasks() {
         animate={{ opacity: 1, y: 0 }}
       >
         <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
-          全部任务
+          {isTrashView ? "垃圾箱" : "全部任务"}
         </h1>
-        <p className="text-slate-600">管理您的所有任务和提醒</p>
+        <p className="text-slate-600">
+          {isTrashView ? "管理已删除的任务，可恢复或永久删除" : "管理您的所有任务和提醒"}
+        </p>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
-        <SmartTextParser onTasksGenerated={handleBulkCreate} />
-      </div>
+      {!isTrashView && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+          <SmartTextParser onTasksGenerated={handleBulkCreate} />
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -250,21 +259,24 @@ export default function Tasks() {
 
         <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
           <TabsList className="grid w-full md:w-auto grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
-            <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              全部 ({tasks.length})
-            </TabsTrigger>
-            <TabsTrigger value="pending" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              进行中 ({tasks.filter(t => t.status === "pending").length})
-            </TabsTrigger>
-            <TabsTrigger value="completed" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              已完成 ({tasks.filter(t => t.status === "completed").length})
-            </TabsTrigger>
-            <TabsTrigger value="trash" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <div className="flex items-center gap-1.5">
-                <Trash2 className="w-3.5 h-3.5" />
-                垃圾箱 ({trashTasks.length})
+            {isTrashView ? (
+              <div className="col-span-3 flex items-center justify-center gap-2 py-1 text-[#d5495f] font-medium">
+                <Trash2 className="w-4 h-4" />
+                回收站 ({trashTasks.length} 个任务)
               </div>
-            </TabsTrigger>
+            ) : (
+              <>
+                <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+                  全部 ({tasks.length})
+                </TabsTrigger>
+                <TabsTrigger value="pending" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+                  进行中 ({tasks.filter(t => t.status === "pending").length})
+                </TabsTrigger>
+                <TabsTrigger value="completed" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
+                  已完成 ({tasks.filter(t => t.status === "completed").length})
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
         </Tabs>
       </motion.div>
@@ -276,7 +288,7 @@ export default function Tasks() {
         className="space-y-3"
       >
         <AnimatePresence mode="popLayout">
-          {statusFilter === "trash" ? (
+          {isTrashView ? (
             trashTasks.map((task) => (
               <TaskCard
                 key={task.id}
@@ -302,7 +314,7 @@ export default function Tasks() {
           )}
         </AnimatePresence>
 
-        {((statusFilter === "trash" && trashTasks.length === 0) || (statusFilter !== "trash" && filteredTasks.length === 0)) && (
+        {((isTrashView && trashTasks.length === 0) || (!isTrashView && filteredTasks.length === 0)) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

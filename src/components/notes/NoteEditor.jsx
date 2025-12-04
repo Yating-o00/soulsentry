@@ -3,6 +3,7 @@ import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
 import { Loader2, Sparkles, X, Save } from "lucide-react";
+import AINoteAssistant from "./AINoteAssistant";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,56 +24,12 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [content, setContent] = useState(initialData?.content || "");
   const [tags, setTags] = useState(initialData?.tags || []);
   const [color, setColor] = useState(initialData?.color || "white");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const quillRef = useRef(null);
-
-  const handleAnalyze = async () => {
-    // Get plain text from Quill
+  
+  const getPlainText = () => {
+    if (!quillRef.current) return "";
     const editor = quillRef.current.getEditor();
-    const text = editor.getText().trim();
-
-    if (!text) {
-      toast.error("请先输入一些内容");
-      return;
-    }
-
-    setIsAnalyzing(true);
-    try {
-      const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `请分析以下便签内容，提取3-5个关键标签，并用JSON格式返回。
-        
-        内容：
-        ${text}
-        
-        要求：
-        1. 标签应简短有力（如：工作、想法、食谱、React）。
-        2. 如果内容包含待办事项，请包含 "待办" 标签。
-        3. 如果内容包含链接，请包含 "链接" 标签。
-        `,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            tags: {
-              type: "array",
-              items: { type: "string" }
-            }
-          },
-          required: ["tags"]
-        }
-      });
-
-      if (res && res.tags) {
-        // Merge new tags with existing ones, removing duplicates
-        const newTags = Array.from(new Set([...tags, ...res.tags]));
-        setTags(newTags);
-        toast.success("AI 标签生成成功！");
-      }
-    } catch (error) {
-      console.error("AI Analysis failed", error);
-      toast.error("AI 分析失败");
-    } finally {
-      setIsAnalyzing(false);
-    }
+    return editor.getText().trim();
   };
 
   const handleSave = () => {
@@ -147,19 +104,20 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 </motion.div>
             ))}
             </AnimatePresence>
-            <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleAnalyze}
-                disabled={isAnalyzing}
-                className="h-7 text-xs text-[#384877] hover:bg-[#384877]/10 rounded-full gap-1.5 border border-[#384877]/20"
-            >
-                {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                AI 智能标签
-            </Button>
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-black/5">
+        <AINoteAssistant 
+            noteContent={getPlainText()}
+            onTagsGenerated={(newTags) => {
+                const mergedTags = Array.from(new Set([...tags, ...newTags]));
+                setTags(mergedTags);
+            }}
+            onSummaryGenerated={(summary) => {
+                // Optional: Save summary to note if you update the entity schema
+            }}
+        />
+
+        <div className="flex items-center justify-between pt-4 mt-2 border-t border-black/5">
             <div className="flex gap-1">
                 {COLORS.map(c => (
                     <button

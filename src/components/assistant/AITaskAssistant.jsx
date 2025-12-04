@@ -361,7 +361,7 @@ import React, { useState, useEffect, useRef } from "react";
    
            {/* 快捷建议芯片 */}
            {messages.length > 0 && !isLoading && (
-             <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white/50 border-t border-[#ffe4e6]">
+             <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white/50 border-t border-slate-100">
                {[
                  { label: "📅 今日任务", text: "今天有哪些任务？" },
                  { label: "⚠️ 紧急事项", text: "列出紧急和过期的任务" },
@@ -379,13 +379,13 @@ import React, { useState, useEffect, useRef } from "react";
            )}
 
            {/* 输入区域 - 精简版 */}
-           <div className="border-t border-[#ffe4e6] p-2.5 bg-white">
+           <div className="border-t border-slate-100 p-2.5 bg-white">
              <form onSubmit={handleSubmit} className="flex gap-1.5">
                <Input
                  value={inputText}
                  onChange={(e) => setInputText(e.target.value)}
                  placeholder="输入任务（如：明天10点开会）或 询问进度..."
-                 className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#d5495f]"
+                 className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#384877]"
                  disabled={isLoading}
                />
                <Button
@@ -394,15 +394,15 @@ import React, { useState, useEffect, useRef } from "react";
                  variant="outline"
                  onClick={startVoiceInput}
                  disabled={isLoading}
-                 className={`h-9 w-9 border-[#e0919e] ${isRecording ? 'bg-[#fff1f2] border-[#d5495f]' : 'hover:bg-[#fff1f2]'}`}
+                 className={`h-9 w-9 border-slate-200 ${isRecording ? 'bg-red-50 border-red-200 text-red-500' : 'hover:bg-slate-50 text-[#384877]'}`}
                >
-                 {isRecording ? <MicOff className="w-3.5 h-3.5 text-[#d5495f]" /> : <Mic className="w-3.5 h-3.5 text-[#d5495f]" />}
+                 {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
                </Button>
                <Button
                  type="submit"
                  size="icon"
                  disabled={!inputText.trim() || isLoading}
-                 className="h-9 w-9 bg-gradient-to-r from-[#d5495f] to-[#384877] hover:from-[#c03d50] hover:to-[#2c3b63]"
+                 className="h-9 w-9 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585]"
                >
                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                </Button>

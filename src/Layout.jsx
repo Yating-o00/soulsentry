@@ -145,7 +145,7 @@ export default function Layout({ children }) {
           <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">
             <div className="flex items-center gap-4">
               <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-all duration-200" />
-              <h1 className="text-lg font-semibold bg-gradient-to-r from-[#384877] to-[#202a44] bg-clip-text text-transparent">
+              <h1 className="text-lg font-semibold bg-gradient-to-r from-[#d5495f] to-[#de6d7e] bg-clip-text text-transparent">
                 任务管家
               </h1>
             </div>

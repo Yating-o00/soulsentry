@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Trash2, RotateCcw, AlertTriangle } from "lucide-react";
+import { Search, Filter, Trash2, RotateCcw, AlertTriangle, ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCard from "../components/tasks/TaskCard";
 import QuickAddTask from "../components/tasks/QuickAddTask";
@@ -25,6 +25,7 @@ export default function Tasks() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTask, setSelectedTask] = useState(null);
+  const [viewMode, setViewMode] = useState("active"); // 'active' or 'trash'
   const queryClient = useQueryClient();
 
   const { data: allTasks = [], isLoading } = useQuery({
@@ -33,9 +34,14 @@ export default function Tasks() {
     initialData: [],
   });
 
-  // 只显示主任务（没有 parent_task_id 的任务）
-  const tasks = allTasks.filter(task => !task.parent_task_id && !task.deleted_at);
-  const trashTasks = allTasks.filter(task => !task.parent_task_id && task.deleted_at);
+  // 根据视图模式过滤任务
+  const tasks = allTasks.filter(task => {
+    const isMainTask = !task.parent_task_id;
+    if (viewMode === 'trash') {
+      return isMainTask && task.deleted_at;
+    }
+    return isMainTask && !task.deleted_at;
+  });
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
@@ -84,6 +90,7 @@ export default function Tasks() {
   });
 
   const handleComplete = (task) => {
+    if (viewMode === 'trash') return;
     const newStatus = task.status === "completed" ? "pending" : "completed";
     updateTaskMutation.mutate({
       id: task.id,
@@ -199,16 +206,46 @@ export default function Tasks() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
-          全部任务
-        </h1>
-        <p className="text-slate-600">管理您的所有任务和提醒</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
+              {viewMode === 'trash' ? '回收站' : '全部任务'}
+            </h1>
+            <p className="text-slate-600">
+              {viewMode === 'trash' ? '管理已删除的任务' : '管理您的所有任务和提醒'}
+            </p>
+          </div>
+          
+          <div className="flex gap-3">
+            {viewMode === 'trash' ? (
+              <Button 
+                variant="outline" 
+                onClick={() => setViewMode('active')}
+                className="gap-2 border-[#dce4ed] text-[#384877]"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                返回任务
+              </Button>
+            ) : (
+              <Button 
+                variant="ghost" 
+                onClick={() => setViewMode('trash')}
+                className="gap-2 text-[#d5495f] hover:bg-[#fff1f2] hover:text-[#d5495f] rounded-lg"
+              >
+                <Trash2 className="w-4 h-4" />
+                回收站
+              </Button>
+            )}
+          </div>
+        </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
-        <SmartTextParser onTasksGenerated={handleBulkCreate} />
-      </div>
+      {viewMode === 'active' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+          <SmartTextParser onTasksGenerated={handleBulkCreate} />
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -249,7 +286,7 @@ export default function Tasks() {
         </div>
 
         <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
-          <TabsList className="grid w-full md:w-auto grid-cols-4 bg-white shadow-md rounded-[12px] p-1">
+          <TabsList className="grid w-full md:w-auto grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
             <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
               全部 ({tasks.length})
             </TabsTrigger>
@@ -258,12 +295,6 @@ export default function Tasks() {
             </TabsTrigger>
             <TabsTrigger value="completed" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
               已完成 ({tasks.filter(t => t.status === "completed").length})
-            </TabsTrigger>
-            <TabsTrigger value="trash" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#d5495f] data-[state=active]:to-[#de6d7e] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <div className="flex items-center gap-1.5">
-                <Trash2 className="w-3.5 h-3.5" />
-                垃圾箱 ({trashTasks.length})
-              </div>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -276,33 +307,30 @@ export default function Tasks() {
         className="space-y-3"
       >
         <AnimatePresence mode="popLayout">
-          {statusFilter === "trash" ? (
-            trashTasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                isTrash={true}
-                onRestore={() => restoreTaskMutation.mutate(task.id)}
-                onDeleteForever={() => permanentDeleteTaskMutation.mutate(task.id)}
-                onClick={() => {}}
-              />
-            ))
-          ) : (
-            filteredTasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onComplete={() => handleComplete(task)}
-                onDelete={() => deleteTaskMutation.mutate(task.id)}
-                onEdit={() => {}}
-                onClick={() => setSelectedTask(task)}
-                onSubtaskToggle={handleSubtaskToggle}
-              />
-            ))
-          )}
+          {filteredTasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              isTrash={viewMode === 'trash'}
+              onComplete={() => handleComplete(task)}
+              onDelete={() => {
+                if (viewMode === 'trash') {
+                  if (window.confirm('确定要永久删除这个任务吗？此操作无法撤销。')) {
+                    permanentDeleteTaskMutation.mutate(task.id);
+                  }
+                } else {
+                  softDeleteTaskMutation.mutate(task.id);
+                }
+              }}
+              onRestore={() => restoreTaskMutation.mutate(task.id)}
+              onEdit={() => {}}
+              onClick={() => setSelectedTask(task)}
+              onSubtaskToggle={handleSubtaskToggle}
+            />
+          ))}
         </AnimatePresence>
 
-        {((statusFilter === "trash" && trashTasks.length === 0) || (statusFilter !== "trash" && filteredTasks.length === 0)) && (
+        {filteredTasks.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

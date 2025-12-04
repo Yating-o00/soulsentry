@@ -402,7 +402,7 @@ import React, { useState, useEffect, useRef } from "react";
                  type="submit"
                  size="icon"
                  disabled={!inputText.trim() || isLoading}
-                 className="h-9 w-9 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585]"
+                 className="h-9 w-9 bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] hover:shadow-[#3b5aa2]/40 hover:scale-105 transition-all duration-300 rounded-xl shadow-lg shadow-[#3b5aa2]/25"
                >
                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                </Button>

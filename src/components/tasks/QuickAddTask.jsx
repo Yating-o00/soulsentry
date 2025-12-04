@@ -415,7 +415,7 @@ export default function QuickAddTask({ onAdd }) {
                       <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
                     </div>
                     <motion.div
-                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#34C759] flex items-center justify-center shadow-md"
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#d5495f] flex items-center justify-center shadow-md"
                       initial={{ scale: 0 }}
                       animate={{ scale: [0, 1.2, 1] }}
                       transition={{ duration: 0.5, delay: 0.2 }}

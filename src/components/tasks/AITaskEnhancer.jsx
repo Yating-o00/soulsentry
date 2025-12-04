@@ -75,6 +75,17 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
               type: "array",
               items: { type: "string" }
             },
+            subtasks: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        title: { type: "string" },
+                        description: { type: "string" }
+                    },
+                    required: ["title"]
+                }
+            },
             reasoning: { type: "string" }
           },
           required: ["description", "category", "priority", "tags", "reasoning"]
@@ -98,6 +109,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
       category: suggestions.category,
       priority: suggestions.priority,
       tags: suggestions.tags,
+      subtasks: suggestions.subtasks // Pass subtasks if parent component supports it
     });
     
     toast.success("已应用AI建议");

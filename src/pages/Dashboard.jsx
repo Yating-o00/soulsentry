@@ -148,11 +148,11 @@ export default function Dashboard() {
           category: taskData.category || "personal",
           status: "pending",
           progress: 0, // 初始进度为0
-          // 保留其他通知设置字段（如果存在）
           notification_sound: taskData.notification_sound || "default",
           persistent_reminder: taskData.persistent_reminder || false,
           notification_interval: taskData.notification_interval || 15,
           advance_reminders: taskData.advance_reminders || [],
+          assigned_to: taskData.assigned_to || [],
         };
         
         const createdMainTask = await createTaskMutation.mutateAsync(mainTaskData);
@@ -165,16 +165,16 @@ export default function Dashboard() {
             const subtaskData = {
               title: `${subtask.order || i + 1}. ${subtask.title}`, // 添加序号到标题
               description: subtask.description || "",
-              reminder_time: subtask.reminder_time,
+              reminder_time: subtask.reminder_time || taskData.reminder_time,
               priority: subtask.priority || taskData.priority || "medium",
               category: taskData.category, // 子任务继承父任务的类别
               status: "pending",
               parent_task_id: createdMainTask.id, // 关联父任务
               progress: 0, // 子任务也有progress字段
-              // 子任务继承父任务的通知设置
               notification_sound: taskData.notification_sound || "default",
               persistent_reminder: false, // 子任务默认不持续提醒
               advance_reminders: [],
+              assigned_to: taskData.assigned_to || [],
             };
             
             await createTaskMutation.mutateAsync(subtaskData);

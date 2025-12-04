@@ -234,7 +234,7 @@ import React, { useState, useEffect, useRef } from "react";
        >
          <Card className="shadow-2xl border border-purple-200 bg-white overflow-hidden">
            {/* 头部 - 精简版 */}
-           <div className="bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] p-3 text-white">
+           <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] p-3 text-white">
              <div className="flex items-center justify-between">
                <div className="flex items-center gap-2">
                  <div className="h-7 w-7 rounded-full bg-white flex items-center justify-center">
@@ -394,7 +394,7 @@ import React, { useState, useEffect, useRef } from "react";
          className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
        >
          {!isUser && (
-           <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] flex-shrink-0 flex items-center justify-center">
+           <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex-shrink-0 flex items-center justify-center">
              <Bot className="w-3.5 h-3.5 text-white" />
            </div>
          )}
@@ -403,7 +403,7 @@ import React, { useState, useEffect, useRef } from "react";
            <div
              className={`rounded-xl px-3 py-2 ${
                isUser
-                 ? "bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] text-white"
+                 ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white"
                  : "bg-white border border-[#e5e9ef] text-[#222222]"
              }`}
            >

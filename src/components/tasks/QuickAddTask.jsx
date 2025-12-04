@@ -392,9 +392,9 @@ export default function QuickAddTask({ onAdd }) {
                     className="h-9 w-9 hover:bg-[#e0f2fe] rounded-full group transition-all relative"
                     title="语音输入"
                   >
-                    <Mic className="w-4 h-4 text-[#52525b] group-hover:text-[#0284c7] transition-colors" />
+                    <Mic className="w-4 h-4 text-[#52525b] group-hover:text-[#0891b2] transition-colors" />
                     <motion.div
-                      className="absolute inset-0 rounded-full bg-[#0284c7]"
+                      className="absolute inset-0 rounded-full bg-[#06b6d4]"
                       initial={{ scale: 0, opacity: 0 }}
                       whileHover={{ scale: 1.2, opacity: 0.15 }}
                       transition={{ duration: 0.3 }}
@@ -628,7 +628,7 @@ export default function QuickAddTask({ onAdd }) {
                       onClick={() => setShowSmartSuggestion(!showSmartSuggestion)}
                       className={`border ${
                         showSmartSuggestion 
-                          ? 'border-[#0284c7] bg-[#e0f2fe] text-[#0284c7] shadow-sm' 
+                          ? 'border-[#06b6d4] bg-[#e0f2fe] text-[#0891b2] shadow-sm' 
                           : 'border-[#bae6fd] text-[#0284c7] hover:bg-[#f0f9ff] hover:border-[#7dd3fc]'
                       } rounded-[10px]`}
                     >
@@ -713,7 +713,7 @@ export default function QuickAddTask({ onAdd }) {
                     <Users className="h-4 w-4 mr-2 text-[#52525b]" />
                     <span className="text-[#222222] font-medium">团队分配</span>
                     {task.assigned_to && task.assigned_to.length > 0 && (
-                      <Badge className="ml-2 bg-[#0284c7] text-white rounded-md">
+                      <Badge className="ml-2 bg-[#06b6d4] text-white rounded-md">
                         {task.assigned_to.length}
                       </Badge>
                     )}
@@ -745,7 +745,7 @@ export default function QuickAddTask({ onAdd }) {
                 <div className="flex items-center gap-3 pt-2">
                   <Button
                     type="submit"
-                    className="flex-1 bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] hover:from-[#4a5670] hover:to-[#152e50] text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-[#5a647d]/25 hover:shadow-[#5a647d]/40 transition-all"
+                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#4a5670] hover:to-[#152e50] text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-[#5a647d]/25 hover:shadow-[#5a647d]/40 transition-all"
                     disabled={!task.title.trim() || !task.reminder_time}
                   >
                     <Plus className="w-5 h-5 mr-2" strokeWidth={2.5} />
@@ -932,7 +932,7 @@ export default function QuickAddTask({ onAdd }) {
             {/* 使用提示 */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
               <div className="flex gap-3">
-                <Wand2 className="w-5 h-5 text-[#0284c7] flex-shrink-0 mt-0.5" />
+                <Wand2 className="w-5 h-5 text-[#0891b2] flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-[15px] font-semibold text-[#222222] mb-2">💡 使用提示</p>
                   <ul className="text-[13px] text-[#52525b] space-y-1.5 leading-relaxed">

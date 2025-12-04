@@ -239,7 +239,7 @@ import React, { useState, useEffect, useRef } from "react";
          exit={{ opacity: 0, scale: 0.9, y: 20 }}
          className="fixed bottom-20 right-6 z-50 w-80 max-w-[calc(100vw-3rem)]"
        >
-         <Card className="shadow-2xl border border-purple-200 bg-white overflow-hidden">
+         <Card className="shadow-2xl border border-[#e0919e] bg-white overflow-hidden">
            {/* 头部 - 精简版 */}
            <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] p-3 text-white">
              <div className="flex items-center justify-between">
@@ -361,7 +361,7 @@ import React, { useState, useEffect, useRef } from "react";
    
            {/* 快捷建议芯片 */}
            {messages.length > 0 && !isLoading && (
-             <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white/50 border-t border-purple-50">
+             <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white/50 border-t border-[#ffe4e6]">
                {[
                  { label: "📅 今日任务", text: "今天有哪些任务？" },
                  { label: "⚠️ 紧急事项", text: "列出紧急和过期的任务" },
@@ -370,7 +370,7 @@ import React, { useState, useEffect, useRef } from "react";
                  <button
                    key={action.label}
                    onClick={() => sendMessage(action.text)}
-                   className="flex-shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-100 hover:bg-purple-100 transition-colors whitespace-nowrap"
+                   className="flex-shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-[#fff1f2] text-[#d5495f] border border-[#e0919e]/30 hover:bg-[#ffe4e6] transition-colors whitespace-nowrap"
                  >
                    {action.label}
                  </button>
@@ -379,13 +379,13 @@ import React, { useState, useEffect, useRef } from "react";
            )}
 
            {/* 输入区域 - 精简版 */}
-           <div className="border-t border-purple-100 p-2.5 bg-white">
+           <div className="border-t border-[#ffe4e6] p-2.5 bg-white">
              <form onSubmit={handleSubmit} className="flex gap-1.5">
                <Input
                  value={inputText}
                  onChange={(e) => setInputText(e.target.value)}
                  placeholder="输入任务（如：明天10点开会）或 询问进度..."
-                 className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#5a647d]"
+                 className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#d5495f]"
                  disabled={isLoading}
                />
                <Button
@@ -394,15 +394,15 @@ import React, { useState, useEffect, useRef } from "react";
                  variant="outline"
                  onClick={startVoiceInput}
                  disabled={isLoading}
-                 className={`h-9 w-9 border-purple-200 ${isRecording ? 'bg-red-50 border-red-300' : 'hover:bg-purple-50'}`}
+                 className={`h-9 w-9 border-[#e0919e] ${isRecording ? 'bg-[#fff1f2] border-[#d5495f]' : 'hover:bg-[#fff1f2]'}`}
                >
-                 {isRecording ? <MicOff className="w-3.5 h-3.5 text-red-600" /> : <Mic className="w-3.5 h-3.5 text-purple-600" />}
+                 {isRecording ? <MicOff className="w-3.5 h-3.5 text-[#d5495f]" /> : <Mic className="w-3.5 h-3.5 text-[#d5495f]" />}
                </Button>
                <Button
                  type="submit"
                  size="icon"
                  disabled={!inputText.trim() || isLoading}
-                 className="h-9 w-9 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+                 className="h-9 w-9 bg-gradient-to-r from-[#d5495f] to-[#384877] hover:from-[#c03d50] hover:to-[#2c3b63]"
                >
                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                </Button>

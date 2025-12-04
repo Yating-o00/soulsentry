@@ -120,7 +120,7 @@ export default function Layout({ children }) {
                           asChild 
                           className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
                             isActive 
-                              ? 'bg-gradient-to-r from-[#384877] to-[#202a44] text-white shadow-lg shadow-[#384877]/25' 
+                              ? 'bg-gradient-to-r from-[#d5495f] to-[#de6d7e] text-white shadow-lg shadow-[#d5495f]/25' 
                               : 'hover:bg-[#f9fafb] text-slate-700'
                           }`}
                         >

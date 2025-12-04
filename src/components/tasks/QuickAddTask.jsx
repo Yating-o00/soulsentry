@@ -33,15 +33,15 @@ const CATEGORIES = [
   { value: "study", label: "学习", icon: "📚", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
   { value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦", color: "bg-pink-50 text-pink-700 border-pink-200" },
   { value: "shopping", label: "购物", icon: "🛒", color: "bg-orange-50 text-orange-700 border-orange-200" },
-  { value: "finance", label: "财务", icon: "💰", color: "bg-red-50 text-red-700 border-red-200" },
+  { value: "finance", label: "财务", icon: "💰", color: "bg-[#fff1f2] text-[#d5495f] border-[#e0919e]" },
   { value: "other", label: "其他", icon: "📌", color: "bg-gray-50 text-gray-700 border-gray-200" },
 ];
 
 const PRIORITIES = [
   { value: "low", label: "低", icon: "○", color: "text-slate-400" },
   { value: "medium", label: "中", icon: "◐", color: "text-blue-600" },
-  { value: "high", label: "高", icon: "◉", color: "text-orange-600" },
-  { value: "urgent", label: "紧急", icon: "⚠️", color: "text-red-600" },
+  { value: "high", label: "高", icon: "◉", color: "text-[#de6d7e]" },
+  { value: "urgent", label: "紧急", icon: "⚠️", color: "text-[#d5495f]" },
 ];
 
 export default function QuickAddTask({ onAdd }) {

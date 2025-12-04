@@ -273,8 +273,8 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
   const PRIORITY_LABELS = {
     low: { label: "低", color: "bg-[#f4f6f8] text-[#52525b]" },
     medium: { label: "中", color: "bg-[#e5e9ef] text-[#384877]" },
-    high: { label: "高", color: "bg-[#fed7aa] text-[#ea580c]" },
-    urgent: { label: "紧急", color: "bg-[#fecaca] text-[#dc2626]" },
+    high: { label: "高", color: "bg-[#fff1f2] text-[#de6d7e]" },
+    urgent: { label: "紧急", color: "bg-[#ffe4e6] text-[#d5495f]" },
   };
 
   const CATEGORY_LABELS = {
@@ -284,7 +284,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
     study: { label: "学习", color: "bg-[#fef3c7] text-[#d97706]" },
     family: { label: "家庭", color: "bg-[#fce7f3] text-[#db2777]" },
     shopping: { label: "购物", color: "bg-[#fed7aa] text-[#ea580c]" },
-    finance: { label: "财务", color: "bg-[#fecaca] text-[#dc2626]" },
+    finance: { label: "财务", color: "bg-[#ffe4e6] text-[#d5495f]" },
     other: { label: "其他", color: "bg-[#f4f6f8] text-[#52525b]" },
   };
 

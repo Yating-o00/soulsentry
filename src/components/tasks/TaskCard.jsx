@@ -54,15 +54,15 @@ const CATEGORY_COLORS = {
   study: "bg-[#fef3c7] text-[#f59e0b] border-[#fcd34d]",
   family: "bg-[#fce7f3] text-[#ec4899] border-[#f9a8d4]",
   shopping: "bg-[#fff7ed] text-[#f97316] border-[#fdba74]",
-  finance: "bg-[#fee2e2] text-[#ef4444] border-[#fca5a5]",
+  finance: "bg-[#fff1f2] text-[#d5495f] border-[#e0919e]",
   other: "bg-[#f4f6f8] text-[#52525b] border-[#e4e4e7]",
 };
 
 const PRIORITY_COLORS = {
   low: "text-[#a1a1aa]",
   medium: "text-[#384877]",
-  high: "text-[#f97316]",
-  urgent: "text-[#ef4444]",
+  high: "text-[#de6d7e]",
+  urgent: "text-[#d5495f]",
 };
 
 const PRIORITY_LABELS = {
@@ -127,7 +127,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
               : isSnoozed
               ? 'border-l-[3px] border-l-[#fbbf24]'
               : isPast
-              ? 'border-l-[3px] border-l-[#ef4444]'
+              ? 'border-l-[3px] border-l-[#d5495f]'
               : 'hover:translate-y-[-1px]'
           }`}
         >
@@ -298,7 +298,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                   )}
 
                   {isPast && !isCompleted && !isSnoozed && (
-                    <Badge className="bg-[#ef4444] text-white rounded-[8px] text-[13px] shadow-sm">
+                    <Badge className="bg-[#d5495f] text-white rounded-[8px] text-[13px] shadow-sm">
                       已过期
                     </Badge>
                   )}

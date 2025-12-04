@@ -181,7 +181,7 @@ export default function Tasks() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
           全部任务
         </h1>
         <p className="text-slate-600">管理您的所有任务和提醒</p>
@@ -232,7 +232,7 @@ export default function Tasks() {
 
         <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
           <TabsList className="grid w-full md:w-auto grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
-            <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#5a647d] data-[state=active]:to-[#4a5670] data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
               全部 ({tasks.length})
             </TabsTrigger>
             <TabsTrigger value="pending" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">

@@ -36,7 +36,14 @@ import React, { useState, useEffect, useRef } from "react";
      const messagesEndRef = useRef(null);
      const recognitionRef = useRef(null);
      const synthRef = useRef(null);
-   
+
+     const { data: user } = base44.useQuery({
+       queryKey: ['currentUser'],
+       queryFn: () => base44.auth.me(),
+     });
+
+     const assistantName = `SoulSentry-${user?.assistant_name || "小雅"}`;
+
      useEffect(() => {
        if (isOpen && !conversationId) {
          initConversation();
@@ -121,14 +128,14 @@ import React, { useState, useEffect, useRef } from "react";
        try {
          const conversation = await base44.agents.getConversation(convId);
          
-         const analysisPrompt = `请以“温柔的背后顶梁柱”的身份，像老朋友一样直接帮我分析当前任务状况，不要客套打招呼。
-   
-   直接切入重点，关注三个方面：
-   1. 【建设】：有没有任务缺少时间或描述？直接指出来。
-   2. 【执行】：根据截止时间，直接建议我哪个任务应该调高优先级，或者建议我现在的重点应该放在哪。
-   3. 【检查】：有没有过期未完成的？温柔地问我是否需要调整。
-   
-   语气要稳重、温暖、直接。不要问“需要我做什么”，而是直接给出你的分析和建议。`;
+         const analysisPrompt = `请以“${assistantName}”（温柔的背后顶梁柱）的身份，像老朋友一样直接帮我分析当前任务状况，不要客套打招呼。
+
+         直接切入重点，关注三个方面：
+         1. 【建设】：有没有任务缺少时间或描述？直接指出来。
+         2. 【执行】：根据截止时间，直接建议我哪个任务应该调高优先级，或者建议我现在的重点应该放在哪。
+         3. 【检查】：有没有过期未完成的？温柔地问我是否需要调整。
+
+         语气要稳重、温暖、直接。不要问“需要我做什么”，而是直接给出你的分析和建议。`;
    
          await base44.agents.addMessage(conversation, {
            role: "user",
@@ -234,7 +241,7 @@ import React, { useState, useEffect, useRef } from "react";
                  </div>
                  <div>
                    <h3 className="text-sm font-semibold flex items-center gap-1.5">
-                     小助
+                     {assistantName}
                      <Sparkles className="w-3 h-3" />
                    </h3>
                  </div>
@@ -283,7 +290,7 @@ import React, { useState, useEffect, useRef } from "react";
                    />
                  </div>
                  <h3 className="text-sm font-semibold text-slate-800 mb-1.5">
-                   小助正在分析中
+                   {assistantName}正在分析中
                  </h3>
                  <p className="text-xs text-slate-600 mb-3">
                    正在查看你的任务和习惯...

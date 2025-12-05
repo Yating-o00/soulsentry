@@ -41,25 +41,26 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
     setIsAnalyzing(true);
     try {
       const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Analyze this note content for:
-        1. Key entities (names, locations, dates, organizations, websites) to extract.
-        2. A concise summary (bullet points or short paragraph).
-        3. Relevant tags (3-5).
+        prompt: `Analyze this note content deeply.
+        
+        Tasks:
+        1. Extract Key Entities: names (person), locations, dates/times, organizations, websites (url).
+           - Be precise. For Chinese names, ensure full names are captured.
+        2. Generate Summaries:
+           - "summary": A concise 1-sentence summary of the main idea.
+           - "key_points": A list of 3-5 key takeaways or action items from the note.
+        3. Generate Tags: 3-5 relevant tags for categorization.
 
         Content:
         "${text}"
 
-        Return ONLY JSON:
-        {
-          "tags": ["string"],
-          "entities": [{"text": "entity text", "type": "person|location|date|org|url"}],
-          "summary": "string"
-        }`,
+        Return JSON matching the schema.`,
         response_json_schema: {
           type: "object",
           properties: {
             tags: { type: "array", items: { type: "string" } },
-            summary: { type: "string" },
+            summary: { type: "string", description: "One sentence summary" },
+            key_points: { type: "array", items: { type: "string" }, description: "List of key points" },
             entities: {
               type: "array",
               items: {
@@ -72,7 +73,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
               }
             }
           },
-          required: ["tags", "summary", "entities"]
+          required: ["tags", "summary", "key_points", "entities"]
         }
       });
 
@@ -81,16 +82,22 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
         setTags(newTags);
         setAiAnalysis({
           summary: res.summary,
+          key_points: res.key_points,
           entities: res.entities
         });
 
-        // Highlight entities in editor content (simple string replacement on HTML)
+        // Highlight entities in editor content
         let newHtml = currentHtml;
-        res.entities.forEach(entity => {
-            // Simple case-insensitive replacement, avoiding tags
-            // Note: This is a naive implementation. Proper HTML manipulation is complex.
-            // We wrap found entities in a span with background color
-            const regex = new RegExp(`(${entity.text})(?![^<]*>)`, "gi");
+        // Sort entities by length desc to replace longest first (avoids partial replacement issues)
+        const sortedEntities = [...(res.entities || [])].sort((a, b) => b.text.length - a.text.length);
+        
+        sortedEntities.forEach(entity => {
+            if (!entity.text || entity.text.length < 2) return; // Skip very short entities
+
+            // Regex to find text content not inside HTML tags
+            // This is still a heuristic but better than nothing
+            const regex = new RegExp(`(${entity.text})(?![^<]*>|[^<>]*<\\/)`, "gi");
+            
             const colorMap = {
                 person: "#dbeafe", // blue-100
                 location: "#dcfce7", // green-100
@@ -98,9 +105,13 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 org: "#f3e8ff", // purple-100
                 url: "#ffedd5" // orange-100
             };
-            // Only replace if not already highlighted (basic check)
-            if (!newHtml.includes(`style="background-color: ${colorMap[entity.type]}`)) {
-               newHtml = newHtml.replace(regex, `<span style="background-color: ${colorMap[entity.type] || '#f1f5f9'}; border-radius: 4px; padding: 0 2px;">$1</span>`);
+            
+            const color = colorMap[entity.type] || '#f1f5f9';
+            const replacement = `<span style="background-color: ${color}; border-radius: 4px; padding: 0 2px; border-bottom: 1px solid ${color.replace('100', '300')}40;">$1</span>`;
+            
+            // Only replace if we don't suspect it's already wrapped (heuristic)
+            if (!newHtml.includes(`style="background-color: ${color}`) || !newHtml.includes(entity.text)) {
+               newHtml = newHtml.replace(regex, replacement);
             }
         });
         
@@ -108,7 +119,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             setContent(newHtml);
         }
 
-        toast.success("AI 分析完成");
+        toast.success("AI 深度分析完成");
       }
     } catch (error) {
       console.error("AI Analysis failed", error);

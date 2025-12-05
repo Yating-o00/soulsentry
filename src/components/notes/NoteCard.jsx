@@ -50,13 +50,50 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
             dangerouslySetInnerHTML={{ __html: note.content }}
           />
           
-          {note.ai_analysis?.summary && (
-            <div className="mb-3 p-2 bg-black/5 rounded text-xs text-slate-600 border-l-2 border-purple-400">
-                <div className="flex items-center gap-1 mb-1 font-medium opacity-75">
-                    <Sparkles className="w-3 h-3" />
-                    摘要
-                </div>
-                {note.ai_analysis.summary}
+          {note.ai_analysis && (
+            <div className="mb-3 space-y-2">
+                {note.ai_analysis.summary && (
+                    <div className="p-2.5 bg-white/50 rounded-lg text-xs text-slate-600 border border-purple-100 shadow-sm">
+                        <div className="flex items-center gap-1 mb-1.5 font-medium text-purple-700">
+                            <Sparkles className="w-3 h-3" />
+                            智能摘要
+                        </div>
+                        <p className="leading-relaxed">{note.ai_analysis.summary}</p>
+                    </div>
+                )}
+                
+                {note.ai_analysis.key_points && note.ai_analysis.key_points.length > 0 && (
+                    <div className="p-2.5 bg-white/50 rounded-lg text-xs text-slate-600 border border-blue-100 shadow-sm">
+                         <div className="flex items-center gap-1 mb-1.5 font-medium text-blue-700">
+                            <ListTodo className="w-3 h-3" />
+                            要点总结
+                        </div>
+                        <ul className="list-disc list-inside space-y-1 ml-1">
+                            {note.ai_analysis.key_points.map((point, idx) => (
+                                <li key={idx} className="leading-relaxed">{point}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                {note.ai_analysis.entities && note.ai_analysis.entities.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                        {note.ai_analysis.entities.map((entity, idx) => {
+                            const styles = {
+                                person: "bg-blue-50 text-blue-700 border-blue-100",
+                                location: "bg-green-50 text-green-700 border-green-100",
+                                date: "bg-yellow-50 text-yellow-700 border-yellow-100",
+                                org: "bg-purple-50 text-purple-700 border-purple-100",
+                                url: "bg-orange-50 text-orange-700 border-orange-100"
+                            };
+                            return (
+                                <span key={idx} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border ${styles[entity.type] || "bg-gray-50"}`}>
+                                    {entity.text}
+                                </span>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
           )}
 

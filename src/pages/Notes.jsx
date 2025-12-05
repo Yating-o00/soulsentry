@@ -215,7 +215,9 @@ export default function Notes() {
             <QuickAddTask
               initialData={{
                 title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新任务",
-                description: taskCreationNote.plain_text || "",
+                description: taskCreationNote.ai_analysis?.key_points 
+                    ? `要点总结：\n- ${taskCreationNote.ai_analysis.key_points.join('\n- ')}\n\n原文内容：\n${taskCreationNote.plain_text || ""}`
+                    : (taskCreationNote.plain_text || ""),
               }}
               onAdd={(taskData) => {
                   // Ensure reminder_time is set if QuickAddTask doesn't enforce it strictly or if user didn't change it

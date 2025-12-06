@@ -40,21 +40,35 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
 
     setIsAnalyzing(true);
     try {
+      // Extract media URLs (images and videos) for multimodal analysis
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = currentHtml;
+      const imgUrls = Array.from(tempDiv.querySelectorAll('img')).map(img => img.src);
+      const videoUrls = Array.from(tempDiv.querySelectorAll('iframe')).map(v => v.src);
+      // Filter out very large Data URIs to prevent payload issues if necessary, 
+      // but keeping them allows analyzing pasted screenshots if supported by backend.
+      // For now, we pass all valid sources.
+      const mediaUrls = [...imgUrls, ...videoUrls].filter(src => src && src.length > 0);
+
       const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Analyze this note content deeply.
+        prompt: `Analyze this note content deeply, including any attached images or videos.
         
         Tasks:
-        1. Extract Key Entities: names (person), locations, dates/times, organizations, websites (url).
+        1. Visual Analysis (if images/videos provided):
+           - Identify key objects, scenes, text (OCR), or people in the visuals.
+           - Incorporate visual insights into the summary and key points.
+        2. Extract Key Entities: names (person), locations, dates/times, organizations, websites (url).
            - Be precise. For Chinese names, ensure full names are captured.
-        2. Generate Summaries:
-           - "summary": A concise 1-sentence summary of the main idea.
-           - "key_points": A list of 3-5 key takeaways or action items from the note.
-        3. Generate Tags: 3-5 relevant tags for categorization.
+        3. Generate Summaries:
+           - "summary": A concise 1-sentence summary of the main idea (combining text and visual context).
+           - "key_points": A list of 3-5 key takeaways or action items.
+        4. Generate Tags: 3-5 relevant tags.
 
-        Content:
+        Text Content:
         "${text}"
 
         Return JSON matching the schema.`,
+        file_urls: mediaUrls.length > 0 ? mediaUrls : undefined,
         response_json_schema: {
           type: "object",
           properties: {

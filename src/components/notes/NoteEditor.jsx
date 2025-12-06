@@ -35,7 +35,79 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [color, setColor] = useState(initialData?.color || "white");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(initialData?.ai_analysis || null);
+  const [showAIWriter, setShowAIWriter] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const quillRef = useRef(null);
+
+  const handleAIGenerate = async (mode) => {
+    setIsGenerating(true);
+    const editor = quillRef.current.getEditor();
+    const currentText = editor.getText().trim();
+    const currentHtml = editor.root.innerHTML;
+
+    let systemPrompt = "";
+    let userPrompt = "";
+
+    if (mode === "draft") {
+      if (!aiPrompt.trim()) {
+        toast.error("请输入写作指令");
+        setIsGenerating(false);
+        return;
+      }
+      systemPrompt = "You are a helpful writing assistant. Generate content based on the user's request. Output formatted HTML directly (using <p>, <ul>, <strong>, etc) suitable for a rich text editor. Do not wrap in ```html block.";
+      userPrompt = `Write a note about: ${aiPrompt}`;
+    } else if (mode === "continue") {
+      if (!currentText) {
+        toast.error("便签为空，无法续写");
+        setIsGenerating(false);
+        return;
+      }
+      systemPrompt = "You are a helpful writing assistant. Continue the text naturally based on the context provided. Output formatted HTML directly. Keep the style consistent.";
+      userPrompt = `Context: "${currentText.slice(-500)}"\n\nContinue writing:`;
+    } else if (mode === "rewrite") {
+       if (!currentText) {
+        toast.error("便签为空，无法改写");
+        setIsGenerating(false);
+        return;
+      }
+      systemPrompt = "You are a helpful writing assistant. Rewrite/Polish the following text to be more clear, professional, and well-structured. Output formatted HTML directly.";
+      userPrompt = `Original text: "${currentText}"\n\nRewrite it:`;
+    }
+
+    try {
+      const res = await base44.integrations.Core.InvokeLLM({
+        prompt: `${systemPrompt}\n\n${userPrompt}`,
+      });
+
+      // Clean up markdown code blocks if LLM adds them despite instructions
+      let generatedHtml = res.replace(/^```html\s*/, '').replace(/\s*```$/, '');
+
+      if (mode === "draft") {
+        const range = editor.getSelection(true);
+        editor.clipboard.dangerouslyPasteHTML(range ? range.index : 0, generatedHtml);
+        toast.success("已生成初稿");
+        setShowAIWriter(false);
+        setAiPrompt("");
+      } else if (mode === "continue") {
+        const length = editor.getLength();
+        editor.clipboard.dangerouslyPasteHTML(length, generatedHtml);
+        toast.success("已续写内容");
+        setShowAIWriter(false);
+      } else if (mode === "rewrite") {
+        editor.root.innerHTML = generatedHtml;
+        toast.success("已改写内容");
+        setShowAIWriter(false);
+      }
+      // Update state
+      setContent(editor.root.innerHTML);
+    } catch (error) {
+      console.error("AI Generation failed", error);
+      toast.error("生成失败，请重试");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     const editor = quillRef.current.getEditor();

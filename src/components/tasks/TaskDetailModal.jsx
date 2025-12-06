@@ -213,6 +213,7 @@ export default function TaskDetailModal({ task, open, onClose }) {
               3. Potential Risks: E.g. stalled subtasks, visual defects, high priority but low progress.
               4. Key Dependencies: Prerequisites inferred from text or visuals.
               5. Actionable Suggestions.
+              6. Suggest Priority: Based on deadline, risks, and status, suggest a priority (low/medium/high/urgent) and provide reasoning.
               
               Return ONLY JSON.`,
               file_urls: mediaAttachments.length > 0 ? mediaAttachments : undefined,
@@ -222,9 +223,11 @@ export default function TaskDetailModal({ task, open, onClose }) {
                       status_summary: { type: "string" },
                       risks: { type: "array", items: { type: "string" } },
                       key_dependencies: { type: "array", items: { type: "string" } },
-                      suggestions: { type: "array", items: { type: "string" } }
+                      suggestions: { type: "array", items: { type: "string" } },
+                      suggested_priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                      priority_reasoning: { type: "string" }
                   },
-                  required: ["status_summary", "risks"]
+                  required: ["status_summary", "risks", "suggested_priority"]
               }
           });
 
@@ -279,6 +282,31 @@ export default function TaskDetailModal({ task, open, onClose }) {
                       智能分析报告
                   </h4>
                   <div className="grid md:grid-cols-2 gap-4 text-sm">
+                      {task.ai_analysis.suggested_priority && (
+                          <div className="col-span-2 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50 p-3 rounded-lg border border-indigo-100">
+                              <div className="flex items-center gap-3">
+                                  <Badge variant="outline" className="bg-white border-indigo-200 text-indigo-700">
+                                      AI 建议: {
+                                          {low: "低优先级", medium: "中优先级", high: "高优先级", urgent: "紧急"}[task.ai_analysis.suggested_priority] || task.ai_analysis.suggested_priority
+                                      }
+                                  </Badge>
+                                  <span className="text-xs text-indigo-600">{task.ai_analysis.priority_reasoning}</span>
+                              </div>
+                              {task.ai_analysis.suggested_priority !== task.priority && (
+                                  <Button 
+                                      size="sm" 
+                                      variant="ghost"
+                                      onClick={() => updateTaskMutation.mutate({
+                                          id: task.id,
+                                          data: { priority: task.ai_analysis.suggested_priority }
+                                      })}
+                                      className="h-7 text-xs bg-white/80 hover:bg-white text-indigo-600 border border-indigo-200"
+                                  >
+                                      应用建议
+                                  </Button>
+                              )}
+                          </div>
+                      )}
                       <div className="col-span-2 bg-white/60 p-3 rounded-lg border border-indigo-50/50">
                           <span className="text-slate-500 text-xs block mb-1">状态摘要</span>
                           <p className="text-slate-700 leading-relaxed">{task.ai_analysis.status_summary}</p>

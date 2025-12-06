@@ -14,6 +14,7 @@ import {
   Repeat,
   Trash2,
   Edit,
+  Sparkles,
   Briefcase,
   User,
   Heart,
@@ -291,6 +292,16 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                     <AlertCircle className="w-3 h-3 mr-1" />
                     {PRIORITY_LABELS[task.priority]}
                   </Badge>
+
+                  {task.ai_analysis?.suggested_priority && task.ai_analysis.suggested_priority !== task.priority && (
+                    <Badge 
+                      className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0 rounded-[8px] text-[13px] shadow-sm"
+                      title={`AI 建议: ${task.ai_analysis.priority_reasoning}`}
+                    >
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      建议: {PRIORITY_LABELS[task.ai_analysis.suggested_priority]}
+                    </Badge>
+                  )}
 
                   {hasSubtasks && (
                     <Badge className="bg-[#384877] text-white rounded-[8px] text-[13px]">

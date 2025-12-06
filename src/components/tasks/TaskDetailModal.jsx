@@ -178,17 +178,135 @@ export default function TaskDetailModal({ task, open, onClose }) {
 
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const handleAIAnalysis = async () => {
+      setIsAnalyzing(true);
+      try {
+          // Prepare context
+          const subtaskStatus = subtasks.map(s => `- ${s.title}: ${s.status}`).join('\n');
+          const context = `
+            Task: ${task.title}
+            Description: ${task.description || "None"}
+            Priority: ${task.priority}
+            Status: ${task.status}
+            Progress: ${task.progress}%
+            Subtasks:
+            ${subtaskStatus}
+          `;
+
+          const res = await base44.integrations.Core.InvokeLLM({
+              prompt: `Analyze this task status, risks, and dependencies based on the provided context.
+              
+              Context:
+              ${context}
+              
+              Generate:
+              1. A brief status summary (2-3 sentences).
+              2. Potential risks (e.g. stalled subtasks, high priority but low progress).
+              3. Key dependencies or prerequisites.
+              4. Actionable suggestions.
+              
+              Return ONLY JSON.`,
+              response_json_schema: {
+                  type: "object",
+                  properties: {
+                      status_summary: { type: "string" },
+                      risks: { type: "array", items: { type: "string" } },
+                      key_dependencies: { type: "array", items: { type: "string" } },
+                      suggestions: { type: "array", items: { type: "string" } }
+                  },
+                  required: ["status_summary", "risks"]
+              }
+          });
+
+          if (res) {
+              await updateTaskMutation.mutateAsync({
+                  id: task.id,
+                  data: { ai_analysis: res }
+              });
+              toast.success("AI 分析完成");
+          }
+      } catch (e) {
+          console.error(e);
+          toast.error("AI 分析失败");
+      } finally {
+          setIsAnalyzing(false);
+      }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+        <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <DialogTitle className="text-[20px] font-semibold tracking-tight text-[#222222]">
             {task.title}
           </DialogTitle>
+          <div className="flex items-center gap-2">
+             <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleAIAnalysis}
+                disabled={isAnalyzing}
+                className="h-8 text-xs bg-gradient-to-r from-indigo-50 to-purple-50 border-purple-200 text-purple-700 hover:from-indigo-100 hover:to-purple-100"
+             >
+                {isAnalyzing ? <span className="animate-spin mr-1">⏳</span> : <span className="mr-1">✨</span>}
+                AI 状态分析
+             </Button>
+          </div>
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* AI Analysis Result */}
+          {task.ai_analysis && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="bg-gradient-to-br from-slate-50 to-white border border-indigo-100 rounded-xl p-4 shadow-sm"
+              >
+                  <h4 className="text-sm font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+                      <div className="p-1 bg-indigo-100 rounded-md">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                      </div>
+                      智能分析报告
+                  </h4>
+                  <div className="grid md:grid-cols-2 gap-4 text-sm">
+                      <div className="col-span-2 bg-white/60 p-3 rounded-lg border border-indigo-50/50">
+                          <span className="text-slate-500 text-xs block mb-1">状态摘要</span>
+                          <p className="text-slate-700 leading-relaxed">{task.ai_analysis.status_summary}</p>
+                      </div>
+                      {task.ai_analysis.risks?.length > 0 && (
+                          <div className="bg-red-50/50 p-3 rounded-lg border border-red-100/50">
+                              <span className="text-red-500 text-xs block mb-1 font-medium">⚠️ 潜在风险</span>
+                              <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
+                                  {task.ai_analysis.risks.map((risk, i) => <li key={i}>{risk}</li>)}
+                              </ul>
+                          </div>
+                      )}
+                      {task.ai_analysis.key_dependencies?.length > 0 && (
+                          <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-100/50">
+                              <span className="text-amber-600 text-xs block mb-1 font-medium">🔗 关键依赖</span>
+                              <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
+                                  {task.ai_analysis.key_dependencies.map((dep, i) => <li key={i}>{dep}</li>)}
+                              </ul>
+                          </div>
+                      )}
+                      {task.ai_analysis.suggestions?.length > 0 && (
+                           <div className="col-span-2 bg-blue-50/50 p-3 rounded-lg border border-blue-100/50">
+                              <span className="text-blue-600 text-xs block mb-1 font-medium">💡 改进建议</span>
+                              <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  {task.ai_analysis.suggestions.map((sug, i) => (
+                                      <li key={i} className="flex items-start gap-2 text-slate-700 text-xs">
+                                          <span className="text-blue-400 mt-0.5">•</span>
+                                          {sug}
+                                      </li>
+                                  ))}
+                              </ul>
+                          </div>
+                      )}
+                  </div>
+              </motion.div>
+          )}
           {/* Progress */}
           {totalSubtasks > 0 && (
             <div className="space-y-2">

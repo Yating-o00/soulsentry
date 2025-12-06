@@ -210,9 +210,41 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 className="h-7 text-xs text-[#384877] hover:bg-[#384877]/10 rounded-full gap-1.5 border border-[#384877]/20"
             >
                 {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                AI 智能标签
+                AI 智能分析
             </Button>
         </div>
+
+        {/* AI Analysis Result Area */}
+        {aiAnalysis && (
+            <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="mb-4 bg-slate-50/80 rounded-lg p-3 border border-slate-100 space-y-3"
+            >
+                {aiAnalysis.summary && (
+                    <div className="text-xs text-slate-600">
+                        <div className="flex items-center gap-1 font-semibold text-purple-700 mb-1">
+                            <Sparkles className="w-3 h-3" />
+                            智能摘要
+                        </div>
+                        <p>{aiAnalysis.summary}</p>
+                    </div>
+                )}
+                {aiAnalysis.key_points && aiAnalysis.key_points.length > 0 && (
+                     <div className="text-xs text-slate-600">
+                        <div className="flex items-center gap-1 font-semibold text-blue-700 mb-1">
+                            <ListTodo className="w-3 h-3" />
+                            核心要点
+                        </div>
+                        <ul className="list-disc list-inside space-y-0.5 ml-1 text-slate-600">
+                            {aiAnalysis.key_points.map((p, i) => (
+                                <li key={i}>{p}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+            </motion.div>
+        )}
 
         <div className="flex items-center justify-between pt-2 border-t border-black/5">
             <div className="flex gap-1">

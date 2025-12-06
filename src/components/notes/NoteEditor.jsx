@@ -307,6 +307,83 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                 AI 智能分析
             </Button>
+            
+            <Dialog open={showAIWriter} onOpenChange={setShowAIWriter}>
+                <DialogTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-purple-700 hover:bg-purple-100 rounded-full gap-1.5 border border-purple-200"
+                    >
+                        <Wand2 className="w-3 h-3" />
+                        AI 写作助手
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-purple-700">
+                            <Wand2 className="w-5 h-5" />
+                            AI 写作助手
+                        </DialogTitle>
+                    </DialogHeader>
+                    <Tabs defaultValue="draft" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="draft">生成初稿</TabsTrigger>
+                            <TabsTrigger value="continue">续写</TabsTrigger>
+                            <TabsTrigger value="rewrite">润色改写</TabsTrigger>
+                        </TabsList>
+                        
+                        <TabsContent value="draft" className="space-y-4 pt-4">
+                            <div className="space-y-2">
+                                <Label>你想要写什么？</Label>
+                                <Textarea 
+                                    placeholder="例如：写一篇关于AI在健康领域应用的便签..."
+                                    value={aiPrompt}
+                                    onChange={(e) => setAiPrompt(e.target.value)}
+                                    className="h-24 resize-none"
+                                />
+                            </div>
+                            <Button 
+                                onClick={() => handleAIGenerate("draft")} 
+                                disabled={isGenerating || !aiPrompt.trim()}
+                                className="w-full bg-purple-600 hover:bg-purple-700"
+                            >
+                                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <PenLine className="w-4 h-4 mr-2" />}
+                                开始生成
+                            </Button>
+                        </TabsContent>
+
+                        <TabsContent value="continue" className="space-y-4 pt-4">
+                            <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
+                                <p>AI 将根据当前便签的上下文，自动续写下一段内容。</p>
+                            </div>
+                            <Button 
+                                onClick={() => handleAIGenerate("continue")} 
+                                disabled={isGenerating}
+                                className="w-full bg-blue-600 hover:bg-blue-700"
+                            >
+                                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                                智能续写
+                            </Button>
+                        </TabsContent>
+
+                        <TabsContent value="rewrite" className="space-y-4 pt-4">
+                             <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
+                                <p>AI 将优化当前内容的结构、语气和流畅度，使其更加专业。</p>
+                                <p className="text-xs text-red-500 mt-2">* 注意：这将替换当前全部内容</p>
+                            </div>
+                            <Button 
+                                onClick={() => handleAIGenerate("rewrite")} 
+                                disabled={isGenerating}
+                                className="w-full bg-orange-500 hover:bg-orange-600"
+                            >
+                                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                                一键润色
+                            </Button>
+                        </TabsContent>
+                    </Tabs>
+                </DialogContent>
+            </Dialog>
         </div>
 
         {/* AI Analysis Result Area */}

@@ -185,6 +185,12 @@ export default function TaskDetailModal({ task, open, onClose }) {
       try {
           // Prepare context
           const subtaskStatus = subtasks.map(s => `- ${s.title}: ${s.status}`).join('\n');
+          
+          // Filter media attachments for multimodal analysis
+          const mediaAttachments = (task.attachments || [])
+            .filter(att => att.file_type?.startsWith('image/') || att.file_type?.startsWith('video/'))
+            .map(att => att.file_url);
+
           const context = `
             Task: ${task.title}
             Description: ${task.description || "None"}
@@ -196,18 +202,20 @@ export default function TaskDetailModal({ task, open, onClose }) {
           `;
 
           const res = await base44.integrations.Core.InvokeLLM({
-              prompt: `Analyze this task status, risks, and dependencies based on the provided context.
+              prompt: `Analyze this task status, risks, and dependencies based on the provided context and any attached media (images/videos).
               
               Context:
               ${context}
               
-              Generate:
-              1. A brief status summary (2-3 sentences).
-              2. Potential risks (e.g. stalled subtasks, high priority but low progress).
-              3. Key dependencies or prerequisites.
-              4. Actionable suggestions.
+              Tasks:
+              1. Visual Analysis (if media provided): Identify key information, blockers, or context from attached images/videos.
+              2. Status Summary: Combine text and visual insights into a brief summary (2-3 sentences). Highlight any visual evidence of progress or issues.
+              3. Potential Risks: E.g. stalled subtasks, visual defects, high priority but low progress.
+              4. Key Dependencies: Prerequisites inferred from text or visuals.
+              5. Actionable Suggestions.
               
               Return ONLY JSON.`,
+              file_urls: mediaAttachments.length > 0 ? mediaAttachments : undefined,
               response_json_schema: {
                   type: "object",
                   properties: {

@@ -54,14 +54,13 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
         prompt: `Analyze this note content deeply, including any attached images or videos.
         
         Tasks:
-        1. Visual Analysis (if images/videos provided):
-           - Identify key objects, scenes, text (OCR), or people in the visuals.
-           - Incorporate visual insights into the summary and key points.
-        2. Extract Key Entities: names (person), locations, dates/times, organizations, websites (url).
-           - Be precise. For Chinese names, ensure full names are captured.
+        1. Visual Analysis (Multimodal):
+           - Analyze any images/videos for key objects, scenes, text (OCR), diagrams, or people.
+           - EXTRACT VISUAL HIGHLIGHTS: What are the most important visual elements?
+        2. Extract Key Entities: names, locations, dates, orgs, urls.
         3. Generate Summaries:
-           - "summary": A concise 1-sentence summary of the main idea (combining text and visual context).
-           - "key_points": A list of 3-5 key takeaways or action items.
+           - "summary": A concise 1-sentence summary combining text and visual insights.
+           - "key_points": A list of 3-5 key takeaways. IF IMAGES/VIDEOS ARE PRESENT, explicitly mention the visual highlights in these points (e.g., "Image shows design mockup with...").
         4. Generate Tags: 3-5 relevant tags.
 
         Text Content:

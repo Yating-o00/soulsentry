@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { logUserBehavior } from "@/utils/behaviorLogger";
+import { logUserBehavior } from "@/components/behaviorLogger";
 
 const CATEGORIES = [
   { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },

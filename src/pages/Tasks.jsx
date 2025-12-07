@@ -18,6 +18,7 @@ import NotificationManager from "../components/notifications/NotificationManager
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import SmartTextParser from "../components/tasks/SmartTextParser";
 import { toast } from "sonner";
+import { logUserBehavior } from "@/components/utils/behaviorLogger";
 
 
 export default function Tasks() {
@@ -49,13 +50,13 @@ export default function Tasks() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       
-      // Infer behavior from status change
+      // Log behavior based on what changed
       if (variables.data.status === 'completed') {
-          logUserBehavior("task_completed", variables.data);
+          logUserBehavior("task_completed", { id: variables.id, ...variables.data });
       } else if (variables.data.status === 'snoozed') {
-          logUserBehavior("task_snoozed", variables.data);
+          logUserBehavior("task_snoozed", { id: variables.id, ...variables.data });
       } else {
-           logUserBehavior("task_edited", variables.data);
+          logUserBehavior("task_edited", { id: variables.id, ...variables.data });
       }
     },
   });

@@ -22,9 +22,8 @@ import TaskCard from "../components/tasks/TaskCard";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import NotificationManager from "../components/notifications/NotificationManager";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
-import SmartTextParser from "../components/tasks/SmartTextParser"; // Added import
-import { toast } from "sonner"; // Added import for toast notifications
-import { logUserBehavior } from "@/components/behaviorLogger";
+import SmartTextParser from "../components/tasks/SmartTextParser";
+import { toast } from "sonner";
 import UserBehaviorInsights from "../components/insights/UserBehaviorInsights";
 
 
@@ -93,12 +92,6 @@ export default function Dashboard() {
     updateTaskMutation.mutate({
       id: task.id,
       data: { status: newStatus }
-    }, {
-      onSuccess: () => {
-        if (newStatus === "completed") {
-          logUserBehavior("task_completed", task);
-        }
-      }
     });
   };
 
@@ -236,10 +229,6 @@ export default function Dashboard() {
         </Link>
       </motion.div>
 
-      <div className="mb-8">
-        <UserBehaviorInsights />
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -302,6 +291,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
         <SmartTextParser onTasksGenerated={handleBulkCreate} />
+      </div>
+
+      <div className="mb-4">
+        <UserBehaviorInsights />
       </div>
 
       {todayTasks.length > 0 && (

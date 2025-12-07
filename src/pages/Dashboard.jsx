@@ -24,6 +24,8 @@ import NotificationManager from "../components/notifications/NotificationManager
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import SmartTextParser from "../components/tasks/SmartTextParser"; // Added import
 import { toast } from "sonner"; // Added import for toast notifications
+import { logUserBehavior } from "@/components/behaviorLogger";
+import UserBehaviorInsights from "../components/insights/UserBehaviorInsights";
 
 
 export default function Dashboard() {
@@ -91,6 +93,12 @@ export default function Dashboard() {
     updateTaskMutation.mutate({
       id: task.id,
       data: { status: newStatus }
+    }, {
+      onSuccess: () => {
+        if (newStatus === "completed") {
+          logUserBehavior("task_completed", task);
+        }
+      }
     });
   };
 
@@ -227,6 +235,10 @@ export default function Dashboard() {
           </Button>
         </Link>
       </motion.div>
+
+      <div className="mb-8">
+        <UserBehaviorInsights />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <motion.div

@@ -46,16 +46,26 @@ export default function Tasks() {
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      
+      // Infer behavior from status change
+      if (variables.data.status === 'completed') {
+          logUserBehavior("task_completed", variables.data);
+      } else if (variables.data.status === 'snoozed') {
+          logUserBehavior("task_snoozed", variables.data);
+      } else {
+           logUserBehavior("task_edited", variables.data);
+      }
     },
   });
 
   const deleteTaskMutation = useMutation({
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
-    onSuccess: () => {
+    onSuccess: (data, id) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success("任务已移至垃圾箱");
+      logUserBehavior("task_deleted", { id });
     },
   });
 

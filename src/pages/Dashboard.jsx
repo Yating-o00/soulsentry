@@ -54,7 +54,7 @@ export default function Dashboard() {
   }, []);
 
   // Filter tasks
-  const activeTasks = allTasks.filter(t => !t.deleted_at);
+  const activeTasks = allTasks.filter(t => !t.deleted_at && !t.parent_task_id);
   const todayTasks = activeTasks.filter(t => t.reminder_time && isToday(parseISO(t.reminder_time)));
   const overdueTasks = activeTasks.filter(t => 
     t.status === 'pending' && 

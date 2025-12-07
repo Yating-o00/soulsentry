@@ -520,12 +520,15 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                       category: aiSuggestions.category,
                       priority: aiSuggestions.priority,
                       tags: aiSuggestions.tags || [],
-                      subtasks: aiSuggestions.subtasks ? aiSuggestions.subtasks.map(st => ({
-                          title: st,
-                          description: "",
-                          reminder_time: task.reminder_time || new Date().toISOString(),
-                          priority: "medium"
-                      })) : (task.subtasks || [])
+                      subtasks: aiSuggestions.subtasks ? aiSuggestions.subtasks.map(st => {
+                          const title = typeof st === 'object' ? (st.title || st.task || JSON.stringify(st)) : String(st);
+                          return {
+                              title: title.replace(/^\[object Object\]$/, "新子任务"), // Fallback for bad data
+                              description: "",
+                              reminder_time: task.reminder_time || new Date().toISOString(),
+                              priority: "medium"
+                          };
+                      }) : (task.subtasks || [])
                     });
                   }}
                 />

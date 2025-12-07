@@ -5,6 +5,7 @@ import Account from './pages/Account';
 import Teams from './pages/Teams';
 import Trash from './pages/Trash';
 import Notes from './pages/Notes';
+import GeminiTest from './pages/GeminiTest';
 import __Layout from './Layout.jsx';
 
 
@@ -16,6 +17,7 @@ export const PAGES = {
     "Teams": Teams,
     "Trash": Trash,
     "Notes": Notes,
+    "GeminiTest": GeminiTest,
 }
 
 export const pagesConfig = {

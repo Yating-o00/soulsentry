@@ -1,3 +1,4 @@
+
 import { base44 } from "@/api/base44Client";
 
 export const logUserBehavior = async (eventType, task = {}, metadata = {}) => {

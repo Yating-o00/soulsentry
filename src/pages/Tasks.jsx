@@ -171,7 +171,7 @@ export default function Tasks() {
           for (let i = 0; i < taskData.subtasks.length; i++) {
             const subtask = taskData.subtasks[i];
             const subtaskData = {
-              title: `${subtask.order || i + 1}. ${subtask.title}`, // 添加序号到标题
+              title: `${subtask.order || i + 1}. ${typeof subtask.title === 'object' ? (subtask.title.title || subtask.title.text || "未命名子任务") : subtask.title}`, // 添加序号到标题
               description: subtask.description || "",
               reminder_time: subtask.reminder_time || taskData.reminder_time,
               priority: subtask.priority || taskData.priority || "medium",

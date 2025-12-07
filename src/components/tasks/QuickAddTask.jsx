@@ -1,0 +1,1030 @@
+import React, { useState, useRef, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { zhCN } from "date-fns/locale";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import NotificationSettings from "../notifications/NotificationSettings";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import RecurrenceEditor from "./RecurrenceEditor";
+import TaskAssignment from "./TaskAssignment";
+import SmartReminderSuggestion from "./SmartReminderSuggestion";
+import AITaskEnhancer from "./AITaskEnhancer";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { logUserBehavior } from "@/components/utils/behaviorLogger";
+
+const CATEGORIES = [
+  { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
+  { value: "personal", label: "个人", icon: "👤", color: "bg-purple-50 text-purple-700 border-purple-200" },
+  { value: "health", label: "健康", icon: "❤️", color: "bg-green-50 text-green-700 border-green-200" },
+  { value: "study", label: "学习", icon: "📚", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  { value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦", color: "bg-pink-50 text-pink-700 border-pink-200" },
+  { value: "shopping", label: "购物", icon: "🛒", color: "bg-orange-50 text-orange-700 border-orange-200" },
+  { value: "finance", label: "财务", icon: "💰", color: "bg-[#fff1f2] text-[#d5495f] border-[#e0919e]" },
+  { value: "other", label: "其他", icon: "📌", color: "bg-gray-50 text-gray-700 border-gray-200" },
+];
+
+const PRIORITIES = [
+  { value: "low", label: "低", icon: "○", color: "text-slate-400" },
+  { value: "medium", label: "中", icon: "◐", color: "text-blue-600" },
+  { value: "high", label: "高", icon: "◉", color: "text-[#de6d7e]" },
+  { value: "urgent", label: "紧急", icon: "⚠️", color: "text-[#d5495f]" },
+];
+
+export default function QuickAddTask({ onAdd, initialData = null }) {
+  const [isExpanded, setIsExpanded] = useState(!!initialData);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showRecurrence, setShowRecurrence] = useState(false);
+  const [showVoiceDialog, setShowVoiceDialog] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const recognitionRef = useRef(null);
+  const [browserSupported, setBrowserSupported] = useState(true);
+  
+  const [showAssignment, setShowAssignment] = useState(false);
+  const [showSmartSuggestion, setShowSmartSuggestion] = useState(false);
+  const [showAIEnhancer, setShowAIEnhancer] = useState(false);
+  const [task, setTask] = useState({
+    title: initialData?.title || "",
+    description: initialData?.description || "",
+    reminder_time: initialData?.reminder_time ? new Date(initialData.reminder_time) : null,
+    time: initialData?.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : "09:00",
+    priority: initialData?.priority || "medium",
+    category: initialData?.category || "personal",
+    repeat_rule: "none",
+    custom_recurrence: null,
+    is_all_day: false,
+    notification_sound: "default",
+    persistent_reminder: false,
+    notification_interval: 15,
+    advance_reminders: [],
+    assigned_to: [],
+    is_shared: false,
+    team_visibility: "private",
+    subtasks: [],
+  });
+
+  // Update task if initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setTask(prev => ({
+        ...prev,
+        title: initialData.title || prev.title,
+        description: initialData.description || prev.description,
+      }));
+      setIsExpanded(true);
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setBrowserSupported(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      setTranscript(prev => prev + finalTranscript || interimTranscript);
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error === 'not-allowed') {
+        toast.error("请允许麦克风权限");
+      } else if (event.error !== 'no-speech') {
+        toast.error("语音识别出错");
+      }
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      if (isRecording) {
+        recognition.start();
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, [isRecording]);
+
+  const startVoiceInput = () => {
+    setTranscript("");
+    setShowVoiceDialog(true);
+    setTimeout(() => {
+      setIsRecording(true);
+      recognitionRef.current?.start();
+      toast.success("🎤 开始录音");
+    }, 300);
+  };
+
+  const stopRecording = () => {
+    setIsRecording(false);
+    recognitionRef.current?.stop();
+    
+    if (transcript.trim()) {
+      parseVoiceInput();
+    } else {
+      toast.error("未检测到语音内容");
+      setShowVoiceDialog(false);
+    }
+  };
+
+  const parseVoiceInput = async () => {
+    setIsProcessing(true);
+    try {
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt: `从以下语音内容中提取任务信息，识别主任务和子任务。
+
+语音内容：${transcript}
+
+提取：标题、描述、时间、优先级、类别、子任务。
+时间规则：具体时间转ISO格式，相对时间（明天/下周）计算日期，默认明天9点。
+优先级：urgent/high/medium/low
+类别：work/personal/health/study/family/shopping/finance/other
+
+当前时间：${new Date().toISOString()}`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            tasks: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  description: { type: "string" },
+                  reminder_time: { type: "string" },
+                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                  subtasks: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        description: { type: "string" },
+                        reminder_time: { type: "string" },
+                        priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                        order: { type: "number" }
+                      },
+                      required: ["title", "reminder_time"]
+                    }
+                  }
+                },
+                required: ["title", "reminder_time"]
+              }
+            }
+          },
+          required: ["tasks"]
+        }
+      });
+
+      if (response.tasks && response.tasks.length > 0) {
+        setShowVoiceDialog(false);
+        setTranscript("");
+        setIsProcessing(false);
+        
+        if (response.tasks.length > 1 || response.tasks.some(t => t.subtasks?.length > 0)) {
+          await handleBulkCreateDirect(response.tasks);
+        } else {
+          const firstTask = response.tasks[0];
+          setTask({
+            title: firstTask.title,
+            description: firstTask.description || "",
+            reminder_time: new Date(firstTask.reminder_time),
+            time: format(new Date(firstTask.reminder_time), "HH:mm"),
+            priority: firstTask.priority || "medium",
+            category: firstTask.category || "personal",
+            repeat_rule: "none",
+            custom_recurrence: null,
+            is_all_day: false,
+            notification_sound: "default",
+            persistent_reminder: false,
+            notification_interval: 15,
+            advance_reminders: [],
+          });
+          setIsExpanded(true);
+          toast.success("✨ 语音内容已填充到表单");
+        }
+      } else {
+        toast.error("未能识别任务信息");
+        setShowVoiceDialog(false);
+        setTranscript("");
+      }
+    } catch (error) {
+      console.error("Parse error:", error);
+      toast.error("解析失败");
+      setShowVoiceDialog(false);
+    }
+    setIsProcessing(false);
+  };
+
+  const handleBulkCreateDirect = async (parsedTasks) => {
+    let createdCount = 0;
+    let createdSubtasksCount = 0;
+
+    try {
+      toast.loading("正在创建任务...", { id: 'bulk-create' });
+
+      for (const taskData of parsedTasks) {
+        const hasSubtasks = taskData.subtasks && taskData.subtasks.length > 0;
+        
+        const mainTaskData = {
+          title: taskData.title,
+          description: taskData.description || "",
+          reminder_time: taskData.reminder_time,
+          priority: taskData.priority || "medium",
+          category: taskData.category || "personal",
+          status: "pending",
+          progress: 0,
+          notification_sound: "default",
+          persistent_reminder: false,
+          notification_interval: 15,
+          advance_reminders: [],
+        };
+        
+        const createdMainTask = await base44.entities.Task.create(mainTaskData);
+        logUserBehavior("task_created", createdMainTask, { source: "voice_bulk" });
+        createdCount++;
+        
+        if (hasSubtasks) {
+          for (let i = 0; i < taskData.subtasks.length; i++) {
+            const subtask = taskData.subtasks[i];
+            const subtaskData = {
+              title: `${subtask.order || i + 1}. ${subtask.title}`,
+              description: subtask.description || "",
+              reminder_time: subtask.reminder_time,
+              priority: subtask.priority || taskData.priority || "medium",
+              category: taskData.category,
+              status: "pending",
+              parent_task_id: createdMainTask.id,
+              progress: 0,
+              notification_sound: "default",
+              persistent_reminder: false,
+              advance_reminders: [],
+            };
+            
+            await base44.entities.Task.create(subtaskData);
+            createdSubtasksCount++;
+          }
+        }
+      }
+      
+      toast.success(
+        `✅ 创建 ${createdCount} 个任务${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子任务` : ''}！`,
+        { id: 'bulk-create' }
+      );
+      
+      if (onAdd) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (error) {
+      console.error("Error creating tasks:", error);
+      toast.error("创建任务时出错", { id: 'bulk-create' });
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    if (!task.title.trim() || !task.reminder_time) return;
+
+    const reminderDateTime = new Date(task.reminder_time);
+    if (!task.is_all_day) {
+      const [hours, minutes] = task.time.split(':');
+      reminderDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
+    }
+
+    const taskToSubmit = {
+      ...task,
+      reminder_time: reminderDateTime.toISOString(),
+    };
+
+    if (task.subtasks && task.subtasks.length > 0) {
+        handleBulkCreateDirect([taskToSubmit]);
+    } else {
+        onAdd(taskToSubmit);
+        }
+
+        logUserBehavior("task_created", taskToSubmit);
+
+    setTask({
+      title: "",
+      description: "",
+      reminder_time: null,
+      time: "09:00",
+      priority: "medium",
+      category: "personal",
+      repeat_rule: "none",
+      custom_recurrence: null,
+      is_all_day: false,
+      notification_sound: "default",
+      persistent_reminder: false,
+      notification_interval: 15,
+      advance_reminders: [],
+      assigned_to: [],
+      is_shared: false,
+      team_visibility: "private",
+      subtasks: []
+    });
+    setIsExpanded(false);
+    setShowSettings(false);
+    setShowRecurrence(false);
+  };
+
+  const getRecurrenceLabel = () => {
+    if (task.repeat_rule === "custom" && task.custom_recurrence) {
+      const rec = task.custom_recurrence;
+      if (rec.frequency === "weekly" && rec.days_of_week?.length > 0) {
+        const days = ["日", "一", "二", "三", "四", "五", "六"];
+        return `每周${rec.days_of_week.map(d => days[d]).join("、")}`;
+      }
+      if (rec.frequency === "monthly" && rec.days_of_month?.length > 0) {
+        return `每月${rec.days_of_month.join("、")}日`;
+      }
+      return "自定义重复";
+    } else if (task.repeat_rule === "daily") {
+      return "每天";
+    } else if (task.repeat_rule === "weekly") {
+      return "每周";
+    } else if (task.repeat_rule === "monthly") {
+      return "每月";
+    }
+    return null;
+  };
+
+  const selectedCategory = CATEGORIES.find(c => c.value === task.category);
+  const selectedPriority = PRIORITIES.find(p => p.value === task.priority);
+
+  return (
+    <>
+      <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm">
+        <div className="p-6">
+          {!isExpanded ? (
+            <div className="space-y-4">
+              {/* AI 智能助手标识 */}
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs font-medium text-blue-600 tracking-wide">AI 助手</span>
+                  </div>
+                  <span className="text-xs text-slate-400">·</span>
+                  <span className="text-xs text-slate-500">智能创建任务</span>
+                </div>
+                {browserSupported && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={startVoiceInput}
+                    className="h-9 w-9 hover:bg-[#e0f2fe] rounded-full group transition-all relative"
+                    title="语音输入"
+                  >
+                    <Mic className="w-4 h-4 text-[#52525b] group-hover:text-[#0891b2] transition-colors" />
+                    <motion.div
+                      className="absolute inset-0 rounded-full bg-[#06b6d4]"
+                      initial={{ scale: 0, opacity: 0 }}
+                      whileHover={{ scale: 1.2, opacity: 0.15 }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  </Button>
+                )}
+              </div>
+              
+              {/* 超大新建任务按钮 */}
+              <button
+                onClick={() => setIsExpanded(true)}
+                className="w-full group relative overflow-hidden"
+              >
+                <div className="relative flex items-center gap-4 px-6 py-5 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/50 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300">
+                  {/* 图标 */}
+                  <div className="relative">
+                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] flex items-center justify-center shadow-lg shadow-[#3b5aa2]/25 group-hover:shadow-[#3b5aa2]/40 group-hover:scale-105 transition-all duration-300">
+                      <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
+                    </div>
+                    <motion.div
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#d5495f] flex items-center justify-center shadow-md"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: [0, 1.2, 1] }}
+                      transition={{ duration: 0.5, delay: 0.2 }}
+                    >
+                      <Sparkles className="w-3 h-3 text-white" />
+                    </motion.div>
+                  </div>
+                  
+                  {/* 文字 */}
+                  <div className="flex-1 text-left">
+                    <div className="text-[17px] font-semibold text-[#222222] mb-0.5 tracking-tight">
+                      创建新任务
+                    </div>
+                    <div className="text-[15px] text-[#52525b]">
+                      开始输入或使用语音快速创建
+                    </div>
+                  </div>
+                  
+                  {/* 右侧提示 */}
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <kbd className="px-2 py-1 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded">
+                      Ctrl
+                    </kbd>
+                    <span className="text-sm">+</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded">
+                      N
+                    </kbd>
+                  </div>
+                </div>
+                
+                {/* 背景动画 */}
+                <motion.div
+                  className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/5 to-purple-500/5"
+                  initial={{ opacity: 0 }}
+                  whileHover={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                />
+              </button>
+            </div>
+          ) : (
+            <AnimatePresence>
+              <motion.form
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                onSubmit={handleSubmit}
+                className="space-y-5"
+              >
+                {/* 标题输入 - 超大字体 */}
+                <div className="relative">
+                  <Input
+                    placeholder="输入任务标题..."
+                    value={task.title}
+                    onChange={(e) => setTask({ ...task, title: e.target.value })}
+                    className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors"
+                    autoFocus
+                  />
+                  <motion.div
+                    className="absolute bottom-0 left-0 h-0.5 bg-blue-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: task.title ? "100%" : "0%" }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+
+                {/* AI智能增强 */}
+                <AITaskEnhancer
+                  taskTitle={task.title}
+                  currentDescription={task.description}
+                  onApply={(aiSuggestions) => {
+                    setTask({
+                      ...task,
+                      description: aiSuggestions.description,
+                      category: aiSuggestions.category,
+                      priority: aiSuggestions.priority,
+                      tags: aiSuggestions.tags || [],
+                      subtasks: aiSuggestions.subtasks ? aiSuggestions.subtasks.map(st => ({
+                          title: st,
+                          description: "",
+                          reminder_time: task.reminder_time || new Date().toISOString(),
+                          priority: "medium"
+                      })) : (task.subtasks || [])
+                    });
+                  }}
+                />
+
+                {/* 描述输入 */}
+                <Textarea
+                  placeholder="添加详细描述（可选）"
+                  value={task.description}
+                  onChange={(e) => setTask({ ...task, description: e.target.value })}
+                  className="border-slate-200 bg-slate-50/50 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 rounded-xl resize-none text-sm"
+                  rows={2}
+                />
+
+                {/* 子任务列表 */}
+                <div className="space-y-2">
+                    {task.subtasks && task.subtasks.length > 0 && (
+                        <div className="space-y-2 pl-2 border-l-2 border-slate-100">
+                            {task.subtasks.map((st, idx) => (
+                                <div key={idx} className="flex items-center gap-2 text-sm">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                                    <Input 
+                                        value={st.title} 
+                                        onChange={(e) => {
+                                            const newSubtasks = [...task.subtasks];
+                                            newSubtasks[idx].title = e.target.value;
+                                            setTask({...task, subtasks: newSubtasks});
+                                        }}
+                                        className="h-8 border-none bg-transparent focus-visible:ring-0 p-0"
+                                    />
+                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => {
+                                        const newSubtasks = task.subtasks.filter((_, i) => i !== idx);
+                                        setTask({...task, subtasks: newSubtasks});
+                                    }}>
+                                        <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <Button type="button" variant="ghost" size="sm" className="text-xs text-slate-500 hover:text-blue-600" onClick={() => {
+                        setTask({
+                            ...task, 
+                            subtasks: [...(task.subtasks || []), { title: "", description: "", priority: "medium", reminder_time: task.reminder_time }]
+                        });
+                    }}>
+                        <ListTodo className="w-3.5 h-3.5 mr-1.5" />
+                        添加子任务
+                    </Button>
+                </div>
+
+                {/* 快速设置栏 - 图标化 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* 日期 */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="justify-start text-left font-normal border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 rounded-xl h-auto py-3 transition-all"
+                      >
+                        <div className="flex flex-col items-start gap-1 w-full">
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <CalendarIcon className="h-4 w-4" />
+                            <span className="text-xs font-medium">日期</span>
+                          </div>
+                          {task.reminder_time ? (
+                            <span className="text-sm font-semibold text-slate-800">{format(task.reminder_time, "M月d日", { locale: zhCN })}</span>
+                          ) : (
+                            <span className="text-xs text-slate-400">选择日期</span>
+                          )}
+                        </div>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={task.reminder_time}
+                        onSelect={(date) => setTask({ ...task, reminder_time: date })}
+                        locale={zhCN}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* 时间 */}
+                  {!task.is_all_day && (
+                    <div className="border border-slate-200 bg-white hover:border-blue-300 rounded-xl py-3 px-3 transition-all">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Clock className="h-4 w-4" />
+                          <span className="text-xs font-medium">时间</span>
+                        </div>
+                        <Input
+                          type="time"
+                          value={task.time}
+                          onChange={(e) => setTask({ ...task, time: e.target.value })}
+                          className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 类别 */}
+                  <Select
+                    value={task.category}
+                    onValueChange={(value) => setTask({ ...task, category: value })}
+                  >
+                    <SelectTrigger className="border-slate-200 bg-white hover:border-blue-300 rounded-xl h-auto py-3 transition-all">
+                      <div className="flex flex-col items-start gap-1 w-full">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Tag className="h-4 w-4" />
+                          <span className="text-xs font-medium">类别</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-base">{selectedCategory?.icon}</span>
+                          <span className="text-sm font-semibold text-slate-800">{selectedCategory?.label}</span>
+                        </div>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{cat.icon}</span>
+                            <span>{cat.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* 优先级 */}
+                  <Select
+                    value={task.priority}
+                    onValueChange={(value) => setTask({ ...task, priority: value })}
+                  >
+                    <SelectTrigger className="border-slate-200 bg-white hover:border-blue-300 rounded-xl h-auto py-3 transition-all">
+                      <div className="flex flex-col items-start gap-1 w-full">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Circle className="h-4 w-4" />
+                          <span className="text-xs font-medium">优先级</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-base ${selectedPriority?.color}`}>{selectedPriority?.icon}</span>
+                          <span className={`text-sm font-semibold ${selectedPriority?.color}`}>{selectedPriority?.label}</span>
+                        </div>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRIORITIES.map((pri) => (
+                        <SelectItem key={pri.value} value={pri.value}>
+                          <div className="flex items-center gap-2">
+                            <span className={`${pri.color}`}>{pri.icon}</span>
+                            <span>{pri.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* AI 智能推荐按钮 */}
+                {task.title && task.category && task.priority && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowSmartSuggestion(!showSmartSuggestion)}
+                      className={`border ${
+                        showSmartSuggestion 
+                          ? 'border-[#06b6d4] bg-[#e0f2fe] text-[#0891b2] shadow-sm' 
+                          : 'border-[#bae6fd] text-[#0284c7] hover:bg-[#f0f9ff] hover:border-[#7dd3fc]'
+                      } rounded-[10px]`}
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      <span className="font-medium">AI 智能推荐</span>
+                    </Button>
+                  </motion.div>
+                )}
+
+                {/* 智能提醒建议 */}
+                <AnimatePresence>
+                  {showSmartSuggestion && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="col-span-full"
+                    >
+                      <SmartReminderSuggestion
+                        task={task}
+                        onApply={(datetime) => {
+                          const newDate = new Date(datetime);
+                          setTask({
+                            ...task,
+                            reminder_time: newDate,
+                            time: format(newDate, "HH:mm"),
+                            optimal_reminder_time: datetime
+                          });
+                          setShowSmartSuggestion(false);
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* 重复设置和团队分配 */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Select
+                    value={task.repeat_rule}
+                    onValueChange={(value) => {
+                      if (value === "custom") {
+                        setTask({ ...task, repeat_rule: value });
+                        setShowRecurrence(true);
+                      } else {
+                        setTask({ ...task, repeat_rule: value, custom_recurrence: null });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-auto border-slate-200 bg-white hover:border-blue-300 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Repeat className="h-4 w-4 text-slate-500" />
+                        <SelectValue placeholder="重复" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">不重复</SelectItem>
+                      <SelectItem value="daily">每天</SelectItem>
+                      <SelectItem value="weekly">每周</SelectItem>
+                      <SelectItem value="monthly">每月</SelectItem>
+                      <SelectItem value="custom">自定义...</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {getRecurrenceLabel() && task.repeat_rule !== "none" && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                    >
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                        <Repeat className="w-3 h-3 mr-1" />
+                        {getRecurrenceLabel()}
+                      </Badge>
+                    </motion.div>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAssignment(true)}
+                    className="border border-[#dce4ed] bg-white hover:bg-[#f9fafb] hover:border-[#5a647d] rounded-[10px]"
+                  >
+                    <Users className="h-4 w-4 mr-2 text-[#52525b]" />
+                    <span className="text-[#222222] font-medium">团队分配</span>
+                    {task.assigned_to && task.assigned_to.length > 0 && (
+                      <Badge className="ml-2 bg-[#06b6d4] text-white rounded-md">
+                        {task.assigned_to.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </div>
+
+                {/* 高级设置 */}
+                <Collapsible open={showSettings} onOpenChange={setShowSettings}>
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border border-[#dce4ed] bg-white hover:bg-[#f9fafb] hover:border-[#c8d1e0] rounded-[12px] text-[#222222] transition-all"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      <span>{showSettings ? "收起" : "展开"}高级设置</span>
+                      <Bell className="w-4 h-4 ml-auto text-slate-400" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-4">
+                    <NotificationSettings
+                      taskDefaults={task}
+                      onUpdate={(settings) => setTask({ ...task, ...settings })}
+                    />
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* 操作按钮 */}
+                <div className="flex items-center gap-3 pt-2">
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all"
+                    disabled={!task.title.trim() || !task.reminder_time}
+                  >
+                    <Plus className="w-5 h-5 mr-2" strokeWidth={2.5} />
+                    创建任务
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsExpanded(false);
+                      setShowSettings(false);
+                      setShowRecurrence(false);
+                    }}
+                    className="rounded-[12px] h-12 px-6 border border-[#dce4ed] text-[#222222] hover:bg-[#f9fafb] font-medium"
+                  >
+                    取消
+                  </Button>
+                </div>
+              </motion.form>
+            </AnimatePresence>
+          )}
+        </div>
+      </Card>
+
+      {/* 重复规则编辑器 */}
+      <Dialog open={showRecurrence} onOpenChange={setShowRecurrence}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>自定义重复规则</DialogTitle>
+          </DialogHeader>
+          <RecurrenceEditor
+            value={task.custom_recurrence}
+            onChange={(recurrence) => {
+              setTask({ ...task, custom_recurrence: recurrence, repeat_rule: "custom" });
+            }}
+            onClose={() => setShowRecurrence(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* 团队分配 */}
+      <Dialog open={showAssignment} onOpenChange={setShowAssignment}>
+        <DialogContent>
+          <TaskAssignment
+            selectedUsers={task.assigned_to}
+            onUpdate={(settings) => {
+              setTask({ ...task, ...settings });
+            }}
+            onClose={() => setShowAssignment(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* 语音输入对话框 */}
+      <Dialog open={showVoiceDialog} onOpenChange={setShowVoiceDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-800">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-500" />
+                <span>AI 语音助手</span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* 录音按钮区域 */}
+            <div className="flex justify-center">
+              <Button
+                size="lg"
+                onClick={stopRecording}
+                disabled={isProcessing}
+                className="relative h-32 w-32 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 border-4 border-blue-200 hover:border-blue-300 transition-all duration-300 shadow-2xl shadow-blue-500/30"
+              >
+                <AnimatePresence mode="wait">
+                  {isRecording && !isProcessing && (
+                    <motion.div
+                      key="recording"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+                    >
+                      <MicOff className="w-12 h-12 text-white" />
+                      <span className="text-xs font-medium text-white">点击完成</span>
+                    </motion.div>
+                  )}
+                  {isProcessing && (
+                    <motion.div
+                      key="processing"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+                    >
+                      <Loader2 className="w-12 h-12 text-white animate-spin" />
+                      <span className="text-xs font-medium text-white">AI解析中</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {isRecording && !isProcessing && (
+                  <>
+                    <motion.div
+                      className="absolute inset-0 rounded-full bg-blue-400"
+                      animate={{
+                        scale: [1, 1.3, 1],
+                        opacity: [0.5, 0, 0.5],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    />
+                    <motion.div
+                      className="absolute inset-0 rounded-full bg-blue-300"
+                      animate={{
+                        scale: [1, 1.5, 1],
+                        opacity: [0.3, 0, 0.3],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                        delay: 0.5,
+                      }}
+                    />
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* 识别文本区域 - 固定高度避免跳动 */}
+            <div className="min-h-[140px]">
+              <AnimatePresence mode="wait">
+                {transcript ? (
+                  <motion.div
+                    key="transcript"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="w-2 h-2 rounded-full bg-blue-500"
+                      />
+                      <span className="text-sm font-semibold text-blue-700">实时识别</span>
+                    </div>
+                    <p className="text-base text-slate-700 leading-relaxed max-h-24 overflow-y-auto font-medium">
+                      {transcript}
+                    </p>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="placeholder"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border-2 border-dashed border-slate-200"
+                  >
+                    <div className="flex items-center justify-center h-full min-h-[100px]">
+                      <div className="text-center">
+                        <motion.div
+                          animate={{ scale: [1, 1.1, 1] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                          className="mb-2"
+                        >
+                          <Mic className="w-8 h-8 text-slate-300 mx-auto" />
+                        </motion.div>
+                        <p className="text-sm text-slate-400 font-medium">等待语音输入...</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* 使用提示 */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+              <div className="flex gap-3">
+                <Wand2 className="w-5 h-5 text-[#0891b2] flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[15px] font-semibold text-[#222222] mb-2">💡 使用提示</p>
+                  <ul className="text-[13px] text-[#52525b] space-y-1.5 leading-relaxed">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#06b6d4] mt-0.5">•</span>
+                      <span>直接说出任务内容，AI 自动识别</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#06b6d4] mt-0.5">•</span>
+                      <span>例如："明天下午3点提醒我开会"</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#06b6d4] mt-0.5">•</span>
+                      <span>支持创建多个任务和子任务</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

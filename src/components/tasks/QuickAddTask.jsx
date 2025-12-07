@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { logUserBehavior } from "@/utils/behaviorLogger";
 
 const CATEGORIES = [
   { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
@@ -280,6 +281,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         };
         
         const createdMainTask = await base44.entities.Task.create(mainTaskData);
+        logUserBehavior("task_created", createdMainTask, { source: "voice_bulk" });
         createdCount++;
         
         if (hasSubtasks) {
@@ -341,7 +343,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         handleBulkCreateDirect([taskToSubmit]);
     } else {
         onAdd(taskToSubmit);
-    }
+        }
+
+        logUserBehavior("task_created", taskToSubmit);
 
     setTask({
       title: "",

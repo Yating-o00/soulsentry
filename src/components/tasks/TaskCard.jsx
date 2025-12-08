@@ -275,7 +275,12 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                     className="rounded-[8px] text-[13px] border-[#dce4ed]"
                   >
                     <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[task.priority]}`} />
-                    {format(new Date(isSnoozed ? task.snooze_until : task.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
+                    {isSnoozed 
+                      ? format(new Date(task.snooze_until), "M月d日 HH:mm", { locale: zhCN })
+                      : task.end_time
+                        ? `${format(new Date(task.reminder_time), "M月d日 HH:mm", { locale: zhCN })} - ${format(new Date(task.end_time), "HH:mm", { locale: zhCN })}`
+                        : format(new Date(task.reminder_time), "M月d日 HH:mm", { locale: zhCN })
+                    }
                   </Badge>
 
                   {getRecurrenceText() && (

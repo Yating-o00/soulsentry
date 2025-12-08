@@ -56,17 +56,18 @@ export default function Dashboard() {
     else setGreeting("晚上好");
   }, []);
 
-  // Filter tasks
+  // Filter tasks (exclude subtasks from main view)
   const activeTasks = allTasks.filter(t => !t.deleted_at);
-  const todayTasks = activeTasks.filter(t => t.reminder_time && isToday(parseISO(t.reminder_time)));
-  const overdueTasks = activeTasks.filter(t => 
+  const rootTasks = activeTasks.filter(t => !t.parent_task_id);
+  const todayTasks = rootTasks.filter(t => t.reminder_time && isToday(parseISO(t.reminder_time)));
+  const overdueTasks = rootTasks.filter(t => 
     t.status === 'pending' && 
     t.reminder_time && 
     isPast(parseISO(t.reminder_time)) && 
     !isToday(parseISO(t.reminder_time))
   );
-  const pendingTasks = activeTasks.filter(t => t.status === 'pending');
-  const completedToday = activeTasks.filter(t => 
+  const pendingTasks = rootTasks.filter(t => t.status === 'pending');
+  const completedToday = rootTasks.filter(t => 
     t.status === 'completed' && 
     t.completed_at && 
     isToday(parseISO(t.completed_at))
@@ -313,7 +314,7 @@ export default function Dashboard() {
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-slate-600">本周完成</span>
                   <span className="font-semibold text-green-600">
-                    {activeTasks.filter(t => t.status === 'completed').length}
+                    {activeTasks.filter(t => t.status === 'completed' && !t.parent_task_id).length}
                   </span>
                 </div>
                 <div className="pt-2 border-t border-indigo-100">

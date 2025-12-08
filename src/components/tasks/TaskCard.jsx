@@ -449,11 +449,13 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
       </motion.div>
 
       {/* 分享卡片弹窗 */}
-      <TaskShareCard
-        task={task}
-        open={showShareCard}
-        onClose={() => setShowShareCard(false)}
-      />
+      {showShareCard && (
+        <TaskShareCard
+          task={task}
+          open={showShareCard}
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
     </>
   );
 }

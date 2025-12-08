@@ -80,9 +80,9 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
 
   // 查询子任务
   const { data: subtasks = [] } = useQuery({
-    queryKey: ['subtasks', task.id],
+    queryKey: ['subtasks', task?.id],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: task.id }),
-    enabled: !!task.id,
+    enabled: !!task?.id,
     initialData: [],
   });
 

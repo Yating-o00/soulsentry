@@ -68,6 +68,8 @@ export default function TaskDetailModal({ task, open, onClose }) {
     },
   });
 
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -178,7 +180,6 @@ export default function TaskDetailModal({ task, open, onClose }) {
 
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const handleAIAnalysis = async () => {
       setIsAnalyzing(true);

@@ -64,6 +64,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     description: initialData?.description || "",
     reminder_time: initialData?.reminder_time ? new Date(initialData.reminder_time) : null,
     time: initialData?.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : "09:00",
+    end_time: initialData?.end_time ? new Date(initialData.end_time) : null,
+    end_time_str: initialData?.end_time ? format(new Date(initialData.end_time), "HH:mm") : "10:00",
+    has_end_time: !!initialData?.end_time,
     priority: initialData?.priority || "medium",
     category: initialData?.category || "personal",
     repeat_rule: "none",
@@ -86,6 +89,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         ...prev,
         title: initialData.title || prev.title,
         description: initialData.description || prev.description,
+        end_time: initialData.end_time ? new Date(initialData.end_time) : prev.end_time,
+        end_time_str: initialData.end_time ? format(new Date(initialData.end_time), "HH:mm") : prev.end_time_str,
+        has_end_time: !!initialData.end_time || prev.has_end_time,
       }));
       setIsExpanded(true);
     }
@@ -329,14 +335,29 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     if (!task.title.trim() || !task.reminder_time) return;
 
     const reminderDateTime = new Date(task.reminder_time);
+    let endDateTime = null;
+
     if (!task.is_all_day) {
       const [hours, minutes] = task.time.split(':');
       reminderDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
+
+      if (task.has_end_time) {
+        endDateTime = new Date(task.reminder_time);
+        const [endHours, endMinutes] = task.end_time_str.split(':');
+        endDateTime.setHours(parseInt(endHours), parseInt(endMinutes), 0);
+        
+        // Handle next day if end time is before start time (optional logic, but for now assuming same day)
+        // actually, let's keep it simple: same day. If user wants next day, they might need a full date picker for end time, but usually "time range" implies same day for simple tasks.
+      }
+    } else {
+        // For all day tasks, we might not need specific times, but let's leave it as is for now or just set end_time if needed.
+        // Usually all day tasks don't have start/end times in HH:mm.
     }
 
     const taskToSubmit = {
       ...task,
       reminder_time: reminderDateTime.toISOString(),
+      end_time: endDateTime ? endDateTime.toISOString() : null,
     };
 
     if (task.subtasks && task.subtasks.length > 0) {
@@ -611,18 +632,42 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
 
                   {/* 时间 */}
                   {!task.is_all_day && (
-                    <div className="border border-slate-200 bg-white hover:border-blue-300 rounded-xl py-3 px-3 transition-all">
+                    <div className={`border border-slate-200 bg-white hover:border-blue-300 rounded-xl py-3 px-3 transition-all ${task.has_end_time ? 'col-span-2' : ''}`}>
                       <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <Clock className="h-4 w-4" />
-                          <span className="text-xs font-medium">时间</span>
+                        <div className="flex items-center justify-between text-slate-500">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            <span className="text-xs font-medium">时间</span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 px-1.5 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => setTask({ ...task, has_end_time: !task.has_end_time })}
+                          >
+                            {task.has_end_time ? "移除结束" : "添加结束"}
+                          </Button>
                         </div>
-                        <Input
-                          type="time"
-                          value={task.time}
-                          onChange={(e) => setTask({ ...task, time: e.target.value })}
-                          className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0"
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="time"
+                            value={task.time}
+                            onChange={(e) => setTask({ ...task, time: e.target.value })}
+                            className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0 w-20"
+                          />
+                          {task.has_end_time && (
+                            <>
+                              <span className="text-slate-400">-</span>
+                              <Input
+                                type="time"
+                                value={task.end_time_str}
+                                onChange={(e) => setTask({ ...task, end_time_str: e.target.value })}
+                                className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0 w-20"
+                              />
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}

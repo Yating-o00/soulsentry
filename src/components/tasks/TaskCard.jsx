@@ -74,17 +74,19 @@ const PRIORITY_LABELS = {
   urgent: "紧急",
 };
 
-export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever }) {
+export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false); // Added state for share card
 
-  // 查询子任务
-  const { data: subtasks = [] } = useQuery({
+  // 查询子任务 (如果外部未传入)
+  const { data: fetchedSubtasks = [] } = useQuery({
     queryKey: ['subtasks', task?.id],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: task.id }),
-    enabled: !!task?.id,
+    enabled: !!task?.id && !propSubtasks,
     initialData: [],
   });
+
+  const subtasks = propSubtasks || fetchedSubtasks;
 
   const CategoryIcon = CATEGORY_ICONS[task.category] || MoreHorizontal;
   const isCompleted = task.status === "completed";
@@ -151,22 +153,22 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex items-center gap-2 flex-1 cursor-pointer" onClick={onClick}>
-                    {hasSubtasks && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpanded(!expanded);
-                        }}
-                        className="hover:bg-[#e5e9ef] rounded-lg p-1 transition-colors"
-                      >
-                        {expanded ? (
-                          <ChevronDown className="w-4 h-4 text-[#384877]" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-[#384877]" />
-                        )}
-                      </button>
-                    )}
-                    <h3 className={`text-[17px] font-semibold tracking-tight ${
+                  {hasSubtasks && !hideSubtaskList && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpanded(!expanded);
+                      }}
+                      className="hover:bg-[#e5e9ef] rounded-lg p-1 transition-colors"
+                    >
+                      {expanded ? (
+                        <ChevronDown className="w-4 h-4 text-[#384877]" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-[#384877]" />
+                      )}
+                    </button>
+                  )}
+                  <h3 className={`text-[17px] font-semibold tracking-tight ${
                       isCompleted ? 'line-through text-[#a1a1aa]' : 'text-[#222222]'
                     }`}>
                       {task.title}
@@ -361,7 +363,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
 
           {/* 子任务列表 */}
           <AnimatePresence>
-            {expanded && hasSubtasks && (
+            {expanded && hasSubtasks && !hideSubtaskList && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}

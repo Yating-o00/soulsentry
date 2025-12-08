@@ -36,9 +36,9 @@ export default function Tasks() {
     initialData: [],
   });
 
-  // 只显示主任务（没有 parent_task_id 的任务）
-  const tasks = allTasks.filter(task => !task.parent_task_id && !task.deleted_at);
-  const trashTasks = allTasks.filter(task => !task.parent_task_id && task.deleted_at);
+  // Include ALL non-deleted tasks for processing
+  const tasks = allTasks.filter(task => !task.deleted_at);
+  const trashTasks = allTasks.filter(task => task.deleted_at);
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
@@ -96,6 +96,13 @@ export default function Tasks() {
                          task.description?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesCategory && matchesSearch;
   });
+
+  // Group tasks logic
+  const taskMap = new Map(filteredTasks.map(t => [t.id, t]));
+  // Root tasks are those without a parent, OR those whose parent is NOT in the filtered list
+  const rootTasks = filteredTasks.filter(t => !t.parent_task_id || !taskMap.has(t.parent_task_id));
+  const getSubtasks = (parentId) => filteredTasks.filter(t => t.parent_task_id === parentId);
+  const getAllSubtasks = (parentId) => tasks.filter(t => t.parent_task_id === parentId);
 
   const handleComplete = (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";
@@ -292,16 +299,32 @@ export default function Tasks() {
         className="space-y-3"
       >
         <AnimatePresence mode="popLayout">
-          {filteredTasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onComplete={() => handleComplete(task)}
-              onDelete={() => deleteTaskMutation.mutate(task.id)}
-              onEdit={() => setEditingTask(task)}
-              onClick={() => setSelectedTask(task)}
-              onSubtaskToggle={handleSubtaskToggle}
-            />
+          {rootTasks.map((task) => (
+            <React.Fragment key={task.id}>
+              <TaskCard
+                task={task}
+                subtasks={getAllSubtasks(task.id)}
+                hideSubtaskList={true}
+                onComplete={() => handleComplete(task)}
+                onDelete={() => deleteTaskMutation.mutate(task.id)}
+                onEdit={() => setEditingTask(task)}
+                onClick={() => setSelectedTask(task)}
+                onSubtaskToggle={handleSubtaskToggle}
+              />
+              {getSubtasks(task.id).map(subtask => (
+                <div key={subtask.id} className="ml-8 relative pl-4 border-l-2 border-slate-200/50">
+                  <TaskCard
+                    task={subtask}
+                    hideSubtaskList={true}
+                    onComplete={() => handleSubtaskToggle(subtask)}
+                    onDelete={() => deleteTaskMutation.mutate(subtask.id)}
+                    onEdit={() => setEditingTask(subtask)}
+                    onClick={() => setSelectedTask(subtask)}
+                    onSubtaskToggle={handleSubtaskToggle}
+                  />
+                </div>
+              ))}
+            </React.Fragment>
           ))}
         </AnimatePresence>
 

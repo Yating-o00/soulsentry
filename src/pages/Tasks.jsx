@@ -111,9 +111,8 @@ export default function Tasks() {
   });
 
   // Group tasks logic
-  const taskMap = new Map(filteredTasks.map(t => [t.id, t]));
-  // Root tasks are those without a parent, OR those whose parent is NOT in the filtered list
-  const rootTasks = filteredTasks.filter(t => !t.parent_task_id || !taskMap.has(t.parent_task_id));
+  // Only show top-level tasks in the list
+  const rootTasks = filteredTasks.filter(t => !t.parent_task_id);
   const getSubtasks = (parentId) => filteredTasks.filter(t => t.parent_task_id === parentId);
   const getAllSubtasks = (parentId) => tasks.filter(t => t.parent_task_id === parentId);
 

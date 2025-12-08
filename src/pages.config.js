@@ -5,6 +5,7 @@ import Teams from './pages/Teams';
 import Trash from './pages/Trash';
 import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
+import NotificationSettings from './pages/NotificationSettings';
 import __Layout from './Layout.jsx';
 
 
@@ -16,6 +17,7 @@ export const PAGES = {
     "Trash": Trash,
     "Notes": Notes,
     "Dashboard": Dashboard,
+    "NotificationSettings": NotificationSettings,
 }
 
 export const pagesConfig = {

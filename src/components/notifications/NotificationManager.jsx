@@ -28,6 +28,12 @@ export default function NotificationManager() {
     refetchInterval: 30000, // 每30秒检查一次
   });
 
+  const { data: rules = [] } = useQuery({
+    queryKey: ['notificationRules'],
+    queryFn: () => base44.entities.NotificationRule.list(),
+    initialData: [],
+  });
+
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => {
@@ -60,6 +66,21 @@ export default function NotificationManager() {
   const sendNotification = (task, isAdvanceReminder = false) => {
     if (permission !== "granted") return;
 
+    // Check for matching rules
+    const matchingRule = rules.find(rule => 
+      rule.is_enabled && 
+      (rule.condition_category === "all" || rule.condition_category === task.category) &&
+      (rule.condition_priority === "all" || rule.condition_priority === task.priority)
+    );
+
+    if (matchingRule && matchingRule.action_mute) {
+      console.log(`Notification muted by rule: ${matchingRule.title}`);
+      // Log the behavior even if muted, or skip? Maybe skip log for now or log as 'muted'
+      return; 
+    }
+
+    const soundToPlay = matchingRule ? matchingRule.action_sound : (task.notification_sound || "default");
+
     const title = isAdvanceReminder 
       ? `📋 即将到来：${task.title}`
       : `⏰ 提醒：${task.title}`;
@@ -71,10 +92,10 @@ export default function NotificationManager() {
       icon: "/favicon.ico",
       tag: task.id,
       requireInteraction: task.persistent_reminder,
-      silent: task.notification_sound === "none",
+      silent: soundToPlay === "none",
     });
 
-    playSound(task.notification_sound || "default");
+    playSound(soundToPlay);
 
     notification.onclick = () => {
       window.focus();

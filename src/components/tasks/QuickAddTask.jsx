@@ -69,17 +69,17 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     has_end_time: !!initialData?.end_time,
     priority: initialData?.priority || "medium",
     category: initialData?.category || "personal",
-    repeat_rule: "none",
-    custom_recurrence: null,
-    is_all_day: false,
-    notification_sound: "default",
-    persistent_reminder: false,
-    notification_interval: 15,
-    advance_reminders: [],
-    assigned_to: [],
-    is_shared: false,
-    team_visibility: "private",
-    subtasks: [],
+    repeat_rule: initialData?.repeat_rule || "none",
+    custom_recurrence: initialData?.custom_recurrence || null,
+    is_all_day: initialData?.is_all_day || false,
+    notification_sound: initialData?.notification_sound || "default",
+    persistent_reminder: initialData?.persistent_reminder || false,
+    notification_interval: initialData?.notification_interval || 15,
+    advance_reminders: initialData?.advance_reminders || [],
+    assigned_to: initialData?.assigned_to || [],
+    is_shared: initialData?.is_shared || false,
+    team_visibility: initialData?.team_visibility || "private",
+    subtasks: initialData?.subtasks || [], // Note: fetching subtasks might be needed if they are separate entities, but here we assume passed in initialData or ignored for quick edit
   });
 
   // Update task if initialData changes
@@ -360,15 +360,18 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       end_time: endDateTime ? endDateTime.toISOString() : null,
     };
 
-    if (task.subtasks && task.subtasks.length > 0) {
+    if (!initialData && task.subtasks && task.subtasks.length > 0) {
         handleBulkCreateDirect([taskToSubmit]);
     } else {
         onAdd(taskToSubmit);
-        }
+    }
 
+    if (!initialData) {
         logUserBehavior("task_created", taskToSubmit);
+    }
 
-    setTask({
+    if (!initialData) {
+      setTask({
       title: "",
       description: "",
       reminder_time: null,
@@ -386,10 +389,14 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       is_shared: false,
       team_visibility: "private",
       subtasks: []
-    });
-    setIsExpanded(false);
-    setShowSettings(false);
-    setShowRecurrence(false);
+      });
+      setIsExpanded(false);
+      setShowSettings(false);
+      setShowRecurrence(false);
+    } else {
+      // For edit mode, we might want to close the form/modal handled by parent, or just keep data?
+      // Usually parent closes modal on success.
+    }
   };
 
   const getRecurrenceLabel = () => {
@@ -863,8 +870,17 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] text-white rounded-xl h-12 text-base font-semibold shadow-lg shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all"
                     disabled={!task.title.trim() || !task.reminder_time}
                   >
-                    <Plus className="w-5 h-5 mr-2" strokeWidth={2.5} />
-                    创建任务
+                    {initialData ? (
+                      <>
+                        <Sparkles className="w-5 h-5 mr-2" strokeWidth={2.5} />
+                        保存修改
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5 mr-2" strokeWidth={2.5} />
+                        创建任务
+                      </>
+                    )}
                   </Button>
                   <Button
                     type="button"

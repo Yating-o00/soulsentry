@@ -3,7 +3,8 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Trash2, RotateCcw, AlertTriangle } from "lucide-react";
+import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCard from "../components/tasks/TaskCard";
 import QuickAddTask from "../components/tasks/QuickAddTask";
@@ -26,6 +27,7 @@ export default function Tasks() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTask, setSelectedTask] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: allTasks = [], isLoading } = useQuery({
@@ -49,6 +51,7 @@ export default function Tasks() {
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setEditingTask(null);
       
       // Log behavior based on what changed
       if (variables.data.status === 'completed') {
@@ -130,6 +133,12 @@ export default function Tasks() {
         });
       }
     }
+  };
+
+  const handleUpdateTask = (taskData) => {
+    // Remove id from data if present to avoid error, and map other fields if needed
+    const { id, ...data } = taskData;
+    updateTaskMutation.mutate({ id: editingTask.id, data });
   };
 
   const handleBulkCreate = async (parsedTasks) => {
@@ -289,7 +298,7 @@ export default function Tasks() {
               task={task}
               onComplete={() => handleComplete(task)}
               onDelete={() => deleteTaskMutation.mutate(task.id)}
-              onEdit={() => {}}
+              onEdit={() => setEditingTask(task)}
               onClick={() => setSelectedTask(task)}
               onSubtaskToggle={handleSubtaskToggle}
             />
@@ -316,6 +325,20 @@ export default function Tasks() {
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)}
       />
+
+      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>编辑任务</DialogTitle>
+          </DialogHeader>
+          {editingTask && (
+            <QuickAddTask 
+              initialData={editingTask} 
+              onAdd={handleUpdateTask} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

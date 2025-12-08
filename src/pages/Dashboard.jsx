@@ -10,8 +10,10 @@ import {
   Calendar as CalendarIcon, 
   TrendingUp, 
   Sun,
-  ListTodo
+  ListTodo,
+  Edit
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 
 import QuickAddTask from "../components/tasks/QuickAddTask";
@@ -28,6 +30,7 @@ import { logUserBehavior } from "@/components/utils/behaviorLogger";
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
   const [selectedTask, setSelectedTask] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
   const queryClient = useQueryClient();
 
   // Get current user
@@ -54,7 +57,7 @@ export default function Dashboard() {
   }, []);
 
   // Filter tasks
-  const activeTasks = allTasks.filter(t => !t.deleted_at && !t.parent_task_id);
+  const activeTasks = allTasks.filter(t => !t.deleted_at);
   const todayTasks = activeTasks.filter(t => t.reminder_time && isToday(parseISO(t.reminder_time)));
   const overdueTasks = activeTasks.filter(t => 
     t.status === 'pending' && 
@@ -79,6 +82,7 @@ export default function Dashboard() {
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setEditingTask(null);
       
       if (variables.data.status === 'completed') {
         logUserBehavior("task_completed", { id: variables.id, ...variables.data });
@@ -241,7 +245,7 @@ export default function Dashboard() {
                     task={task}
                     onComplete={() => handleComplete(task)}
                     onDelete={() => deleteTaskMutation.mutate(task.id)}
-                    onEdit={() => {}} // Could implement edit modal trigger here
+                    onEdit={() => setEditingTask(task)}
                     onClick={() => setSelectedTask(task)}
                     onSubtaskToggle={handleSubtaskToggle}
                   />
@@ -272,7 +276,7 @@ export default function Dashboard() {
                       task={task}
                       onComplete={() => handleComplete(task)}
                       onDelete={() => deleteTaskMutation.mutate(task.id)}
-                      onEdit={() => {}}
+                      onEdit={() => setEditingTask(task)}
                       onClick={() => setSelectedTask(task)}
                       onSubtaskToggle={handleSubtaskToggle}
                     />
@@ -328,6 +332,23 @@ export default function Dashboard() {
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)}
       />
+
+      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>编辑任务</DialogTitle>
+          </DialogHeader>
+          {editingTask && (
+            <QuickAddTask 
+              initialData={editingTask} 
+              onAdd={(taskData) => {
+                  const { id, ...data } = taskData;
+                  updateTaskMutation.mutate({ id: editingTask.id, data });
+              }} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

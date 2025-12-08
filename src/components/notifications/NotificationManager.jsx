@@ -255,9 +255,19 @@ export default function NotificationManager() {
         }
       }
 
+      // Find matching rules for advance reminders
+      const matchingRule = rules.find(rule => 
+        rule.is_enabled && 
+        (rule.condition_category === "all" || rule.condition_category === task.category) &&
+        (rule.condition_priority === "all" || rule.condition_priority === task.priority)
+      );
+
+      const ruleAdvanceReminders = matchingRule?.action_advance_minutes || [];
+      const allAdvanceReminders = [...new Set([...(task.advance_reminders || []), ...ruleAdvanceReminders])];
+
       // 检查提前提醒
-      if (task.advance_reminders && task.advance_reminders.length > 0) {
-        task.advance_reminders.forEach(minutes => {
+      if (allAdvanceReminders.length > 0) {
+        allAdvanceReminders.forEach(minutes => {
           const advanceTime = new Date(reminderTime.getTime() - minutes * 60000);
           const checkKey = `${task.id}-advance-${minutes}`;
           

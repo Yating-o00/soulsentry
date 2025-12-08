@@ -31,6 +31,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import TaskComments from "./TaskComments";
+import AITaskEnhancer from "./AITaskEnhancer";
 
 export default function TaskDetailModal({ task, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -146,6 +147,35 @@ export default function TaskDetailModal({ task, open, onClose }) {
       id: task.id,
       data: { progress }
     });
+  };
+
+  const handleEnhanceApply = async (enhancements) => {
+    // Update task fields
+    await updateTaskMutation.mutateAsync({
+      id: task.id,
+      data: {
+        description: enhancements.description,
+        category: enhancements.category,
+        priority: enhancements.priority,
+        tags: enhancements.tags
+      }
+    });
+
+    // Create subtasks
+    if (enhancements.subtasks && enhancements.subtasks.length > 0) {
+      for (const st of enhancements.subtasks) {
+        await createSubtaskMutation.mutateAsync({
+          title: st,
+          parent_task_id: task.id,
+          reminder_time: task.reminder_time,
+          category: enhancements.category,
+          priority: enhancements.priority,
+          status: "pending",
+        });
+      }
+    }
+    
+    toast.success("AI 优化已应用");
   };
 
   const handleAddNote = async () => {
@@ -269,6 +299,12 @@ export default function TaskDetailModal({ task, open, onClose }) {
         </DialogHeader>
 
         <div className="space-y-6">
+          <AITaskEnhancer 
+            taskTitle={task.title} 
+            currentDescription={task.description} 
+            onApply={handleEnhanceApply} 
+          />
+
           {/* AI Analysis Result */}
           {task.ai_analysis && (
               <motion.div 

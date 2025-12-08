@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -217,7 +216,7 @@ export default function TaskShareCard({ task, open, onClose }) {
 📋 ${task.title}
 
 ${task.description ? `📝 ${task.description}\n` : ''}
-📅 提醒时间：${format(new Date(task.reminder_time), "yyyy年M月d日 EEEE HH:mm", { locale: zhCN })}
+📅 提醒时间：${format(new Date(task.reminder_time), "yyyy年M月d日 EEEE HH:mm", { locale: zhCN })}${task.end_time ? ` - ${format(new Date(task.end_time), "HH:mm", { locale: zhCN })}` : ''}
 🏷️ 类别：${CATEGORY_LABELS[task.category]}
 ⚡ 优先级：${PRIORITY_LABELS[task.priority]}
 📊 完成进度：${progress}%
@@ -392,6 +391,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
                         {format(new Date(task.reminder_time), "EEEE HH:mm", { locale: zhCN })}
+                        {task.end_time && ` - ${format(new Date(task.end_time), "HH:mm", { locale: zhCN })}`}
                       </p>
                     </div>
 

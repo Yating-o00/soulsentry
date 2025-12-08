@@ -28,7 +28,20 @@ export default function Tasks() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
+  const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
   const queryClient = useQueryClient();
+
+  const toggleTaskExpansion = (taskId) => {
+    setExpandedTaskIds(prev => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  };
 
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
@@ -310,20 +323,30 @@ export default function Tasks() {
                 onEdit={() => setEditingTask(task)}
                 onClick={() => setSelectedTask(task)}
                 onSubtaskToggle={handleSubtaskToggle}
+                onToggleSubtasks={() => toggleTaskExpansion(task.id)}
+                isExpanded={expandedTaskIds.has(task.id)}
               />
-              {getSubtasks(task.id).map(subtask => (
-                <div key={subtask.id} className="ml-8 relative pl-4 border-l-2 border-slate-200/50">
-                  <TaskCard
-                    task={subtask}
-                    hideSubtaskList={true}
-                    onComplete={() => handleSubtaskToggle(subtask)}
-                    onDelete={() => deleteTaskMutation.mutate(subtask.id)}
-                    onEdit={() => setEditingTask(subtask)}
-                    onClick={() => setSelectedTask(subtask)}
-                    onSubtaskToggle={handleSubtaskToggle}
-                  />
-                </div>
-              ))}
+              <AnimatePresence>
+                {expandedTaskIds.has(task.id) && getSubtasks(task.id).map(subtask => (
+                  <motion.div 
+                    key={subtask.id} 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="ml-8 relative pl-4 border-l-2 border-slate-200/50"
+                  >
+                    <TaskCard
+                      task={subtask}
+                      hideSubtaskList={true}
+                      onComplete={() => handleSubtaskToggle(subtask)}
+                      onDelete={() => deleteTaskMutation.mutate(subtask.id)}
+                      onEdit={() => setEditingTask(subtask)}
+                      onClick={() => setSelectedTask(subtask)}
+                      onSubtaskToggle={handleSubtaskToggle}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </React.Fragment>
           ))}
         </AnimatePresence>

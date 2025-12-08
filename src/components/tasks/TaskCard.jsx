@@ -30,6 +30,7 @@ import {
   StickyNote,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Circle,
   CheckCircle2,
   Share2, // Added Share2 icon
@@ -74,7 +75,7 @@ const PRIORITY_LABELS = {
   urgent: "紧急",
 };
 
-export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false }) {
+export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false); // Added state for share card
 
@@ -311,8 +312,19 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                   )}
 
                   {hasSubtasks && (
-                    <Badge className="bg-[#384877] text-white rounded-[8px] text-[13px]">
+                    <Badge 
+                      className={`bg-[#384877] text-white rounded-[8px] text-[13px] ${onToggleSubtasks ? 'cursor-pointer hover:bg-[#2c3b63] transition-colors' : ''}`}
+                      onClick={(e) => {
+                        if (onToggleSubtasks) {
+                          e.stopPropagation();
+                          onToggleSubtasks();
+                        }
+                      }}
+                    >
                       {subtasks.length} 个子任务
+                      {onToggleSubtasks && (
+                        isExpanded ? <ChevronUp className="w-3 h-3 ml-1 inline" /> : <ChevronDown className="w-3 h-3 ml-1 inline" />
+                      )}
                     </Badge>
                   )}
 

@@ -364,6 +364,7 @@ import React, { useState, useEffect, useRef } from "react";
                {[
                  { label: "📅 今日任务", text: "今天有哪些任务？" },
                  { label: "⚠️ 紧急事项", text: "列出紧急和过期的任务" },
+                 { label: "🌟 核心事项", text: "请以列表形式列出我的核心事项（高优先级、紧急或重要的任务）" },
                  { label: "📊 进度分析", text: "分析当前任务状况并给出建议" },
                ].map((action) => (
                  <button
@@ -477,19 +478,21 @@ import React, { useState, useEffect, useRef } from "react";
    
    function ToolCallDisplay({ toolCall }) {
      const getIcon = () => {
-       if (toolCall.name.includes("Task")) {
-         if (toolCall.name.includes("create")) return <CheckCircle2 className="w-3 h-3" />;
-         if (toolCall.name.includes("update")) return <Clock className="w-3 h-3" />;
-         if (toolCall.name.includes("read")) return <Calendar className="w-3 h-3" />;
-       }
+       if (toolCall.name.includes("create")) return <CheckCircle2 className="w-3 h-3" />;
+       if (toolCall.name.includes("update")) return <Clock className="w-3 h-3" />;
+       if (toolCall.name.includes("read") || toolCall.name.includes("list")) return <Calendar className="w-3 h-3" />;
+       if (toolCall.name.includes("delete")) return <AlertCircle className="w-3 h-3" />;
        return <AlertCircle className="w-3 h-3" />;
      };
    
      const getLabel = () => {
-       if (toolCall.name.includes("create")) return "创建任务";
-       if (toolCall.name.includes("update")) return "更新任务";
-       if (toolCall.name.includes("read")) return "查询任务";
-       if (toolCall.name.includes("delete")) return "删除任务";
+       const isTask = toolCall.name.includes("Task");
+       const suffix = isTask ? "任务" : "数据";
+
+       if (toolCall.name.includes("create")) return `创建${suffix}`;
+       if (toolCall.name.includes("update")) return `更新${suffix}`;
+       if (toolCall.name.includes("read") || toolCall.name.includes("list")) return `查询${suffix}`;
+       if (toolCall.name.includes("delete")) return `删除${suffix}`;
        return "执行操作";
      };
    

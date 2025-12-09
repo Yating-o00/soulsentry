@@ -165,7 +165,7 @@ export default function TaskDetailModal({ task, open, onClose }) {
     if (enhancements.subtasks && enhancements.subtasks.length > 0) {
       for (const st of enhancements.subtasks) {
         await createSubtaskMutation.mutateAsync({
-          title: st,
+          title: String(st || "新子任务"),
           parent_task_id: task.id,
           reminder_time: task.reminder_time,
           category: enhancements.category,

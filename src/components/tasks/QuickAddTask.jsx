@@ -273,7 +273,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         const hasSubtasks = taskData.subtasks && taskData.subtasks.length > 0;
         
         const mainTaskData = {
-          title: taskData.title,
+          title: String(taskData.title || "未命名任务"),
           description: taskData.description || "",
           reminder_time: taskData.reminder_time,
           priority: taskData.priority || "medium",
@@ -293,8 +293,17 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         if (hasSubtasks) {
           for (let i = 0; i < taskData.subtasks.length; i++) {
             const subtask = taskData.subtasks[i];
+            let subtaskTitle = "未命名子任务";
+            if (subtask && subtask.title) {
+                if (typeof subtask.title === 'object') {
+                    subtaskTitle = subtask.title.title || subtask.title.text || subtask.title.content || "未命名子任务";
+                } else {
+                    subtaskTitle = String(subtask.title);
+                }
+            }
+
             const subtaskData = {
-              title: `${subtask.order || i + 1}. ${typeof subtask.title === 'object' ? (subtask.title.title || subtask.title.text || "未命名子任务") : subtask.title}`,
+              title: `${subtask.order || i + 1}. ${subtaskTitle}`,
               description: subtask.description || "",
               reminder_time: subtask.reminder_time,
               priority: subtask.priority || taskData.priority || "medium",

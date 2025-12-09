@@ -335,23 +335,34 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     if (!task.title.trim() || !task.reminder_time) return;
 
     const reminderDateTime = new Date(task.reminder_time);
-    let endDateTime = null;
+    let endDateTime = task.end_time ? new Date(task.end_time) : null;
 
     if (!task.is_all_day) {
       const [hours, minutes] = task.time.split(':');
       reminderDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
 
-      if (task.has_end_time) {
-        endDateTime = new Date(task.reminder_time);
-        const [endHours, endMinutes] = task.end_time_str.split(':');
-        endDateTime.setHours(parseInt(endHours), parseInt(endMinutes), 0);
+      if (task.has_end_time || (task.end_time && task.end_time.getTime() !== task.reminder_time.getTime())) {
+        // If end_time date is present (from range), use it. Otherwise default to reminder_time (same day).
+        const baseEndDate = task.end_time || task.reminder_time;
+        endDateTime = new Date(baseEndDate);
         
-        // Handle next day if end time is before start time (optional logic, but for now assuming same day)
-        // actually, let's keep it simple: same day. If user wants next day, they might need a full date picker for end time, but usually "time range" implies same day for simple tasks.
+        // If has_end_time is true, use the specified end time. 
+        // Otherwise (multi-day range without specific end time), default to same time as start or end of day? 
+        // Using start time for consistency if not specified.
+        const timeStr = task.has_end_time ? task.end_time_str : task.time;
+        const [endHours, endMinutes] = timeStr.split(':');
+        endDateTime.setHours(parseInt(endHours), parseInt(endMinutes), 0);
+      } else {
+        // Single day, no specific end time
+        endDateTime = null;
       }
     } else {
-        // For all day tasks, we might not need specific times, but let's leave it as is for now or just set end_time if needed.
-        // Usually all day tasks don't have start/end times in HH:mm.
+        // All day task - keep dates as is (usually 00:00)
+        // If we have an end date, ensure it's set
+        if (endDateTime) {
+            // Optional: set to end of day? Or just keep date part. 
+            // Keeping date part (00:00) is standard for date-only comparison often.
+        }
     }
 
     const taskToSubmit = {
@@ -619,7 +630,12 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                             <span className="text-xs font-medium">日期</span>
                           </div>
                           {task.reminder_time ? (
-                            <span className="text-sm font-semibold text-slate-800">{format(task.reminder_time, "M月d日", { locale: zhCN })}</span>
+                            <span className="text-sm font-semibold text-slate-800">
+                              {format(task.reminder_time, "M月d日", { locale: zhCN })}
+                              {task.end_time && task.end_time.getTime() !== task.reminder_time.getTime() && (
+                                <> - {format(task.end_time, "M月d日", { locale: zhCN })}</>
+                              )}
+                            </span>
                           ) : (
                             <span className="text-xs text-slate-400">选择日期</span>
                           )}
@@ -628,9 +644,22 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
-                        mode="single"
-                        selected={task.reminder_time}
-                        onSelect={(date) => setTask({ ...task, reminder_time: date })}
+                        mode="range"
+                        selected={{
+                          from: task.reminder_time,
+                          to: task.end_time
+                        }}
+                        onSelect={(range) => {
+                          if (range?.from) {
+                            setTask({ 
+                              ...task, 
+                              reminder_time: range.from, 
+                              end_time: range.to || null // 'to' might be undefined if single day clicked
+                            });
+                          } else {
+                            setTask({ ...task, reminder_time: null, end_time: null });
+                          }
+                        }}
                         locale={zhCN}
                         initialFocus
                       />

@@ -281,7 +281,14 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                     {isSnoozed 
                       ? format(new Date(task.snooze_until), "M月d日 HH:mm", { locale: zhCN })
                       : task.end_time
-                        ? `${format(new Date(task.reminder_time), "M月d日 HH:mm", { locale: zhCN })} - ${format(new Date(task.end_time), "HH:mm", { locale: zhCN })}`
+                        ? (() => {
+                            const start = new Date(task.reminder_time);
+                            const end = new Date(task.end_time);
+                            const isSameDay = start.toDateString() === end.toDateString();
+                            return isSameDay 
+                              ? `${format(start, "M月d日 HH:mm", { locale: zhCN })} - ${format(end, "HH:mm", { locale: zhCN })}`
+                              : `${format(start, "M月d日 HH:mm", { locale: zhCN })} - ${format(end, "M月d日 HH:mm", { locale: zhCN })}`
+                          })()
                         : format(new Date(task.reminder_time), "M月d日 HH:mm", { locale: zhCN })
                     }
                   </Badge>

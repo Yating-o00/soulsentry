@@ -48,7 +48,7 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
 ${currentDescription ? `当前描述：${currentDescription}` : ""}
 
 请分析并提供：
-1. 完善的任务描述（如果当前描述为空或不完整，生成一个详细的描述；如果已有描述，优化它）
+1. 完善的任务描述（重要：必须基于用户当前的描述（如果有）进行润色和补充，保留所有原始关键信息和细节，不要随意丢弃或完全重写。如果描述为空，则根据标题生成详细描述。）
 2. 推荐的任务分类（从以下选项中选择最合适的：work, personal, health, study, family, shopping, finance, other）
 3. 推荐的优先级（从以下选项中选择：low, medium, high, urgent）
 4. 建议的标签（3-5个简短的标签，帮助快速识别任务）

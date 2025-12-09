@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle, X, Plus, ListTodo } from "lucide-react";
+import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle, X, Plus, ListTodo, Clock, Calendar, ShieldAlert } from "lucide-react";
+import { format } from "date-fns";
+import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
@@ -41,26 +43,31 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
 
     setIsAnalyzing(true);
     try {
+      const now = new Date().toISOString();
       const response = await base44.integrations.Core.InvokeLLM({
         prompt: `你是一个任务管理AI助手。根据用户输入的任务信息，提供智能建议。
 
 用户任务标题：${taskTitle}
 ${currentDescription ? `当前描述：${currentDescription}` : ""}
+当前时间：${now}
 
-请分析并提供：
-1. 完善的任务描述（重要：必须基于用户当前的描述（如果有）进行润色和补充，保留所有原始关键信息和细节，不要随意丢弃或完全重写。如果描述为空，则根据标题生成详细描述。）
-2. 推荐的任务分类（从以下选项中选择最合适的：work, personal, health, study, family, shopping, finance, other）
-3. 推荐的优先级（从以下选项中选择：low, medium, high, urgent）
-4. 建议的标签（3-5个简短的标签，帮助快速识别任务）
-5. 推荐的子任务（如果任务较复杂，建议拆分为3-5个子任务。如果已有描述中包含了步骤，请将其转换为子任务）
-6. 分析原因（简要说明为什么做出这些建议）
+请分析并提供以下JSON格式的建议：
+1. 完善的任务描述：基于用户输入润色补充，保留关键信息。
+2. 推荐分类：work/personal/health/study/family/shopping/finance/other。
+3. 推荐优先级：low/medium/high/urgent。
+4. 建议标签：3-5个。
+5. 推荐子任务：按执行顺序。
+6. **智能时间建议**：
+   - 最佳提醒时间 (reminder_time): 综合考虑任务性质和当前时间。
+   - 最佳执行时间段 (execution_start/end): 建议何时开始和完成此任务最佳。
+   - 时间建议理由 (time_reasoning): 为什么选择这个时间？
+7. **风险与依赖分析**：
+   - 潜在风险 (risks): 任务可能面临的阻碍。
+   - 风险等级 (risk_level): low/medium/high/critical。
+   - 关键依赖 (dependencies): 隐含的前置条件。
+8. 分析原因 (reasoning): 总体建议理由。
 
-注意：
-- 描述要具体、可执行，包含关键要点
-- 优先级判断要考虑紧迫性和重要性
-- 标签要简洁有用
-- 分类要准确反映任务性质
-- 子任务要按执行顺序排列`,
+注意：所有时间必须为ISO 8601格式 (YYYY-MM-DDTHH:mm:ss.sssZ)。`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -82,9 +89,16 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                 items: { type: "string" },
                 description: "建议的子任务列表"
             },
+            reminder_time: { type: "string", format: "date-time" },
+            execution_start: { type: "string", format: "date-time" },
+            execution_end: { type: "string", format: "date-time" },
+            time_reasoning: { type: "string" },
+            risks: { type: "array", items: { type: "string" } },
+            risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
+            dependencies: { type: "array", items: { type: "string" } },
             reasoning: { type: "string" }
           },
-          required: ["description", "category", "priority", "tags", "reasoning"]
+          required: ["description", "category", "priority", "tags", "reasoning", "risk_level"]
         }
       });
 
@@ -105,7 +119,21 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
       category: suggestions.category,
       priority: suggestions.priority,
       tags: suggestions.tags,
-      subtasks: suggestions.subtasks || []
+      subtasks: suggestions.subtasks || [],
+      // New fields
+      reminder_time: suggestions.reminder_time,
+      optimal_reminder_time: suggestions.reminder_time,
+      end_time: suggestions.execution_end,
+      ai_analysis: {
+        status_summary: "Initial Analysis",
+        risks: suggestions.risks || [],
+        risk_level: suggestions.risk_level || "low",
+        key_dependencies: suggestions.dependencies || [],
+        time_reasoning: suggestions.time_reasoning,
+        recommended_execution_start: suggestions.execution_start,
+        recommended_execution_end: suggestions.execution_end,
+        priority_reasoning: suggestions.reasoning
+      }
     });
     
     toast.success("已应用AI建议");
@@ -325,6 +353,68 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                       </div>
                   </div>
               )}
+
+              {/* 时间建议与风险分析 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* 智能时间 */}
+                  <div className="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100">
+                      <div className="flex items-center gap-2 mb-2 text-indigo-800">
+                          <Clock className="w-4 h-4" />
+                          <span className="text-xs font-bold">最佳执行时间</span>
+                      </div>
+                      <div className="space-y-1 text-xs text-indigo-700">
+                          {suggestions.reminder_time && (
+                              <div className="flex justify-between">
+                                  <span className="opacity-70">建议提醒:</span>
+                                  <span className="font-medium">{format(new Date(suggestions.reminder_time), "MM-dd HH:mm")}</span>
+                              </div>
+                          )}
+                          {suggestions.execution_start && (
+                              <div className="flex justify-between">
+                                  <span className="opacity-70">建议执行:</span>
+                                  <span className="font-medium">
+                                      {format(new Date(suggestions.execution_start), "MM-dd HH:mm")}
+                                      {suggestions.execution_end && ` - ${format(new Date(suggestions.execution_end), "HH:mm")}`}
+                                  </span>
+                              </div>
+                          )}
+                          {suggestions.time_reasoning && (
+                              <p className="mt-1 pt-1 border-t border-indigo-200/50 opacity-80 leading-snug">
+                                  {suggestions.time_reasoning}
+                              </p>
+                          )}
+                      </div>
+                  </div>
+
+                  {/* 风险分析 */}
+                  <div className={`p-3 rounded-lg border ${
+                      suggestions.risk_level === 'high' || suggestions.risk_level === 'critical' 
+                      ? 'bg-red-50 border-red-100' 
+                      : 'bg-amber-50 border-amber-100'
+                  }`}>
+                      <div className={`flex items-center gap-2 mb-2 ${
+                          suggestions.risk_level === 'high' || suggestions.risk_level === 'critical' 
+                          ? 'text-red-800' 
+                          : 'text-amber-800'
+                      }`}>
+                          <ShieldAlert className="w-4 h-4" />
+                          <span className="text-xs font-bold">
+                              风险等级: {suggestions.risk_level?.toUpperCase() || 'LOW'}
+                          </span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                          {suggestions.risks?.length > 0 ? (
+                              <ul className="list-disc list-inside space-y-0.5 opacity-80">
+                                  {suggestions.risks.map((risk, i) => (
+                                      <li key={i}>{risk}</li>
+                                  ))}
+                              </ul>
+                          ) : (
+                              <span className="opacity-60">未检测到显著风险</span>
+                          )}
+                      </div>
+                  </div>
+              </div>
 
               {/* AI分析原因 */}
               <div className="bg-gradient-to-r from-[#4FC3F7]/10 to-[#1BA1CD]/10 rounded-lg p-3 border border-[#384877]/20">

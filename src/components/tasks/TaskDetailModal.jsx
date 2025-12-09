@@ -297,20 +297,26 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               4. 关键依赖：从文本或视觉推断的先决条件。
               5. 可行的建议。
               6. 建议优先级：基于截止日期、风险和状态，建议优先级（low/medium/high/urgent）并提供理由。
+              7. 风险评估：评估任务风险等级（low/medium/high/critical）。
+              8. 时间建议：基于任务性质，建议最佳执行时间段（start/end）及理由。
               
-              Return ONLY JSON. All string values in the response must be in Chinese (except for enum keys like priority).`,
+              Return ONLY JSON. All string values in the response must be in Chinese (except for enum keys like priority). Time format: ISO 8601.`,
               file_urls: mediaAttachments.length > 0 ? mediaAttachments : undefined,
               response_json_schema: {
                   type: "object",
                   properties: {
                       status_summary: { type: "string" },
                       risks: { type: "array", items: { type: "string" } },
+                      risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
                       key_dependencies: { type: "array", items: { type: "string" } },
                       suggestions: { type: "array", items: { type: "string" } },
                       suggested_priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-                      priority_reasoning: { type: "string" }
+                      priority_reasoning: { type: "string" },
+                      recommended_execution_start: { type: "string", format: "date-time" },
+                      recommended_execution_end: { type: "string", format: "date-time" },
+                      time_reasoning: { type: "string" }
                   },
-                  required: ["status_summary", "risks", "suggested_priority"]
+                  required: ["status_summary", "risks", "suggested_priority", "risk_level"]
               }
           });
 
@@ -400,14 +406,37 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                           <span className="text-slate-500 text-xs block mb-1">状态摘要</span>
                           <p className="text-slate-700 leading-relaxed">{task.ai_analysis.status_summary}</p>
                       </div>
-                      {task.ai_analysis.risks?.length > 0 && (
-                          <div className="bg-red-50/50 p-3 rounded-lg border border-red-100/50">
-                              <span className="text-red-500 text-xs block mb-1 font-medium">⚠️ 潜在风险</span>
+                      
+                      {/* Risk Section */}
+                      <div className={`p-3 rounded-lg border ${
+                          ['high', 'critical'].includes(task.ai_analysis.risk_level) ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'
+                      }`}>
+                          <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs font-medium ${['high', 'critical'].includes(task.ai_analysis.risk_level) ? 'text-red-600' : 'text-amber-600'}`}>
+                                  ⚠️ 风险评估: {task.ai_analysis.risk_level?.toUpperCase() || 'N/A'}
+                              </span>
+                          </div>
+                          {task.ai_analysis.risks?.length > 0 ? (
                               <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
                                   {task.ai_analysis.risks.map((risk, i) => <li key={i}>{risk}</li>)}
                               </ul>
+                          ) : <span className="text-xs text-slate-500">无显著风险</span>}
+                      </div>
+
+                      {/* Time Suggestion Section */}
+                      {(task.ai_analysis.recommended_execution_start || task.ai_analysis.time_reasoning) && (
+                          <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100/50">
+                              <span className="text-blue-600 text-xs block mb-1 font-medium">⏰ 最佳执行时间建议</span>
+                              {task.ai_analysis.recommended_execution_start && (
+                                  <div className="text-xs font-semibold text-slate-700 mb-1">
+                                      {format(new Date(task.ai_analysis.recommended_execution_start), "MM月dd日 HH:mm")}
+                                      {task.ai_analysis.recommended_execution_end && ` - ${format(new Date(task.ai_analysis.recommended_execution_end), "HH:mm")}`}
+                                  </div>
+                              )}
+                              <p className="text-xs text-slate-600 italic">{task.ai_analysis.time_reasoning}</p>
                           </div>
                       )}
+
                       {task.ai_analysis.key_dependencies?.length > 0 && (
                           <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-100/50">
                               <span className="text-amber-600 text-xs block mb-1 font-medium">🔗 关键依赖</span>

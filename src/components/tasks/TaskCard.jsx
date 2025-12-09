@@ -15,6 +15,8 @@ import {
   Trash2,
   Edit,
   Sparkles,
+  ShieldAlert,
+  CalendarClock,
   Briefcase,
   User,
   Heart,
@@ -349,6 +351,27 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                     >
                       <Sparkles className="w-3 h-3 mr-1" />
                       建议: {PRIORITY_LABELS[task.ai_analysis.suggested_priority]}
+                    </Badge>
+                  )}
+
+                  {task.ai_analysis?.risk_level && ['high', 'critical'].includes(task.ai_analysis.risk_level) && (
+                     <Badge 
+                      className="bg-red-100 text-red-600 border-red-200 rounded-[8px] text-[13px]"
+                      title={`高风险任务: ${task.ai_analysis.risks?.join('; ')}`}
+                    >
+                      <ShieldAlert className="w-3 h-3 mr-1" />
+                      {task.ai_analysis.risk_level === 'critical' ? '极高风险' : '高风险'}
+                    </Badge>
+                  )}
+
+                  {task.ai_analysis?.recommended_execution_start && (
+                     <Badge 
+                      variant="outline"
+                      className="bg-blue-50 text-blue-600 border-blue-200 rounded-[8px] text-[13px]"
+                      title={`AI 建议时间: ${task.ai_analysis.time_reasoning}`}
+                    >
+                      <CalendarClock className="w-3 h-3 mr-1" />
+                      建议: {format(new Date(task.ai_analysis.recommended_execution_start), "MM-dd HH:mm")}
                     </Badge>
                   )}
 

@@ -565,13 +565,27 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                       category: aiSuggestions.category,
                       priority: aiSuggestions.priority,
                       tags: aiSuggestions.tags || [],
+                      // Update reminder time if AI suggests a better one and user didn't manually lock it (conceptually)
+                      // Here we just apply it as it's an "Enhancer" action
+                      reminder_time: aiSuggestions.reminder_time ? new Date(aiSuggestions.reminder_time) : task.reminder_time,
+                      time: aiSuggestions.reminder_time ? format(new Date(aiSuggestions.reminder_time), "HH:mm") : task.time,
+                      
+                      // Also set end time if suggested
+                      end_time: aiSuggestions.end_time ? new Date(aiSuggestions.end_time) : task.end_time,
+                      has_end_time: !!aiSuggestions.end_time || task.has_end_time,
+                      end_time_str: aiSuggestions.end_time ? format(new Date(aiSuggestions.end_time), "HH:mm") : task.end_time_str,
+
                       subtasks: aiSuggestions.subtasks ? aiSuggestions.subtasks.map(st => ({
                           title: typeof st === 'object' ? (st.title || st.text || st.content || JSON.stringify(st)) : st,
                           description: "",
-                          reminder_time: task.reminder_time || new Date().toISOString(),
+                          reminder_time: aiSuggestions.reminder_time || task.reminder_time || new Date().toISOString(),
                           priority: "medium"
                       })) : (task.subtasks || [])
                     });
+                    
+                    if (aiSuggestions.reminder_time) {
+                        toast.success("已根据AI建议更新提醒时间");
+                    }
                   }}
                 />
 

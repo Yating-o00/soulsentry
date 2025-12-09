@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle, X, Plus, ListTodo, Clock, Calendar, ShieldAlert } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -34,6 +36,7 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [newTag, setNewTag] = useState("");
+  const [preserveDescription, setPreserveDescription] = useState(false);
 
   const handleAnalyze = async () => {
     if (!taskTitle.trim()) {
@@ -115,7 +118,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
     if (!suggestions) return;
     
     onApply({
-      description: suggestions.description,
+      description: preserveDescription ? (currentDescription || suggestions.description) : suggestions.description,
       category: suggestions.category,
       priority: suggestions.priority,
       tags: suggestions.tags,
@@ -428,14 +431,26 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
               </div>
 
               {/* 操作按钮 */}
-              <div className="flex gap-2 pt-2">
-                <Button
-                  onClick={handleApplySuggestions}
-                  className="flex-1 bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#0ea5e9] hover:to-[#0284c7] text-white rounded-lg"
-                >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  应用所有建议
-                </Button>
+              <div className="flex flex-col gap-3 pt-2">
+                <div className="flex items-center space-x-2 px-1">
+                  <Switch 
+                    id="preserve-mode" 
+                    checked={preserveDescription}
+                    onCheckedChange={setPreserveDescription}
+                  />
+                  <Label htmlFor="preserve-mode" className="text-sm font-medium text-slate-600 cursor-pointer">
+                    保留原任务描述 (仅应用属性和其他建议)
+                  </Label>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleApplySuggestions}
+                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#0ea5e9] hover:to-[#0284c7] text-white rounded-lg"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    应用建议
+                  </Button>
                 <Button
                   onClick={() => setSuggestions(null)}
                   variant="outline"

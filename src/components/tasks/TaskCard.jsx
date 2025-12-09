@@ -34,10 +34,12 @@ import {
   Circle,
   CheckCircle2,
   Share2, // Added Share2 icon
-  RotateCcw
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import TaskShareCard from "./TaskShareCard"; // Added import for TaskShareCard
+  RotateCcw,
+  Link as LinkIcon,
+  Ban
+  } from "lucide-react";
+  import { motion, AnimatePresence } from "framer-motion";
+  import TaskShareCard from "./TaskShareCard"; // Added import for TaskShareCard
 
 const CATEGORY_ICONS = {
   work: Briefcase,
@@ -92,8 +94,24 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
   const CategoryIcon = CATEGORY_ICONS[task.category] || MoreHorizontal;
   const isCompleted = task.status === "completed";
   const isSnoozed = task.status === "snoozed";
-  const isPast = new Date(task.reminder_time) < new Date() && !isCompleted && !isSnoozed;
+  const isBlocked = task.status === "blocked";
+  const isPast = new Date(task.reminder_time) < new Date() && !isCompleted && !isSnoozed && !isBlocked;
   const hasSubtasks = subtasks.length > 0;
+
+  // Fetch dependencies info if blocked or has dependencies
+  const { data: dependencies = [] } = useQuery({
+      queryKey: ['task-dependencies', task.id],
+      queryFn: async () => {
+          if (!task.dependencies || task.dependencies.length === 0) return [];
+          // This might be inefficient for list view, but it's a trade-off for MVP. 
+          // Better would be to fetch all tasks once in parent.
+          // Assuming base44.entities.Task.list supports ids filter if implemented, but here we filter manually or use separate calls
+          // Optimization: In a real app, we'd pass allTasks map.
+          // For now, we only show dependency count or simple status.
+          return []; 
+      },
+      enabled: false // Disable auto fetch for list view performance, just use counts or passed data if available
+  });
 
   // 计算子任务完成进度
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
@@ -129,13 +147,15 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
           className={`group border border-[#e5e9ef] hover:border-[#c8d1e0] hover:shadow-lg transition-all duration-200 bg-white rounded-[16px] ${
             isCompleted
               ? 'opacity-60'
+              : isBlocked
+              ? 'border-l-[3px] border-l-[#f43f5e] bg-red-50/30'
               : isSnoozed
               ? 'border-l-[3px] border-l-[#fbbf24]'
               : isPast
               ? 'border-l-[3px] border-l-[#d5495f]'
               : 'hover:translate-y-[-1px]'
-          }`}
-        >
+            }`}
+            >
           {/* 主任务 */}
           <div className="p-5">
             <div className="flex items-start gap-4">
@@ -265,6 +285,20 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                 )}
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {isBlocked && (
+                      <Badge className="bg-[#f43f5e] text-white rounded-[8px] text-[13px] border-[#f43f5e] flex items-center gap-1 animate-pulse">
+                          <Ban className="w-3 h-3" />
+                          阻塞中
+                      </Badge>
+                  )}
+
+                  {task.dependencies && task.dependencies.length > 0 && (
+                       <Badge variant="outline" className="text-slate-500 border-slate-200 rounded-[8px] text-[13px] flex items-center gap-1">
+                          <LinkIcon className="w-3 h-3" />
+                          依赖 {task.dependencies.length} 项
+                      </Badge>
+                  )}
+
                   <Badge
                     variant="outline"
                     className={`${CATEGORY_COLORS[task.category]} border rounded-[8px] text-[13px] font-medium`}

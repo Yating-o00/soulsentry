@@ -32,6 +32,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import TaskComments from "./TaskComments";
 import AITaskEnhancer from "./AITaskEnhancer";
+import TaskDependencySelector from "./TaskDependencySelector";
+import { Link as LinkIcon } from "lucide-react";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -208,9 +210,47 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     });
 
     setNewNote("");
-  };
+    };
 
-  const handleDeleteNote = async (index) => {
+    const handleUpdateDependencies = async (newDependencyIds) => {
+      // Check if we need to update status
+      // If we add a dependency that is NOT completed, task might become blocked
+      // We'll let the backend or a separate logic handle status, but here we update the list
+      // Or we can simple check here:
+
+      // For now, just update the list. The parent component or logic should handle status updates if we want automation.
+      // But user asked for "automatically mark". 
+      // We can check the status of the added dependencies here.
+
+      let newStatus = task.status;
+
+      if (newDependencyIds.length > 0) {
+           const allTasks = await base44.entities.Task.list(); // Ideally fetch only needed, but list is ok for now
+           const blockingTasks = allTasks.filter(t => newDependencyIds.includes(t.id) && t.status !== 'completed');
+
+           if (blockingTasks.length > 0 && task.status !== 'completed') {
+               newStatus = 'blocked';
+           } else if (blockingTasks.length === 0 && task.status === 'blocked') {
+               newStatus = 'pending'; // Unblock if no blocking tasks
+           }
+      } else if (task.status === 'blocked') {
+          newStatus = 'pending';
+      }
+
+      await updateTaskMutation.mutateAsync({
+          id: task.id,
+          data: { 
+              dependencies: newDependencyIds,
+              status: newStatus
+          }
+      });
+
+      if (newStatus === 'blocked') {
+          toast("任务已标记为阻塞状态 (等待前置任务完成)", { icon: "🚫" });
+      }
+    };
+
+    const handleDeleteNote = async (index) => {
     const updatedNotes = task.notes.filter((_, i) => i !== index);
     await updateTaskMutation.mutateAsync({
       id: task.id,
@@ -416,6 +456,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               <TabsTrigger value="subtasks">
                 子任务 ({totalSubtasks})
               </TabsTrigger>
+              <TabsTrigger value="dependencies">
+                依赖 ({task.dependencies?.length || 0})
+              </TabsTrigger>
               <TabsTrigger value="attachments">
                 附件 ({task.attachments?.length || 0})
               </TabsTrigger>
@@ -425,9 +468,18 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               <TabsTrigger value="comments">
                 评论
               </TabsTrigger>
-            </TabsList>
+              </TabsList>
 
-            {/* Subtasks Tab */}
+              {/* Dependencies Tab */}
+              <TabsContent value="dependencies" className="space-y-4">
+                <TaskDependencySelector 
+                    currentTask={task}
+                    selectedDependencyIds={task.dependencies || []}
+                    onUpdate={handleUpdateDependencies}
+                />
+              </TabsContent>
+
+              {/* Subtasks Tab */}
             <TabsContent value="subtasks" className="space-y-4">
               <div className="flex gap-2">
                 <Input

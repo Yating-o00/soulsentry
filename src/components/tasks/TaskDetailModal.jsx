@@ -233,20 +233,20 @@ export default function TaskDetailModal({ task, open, onClose }) {
           `;
 
           const res = await base44.integrations.Core.InvokeLLM({
-              prompt: `Analyze this task status, risks, and dependencies based on the provided context and any attached media (images/videos).
+              prompt: `基于提供的上下文和附件（图片/视频），分析此任务的状态、风险和依赖关系。请务必使用中文回答所有文本内容。
               
               Context:
               ${context}
               
               Tasks:
-              1. Visual Analysis (if media provided): Identify key information, blockers, or context from attached images/videos.
-              2. Status Summary: Combine text and visual insights into a brief summary (2-3 sentences). Highlight any visual evidence of progress or issues.
-              3. Potential Risks: E.g. stalled subtasks, visual defects, high priority but low progress.
-              4. Key Dependencies: Prerequisites inferred from text or visuals.
-              5. Actionable Suggestions.
-              6. Suggest Priority: Based on deadline, risks, and status, suggest a priority (low/medium/high/urgent) and provide reasoning.
+              1. 视觉分析（如果有媒体附件）：从附件中识别关键信息、阻碍因素或上下文。
+              2. 状态摘要：结合文本和视觉见解生成简短摘要（2-3句）。强调任何进度的视觉证据或问题。
+              3. 潜在风险：例如停滞的子任务、视觉缺陷、高优先级但进度低等。
+              4. 关键依赖：从文本或视觉推断的先决条件。
+              5. 可行的建议。
+              6. 建议优先级：基于截止日期、风险和状态，建议优先级（low/medium/high/urgent）并提供理由。
               
-              Return ONLY JSON.`,
+              Return ONLY JSON. All string values in the response must be in Chinese (except for enum keys like priority).`,
               file_urls: mediaAttachments.length > 0 ? mediaAttachments : undefined,
               response_json_schema: {
                   type: "object",

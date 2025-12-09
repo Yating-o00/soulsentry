@@ -453,7 +453,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
           {!isExpanded ? (
             <div className="space-y-4">
               {/* AI 智能助手标识 */}
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-blue-500" />
@@ -462,76 +462,70 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   <span className="text-xs text-slate-400">·</span>
                   <span className="text-xs text-slate-500">智能创建任务</span>
                 </div>
-                {browserSupported && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={startVoiceInput}
-                    className="h-9 w-9 hover:bg-[#e0f2fe] rounded-full group transition-all relative"
-                    title="语音输入"
-                  >
-                    <Mic className="w-4 h-4 text-[#52525b] group-hover:text-[#0891b2] transition-colors" />
-                    <motion.div
-                      className="absolute inset-0 rounded-full bg-[#06b6d4]"
-                      initial={{ scale: 0, opacity: 0 }}
-                      whileHover={{ scale: 1.2, opacity: 0.15 }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  </Button>
-                )}
               </div>
               
-              {/* 超大新建任务按钮 */}
-              <button
-                onClick={() => setIsExpanded(true)}
-                className="w-full group relative overflow-hidden"
-              >
-                <div className="relative flex items-center gap-4 px-6 py-5 rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/50 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300">
-                  {/* 图标 */}
-                  <div className="relative">
-                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] flex items-center justify-center shadow-lg shadow-[#3b5aa2]/25 group-hover:shadow-[#3b5aa2]/40 group-hover:scale-105 transition-all duration-300">
-                      <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
+              <div className="flex gap-4 h-[100px]">
+                {/* 文本输入按钮 */}
+                <button
+                  onClick={() => setIsExpanded(true)}
+                  className="flex-1 group relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/30 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300"
+                >
+                  <div className="relative flex items-center h-full px-5 gap-4">
+                    <div className="relative flex-shrink-0">
+                      <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
+                        <Plus className="w-6 h-6 text-[#3b5aa2]" strokeWidth={2.5} />
+                      </div>
                     </div>
-                    <motion.div
-                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#d5495f] flex items-center justify-center shadow-md"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: [0, 1.2, 1] }}
-                      transition={{ duration: 0.5, delay: 0.2 }}
-                    >
-                      <Sparkles className="w-3 h-3 text-white" />
-                    </motion.div>
-                  </div>
-                  
-                  {/* 文字 */}
-                  <div className="flex-1 text-left">
-                    <div className="text-[17px] font-semibold text-[#222222] mb-0.5 tracking-tight">
-                      创建新任务
-                    </div>
-                    <div className="text-[15px] text-[#52525b]">
-                      开始输入或使用语音快速创建
+                    <div className="text-left">
+                      <div className="text-[16px] font-semibold text-[#222222] mb-0.5">
+                        手动创建
+                      </div>
+                      <div className="text-[13px] text-[#52525b]">
+                        点击输入任务详情
+                      </div>
                     </div>
                   </div>
                   
-                  {/* 右侧提示 */}
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <kbd className="px-2 py-1 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded">
-                      Ctrl
-                    </kbd>
-                    <span className="text-sm">+</span>
-                    <kbd className="px-2 py-1 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded">
-                      N
-                    </kbd>
-                  </div>
-                </div>
-                
-                {/* 背景动画 */}
-                <motion.div
-                  className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/5 to-purple-500/5"
-                  initial={{ opacity: 0 }}
-                  whileHover={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                />
-              </button>
+                  <motion.div
+                    className="absolute inset-0 bg-blue-500/5"
+                    initial={{ opacity: 0 }}
+                    whileHover={{ opacity: 1 }}
+                  />
+                </button>
+
+                {/* 语音输入按钮 - 高亮强调 */}
+                {browserSupported && (
+                  <button
+                    onClick={startVoiceInput}
+                    className="flex-[0.8] group relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] text-white shadow-lg shadow-[#3b5aa2]/25 hover:shadow-[#3b5aa2]/40 hover:-translate-y-0.5 transition-all duration-300"
+                  >
+                    <div className="relative flex items-center justify-center h-full gap-3 px-4">
+                      <div className="relative">
+                        <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
+                          <Mic className="w-6 h-6 text-white" />
+                        </div>
+                        <motion.div
+                          className="absolute inset-0 rounded-xl bg-white/20"
+                          animate={{ scale: [1, 1.4, 1], opacity: [0, 0.5, 0] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                        />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-[16px] font-bold">
+                          语音创建
+                        </div>
+                        <div className="text-[12px] text-blue-100/90">
+                          AI 自动识别
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* 装饰光效 */}
+                    <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 w-16 h-16 bg-blue-400/20 rounded-full blur-xl -ml-8 -mb-8 pointer-events-none" />
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <AnimatePresence>

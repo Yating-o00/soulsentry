@@ -52,7 +52,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
 2. 推荐的任务分类（从以下选项中选择最合适的：work, personal, health, study, family, shopping, finance, other）
 3. 推荐的优先级（从以下选项中选择：low, medium, high, urgent）
 4. 建议的标签（3-5个简短的标签，帮助快速识别任务）
-5. 推荐的子任务（如果任务较复杂，建议拆分为3-5个子任务）
+5. 推荐的子任务（如果任务较复杂，建议拆分为3-5个子任务。如果已有描述中包含了步骤，请将其转换为子任务）
 6. 分析原因（简要说明为什么做出这些建议）
 
 注意：

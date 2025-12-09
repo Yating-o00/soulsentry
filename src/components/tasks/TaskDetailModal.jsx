@@ -33,11 +33,22 @@ import { toast } from "sonner";
 import TaskComments from "./TaskComments";
 import AITaskEnhancer from "./AITaskEnhancer";
 
-export default function TaskDetailModal({ task, open, onClose }) {
+export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
   const [newNote, setNewNote] = useState("");
   const queryClient = useQueryClient();
+
+  // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
+  const { data: task = initialTaskData } = useQuery({
+    queryKey: ['task', initialTaskData?.id],
+    queryFn: async () => {
+        const res = await base44.entities.Task.filter({ id: initialTaskData.id });
+        return res[0];
+    },
+    enabled: !!initialTaskData?.id && open,
+    initialData: initialTaskData,
+  });
 
   const { data: subtasks = [] } = useQuery({
     queryKey: ['subtasks', task?.id],
@@ -51,6 +62,7 @@ export default function TaskDetailModal({ task, open, onClose }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      queryClient.invalidateQueries({ queryKey: ['task', task?.id] });
     },
   });
 

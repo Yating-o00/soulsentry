@@ -118,6 +118,33 @@ export default function Tasks() {
 
   const handleComplete = (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";
+    
+    // Automation: Unblock dependent tasks if this task is completed
+    if (newStatus === 'completed') {
+        const dependentTasks = allTasks.filter(t => 
+            t.dependencies && 
+            t.dependencies.includes(task.id) && 
+            t.status === 'blocked'
+        );
+        
+        dependentTasks.forEach(depTask => {
+             const dependencies = depTask.dependencies || [];
+             // Check if all OTHER dependencies are completed
+             const otherDepIds = dependencies.filter(id => id !== task.id);
+             // We need current status of other tasks. allTasks has current state.
+             const otherDeps = allTasks.filter(t => otherDepIds.includes(t.id));
+             const allOthersCompleted = otherDeps.every(t => t.status === 'completed');
+             
+             if (allOthersCompleted) {
+                 updateTaskMutation.mutate({
+                     id: depTask.id,
+                     data: { status: 'pending' }
+                 });
+                 toast.success(`任务 "${depTask.title}" 已解除阻塞`, { icon: "🔓" });
+             }
+        });
+    }
+
     updateTaskMutation.mutate({
       id: task.id,
       data: { status: newStatus }

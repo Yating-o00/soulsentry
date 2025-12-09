@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,6 +47,7 @@ const PRIORITIES = [
 ];
 
 export default function QuickAddTask({ onAdd, initialData = null }) {
+  const queryClient = useQueryClient();
   const [isExpanded, setIsExpanded] = useState(!!initialData);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
@@ -327,10 +329,11 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         { id: 'bulk-create' }
       );
       
-      if (onAdd) {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      
+      if (onAdd && typeof onAdd === 'function' && !initialData) {
+        // Optional: call onAdd if it expects a callback, though we handled creation internally
+        // onAdd(createdMainTask); // complicated because we created multiple
       }
     } catch (error) {
       console.error("Error creating tasks:", error);
@@ -587,42 +590,44 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   rows={2}
                 />
 
-                {/* 子任务列表 */}
-                <div className="space-y-2">
-                    {task.subtasks && task.subtasks.length > 0 && (
-                        <div className="space-y-2 pl-2 border-l-2 border-slate-100">
-                            {task.subtasks.map((st, idx) => (
-                                <div key={idx} className="flex items-center gap-2 text-sm">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                                    <Input 
-                                        value={st.title} 
-                                        onChange={(e) => {
-                                            const newSubtasks = [...task.subtasks];
-                                            newSubtasks[idx].title = e.target.value;
-                                            setTask({...task, subtasks: newSubtasks});
-                                        }}
-                                        className="h-8 border-none bg-transparent focus-visible:ring-0 p-0"
-                                    />
-                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => {
-                                        const newSubtasks = task.subtasks.filter((_, i) => i !== idx);
-                                        setTask({...task, subtasks: newSubtasks});
-                                    }}>
-                                        <Trash2 className="w-3 h-3" />
-                                    </Button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    <Button type="button" variant="ghost" size="sm" className="text-xs text-slate-500 hover:text-blue-600" onClick={() => {
-                        setTask({
-                            ...task, 
-                            subtasks: [...(task.subtasks || []), { title: "", description: "", priority: "medium", reminder_time: task.reminder_time }]
-                        });
-                    }}>
-                        <ListTodo className="w-3.5 h-3.5 mr-1.5" />
-                        添加子任务
-                    </Button>
-                </div>
+                {/* 子任务列表 (仅在创建模式下显示) */}
+                {!initialData && (
+                  <div className="space-y-2">
+                      {task.subtasks && task.subtasks.length > 0 && (
+                          <div className="space-y-2 pl-2 border-l-2 border-slate-100">
+                              {task.subtasks.map((st, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 text-sm">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                                      <Input 
+                                          value={st.title} 
+                                          onChange={(e) => {
+                                              const newSubtasks = [...task.subtasks];
+                                              newSubtasks[idx].title = e.target.value;
+                                              setTask({...task, subtasks: newSubtasks});
+                                          }}
+                                          className="h-8 border-none bg-transparent focus-visible:ring-0 p-0"
+                                      />
+                                      <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => {
+                                          const newSubtasks = task.subtasks.filter((_, i) => i !== idx);
+                                          setTask({...task, subtasks: newSubtasks});
+                                      }}>
+                                          <Trash2 className="w-3 h-3" />
+                                      </Button>
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                      <Button type="button" variant="ghost" size="sm" className="text-xs text-slate-500 hover:text-blue-600" onClick={() => {
+                          setTask({
+                              ...task, 
+                              subtasks: [...(task.subtasks || []), { title: "", description: "", priority: "medium", reminder_time: task.reminder_time }]
+                          });
+                      }}>
+                          <ListTodo className="w-3.5 h-3.5 mr-1.5" />
+                          添加子任务
+                      </Button>
+                  </div>
+                )}
 
                 {/* 快速设置栏 - 图标化 */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

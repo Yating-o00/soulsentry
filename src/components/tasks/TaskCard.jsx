@@ -269,6 +269,27 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                                 <Edit className="mr-2 h-4 w-4" />
                                 编辑任务
                             </DropdownMenuItem>
+
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
+                                <AlertCircle className="mr-2 h-4 w-4" />
+                                优先级
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onUpdate && onUpdate({ priority: 'low' }); }}>
+                                  低优先级
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onUpdate && onUpdate({ priority: 'medium' }); }}>
+                                  中优先级
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onUpdate && onUpdate({ priority: 'high' }); }}>
+                                  高优先级
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onUpdate && onUpdate({ priority: 'urgent' }); }}>
+                                  紧急
+                                </DropdownMenuItem>
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
                             <DropdownMenuItem onClick={(e) => {
                                 e.stopPropagation();
                                 setShowShareCard(true);

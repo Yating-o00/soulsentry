@@ -33,7 +33,8 @@ import { toast } from "sonner";
 import TaskComments from "./TaskComments";
 import AITaskEnhancer from "./AITaskEnhancer";
 import TaskDependencySelector from "./TaskDependencySelector";
-import { Link as LinkIcon } from "lucide-react";
+import { Link as LinkIcon, BrainCircuit } from "lucide-react";
+import ReminderStrategyEditor from "./ReminderStrategyEditor";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -400,7 +401,21 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               <TabsTrigger value="comments">
                 评论
               </TabsTrigger>
+              <TabsTrigger value="strategy">
+                AI 提醒
+              </TabsTrigger>
               </TabsList>
+
+              {/* AI Strategy Tab */}
+              <TabsContent value="strategy" className="space-y-4">
+                  <ReminderStrategyEditor 
+                      task={task} 
+                      onUpdate={(strategy) => updateTaskMutation.mutate({
+                          id: task.id,
+                          data: { reminder_strategy: strategy }
+                      })}
+                  />
+              </TabsContent>
 
               {/* Dependencies Tab */}
               <TabsContent value="dependencies" className="space-y-4">

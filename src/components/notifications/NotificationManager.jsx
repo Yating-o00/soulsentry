@@ -28,6 +28,13 @@ export default function NotificationManager() {
     refetchInterval: 30000, // 每30秒检查一次
   });
 
+  // 获取最近的用户行为，用于动态调整提醒
+  const { data: recentBehaviors = [] } = useQuery({
+    queryKey: ['recentBehaviors'],
+    queryFn: () => base44.entities.UserBehavior.list('-created_date', 20),
+    refetchInterval: 60000, 
+  });
+
   const { data: rules = [] } = useQuery({
     queryKey: ['notificationRules'],
     queryFn: () => base44.entities.NotificationRule.list(),
@@ -81,11 +88,31 @@ export default function NotificationManager() {
 
     const soundToPlay = matchingRule ? matchingRule.action_sound : (task.notification_sound || "default");
 
-    const title = isAdvanceReminder 
+    // 处理高级提醒策略的消息
+    let title = isAdvanceReminder 
       ? `📋 即将到来：${task.title}`
       : `⏰ 提醒：${task.title}`;
-    
-    const body = task.description || "现在是完成这个任务的时间";
+    let body = task.description || "现在是完成这个任务的时间";
+    let messageType = "default";
+
+    // 检查是否有自定义策略消息
+    if (isAdvanceReminder && task.reminder_strategy?.steps) {
+        // 查找匹配的step
+        // 注意：这里的匹配逻辑比较简单，实际上可能需要传递具体触发的minutes
+        // 为了简化，我们假设isAdvanceReminder如果是对象，包含了具体的step信息
+        // 或者我们通过遍历找到最接近的
+    }
+
+    // 如果传入了具体的消息配置 (用于复杂策略)
+    if (typeof isAdvanceReminder === 'object' && isAdvanceReminder.custom_message) {
+        title = isAdvanceReminder.title || title;
+        body = isAdvanceReminder.custom_message;
+        messageType = isAdvanceReminder.message_type;
+        
+        if (messageType === 'urgent') title = `🚨 紧急提醒：${task.title}`;
+        if (messageType === 'encouraging') title = `✨ 加油：${task.title}`;
+        if (messageType === 'summary') title = `📊 状态摘要：${task.title}`;
+    }
 
     const notification = new Notification(title, {
       body,
@@ -265,20 +292,107 @@ export default function NotificationManager() {
       const ruleAdvanceReminders = matchingRule?.action_advance_minutes || [];
       const allAdvanceReminders = [...new Set([...(task.advance_reminders || []), ...ruleAdvanceReminders])];
 
-      // 检查提前提醒
-      if (allAdvanceReminders.length > 0) {
-        allAdvanceReminders.forEach(minutes => {
+      // 检查提前提醒 (标准 + 高级策略)
+      const strategySteps = task.reminder_strategy?.steps || [];
+      
+      // 合并标准提前提醒和策略步骤
+      const standardAdvance = allAdvanceReminders.map(m => ({ offset_minutes: m, type: 'standard' }));
+      const allCheckPoints = [...standardAdvance, ...strategySteps];
+
+      if (allCheckPoints.length > 0) {
+        allCheckPoints.forEach(point => {
+          const minutes = point.offset_minutes;
           const advanceTime = new Date(reminderTime.getTime() - minutes * 60000);
-          const checkKey = `${task.id}-advance-${minutes}`;
+          const checkKey = `${task.id}-advance-${minutes}-${point.type || 'strategy'}`;
           
           if (isPast(advanceTime) && !checkedTasks.current.has(checkKey)) {
             const minutesUntil = differenceInMinutes(reminderTime, now);
-            if (minutesUntil > 0 && minutesUntil <= minutes) {
-              sendNotification(task, true);
+            // 允许稍微过期的检查（比如最近1分钟内），避免错过
+            if (minutesUntil <= minutes && minutesUntil > minutes - 5) {
+              
+              if (point.type === 'standard') {
+                  sendNotification(task, true);
+              } else {
+                  // 高级策略提醒
+                  sendNotification(task, {
+                      custom_message: point.custom_message || `还有 ${minutes} 分钟截止`,
+                      message_type: point.message_type,
+                      title: `⏳ ${task.title} 倒计时`
+                  });
+              }
               checkedTasks.current.add(checkKey);
             }
           }
         });
+      }
+
+      // Proactive: 检查是否为遗漏的重要任务 (High/Urgent, Overdue > 24h, Not Completed)
+      // 且未被Snooze, 且未交互过
+      if (['high', 'urgent'].includes(task.priority) && 
+          task.status === 'pending' && 
+          !task.snooze_until &&
+          isPast(reminderTime)) {
+            
+            const hoursOverdue = Math.abs(differenceInMinutes(now, reminderTime)) / 60;
+            const proactiveKey = `${task.id}-proactive-nag`;
+
+            // 如果超过24小时未处理，且没有被此逻辑触发过
+            if (hoursOverdue > 24 && !checkedTasks.current.has(proactiveKey)) {
+                // 检查用户最近是否活跃但忽略了此任务
+                const recentActivity = recentBehaviors.length > 0;
+                
+                if (recentActivity) {
+                    sendNotification(task, {
+                        custom_message: `检测到此重要任务已逾期 ${Math.round(hoursOverdue)} 小时。建议重新规划时间或分解任务。`,
+                        message_type: 'urgent',
+                        title: `⚠️ 遗漏任务关注：${task.title}`
+                    });
+                    checkedTasks.current.add(proactiveKey);
+                    
+                    // 记录AI主动干预
+                    logBehaviorMutation.mutate({
+                        event_type: "ai_proactive_remind",
+                        task_id: task.id,
+                        hour_of_day: new Date().getHours(),
+                        day_of_week: new Date().getDay(),
+                        category: task.category,
+                        metadata: { reason: "high_priority_neglected" }
+                    });
+                }
+            }
+      }
+
+      // Dynamic Adjustment: 简单的动态调整逻辑
+      // 如果任务设置了 dynamic_adjustment，并且现在距离提醒时间还有一段距离
+      if (task.reminder_strategy?.dynamic_adjustment && !isPast(reminderTime)) {
+          const minutesUntil = differenceInMinutes(reminderTime, now);
+          // 比如在提醒前 2 小时检查
+          if (minutesUntil > 115 && minutesUntil < 125) {
+             const dynamicKey = `${task.id}-dynamic-check`;
+             if (!checkedTasks.current.has(dynamicKey)) {
+                 // 这里可以调用LLM判断，但为了性能，我们做简单的启发式
+                 // 如果用户在当前时间段通常不活跃（基于recentBehaviors），则建议推迟
+                 // 简化：如果最近1小时没有行为，发送一个询问
+                 const lastBehavior = recentBehaviors[0];
+                 const lastBehaviorTime = lastBehavior ? new Date(lastBehavior.created_date) : null;
+                 const isInactive = !lastBehaviorTime || differenceInMinutes(now, lastBehaviorTime) > 60;
+
+                 if (isInactive) {
+                    // 用户不活跃，可能不在电脑旁，发送一个 gentle 提醒建议调整
+                    // 注意：这里实际发送通知可能打扰，最好是静默的或者是App内的Toast
+                    // 我们这里模拟发送一个引导性通知
+                    /* 
+                    sendNotification(task, {
+                        custom_message: "检测到您当前可能不在线，是否需要将此任务提醒推迟到更晚？",
+                        message_type: "encouraging",
+                        title: "🤖 智能调整建议"
+                    });
+                    */
+                    // 暂时注释掉以免太烦人，仅作为架构预留
+                 }
+                 checkedTasks.current.add(dynamicKey);
+             }
+          }
       }
     });
 

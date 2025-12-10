@@ -91,7 +91,7 @@ const PRIORITY_LABELS = {
   urgent: "紧急",
 };
 
-export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false }) {
+export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false); // Added state for share card
 

@@ -385,26 +385,27 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
           )}
 
           <Tabs defaultValue="subtasks" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="subtasks">
+            <TabsList className="flex w-full overflow-x-auto justify-start gap-2 p-1 bg-slate-100/80 rounded-xl h-auto scrollbar-hide">
+              <TabsTrigger value="subtasks" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 子任务 ({totalSubtasks})
               </TabsTrigger>
-              <TabsTrigger value="dependencies">
+              <TabsTrigger value="dependencies" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 依赖 ({task.dependencies?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="attachments">
+              <TabsTrigger value="attachments" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 附件 ({task.attachments?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="notes">
+              <TabsTrigger value="notes" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 笔记 ({task.notes?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="comments">
+              <TabsTrigger value="comments" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 评论
               </TabsTrigger>
-              <TabsTrigger value="strategy">
+              <TabsTrigger value="strategy" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1.5">
+                <BrainCircuit className="w-3.5 h-3.5 text-indigo-500" />
                 AI 提醒
               </TabsTrigger>
-              </TabsList>
+            </TabsList>
 
               {/* AI Strategy Tab */}
               <TabsContent value="strategy" className="space-y-4">

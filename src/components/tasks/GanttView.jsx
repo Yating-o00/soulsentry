@@ -14,10 +14,8 @@ import {
   ChevronDown, 
   Calendar as CalendarIcon, 
   ZoomIn, 
-  ZoomOut,
-  Maximize2
+  ZoomOut
 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Layout constants
 const HEADER_HEIGHT = 56;
@@ -32,7 +30,6 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
   
   const headerRef = useRef(null);
   const bodyRef = useRef(null);
-  const sidebarRef = useRef(null);
 
   // Initialize expanded tasks
   useEffect(() => {
@@ -43,7 +40,7 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
        }
     });
     setExpandedTasks(initialExpanded);
-  }, [tasks.length]); // Only on init/count change
+  }, [tasks.length]); 
 
   // Calculate timeline range dynamically
   useEffect(() => {
@@ -116,11 +113,8 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
   const getWidth = (start, end) => {
     if (!end) return dayWidth; 
     let diff = differenceInDays(startOfDay(new Date(end)), startOfDay(new Date(start)));
-    // Add 1 day if end time is later than start time significantly? 
-    // Usually Gantt includes the end day if it's inclusive.
-    // Base44 tasks usually are point in time or range. Let's assume inclusive range if end date provided.
     if (diff < 0) diff = 0;
-    return (diff + 1) * dayWidth; // +1 to include the full end day
+    return (diff + 1) * dayWidth; 
   };
 
   const handleDragEnd = (task, info) => {
@@ -157,7 +151,7 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
   return (
     <div className="flex flex-col h-[calc(100vh-180px)] border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden select-none">
       {/* Toolbar */}
-      <div className="h-14 border-b px-4 flex items-center justify-between bg-white z-20">
+      <div className="h-14 border-b px-4 flex items-center justify-between bg-white z-20 shrink-0">
         <div className="flex items-center gap-2">
             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-indigo-600" />
@@ -245,7 +239,7 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
           >
               <div className="flex flex-col min-w-full relative">
                   {/* Grid Lines Overlay */}
-                  <div className="absolute inset-0 left-[280px] flex pointer-events-none z-0">
+                  <div className="absolute inset-0 flex pointer-events-none z-0" style={{ left: SIDEBAR_WIDTH }}>
                       {days.map((day, i) => {
                           const isWeekendDay = isWeekend(day);
                           return (
@@ -266,9 +260,7 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
                               className="flex items-stretch hover:bg-slate-50/80 transition-colors group"
                               style={{ height: TASK_HEIGHT }}
                           >
-                              {/* Sidebar Item (Sticky Left simulated by structure or just rendered here) */}
-                              {/* Since we are scrolling the whole container horizontally, we need the sidebar to be sticky. 
-                                  CSS sticky is best here. */}
+                              {/* Sidebar Item (Sticky Left) */}
                               <div 
                                   className="sticky left-0 z-20 flex-shrink-0 border-r border-slate-200 bg-white group-hover:bg-slate-50 transition-colors flex items-center px-4"
                                   style={{ width: SIDEBAR_WIDTH }}
@@ -296,7 +288,7 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
                               </div>
 
                               {/* Timeline Bar */}
-                              <div className="relative flex-1" style={{ width: days.length * dayWidth }}>
+                              <div className="relative flex-shrink-0" style={{ width: days.length * dayWidth }}>
                                    {/* The Task Bar */}
                                    <TooltipProvider>
                                       <Tooltip>

@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, GanttChartSquare } from "lucide-react";
+import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3 } from "lucide-react";
 import GanttView from "../components/tasks/GanttView";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,7 +30,7 @@ export default function Tasks() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
-  const [viewMode, setViewMode] = useState("list"); // "list" or "gantt"
+  const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt'
   const queryClient = useQueryClient();
 
   const toggleTaskExpansion = (taskId) => {
@@ -318,46 +318,19 @@ export default function Tasks() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full justify-between items-center">
-          <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto">
-            <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
-              <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-                全部
-              </TabsTrigger>
-              <TabsTrigger value="pending" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-                进行中
-              </TabsTrigger>
-              <TabsTrigger value="completed" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
-                已完成
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <div className="flex bg-white p-1 rounded-[12px] shadow-sm border border-slate-100">
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-2 rounded-[8px] transition-all flex items-center gap-2 text-sm font-medium ${
-                viewMode === "list" 
-                  ? "bg-slate-100 text-slate-900 shadow-sm" 
-                  : "text-slate-500 hover:bg-slate-50"
-              }`}
-            >
-              <LayoutList className="w-4 h-4" />
-              列表
-            </button>
-            <button
-              onClick={() => setViewMode("gantt")}
-              className={`p-2 rounded-[8px] transition-all flex items-center gap-2 text-sm font-medium ${
-                viewMode === "gantt" 
-                  ? "bg-blue-50 text-blue-700 shadow-sm border border-blue-100" 
-                  : "text-slate-500 hover:bg-slate-50"
-              }`}
-            >
-              <GanttChartSquare className="w-4 h-4" />
-              甘特图
-            </button>
-          </div>
-        </div>
+        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
+          <TabsList className="grid w-full md:w-auto grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
+            <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              全部 ({tasks.length})
+            </TabsTrigger>
+            <TabsTrigger value="pending" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              进行中 ({tasks.filter(t => t.status === "pending").length})
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              已完成 ({tasks.filter(t => t.status === "completed").length})
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </motion.div>
 
       <motion.div
@@ -366,13 +339,6 @@ export default function Tasks() {
         transition={{ delay: 0.2 }}
         className="space-y-3"
       >
-        {viewMode === "gantt" ? (
-           <GanttView 
-              tasks={filteredTasks} 
-              onUpdateTask={(payload) => updateTaskMutation.mutate(payload)}
-              onTaskClick={(task) => setSelectedTask(task)}
-           />
-        ) : (
         <AnimatePresence mode="popLayout">
           {rootTasks.map((task) => (
             <React.Fragment key={task.id}>
@@ -412,7 +378,6 @@ export default function Tasks() {
             </React.Fragment>
           ))}
         </AnimatePresence>
-        )}
 
         {filteredTasks.length === 0 && (
           <motion.div

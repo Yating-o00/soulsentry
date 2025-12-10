@@ -373,6 +373,7 @@ export default function Tasks() {
                 onComplete={() => handleComplete(task)}
                 onDelete={() => deleteTaskMutation.mutate(task.id)}
                 onEdit={() => setEditingTask(task)}
+                onUpdate={(data) => updateTaskMutation.mutate({ id: task.id, data })}
                 onClick={() => setSelectedTask(task)}
                 onSubtaskToggle={handleSubtaskToggle}
                 onToggleSubtasks={() => toggleTaskExpansion(task.id)}

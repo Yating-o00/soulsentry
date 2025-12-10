@@ -241,40 +241,56 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                       </>
                     ) : (
                       <>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowShareCard(true);
-                          }}
-                          className="h-8 w-8 hover:bg-[#e0f2fe] hover:text-[#0891b2] rounded-lg"
-                          title="分享任务"
-                        >
-                          <Share2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit();
-                          }}
-                          className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#384877] rounded-lg"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete();
-                          }}
-                          className="h-8 w-8 hover:bg-[#fee2e2] hover:text-[#dc2626] rounded-lg"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#384877] rounded-lg"
+                            >
+                              <MoreIcon className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel>快速操作</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation();
+                                onComplete();
+                            }}>
+                                {isCompleted ? <Circle className="mr-2 h-4 w-4" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                {isCompleted ? "标记未完成" : "标记完成"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation();
+                                onEdit();
+                            }}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                编辑任务
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation();
+                                setShowShareCard(true);
+                            }}>
+                                <Share2 className="mr-2 h-4 w-4" />
+                                分享任务
+                            </DropdownMenuItem>
+                            
+                            <DropdownMenuSeparator />
+                            
+                            <DropdownMenuItem 
+                                className="text-red-600 focus:text-red-600"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDelete();
+                                }}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                移至回收站
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </>
                     )}
                   </div>

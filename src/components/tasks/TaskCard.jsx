@@ -38,10 +38,22 @@ import {
   Share2, // Added Share2 icon
   RotateCcw,
   Link as LinkIcon,
-  Ban
+  Ban,
+  MessageSquare,
+  ArrowUpCircle,
+  CheckCircle,
+  MoreVertical
   } from "lucide-react";
   import { motion, AnimatePresence } from "framer-motion";
-  import TaskShareCard from "./TaskShareCard"; // Added import for TaskShareCard
+  import TaskShareCard from "./TaskShareCard";
+  import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+    DropdownMenuLabel
+  } from "@/components/ui/dropdown-menu";
 
 const CATEGORY_ICONS = {
   work: Briefcase,
@@ -227,44 +239,69 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onClick, 
                           彻底删除
                         </Button>
                       </>
-                    ) : (
+                      ) : (
                       <>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowShareCard(true);
-                          }}
-                          className="h-8 w-8 hover:bg-[#e0f2fe] hover:text-[#0891b2] rounded-lg"
-                          title="分享任务"
-                        >
-                          <Share2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit();
-                          }}
-                          className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#384877] rounded-lg"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete();
-                          }}
-                          className="h-8 w-8 hover:bg-[#fee2e2] hover:text-[#dc2626] rounded-lg"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#384877] rounded-lg"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel>快速操作</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              onComplete();
+                            }}>
+                              <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                              {isCompleted ? "标记未完成" : "标记完成"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              onEdit(); // Opens edit modal which has priority
+                            }}>
+                              <ArrowUpCircle className="w-4 h-4 mr-2 text-blue-600" />
+                              调整优先级/编辑
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              // Open detail modal with comments tab focused? 
+                              // For now just open detail, user can click tab. 
+                              // Ideally pass a prop to open specific tab.
+                              onClick(); 
+                            }}>
+                              <MessageSquare className="w-4 h-4 mr-2 text-slate-500" />
+                              查看详情/评论
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setShowShareCard(true);
+                            }}>
+                              <Share2 className="w-4 h-4 mr-2 text-cyan-600" />
+                              分享任务
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete();
+                              }}
+                              className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              删除任务
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </>
-                    )}
+                      )}
                   </div>
                 </div>
 

@@ -356,13 +356,15 @@ export default function Tasks() {
         transition={{ delay: 0.2 }}
         className="space-y-3"
       >
-        {viewMode === 'gantt' ? (
+        {viewMode === 'gantt' && (
            <GanttView 
               tasks={filteredTasks} 
               onUpdateTask={({ id, data }) => updateTaskMutation.mutate({ id, data })}
               onTaskClick={(task) => setSelectedTask(task)}
            />
-        ) : (
+        )}
+
+        {viewMode === 'list' && (
         <AnimatePresence mode="popLayout">
           {rootTasks.map((task) => (
             <React.Fragment key={task.id}>

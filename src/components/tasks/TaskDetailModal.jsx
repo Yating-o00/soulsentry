@@ -338,12 +338,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <DialogTitle className="text-[20px] font-semibold tracking-tight text-[#222222]">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-6 border-b shrink-0 bg-white z-10">
+          <DialogTitle className="text-[20px] font-semibold tracking-tight text-[#222222] line-clamp-1 pr-8">
             {task.title}
           </DialogTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 absolute right-12 top-6">
              <Button 
                 variant="outline" 
                 size="sm" 
@@ -357,7 +357,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
           </div>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <AITaskEnhancer 
             taskTitle={task.title} 
             currentDescription={task.description} 

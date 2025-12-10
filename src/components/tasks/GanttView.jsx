@@ -1,28 +1,89 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import { format, addDays, startOfDay, differenceInDays, isSameDay } from "date-fns";
+import React, { useState, useRef, useEffect } from "react";
+import { format, addDays, startOfDay, differenceInDays, isSameDay, startOfWeek, endOfWeek, eachDayOfInterval, isWeekend } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { 
+  Tooltip, 
+  TooltipContent, 
+  TooltipProvider, 
+  TooltipTrigger 
+} from "@/components/ui/tooltip";
+import { 
+  ChevronRight, 
+  ChevronDown, 
+  Calendar as CalendarIcon, 
+  ZoomIn, 
+  ZoomOut,
+  Maximize2
+} from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Constants for layout
-const DAY_WIDTH = 50; 
-const HEADER_HEIGHT = 50;
-const TASK_HEIGHT = 40;
-const TASK_GAP = 8;
-const SIDEBAR_WIDTH = 250;
+// Layout constants
+const HEADER_HEIGHT = 56;
+const TASK_HEIGHT = 44;
+const SIDEBAR_WIDTH = 280;
 
 export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
-  const [dateRange, setDateRange] = useState({ start: addDays(new Date(), -2), end: addDays(new Date(), 14) });
+  const [viewScale, setViewScale] = useState("day"); // 'day', 'week'
+  const [dayWidth, setDayWidth] = useState(60);
   const [expandedTasks, setExpandedTasks] = useState(new Set());
-  const scrollContainerRef = useRef(null);
-
-  // Flatten tasks logic
-  const rootTasks = useMemo(() => tasks.filter(t => !t.parent_task_id), [tasks]);
+  const [dateRange, setDateRange] = useState({ start: addDays(new Date(), -3), end: addDays(new Date(), 14) });
   
+  const headerRef = useRef(null);
+  const bodyRef = useRef(null);
+  const sidebarRef = useRef(null);
+
+  // Initialize expanded tasks
+  useEffect(() => {
+    const initialExpanded = new Set();
+    tasks.forEach(t => {
+       if (tasks.some(sub => sub.parent_task_id === t.id)) {
+           initialExpanded.add(t.id);
+       }
+    });
+    setExpandedTasks(initialExpanded);
+  }, [tasks.length]); // Only on init/count change
+
+  // Calculate timeline range dynamically
+  useEffect(() => {
+    if (tasks.length > 0) {
+      const dates = tasks.flatMap(t => [
+          new Date(t.reminder_time), 
+          t.end_time ? new Date(t.end_time) : new Date(t.reminder_time)
+      ]).filter(d => !isNaN(d));
+
+      if (dates.length > 0) {
+          const minDate = new Date(Math.min(...dates));
+          const maxDate = new Date(Math.max(...dates));
+          
+          // Add buffer
+          let start = addDays(minDate, -7);
+          let end = addDays(maxDate, 14);
+          
+          // Adjust to start of week if week view
+          if (viewScale === 'week') {
+              start = startOfWeek(start, { weekStartsOn: 1 });
+              end = endOfWeek(end, { weekStartsOn: 1 });
+          }
+          
+          setDateRange({ start, end });
+      }
+    }
+  }, [tasks.length, viewScale]);
+
+  // Sync scrolling
+  const handleBodyScroll = (e) => {
+    if (headerRef.current) {
+      headerRef.current.scrollLeft = e.target.scrollLeft;
+    }
+  };
+
+  // Helper functions
+  const rootTasks = tasks.filter(t => !t.parent_task_id);
   const getSubtasks = (parentId) => tasks.filter(t => t.parent_task_id === parentId);
 
-  const visibleTasks = useMemo(() => {
+  const getVisibleTasks = () => {
     let visible = [];
     const traverse = (taskList, level = 0) => {
       taskList.forEach(task => {
@@ -34,25 +95,9 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
     };
     traverse(rootTasks);
     return visible;
-  }, [tasks, expandedTasks, rootTasks]);
+  };
 
-  // Adjust date range dynamically
-  useEffect(() => {
-    if (tasks.length > 0) {
-      const dates = tasks.flatMap(t => [
-        t.reminder_time ? new Date(t.reminder_time) : new Date(),
-        t.end_time ? new Date(t.end_time) : (t.reminder_time ? new Date(t.reminder_time) : new Date())
-      ]);
-      const minDate = new Date(Math.min(...dates));
-      const maxDate = new Date(Math.max(...dates));
-      
-      // Add buffer
-      setDateRange({
-        start: addDays(minDate, -5),
-        end: addDays(maxDate, 10)
-      });
-    }
-  }, [tasks.length]);
+  const visibleTasks = getVisibleTasks();
 
   const toggleExpand = (taskId) => {
     setExpandedTasks(prev => {
@@ -64,29 +109,27 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
   };
 
   const getPosition = (date) => {
-    const d = date ? new Date(date) : new Date();
-    const diff = differenceInDays(startOfDay(d), startOfDay(dateRange.start));
-    return diff * DAY_WIDTH;
+    const diff = differenceInDays(startOfDay(new Date(date)), startOfDay(dateRange.start));
+    return diff * dayWidth;
   };
 
   const getWidth = (start, end) => {
-    const s = start ? new Date(start) : new Date();
-    const e = end ? new Date(end) : s;
-    let diff = differenceInDays(startOfDay(e), startOfDay(s));
-    if (diff < 1) diff = 1; 
-    return diff * DAY_WIDTH;
+    if (!end) return dayWidth; 
+    let diff = differenceInDays(startOfDay(new Date(end)), startOfDay(new Date(start)));
+    // Add 1 day if end time is later than start time significantly? 
+    // Usually Gantt includes the end day if it's inclusive.
+    // Base44 tasks usually are point in time or range. Let's assume inclusive range if end date provided.
+    if (diff < 0) diff = 0;
+    return (diff + 1) * dayWidth; // +1 to include the full end day
   };
 
   const handleDragEnd = (task, info) => {
     const moveX = info.offset.x;
-    const daysMoved = Math.round(moveX / DAY_WIDTH);
+    const daysMoved = Math.round(moveX / dayWidth);
     
     if (daysMoved !== 0) {
-      const currentStart = task.reminder_time ? new Date(task.reminder_time) : new Date();
-      const currentEnd = task.end_time ? new Date(task.end_time) : null;
-      
-      const newStart = addDays(currentStart, daysMoved);
-      const newEnd = currentEnd ? addDays(currentEnd, daysMoved) : null;
+      const newStart = addDays(new Date(task.reminder_time), daysMoved);
+      const newEnd = task.end_time ? addDays(new Date(task.end_time), daysMoved) : null;
       
       onUpdateTask({
         id: task.id,
@@ -99,178 +142,213 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
   };
 
   // Generate timeline headers
-  const days = [];
-  let curr = startOfDay(dateRange.start);
-  const end = startOfDay(dateRange.end);
-  while (curr <= end) {
-    days.push(new Date(curr));
-    curr = addDays(curr, 1);
-  }
+  const days = eachDayOfInterval({
+      start: startOfDay(dateRange.start),
+      end: startOfDay(dateRange.end)
+  });
 
-  // Calculate coordinates for dependency lines
-  const getTaskCoordinates = (taskId) => {
-    const index = visibleTasks.findIndex(t => t.id === taskId);
-    if (index === -1) return null;
-    const task = visibleTasks[index];
-    
-    const x = getPosition(task.reminder_time);
-    const width = getWidth(task.reminder_time, task.end_time);
-    const y = index * (TASK_HEIGHT + TASK_GAP) + TASK_HEIGHT / 2;
-    
-    return { x, y, width, rightX: x + width };
+  const scrollToToday = () => {
+      if (bodyRef.current) {
+          const todayPos = getPosition(new Date());
+          bodyRef.current.scrollTo({ left: todayPos - 300, behavior: 'smooth' });
+      }
   };
 
   return (
-    <div className="flex flex-col h-[600px] border rounded-xl bg-white shadow-sm overflow-hidden">
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className="w-[200px] md:w-[250px] flex-shrink-0 border-r bg-slate-50 flex flex-col z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-          <div className="h-[50px] border-b flex items-center px-4 font-semibold text-slate-700 bg-white flex-shrink-0">
-            任务列表
-          </div>
-          <div className="flex-1 overflow-y-hidden hover:overflow-y-auto scrollbar-hide">
-            <div style={{ height: visibleTasks.length * (TASK_HEIGHT + TASK_GAP) + 20 }}>
-              {visibleTasks.map((task) => (
-                <div 
-                  key={task.id}
-                  className="flex items-center px-4 hover:bg-white transition-colors cursor-pointer text-sm truncate border-b border-dashed border-slate-100"
-                  style={{ height: TASK_HEIGHT + TASK_GAP, paddingLeft: `${task.level * 16 + 16}px` }}
-                  onClick={() => onTaskClick(task)}
-                >
-                  {getSubtasks(task.id).length > 0 ? (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}
-                      className="mr-1.5 p-0.5 hover:bg-slate-200 rounded text-slate-500"
-                    >
-                      {expandedTasks.has(task.id) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    </button>
-                  ) : <span className="w-4 mr-1.5" />}
-                  <span className={`truncate ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}`}>
-                    {task.title}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+    <div className="flex flex-col h-[calc(100vh-180px)] border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden select-none">
+      {/* Toolbar */}
+      <div className="h-14 border-b px-4 flex items-center justify-between bg-white z-20">
+        <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-indigo-600" />
+                时间规划
+            </h3>
+            <div className="h-4 w-px bg-slate-200 mx-2" />
+            <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={scrollToToday}
+                className="text-xs h-8"
+            >
+                回到今天
+            </Button>
         </div>
-
-        {/* Timeline */}
-        <div className="flex-1 overflow-auto relative bg-slate-50/30" ref={scrollContainerRef}>
-          <div style={{ width: days.length * DAY_WIDTH, minHeight: '100%' }}>
-            {/* Header */}
-            <div className="sticky top-0 left-0 right-0 h-[50px] bg-white border-b flex z-10 shadow-sm">
-              {days.map((day, i) => (
-                <div 
-                  key={i} 
-                  className={`flex-shrink-0 border-r flex flex-col items-center justify-center text-xs ${isSameDay(day, new Date()) ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-500'}`}
-                  style={{ width: DAY_WIDTH }}
+        
+        <div className="flex items-center gap-2">
+             <div className="flex items-center border rounded-lg p-0.5 bg-slate-50">
+                <button 
+                    onClick={() => { setViewScale('day'); setDayWidth(60); }}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewScale === 'day' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                  <span>{format(day, 'dd')}</span>
-                  <span className="text-[10px] scale-90">{format(day, 'EEE', { locale: zhCN })}</span>
-                </div>
-              ))}
-            </div>
+                    日视图
+                </button>
+                <button 
+                    onClick={() => { setViewScale('week'); setDayWidth(30); }}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewScale === 'week' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    周视图
+                </button>
+             </div>
+             
+             <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-slate-50 ml-2">
+                <button onClick={() => setDayWidth(Math.max(20, dayWidth - 10))} className="p-1.5 hover:bg-white rounded-md text-slate-500"><ZoomOut className="w-4 h-4" /></button>
+                <span className="text-[10px] w-8 text-center text-slate-400">{dayWidth}px</span>
+                <button onClick={() => setDayWidth(Math.min(200, dayWidth + 10))} className="p-1.5 hover:bg-white rounded-md text-slate-500"><ZoomIn className="w-4 h-4" /></button>
+             </div>
+        </div>
+      </div>
 
-            <div className="relative" style={{ height: visibleTasks.length * (TASK_HEIGHT + TASK_GAP) + 20 }}>
-              {/* Grid Lines */}
-              <div className="absolute inset-0 flex pointer-events-none">
-                {days.map((_, i) => (
-                  <div key={i} className="border-r h-full border-slate-200/40" style={{ width: DAY_WIDTH }}></div>
-                ))}
+      {/* Main Content Area - Synchronized Scrolling */}
+      <div className="flex-1 flex flex-col min-h-0 relative">
+          
+          {/* Fixed Header Row */}
+          <div className="flex flex-shrink-0 border-b bg-slate-50/80 backdrop-blur-sm z-10">
+              {/* Sidebar Header */}
+              <div 
+                  className="flex-shrink-0 border-r border-slate-200 flex items-center px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50"
+                  style={{ width: SIDEBAR_WIDTH, height: HEADER_HEIGHT }}
+              >
+                  任务列表
               </div>
-
-              {/* Dependency Lines (SVG) */}
-              <svg className="absolute inset-0 pointer-events-none w-full h-full z-0">
-                 {visibleTasks.map(task => 
-                   (task.dependencies || []).map(depId => {
-                     const startCoords = getTaskCoordinates(depId);
-                     const endCoords = getTaskCoordinates(task.id);
-                     
-                     if (!startCoords || !endCoords) return null;
-
-                     // Simple curve path
-                     const path = `M ${startCoords.rightX} ${startCoords.y} 
-                                   C ${startCoords.rightX + 15} ${startCoords.y}, 
-                                     ${endCoords.x - 15} ${endCoords.y}, 
-                                     ${endCoords.x} ${endCoords.y}`;
-
-                     return (
-                       <g key={`${depId}-${task.id}`}>
-                         <path d={path} fill="none" stroke="#cbd5e1" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
-                       </g>
-                     );
-                   })
-                 )}
-                 <defs>
-                   <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto">
-                     <polygon points="0 0, 6 2, 0 4" fill="#94a3b8" />
-                   </marker>
-                 </defs>
-              </svg>
-
-              {/* Task Bars */}
-              {visibleTasks.map((task, index) => {
-                const left = getPosition(task.reminder_time);
-                const width = getWidth(task.reminder_time, task.end_time);
-                const isGroup = getSubtasks(task.id).length > 0;
-                
-                return (
-                  <div 
-                    key={task.id}
-                    className="absolute w-full"
-                    style={{ top: index * (TASK_HEIGHT + TASK_GAP), height: TASK_HEIGHT + TASK_GAP }}
-                  >
-                    <TooltipProvider>
-                      <Tooltip delayDuration={0}>
-                        <TooltipTrigger asChild>
-                          <motion.div
-                            drag="x"
-                            dragMomentum={false}
-                            dragConstraints={scrollContainerRef}
-                            onDragEnd={(e, info) => handleDragEnd(task, info)}
-                            className={`absolute top-1 rounded-[6px] shadow-sm border flex items-center px-2 text-xs truncate cursor-grab active:cursor-grabbing group transition-colors ${
-                              task.status === 'completed' ? 'bg-slate-100 border-slate-200 text-slate-400' :
-                              task.priority === 'urgent' ? 'bg-rose-100 border-rose-200 text-rose-700 hover:bg-rose-200' :
-                              task.priority === 'high' ? 'bg-orange-100 border-orange-200 text-orange-700 hover:bg-orange-200' :
-                              isGroup ? 'bg-slate-800 border-slate-700 text-slate-100' :
-                              'bg-blue-100 border-blue-200 text-blue-700 hover:bg-blue-200'
-                            }`}
-                            style={{ 
-                              left, 
-                              width: Math.max(width - 4, 30),
-                              height: TASK_HEIGHT - 8,
-                              zIndex: 10
-                            }}
-                            whileHover={{ scale: 1.02, zIndex: 20 }}
-                            whileTap={{ scale: 0.98 }}
+              
+              {/* Timeline Header (Scrolls horizontally via ref sync) */}
+              <div 
+                  ref={headerRef}
+                  className="flex-1 overflow-hidden flex"
+              >
+                  {days.map((day, i) => {
+                      const isToday = isSameDay(day, new Date());
+                      const isWeekendDay = isWeekend(day);
+                      return (
+                          <div 
+                              key={i} 
+                              className={`flex-shrink-0 flex flex-col items-center justify-center border-r border-slate-100 ${isToday ? 'bg-indigo-50/50' : isWeekendDay ? 'bg-slate-50/50' : ''}`}
+                              style={{ width: dayWidth, height: HEADER_HEIGHT }}
                           >
-                             {isGroup && (
-                               <div className="absolute inset-x-0 -bottom-1 h-2 flex justify-between px-1">
-                                  <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px] border-l-transparent border-r-transparent border-t-slate-700"></div>
-                                  <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px] border-l-transparent border-r-transparent border-t-slate-700"></div>
-                               </div>
-                             )}
-                             <span className="truncate font-medium relative z-10">{task.title}</span>
-                          </motion.div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="bg-slate-900 text-white border-0 text-xs p-2">
-                          <p className="font-bold">{task.title}</p>
-                          <p className="opacity-80">
-                            {format(new Date(task.reminder_time), 'MM-dd HH:mm')}
-                            {task.end_time && ` -> ${format(new Date(task.end_time), 'MM-dd HH:mm')}`}
-                          </p>
-                          {task.dependencies?.length > 0 && (
-                            <p className="text-orange-300 mt-1">依赖: {task.dependencies.length} 项</p>
-                          )}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                );
-              })}
-            </div>
+                              <span className={`text-[10px] font-medium ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                                  {format(day, 'EEE', { locale: zhCN })}
+                              </span>
+                              <div className={`text-sm font-bold mt-0.5 w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>
+                                  {format(day, 'd')}
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
           </div>
-        </div>
+
+          {/* Scrollable Body Row */}
+          <div 
+              ref={bodyRef}
+              onScroll={handleBodyScroll}
+              className="flex-1 overflow-auto flex"
+          >
+              <div className="flex flex-col min-w-full relative">
+                  {/* Grid Lines Overlay */}
+                  <div className="absolute inset-0 left-[280px] flex pointer-events-none z-0">
+                      {days.map((day, i) => {
+                          const isWeekendDay = isWeekend(day);
+                          return (
+                            <div 
+                                key={i} 
+                                className={`flex-shrink-0 border-r border-slate-100 h-full ${isWeekendDay ? 'bg-slate-50/30' : ''}`}
+                                style={{ width: dayWidth }} 
+                            />
+                          );
+                      })}
+                  </div>
+
+                  {/* Task Rows */}
+                  <div className="flex flex-col relative z-0 pb-10">
+                      {visibleTasks.map((task) => (
+                          <div 
+                              key={task.id} 
+                              className="flex items-stretch hover:bg-slate-50/80 transition-colors group"
+                              style={{ height: TASK_HEIGHT }}
+                          >
+                              {/* Sidebar Item (Sticky Left simulated by structure or just rendered here) */}
+                              {/* Since we are scrolling the whole container horizontally, we need the sidebar to be sticky. 
+                                  CSS sticky is best here. */}
+                              <div 
+                                  className="sticky left-0 z-20 flex-shrink-0 border-r border-slate-200 bg-white group-hover:bg-slate-50 transition-colors flex items-center px-4"
+                                  style={{ width: SIDEBAR_WIDTH }}
+                              >
+                                  <div 
+                                      className="flex items-center gap-2 w-full cursor-pointer" 
+                                      style={{ paddingLeft: `${task.level * 16}px` }}
+                                      onClick={() => onTaskClick(task)}
+                                  >
+                                      {getSubtasks(task.id).length > 0 ? (
+                                          <button 
+                                              onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}
+                                              className="p-1 rounded-md hover:bg-slate-200 text-slate-500"
+                                          >
+                                              {expandedTasks.has(task.id) ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                          </button>
+                                      ) : (
+                                          <span className="w-5.5" /> /* Spacer */
+                                      )}
+                                      
+                                      <span className={`text-sm truncate font-medium ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                                          {task.title}
+                                      </span>
+                                  </div>
+                              </div>
+
+                              {/* Timeline Bar */}
+                              <div className="relative flex-1" style={{ width: days.length * dayWidth }}>
+                                   {/* The Task Bar */}
+                                   <TooltipProvider>
+                                      <Tooltip>
+                                          <TooltipTrigger asChild>
+                                              <motion.div
+                                                  drag="x"
+                                                  dragMomentum={false}
+                                                  onDragEnd={(e, info) => handleDragEnd(task, info)}
+                                                  className={`absolute top-1.5 h-[32px] rounded-lg shadow-sm border px-3 text-xs flex items-center cursor-grab active:cursor-grabbing truncate transition-all ${
+                                                      task.status === 'completed' ? 'bg-slate-100 border-slate-200 text-slate-400' :
+                                                      task.priority === 'urgent' ? 'bg-rose-100 border-rose-200 text-rose-700' :
+                                                      task.priority === 'high' ? 'bg-orange-100 border-orange-200 text-orange-700' :
+                                                      'bg-indigo-100 border-indigo-200 text-indigo-700'
+                                                  }`}
+                                                  style={{
+                                                      left: getPosition(task.reminder_time),
+                                                      width: Math.max(getWidth(task.reminder_time, task.end_time) - 10, 24),
+                                                  }}
+                                                  whileHover={{ scale: 1.02, zIndex: 10, height: 34, y: -1 }}
+                                                  whileTap={{ scale: 0.98 }}
+                                              >
+                                                  {getSubtasks(task.id).length > 0 && (
+                                                      <div className="absolute inset-x-0 bottom-0 h-1 bg-black/10 mx-2 rounded-full" />
+                                                  )}
+                                                  <span className="truncate font-medium">{task.title}</span>
+                                              </motion.div>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top">
+                                              <div className="text-xs space-y-1">
+                                                  <p className="font-bold">{task.title}</p>
+                                                  <div className="text-slate-500 flex flex-col">
+                                                      <span>开始: {format(new Date(task.reminder_time), 'MM-dd HH:mm')}</span>
+                                                      {task.end_time && <span>结束: {format(new Date(task.end_time), 'MM-dd HH:mm')}</span>}
+                                                  </div>
+                                              </div>
+                                          </TooltipContent>
+                                      </Tooltip>
+                                   </TooltipProvider>
+                              </div>
+                          </div>
+                      ))}
+                      
+                      {/* Empty state filler lines */}
+                      {visibleTasks.length < 10 && Array.from({ length: 10 - visibleTasks.length }).map((_, i) => (
+                           <div key={`filler-${i}`} className="flex items-stretch border-b border-slate-50" style={{ height: TASK_HEIGHT }}>
+                               <div className="sticky left-0 z-20 flex-shrink-0 border-r border-slate-200 bg-white w-[280px]" />
+                               <div className="flex-1" />
+                           </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
       </div>
     </div>
   );

@@ -298,6 +298,23 @@ export default function Tasks() {
           </div>
 
           <div className="flex gap-3">
+            <div className="bg-white p-1 rounded-xl shadow-lg flex gap-1 border border-slate-100">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                title="列表视图"
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("gantt")}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                title="甘特图视图"
+              >
+                <BarChart3 className="w-4 h-4" />
+              </button>
+            </div>
+
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-32 border-0 bg-white shadow-lg rounded-xl">
                 <Filter className="w-4 h-4 mr-2" />

@@ -402,6 +402,7 @@ export default function Tasks() {
             </React.Fragment>
           ))}
         </AnimatePresence>
+        )}
 
         {filteredTasks.length === 0 && (
           <motion.div

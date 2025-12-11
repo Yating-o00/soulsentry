@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
    import { base44 } from "@/api/base44Client";
-   import { useQuery } from "@tanstack/react-query";
+   import { useQuery, useQueryClient } from "@tanstack/react-query";
    import { Button } from "@/components/ui/button";
    import { Card } from "@/components/ui/card";
    import { Input } from "@/components/ui/input";
@@ -37,6 +37,8 @@ import React, { useState, useEffect, useRef } from "react";
      const messagesEndRef = useRef(null);
      const recognitionRef = useRef(null);
      const synthRef = useRef(null);
+     const queryClient = useQueryClient();
+     const processedToolCallIds = useRef(new Set());
 
      const { data: user } = useQuery({
        queryKey: ['currentUser'],
@@ -97,6 +99,30 @@ import React, { useState, useEffect, useRef } from "react";
        const unsubscribe = base44.agents.subscribeToConversation(conversationId, (data) => {
          const newMessages = data.messages || [];
          setMessages(newMessages);
+
+         // Check for completed tool calls to invalidate queries
+         newMessages.forEach(msg => {
+             if (msg.role === 'assistant' && msg.tool_calls) {
+                 msg.tool_calls.forEach(tc => {
+                     // If tool call is successful (or has results) and not processed yet
+                     if ((tc.status === 'success' || tc.results) && !processedToolCallIds.current.has(tc.id)) {
+                         processedToolCallIds.current.add(tc.id);
+                         // Invalidate relevant queries based on entity
+                         if (tc.name.includes('Task')) {
+                             queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                             queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+                             queryClient.invalidateQueries({ queryKey: ['task'] });
+                         }
+                         if (tc.name.includes('HealthLog')) {
+                             queryClient.invalidateQueries({ queryKey: ['healthLogs'] });
+                         }
+                         if (tc.name.includes('UserBehavior')) {
+                             queryClient.invalidateQueries({ queryKey: ['recentBehaviors'] });
+                         }
+                     }
+                 });
+             }
+         });
 
          // 智能判断加载状态：如果收到最新的助手消息，且该消息不是空的（正在生成中），则停止加载
          const lastMsg = newMessages[newMessages.length - 1];

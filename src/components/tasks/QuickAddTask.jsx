@@ -46,9 +46,9 @@ const PRIORITIES = [
   { value: "urgent", label: "紧急", icon: "⚠️", color: "text-[#d5495f]" },
 ];
 
-export default function QuickAddTask({ onAdd, initialData = null }) {
+export default function QuickAddTask({ onAdd, initialData = null, defaultExpanded = false }) {
   const queryClient = useQueryClient();
-  const [isExpanded, setIsExpanded] = useState(!!initialData);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded || !!initialData);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
@@ -178,25 +178,20 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     setIsProcessing(true);
     try {
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `从以下语音内容中识别用户意图（创建任务 或 更新任务状态）。
+        prompt: `从以下语音内容中提取任务信息，识别主任务和子任务。
 
 语音内容：${transcript}
 
-1. 如果是创建任务：提取标题、时间、优先级、类别、子任务。
-   时间规则：具体时间转ISO格式，相对时间（明天/下周）计算日期，默认明天9点。
-   优先级：urgent/high/medium/low
-   类别：work/personal/health/study/family/shopping/finance/other
-
-2. 如果是更新任务状态（如“把买牛奶标记为完成”，“取消开会任务”）：
-   提取操作的目标任务关键词（keywords）和目标状态（target_status）。
-   目标状态：completed (完成), pending (未完成/重做), cancelled (取消/删除), deleted (删除)
+提取：标题、描述、时间、优先级、类别、子任务。
+时间规则：具体时间转ISO格式，相对时间（明天/下周）计算日期，默认明天9点。
+优先级：urgent/high/medium/low
+类别：work/personal/health/study/family/shopping/finance/other
 
 当前时间：${new Date().toISOString()}`,
         response_json_schema: {
           type: "object",
           properties: {
-            intent: { type: "string", enum: ["create", "update_status"] },
-            tasks: { // for create
+            tasks: {
               type: "array",
               items: {
                 type: "object",
@@ -223,26 +218,13 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                 },
                 required: ["title", "reminder_time"]
               }
-            },
-            update_action: { // for update_status
-               type: "object",
-               properties: {
-                  keywords: { type: "string" },
-                  target_status: { type: "string", enum: ["completed", "pending", "cancelled", "deleted"] }
-               },
-               required: ["keywords", "target_status"]
             }
           },
-          required: ["intent"]
+          required: ["tasks"]
         }
       });
 
-      if (response.intent === 'update_status' && response.update_action) {
-          await handleVoiceUpdate(response.update_action);
-          setShowVoiceDialog(false);
-          setTranscript("");
-          setIsProcessing(false);
-      } else if (response.tasks && response.tasks.length > 0) {
+      if (response.tasks && response.tasks.length > 0) {
         setShowVoiceDialog(false);
         setTranscript("");
         setIsProcessing(false);
@@ -273,7 +255,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         toast.error("未能识别任务信息");
         setShowVoiceDialog(false);
         setTranscript("");
-        setIsProcessing(false);
       }
     } catch (error) {
       console.error("Parse error:", error);
@@ -281,55 +262,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       setShowVoiceDialog(false);
     }
     setIsProcessing(false);
-  };
-
-  const handleVoiceUpdate = async (action) => {
-    try {
-        toast.loading(`正在查找任务 "${action.keywords}"...`, { id: 'voice-update' });
-        
-        // 1. Get candidate tasks (we fetch recent/pending ones to search)
-        const allTasks = await base44.entities.Task.list(); 
-        
-        // 2. Simple fuzzy match
-        const keywords = action.keywords.toLowerCase();
-        const candidates = allTasks.filter(t => t.title.toLowerCase().includes(keywords) && !t.deleted_at);
-        
-        if (candidates.length === 0) {
-            toast.error(`未找到包含 "${action.keywords}" 的任务`, { id: 'voice-update' });
-            return;
-        }
-        
-        // 3. Pick the best one
-        // Prefer exact match
-        let target = candidates.find(t => t.title === action.keywords);
-        // Then prefer pending tasks if action is completing
-        if (!target && action.target_status === 'completed') {
-             target = candidates.find(t => t.status !== 'completed');
-        }
-        // Default to first candidate
-        if (!target) target = candidates[0];
-        
-        // 4. Update
-        if (action.target_status === 'deleted') {
-             // Soft delete
-             await base44.entities.Task.update(target.id, { deleted_at: new Date().toISOString() });
-             toast.success(`已删除任务: ${target.title}`, { id: 'voice-update' });
-             logUserBehavior("task_deleted", { id: target.id, source: "voice" });
-        } else {
-             await base44.entities.Task.update(target.id, { 
-                 status: action.target_status,
-                 completed_at: action.target_status === 'completed' ? new Date().toISOString() : null
-             });
-             toast.success(`已将 "${target.title}" 标记为 ${action.target_status === 'completed' ? '完成' : action.target_status}`, { id: 'voice-update' });
-             logUserBehavior(action.target_status === 'completed' ? "task_completed" : "task_edited", { id: target.id, source: "voice", new_status: action.target_status });
-        }
-        
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        
-    } catch (e) {
-        console.error(e);
-        toast.error("更新任务失败", { id: 'voice-update' });
-    }
   };
 
   const handleBulkCreateDirect = async (parsedTasks) => {
@@ -606,20 +538,36 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                 className="space-y-5"
               >
                 {/* 标题输入 - 超大字体 */}
-                <div className="relative">
-                  <Input
-                    placeholder="输入任务标题..."
-                    value={task.title}
-                    onChange={(e) => setTask({ ...task, title: e.target.value })}
-                    className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors"
-                    autoFocus
-                  />
-                  <motion.div
-                    className="absolute bottom-0 left-0 h-0.5 bg-blue-500"
-                    initial={{ width: 0 }}
-                    animate={{ width: task.title ? "100%" : "0%" }}
-                    transition={{ duration: 0.3 }}
-                  />
+                <div className="relative flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      placeholder="输入任务标题..."
+                      value={task.title}
+                      onChange={(e) => setTask({ ...task, title: e.target.value })}
+                      className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 pr-8 focus-visible:ring-0 transition-colors"
+                      autoFocus
+                    />
+                    <motion.div
+                      className="absolute bottom-0 left-0 h-0.5 bg-blue-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: task.title ? "100%" : "0%" }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  </div>
+                  
+                  {/* 语音输入按钮 (Expanded Mode) */}
+                  {browserSupported && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={startVoiceInput}
+                      className="h-10 w-10 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                      title="语音输入"
+                    >
+                      <Mic className="w-5 h-5" />
+                    </Button>
+                  )}
                 </div>
 
                 {/* AI智能增强 */}
@@ -1193,10 +1141,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     <li className="flex items-start gap-2">
                       <span className="text-[#06b6d4] mt-0.5">•</span>
                       <span>例如："明天下午3点提醒我开会"</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-[#06b6d4] mt-0.5">•</span>
-                      <span>支持更新任务："把'买牛奶'标记为完成"</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-[#06b6d4] mt-0.5">•</span>

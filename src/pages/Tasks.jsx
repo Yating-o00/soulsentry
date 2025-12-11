@@ -275,9 +275,44 @@ export default function Tasks() {
         <p className="text-slate-600">管理您的所有任务和提醒</p>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
-        <SmartTextParser onTasksGenerated={handleBulkCreate} />
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <Tabs defaultValue="quick" className="w-full">
+          <div className="bg-slate-50/50 border-b border-slate-200 px-4 pt-2">
+            <TabsList className="bg-transparent p-0 gap-6 h-auto">
+              <TabsTrigger 
+                value="quick" 
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#384877] data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 py-3 text-slate-500 data-[state=active]:text-[#384877] font-medium transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <Edit className="w-4 h-4" />
+                  快速创建
+                </div>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="smart" 
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#384877] data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 py-3 text-slate-500 data-[state=active]:text-[#384877] font-medium transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <Wand2 className="w-4 h-4" />
+                  智能文本解析
+                </div>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          
+          <TabsContent value="quick" className="p-0 m-0">
+            <div className="p-1">
+              <QuickAddTask 
+                onAdd={(data) => createTaskMutation.mutate(data)} 
+                defaultExpanded={true} 
+              />
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="smart" className="p-0 m-0">
+            <SmartTextParser onTasksGenerated={handleBulkCreate} />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <motion.div

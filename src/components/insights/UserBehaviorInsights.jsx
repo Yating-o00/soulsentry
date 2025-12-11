@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Sparkles, Lightbulb, Loader2, RotateCcw, Target, Trophy, ArrowRight, BrainCircuit } from "lucide-react";
+import { Sparkles, Lightbulb, Loader2, RotateCcw, Target, Trophy, ArrowRight, BrainCircuit, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, subDays } from "date-fns";
 import { toast } from "sonner";

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3 } from "lucide-react";
 import GanttView from "../components/tasks/GanttView";
@@ -275,41 +275,28 @@ export default function Tasks() {
         <p className="text-slate-600">管理您的所有任务和提醒</p>
       </motion.div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="mb-8">
         <Tabs defaultValue="quick" className="w-full">
-          <div className="bg-slate-50/50 border-b border-slate-200 px-4 pt-2">
-            <TabsList className="bg-transparent p-0 gap-6 h-auto">
-              <TabsTrigger 
-                value="quick" 
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#384877] data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 py-3 text-slate-500 data-[state=active]:text-[#384877] font-medium transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <Edit className="w-4 h-4" />
-                  快速创建
-                </div>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="smart" 
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#384877] data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 py-3 text-slate-500 data-[state=active]:text-[#384877] font-medium transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <Wand2 className="w-4 h-4" />
-                  智能文本解析
-                </div>
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-slate-100 p-1 rounded-xl mb-4">
+            <TabsTrigger 
+              value="quick" 
+              className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#384877] data-[state=active]:shadow-sm transition-all font-medium py-2"
+            >
+              快速创建
+            </TabsTrigger>
+            <TabsTrigger 
+              value="smart"
+              className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#d5495f] data-[state=active]:shadow-sm transition-all font-medium py-2"
+            >
+              智能文本解析
+            </TabsTrigger>
+          </TabsList>
           
-          <TabsContent value="quick" className="p-0 m-0">
-            <div className="p-1">
-              <QuickAddTask 
-                onAdd={(data) => createTaskMutation.mutate(data)} 
-                defaultExpanded={true} 
-              />
-            </div>
+          <TabsContent value="quick" className="mt-0 focus-visible:ring-0">
+            <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
           </TabsContent>
           
-          <TabsContent value="smart" className="p-0 m-0">
+          <TabsContent value="smart" className="mt-0 focus-visible:ring-0">
             <SmartTextParser onTasksGenerated={handleBulkCreate} />
           </TabsContent>
         </Tabs>

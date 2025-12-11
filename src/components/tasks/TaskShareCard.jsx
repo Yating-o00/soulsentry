@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2 } from "lucide-react";
+import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { toast } from "sonner";
@@ -60,6 +60,22 @@ export default function TaskShareCard({ task, open, onClose }) {
 
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 100;
+
+  const [quote] = useState(() => {
+    const quotes = [
+      "每一个不曾起舞的日子，都是对生命的辜负。",
+      "坚持不是因为看到了希望，而是因为坚持了才有希望。",
+      "今日的努力，是明日的惊喜。",
+      "自律给我自由。",
+      "星光不问赶路人，时光不负有心人。",
+      "做难事必有所得。",
+      "种一棵树最好的时间是十年前，其次是现在。",
+      "不积跬步，无以至千里。",
+      "每天进步一点点，坚持带来大改变。",
+      "专注当下，未来可期。"
+    ];
+    return quotes[Math.floor(Math.random() * quotes.length)];
+  });
 
   // 使用动态导入 html2canvas
   const loadHtml2Canvas = async () => {
@@ -289,272 +305,204 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
           )}
 
           {/* 预览区域 */}
-          <div className="flex justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-8 rounded-2xl max-h-[60vh] overflow-y-auto">
-            <div ref={cardRef} className={`${expandedView ? 'w-[720px]' : 'w-[520px]'} relative`}>
-              {/* 主卡片 */}
-              <div className="relative bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
-                {/* 科技感背景装饰 */}
-                <div className="absolute inset-0 opacity-[0.03]">
-                  {/* 网格背景 */}
-                  <div 
-                    className="absolute inset-0" 
-                    style={{
-                      backgroundImage: `
-                        linear-gradient(to right, #94a3b8 1px, transparent 1px),
-                        linear-gradient(to bottom, #94a3b8 1px, transparent 1px)
-                      `,
-                      backgroundSize: '20px 20px'
-                    }}
-                  />
-                </div>
-
-                {/* 顶部色带 */}
+          <div className="flex justify-center bg-slate-100/50 p-4 md:p-8 rounded-2xl max-h-[60vh] overflow-y-auto">
+            <div ref={cardRef} className={`${expandedView ? 'w-[720px]' : 'w-[450px]'} relative transition-all duration-300`}>
+              {/* 主卡片 - 采用打卡风格 */}
+              <div 
+                className="relative bg-white rounded-3xl overflow-hidden shadow-2xl"
+                style={{
+                  boxShadow: `0 20px 60px -10px ${categoryColor.accent}30`
+                }}
+              >
+                {/* 顶部渐变背景 */}
                 <div 
-                  className="h-1.5" 
-                  style={{ backgroundColor: categoryColor.accent }}
+                  className="h-32 w-full absolute top-0 left-0"
+                  style={{
+                    background: `linear-gradient(135deg, ${categoryColor.accent}, ${categoryColor.accent}dd)`,
+                    clipPath: 'polygon(0 0, 100% 0, 100% 70%, 0 100%)'
+                  }}
                 />
 
-                {/* 内容区域 */}
-                <div className="relative z-10 p-8">
-                  {/* 顶部标识 */}
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-12 h-12 rounded-xl flex items-center justify-center"
-                        style={{ backgroundColor: categoryColor.bg }}
-                      >
-                        <Target 
-                          className="w-6 h-6" 
-                          style={{ color: categoryColor.accent }}
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span 
-                            className="text-xs font-semibold px-2.5 py-1 rounded-md"
-                            style={{ 
-                              backgroundColor: categoryColor.bg,
-                              color: categoryColor.accent 
-                            }}
-                          >
-                            {CATEGORY_LABELS[task.category]}
-                          </span>
-                          <span className="text-xs text-slate-400">·</span>
-                          <span className="text-xs text-slate-500 font-medium">
-                            {PRIORITY_LABELS[task.priority]}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400">
-                          ID: {task.id.slice(0, 8).toUpperCase()}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {/* 状态指示器 */}
-                    <div className="text-right">
-                      {task.status === "completed" ? (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                          <span className="text-xs font-semibold text-green-700">已完成</span>
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200">
-                          <Circle className="w-4 h-4 text-blue-600" />
-                          <span className="text-xs font-semibold text-blue-700">进行中</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 任务标题 */}
-                  <div className="mb-6">
-                    <h2 className={`${expandedView ? 'text-4xl' : 'text-3xl'} font-bold text-slate-800 mb-3 leading-tight tracking-tight`}>
-                      {task.title}
-                    </h2>
-                    {task.description && (
-                      <p className="text-slate-600 text-sm leading-relaxed">
-                        {task.description}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* 时间和进度信息 */}
-                  <div className="grid grid-cols-2 gap-4 mb-6">
-                    {/* 时间卡片 */}
-                    <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="w-4 h-4 text-slate-500" />
-                        <span className="text-xs text-slate-500 font-medium">提醒时间</span>
-                      </div>
-                      <p className="text-lg font-bold text-slate-800">
-                        {format(new Date(task.reminder_time), "M月d日", { locale: zhCN })}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {format(new Date(task.reminder_time), "EEEE HH:mm", { locale: zhCN })}
-                        {task.end_time && ` - ${format(new Date(task.end_time), "HH:mm", { locale: zhCN })}`}
-                      </p>
-                    </div>
-
-                    {/* 进度卡片 */}
-                    <div 
-                      className="rounded-xl p-4 border"
-                      style={{ 
-                        backgroundColor: categoryColor.bg,
-                        borderColor: categoryColor.accent + '20'
-                      }}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sparkles 
-                          className="w-4 h-4" 
-                          style={{ color: categoryColor.accent }}
-                        />
-                        <span 
-                          className="text-xs font-medium"
-                          style={{ color: categoryColor.accent }}
-                        >
-                          完成进度
-                        </span>
-                      </div>
-                      <div className="flex items-baseline gap-1">
-                        <p 
-                          className="text-3xl font-bold"
-                          style={{ color: categoryColor.accent }}
-                        >
-                          {progress}
-                        </p>
-                        <span 
-                          className="text-lg font-semibold"
-                          style={{ color: categoryColor.accent }}
-                        >
-                          %
-                        </span>
-                      </div>
-                      {subtasks.length > 0 && (
-                        <p className="text-xs text-slate-500 mt-1">
-                          {completedSubtasks}/{subtasks.length} 项已完成
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 进度条 */}
-                  {subtasks.length > 0 && (
-                    <div className="mb-6">
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full transition-all duration-500 rounded-full"
-                          style={{ 
-                            width: `${progress}%`,
-                            backgroundColor: categoryColor.accent
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 子任务列表 */}
-                  {displayedSubtasks.length > 0 && (
-                    <div className="space-y-3 mb-6">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="h-px flex-1 bg-slate-200" />
-                        <span className="text-xs text-slate-400 font-medium">
-                          子任务清单 ({completedSubtasks}/{subtasks.length})
-                        </span>
-                        <div className="h-px flex-1 bg-slate-200" />
-                      </div>
-                      
-                      {/* 移除 max-h 限制，让所有内容可见以便截图 */}
-                      <div className="space-y-2">
-                        {displayedSubtasks.map((subtask, index) => {
-                          const isCompleted = subtask.status === "completed";
-                          const titleMatch = subtask.title.match(/^(\d+)\.\s*/);
-                          const orderNumber = titleMatch ? titleMatch[1] : (index + 1);
-                          const cleanTitle = titleMatch ? subtask.title.replace(/^\d+\.\s*/, '') : subtask.title;
-                          
-                          return (
-                            <div
-                              key={subtask.id}
-                              className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                                isCompleted 
-                                  ? 'bg-slate-50 border-slate-200' 
-                                  : 'bg-white border-slate-200'
-                              }`}
-                            >
-                              <div 
-                                className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold flex-shrink-0 border-2 ${
-                                  isCompleted 
-                                    ? 'bg-slate-100 border-slate-300 text-slate-400' 
-                                    : 'border-slate-300 text-slate-600'
-                                }`}
-                              >
-                                {isCompleted ? '✓' : orderNumber}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <span className={`text-sm block ${
-                                  isCompleted 
-                                    ? 'line-through text-slate-400' 
-                                    : 'text-slate-700 font-medium'
-                                }`}>
-                                  {cleanTitle}
-                                </span>
-                                {subtask.description && (
-                                  <p className="text-xs text-slate-500 mt-1">{subtask.description}</p>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {hasMoreSubtasks && (
-                          <div className="text-center py-2 border border-dashed border-slate-300 rounded-lg">
-                            <p className="text-xs text-slate-400">
-                              还有 {subtasks.length - displayedSubtasks.length} 个子任务...
-                            </p>
-                            <p className="text-xs text-slate-400 mt-1">
-                              💡 开启"显示所有子任务"查看完整列表
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 底部信息 */}
-                  <div className="pt-4 border-t border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="w-10 h-10 rounded-lg flex items-center justify-center"
-                          style={{ backgroundColor: categoryColor.bg }}
-                        >
-                          <Sparkles 
-                            className="w-5 h-5" 
-                            style={{ color: categoryColor.accent }}
-                          />
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-slate-800">任务管家</p>
-                          <p className="text-xs text-slate-400">智能提醒 · 高效管理</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-slate-400 font-mono">
-                          {format(new Date(), "yyyy.MM.dd", { locale: zhCN })}
-                        </p>
-                        <p className="text-xs text-slate-400 font-mono">
-                          {format(new Date(), "HH:mm", { locale: zhCN })}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                {/* 装饰圆环 */}
+                <div className="absolute top-0 right-0 w-32 h-32 opacity-10 transform translate-x-10 -translate-y-10">
+                  <div className="w-full h-full rounded-full border-[12px] border-white" />
+                </div>
+                <div className="absolute top-10 left-0 w-16 h-16 opacity-10 transform -translate-x-8">
+                   <div className="w-full h-full rounded-full bg-white" />
                 </div>
 
-                {/* 右侧装饰线条 */}
-                <div className="absolute right-0 top-1/4 w-32 h-32 opacity-[0.03]">
-                  <svg viewBox="0 0 100 100" className="w-full h-full">
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-slate-400"/>
-                    <circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-slate-400"/>
-                    <circle cx="50" cy="50" r="20" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-slate-400"/>
-                  </svg>
+                <div className="relative z-10 px-8 pt-8 pb-10">
+                  {/* 头部：日期与打卡标识 */}
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="text-white">
+                      <div className="flex items-center gap-2 mb-1 opacity-90">
+                        <Calendar className="w-4 h-4" />
+                        <span className="text-sm font-medium tracking-wide">DAILY CHECK-IN</span>
+                      </div>
+                      <h3 className="text-3xl font-bold tracking-tight">
+                        {format(new Date(), "dd")}
+                        <span className="text-lg font-normal ml-1 opacity-80">/ {format(new Date(), "MMM", { locale: zhCN })}</span>
+                      </h3>
+                      <p className="text-sm opacity-80 mt-1">{format(new Date(), "EEEE", { locale: zhCN })}</p>
+                    </div>
+
+                    <div className="bg-white/20 backdrop-blur-md rounded-2xl p-2 border border-white/20">
+                      <div 
+                        className="w-12 h-12 rounded-xl flex items-center justify-center bg-white shadow-lg"
+                        style={{ color: categoryColor.accent }}
+                      >
+                         {task.status === "completed" ? (
+                           <CheckCircle2 className="w-8 h-8" strokeWidth={3} />
+                         ) : (
+                           <Target className="w-8 h-8" strokeWidth={2.5} />
+                         )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 任务核心内容 */}
+                  <div className="mt-8 mb-8">
+                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold mb-4 uppercase tracking-wider" 
+                        style={{ 
+                          backgroundColor: `${categoryColor.accent}15`, 
+                          color: categoryColor.accent 
+                        }}
+                     >
+                       <span className="w-2 h-2 rounded-full bg-current" />
+                       {CATEGORY_LABELS[task.category]}
+                     </div>
+                     
+                     <h1 className="text-3xl font-black text-slate-800 leading-tight mb-4">
+                       {task.title}
+                     </h1>
+                     
+                     {task.description && (
+                       <div className="relative pl-4 border-l-2 border-slate-200 py-1 mb-6">
+                         <p className="text-slate-600 text-sm italic leading-relaxed">
+                           "{task.description}"
+                         </p>
+                       </div>
+                     )}
+                  </div>
+
+                  {/* 进度圆环/统计 */}
+                  <div className="grid grid-cols-2 gap-4 mb-8">
+                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center items-center text-center">
+                        <div className="relative w-16 h-16 mb-2">
+                           <svg className="w-full h-full transform -rotate-90">
+                             <circle cx="32" cy="32" r="28" stroke="#e2e8f0" strokeWidth="6" fill="none" />
+                             <circle 
+                               cx="32" cy="32" r="28" 
+                               stroke={categoryColor.accent} 
+                               strokeWidth="6" 
+                               fill="none" 
+                               strokeDasharray={175.9}
+                               strokeDashoffset={175.9 - (175.9 * progress) / 100}
+                               className="transition-all duration-1000 ease-out"
+                               strokeLinecap="round"
+                             />
+                           </svg>
+                           <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-sm font-bold text-slate-700">{progress}%</span>
+                           </div>
+                        </div>
+                        <span className="text-xs text-slate-500 font-medium">完成进度</span>
+                     </div>
+
+                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center items-center text-center">
+                        <div 
+                          className="w-12 h-12 rounded-full mb-3 flex items-center justify-center text-white text-xl font-bold"
+                          style={{ background: `linear-gradient(135deg, ${categoryColor.accent}, ${categoryColor.accent}bb)` }}
+                        >
+                          {completedSubtasks}
+                        </div>
+                        <span className="text-xs text-slate-500 font-medium">
+                          {completedSubtasks === subtasks.length && subtasks.length > 0 ? "全部完成" : "已完成项目"}
+                        </span>
+                     </div>
+                  </div>
+
+                  {/* 子任务列表 (精简版) */}
+                  {displayedSubtasks.length > 0 && (
+                     <div className="mb-8 bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <span className="w-1 h-1 rounded-full bg-slate-300" />
+                          CHECKLIST
+                          <div className="h-px bg-slate-200 flex-1" />
+                        </div>
+                        <div className="space-y-2">
+                          {displayedSubtasks.map((subtask, index) => {
+                             const isCompleted = subtask.status === "completed";
+                             return (
+                               <div key={subtask.id} className="flex items-center gap-3">
+                                  <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>
+                                    {isCompleted && <Check className="w-3 h-3" />}
+                                  </div>
+                                  <span className={`text-sm ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                    {subtask.title.replace(/^\d+\.\s*/, '')}
+                                  </span>
+                               </div>
+                             );
+                          })}
+                          {hasMoreSubtasks && (
+                            <p className="text-xs text-slate-400 italic pl-7 pt-1">
+                              + 还有 {subtasks.length - displayedSubtasks.length} 项子任务
+                            </p>
+                          )}
+                        </div>
+                     </div>
+                  )}
+
+                  {/* 每日金句 */}
+                  <div className="mb-8">
+                     <div className="relative py-4 px-6 bg-yellow-50/80 rounded-xl border border-yellow-100">
+                        <Quote className="absolute top-2 left-2 w-4 h-4 text-yellow-400 opacity-50 transform rotate-180" />
+                        <p className="text-center text-sm font-medium text-slate-700 italic">
+                          {quote}
+                        </p>
+                        <Quote className="absolute bottom-2 right-2 w-4 h-4 text-yellow-400 opacity-50" />
+                     </div>
+                  </div>
+
+                  {/* 底部 Footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                       <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white">
+                         <Sparkles className="w-4 h-4" />
+                       </div>
+                       <div>
+                         <p className="text-xs font-bold text-slate-900">SoulSentry</p>
+                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">Focus & Achieve</p>
+                       </div>
+                    </div>
+                    
+                    {/* 模拟二维码区域 */}
+                    <div className="flex items-center gap-2">
+                       <div className="text-right hidden sm:block">
+                         <p className="text-[10px] text-slate-400">Scan to view</p>
+                         <p className="text-[10px] text-slate-400 font-mono">ID: {task.id.slice(0,4)}</p>
+                       </div>
+                       <div className="w-10 h-10 bg-slate-900 rounded-md p-1 opacity-90">
+                         <div className="w-full h-full bg-white p-0.5">
+                            <div className="w-full h-full bg-slate-900" style={{ clipPath: 'polygon(0% 0%, 0% 100%, 25% 100%, 25% 25%, 75% 25%, 75% 75%, 25% 75%, 25% 100%, 100% 100%, 100% 0%)' }}></div>
+                         </div>
+                       </div>
+                    </div>
+                  </div>
+
+                  {/* 完成印章 */}
+                  {task.status === "completed" && (
+                    <div className="absolute bottom-24 right-8 transform rotate-[-15deg] opacity-90 pointer-events-none">
+                      <div className="w-32 h-32 border-4 border-green-600 rounded-full flex items-center justify-center p-2" style={{ maskImage: 'url("data:image/svg+xml;base64,...")' }}> {/* 模拟印章纹理可用CSS实现，这里简化 */}
+                         <div className="w-full h-full border-2 border-green-600 rounded-full flex flex-col items-center justify-center text-green-600">
+                            <span className="text-xs font-bold tracking-widest uppercase">Mission</span>
+                            <span className="text-xl font-black uppercase tracking-wider">Completed</span>
+                            <span className="text-[10px] font-mono mt-1">{format(new Date(), "yyyy.MM.dd")}</span>
+                         </div>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               </div>
             </div>

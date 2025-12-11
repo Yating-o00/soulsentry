@@ -411,9 +411,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               <TabsContent value="strategy" className="space-y-4">
                   <ReminderStrategyEditor 
                       task={task} 
-                      onUpdate={(strategy) => updateTaskMutation.mutate({
+                      onUpdate={(updates) => updateTaskMutation.mutate({
                           id: task.id,
-                          data: { reminder_strategy: strategy }
+                          data: updates
                       })}
                   />
               </TabsContent>

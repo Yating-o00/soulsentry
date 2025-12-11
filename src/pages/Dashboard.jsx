@@ -15,8 +15,10 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import QuickAddTask from "../components/tasks/QuickAddTask";
+import CalendarView from "../components/calendar/CalendarView";
 import TaskCard from "../components/tasks/TaskCard";
 import UserBehaviorInsights from "../components/insights/UserBehaviorInsights";
 import NotificationManager from "../components/notifications/NotificationManager";
@@ -150,23 +152,36 @@ export default function Dashboard() {
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen">
       <NotificationManager />
       
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <h1 className="text-3xl font-bold text-slate-900 mb-1 flex items-center gap-2">
-            {greeting}，{user?.full_name || user?.email?.split('@')[0] || "朋友"} 
-            <Sun className="w-6 h-6 text-amber-500 fill-amber-500 animate-pulse" />
-          </h1>
-          <p className="text-slate-500">
-            今天是 {format(new Date(), "yyyy年MM月dd日 EEEE", { locale: zhCN })}
-          </p>
-        </motion.div>
-      </div>
+      <Tabs defaultValue="overview" className="space-y-6">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <h1 className="text-3xl font-bold text-slate-900 mb-1 flex items-center gap-2">
+              {greeting}，{user?.full_name || user?.email?.split('@')[0] || "朋友"} 
+              <Sun className="w-6 h-6 text-amber-500 fill-amber-500 animate-pulse" />
+            </h1>
+            <p className="text-slate-500">
+              今天是 {format(new Date(), "yyyy年MM月dd日 EEEE", { locale: zhCN })}
+            </p>
+          </motion.div>
 
-      {/* Stats Cards */}
+          <TabsList className="bg-white shadow-md rounded-[12px] p-1 h-auto">
+            <TabsTrigger value="overview" className="rounded-[10px] px-6 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white">
+              <ListTodo className="w-4 h-4 mr-2" />
+              概览
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="rounded-[10px] px-6 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white">
+              <CalendarIcon className="w-4 h-4 mr-2" />
+              日历
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="overview" className="space-y-6">
+          {/* Stats Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -327,6 +342,12 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+      </TabsContent>
+
+      <TabsContent value="calendar">
+        <CalendarView />
+      </TabsContent>
+      </Tabs>
 
       <TaskDetailModal
         task={selectedTask}

@@ -30,11 +30,6 @@ const navigationItems = [
     icon: ListTodo,
   },
   {
-    title: "日历",
-    url: createPageUrl("Calendar"),
-    icon: Calendar,
-  },
-  {
     title: "便签",
     url: createPageUrl("Notes"),
     icon: StickyNote,

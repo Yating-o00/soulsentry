@@ -318,17 +318,12 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
   };
 
   return (
-    <Card className="border border-[#e5e9ef] shadow-md hover:shadow-lg transition-all bg-white rounded-[16px]">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
-          <Wand2 className="w-5 h-5 text-[#384877]" />
-          <span className="text-[#222222]">智能文本解析</span>
-        </CardTitle>
-        <p className="text-[15px] text-[#52525b] mt-1.5">
-          粘贴任何文本，AI 自动提取并智能拆解任务
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="bg-white p-6 space-y-4">
+        <div className="mb-4">
+          <p className="text-[15px] text-[#52525b]">
+            粘贴任何文本，AI 自动提取并智能拆解任务
+          </p>
+        </div>
         <div className="space-y-2">
           <Textarea
             placeholder="粘贴文本，例如：&#10;明天晚上准备家庭聚餐，需要买菜、做三道菜和一个汤&#10;本周完成项目报告，包括数据收集、分析和撰写..."
@@ -666,7 +661,6 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
             💡 <strong className="text-[#222222]">提示：</strong>AI 自动识别任务层级关系。例如"准备晚餐"会被拆解为"购买食材"、"做菜"等子任务。支持自然语言，如"明天下午3点"、"本周五前"等。
           </p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
   );
 }

@@ -100,10 +100,35 @@ export default function CalendarView() {
     const map = {};
     
     tasks.forEach(task => {
-      const dateKey = format(new Date(task.reminder_time), 'yyyy-MM-dd');
-      if (!map[dateKey]) map[dateKey] = [];
-      map[dateKey].push({ type: 'task', data: task, date: new Date(task.reminder_time) });
+      if (!task.reminder_time) return;
+      
+      const startDate = new Date(task.reminder_time);
+      const endDate = task.end_time ? new Date(task.end_time) : startDate;
+      
+      // Handle potential invalid dates or end before start
+      const validEndDate = (isValidDate(endDate) && endDate >= startDate) ? endDate : startDate;
+      
+      try {
+        // Get all days in the range
+        const days = eachDayOfInterval({ start: startDate, end: validEndDate });
+        
+        days.forEach(day => {
+          const dateKey = format(day, 'yyyy-MM-dd');
+          if (!map[dateKey]) map[dateKey] = [];
+          // Use original start date for sorting consistency across days
+          map[dateKey].push({ type: 'task', data: task, date: startDate });
+        });
+      } catch (err) {
+        // Fallback if interval calculation fails
+        const dateKey = format(startDate, 'yyyy-MM-dd');
+        if (!map[dateKey]) map[dateKey] = [];
+        map[dateKey].push({ type: 'task', data: task, date: startDate });
+      }
     });
+
+    function isValidDate(d) {
+      return d instanceof Date && !isNaN(d);
+    }
 
     notes.forEach(note => {
       const dateKey = format(new Date(note.created_date), 'yyyy-MM-dd');

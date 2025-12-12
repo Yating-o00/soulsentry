@@ -109,7 +109,11 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
   const isCompleted = task.status === "completed";
   const isSnoozed = task.status === "snoozed";
   const isBlocked = task.status === "blocked";
-  const isPast = new Date(task.reminder_time) < new Date() && !isCompleted && !isSnoozed && !isBlocked;
+  
+  // Update isPast to consider end_time if available
+  const checkDate = task.end_time ? new Date(task.end_time) : new Date(task.reminder_time);
+  const isPast = checkDate < new Date() && !isCompleted && !isSnoozed && !isBlocked;
+  
   const hasSubtasks = subtasks.length > 0;
 
   // Fetch dependencies info if blocked or has dependencies
@@ -167,7 +171,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
               ? 'border-l-[3px] border-l-[#fbbf24]'
               : isPast
               ? 'border-l-[3px] border-l-[#d5495f]'
-              : 'hover:translate-y-[-1px]'
+              : 'border-l-[3px] border-l-[#384877] hover:translate-y-[-1px]'
             }`}
             >
           {/* 主任务 */}

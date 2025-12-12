@@ -273,18 +273,19 @@ export default function NotificationManager() {
       // Determine if task is multi-day (has end_time on a different day)
       const end = task.end_time ? parseISO(task.end_time) : start;
       const isMultiDay = !isSameDay(start, end);
+      
+      // Initialize reminderTime. For multi-day, we might update this to today's instance.
+      let reminderTime = task.snooze_until ? parseISO(task.snooze_until) : start;
 
       if (task.snooze_until) {
           // Snoozed logic (override normal schedule)
-          const snoozeTime = parseISO(task.snooze_until);
-          if (isPast(snoozeTime) && !checkedTasks.current.has(task.id)) {
+          if (isPast(reminderTime) && !checkedTasks.current.has(task.id)) {
              sendNotification(task, false);
              checkedTasks.current.add(task.id);
           }
       } else if (isMultiDay) {
           // Multi-day logic: Remind daily at the specific time
           // Check if today is within the range [start date, end date]
-          const todayStart = startOfDay(now);
           const rangeStart = startOfDay(start);
           const rangeEnd = endOfDay(end);
 
@@ -296,6 +297,9 @@ export default function NotificationManager() {
                  seconds: 0, 
                  milliseconds: 0 
              });
+             
+             // Update reminderTime for downstream logic (advance reminders etc)
+             reminderTime = targetTime;
 
              // Check conditions:
              // 1. Past the target time for today
@@ -319,7 +323,7 @@ export default function NotificationManager() {
           }
       } else {
           // Single day logic (Original)
-          if (isPast(start) && !task.reminder_sent && !checkedTasks.current.has(task.id)) {
+          if (isPast(reminderTime) && !task.reminder_sent && !checkedTasks.current.has(task.id)) {
             sendNotification(task, false);
             checkedTasks.current.add(task.id);
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay, isSameDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { 
   CheckCircle2, 
@@ -65,19 +65,40 @@ export default function Dashboard() {
     if (!t.reminder_time) return false;
     const start = parseISO(t.reminder_time);
     const end = t.end_time ? parseISO(t.end_time) : start;
+    
     // Check if today is within the range [start, end]
-    // We compare against the start and end of the day to include the full range
     return isWithinInterval(new Date(), { 
       start: startOfDay(start), 
       end: endOfDay(end) 
     });
+  }).map(t => {
+      // For multi-day tasks, if completed on a previous day, show as pending for today
+      const start = parseISO(t.reminder_time);
+      const end = t.end_time ? parseISO(t.end_time) : start;
+      const isMultiDay = !isSameDay(start, end);
+      
+      if (isMultiDay && t.status === 'completed' && t.completed_at && !isToday(parseISO(t.completed_at))) {
+          return { ...t, status: 'pending' };
+      }
+      return t;
   });
-  const overdueTasks = rootTasks.filter(t => 
-    t.status === 'pending' && 
-    t.reminder_time && 
-    isPast(parseISO(t.reminder_time)) && 
-    !isToday(parseISO(t.reminder_time))
-  );
+
+  const overdueTasks = rootTasks.filter(t => {
+    if (t.status === 'completed') return false;
+    if (!t.reminder_time) return false;
+    
+    const start = parseISO(t.reminder_time);
+    const end = t.end_time ? parseISO(t.end_time) : start;
+    const now = new Date();
+    
+    // Not overdue if currently in range (it's today's task)
+    if (isWithinInterval(now, { start: startOfDay(start), end: endOfDay(end) })) {
+        return false;
+    }
+    
+    // Overdue if past the end date
+    return isPast(endOfDay(end));
+  });
   const pendingTasks = rootTasks.filter(t => t.status === 'pending');
   const completedToday = rootTasks.filter(t => 
     t.status === 'completed' && 

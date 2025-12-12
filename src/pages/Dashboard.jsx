@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay, isSameDay } from "date-fns";
+import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { 
   CheckCircle2, 
@@ -60,46 +60,74 @@ export default function Dashboard() {
 
   // Filter tasks (exclude subtasks from main view)
   const activeTasks = allTasks.filter(t => !t.deleted_at);
-  const rootTasks = activeTasks.filter(t => !t.parent_task_id);
+  
+  // Pre-process tasks to handle multi-day recurrence logic
+  const processedTasks = activeTasks.map(task => {
+    if (!task.reminder_time) return task;
+    
+    const start = parseISO(task.reminder_time);
+    const end = task.end_time ? parseISO(task.end_time) : start;
+    const isMultiDay = !isToday(start) || (task.end_time && !isToday(parseISO(task.end_time))); // Simple check for any range implication
+    
+    // If we are currently within the task's date range (inclusive)
+    const now = new Date();
+    const isInRange = isWithinInterval(now, { 
+      start: startOfDay(start), 
+      end: endOfDay(end) 
+    });
+
+    if (isInRange) {
+      // For multi-day/range tasks, check if it was completed TODAY
+      const completedAt = task.completed_at ? parseISO(task.completed_at) : null;
+      const isCompletedToday = completedAt && isToday(completedAt);
+      
+      // If not completed today, treat as pending for today's view
+      // This ensures it shows up as a todo item every day of the range until done for that day
+      if (!isCompletedToday) {
+        return { ...task, status: 'pending' };
+      }
+    }
+    
+    return task;
+  });
+
+  const rootTasks = processedTasks.filter(t => !t.parent_task_id);
+
   const todayTasks = rootTasks.filter(t => {
     if (!t.reminder_time) return false;
     const start = parseISO(t.reminder_time);
     const end = t.end_time ? parseISO(t.end_time) : start;
     
-    // Check if today is within the range [start, end]
     return isWithinInterval(new Date(), { 
       start: startOfDay(start), 
       end: endOfDay(end) 
     });
-  }).map(t => {
-      // For multi-day tasks, if completed on a previous day, show as pending for today
-      const start = parseISO(t.reminder_time);
-      const end = t.end_time ? parseISO(t.end_time) : start;
-      const isMultiDay = !isSameDay(start, end);
-      
-      if (isMultiDay && t.status === 'completed' && t.completed_at && !isToday(parseISO(t.completed_at))) {
-          return { ...t, status: 'pending' };
-      }
-      return t;
   });
 
+  // Updated Overdue Logic:
+  // A task is overdue only if:
+  // 1. It is pending
+  // 2. The END time of the task has passed (or start if no end)
+  // 3. We are NOT currently within the valid date range (because if we are in range, it's a "Today" task, not overdue)
   const overdueTasks = rootTasks.filter(t => {
-    if (t.status === 'completed') return false;
+    if (t.status !== 'pending') return false;
     if (!t.reminder_time) return false;
-    
+
+    const now = new Date();
     const start = parseISO(t.reminder_time);
     const end = t.end_time ? parseISO(t.end_time) : start;
-    const now = new Date();
-    
-    // Not overdue if currently in range (it's today's task)
+
+    // If we are in the active range, it's not overdue (it's due today)
     if (isWithinInterval(now, { start: startOfDay(start), end: endOfDay(end) })) {
-        return false;
+      return false;
     }
-    
-    // Overdue if past the end date
-    return isPast(endOfDay(end));
+
+    // Otherwise, check if the end time has fully passed and it's not today
+    return isPast(end) && !isToday(end);
   });
+
   const pendingTasks = rootTasks.filter(t => t.status === 'pending');
+  
   const completedToday = rootTasks.filter(t => 
     t.status === 'completed' && 
     t.completed_at && 

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { differenceInMinutes, isPast, parseISO } from "date-fns";
+import { differenceInMinutes, isPast, parseISO, isSameDay, isWithinInterval, startOfDay, endOfDay, set, getHours, getMinutes, format, isBefore } from "date-fns";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Bell, Clock, X } from "lucide-react";
@@ -185,7 +185,9 @@ export default function NotificationManager() {
       duration: task.persistent_reminder ? Infinity : 10000,
     });
 
-    if (!isAdvanceReminder) {
+    // 仅针对非重复/非每日提醒的任务更新数据库状态
+    // 如果是 isAdvanceReminder（提前提醒）或者是每日循环提醒（通过参数判断），则不更新 reminder_sent
+    if (!isAdvanceReminder && !task.is_daily_recurring_instance) {
       updateTaskMutation.mutate({
         id: task.id,
         data: { reminder_sent: true }
@@ -267,19 +269,65 @@ export default function NotificationManager() {
         return;
       }
 
-      const reminderTime = task.snooze_until 
-        ? parseISO(task.snooze_until)
-        : parseISO(task.reminder_time);
+      const start = parseISO(task.reminder_time);
+      // Determine if task is multi-day (has end_time on a different day)
+      const end = task.end_time ? parseISO(task.end_time) : start;
+      const isMultiDay = !isSameDay(start, end);
 
-      // 检查是否到了提醒时间
-      if (isPast(reminderTime) && !task.reminder_sent && !checkedTasks.current.has(task.id)) {
-        sendNotification(task, false);
-        checkedTasks.current.add(task.id);
+      if (task.snooze_until) {
+          // Snoozed logic (override normal schedule)
+          const snoozeTime = parseISO(task.snooze_until);
+          if (isPast(snoozeTime) && !checkedTasks.current.has(task.id)) {
+             sendNotification(task, false);
+             checkedTasks.current.add(task.id);
+          }
+      } else if (isMultiDay) {
+          // Multi-day logic: Remind daily at the specific time
+          // Check if today is within the range [start date, end date]
+          const todayStart = startOfDay(now);
+          const rangeStart = startOfDay(start);
+          const rangeEnd = endOfDay(end);
 
-        // 如果是持续提醒，设置定时器
-        if (task.persistent_reminder) {
-          setupPersistentReminder(task);
-        }
+          if (isWithinInterval(now, { start: rangeStart, end: rangeEnd })) {
+             // Construct target time for today using start time's clock
+             const targetTime = set(now, { 
+                 hours: getHours(start), 
+                 minutes: getMinutes(start), 
+                 seconds: 0, 
+                 milliseconds: 0 
+             });
+
+             // Check conditions:
+             // 1. Past the target time for today
+             // 2. Not past the global end time (if specific end time exists)
+             // 3. Not before the global start time
+             if (isPast(targetTime) && (!task.end_time || isBefore(now, end)) && !isBefore(now, start)) {
+                 const uniqueKey = `${task.id}-daily-${format(now, 'yyyy-MM-dd')}`;
+                 const hasNotifiedToday = typeof window !== 'undefined' && localStorage.getItem(`notified-${uniqueKey}`);
+
+                 if (!hasNotifiedToday && !checkedTasks.current.has(uniqueKey)) {
+                     // Tag task object temporarily to prevent DB update in sendNotification
+                     const taskWithFlag = { ...task, is_daily_recurring_instance: true };
+                     sendNotification(taskWithFlag, false);
+                     
+                     checkedTasks.current.add(uniqueKey);
+                     if (typeof window !== 'undefined') {
+                         localStorage.setItem(`notified-${uniqueKey}`, 'true');
+                     }
+                 }
+             }
+          }
+      } else {
+          // Single day logic (Original)
+          if (isPast(start) && !task.reminder_sent && !checkedTasks.current.has(task.id)) {
+            sendNotification(task, false);
+            checkedTasks.current.add(task.id);
+
+            // 如果是持续提醒，设置定时器
+            if (task.persistent_reminder) {
+              setupPersistentReminder(task);
+            }
+          }
       }
 
       // Find matching rules for advance reminders

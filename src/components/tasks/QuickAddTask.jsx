@@ -637,100 +637,120 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   </div>
                 )}
 
-                {/* 快速设置栏 - 图标化 */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {/* 日期选择 (关注区间) */}
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="justify-start text-left font-normal border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 rounded-xl h-auto py-3 transition-all"
-                    >
-                      <div className="flex flex-col items-start gap-1 w-full">
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <CalendarIcon className="h-4 w-4" />
-                          <span className="text-xs font-medium">任务日期/区间</span>
-                        </div>
-                        {task.reminder_time ? (
-                          <span className="text-sm font-semibold text-slate-800">
-                            {format(task.reminder_time, "M月d日", { locale: zhCN })}
-                            {task.end_time && task.end_time.getTime() !== task.reminder_time.getTime() && (
-                              <> - {format(task.end_time, "M月d日", { locale: zhCN })}</>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400">选择日期范围</span>
-                        )}
-                      </div>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="range"
-                      selected={{
-                        from: task.reminder_time,
-                        to: task.end_time
-                      }}
-                      onSelect={(range) => {
-                        if (range?.from) {
-                          setTask({ 
-                            ...task, 
-                            reminder_time: range.from, 
-                            end_time: range.to || null
-                          });
-                        } else {
-                          setTask({ ...task, reminder_time: null, end_time: null });
-                        }
-                      }}
-                      locale={zhCN}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-
-                {/* 提醒时间设置 (关注具体时间点或时段) */}
-                {!task.is_all_day && (
-                  <div className={`border border-slate-200 bg-white hover:border-blue-300 rounded-xl py-3 px-3 transition-all ${task.has_end_time ? 'col-span-2' : ''}`}>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between text-slate-500">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          <span className="text-xs font-medium">
-                            {task.has_end_time ? "时间段" : "提醒时间"}
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 px-1.5 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => setTask({ ...task, has_end_time: !task.has_end_time })}
-                        >
-                          {task.has_end_time ? "改为单点提醒" : "设为时间段"}
-                        </Button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="time"
-                          value={task.time}
-                          onChange={(e) => setTask({ ...task, time: e.target.value })}
-                          className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0 w-20"
-                        />
-                        {task.has_end_time && (
-                          <>
-                            <span className="text-slate-400">-</span>
-                            <Input
-                              type="time"
-                              value={task.end_time_str}
-                              onChange={(e) => setTask({ ...task, end_time_str: e.target.value })}
-                              className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0 w-20"
+                {/* 新版日期时间选择 UI - 模仿用户设计 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 左侧：日期区间选择 */}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <div className="relative group cursor-pointer">
+                                <div className="absolute inset-0 bg-blue-100/50 rounded-2xl transform rotate-1 group-hover:rotate-2 transition-transform duration-300" />
+                                <div className="relative bg-white border-2 border-blue-100 hover:border-blue-300 rounded-2xl p-5 h-full flex flex-col justify-center transition-all duration-300 shadow-sm hover:shadow-md">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                                            <CalendarIcon className="w-5 h-5" />
+                                        </div>
+                                        <span className="font-semibold text-slate-700">任务日期/区间</span>
+                                    </div>
+                                    <div className="text-center py-2">
+                                        {task.reminder_time ? (
+                                            <div className="space-y-1">
+                                                <div className="text-lg font-bold text-slate-800">
+                                                    {format(task.reminder_time, "yyyy年M月d日", { locale: zhCN })}
+                                                </div>
+                                                {task.end_time && task.end_time.getTime() !== task.reminder_time.getTime() && (
+                                                    <div className="text-sm text-slate-500 font-medium">
+                                                        至 {format(task.end_time, "M月d日", { locale: zhCN })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span className="text-slate-400 text-sm">点击选择日期范围</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                mode="range"
+                                selected={{
+                                    from: task.reminder_time,
+                                    to: task.end_time
+                                }}
+                                onSelect={(range) => {
+                                    if (range?.from) {
+                                        setTask({
+                                            ...task,
+                                            reminder_time: range.from,
+                                            end_time: range.to || null
+                                        });
+                                    } else {
+                                        setTask({ ...task, reminder_time: null, end_time: null });
+                                    }
+                                }}
+                                locale={zhCN}
+                                initialFocus
                             />
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                        </PopoverContent>
+                    </Popover>
+
+                    {/* 右侧：时间设置 */}
+                    {!task.is_all_day && (
+                        <div className="relative group">
+                            <div className="absolute inset-0 bg-slate-100/50 rounded-2xl transform -rotate-1 group-hover:-rotate-2 transition-transform duration-300" />
+                            <div className="relative bg-white border-2 border-slate-100 hover:border-slate-300 rounded-2xl p-5 h-full flex flex-col justify-center transition-all duration-300 shadow-sm hover:shadow-md">
+                                <div className="flex items-start justify-between mb-4">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-400 writing-vertical-rl tracking-widest uppercase">
+                                            Time
+                                        </span>
+                                        <Clock className="w-4 h-4 text-slate-400" />
+                                    </div>
+                                    
+                                    <div className="flex flex-col items-center flex-1">
+                                        <div className="text-sm font-semibold text-slate-600 mb-2">提醒时间</div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="relative">
+                                                <Input
+                                                    type="time"
+                                                    value={task.time}
+                                                    onChange={(e) => setTask({ ...task, time: e.target.value })}
+                                                    className="border-none text-3xl font-bold p-0 h-auto w-auto focus-visible:ring-0 bg-transparent text-slate-800 text-center"
+                                                />
+                                            </div>
+                                            {task.has_end_time && (
+                                                <>
+                                                    <span className="text-slate-300 text-xl">/</span>
+                                                    <div className="relative">
+                                                        <Input
+                                                            type="time"
+                                                            value={task.end_time_str}
+                                                            onChange={(e) => setTask({ ...task, end_time_str: e.target.value })}
+                                                            className="border-none text-3xl font-bold p-0 h-auto w-auto focus-visible:ring-0 bg-transparent text-slate-800 text-center"
+                                                        />
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-auto py-1 px-2 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium whitespace-nowrap"
+                                        onClick={() => setTask({ ...task, has_end_time: !task.has_end_time })}
+                                    >
+                                        {task.has_end_time ? "单点" : "设为时间段"}
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 类别与优先级 */}
+                <div className="grid grid-cols-2 gap-3">
 
                 {/* 类别 */}
                   <Select

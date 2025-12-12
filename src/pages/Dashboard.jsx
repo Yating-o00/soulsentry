@@ -61,7 +61,20 @@ export default function Dashboard() {
   // Filter tasks (exclude subtasks from main view)
   const activeTasks = allTasks.filter(t => !t.deleted_at);
   const rootTasks = activeTasks.filter(t => !t.parent_task_id);
-  const todayTasks = rootTasks.filter(t => t.reminder_time && isToday(parseISO(t.reminder_time)));
+  const todayTasks = rootTasks.filter(t => {
+    if (!t.reminder_time) return false;
+    const today = new Date();
+    const start = parseISO(t.reminder_time);
+    const end = t.end_time ? parseISO(t.end_time) : start;
+    
+    // Check if today is within the task's date range (inclusive)
+    // Using string comparison for date part to avoid timezone issues or simple interval check
+    const todayStr = format(today, 'yyyy-MM-dd');
+    const startStr = format(start, 'yyyy-MM-dd');
+    const endStr = format(end, 'yyyy-MM-dd');
+
+    return todayStr >= startStr && todayStr <= endStr;
+  });
   const overdueTasks = rootTasks.filter(t => 
     t.status === 'pending' && 
     t.reminder_time && 

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
@@ -46,9 +47,9 @@ const PRIORITIES = [
   { value: "urgent", label: "紧急", icon: "⚠️", color: "text-[#d5495f]" },
 ];
 
-export default function QuickAddTask({ onAdd, initialData = null, defaultExpanded = false }) {
+export default function QuickAddTask({ onAdd, initialData = null }) {
   const queryClient = useQueryClient();
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded || !!initialData);
+  const [isExpanded, setIsExpanded] = useState(!!initialData);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
@@ -538,36 +539,20 @@ export default function QuickAddTask({ onAdd, initialData = null, defaultExpande
                 className="space-y-5"
               >
                 {/* 标题输入 - 超大字体 */}
-                <div className="relative flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      placeholder="输入任务标题..."
-                      value={task.title}
-                      onChange={(e) => setTask({ ...task, title: e.target.value })}
-                      className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 pr-8 focus-visible:ring-0 transition-colors"
-                      autoFocus
-                    />
-                    <motion.div
-                      className="absolute bottom-0 left-0 h-0.5 bg-blue-500"
-                      initial={{ width: 0 }}
-                      animate={{ width: task.title ? "100%" : "0%" }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  </div>
-                  
-                  {/* 语音输入按钮 (Expanded Mode) */}
-                  {browserSupported && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={startVoiceInput}
-                      className="h-10 w-10 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
-                      title="语音输入"
-                    >
-                      <Mic className="w-5 h-5" />
-                    </Button>
-                  )}
+                <div className="relative">
+                  <Input
+                    placeholder="输入任务标题..."
+                    value={task.title}
+                    onChange={(e) => setTask({ ...task, title: e.target.value })}
+                    className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors"
+                    autoFocus
+                  />
+                  <motion.div
+                    className="absolute bottom-0 left-0 h-0.5 bg-blue-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: task.title ? "100%" : "0%" }}
+                    transition={{ duration: 0.3 }}
+                  />
                 </div>
 
                 {/* AI智能增强 */}
@@ -704,47 +689,64 @@ export default function QuickAddTask({ onAdd, initialData = null, defaultExpande
                     </PopoverContent>
                   </Popover>
 
-                  {/* 时间 */}
-                  {!task.is_all_day && (
-                    <div className={`border border-slate-200 bg-white hover:border-blue-300 rounded-xl py-3 px-3 transition-all ${task.has_end_time ? 'col-span-2' : ''}`}>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center justify-between text-slate-500">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            <span className="text-xs font-medium">时间</span>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-5 px-1.5 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            onClick={() => setTask({ ...task, has_end_time: !task.has_end_time })}
-                          >
-                            {task.has_end_time ? "移除结束" : "添加结束"}
-                          </Button>
+                  {/* 时间/提醒 */}
+                  <div className={`border border-slate-200 bg-white hover:border-blue-300 rounded-xl py-3 px-3 transition-all ${task.has_end_time && !task.is_all_day ? 'col-span-2' : ''}`}>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span className="text-xs font-medium">{task.is_all_day ? "时间" : "提醒时间"}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Input
-                            type="time"
-                            value={task.time}
-                            onChange={(e) => setTask({ ...task, time: e.target.value })}
-                            className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0 w-20"
+                          <span className="text-[10px] text-slate-400">全天</span>
+                          <Switch 
+                              checked={task.is_all_day}
+                              onCheckedChange={(checked) => setTask({ ...task, is_all_day: checked })}
+                              className="scale-75 origin-right"
                           />
-                          {task.has_end_time && (
-                            <>
-                              <span className="text-slate-400">-</span>
-                              <Input
-                                type="time"
-                                value={task.end_time_str}
-                                onChange={(e) => setTask({ ...task, end_time_str: e.target.value })}
-                                className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0 w-20"
-                              />
-                            </>
-                          )}
                         </div>
                       </div>
+                      
+                      {!task.is_all_day ? (
+                        <div className="flex flex-col gap-1">
+                             <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="time"
+                                    value={task.time}
+                                    onChange={(e) => setTask({ ...task, time: e.target.value })}
+                                    className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0 w-20"
+                                  />
+                                  {task.has_end_time && (
+                                    <>
+                                      <span className="text-slate-400">-</span>
+                                      <Input
+                                        type="time"
+                                        value={task.end_time_str}
+                                        onChange={(e) => setTask({ ...task, end_time_str: e.target.value })}
+                                        className="border-0 bg-transparent p-0 h-auto text-sm font-semibold text-slate-800 focus-visible:ring-0 w-20"
+                                      />
+                                    </>
+                                  )}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-5 px-1.5 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 ml-auto"
+                                  onClick={() => setTask({ ...task, has_end_time: !task.has_end_time })}
+                                >
+                                  {task.has_end_time ? "移除结束" : "添加结束"}
+                                </Button>
+                             </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm font-semibold text-slate-800 h-6 flex items-center">
+                          全天任务
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
 
                   {/* 类别 */}
                   <Select

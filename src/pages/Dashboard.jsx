@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, isToday, isPast, isFuture, parseISO } from "date-fns";
+import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { 
   CheckCircle2, 
@@ -63,17 +63,14 @@ export default function Dashboard() {
   const rootTasks = activeTasks.filter(t => !t.parent_task_id);
   const todayTasks = rootTasks.filter(t => {
     if (!t.reminder_time) return false;
-    const today = new Date();
     const start = parseISO(t.reminder_time);
     const end = t.end_time ? parseISO(t.end_time) : start;
-    
-    // Check if today is within the task's date range (inclusive)
-    // Using string comparison for date part to avoid timezone issues or simple interval check
-    const todayStr = format(today, 'yyyy-MM-dd');
-    const startStr = format(start, 'yyyy-MM-dd');
-    const endStr = format(end, 'yyyy-MM-dd');
-
-    return todayStr >= startStr && todayStr <= endStr;
+    // Check if today is within the range [start, end]
+    // We compare against the start and end of the day to include the full range
+    return isWithinInterval(new Date(), { 
+      start: startOfDay(start), 
+      end: endOfDay(end) 
+    });
   });
   const overdueTasks = rootTasks.filter(t => 
     t.status === 'pending' && 

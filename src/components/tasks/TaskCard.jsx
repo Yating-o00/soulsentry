@@ -93,7 +93,17 @@ const PRIORITY_LABELS = {
 
 export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false }) {
   const [expanded, setExpanded] = useState(false);
-  const [showShareCard, setShowShareCard] = useState(false); // Added state for share card
+  const [showShareCard, setShowShareCard] = useState(false);
+  
+  // Fetch latest completion history (only if task is recurring or has history)
+  const { data: latestCompletion } = useQuery({
+     queryKey: ['task-completion-latest', task.id],
+     queryFn: async () => {
+         const res = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-completed_at", 1);
+         return res[0];
+     },
+     enabled: !!task.id && !isTrash
+  });
 
   // 查询子任务 (如果外部未传入)
   const { data: fetchedSubtasks = [] } = useQuery({
@@ -443,6 +453,13 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                         isExpanded ? <ChevronUp className="w-3 h-3 ml-1 inline" /> : <ChevronDown className="w-3 h-3 ml-1 inline" />
                       )}
                     </Badge>
+                  )}
+
+                  {latestCompletion && task.status !== 'completed' && (
+                     <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 rounded-[8px] text-[13px]" title="上次完成时间">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        上次: {format(new Date(latestCompletion.completed_at), "M-d", { locale: zhCN })}
+                     </Badge>
                   )}
 
                   {task.persistent_reminder && (

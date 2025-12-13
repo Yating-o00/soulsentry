@@ -169,15 +169,38 @@ export default function Dashboard() {
     },
   });
 
-  const handleComplete = (task) => {
+  const handleComplete = async (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";
+    const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
+    
     updateTaskMutation.mutate({
       id: task.id,
       data: { 
         status: newStatus,
-        completed_at: newStatus === "completed" ? new Date().toISOString() : null
+        completed_at: completedAt
       }
     });
+
+    if (newStatus === "completed") {
+      try {
+        await base44.entities.TaskCompletion.create({
+          task_id: task.id,
+          status: "completed",
+          completed_at: completedAt
+        });
+      } catch (e) {
+        console.error("Failed to record completion", e);
+      }
+    } else {
+      try {
+        const history = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-created_date", 1);
+        if (history && history.length > 0) {
+           await base44.entities.TaskCompletion.delete(history[0].id);
+        }
+      } catch (e) {
+        console.error("Failed to remove completion record", e);
+      }
+    }
   };
 
   const handleSubtaskToggle = async (subtask) => {

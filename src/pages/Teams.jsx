@@ -77,12 +77,35 @@ export default function Teams() {
     return matchesSearch;
   });
 
-  const handleComplete = (task) => {
+  const handleComplete = async (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";
+    const now = new Date().toISOString();
+
     updateTaskMutation.mutate({
       id: task.id,
       data: { status: newStatus }
     });
+
+    if (newStatus === "completed") {
+      try {
+        await base44.entities.TaskCompletion.create({
+          task_id: task.id,
+          status: "completed",
+          completed_at: now
+        });
+      } catch (e) {
+        console.error("Failed to record completion", e);
+      }
+    } else {
+      try {
+        const history = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-created_date", 1);
+        if (history && history.length > 0) {
+           await base44.entities.TaskCompletion.delete(history[0].id);
+        }
+      } catch (e) {
+        console.error("Failed to remove completion record", e);
+      }
+    }
   };
 
   const handleSubtaskToggle = async (subtask) => {

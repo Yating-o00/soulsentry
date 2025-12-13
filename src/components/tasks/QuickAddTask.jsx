@@ -642,29 +642,30 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   {/* 日期选择 (关注区间) */}
                   <Popover>
                     <PopoverTrigger asChild>
-                      <div className="group cursor-pointer relative overflow-hidden rounded-xl bg-slate-50/50 border border-slate-200/60 hover:bg-white hover:border-blue-200/50 hover:shadow-sm transition-all duration-200 p-4 flex flex-col justify-center min-h-[100px]">
-                        <div className="flex items-center gap-2 text-slate-500 mb-2">
-                          <CalendarIcon className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
-                          <span className="text-xs font-medium text-slate-500">任务日期</span>
-                        </div>
-
-                        <div className="text-base font-semibold text-slate-700 pl-6">
-                          {task.reminder_time ? (
-                            <div className="flex items-center gap-2">
-                                <span className="text-slate-900">
-                                  {format(task.reminder_time, "M月d日", { locale: zhCN })}
-                                </span>
-                                {task.end_time && task.end_time.getTime() !== task.reminder_time.getTime() && (
-                                  <span className="text-slate-400 text-sm font-normal">
-                                    - {format(task.end_time, "M月d日", { locale: zhCN })}
-                                  </span>
-                                )}
+                      <button type="button" className="group flex items-center justify-between gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 transition-all text-left">
+                         <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">
+                                <CalendarIcon className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
                             </div>
-                          ) : (
-                            <span className="text-slate-400 font-normal">点击设置日期</span>
-                          )}
-                        </div>
-                      </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-slate-500 mb-0.5">任务日期</p>
+                                <div className="text-sm font-bold text-slate-700 truncate">
+                                     {task.reminder_time ? (
+                                          <span>
+                                            {format(task.reminder_time, "M月d日", { locale: zhCN })}
+                                            {task.end_time && task.end_time.getTime() !== task.reminder_time.getTime() && (
+                                              <span className="text-slate-400 font-normal ml-1">
+                                                - {format(task.end_time, "M月d日", { locale: zhCN })}
+                                              </span>
+                                            )}
+                                          </span>
+                                        ) : (
+                                          <span className="text-slate-400 font-normal">点击选择日期</span>
+                                        )}
+                                </div>
+                            </div>
+                         </div>
+                      </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
@@ -692,42 +693,36 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
 
                   {/* 提醒时间设置 */}
                   {!task.is_all_day && (
-                    <div className="group relative overflow-hidden rounded-xl bg-slate-50/50 border border-slate-200/60 hover:bg-white hover:border-blue-200/50 hover:shadow-sm transition-all duration-200 p-4 flex flex-col justify-center min-h-[100px]">
-                        <div className="flex items-center justify-between mb-2">
-                           <div className="flex items-center gap-2 text-slate-500">
-                              <Clock className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
-                              <span className="text-xs font-medium text-slate-500">提醒时间</span>
-                           </div>
-                           <button
-                              type="button"
-                              className="text-[10px] text-blue-500 hover:text-blue-700 hover:underline transition-colors px-2"
-                              onClick={() => setTask({ ...task, has_end_time: !task.has_end_time })}
-                            >
-                              {task.has_end_time ? "单点时间" : "时间段"}
-                           </button>
+                    <div className="group flex items-center gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-300 transition-all">
+                         <div className="h-10 w-10 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition-colors">
+                            <Clock className="h-5 w-5 text-purple-500 group-hover:scale-110 transition-transform" />
                         </div>
-
-                        <div className="flex items-center gap-3 pl-6">
-                           <div className="relative">
-                             <Input
-                                type="time"
-                                value={task.time}
-                                onChange={(e) => setTask({ ...task, time: e.target.value })}
-                                className="border-0 border-b border-slate-200 bg-transparent text-lg font-semibold h-8 w-24 p-0 rounded-none focus-visible:ring-0 focus-visible:border-blue-500 transition-all text-left"
-                              />
-                           </div>
-
-                           {task.has_end_time && (
-                             <>
-                               <span className="text-slate-300 text-sm">-</span>
-                               <Input
-                                  type="time"
-                                  value={task.end_time_str}
-                                  onChange={(e) => setTask({ ...task, end_time_str: e.target.value })}
-                                  className="border-0 border-b border-slate-200 bg-transparent text-lg font-semibold h-8 w-24 p-0 rounded-none focus-visible:ring-0 focus-visible:border-blue-500 transition-all text-left"
-                                />
-                             </>
-                           )}
+                        <div className="flex-1 min-w-0">
+                             <div className="flex items-center justify-between mb-0.5">
+                                 <p className="text-xs font-medium text-slate-500">提醒时间</p>
+                                 <button type="button" onClick={() => setTask({ ...task, has_end_time: !task.has_end_time })} className="text-[10px] text-blue-600 hover:underline">
+                                     {task.has_end_time ? "改为单点" : "设为时间段"}
+                                 </button>
+                             </div>
+                             <div className="flex items-center gap-1">
+                                 <input
+                                    type="time"
+                                    value={task.time}
+                                    onChange={(e) => setTask({ ...task, time: e.target.value })}
+                                    className="p-0 border-0 h-auto text-sm font-bold text-slate-700 bg-transparent focus:ring-0 w-[54px] cursor-pointer"
+                                 />
+                                 {task.has_end_time && (
+                                     <>
+                                         <span className="text-slate-300">-</span>
+                                         <input
+                                            type="time"
+                                            value={task.end_time_str}
+                                            onChange={(e) => setTask({ ...task, end_time_str: e.target.value })}
+                                            className="p-0 border-0 h-auto text-sm font-bold text-slate-700 bg-transparent focus:ring-0 w-[54px] cursor-pointer"
+                                          />
+                                     </>
+                                 )}
+                             </div>
                         </div>
                     </div>
                   )}

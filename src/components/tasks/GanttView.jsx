@@ -252,6 +252,45 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
                       })}
                   </div>
 
+                  {/* Dependency Lines SVG Overlay */}
+                  <svg className="absolute inset-0 pointer-events-none z-10" style={{ left: SIDEBAR_WIDTH, width: days.length * dayWidth, height: '100%' }}>
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#cbd5e1" />
+                            </marker>
+                        </defs>
+                        {visibleTasks.map(task => {
+                            if (!task.dependencies || task.dependencies.length === 0) return null;
+                            const taskIndex = visibleTasks.findIndex(t => t.id === task.id);
+                            if (taskIndex === -1) return null;
+                            
+                            const taskY = taskIndex * TASK_HEIGHT + TASK_HEIGHT / 2;
+                            const taskStartX = getPosition(task.reminder_time);
+                            
+                            return task.dependencies.map(depId => {
+                                const depIndex = visibleTasks.findIndex(t => t.id === depId);
+                                if (depIndex === -1) return null;
+                                
+                                const depTask = visibleTasks[depIndex];
+                                const depY = depIndex * TASK_HEIGHT + TASK_HEIGHT / 2;
+                                const depEndX = getPosition(depTask.end_time || depTask.reminder_time) + getWidth(depTask.reminder_time, depTask.end_time);
+                                
+                                // Draw curved path
+                                const midX = (depEndX + taskStartX) / 2;
+                                return (
+                                    <path 
+                                        key={`${task.id}-${depId}`}
+                                        d={`M ${depEndX} ${depY} C ${midX} ${depY}, ${midX} ${taskY}, ${taskStartX} ${taskY}`}
+                                        fill="none"
+                                        stroke="#cbd5e1"
+                                        strokeWidth="1.5"
+                                        markerEnd="url(#arrowhead)"
+                                    />
+                                );
+                            });
+                        })}
+                  </svg>
+
                   {/* Task Rows */}
                   <div className="flex flex-col relative z-0 pb-10">
                       {visibleTasks.map((task) => (

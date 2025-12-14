@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users } from "lucide-react";
@@ -16,7 +16,8 @@ import {
   SidebarTrigger,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Trash2 } from "lucide-react";
+import { Trash2, MessageSquarePlus } from "lucide-react";
+import FeedbackDialog from "@/components/feedback/FeedbackDialog";
 
 const navigationItems = [
   {
@@ -54,6 +55,7 @@ const navigationItems = [
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   return (
     <SidebarProvider>
@@ -163,6 +165,18 @@ export default function Layout({ children }) {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton 
+                  onClick={() => setFeedbackOpen(true)}
+                  className="group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 hover:bg-blue-50 text-slate-700 cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 px-4 py-3 w-full">
+                    <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-blue-600 group-hover:scale-110 transition-all duration-300" />
+                    <span className="font-medium group-hover:text-blue-600 transition-colors">反馈与联系</span>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton 
                   asChild 
                   className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
                     location.pathname === createPageUrl("Trash") 
@@ -182,6 +196,7 @@ export default function Layout({ children }) {
           </SidebarFooter>
           </Sidebar>
 
+        <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative">
           <FloatingAssistantButton />
           <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">

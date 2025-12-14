@@ -54,8 +54,8 @@ export default function CalendarView() {
     initialData: [],
   });
 
-  const tasks = allTasks.filter(task => !task.parent_task_id && !task.deleted_at);
-  const notes = allNotes.filter(note => !note.deleted_at);
+  const tasks = useMemo(() => allTasks.filter(task => !task.parent_task_id && !task.deleted_at), [allTasks]);
+  const notes = useMemo(() => allNotes.filter(note => !note.deleted_at), [allNotes]);
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
@@ -144,9 +144,9 @@ export default function CalendarView() {
     return map;
   }, [tasks, notes]);
 
-  const eventsOnSelectedDate = eventsByDate[format(selectedDate, 'yyyy-MM-dd')] || [];
-  const tasksOnSelectedDate = eventsOnSelectedDate.filter(e => e.type === 'task').map(e => e.data);
-  const notesOnSelectedDate = eventsOnSelectedDate.filter(e => e.type === 'note').map(e => e.data);
+  const eventsOnSelectedDate = useMemo(() => eventsByDate[format(selectedDate, 'yyyy-MM-dd')] || [], [eventsByDate, selectedDate]);
+  const tasksOnSelectedDate = useMemo(() => eventsOnSelectedDate.filter(e => e.type === 'task').map(e => e.data), [eventsOnSelectedDate]);
+  const notesOnSelectedDate = useMemo(() => eventsOnSelectedDate.filter(e => e.type === 'note').map(e => e.data), [eventsOnSelectedDate]);
 
   const handleComplete = async (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";

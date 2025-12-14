@@ -104,17 +104,17 @@ export default function Tasks() {
     }
   });
 
-  const filteredTasks = tasks.filter((task) => {
+  const filteredTasks = React.useMemo(() => tasks.filter((task) => {
     const matchesStatus = statusFilter === "all" || task.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || task.category === categoryFilter;
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     task.description?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesCategory && matchesSearch;
-  });
+  }), [tasks, statusFilter, categoryFilter, searchQuery]);
 
   // Group tasks logic
   // Only show top-level tasks in the list
-  const rootTasks = filteredTasks.filter((t) => !t.parent_task_id);
+  const rootTasks = React.useMemo(() => filteredTasks.filter((t) => !t.parent_task_id), [filteredTasks]);
   const getSubtasks = (parentId) => filteredTasks.filter((t) => t.parent_task_id === parentId);
   const getAllSubtasks = (parentId) => tasks.filter((t) => t.parent_task_id === parentId);
 

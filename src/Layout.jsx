@@ -1,6 +1,4 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users } from "lucide-react";
@@ -18,7 +16,7 @@ import {
   SidebarTrigger,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Trash2, MessageSquarePlus, ShieldCheck } from "lucide-react";
+import { Trash2, MessageSquarePlus } from "lucide-react";
 import FeedbackDialog from "@/components/feedback/FeedbackDialog";
 
 const navigationItems = [
@@ -58,13 +56,6 @@ const navigationItems = [
 export default function Layout({ children }) {
   const location = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-
-  const { data: user } = useQuery({
-    queryKey: ['user'],
-    queryFn: () => base44.auth.me(),
-  });
-  
-  const isAdmin = user?.role === 'admin';
 
   return (
     <SidebarProvider>
@@ -172,26 +163,6 @@ export default function Layout({ children }) {
           </SidebarContent>
           <SidebarFooter className="p-3 border-t border-slate-200/50">
             <SidebarMenu>
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    asChild
-                    className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
-                      location.pathname === createPageUrl("FeedbackManagement") 
-                        ? 'bg-gradient-to-r from-slate-700 to-slate-800 text-white shadow-lg' 
-                        : 'hover:bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    <Link to={createPageUrl("FeedbackManagement")} className="flex items-center gap-3 px-4 py-3">
-                      <ShieldCheck className={`w-5 h-5 transition-transform duration-300 ${
-                        location.pathname === createPageUrl("FeedbackManagement") ? 'scale-110' : 'group-hover:scale-110'
-                      }`} />
-                      <span className="font-medium">反馈管理</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
               <SidebarMenuItem>
                 <SidebarMenuButton 
                   onClick={() => setFeedbackOpen(true)}

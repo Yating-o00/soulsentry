@@ -76,7 +76,7 @@ export default function Tasks() {
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: null }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已恢复");
+      toast.success("约定已恢复");
     }
   });
 
@@ -84,7 +84,7 @@ export default function Tasks() {
     mutationFn: (id) => base44.entities.Task.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已永久删除");
+      toast.success("约定已永久删除");
     }
   });
 
@@ -126,7 +126,7 @@ export default function Tasks() {
 
   const handleBulkCreate = async (parsedTasks) => {
     if (!parsedTasks || parsedTasks.length === 0) {
-      toast.error("没有任务需要创建");
+      toast.error("没有约定需要创建");
       return;
     }
 
@@ -134,12 +134,12 @@ export default function Tasks() {
     let createdSubtasksCount = 0;
 
     try {
-      toast.loading("正在创建任务...", { id: 'bulk-create' });
+      toast.loading("正在创建约定...", { id: 'bulk-create' });
 
       for (const taskData of parsedTasks) {
         const hasSubtasks = taskData.subtasks && taskData.subtasks.length > 0;
 
-        // 创建主任务，确保包含所有字段和初始进度
+        // 创建主约定，确保包含所有字段和初始进度
         const mainTaskData = {
           title: taskData.title,
           description: taskData.description || "",
@@ -158,21 +158,21 @@ export default function Tasks() {
         const createdMainTask = await base44.entities.Task.create(mainTaskData);
         createdCount++;
 
-        // 如果有子任务，创建子任务
+        // 如果有子约定，创建子约定
         if (hasSubtasks) {
           for (let i = 0; i < taskData.subtasks.length; i++) {
             const subtask = taskData.subtasks[i];
             const subtaskData = {
-              title: `${subtask.order || i + 1}. ${typeof subtask.title === 'object' ? subtask.title.title || subtask.title.text || "未命名子任务" : subtask.title}`, // 添加序号到标题
+              title: `${subtask.order || i + 1}. ${typeof subtask.title === 'object' ? subtask.title.title || subtask.title.text || "未命名子约定" : subtask.title}`, // 添加序号到标题
               description: subtask.description || "",
               reminder_time: subtask.reminder_time || taskData.reminder_time,
               priority: subtask.priority || taskData.priority || "medium",
-              category: taskData.category, // 子任务继承父任务的类别
+              category: taskData.category, // 子约定继承父约定的类别
               status: "pending",
-              parent_task_id: createdMainTask.id, // 关联父任务
-              progress: 0, // 子任务也有progress字段
+              parent_task_id: createdMainTask.id, // 关联父约定
+              progress: 0, // 子约定也有progress字段
               notification_sound: taskData.notification_sound || "default",
-              persistent_reminder: false, // 子任务默认不持续提醒
+              persistent_reminder: false, // 子约定默认不持续提醒
               advance_reminders: [],
               assigned_to: taskData.assigned_to || []
             };
@@ -187,13 +187,13 @@ export default function Tasks() {
       }
 
       toast.success(
-        `✅ 成功创建 ${createdCount} 个主任务${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子任务` : ''}！`,
+        `✅ 成功创建 ${createdCount} 个主约定${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子约定` : ''}！`,
         { id: 'bulk-create' }
       );
     } catch (error) {
       console.error("Error creating bulk tasks:", error);
       toast.error(
-        `创建任务时出错。已成功创建 ${createdCount} 个主任务${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子任务` : ''}。`,
+        `创建约定时出错。已成功创建 ${createdCount} 个主约定${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子约定` : ''}。`,
         { id: 'bulk-create' }
       );
     }
@@ -208,7 +208,7 @@ export default function Tasks() {
         animate={{ opacity: 1, y: 0 }}>
 
         <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
-          全部任务
+          全部约定
         </h1>
         <p className="text-slate-600">你的点滴都是最重要的事</p>
       </motion.div>
@@ -250,7 +250,7 @@ export default function Tasks() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="搜索任务..."
+              placeholder="搜索约定..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 border-0 bg-white shadow-lg rounded-xl" />
@@ -398,8 +398,8 @@ export default function Tasks() {
             <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
               <Search className="w-12 h-12 text-slate-400" />
             </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">未找到任务</h3>
-            <p className="text-slate-600">试试调整筛选条件或创建新任务</p>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">未找到约定</h3>
+            <p className="text-slate-600">试试调整筛选条件或创建新约定</p>
           </motion.div>
         }
       </motion.div>
@@ -413,7 +413,7 @@ export default function Tasks() {
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>编辑任务</DialogTitle>
+            <DialogTitle>编辑约定</DialogTitle>
           </DialogHeader>
           {editingTask &&
           <QuickAddTask

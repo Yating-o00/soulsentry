@@ -105,7 +105,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
      enabled: !!task.id && !isTrash
   });
 
-  // 查询子任务 (如果外部未传入)
+  // 查询子约定 (如果外部未传入)
   const { data: fetchedSubtasks = [] } = useQuery({
     queryKey: ['subtasks', task?.id],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: task.id }),
@@ -141,7 +141,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
       enabled: false // Disable auto fetch for list view performance, just use counts or passed data if available
   });
 
-  // 计算子任务完成进度
+  // 计算子约定完成进度
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const progress = hasSubtasks ? Math.round((completedSubtasks / subtasks.length) * 100) : 0;
 
@@ -184,7 +184,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
               : 'border-l-[3px] border-l-[#384877] hover:translate-y-[-1px]'
             }`}
             >
-          {/* 主任务 */}
+          {/* 主约定 */}
           <div className="p-5">
             <div className="flex items-start gap-4">
               {!isTrash && (
@@ -234,7 +234,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                             onRestore();
                           }}
                           className="h-8 px-2 hover:bg-[#f0fdf4] hover:text-[#16a34a] rounded-lg text-xs font-medium"
-                          title="恢复任务"
+                          title="恢复约定"
                         >
                           <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                           恢复
@@ -281,7 +281,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                                 onEdit();
                             }}>
                                 <Edit className="mr-2 h-4 w-4" />
-                                编辑任务
+                                编辑约定
                             </DropdownMenuItem>
 
                             <DropdownMenuSub>
@@ -309,7 +309,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                                 setShowShareCard(true);
                             }}>
                                 <Share2 className="mr-2 h-4 w-4" />
-                                分享任务
+                                分享约定
                             </DropdownMenuItem>
                             
                             <DropdownMenuSeparator />
@@ -340,7 +340,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                 {hasSubtasks && (
                   <div className="mb-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[13px] text-[#a1a1aa]">子任务进度</span>
+                      <span className="text-[13px] text-[#a1a1aa]">子约定进度</span>
                       <span className="text-[13px] font-semibold text-[#384877]">
                         {completedSubtasks}/{subtasks.length} 已完成 ({progress}%)
                       </span>
@@ -420,7 +420,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   {task.ai_analysis?.risk_level && ['high', 'critical'].includes(task.ai_analysis.risk_level) && (
                      <Badge 
                       className="bg-red-100 text-red-600 border-red-200 rounded-[8px] text-[13px]"
-                      title={`高风险任务: ${task.ai_analysis.risks?.join('; ')}`}
+                      title={`高风险约定: ${task.ai_analysis.risks?.join('; ')}`}
                     >
                       <ShieldAlert className="w-3 h-3 mr-1" />
                       {task.ai_analysis.risk_level === 'critical' ? '极高风险' : '高风险'}
@@ -448,7 +448,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                         }
                       }}
                     >
-                      {subtasks.length} 个子任务
+                      {subtasks.length} 个子约定
                       {onToggleSubtasks && (
                         isExpanded ? <ChevronUp className="w-3 h-3 ml-1 inline" /> : <ChevronDown className="w-3 h-3 ml-1 inline" />
                       )}
@@ -507,7 +507,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
             </div>
           </div>
 
-          {/* 子任务列表 */}
+          {/* 子约定列表 */}
           <AnimatePresence>
             {expanded && hasSubtasks && !hideSubtaskList && (
               <motion.div
@@ -535,7 +535,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        {/* 子任务序号标识 */}
+                        {/* 子约定序号标识 */}
                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                           isSubtaskCompleted
                             ? 'bg-[#10b981] text-white'

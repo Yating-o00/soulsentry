@@ -137,7 +137,7 @@ export default function Teams() {
         <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#5a647d] to-[#1e3a5f] bg-clip-text text-transparent mb-2">
           团队协作
         </h1>
-        <p className="text-slate-600">查看和管理团队共享的任务</p>
+        <p className="text-slate-600">查看和管理团队共享的约定</p>
       </motion.div>
 
       {/* 统计卡片 */}
@@ -234,7 +234,7 @@ export default function Teams() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="搜索团队任务..."
+            placeholder="搜索团队约定..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 border-0 bg-white shadow-md rounded-[12px]"
@@ -244,7 +244,7 @@ export default function Teams() {
         <Tabs value={filterView} onValueChange={setFilterView}>
           <TabsList className="grid w-full md:w-auto grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
             <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#5a647d] data-[state=active]:to-[#4a5670] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              全部任务 ({sharedTasks.length})
+              全部约定 ({sharedTasks.length})
             </TabsTrigger>
             <TabsTrigger value="assigned" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#1BA1CD] data-[state=active]:to-[#0D8AB5] data-[state=active]:text-white data-[state=active]:shadow-sm">
               分配给我 ({myAssignedTasks.length})
@@ -256,7 +256,7 @@ export default function Teams() {
         </Tabs>
       </motion.div>
 
-      {/* 任务列表 */}
+      {/* 约定列表 */}
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
           {filteredTasks.map((task) => (
@@ -306,8 +306,8 @@ export default function Teams() {
             <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
               <Users className="w-12 h-12 text-slate-400" />
             </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">暂无团队任务</h3>
-            <p className="text-slate-600">创建任务并分配给团队成员</p>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">暂无团队约定</h3>
+            <p className="text-slate-600">创建约定并分配给团队成员</p>
           </motion.div>
         )}
       </div>

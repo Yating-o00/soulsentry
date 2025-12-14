@@ -25,7 +25,7 @@ const navigationItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "任务",
+    title: "约定",
     url: createPageUrl("Tasks"),
     icon: ListTodo,
   },

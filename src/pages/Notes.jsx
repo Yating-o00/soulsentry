@@ -45,10 +45,10 @@ export default function Notes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] }); // Ideally invalidate tasks, but might not be mounted
       setTaskCreationNote(null);
-      toast.success("任务已创建");
+      toast.success("约定已创建");
     },
     onError: () => {
-        toast.error("任务创建失败");
+        toast.error("约定创建失败");
     }
   });
 
@@ -208,13 +208,13 @@ export default function Notes() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-blue-600" />
-                从便签创建任务
+                从便签创建约定
             </DialogTitle>
           </DialogHeader>
           {taskCreationNote && (
             <QuickAddTask
               initialData={{
-                title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新任务",
+                title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新约定",
                 description: taskCreationNote.ai_analysis?.key_points 
                     ? `要点总结：\n- ${taskCreationNote.ai_analysis.key_points.join('\n- ')}\n\n原文内容：\n${taskCreationNote.plain_text || ""}`
                     : (taskCreationNote.plain_text || ""),

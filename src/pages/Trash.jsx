@@ -21,7 +21,7 @@ export default function Trash() {
     initialData: [],
   });
 
-  // 只显示已删除的任务
+  // 只显示已删除的约定
   const trashTasks = allTasks.filter(task => !task.parent_task_id && task.deleted_at);
 
   const filteredTasks = trashTasks.filter(task => {
@@ -34,7 +34,7 @@ export default function Trash() {
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: null }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已恢复");
+      toast.success("约定已恢复");
     },
   });
 
@@ -42,7 +42,7 @@ export default function Trash() {
     mutationFn: (id) => base44.entities.Task.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已永久删除");
+      toast.success("约定已永久删除");
     },
   });
 
@@ -62,7 +62,7 @@ export default function Trash() {
             回收站
           </h1>
         </div>
-        <p className="text-slate-600">管理已删除的任务，您可以恢复它们或永久删除</p>
+        <p className="text-slate-600">管理已删除的约定，您可以恢复它们或永久删除</p>
       </motion.div>
 
       <motion.div
@@ -74,7 +74,7 @@ export default function Trash() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="搜索已删除的任务..."
+            placeholder="搜索已删除的约定..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 border-0 bg-white shadow-lg rounded-xl"
@@ -96,7 +96,7 @@ export default function Trash() {
               isTrash={true}
               onRestore={() => restoreTaskMutation.mutate(task.id)}
               onDeleteForever={() => {
-                if (window.confirm('确定要永久删除这个任务吗？此操作无法撤销。')) {
+                if (window.confirm('确定要永久删除这个约定吗？此操作无法撤销。')) {
                   permanentDeleteTaskMutation.mutate(task.id);
                 }
               }}
@@ -116,7 +116,7 @@ export default function Trash() {
               <Trash2 className="w-12 h-12 text-slate-400" />
             </div>
             <h3 className="text-xl font-semibold text-slate-800 mb-2">回收站为空</h3>
-            <p className="text-slate-600">没有已删除的任务</p>
+            <p className="text-slate-600">没有已删除的约定</p>
           </motion.div>
         )}
       </motion.div>

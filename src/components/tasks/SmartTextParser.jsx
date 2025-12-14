@@ -37,26 +37,26 @@ export default function SmartTextParser({ onTasksGenerated }) {
     setParsing(true);
     try {
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `你是一个任务拆解专家。请从以下文本中提取任务信息，并识别大任务与子任务的层级关系。
+        prompt: `你是一个约定拆解专家。请从以下文本中提取约定信息，并识别大约定与子约定的层级关系。
 
 文本内容：
 ${text}
 
 请分析文本并提取以下信息：
-1. 识别主要任务（大任务）和子任务（小任务）的关系
-   - 例如："准备晚餐"是主任务，"购买食材"、"炒菜"、"做汤"是子任务
-   - 例如："完成项目报告"是主任务，"收集数据"、"分析数据"、"撰写报告"是子任务
-2. 为每个任务提取：标题、描述、提醒时间、优先级、类别
-3. 子任务的提醒时间应该早于或等于父任务的提醒时间
-4. 如果文本中没有明确的层级关系，但任务可以拆解，请智能拆解
-5. 为子任务添加序号标识（如：步骤1、步骤2等）
+1. 识别主要约定（大约定）和子约定（小约定）的关系
+   - 例如："准备晚餐"是主约定，"购买食材"、"炒菜"、"做汤"是子约定
+   - 例如："完成项目报告"是主约定，"收集数据"、"分析数据"、"撰写报告"是子约定
+2. 为每个约定提取：标题、描述、提醒时间、优先级、类别
+3. 子约定的提醒时间应该早于或等于父约定的提醒时间
+4. 如果文本中没有明确的层级关系，但约定可以拆解，请智能拆解
+5. 为子约定添加序号标识（如：步骤1、步骤2等）
 6. 提取参与者/负责人：从文本中识别提到的人名（如"和张三"、"交给李四"），返回名字列表
 
 提醒时间规则：
 - 如果提到具体时间，转换为ISO格式
 - 相对时间（如"明天"、"下周"）计算具体日期
 - 没有明确时间时，使用当前时间的第二天上午9点
-- 子任务时间应该合理分布在父任务之前
+- 子约定时间应该合理分布在父约定之前
 
 优先级判断：
 - urgent: 非常紧急，需要立即处理
@@ -111,7 +111,7 @@ ${text}
                           type: "string",
                           enum: ["low", "medium", "high", "urgent"]
                         },
-                        order: { type: "number", description: "子任务的顺序序号" }
+                        order: { type: "number", description: "子约定的顺序序号" }
                       },
                       required: ["title", "reminder_time"]
                     }
@@ -146,9 +146,9 @@ ${text}
         const totalSubtasks = tasksWithAssignments.reduce((sum, task) => 
           sum + (task.subtasks?.length || 0), 0
         );
-        toast.success(`成功解析出 ${response.tasks.length} 个主任务${totalSubtasks > 0 ? `和 ${totalSubtasks} 个子任务` : ''}！`);
+        toast.success(`成功解析出 ${response.tasks.length} 个主约定${totalSubtasks > 0 ? `和 ${totalSubtasks} 个子约定` : ''}！`);
       } else {
-        toast.error("未能从文本中提取到任务信息");
+        toast.error("未能从文本中提取到约定信息");
       }
     } catch (error) {
       toast.error("解析失败，请重试");
@@ -160,7 +160,7 @@ ${text}
   const handleCreateAll = async () => {
     if (parsedTasks.length === 0) return;
     
-    // 直接传递完整的解析结果，包含主任务和子任务的层级结构
+    // 直接传递完整的解析结果，包含主约定和子约定的层级结构
     onTasksGenerated(parsedTasks);
     setParsedTasks([]);
     setText("");
@@ -244,23 +244,23 @@ ${text}
     const subtask = task.subtasks[subtaskIndex];
     
     if (!subtask.title.trim()) {
-      toast.error("请先输入子任务内容");
+      toast.error("请先输入子约定内容");
       return;
     }
 
     setRefiningState({ taskIndex, subIndex: subtaskIndex });
     try {
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `请分析并完善以下子任务。
+        prompt: `请分析并完善以下子约定。
         
-当前子任务内容：${subtask.title}
+当前子约定内容：${subtask.title}
 ${subtask.description ? `当前描述：${subtask.description}` : ""}
-所属主任务：${task.title} (时间: ${task.reminder_time})
+所属主约定：${task.title} (时间: ${task.reminder_time})
 
 请执行以下操作：
 1. 【语义识别】：如果标题包含时间（如"明天"）或优先级（如"紧急"），请提取并清洗标题。
 2. 【内容完善】：优化标题使其更清晰；如果描述为空，生成简短实用的执行步骤；如果已有描述，进行润色。
-3. 【属性推断】：基于主任务时间和子任务内容，推断合理的提醒时间（应早于主任务）和优先级。
+3. 【属性推断】：基于主约定时间和子约定内容，推断合理的提醒时间（应早于主约定）和优先级。
 
 当前时间：${new Date().toISOString()}`,
         response_json_schema: {
@@ -290,7 +290,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
               : t
           )
         );
-        toast.success("子任务已智能完善 ✨");
+        toast.success("子约定已智能完善 ✨");
       }
     } catch (error) {
       console.error("Refine error:", error);
@@ -318,12 +318,17 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
   };
 
   return (
-    <div className="bg-white p-6 space-y-4">
-        <div className="mb-4">
-          <p className="text-[15px] text-[#52525b]">
-            粘贴任何文本，AI 自动提取并智能拆解任务
-          </p>
-        </div>
+    <Card className="border border-[#e5e9ef] shadow-md hover:shadow-lg transition-all bg-white rounded-[16px]">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
+          <Wand2 className="w-5 h-5 text-[#384877]" />
+          <span className="text-[#222222]">智能文本解析</span>
+        </CardTitle>
+        <p className="text-[15px] text-[#52525b] mt-1.5">
+          粘贴任何文本，AI 自动提取并智能拆解约定
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="space-y-2">
           <Textarea
             placeholder="粘贴文本，例如：&#10;明天晚上准备家庭聚餐，需要买菜、做三道菜和一个汤&#10;本周完成项目报告，包括数据收集、分析和撰写..."
@@ -375,14 +380,14 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-[#d5495f]" />
                   <span className="font-semibold text-slate-800">
-                    解析结果 ({parsedTasks.length} 个主任务)
+                    解析结果 ({parsedTasks.length} 个主约定)
                   </span>
                 </div>
                 <Button
                   onClick={handleCreateAll}
                   className="bg-[#d5495f] hover:bg-[#c03d50] shadow-md hover:shadow-lg transition-all rounded-[12px]"
                   >
-                  创建全部任务
+                  创建全部约定
                   </Button>
               </div>
 
@@ -395,7 +400,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                     transition={{ delay: index * 0.1 }}
                     className="bg-white rounded-[12px] border border-[#dce4ed] overflow-hidden hover:border-[#c8d1e0] transition-all"
                   >
-                    {/* 主任务 */}
+                    {/* 主约定 */}
                     <div className="p-4 hover:bg-[#f9fafb] transition-all group">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-start gap-3 flex-1">
@@ -418,7 +423,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                               value={task.title}
                               onChange={(e) => handleEditTask(index, 'title', e.target.value)}
                               className="font-semibold text-[#222222] text-lg border-none p-0 h-auto focus-visible:ring-0 bg-transparent placeholder:text-slate-300 shadow-none"
-                              placeholder="任务标题"
+                              placeholder="约定标题"
                             />
                             <Textarea
                               value={task.description || ""}
@@ -514,7 +519,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                           className="h-7 gap-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 hover:text-blue-700 rounded-md"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          查看并添加子任务
+                          查看并添加子约定
                         </Button>
                       </div>
                       {task.assigned_to && task.assigned_to.length > 0 && (
@@ -534,7 +539,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                       )}
                     </div>
 
-                    {/* 子任务列表 */}
+                    {/* 子约定列表 */}
                     {task.subtasks && task.subtasks.length > 0 && expandedTasks.has(index) && (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
@@ -558,7 +563,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                     value={subtask.title}
                                     onChange={(e) => handleEditSubtask(index, subIndex, 'title', e.target.value)}
                                     className="font-medium text-[#222222] border-none p-0 h-auto focus-visible:ring-0 bg-transparent shadow-none placeholder:text-slate-300 text-sm"
-                                    placeholder="子任务标题"
+                                    placeholder="子约定标题"
                                   />
                                   <Textarea
                                     value={subtask.description || ""}
@@ -658,9 +663,10 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
 
         <div className="bg-[#f9fafb] border border-[#e5e9ef] rounded-[12px] p-3">
           <p className="text-[13px] text-[#52525b] leading-relaxed">
-            💡 <strong className="text-[#222222]">提示：</strong>AI 自动识别任务层级关系。例如"准备晚餐"会被拆解为"购买食材"、"做菜"等子任务。支持自然语言，如"明天下午3点"、"本周五前"等。
+            💡 <strong className="text-[#222222]">提示：</strong>AI 自动识别约定层级关系。例如"准备晚餐"会被拆解为"购买食材"、"做菜"等子约定。支持自然语言，如"明天下午3点"、"本周五前"等。
           </p>
         </div>
-      </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -189,7 +189,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     if (enhancements.subtasks && enhancements.subtasks.length > 0) {
       for (const st of enhancements.subtasks) {
         await createSubtaskMutation.mutateAsync({
-          title: String(st || "新子任务"),
+          title: String(st || "新子约定"),
           parent_task_id: task.id,
           reminder_time: task.reminder_time,
           end_time: task.end_time,
@@ -257,7 +257,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
       });
 
       if (newStatus === 'blocked') {
-          toast("任务已标记为阻塞状态 (等待前置任务完成)", { icon: "🚫" });
+          toast("约定已标记为阻塞状态 (等待前置约定完成)", { icon: "🚫" });
       }
     };
 
@@ -296,7 +296,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
           `;
 
           const res = await base44.integrations.Core.InvokeLLM({
-              prompt: `基于提供的上下文和附件（图片/视频），分析此任务的状态、风险和依赖关系。请务必使用中文回答所有文本内容。
+              prompt: `基于提供的上下文和附件（图片/视频），分析此约定的状态、风险和依赖关系。请务必使用中文回答所有文本内容。
               
               Context:
               ${context}
@@ -304,12 +304,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               Tasks:
               1. 视觉分析（如果有媒体附件）：从附件中识别关键信息、阻碍因素或上下文。
               2. 状态摘要：结合文本和视觉见解生成简短摘要（2-3句）。强调任何进度的视觉证据或问题。
-              3. 潜在风险：例如停滞的子任务、视觉缺陷、高优先级但进度低等。
+              3. 潜在风险：例如停滞的子约定、视觉缺陷、高优先级但进度低等。
               4. 关键依赖：从文本或视觉推断的先决条件。
               5. 可行的建议。
               6. 建议优先级：基于截止日期、风险和状态，建议优先级（low/medium/high/urgent）并提供理由。
-              7. 风险评估：评估任务风险等级（low/medium/high/critical）。
-              8. 时间建议：基于任务性质，建议最佳执行时间段（start/end）及理由。
+              7. 风险评估：评估约定风险等级（low/medium/high/critical）。
+              8. 时间建议：基于约定性质，建议最佳执行时间段（start/end）及理由。
               
               Return ONLY JSON. All string values in the response must be in Chinese (except for enum keys like priority). Time format: ISO 8601.`,
               file_urls: mediaAttachments.length > 0 ? mediaAttachments : undefined,
@@ -381,7 +381,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               <div className="flex justify-between text-[15px]">
                 <span className="text-[#52525b]">完成进度</span>
                 <span className="font-semibold text-[#5a647d]">
-                  {completedSubtasks}/{totalSubtasks} 子任务
+                  {completedSubtasks}/{totalSubtasks} 子约定
                 </span>
               </div>
               <Progress value={task.progress || 0} className="h-2" />
@@ -397,7 +397,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
           <Tabs defaultValue="subtasks" className="w-full">
             <TabsList className="flex w-full overflow-x-auto justify-start gap-2 p-1 bg-slate-100/80 rounded-xl h-auto scrollbar-hide">
               <TabsTrigger value="subtasks" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
-                子任务 ({totalSubtasks})
+                子约定 ({totalSubtasks})
               </TabsTrigger>
               <TabsTrigger value="dependencies" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 依赖 ({task.dependencies?.length || 0})
@@ -445,7 +445,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
             <TabsContent value="subtasks" className="space-y-4">
               <div className="flex gap-2">
                 <Input
-                  placeholder="添加子任务..."
+                  placeholder="添加子约定..."
                   value={newSubtask}
                   onChange={(e) => setNewSubtask(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddSubtask()}
@@ -503,7 +503,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                 {subtasks.length === 0 && (
                   <div className="text-center py-8 text-slate-400">
                     <Circle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>暂无子任务</p>
+                    <p>暂无子约定</p>
                   </div>
                 )}
               </div>
@@ -677,7 +677,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                               <div className="flex justify-between items-start">
                                  <div>
                                     <p className="font-semibold text-slate-800 text-sm flex items-center gap-2">
-                                        任务完成
+                                        约定完成
                                         {idx === 0 && <Badge className="h-5 text-[10px] bg-green-500 hover:bg-green-600">最新</Badge>}
                                     </p>
                                     <p className="text-xs text-slate-500 mt-1 font-medium font-mono">

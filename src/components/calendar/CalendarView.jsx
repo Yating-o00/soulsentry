@@ -486,7 +486,7 @@ export default function CalendarView() {
                         className="border-purple-300 text-purple-600 hover:bg-purple-50"
                       >
                         <Plus className="w-4 h-4 mr-2" />
-                        添加任务
+                        添加约定
                       </Button>
                     </Card>
                   </motion.div>
@@ -497,13 +497,13 @@ export default function CalendarView() {
         </motion.div>
       </div>
 
-      {/* 快速添加任务对话框 */}
+      {/* 快速添加约定对话框 */}
       <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-blue-600" />
-              为 {quickAddDate && format(quickAddDate, "M月d日", { locale: zhCN })} 添加任务
+              为 {quickAddDate && format(quickAddDate, "M月d日", { locale: zhCN })} 添加约定
             </DialogTitle>
           </DialogHeader>
           <QuickAddTask

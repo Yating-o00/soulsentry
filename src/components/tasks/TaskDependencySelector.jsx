@@ -71,7 +71,7 @@ export default function TaskDependencySelector({ currentTask, selectedDependency
                         ))}
                     </div>
                 ) : (
-                    <p className="text-xs text-slate-400 italic">暂无前置依赖任务</p>
+                    <p className="text-xs text-slate-400 italic">暂无前置依赖约定</p>
                 )}
             </div>
 
@@ -80,7 +80,7 @@ export default function TaskDependencySelector({ currentTask, selectedDependency
                 <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                     <Input
-                        placeholder="搜索任务添加依赖..."
+                        placeholder="搜索约定添加依赖..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9"
@@ -91,7 +91,7 @@ export default function TaskDependencySelector({ currentTask, selectedDependency
                     <div className="space-y-1">
                         {filteredTasks.length === 0 ? (
                             <div className="text-center py-4 text-slate-400 text-sm">
-                                没有找到相关任务
+                                没有找到相关约定
                             </div>
                         ) : (
                             filteredTasks.map(task => {

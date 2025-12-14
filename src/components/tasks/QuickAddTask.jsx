@@ -178,11 +178,11 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     setIsProcessing(true);
     try {
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `从以下语音内容中提取任务信息，识别主任务和子任务。
+        prompt: `从以下语音内容中提取约定信息，识别主约定和子约定。
 
 语音内容：${transcript}
 
-提取：标题、描述、时间、优先级、类别、子任务。
+提取：标题、描述、时间、优先级、类别、子约定。
 时间规则：具体时间转ISO格式，相对时间（明天/下周）计算日期，默认明天9点。
 优先级：urgent/high/medium/low
 类别：work/personal/health/study/family/shopping/finance/other
@@ -252,7 +252,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
           toast.success("✨ 语音内容已填充到表单");
         }
       } else {
-        toast.error("未能识别任务信息");
+        toast.error("未能识别约定信息");
         setShowVoiceDialog(false);
         setTranscript("");
       }
@@ -269,13 +269,13 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     let createdSubtasksCount = 0;
 
     try {
-      toast.loading("正在创建任务...", { id: 'bulk-create' });
+      toast.loading("正在创建约定...", { id: 'bulk-create' });
 
       for (const taskData of parsedTasks) {
         const hasSubtasks = taskData.subtasks && taskData.subtasks.length > 0;
         
         const mainTaskData = {
-          title: String(taskData.title || "未命名任务"),
+          title: String(taskData.title || "未命名约定"),
           description: taskData.description || "",
           reminder_time: taskData.reminder_time,
           end_time: taskData.end_time,
@@ -296,10 +296,10 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         if (hasSubtasks) {
           for (let i = 0; i < taskData.subtasks.length; i++) {
             const subtask = taskData.subtasks[i];
-            let subtaskTitle = "未命名子任务";
+            let subtaskTitle = "未命名子约定";
             if (subtask && subtask.title) {
                 if (typeof subtask.title === 'object') {
-                    subtaskTitle = subtask.title.title || subtask.title.text || subtask.title.content || "未命名子任务";
+                    subtaskTitle = subtask.title.title || subtask.title.text || subtask.title.content || "未命名子约定";
                 } else {
                     subtaskTitle = String(subtask.title);
                 }
@@ -327,7 +327,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       }
       
       toast.success(
-        `✅ 创建 ${createdCount} 个任务${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子任务` : ''}！`,
+        `✅ 创建 ${createdCount} 个约定${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子约定` : ''}！`,
         { id: 'bulk-create' }
       );
       
@@ -339,7 +339,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       }
     } catch (error) {
       console.error("Error creating tasks:", error);
-      toast.error("创建任务时出错", { id: 'bulk-create' });
+      toast.error("创建约定时出错", { id: 'bulk-create' });
     }
   };
 
@@ -462,7 +462,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     <span className="text-xs font-medium text-blue-600 tracking-wide">AI 助手</span>
                   </div>
                   <span className="text-xs text-slate-400">·</span>
-                  <span className="text-xs text-slate-500">智能创建任务</span>
+                  <span className="text-xs text-slate-500">智能创建约定</span>
                 </div>
               </div>
               
@@ -483,7 +483,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                         手动创建
                       </div>
                       <div className="text-[13px] text-[#52525b]">
-                        点击输入任务详情
+                        点击输入约定详情
                       </div>
                     </div>
                   </div>
@@ -542,7 +542,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                 {/* 标题输入 - 超大字体 */}
                 <div className="relative">
                   <Input
-                    placeholder="输入任务标题..."
+                    placeholder="输入约定标题..."
                     value={task.title}
                     onChange={(e) => setTask({ ...task, title: e.target.value })}
                     className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors"
@@ -600,7 +600,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   rows={2}
                 />
 
-                {/* 子任务列表 (仅在创建模式下显示) */}
+                {/* 子约定列表 (仅在创建模式下显示) */}
                 {!initialData && (
                   <div className="space-y-2">
                       {task.subtasks && task.subtasks.length > 0 && (
@@ -634,7 +634,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                           });
                       }}>
                           <ListTodo className="w-3.5 h-3.5 mr-1.5" />
-                          添加子任务
+                          添加子约定
                       </Button>
                   </div>
                 )}
@@ -650,7 +650,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                                 <CalendarIcon className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-slate-500 mb-0.5">任务日期</p>
+                                <p className="text-xs font-medium text-slate-500 mb-0.5">约定日期</p>
                                 <div className="text-sm font-bold text-slate-700 truncate">
                                      {task.reminder_time ? (
                                           <span>
@@ -931,7 +931,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     ) : (
                       <>
                         <Plus className="w-5 h-5 mr-2" strokeWidth={2.5} />
-                        创建任务
+                        创建约定
                       </>
                     )}
                   </Button>
@@ -1122,7 +1122,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   <ul className="text-[13px] text-[#52525b] space-y-1.5 leading-relaxed">
                     <li className="flex items-start gap-2">
                       <span className="text-[#06b6d4] mt-0.5">•</span>
-                      <span>直接说出任务内容，AI 自动识别</span>
+                      <span>直接说出约定内容，AI 自动识别</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-[#06b6d4] mt-0.5">•</span>
@@ -1130,7 +1130,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-[#06b6d4] mt-0.5">•</span>
-                      <span>支持创建多个任务和子任务</span>
+                      <span>支持创建多个约定和子约定</span>
                     </li>
                   </ul>
                 </div>

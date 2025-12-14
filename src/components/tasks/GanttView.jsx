@@ -202,7 +202,7 @@ export default function GanttView({ tasks, onUpdateTask, onTaskClick }) {
                   className="flex-shrink-0 border-r border-slate-200 flex items-center px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50"
                   style={{ width: SIDEBAR_WIDTH, height: HEADER_HEIGHT }}
               >
-                  任务列表
+                  约定列表
               </div>
               
               {/* Timeline Header (Scrolls horizontally via ref sync) */}

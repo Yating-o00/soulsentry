@@ -156,7 +156,7 @@ export default function Dashboard() {
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
     onSuccess: (data, id) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已移至垃圾箱");
+      toast.success("约定已移至垃圾箱");
       logUserBehavior("task_deleted", { id });
     },
   });
@@ -165,7 +165,7 @@ export default function Dashboard() {
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务创建成功");
+      toast.success("约定创建成功");
     },
   });
 
@@ -289,7 +289,7 @@ export default function Dashboard() {
         <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
           <CardHeader className="pb-2">
             <CardTitle className="text-slate-500 font-medium text-sm flex items-center justify-between">
-              逾期任务
+              逾期约定
               <AlertCircle className="w-4 h-4 text-red-500" />
             </CardTitle>
           </CardHeader>
@@ -332,7 +332,7 @@ export default function Dashboard() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
               <Clock className="w-5 h-5 text-blue-500" />
-              今日任务
+              今日约定
             </h2>
             
             {todayTasks.length > 0 ? (
@@ -355,8 +355,8 @@ export default function Dashboard() {
                   <div className="bg-white p-4 rounded-full mb-3 shadow-sm">
                     <CalendarIcon className="w-8 h-8 text-slate-300" />
                   </div>
-                  <p>今天暂无任务</p>
-                  <p className="text-xs mt-1">享受美好的一天，或者添加新任务</p>
+                  <p>今天暂无约定</p>
+                  <p className="text-xs mt-1">享受美好的一天，或者添加新约定</p>
                 </CardContent>
               </Card>
             )}
@@ -365,7 +365,7 @@ export default function Dashboard() {
               <>
                 <h2 className="text-lg font-semibold text-red-600 flex items-center gap-2 mt-8">
                   <AlertCircle className="w-5 h-5" />
-                  逾期任务
+                  逾期约定
                 </h2>
                 <div className="space-y-3">
                   {overdueTasks.map(task => (
@@ -416,7 +416,7 @@ export default function Dashboard() {
                 </div>
                 <div className="pt-2 border-t border-indigo-100">
                   <p className="text-xs text-indigo-400 leading-relaxed">
-                    💡 提示：定期清理逾期任务可以提高完成率和专注度。
+                    💡 提示：定期清理逾期约定可以提高完成率和专注度。
                   </p>
                 </div>
               </div>
@@ -440,7 +440,7 @@ export default function Dashboard() {
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>编辑任务</DialogTitle>
+            <DialogTitle>编辑约定</DialogTitle>
           </DialogHeader>
           {editingTask && (
             <QuickAddTask 

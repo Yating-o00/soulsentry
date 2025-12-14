@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTaskOperations } from "../hooks/useTaskOperations";
 import { 
   format, 
   isSameDay, 
@@ -57,28 +58,19 @@ export default function CalendarView() {
   const tasks = useMemo(() => allTasks.filter(task => !task.parent_task_id && !task.deleted_at), [allTasks]);
   const notes = useMemo(() => allNotes.filter(note => !note.deleted_at), [allNotes]);
 
-  const createTaskMutation = useMutation({
-    mutationFn: (taskData) => base44.entities.Task.create(taskData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      setShowQuickAdd(false);
-    },
-  });
+  const { 
+    updateTask, 
+    createTask, 
+    deleteTask, 
+    handleComplete, 
+    handleSubtaskToggle 
+  } = useTaskOperations();
 
-  const updateTaskMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    },
-  });
-
-  const deleteTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已移至垃圾箱");
-    },
-  });
+  const handleCreateTask = (data) => {
+      createTask(data, {
+          onSuccess: () => setShowQuickAdd(false)
+      });
+  };
 
   const updateNoteMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Note.update(id, data),
@@ -148,67 +140,9 @@ export default function CalendarView() {
   const tasksOnSelectedDate = useMemo(() => eventsOnSelectedDate.filter(e => e.type === 'task').map(e => e.data), [eventsOnSelectedDate]);
   const notesOnSelectedDate = useMemo(() => eventsOnSelectedDate.filter(e => e.type === 'note').map(e => e.data), [eventsOnSelectedDate]);
 
-  const handleComplete = async (task) => {
-    const newStatus = task.status === "completed" ? "pending" : "completed";
-    const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
-
-    updateTaskMutation.mutate({
-      id: task.id,
-      data: { 
-        status: newStatus,
-        completed_at: completedAt
-      }
-    });
-
-    if (newStatus === "completed") {
-      try {
-        await base44.entities.TaskCompletion.create({
-          task_id: task.id,
-          status: "completed",
-          completed_at: completedAt
-        });
-      } catch (e) {
-        console.error("Failed to record completion", e);
-      }
-    } else {
-      try {
-        const history = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-created_date", 1);
-        if (history && history.length > 0) {
-           await base44.entities.TaskCompletion.delete(history[0].id);
-        }
-      } catch (e) {
-        console.error("Failed to remove completion record", e);
-      }
-    }
-  };
-
-  const handleSubtaskToggle = async (subtask) => {
-    const newStatus = subtask.status === "completed" ? "pending" : "completed";
-    
-    await updateTaskMutation.mutateAsync({
-      id: subtask.id,
-      data: { 
-        status: newStatus,
-        completed_at: newStatus === "completed" ? new Date().toISOString() : null
-      }
-    });
-
-    if (subtask.parent_task_id) {
-      const parentTask = allTasks.find(t => t.id === subtask.parent_task_id);
-      if (parentTask) {
-        const siblings = allTasks.filter(t => t.parent_task_id === subtask.parent_task_id);
-        const completed = siblings.filter(s => 
-          s.id === subtask.id ? newStatus === "completed" : s.status === "completed"
-        ).length;
-        const progress = siblings.length > 0 ? Math.round((completed / siblings.length) * 100) : 0;
-
-        await updateTaskMutation.mutateAsync({
-          id: parentTask.id,
-          data: { progress }
-        });
-      }
-    }
-  };
+  // handleComplete and handleSubtaskToggle replaced by useTaskOperations hook
+  const onCompleteTask = (task) => handleComplete(task, allTasks);
+  const onSubtaskToggleWrapper = (subtask) => handleSubtaskToggle(subtask, allTasks);
 
   const handleDateClick = (date) => {
     setSelectedDate(date);
@@ -517,11 +451,11 @@ export default function CalendarView() {
                         <TaskCard
                           key={`task-${task.id}`}
                           task={task}
-                          onComplete={() => handleComplete(task)}
-                          onDelete={() => deleteTaskMutation.mutate(task.id)}
+                          onComplete={() => onCompleteTask(task)}
+                          onDelete={() => deleteTask(task.id)}
                           onEdit={() => setSelectedTask(task)}
                           onClick={() => setSelectedTask(task)}
-                          onSubtaskToggle={handleSubtaskToggle}
+                          onSubtaskToggle={onSubtaskToggleWrapper}
                         />
                       );
                     } else {
@@ -582,7 +516,7 @@ export default function CalendarView() {
                 const taskTime = new Date(taskData.reminder_time);
                 reminderDateTime.setHours(taskTime.getHours(), taskTime.getMinutes());
               }
-              createTaskMutation.mutate({
+              handleCreateTask({
                 ...taskData,
                 reminder_time: reminderDateTime.toISOString()
               });

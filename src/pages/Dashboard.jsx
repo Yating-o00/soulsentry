@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { 
@@ -28,6 +28,7 @@ import { Progress } from "@/components/ui/progress";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
+import { useTaskOperations } from "../components/hooks/useTaskOperations";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -325,7 +326,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2 }}
           >
-            <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+            <QuickAddTask onAdd={(data) => createTask(data)} />
           </motion.div>
 
           <div className="space-y-4">
@@ -340,11 +341,11 @@ export default function Dashboard() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    onComplete={() => handleComplete(task)}
-                    onDelete={() => deleteTaskMutation.mutate(task.id)}
+                    onComplete={() => onCompleteTask(task)}
+                    onDelete={() => onDeleteTask(task.id)}
                     onEdit={() => setEditingTask(task)}
                     onClick={() => setSelectedTask(task)}
-                    onSubtaskToggle={handleSubtaskToggle}
+                    onSubtaskToggle={onSubtaskToggleWrapper}
                   />
                 ))}
               </div>
@@ -371,11 +372,11 @@ export default function Dashboard() {
                     <TaskCard
                       key={task.id}
                       task={task}
-                      onComplete={() => handleComplete(task)}
-                      onDelete={() => deleteTaskMutation.mutate(task.id)}
+                      onComplete={() => onCompleteTask(task)}
+                      onDelete={() => onDeleteTask(task.id)}
                       onEdit={() => setEditingTask(task)}
                       onClick={() => setSelectedTask(task)}
-                      onSubtaskToggle={handleSubtaskToggle}
+                      onSubtaskToggle={onSubtaskToggleWrapper}
                     />
                   ))}
                 </div>
@@ -444,10 +445,7 @@ export default function Dashboard() {
           {editingTask && (
             <QuickAddTask 
               initialData={editingTask} 
-              onAdd={(taskData) => {
-                  const { id, ...data } = taskData;
-                  updateTaskMutation.mutate({ id: editingTask.id, data });
-              }} 
+              onAdd={onUpdateTask} 
             />
           )}
         </DialogContent>

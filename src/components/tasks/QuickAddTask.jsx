@@ -278,6 +278,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
           title: String(taskData.title || "未命名任务"),
           description: taskData.description || "",
           reminder_time: taskData.reminder_time,
+          end_time: taskData.end_time,
           priority: taskData.priority || "medium",
           category: taskData.category || "personal",
           status: "pending",
@@ -307,7 +308,8 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
             const subtaskData = {
               title: `${subtask.order || i + 1}. ${subtaskTitle}`,
               description: subtask.description || "",
-              reminder_time: subtask.reminder_time,
+              reminder_time: subtask.reminder_time || taskData.reminder_time,
+              end_time: subtask.end_time || taskData.end_time,
               priority: subtask.priority || taskData.priority || "medium",
               category: taskData.category,
               status: "pending",
@@ -628,7 +630,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                       <Button type="button" variant="ghost" size="sm" className="text-xs text-slate-500 hover:text-blue-600" onClick={() => {
                           setTask({
                               ...task, 
-                              subtasks: [...(task.subtasks || []), { title: "", description: "", priority: "medium", reminder_time: task.reminder_time }]
+                              subtasks: [...(task.subtasks || []), { title: "", description: "", priority: "medium", reminder_time: task.reminder_time, end_time: task.end_time }]
                           });
                       }}>
                           <ListTodo className="w-3.5 h-3.5 mr-1.5" />

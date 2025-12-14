@@ -119,7 +119,7 @@ export default function NotificationSettingsPage() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
           通知设置
         </h1>
-        <p className="text-slate-600">自定义您的任务提醒方式和通知规则</p>
+        <p className="text-slate-600">自定义您的约定提醒方式和通知规则</p>
       </motion.div>
 
       {/* Permission Card */}
@@ -135,7 +135,7 @@ export default function NotificationSettingsPage() {
                 <CardDescription>
                   {permission === 'granted' 
                     ? "您的设备已开启通知权限，可以正常接收提醒" 
-                    : "需要开启权限才能接收任务提醒通知"}
+                    : "需要开启权限才能接收约定提醒通知"}
                 </CardDescription>
               </div>
             </div>
@@ -175,7 +175,7 @@ export default function NotificationSettingsPage() {
                   <div className="space-y-2">
                     <Label>规则名称</Label>
                     <Input 
-                      placeholder="例如：紧急工作任务提醒" 
+                      placeholder="例如：紧急工作约定提醒" 
                       value={newRule.title}
                       onChange={(e) => setNewRule({...newRule, title: e.target.value})}
                       className="bg-white"
@@ -190,7 +190,7 @@ export default function NotificationSettingsPage() {
                       </h3>
                       <div className="space-y-3">
                         <div className="space-y-1.5">
-                          <Label className="text-xs text-slate-500">当任务分类为</Label>
+                          <Label className="text-xs text-slate-500">当约定分类为</Label>
                           <Select 
                             value={newRule.condition_category} 
                             onValueChange={(val) => setNewRule({...newRule, condition_category: val})}

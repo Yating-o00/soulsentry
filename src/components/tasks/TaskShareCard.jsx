@@ -50,7 +50,7 @@ export default function TaskShareCard({ task, open, onClose }) {
   const [showAllSubtasks, setShowAllSubtasks] = useState(false);
   const [expandedView, setExpandedView] = useState(false);
 
-  // 查询子任务
+  // 查询子约定
   const { data: subtasks = [] } = useQuery({
     queryKey: ['subtasks', task?.id],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: task.id }),
@@ -132,11 +132,11 @@ export default function TaskShareCard({ task, open, onClose }) {
       }
 
       const link = document.createElement('a');
-      link.download = `任务-${task.title}-${Date.now()}.png`;
+      link.download = `约定-${task.title}-${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png', 0.95);
       link.click();
       
-      toast.success("任务卡片已保存到本地");
+      toast.success("约定卡片已保存到本地");
     } catch (error) {
       console.error("Download error:", error);
       toast.error(error.message || "生成卡片失败，请重试");
@@ -198,7 +198,7 @@ export default function TaskShareCard({ task, open, onClose }) {
             await navigator.clipboard.write([
               new ClipboardItem({ 'image/png': blob })
             ]);
-            toast.success("任务卡片已复制到剪贴板");
+            toast.success("约定卡片已复制到剪贴板");
           } else {
             throw new Error("浏览器不支持复制图片");
           }
@@ -227,7 +227,7 @@ export default function TaskShareCard({ task, open, onClose }) {
 
   const handleCopyText = () => {
     const taskText = `
-【任务卡片】
+【约定卡片】
 
 📋 ${task.title}
 
@@ -237,19 +237,19 @@ ${task.description ? `📝 ${task.description}\n` : ''}
 ⚡ 优先级：${PRIORITY_LABELS[task.priority]}
 📊 完成进度：${progress}%
 ${task.status === "completed" ? "✅ 已完成" : "🔵 进行中"}
-${subtasks.length > 0 ? `\n📌 子任务清单 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => {
+${subtasks.length > 0 ? `\n📌 子约定清单 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => {
   const titleMatch = s.title.match(/^(\d+)\.\s*/);
   const cleanTitle = titleMatch ? s.title.replace(/^\d+\.\s*/, '') : s.title;
   return `${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`;
 }).join('\n')}` : ''}
 
 ---
-来自「任务管家」智能提醒系统
+来自「约定管家」智能提醒系统
 ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
     `.trim();
 
     navigator.clipboard.writeText(taskText).then(() => {
-      toast.success("任务文本已复制到剪贴板");
+      toast.success("约定文本已复制到剪贴板");
     }).catch(() => {
       toast.error("复制失败");
     });
@@ -259,7 +259,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
 
   const categoryColor = CATEGORY_COLORS[task.category] || CATEGORY_COLORS.other;
   
-  // 决定显示多少子任务
+  // 决定显示多少子约定
   const displayedSubtasks = showAllSubtasks || expandedView ? subtasks : subtasks.slice(0, 6);
   const hasMoreSubtasks = subtasks.length > 6 && !showAllSubtasks && !expandedView;
 
@@ -270,7 +270,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Share2 className="w-5 h-5 text-blue-600" />
-              分享任务卡片
+              分享约定卡片
             </div>
             <Button
               variant="ghost"
@@ -290,9 +290,9 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
               <div className="flex items-center gap-3">
                 <Sparkles className="w-5 h-5 text-blue-600" />
                 <div>
-                  <Label className="text-sm font-semibold text-blue-800">显示所有子任务</Label>
+                  <Label className="text-sm font-semibold text-blue-800">显示所有子约定</Label>
                   <p className="text-xs text-blue-600 mt-0.5">
-                    共 {subtasks.length} 个子任务，当前显示 {displayedSubtasks.length} 个
+                    共 {subtasks.length} 个子约定，当前显示 {displayedSubtasks.length} 个
                   </p>
                 </div>
               </div>
@@ -360,7 +360,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     </div>
                   </div>
 
-                  {/* 任务核心内容 */}
+                  {/* 约定核心内容 */}
                   <div className="mt-8 mb-8">
                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold mb-4 uppercase tracking-wider" 
                         style={{ 
@@ -422,7 +422,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                      </div>
                   </div>
 
-                  {/* 子任务列表 (精简版) */}
+                  {/* 子约定列表 (精简版) */}
                   {displayedSubtasks.length > 0 && (
                      <div className="mb-8 bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50">
                         <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -446,7 +446,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                           })}
                           {hasMoreSubtasks && (
                             <p className="text-xs text-slate-400 italic pl-7 pt-1">
-                              + 还有 {subtasks.length - displayedSubtasks.length} 项子任务
+                              + 还有 {subtasks.length - displayedSubtasks.length} 项子约定
                             </p>
                           )}
                         </div>
@@ -543,9 +543,9 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
               <div>
                 <p className="text-sm font-semibold text-blue-800 mb-1">智能生成提示</p>
                 <ul className="text-xs text-blue-700 space-y-1">
-                  <li>• 长任务列表将自动优化图片质量以保证清晰度</li>
-                  <li>• 开启"显示所有子任务"可以生成包含完整列表的长图</li>
-                  <li>• 复制文本功能会包含所有子任务信息</li>
+                  <li>• 长约定列表将自动优化图片质量以保证清晰度</li>
+                  <li>• 开启"显示所有子约定"可以生成包含完整列表的长图</li>
+                  <li>• 复制文本功能会包含所有子约定信息</li>
                   <li>• 点击右上角展开按钮可以获得更大的预览视图</li>
                 </ul>
               </div>

@@ -26,7 +26,7 @@ export default function FloatingAssistantButton() {
   });
 
   useEffect(() => {
-    // 检查是否有需要关注的任务
+    // 检查是否有需要关注的约定
     const now = new Date();
     const todayTasks = tasks.filter(task => 
       !task.parent_task_id && 
@@ -41,7 +41,7 @@ export default function FloatingAssistantButton() {
       !isSameDay(new Date(task.reminder_time), now)
     );
 
-    // 如果有今日任务或逾期任务，显示提示
+    // 如果有今日约定或逾期约定，显示提示
     if (todayTasks.length > 0 || overdueTasks.length > 0) {
       setShouldPrompt(true);
       
@@ -89,7 +89,7 @@ export default function FloatingAssistantButton() {
                     <span className="text-xs font-semibold text-[#222222]">{assistantName}提醒</span>
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                    今天有 <strong className="text-[#5a647d]">{pendingCount}</strong> 个任务等你完成 💪
+                    今天有 <strong className="text-[#5a647d]">{pendingCount}</strong> 个约定等你完成 💪
                   </p>
                 </button>
               </motion.div>

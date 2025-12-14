@@ -145,7 +145,7 @@ import React, { useState, useEffect, useRef } from "react";
          const conversation = await base44.agents.createConversation({
            agent_name: "task_assistant",
            metadata: {
-             name: "任务检查对话",
+             name: "约定检查对话",
              type: "task_check"
            }
          });
@@ -168,15 +168,15 @@ import React, { useState, useEffect, useRef } from "react";
        try {
          const conversation = await base44.agents.getConversation(convId);
          
-         const analysisPrompt = `请启动后台推理程序，调用工具读取我的所有任务数据（以及HealthLog数据），并严格按照【建设】、【执行】、【检查】的第一性原理模型进行深度分析。
+         const analysisPrompt = `请启动后台推理程序，调用工具读取我的所有约定数据（以及HealthLog数据），并严格按照【建设】、【执行】、【检查】的第一性原理模型进行深度分析。
 
              要求：
-             1. **必须先调用工具**获取最新任务列表和健康数据。
+             1. **必须先调用工具**获取最新约定列表和健康数据。
              2. **零废话**：不要打招呼，直接输出分析结果。
              3. **直击核心**：
-                - 【建设】(Construction)：检查是否有模糊的大目标需要拆解？是否有信息残缺的任务？
+                - 【建设】(Construction)：检查是否有模糊的大目标需要拆解？是否有信息残缺的约定？
                 - 【执行】(Execution)：基于截止时间，指出当前最该做的一件事。如果有关联的健康数据（如运动打卡），请一并展示。
-                - 【检查】(Check)：列出过期任务。如果用户近期表现良好（任务完成度高），给予鼓励；如果偷懒（任务堆积），用“温柔的背后顶梁柱”语气给予提醒和陪伴（如“我陪你...”）。
+                - 【检查】(Check)：列出过期约定。如果用户近期表现良好（约定完成度高），给予鼓励；如果偷懒（约定堆积），用“温柔的背后顶梁柱”语气给予提醒和陪伴（如“我陪你...”）。
              4. 保持极简风格，用Markdown列表展示。语气要温暖且坚定。`;
    
          await base44.agents.addMessage(conversation, {
@@ -326,7 +326,7 @@ import React, { useState, useEffect, useRef } from "react";
                    {assistantName}正在分析中
                  </h3>
                  <p className="text-xs text-slate-600 mb-3">
-                   正在查看你的任务和习惯...
+                   正在查看你的约定和习惯...
                  </p>
                  <div className="text-[10px] text-slate-500 space-y-0.5">
                    <motion.p
@@ -334,7 +334,7 @@ import React, { useState, useEffect, useRef } from "react";
                      animate={{ opacity: 1, x: 0 }}
                      transition={{ delay: 0.2 }}
                    >
-                     ✓ 检查待办任务
+                     ✓ 检查待办约定
                    </motion.p>
                    <motion.p
                      initial={{ opacity: 0, x: -10 }}
@@ -359,7 +359,7 @@ import React, { useState, useEffect, useRef } from "react";
                  .filter(msg => 
                    !msg.content.includes("请以“温柔的背后顶梁柱”的身份") && 
                    !msg.content.includes("请启动后台推理程序") &&
-                   !msg.content.includes("调用工具读取我的所有任务数据")
+                   !msg.content.includes("调用工具读取我的所有约定数据")
                  )
                  .map((message, index) => (
                    <MessageBubble
@@ -388,10 +388,10 @@ import React, { useState, useEffect, useRef } from "react";
            {messages.length > 0 && !isLoading && (
              <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white/50 border-t border-slate-100">
                {[
-                 { label: "📅 今日任务", text: "今天有哪些任务？" },
-                 { label: "⚠️ 紧急事项", text: "列出紧急和过期的任务" },
-                 { label: "🌟 核心事项", text: "请以列表形式列出我的核心事项（高优先级、紧急或重要的任务）" },
-                 { label: "📊 进度分析", text: "分析当前任务状况并给出建议" },
+                 { label: "📅 今日约定", text: "今天有哪些约定？" },
+                 { label: "⚠️ 紧急事项", text: "列出紧急和过期的约定" },
+                 { label: "🌟 核心事项", text: "请以列表形式列出我的核心事项（高优先级、紧急或重要的约定）" },
+                 { label: "📊 进度分析", text: "分析当前约定状况并给出建议" },
                ].map((action) => (
                  <button
                    key={action.label}
@@ -410,7 +410,7 @@ import React, { useState, useEffect, useRef } from "react";
                <Input
                  value={inputText}
                  onChange={(e) => setInputText(e.target.value)}
-                 placeholder="输入任务（如：明天10点开会）或 询问进度..."
+                 placeholder="输入约定（如：明天10点开会）或 询问进度..."
                  className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#384877]"
                  disabled={isLoading}
                />
@@ -513,7 +513,7 @@ import React, { useState, useEffect, useRef } from "react";
    
      const getLabel = () => {
        const isTask = toolCall.name.includes("Task");
-       const suffix = isTask ? "任务" : "数据";
+       const suffix = isTask ? "约定" : "数据";
 
        if (toolCall.name.includes("create")) return `创建${suffix}`;
        if (toolCall.name.includes("update")) return `更新${suffix}`;

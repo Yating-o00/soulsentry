@@ -92,7 +92,7 @@ export default function NotificationManager() {
     let title = isAdvanceReminder 
       ? `📋 即将到来：${task.title}`
       : `⏰ 提醒：${task.title}`;
-    let body = task.description || "现在是完成这个任务的时间";
+    let body = task.description || "现在是完成这个约定的时间";
     let messageType = "default";
 
     // 检查是否有自定义策略消息
@@ -185,7 +185,7 @@ export default function NotificationManager() {
       duration: task.persistent_reminder ? Infinity : 10000,
     });
 
-    // 仅针对非重复/非每日提醒的任务更新数据库状态
+    // 仅针对非重复/非每日提醒的约定更新数据库状态
     // 如果是 isAdvanceReminder（提前提醒）或者是每日循环提醒（通过参数判断），则不更新 reminder_sent
     if (!isAdvanceReminder && !task.is_daily_recurring_instance) {
       updateTaskMutation.mutate({
@@ -378,7 +378,7 @@ export default function NotificationManager() {
         });
       }
 
-      // Proactive: 检查是否为遗漏的重要任务 (High/Urgent, Overdue > 24h, Not Completed)
+      // Proactive: 检查是否为遗漏的重要约定 (High/Urgent, Overdue > 24h, Not Completed)
       // 且未被Snooze, 且未交互过
       if (['high', 'urgent'].includes(task.priority) && 
           task.status === 'pending' && 
@@ -390,14 +390,14 @@ export default function NotificationManager() {
 
             // 如果超过24小时未处理，且没有被此逻辑触发过
             if (hoursOverdue > 24 && !checkedTasks.current.has(proactiveKey)) {
-                // 检查用户最近是否活跃但忽略了此任务
+                // 检查用户最近是否活跃但忽略了此约定
                 const recentActivity = recentBehaviors.length > 0;
                 
                 if (recentActivity) {
                     sendNotification(task, {
-                        custom_message: `检测到此重要任务已逾期 ${Math.round(hoursOverdue)} 小时。建议重新规划时间或分解任务。`,
+                        custom_message: `检测到此重要约定已逾期 ${Math.round(hoursOverdue)} 小时。建议重新规划时间或分解约定。`,
                         message_type: 'urgent',
-                        title: `⚠️ 遗漏任务关注：${task.title}`
+                        title: `⚠️ 遗漏约定关注：${task.title}`
                     });
                     checkedTasks.current.add(proactiveKey);
                     
@@ -415,7 +415,7 @@ export default function NotificationManager() {
       }
 
       // Dynamic Adjustment: 简单的动态调整逻辑
-      // 如果任务设置了 dynamic_adjustment，并且现在距离提醒时间还有一段距离
+      // 如果约定设置了 dynamic_adjustment，并且现在距离提醒时间还有一段距离
       if (task.reminder_strategy?.dynamic_adjustment && !isPast(reminderTime)) {
           const minutesUntil = differenceInMinutes(reminderTime, now);
           // 比如在提醒前 2 小时检查
@@ -435,7 +435,7 @@ export default function NotificationManager() {
                     // 我们这里模拟发送一个引导性通知
                     /* 
                     sendNotification(task, {
-                        custom_message: "检测到您当前可能不在线，是否需要将此任务提醒推迟到更晚？",
+                        custom_message: "检测到您当前可能不在线，是否需要将此约定提醒推迟到更晚？",
                         message_type: "encouraging",
                         title: "🤖 智能调整建议"
                     });
@@ -448,7 +448,7 @@ export default function NotificationManager() {
       }
     });
 
-    // 清理已完成任务的检查记录
+    // 清理已完成约定的检查记录
     const currentTaskIds = new Set(tasks.map(t => t.id));
     checkedTasks.current.forEach(id => {
       const taskId = id.split('-')[0];
@@ -473,7 +473,7 @@ export default function NotificationManager() {
           <div>
             <h4 className="font-semibold text-red-800 mb-1">通知已禁用</h4>
             <p className="text-sm text-red-600">
-              请在浏览器设置中允许通知，以接收任务提醒。
+              请在浏览器设置中允许通知，以接收约定提醒。
             </p>
           </div>
         </div>

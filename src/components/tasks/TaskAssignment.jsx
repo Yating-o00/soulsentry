@@ -48,7 +48,7 @@ export default function TaskAssignment({ selectedUsers = [], onUpdate, onClose }
       <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50">
         <CardTitle className="flex items-center gap-2">
           <Users className="w-5 h-5 text-blue-600" />
-          分配任务
+          分配约定
         </CardTitle>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X className="w-4 h-4" />
@@ -58,7 +58,7 @@ export default function TaskAssignment({ selectedUsers = [], onUpdate, onClose }
         <div className="flex items-center justify-between">
           <div>
             <Label htmlFor="shared" className="text-sm font-medium">团队共享</Label>
-            <p className="text-xs text-slate-500">让团队成员可以看到此任务</p>
+            <p className="text-xs text-slate-500">让团队成员可以看到此约定</p>
           </div>
           <Switch
             id="shared"

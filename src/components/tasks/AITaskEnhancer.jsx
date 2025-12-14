@@ -40,7 +40,7 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
 
   const handleAnalyze = async () => {
     if (!taskTitle.trim()) {
-      toast.error("请先输入任务标题");
+      toast.error("请先输入约定标题");
       return;
     }
 
@@ -48,24 +48,24 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
     try {
       const now = new Date().toISOString();
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `你是一个任务管理AI助手。根据用户输入的任务信息，提供智能建议。
+        prompt: `你是一个约定管理AI助手。根据用户输入的约定信息，提供智能建议。
 
-用户任务标题：${taskTitle}
+用户约定标题：${taskTitle}
 ${currentDescription ? `当前描述：${currentDescription}` : ""}
 当前时间：${now}
 
 请分析并提供以下JSON格式的建议：
-1. 完善的任务描述：基于用户输入润色补充，保留关键信息。
+1. 完善的约定描述：基于用户输入润色补充，保留关键信息。
 2. 推荐分类：work/personal/health/study/family/shopping/finance/other。
 3. 推荐优先级：low/medium/high/urgent。
 4. 建议标签：3-5个。
-5. 推荐子任务：按执行顺序。
+5. 推荐子约定：按执行顺序。
 6. **智能时间建议**：
-   - 最佳提醒时间 (reminder_time): 综合考虑任务性质和当前时间。
-   - 最佳执行时间段 (execution_start/end): 建议何时开始和完成此任务最佳。
+   - 最佳提醒时间 (reminder_time): 综合考虑约定性质和当前时间。
+   - 最佳执行时间段 (execution_start/end): 建议何时开始和完成此约定最佳。
    - 时间建议理由 (time_reasoning): 为什么选择这个时间？
 7. **风险与依赖分析**：
-   - 潜在风险 (risks): 任务可能面临的阻碍。
+   - 潜在风险 (risks): 约定可能面临的阻碍。
    - 风险等级 (risk_level): low/medium/high/critical。
    - 关键依赖 (dependencies): 隐含的前置条件。
 8. 分析原因 (reasoning): 总体建议理由。
@@ -90,7 +90,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
             subtasks: {
                 type: "array",
                 items: { type: "string" },
-                description: "建议的子任务列表"
+                description: "建议的子约定列表"
             },
             reminder_time: { type: "string", format: "date-time" },
             execution_start: { type: "string", format: "date-time" },
@@ -317,7 +317,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                   <div className="space-y-2">
                       <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
                           <ListTodo className="w-4 h-4 text-[#384877]" />
-                          <span>建议子任务</span>
+                          <span>建议子约定</span>
                       </div>
                       <div className="bg-white p-3 rounded-lg border border-[#e5e9ef] space-y-2">
                           {suggestions.subtasks.map((st, idx) => (
@@ -331,7 +331,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                                           updateSuggestion('subtasks', newSubtasks);
                                       }}
                                       className="h-8 text-sm border-0 border-b border-transparent focus-visible:border-blue-500 rounded-none px-0 focus-visible:ring-0 bg-transparent"
-                                      placeholder="输入子任务..."
+                                      placeholder="输入子约定..."
                                   />
                                   <button
                                       onClick={() => {
@@ -351,7 +351,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                               className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-7"
                           >
                               <Plus className="w-3.5 h-3.5 mr-1" />
-                              添加子任务
+                              添加子约定
                           </Button>
                       </div>
                   </div>
@@ -439,7 +439,7 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                     onCheckedChange={setPreserveDescription}
                   />
                   <Label htmlFor="preserve-mode" className="text-sm font-medium text-slate-600 cursor-pointer">
-                    保留原任务描述 (仅应用属性和其他建议)
+                    保留原约定描述 (仅应用属性和其他建议)
                   </Label>
                 </div>
                 

@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
 const CATEGORY_COLORS = {
-  work: { accent: "#3B82F6", bg: "#EFF6FF" },
+  work: { accent: "#1D4ED8", bg: "#EFF6FF" },
   personal: { accent: "#8B5CF6", bg: "#F5F3FF" },
   health: { accent: "#10B981", bg: "#ECFDF5" },
   study: { accent: "#F59E0B", bg: "#FFFBEB" },
@@ -269,7 +269,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Share2 className="w-5 h-5 text-blue-600" />
+              <Share2 className="w-5 h-5 text-blue-700" />
               分享约定卡片
             </div>
             <Button
@@ -288,10 +288,10 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
           {subtasks.length > 6 && (
             <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
               <div className="flex items-center gap-3">
-                <Sparkles className="w-5 h-5 text-blue-600" />
+                <Sparkles className="w-5 h-5 text-blue-700" />
                 <div>
-                  <Label className="text-sm font-semibold text-blue-800">显示所有子约定</Label>
-                  <p className="text-xs text-blue-600 mt-0.5">
+                  <Label className="text-sm font-semibold text-blue-900">显示所有子约定</Label>
+                  <p className="text-xs text-blue-700 mt-0.5">
                     共 {subtasks.length} 个子约定，当前显示 {displayedSubtasks.length} 个
                   </p>
                 </div>
@@ -299,7 +299,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
               <Switch
                 checked={showAllSubtasks}
                 onCheckedChange={setShowAllSubtasks}
-                className="data-[state=checked]:bg-blue-600"
+                className="data-[state=checked]:bg-blue-700"
               />
             </div>
           )}
@@ -513,7 +513,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
             <Button
               onClick={handleDownload}
               disabled={generating}
-              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg"
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:shadow-lg"
             >
               <Download className="w-4 h-4 mr-2" />
               {generating ? "生成中..." : "下载图片"}
@@ -539,10 +539,10 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
 
           <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
             <div className="flex gap-3">
-              <Sparkles className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <Sparkles className="w-5 h-5 text-blue-700 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-blue-800 mb-1">智能生成提示</p>
-                <ul className="text-xs text-blue-700 space-y-1">
+                <p className="text-sm font-semibold text-blue-900 mb-1">智能生成提示</p>
+                <ul className="text-xs text-blue-800 space-y-1">
                   <li>• 长约定列表将自动优化图片质量以保证清晰度</li>
                   <li>• 开启"显示所有子约定"可以生成包含完整列表的长图</li>
                   <li>• 复制文本功能会包含所有子约定信息</li>

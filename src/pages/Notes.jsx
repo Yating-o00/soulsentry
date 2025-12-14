@@ -106,7 +106,7 @@ export default function Notes() {
       >
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
               <StickyNote className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-slate-800">

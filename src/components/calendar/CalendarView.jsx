@@ -15,8 +15,6 @@ import {
   eachDayOfInterval,
   addWeeks,
   subWeeks,
-  startOfMonth,
-  endOfMonth,
   isSameMonth
 } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -140,7 +138,6 @@ export default function CalendarView() {
   const tasksOnSelectedDate = useMemo(() => eventsOnSelectedDate.filter(e => e.type === 'task').map(e => e.data), [eventsOnSelectedDate]);
   const notesOnSelectedDate = useMemo(() => eventsOnSelectedDate.filter(e => e.type === 'note').map(e => e.data), [eventsOnSelectedDate]);
 
-  // handleComplete and handleSubtaskToggle replaced by useTaskOperations hook
   const onCompleteTask = (task) => handleComplete(task, allTasks);
   const onSubtaskToggleWrapper = (subtask) => handleSubtaskToggle(subtask, allTasks);
 

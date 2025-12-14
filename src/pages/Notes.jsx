@@ -36,7 +36,7 @@ export default function Notes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       setIsCreating(false);
-      toast.success("便签已创建");
+      toast.success("心签已创建");
     }
   });
 
@@ -57,7 +57,7 @@ export default function Notes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       setEditingNote(null);
-      toast.success("便签已更新");
+      toast.success("心签已更新");
     }
   });
 
@@ -65,7 +65,7 @@ export default function Notes() {
     mutationFn: (id) => base44.entities.Note.delete(id), // Or soft delete if prefer
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
-      toast.success("便签已删除");
+      toast.success("心签已删除");
     }
   });
 
@@ -110,7 +110,7 @@ export default function Notes() {
               <StickyNote className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-slate-800">
-              灵感便签
+              灵感心签
             </h1>
           </div>
           <p className="text-slate-600">随时记录想法，AI 帮你整理</p>
@@ -142,7 +142,7 @@ export default function Notes() {
             className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 cursor-text hover:shadow-md transition-all flex items-center text-slate-500 gap-3 group"
           >
             <Plus className="w-5 h-5 text-slate-400 group-hover:text-[#384877]" />
-            <span className="font-medium">添加新便签...</span>
+            <span className="font-medium">添加新心签...</span>
           </div>
         ) : (
           <NoteEditor 
@@ -181,7 +181,7 @@ export default function Notes() {
           <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
             <StickyNote className="w-10 h-10 text-slate-400" />
           </div>
-          <h3 className="text-lg font-medium text-slate-700 mb-1">暂无便签</h3>
+          <h3 className="text-lg font-medium text-slate-700 mb-1">暂无心签</h3>
           <p className="text-slate-500">记录下你的第一个灵感吧</p>
         </motion.div>
       )}
@@ -190,7 +190,7 @@ export default function Notes() {
       <Dialog open={!!editingNote} onOpenChange={(open) => !open && setEditingNote(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>编辑便签</DialogTitle>
+            <DialogTitle>编辑心签</DialogTitle>
           </DialogHeader>
           {editingNote && (
             <NoteEditor
@@ -208,7 +208,7 @@ export default function Notes() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-blue-600" />
-                从便签创建约定
+                从心签创建约定
             </DialogTitle>
           </DialogHeader>
           {taskCreationNote && (

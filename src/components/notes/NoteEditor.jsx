@@ -59,7 +59,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
       userPrompt = `Write a note about: ${aiPrompt}`;
     } else if (mode === "continue") {
       if (!currentText) {
-        toast.error("便签为空，无法续写");
+        toast.error("心签为空，无法续写");
         setIsGenerating(false);
         return;
       }
@@ -67,7 +67,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
       userPrompt = `Context: "${currentText.slice(-500)}"\n\nContinue writing:`;
     } else if (mode === "rewrite") {
        if (!currentText) {
-        toast.error("便签为空，无法改写");
+        toast.error("心签为空，无法改写");
         setIsGenerating(false);
         return;
       }
@@ -337,7 +337,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                             <div className="space-y-2">
                                 <Label>你想要写什么？</Label>
                                 <Textarea 
-                                    placeholder="例如：写一篇关于AI在健康领域应用的便签..."
+                                    placeholder="例如：写一篇关于AI在健康领域应用的心签..."
                                     value={aiPrompt}
                                     onChange={(e) => setAiPrompt(e.target.value)}
                                     className="h-24 resize-none"
@@ -355,7 +355,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
 
                         <TabsContent value="continue" className="space-y-4 pt-4">
                             <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
-                                <p>AI 将根据当前便签的上下文，自动续写下一段内容。</p>
+                                <p>AI 将根据当前心签的上下文，自动续写下一段内容。</p>
                             </div>
                             <Button 
                                 onClick={() => handleAIGenerate("continue")} 
@@ -435,7 +435,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 )}
                 <Button onClick={handleSave} className="bg-[#384877] hover:bg-[#2c3b63] text-white">
                     <Save className="w-4 h-4 mr-2" />
-                    保存便签
+                    保存心签
                 </Button>
             </div>
         </div>

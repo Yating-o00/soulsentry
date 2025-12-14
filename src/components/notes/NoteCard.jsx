@@ -159,7 +159,7 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
                     className="text-red-600 focus:text-red-700 focus:bg-red-50"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
-                    删除便签
+                    删除心签
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

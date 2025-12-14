@@ -81,7 +81,7 @@ export default function CalendarView() {
     mutationFn: (id) => base44.entities.Note.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
-      toast.success("便签已删除");
+      toast.success("心签已删除");
     },
   });
 
@@ -367,7 +367,7 @@ export default function CalendarView() {
                                 className="text-xs p-1.5 rounded truncate text-left bg-yellow-50 text-yellow-700 border border-yellow-100"
                               >
                                 <StickyNote className="w-3 h-3 inline mr-1" />
-                                {note.ai_analysis?.summary || "便签"}
+                                {note.ai_analysis?.summary || "心签"}
                               </div>
                             );
                           }
@@ -426,7 +426,7 @@ export default function CalendarView() {
                 <span className="text-2xl font-bold">
                   {notesOnSelectedDate.length}
                 </span>
-                <span className="text-sm opacity-90">便签</span>
+                <span className="text-sm opacity-90">心签</span>
               </div>
             </div>
           </Card>

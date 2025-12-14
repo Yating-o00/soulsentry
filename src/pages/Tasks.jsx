@@ -3,8 +3,10 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3 } from "lucide-react";
+import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare } from "lucide-react";
 import GanttView from "../components/tasks/GanttView";
+import KanbanView from "../components/tasks/KanbanView";
+import AdvancedTaskFilters from "../components/tasks/AdvancedTaskFilters";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCard from "../components/tasks/TaskCard";
@@ -21,16 +23,28 @@ import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import SmartTextParser from "../components/tasks/SmartTextParser";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
+import { useTaskOperations } from "../components/hooks/useTaskOperations";
 
 
 export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [advancedFilters, setAdvancedFilters] = useState({ createdBy: 'all', tags: [], dateRange: undefined });
+  
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
-  const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt'
+  const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt' | 'kanban'
+  
+  const { 
+    updateTask, 
+    createTask, 
+    deleteTask, 
+    handleComplete, 
+    handleSubtaskToggle 
+  } = useTaskOperations();
+
   const queryClient = useQueryClient();
 
   const toggleTaskExpansion = (taskId) => {
@@ -55,38 +69,8 @@ export default function Tasks() {
   const tasks = allTasks.filter((task) => !task.deleted_at);
   const trashTasks = allTasks.filter((task) => task.deleted_at);
 
-  const createTaskMutation = useMutation({
-    mutationFn: (taskData) => base44.entities.Task.create(taskData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    }
-  });
-
-  const updateTaskMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      setEditingTask(null);
-
-      // Log behavior based on what changed
-      if (variables.data.status === 'completed') {
-        logUserBehavior("task_completed", { id: variables.id, ...variables.data });
-      } else if (variables.data.status === 'snoozed') {
-        logUserBehavior("task_snoozed", { id: variables.id, ...variables.data });
-      } else {
-        logUserBehavior("task_edited", { id: variables.id, ...variables.data });
-      }
-    }
-  });
-
-  const deleteTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
-    onSuccess: (data, id) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已移至垃圾箱");
-      logUserBehavior("task_deleted", { id });
-    }
-  });
+  // Mutations replaced by useTaskOperations hook
+  // createTaskMutation, updateTaskMutation, deleteTaskMutation removed
 
   const restoreTaskMutation = useMutation({
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: null }),
@@ -108,9 +92,23 @@ export default function Tasks() {
     const matchesStatus = statusFilter === "all" || task.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || task.category === categoryFilter;
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    task.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesCategory && matchesSearch;
-  }), [tasks, statusFilter, categoryFilter, searchQuery]);
+        task.description?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // Advanced Filters
+    let matchesAdvanced = true;
+    if (advancedFilters.createdBy !== 'all' && task.created_by !== advancedFilters.createdBy) matchesAdvanced = false;
+    if (advancedFilters.tags && advancedFilters.tags.length > 0) {
+        if (!task.tags || !advancedFilters.tags.every(tag => task.tags.includes(tag))) matchesAdvanced = false;
+    }
+    if (advancedFilters.dateRange && advancedFilters.dateRange.from) {
+        const taskDate = new Date(task.reminder_time);
+        const from = advancedFilters.dateRange.from;
+        const to = advancedFilters.dateRange.to || from;
+        if (taskDate < from || taskDate > to) matchesAdvanced = false;
+    }
+
+    return matchesStatus && matchesCategory && matchesSearch && matchesAdvanced;
+  }), [tasks, statusFilter, categoryFilter, searchQuery, advancedFilters]);
 
   // Group tasks logic
   // Only show top-level tasks in the list
@@ -118,75 +116,12 @@ export default function Tasks() {
   const getSubtasks = (parentId) => filteredTasks.filter((t) => t.parent_task_id === parentId);
   const getAllSubtasks = (parentId) => tasks.filter((t) => t.parent_task_id === parentId);
 
-  const handleComplete = (task) => {
-    const newStatus = task.status === "completed" ? "pending" : "completed";
-
-    // Automation: Unblock dependent tasks if this task is completed
-    if (newStatus === 'completed') {
-      const dependentTasks = allTasks.filter((t) =>
-      t.dependencies &&
-      t.dependencies.includes(task.id) &&
-      t.status === 'blocked'
-      );
-
-      dependentTasks.forEach((depTask) => {
-        const dependencies = depTask.dependencies || [];
-        // Check if all OTHER dependencies are completed
-        const otherDepIds = dependencies.filter((id) => id !== task.id);
-        // We need current status of other tasks. allTasks has current state.
-        const otherDeps = allTasks.filter((t) => otherDepIds.includes(t.id));
-        const allOthersCompleted = otherDeps.every((t) => t.status === 'completed');
-
-        if (allOthersCompleted) {
-          updateTaskMutation.mutate({
-            id: depTask.id,
-            data: { status: 'pending' }
-          });
-          toast.success(`任务 "${depTask.title}" 已解除阻塞`, { icon: "🔓" });
-        }
-      });
-    }
-
-    updateTaskMutation.mutate({
-      id: task.id,
-      data: { status: newStatus }
-    });
-  };
-
-  const handleSubtaskToggle = async (subtask) => {
-    const newStatus = subtask.status === "completed" ? "pending" : "completed";
-
-    // 更新子任务状态
-    await updateTaskMutation.mutateAsync({
-      id: subtask.id,
-      data: {
-        status: newStatus,
-        completed_at: newStatus === "completed" ? new Date().toISOString() : null
-      }
-    });
-
-    // 重新计算父任务进度
-    if (subtask.parent_task_id) {
-      const parentTask = allTasks.find((t) => t.id === subtask.parent_task_id);
-      if (parentTask) {
-        const siblings = allTasks.filter((t) => t.parent_task_id === subtask.parent_task_id);
-        const completed = siblings.filter((s) =>
-        s.id === subtask.id ? newStatus === "completed" : s.status === "completed"
-        ).length;
-        const progress = siblings.length > 0 ? Math.round(completed / siblings.length * 100) : 0;
-
-        await updateTaskMutation.mutateAsync({
-          id: parentTask.id,
-          data: { progress }
-        });
-      }
-    }
-  };
+  const onCompleteTask = (task) => handleComplete(task, allTasks);
+  const onSubtaskToggleWrapper = (subtask) => handleSubtaskToggle(subtask, allTasks);
 
   const handleUpdateTask = (taskData) => {
-    // Remove id from data if present to avoid error, and map other fields if needed
     const { id, ...data } = taskData;
-    updateTaskMutation.mutate({ id: editingTask.id, data });
+    updateTask({ id: editingTask.id, data });
   };
 
   const handleBulkCreate = async (parsedTasks) => {
@@ -220,7 +155,7 @@ export default function Tasks() {
           assigned_to: taskData.assigned_to || []
         };
 
-        const createdMainTask = await createTaskMutation.mutateAsync(mainTaskData);
+        const createdMainTask = await base44.entities.Task.create(mainTaskData);
         createdCount++;
 
         // 如果有子任务，创建子任务
@@ -242,10 +177,13 @@ export default function Tasks() {
               assigned_to: taskData.assigned_to || []
             };
 
-            await createTaskMutation.mutateAsync(subtaskData);
+            await base44.entities.Task.create(subtaskData);
             createdSubtasksCount++;
           }
         }
+        
+        // Manual invalidate as we used direct SDK calls for bulk operation
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
       }
 
       toast.success(
@@ -293,7 +231,7 @@ export default function Tasks() {
           </TabsList>
           
           <TabsContent value="quick" className="mt-0 focus-visible:ring-0">
-            <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
+            <QuickAddTask onAdd={(data) => createTask(data)} />
           </TabsContent>
           
           <TabsContent value="smart" className="mt-0 focus-visible:ring-0">
@@ -332,10 +270,22 @@ export default function Tasks() {
                 onClick={() => setViewMode("gantt")}
                 className={`p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
                 title="甘特图视图">
-
                 <BarChart3 className="w-4 h-4" />
               </button>
+              
+              <button
+                onClick={() => setViewMode("kanban")}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                title="看板视图">
+                <KanbanSquare className="w-4 h-4" />
+              </button>
             </div>
+
+            <AdvancedTaskFilters 
+                filters={advancedFilters} 
+                onChange={setAdvancedFilters} 
+                onClear={() => setAdvancedFilters({ createdBy: 'all', tags: [], dateRange: undefined })} 
+            />
 
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-32 border-0 bg-white shadow-lg rounded-xl">
@@ -381,9 +331,19 @@ export default function Tasks() {
         {viewMode === 'gantt' &&
         <GanttView
           tasks={filteredTasks}
-          onUpdateTask={({ id, data }) => updateTaskMutation.mutate({ id, data })}
+          onUpdateTask={({ id, data }) => updateTask({ id, data })}
           onTaskClick={(task) => setSelectedTask(task)} />
+        }
 
+        {viewMode === 'kanban' &&
+        <KanbanView
+            tasks={filteredTasks}
+            onUpdateTask={({ id, data }) => updateTask({ id, data })}
+            onTaskClick={(task) => setSelectedTask(task)}
+            onComplete={onCompleteTask}
+            onDelete={(id) => deleteTask(id)}
+            onEdit={setEditingTask}
+        />
         }
 
         {viewMode === 'list' &&
@@ -394,12 +354,12 @@ export default function Tasks() {
               task={task}
               subtasks={getAllSubtasks(task.id)}
               hideSubtaskList={true}
-              onComplete={() => handleComplete(task)}
-              onDelete={() => deleteTaskMutation.mutate(task.id)}
+              onComplete={() => onCompleteTask(task)}
+              onDelete={() => deleteTask(task.id)}
               onEdit={() => setEditingTask(task)}
-              onUpdate={(data) => updateTaskMutation.mutate({ id: task.id, data })}
+              onUpdate={(data) => updateTask({ id: task.id, data })}
               onClick={() => setSelectedTask(task)}
-              onSubtaskToggle={handleSubtaskToggle}
+              onSubtaskToggle={onSubtaskToggleWrapper}
               onToggleSubtasks={() => toggleTaskExpansion(task.id)}
               isExpanded={expandedTaskIds.has(task.id)} />
 
@@ -415,11 +375,11 @@ export default function Tasks() {
                     <TaskCard
                   task={subtask}
                   hideSubtaskList={true}
-                  onComplete={() => handleSubtaskToggle(subtask)}
-                  onDelete={() => deleteTaskMutation.mutate(subtask.id)}
+                  onComplete={() => onSubtaskToggleWrapper(subtask)}
+                  onDelete={() => deleteTask(subtask.id)}
                   onEdit={() => setEditingTask(subtask)}
                   onClick={() => setSelectedTask(subtask)}
-                  onSubtaskToggle={handleSubtaskToggle} />
+                  onSubtaskToggle={onSubtaskToggleWrapper} />
 
                   </motion.div>
               )}

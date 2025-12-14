@@ -122,7 +122,7 @@ export default function Layout({ children }) {
               </div>
               <div>
                 <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
-                  任务管家
+                  心灵存放站
                 </h2>
                 <p className="text-xs text-slate-500">智能提醒，贴心陪伴</p>
               </div>
@@ -188,7 +188,7 @@ export default function Layout({ children }) {
             <div className="flex items-center gap-4">
               <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-all duration-200" />
               <h1 className="text-lg font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
-                任务管家
+                心灵存放站
               </h1>
             </div>
           </header>

@@ -166,11 +166,11 @@ export default function Layout({ children }) {
               <SidebarMenuItem>
                 <SidebarMenuButton 
                   onClick={() => setFeedbackOpen(true)}
-                  className="group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 hover:bg-blue-50 text-slate-700 cursor-pointer"
+                  className="group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 hover:bg-[#f0f9ff] text-slate-700 cursor-pointer"
                 >
                   <div className="flex items-center gap-3 px-4 py-3 w-full">
-                    <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-blue-600 group-hover:scale-110 transition-all duration-300" />
-                    <span className="font-medium group-hover:text-blue-600 transition-colors">反馈与联系</span>
+                    <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-[#384877] group-hover:scale-110 transition-all duration-300" />
+                    <span className="font-medium group-hover:text-[#384877] transition-colors">反馈与联系</span>
                   </div>
                 </SidebarMenuButton>
               </SidebarMenuItem>

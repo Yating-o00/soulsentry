@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useMutation } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Send, MessageSquarePlus } from "lucide-react";
+import { Loader2, Send, MessageSquarePlus, Sparkles, Bug, Mail, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
+import { motion } from "framer-motion";
 
 export default function FeedbackDialog({ open, onOpenChange }) {
   const [type, setType] = useState("feature");
@@ -59,7 +59,6 @@ ${content}
         });
       } catch (emailError) {
         console.error("Failed to send email notification", emailError);
-        // Don't block success if email fails, but maybe log it
       }
 
       toast.success("反馈已提交，我们会尽快联系您！");
@@ -75,65 +74,110 @@ ${content}
     }
   };
 
+  const getTypeIcon = (t) => {
+    switch(t) {
+      case 'bug': return <Bug className="w-4 h-4 text-red-500" />;
+      case 'feature': return <Sparkles className="w-4 h-4 text-amber-500" />;
+      default: return <MessageCircle className="w-4 h-4 text-blue-500" />;
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <MessageSquarePlus className="w-5 h-5 text-blue-500" />
-            联系我们 / 问题反馈
-          </DialogTitle>
-          <DialogDescription>
-            您的意见对我们非常重要。我们会认真阅读每一条反馈，并尽快通过您留下的联系方式回复。
-          </DialogDescription>
+      <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden border-0 shadow-2xl bg-white/95 backdrop-blur-sm">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]" />
+        
+        <DialogHeader className="p-6 pb-2">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+              <MessageSquarePlus className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <DialogTitle className="text-xl font-bold text-[#222222]">
+                反馈与联系
+              </DialogTitle>
+              <DialogDescription className="text-slate-500 text-xs mt-1">
+                您的声音能帮助我们做得更好
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="type">反馈类型</Label>
+        <div className="px-6 py-4 space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="type" className="text-sm font-semibold text-slate-700">反馈类型</Label>
             <Select value={type} onValueChange={setType}>
-              <SelectTrigger>
+              <SelectTrigger className="border-slate-200 hover:border-blue-300 transition-colors h-11 rounded-xl bg-slate-50/50">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="bug">🐛 问题/Bug反馈</SelectItem>
-                <SelectItem value="feature">✨ 功能建议</SelectItem>
-                <SelectItem value="other">📮 其他留言</SelectItem>
+                <SelectItem value="bug">
+                  <div className="flex items-center gap-2">
+                    <Bug className="w-4 h-4 text-red-500" />
+                    <span>问题/Bug反馈</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="feature">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>功能建议</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="other">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="w-4 h-4 text-blue-500" />
+                    <span>其他留言</span>
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="contact">
-              联系方式 <span className="text-red-500">*</span>
+          <div className="space-y-2">
+            <Label htmlFor="contact" className="text-sm font-semibold text-slate-700 flex items-center gap-1">
+              联系方式 <span className="text-[#d5495f]">*</span>
             </Label>
-            <Input
-              id="contact"
-              placeholder="请输入您的邮箱或电话，方便我们回复"
-              value={contactInfo}
-              onChange={(e) => setContactInfo(e.target.value)}
-            />
+            <div className="relative">
+              <Mail className="absolute left-3 top-3.5 w-4 h-4 text-slate-400" />
+              <Input
+                id="contact"
+                placeholder="请输入邮箱或电话"
+                value={contactInfo}
+                onChange={(e) => setContactInfo(e.target.value)}
+                className="pl-9 border-slate-200 hover:border-blue-300 focus-visible:ring-[#384877] transition-all h-11 rounded-xl bg-slate-50/50"
+              />
+            </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="content">
-              反馈内容 <span className="text-red-500">*</span>
+          <div className="space-y-2">
+            <Label htmlFor="content" className="text-sm font-semibold text-slate-700 flex items-center gap-1">
+              {type === 'bug' ? '问题描述' : type === 'feature' ? '建议详情' : '留言内容'} 
+              <span className="text-[#d5495f]">*</span>
             </Label>
             <Textarea
               id="content"
-              placeholder="请详细描述您遇到的问题或建议..."
-              className="h-32 resize-none"
+              placeholder={type === 'bug' ? "请描述您遇到的问题，发生场景等..." : "请详细描述您的建议..."}
+              className="min-h-[120px] resize-none border-slate-200 hover:border-blue-300 focus-visible:ring-[#384877] transition-all rounded-xl bg-slate-50/50 p-3"
               value={content}
               onChange={(e) => setContent(e.target.value)}
             />
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+        <DialogFooter className="p-6 pt-2 bg-slate-50/50 border-t border-slate-100 flex gap-3">
+          <Button 
+            variant="ghost" 
+            onClick={() => onOpenChange(false)} 
+            disabled={isSubmitting}
+            className="rounded-xl hover:bg-slate-200/50 text-slate-600"
+          >
             取消
           </Button>
-          <Button onClick={submitFeedback} disabled={isSubmitting} className="bg-gradient-to-r from-[#384877] to-[#3b5aa2]">
+          <Button 
+            onClick={submitFeedback} 
+            disabled={isSubmitting} 
+            className="rounded-xl bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] text-white shadow-lg shadow-[#384877]/20 px-6 transition-all"
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

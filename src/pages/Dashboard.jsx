@@ -59,15 +59,14 @@ export default function Dashboard() {
   }, []);
 
   // Filter tasks (exclude subtasks from main view)
-  const activeTasks = allTasks.filter(t => !t.deleted_at);
+  const activeTasks = React.useMemo(() => allTasks.filter(t => !t.deleted_at), [allTasks]);
   
   // Pre-process tasks to handle multi-day recurrence logic
-  const processedTasks = activeTasks.map(task => {
+  const processedTasks = React.useMemo(() => activeTasks.map(task => {
     if (!task.reminder_time) return task;
     
     const start = parseISO(task.reminder_time);
     const end = task.end_time ? parseISO(task.end_time) : start;
-    const isMultiDay = !isToday(start) || (task.end_time && !isToday(parseISO(task.end_time))); // Simple check for any range implication
     
     // If we are currently within the task's date range (inclusive)
     const now = new Date();
@@ -89,11 +88,11 @@ export default function Dashboard() {
     }
     
     return task;
-  });
+  }), [activeTasks]);
 
-  const rootTasks = processedTasks.filter(t => !t.parent_task_id);
+  const rootTasks = React.useMemo(() => processedTasks.filter(t => !t.parent_task_id), [processedTasks]);
 
-  const todayTasks = rootTasks.filter(t => {
+  const todayTasks = React.useMemo(() => rootTasks.filter(t => {
     if (!t.reminder_time) return false;
     const start = parseISO(t.reminder_time);
     const end = t.end_time ? parseISO(t.end_time) : start;
@@ -102,14 +101,14 @@ export default function Dashboard() {
       start: startOfDay(start), 
       end: endOfDay(end) 
     });
-  });
+  }), [rootTasks]);
 
   // Updated Overdue Logic:
   // A task is overdue only if:
   // 1. It is pending
   // 2. The END time of the task has passed (or start if no end)
   // 3. We are NOT currently within the valid date range (because if we are in range, it's a "Today" task, not overdue)
-  const overdueTasks = rootTasks.filter(t => {
+  const overdueTasks = React.useMemo(() => rootTasks.filter(t => {
     if (t.status !== 'pending') return false;
     if (!t.reminder_time) return false;
 
@@ -124,20 +123,20 @@ export default function Dashboard() {
 
     // Otherwise, check if the end time has fully passed and it's not today
     return isPast(end) && !isToday(end);
-  });
+  }), [rootTasks]);
 
-  const pendingTasks = rootTasks.filter(t => t.status === 'pending');
+  const pendingTasks = React.useMemo(() => rootTasks.filter(t => t.status === 'pending'), [rootTasks]);
   
-  const completedToday = rootTasks.filter(t => 
+  const completedToday = React.useMemo(() => rootTasks.filter(t => 
     t.status === 'completed' && 
     t.completed_at && 
     isToday(parseISO(t.completed_at))
-  );
+  ), [rootTasks]);
 
   // Stats
-  const completionRate = todayTasks.length > 0 
+  const completionRate = React.useMemo(() => todayTasks.length > 0 
     ? Math.round((todayTasks.filter(t => t.status === 'completed').length / todayTasks.length) * 100) 
-    : 0;
+    : 0, [todayTasks]);
 
   // Mutations
   const updateTaskMutation = useMutation({

@@ -51,21 +51,21 @@ export default function Teams() {
     },
   });
 
-  const sharedTasks = allTasks.filter(task => 
+  const sharedTasks = React.useMemo(() => allTasks.filter(task => 
     !task.parent_task_id && 
     (task.is_shared || task.team_visibility !== 'private' || 
      (task.assigned_to && task.assigned_to.length > 0))
-  );
+  ), [allTasks]);
 
-  const myAssignedTasks = sharedTasks.filter(task =>
+  const myAssignedTasks = React.useMemo(() => sharedTasks.filter(task =>
     task.assigned_to && task.assigned_to.includes(currentUser?.id)
-  );
+  ), [sharedTasks, currentUser?.id]);
 
-  const myCreatedTasks = sharedTasks.filter(task =>
+  const myCreatedTasks = React.useMemo(() => sharedTasks.filter(task =>
     task.created_by === currentUser?.email
-  );
+  ), [sharedTasks, currentUser?.email]);
 
-  const filteredTasks = sharedTasks.filter(task => {
+  const filteredTasks = React.useMemo(() => sharedTasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          task.description?.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -75,7 +75,7 @@ export default function Teams() {
       return matchesSearch && task.created_by === currentUser?.email;
     }
     return matchesSearch;
-  });
+  }), [sharedTasks, searchQuery, filterView, currentUser?.id, currentUser?.email]);
 
   const handleComplete = async (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";

@@ -61,6 +61,49 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [showAssignment, setShowAssignment] = useState(false);
   const [showSmartSuggestion, setShowSmartSuggestion] = useState(false);
   const [showAIEnhancer, setShowAIEnhancer] = useState(false);
+  const [suggestedTags, setSuggestedTags] = useState([]);
+  const [isSuggestingTags, setIsSuggestingTags] = useState(false);
+  
+  // 智能标签推荐 (Debounced)
+  useEffect(() => {
+    if (!task.title || task.title.length < 2) return;
+    
+    const timer = setTimeout(async () => {
+      setIsSuggestingTags(true);
+      try {
+        const res = await base44.integrations.Core.InvokeLLM({
+          prompt: `Based on the task title "${task.title}", suggest 3 relevant short tags (e.g. "Work", "Meeting", "Urgent", "Study"). Return ONLY a JSON object: {"tags": ["tag1", "tag2", "tag3"]}. Tags should be in Chinese if the title is Chinese.`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              tags: { type: "array", items: { type: "string" } }
+            }
+          }
+        });
+        if (res && res.tags) {
+          // Filter out existing tags
+          const currentTags = task.tags || [];
+          const newSuggestions = res.tags.filter(t => !currentTags.includes(t));
+          setSuggestedTags(newSuggestions);
+        }
+      } catch (e) {
+        console.error("Tag suggestion failed", e);
+      } finally {
+        setIsSuggestingTags(false);
+      }
+    }, 1000); // 1s debounce
+
+    return () => clearTimeout(timer);
+  }, [task.title]);
+
+  const addTag = (tag) => {
+    const currentTags = task.tags || [];
+    if (!currentTags.includes(tag)) {
+        setTask(prev => ({ ...prev, tags: [...currentTags, tag] }));
+        setSuggestedTags(prev => prev.filter(t => t !== tag));
+    }
+  };
+
   const [task, setTask] = useState({
     title: initialData?.title || "",
     description: initialData?.description || "",
@@ -590,6 +633,50 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     }
                   }}
                 />
+
+                {/* 标签推荐区域 */}
+                <AnimatePresence>
+                  {(suggestedTags.length > 0 || (task.tags && task.tags.length > 0)) && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="flex flex-wrap gap-2 items-center"
+                    >
+                      {task.tags && task.tags.map(tag => (
+                        <Badge key={tag} variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-200 gap-1 pl-2 pr-1">
+                          #{tag}
+                          <button 
+                            type="button"
+                            onClick={() => setTask(prev => ({...prev, tags: prev.tags.filter(t => t !== tag)}))}
+                            className="hover:bg-blue-300 rounded-full p-0.5"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                      
+                      {suggestedTags.length > 0 && (
+                        <>
+                          <span className="text-xs text-slate-400 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" /> 推荐:
+                          </span>
+                          {suggestedTags.map(tag => (
+                            <Badge 
+                              key={tag} 
+                              variant="outline" 
+                              className="cursor-pointer border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 transition-colors"
+                              onClick={() => addTag(tag)}
+                            >
+                              + {tag}
+                            </Badge>
+                          ))}
+                        </>
+                      )}
+                      {isSuggestingTags && <Loader2 className="w-3 h-3 animate-spin text-slate-300" />}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* 描述输入 */}
                 <Textarea

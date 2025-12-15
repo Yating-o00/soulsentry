@@ -38,7 +38,43 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [showAIWriter, setShowAIWriter] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [suggestedTags, setSuggestedTags] = useState([]);
   const quillRef = useRef(null);
+
+  // 智能标签推荐 (Debounced)
+  React.useEffect(() => {
+    const plainText = content.replace(/<[^>]+>/g, '').trim(); // Simple strip
+    if (!plainText || plainText.length < 5) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await base44.integrations.Core.InvokeLLM({
+          prompt: `Based on this note content, suggest 3 relevant short tags. Return ONLY a JSON object: {"tags": ["tag1", "tag2", "tag3"]}. Content: "${plainText.slice(0, 200)}..."`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              tags: { type: "array", items: { type: "string" } }
+            }
+          }
+        });
+        if (res && res.tags) {
+          const newSuggestions = res.tags.filter(t => !tags.includes(t));
+          setSuggestedTags(newSuggestions);
+        }
+      } catch (e) {
+        console.error("Tag suggestion failed", e);
+      }
+    }, 2000); // 2s debounce for notes
+
+    return () => clearTimeout(timer);
+  }, [content, tags]);
+
+  const addSuggestedTag = (tag) => {
+    if (!tags.includes(tag)) {
+        setTags([...tags, tag]);
+        setSuggestedTags(prev => prev.filter(t => t !== tag));
+    }
+  };
 
   const handleAIGenerate = async (mode) => {
     setIsGenerating(true);
@@ -297,6 +333,24 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 </motion.div>
             ))}
             </AnimatePresence>
+            
+            {/* 推荐标签 */}
+            {suggestedTags.length > 0 && (
+                <div className="flex items-center gap-1 ml-1 mr-2">
+                    <Sparkles className="w-3 h-3 text-purple-400" />
+                    {suggestedTags.map(tag => (
+                        <Badge 
+                            key={tag} 
+                            variant="outline" 
+                            className="cursor-pointer border-dashed border-purple-300 text-purple-600 hover:bg-purple-50 text-[10px] px-1.5"
+                            onClick={() => addSuggestedTag(tag)}
+                        >
+                            +{tag}
+                        </Badge>
+                    ))}
+                </div>
+            )}
+
             <Button
                 variant="ghost"
                 size="sm"

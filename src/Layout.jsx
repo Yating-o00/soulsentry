@@ -16,8 +16,9 @@ import {
   SidebarTrigger,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Trash2, MessageSquarePlus } from "lucide-react";
+import { Trash2, MessageSquarePlus, Search } from "lucide-react";
 import FeedbackDialog from "@/components/feedback/FeedbackDialog";
+import GlobalSearch from "@/components/search/GlobalSearch";
 
 const navigationItems = [
   {
@@ -56,6 +57,18 @@ const navigationItems = [
 export default function Layout({ children }) {
   const location = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  React.useEffect(() => {
+    const down = (e) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+    };
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
 
   return (
     <SidebarProvider>
@@ -130,8 +143,22 @@ export default function Layout({ children }) {
               </div>
             </div>
           </SidebarHeader>
-          
+
           <SidebarContent className="p-3">
+            <div className="px-2 mb-4">
+              <button 
+                onClick={() => setSearchOpen(true)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-100 hover:bg-slate-200/70 rounded-xl text-slate-500 text-sm transition-colors border border-slate-200/50"
+              >
+                <Search className="w-4 h-4" />
+                <span>搜索...</span>
+                <div className="ml-auto flex items-center gap-1">
+                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-slate-300 bg-white px-1.5 font-mono text-[10px] font-medium text-slate-500 opacity-100">
+                    <span className="text-xs">⌘</span>K
+                  </kbd>
+                </div>
+              </button>
+            </div>
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
@@ -197,6 +224,7 @@ export default function Layout({ children }) {
           </Sidebar>
 
         <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+        <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
         <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative">
           <FloatingAssistantButton />
           <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">

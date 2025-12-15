@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -23,12 +24,30 @@ export default function Notes() {
   const [taskCreationNote, setTaskCreationNote] = useState(null); // State for task creation
   const [viewMode, setViewMode] = useState("grid"); // grid | list
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
 
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date'),
     initialData: []
   });
+
+  // Handle URL param for opening specific note
+  useEffect(() => {
+    const noteId = searchParams.get("noteId");
+    if (noteId && notes.length > 0) {
+      const note = notes.find(n => n.id === noteId);
+      if (note) {
+        setEditingNote(note);
+      } else {
+        base44.entities.Note.filter({ id: noteId }).then(res => {
+          if (res && res.length > 0) {
+             setEditingNote(res[0]);
+          }
+        });
+      }
+    }
+  }, [searchParams, notes]);
 
   // Mutations
   const createNoteMutation = useMutation({

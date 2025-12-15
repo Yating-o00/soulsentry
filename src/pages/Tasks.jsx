@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue } from
 "@/components/ui/select";
+import { useSearchParams } from "react-router-dom";
 import NotificationManager from "../components/notifications/NotificationManager";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import SmartTextParser from "../components/tasks/SmartTextParser";
@@ -36,6 +37,7 @@ export default function Tasks() {
   const [editingTask, setEditingTask] = useState(null);
   const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
   const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt' | 'kanban'
+  const [searchParams, setSearchParams] = useSearchParams();
   
   const { 
     updateTask, 
@@ -64,6 +66,26 @@ export default function Tasks() {
     queryFn: () => base44.entities.Task.list('-reminder_time'),
     initialData: []
   });
+
+  // Handle URL param for opening specific task
+  React.useEffect(() => {
+    const taskId = searchParams.get("taskId");
+    if (taskId && allTasks.length > 0) {
+      const task = allTasks.find(t => t.id === taskId);
+      if (task) {
+        setSelectedTask(task);
+        // Optional: clear param after opening
+        // setSearchParams({});
+      } else {
+        // If not in list (maybe deleted or filtered out by server limit?), try fetch individually
+        base44.entities.Task.filter({ id: taskId }).then(res => {
+          if (res && res.length > 0) {
+            setSelectedTask(res[0]);
+          }
+        });
+      }
+    }
+  }, [searchParams, allTasks]);
 
   // Include ALL non-deleted tasks for processing
   const tasks = allTasks.filter((task) => !task.deleted_at);

@@ -13,8 +13,8 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  DialogTitle } from
+"@/components/ui/dialog";
 
 export default function Notes() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,7 +27,7 @@ export default function Notes() {
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date'),
-    initialData: [],
+    initialData: []
   });
 
   // Mutations
@@ -48,7 +48,7 @@ export default function Notes() {
       toast.success("约定已创建");
     },
     onError: () => {
-        toast.error("约定创建失败");
+      toast.error("约定创建失败");
     }
   });
 
@@ -71,13 +71,13 @@ export default function Notes() {
 
   // Filter and Sort
   const filteredNotes = useMemo(() => {
-    let result = notes.filter(note => !note.deleted_at);
-    
+    let result = notes.filter((note) => !note.deleted_at);
+
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
-      result = result.filter(note => 
-        (note.plain_text && note.plain_text.toLowerCase().includes(lowerQuery)) ||
-        (note.tags && note.tags.some(tag => tag.toLowerCase().includes(lowerQuery)))
+      result = result.filter((note) =>
+      note.plain_text && note.plain_text.toLowerCase().includes(lowerQuery) ||
+      note.tags && note.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
       );
     }
 
@@ -102,8 +102,8 @@ export default function Notes() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
-      >
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+
         <div>
           <div className="flex items-center gap-3 mb-2">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
@@ -113,18 +113,18 @@ export default function Notes() {
               灵感心签
             </h1>
           </div>
-          <p className="text-slate-600">随时记录想法，AI 帮你整理</p>
+          <p className="text-slate-600">让想法的碎片尽情落下</p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input 
-              placeholder="搜索标签或内容..." 
+            <Input
+              placeholder="搜索标签或内容..."
               className="pl-9 bg-white border-slate-200 rounded-xl"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+              onChange={(e) => setSearchQuery(e.target.value)} />
+
           </div>
           {/* View Toggle (Optional, simpler to just stick to masonry-ish grid) */}
         </div>
@@ -134,57 +134,57 @@ export default function Notes() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-      >
-        {!isCreating ? (
-          <div 
-            onClick={() => setIsCreating(true)}
-            className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 cursor-text hover:shadow-md transition-all flex items-center text-slate-500 gap-3 group"
-          >
+        transition={{ delay: 0.1 }}>
+
+        {!isCreating ?
+        <div
+          onClick={() => setIsCreating(true)}
+          className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 cursor-text hover:shadow-md transition-all flex items-center text-slate-500 gap-3 group">
+
             <Plus className="w-5 h-5 text-slate-400 group-hover:text-[#384877]" />
             <span className="font-medium">添加新心签...</span>
-          </div>
-        ) : (
-          <NoteEditor 
-            onSave={(data) => createNoteMutation.mutate(data)}
-            onClose={() => setIsCreating(false)}
-          />
-        )}
+          </div> :
+
+        <NoteEditor
+          onSave={(data) => createNoteMutation.mutate(data)}
+          onClose={() => setIsCreating(false)} />
+
+        }
       </motion.div>
 
       {/* Notes Grid - Using CSS Columns for Masonry effect */}
       <motion.div
         layout
-        className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4 pb-20"
-      >
+        className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4 pb-20">
+
         <AnimatePresence mode="popLayout">
-          {filteredNotes.map((note) => (
-            <NoteCard
-              key={note.id}
-              note={note}
-              onEdit={setEditingNote}
-              onDelete={(n) => deleteNoteMutation.mutate(n.id)}
-              onPin={handlePin}
-              onConvertToTask={(n) => setTaskCreationNote(n)}
-            />
-          ))}
+          {filteredNotes.map((note) =>
+          <NoteCard
+            key={note.id}
+            note={note}
+            onEdit={setEditingNote}
+            onDelete={(n) => deleteNoteMutation.mutate(n.id)}
+            onPin={handlePin}
+            onConvertToTask={(n) => setTaskCreationNote(n)} />
+
+          )}
         </AnimatePresence>
       </motion.div>
 
       {/* Empty State */}
-      {filteredNotes.length === 0 && !isCreating && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center py-20"
-        >
+      {filteredNotes.length === 0 && !isCreating &&
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-center py-20">
+
           <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
             <StickyNote className="w-10 h-10 text-slate-400" />
           </div>
           <h3 className="text-lg font-medium text-slate-700 mb-1">暂无心签</h3>
           <p className="text-slate-500">记录下你的第一个灵感吧</p>
         </motion.div>
-      )}
+      }
 
       {/* Edit Dialog */}
       <Dialog open={!!editingNote} onOpenChange={(open) => !open && setEditingNote(null)}>
@@ -192,13 +192,13 @@ export default function Notes() {
           <DialogHeader>
             <DialogTitle>编辑心签</DialogTitle>
           </DialogHeader>
-          {editingNote && (
-            <NoteEditor
-              initialData={editingNote}
-              onSave={(data) => updateNoteMutation.mutate({ id: editingNote.id, data })}
-              onClose={() => setEditingNote(null)}
-            />
-          )}
+          {editingNote &&
+          <NoteEditor
+            initialData={editingNote}
+            onSave={(data) => updateNoteMutation.mutate({ id: editingNote.id, data })}
+            onClose={() => setEditingNote(null)} />
+
+          }
         </DialogContent>
       </Dialog>
 
@@ -211,26 +211,26 @@ export default function Notes() {
                 从心签创建约定
             </DialogTitle>
           </DialogHeader>
-          {taskCreationNote && (
-            <QuickAddTask
-              initialData={{
-                title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新约定",
-                description: taskCreationNote.ai_analysis?.key_points 
-                    ? `要点总结：\n- ${taskCreationNote.ai_analysis.key_points.join('\n- ')}\n\n原文内容：\n${taskCreationNote.plain_text || ""}`
-                    : (taskCreationNote.plain_text || ""),
-              }}
-              onAdd={(taskData) => {
-                  // Ensure reminder_time is set if QuickAddTask doesn't enforce it strictly or if user didn't change it
-                  const dataToSubmit = {
-                      ...taskData,
-                      reminder_time: taskData.reminder_time || new Date().toISOString()
-                  };
-                  createTaskMutation.mutate(dataToSubmit);
-              }}
-            />
-          )}
+          {taskCreationNote &&
+          <QuickAddTask
+            initialData={{
+              title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新约定",
+              description: taskCreationNote.ai_analysis?.key_points ?
+              `要点总结：\n- ${taskCreationNote.ai_analysis.key_points.join('\n- ')}\n\n原文内容：\n${taskCreationNote.plain_text || ""}` :
+              taskCreationNote.plain_text || ""
+            }}
+            onAdd={(taskData) => {
+              // Ensure reminder_time is set if QuickAddTask doesn't enforce it strictly or if user didn't change it
+              const dataToSubmit = {
+                ...taskData,
+                reminder_time: taskData.reminder_time || new Date().toISOString()
+              };
+              createTaskMutation.mutate(dataToSubmit);
+            }} />
+
+          }
         </DialogContent>
       </Dialog>
-    </div>
-  );
+    </div>);
+
 }

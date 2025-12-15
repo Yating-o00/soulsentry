@@ -509,13 +509,13 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                 </div>
               </div>
               
-              <div className="flex gap-4 h-[100px]">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:h-[100px]">
                 {/* 文本输入按钮 */}
                 <button
                   onClick={() => setIsExpanded(true)}
-                  className="flex-1 group relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/30 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300"
+                  className="w-full sm:flex-1 h-[84px] sm:h-auto group relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/30 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300"
                 >
-                  <div className="relative flex items-center h-full px-5 gap-4">
+                  <div className="relative flex items-center h-full px-4 sm:px-5 gap-3 sm:gap-4">
                     <div className="relative flex-shrink-0">
                       <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
                         <Plus className="w-6 h-6 text-[#3b5aa2]" strokeWidth={2.5} />
@@ -542,9 +542,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                 {browserSupported && (
                   <button
                     onClick={startVoiceInput}
-                    className="flex-[0.8] group relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] text-white shadow-lg shadow-[#3b5aa2]/25 hover:shadow-[#3b5aa2]/40 hover:-translate-y-0.5 transition-all duration-300"
+                    className="w-full sm:flex-[0.8] h-[84px] sm:h-auto group relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] text-white shadow-lg shadow-[#3b5aa2]/25 hover:shadow-[#3b5aa2]/40 hover:-translate-y-0.5 transition-all duration-300"
                   >
-                    <div className="relative flex items-center justify-center h-full gap-3 px-4">
+                    <div className="relative flex items-center justify-start sm:justify-center h-full gap-3 px-4">
                       <div className="relative">
                         <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
                           <Mic className="w-6 h-6 text-white" />

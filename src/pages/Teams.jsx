@@ -134,7 +134,7 @@ export default function Teams() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}>
 
-        <h1 className="bg-clip-text text-transparent px-1 text-lg font-bold md:text-4xl from-[#5a647d] to-[#1e3a5f]">聚是一团火，散是满天星
+        <h1 className="bg-slate-50 text-[#2d60ac] px-1 text-base font-bold md:text-4xl from-[#5a647d] to-[#1e3a5f]">聚是一团火，散是满天星
 
         </h1>
         <p className="text-slate-600">查看和管理团队共享的约定</p>

@@ -145,6 +145,7 @@ export default function Dashboard() {
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       setEditingTask(null);
       
       if (variables.data.status === 'completed') {

@@ -15,6 +15,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
   SidebarFooter,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Trash2, MessageSquarePlus, Search } from "lucide-react";
 import FeedbackDialog from "@/components/feedback/FeedbackDialog";
@@ -53,6 +54,127 @@ const navigationItems = [
   },
 
 ];
+
+function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
+  const location = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  const handleMobileClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
+  return (
+    <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
+      <SidebarHeader className="border-b border-slate-200/50 p-6">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+            <Bell className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+              心灵存放站
+            </h2>
+            <p className="text-xs text-slate-500">智能提醒，贴心陪伴</p>
+          </div>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent className="p-3">
+        <div className="px-2 mb-4">
+          <button 
+            onClick={() => {
+              setSearchOpen(true);
+              handleMobileClick();
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-100 hover:bg-slate-200/70 rounded-xl text-slate-500 text-sm transition-colors border border-slate-200/50"
+          >
+            <Search className="w-4 h-4" />
+            <span>搜索...</span>
+            <div className="ml-auto flex items-center gap-1">
+              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-slate-300 bg-white px-1.5 font-mono text-[10px] font-medium text-slate-500 opacity-100">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </div>
+          </button>
+        </div>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navigationItems.map((item) => {
+                const isActive = location.pathname === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton 
+                      asChild 
+                      className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
+                        isActive 
+                          ? 'bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white shadow-lg shadow-[#384877]/25' 
+                          : 'hover:bg-[#f9fafb] text-slate-700'
+                      }`}
+                    >
+                      <Link 
+                        to={item.url} 
+                        onClick={handleMobileClick}
+                        className="flex items-center gap-3 px-4 py-3"
+                      >
+                        <item.icon className={`w-5 h-5 transition-transform duration-300 ${
+                          isActive ? 'scale-110' : 'group-hover:scale-110'
+                        }`} />
+                        <span className="font-medium">{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarFooter className="p-3 border-t border-slate-200/50">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton 
+              onClick={() => {
+                setFeedbackOpen(true);
+                handleMobileClick();
+              }}
+              className="group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 hover:bg-[#f0f9ff] text-slate-700 cursor-pointer"
+            >
+              <div className="flex items-center gap-3 px-4 py-3 w-full">
+                <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-[#384877] group-hover:scale-110 transition-all duration-300" />
+                <span className="font-medium group-hover:text-[#384877] transition-colors">反馈与联系</span>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton 
+              asChild 
+              className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
+                location.pathname === createPageUrl("Trash") 
+                  ? 'bg-[#fff1f2] text-[#d5495f] shadow-sm border border-[#e0919e]' 
+                  : 'hover:bg-[#fff1f2] hover:text-[#d5495f] text-slate-700'
+              }`}
+            >
+              <Link 
+                to={createPageUrl("Trash")} 
+                onClick={handleMobileClick}
+                className="flex items-center gap-3 px-4 py-3"
+              >
+                <Trash2 className={`w-5 h-5 transition-transform duration-300 ${
+                  location.pathname === createPageUrl("Trash") ? 'scale-110 text-[#d5495f]' : 'group-hover:scale-110 group-hover:text-[#d5495f] text-slate-500'
+                }`} />
+                <span className="font-medium">回收站</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -128,99 +250,7 @@ export default function Layout({ children }) {
           .bg-blue-100 { background-color: rgba(56, 72, 119, 0.1) !important; }
         `}</style>
         
-        <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
-          <SidebarHeader className="border-b border-slate-200/50 p-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
-                <Bell className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
-                  心灵存放站
-                </h2>
-                <p className="text-xs text-slate-500">智能提醒，贴心陪伴</p>
-              </div>
-            </div>
-          </SidebarHeader>
-
-          <SidebarContent className="p-3">
-            <div className="px-2 mb-4">
-              <button 
-                onClick={() => setSearchOpen(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-100 hover:bg-slate-200/70 rounded-xl text-slate-500 text-sm transition-colors border border-slate-200/50"
-              >
-                <Search className="w-4 h-4" />
-                <span>搜索...</span>
-                <div className="ml-auto flex items-center gap-1">
-                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-slate-300 bg-white px-1.5 font-mono text-[10px] font-medium text-slate-500 opacity-100">
-                    <span className="text-xs">⌘</span>K
-                  </kbd>
-                </div>
-              </button>
-            </div>
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {navigationItems.map((item) => {
-                    const isActive = location.pathname === item.url;
-                    return (
-                      <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton 
-                          asChild 
-                          className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
-                            isActive 
-                              ? 'bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white shadow-lg shadow-[#384877]/25' 
-                              : 'hover:bg-[#f9fafb] text-slate-700'
-                          }`}
-                        >
-                          <Link to={item.url} className="flex items-center gap-3 px-4 py-3">
-                            <item.icon className={`w-5 h-5 transition-transform duration-300 ${
-                              isActive ? 'scale-110' : 'group-hover:scale-110'
-                            }`} />
-                            <span className="font-medium">{item.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter className="p-3 border-t border-slate-200/50">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  onClick={() => setFeedbackOpen(true)}
-                  className="group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 hover:bg-[#f0f9ff] text-slate-700 cursor-pointer"
-                >
-                  <div className="flex items-center gap-3 px-4 py-3 w-full">
-                    <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-[#384877] group-hover:scale-110 transition-all duration-300" />
-                    <span className="font-medium group-hover:text-[#384877] transition-colors">反馈与联系</span>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  asChild 
-                  className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
-                    location.pathname === createPageUrl("Trash") 
-                      ? 'bg-[#fff1f2] text-[#d5495f] shadow-sm border border-[#e0919e]' 
-                      : 'hover:bg-[#fff1f2] hover:text-[#d5495f] text-slate-700'
-                  }`}
-                >
-                  <Link to={createPageUrl("Trash")} className="flex items-center gap-3 px-4 py-3">
-                    <Trash2 className={`w-5 h-5 transition-transform duration-300 ${
-                      location.pathname === createPageUrl("Trash") ? 'scale-110 text-[#d5495f]' : 'group-hover:scale-110 group-hover:text-[#d5495f] text-slate-500'
-                    }`} />
-                    <span className="font-medium">回收站</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
-          </Sidebar>
+        <AppSidebar setSearchOpen={setSearchOpen} setFeedbackOpen={setFeedbackOpen} />
 
         <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />

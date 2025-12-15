@@ -64,6 +64,29 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isSuggestingTags, setIsSuggestingTags] = useState(false);
   
+  const [task, setTask] = useState({
+    title: initialData?.title || "",
+    description: initialData?.description || "",
+    reminder_time: initialData?.reminder_time ? new Date(initialData.reminder_time) : null,
+    time: initialData?.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : "09:00",
+    end_time: initialData?.end_time ? new Date(initialData.end_time) : null,
+    end_time_str: initialData?.end_time ? format(new Date(initialData.end_time), "HH:mm") : "10:00",
+    has_end_time: !!initialData?.end_time,
+    priority: initialData?.priority || "medium",
+    category: initialData?.category || "personal",
+    repeat_rule: initialData?.repeat_rule || "none",
+    custom_recurrence: initialData?.custom_recurrence || null,
+    is_all_day: initialData?.is_all_day || false,
+    notification_sound: initialData?.notification_sound || "default",
+    persistent_reminder: initialData?.persistent_reminder || false,
+    notification_interval: initialData?.notification_interval || 15,
+    advance_reminders: initialData?.advance_reminders || [],
+    assigned_to: initialData?.assigned_to || [],
+    is_shared: initialData?.is_shared || false,
+    team_visibility: initialData?.team_visibility || "private",
+    subtasks: initialData?.subtasks || [], // Note: fetching subtasks might be needed if they are separate entities, but here we assume passed in initialData or ignored for quick edit
+  });
+
   // 智能标签推荐 (Debounced)
   useEffect(() => {
     if (!task.title || task.title.length < 2) return;
@@ -103,29 +126,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         setSuggestedTags(prev => prev.filter(t => t !== tag));
     }
   };
-
-  const [task, setTask] = useState({
-    title: initialData?.title || "",
-    description: initialData?.description || "",
-    reminder_time: initialData?.reminder_time ? new Date(initialData.reminder_time) : null,
-    time: initialData?.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : "09:00",
-    end_time: initialData?.end_time ? new Date(initialData.end_time) : null,
-    end_time_str: initialData?.end_time ? format(new Date(initialData.end_time), "HH:mm") : "10:00",
-    has_end_time: !!initialData?.end_time,
-    priority: initialData?.priority || "medium",
-    category: initialData?.category || "personal",
-    repeat_rule: initialData?.repeat_rule || "none",
-    custom_recurrence: initialData?.custom_recurrence || null,
-    is_all_day: initialData?.is_all_day || false,
-    notification_sound: initialData?.notification_sound || "default",
-    persistent_reminder: initialData?.persistent_reminder || false,
-    notification_interval: initialData?.notification_interval || 15,
-    advance_reminders: initialData?.advance_reminders || [],
-    assigned_to: initialData?.assigned_to || [],
-    is_shared: initialData?.is_shared || false,
-    team_visibility: initialData?.team_visibility || "private",
-    subtasks: initialData?.subtasks || [], // Note: fetching subtasks might be needed if they are separate entities, but here we assume passed in initialData or ignored for quick edit
-  });
 
   // Update task if initialData changes
   useEffect(() => {

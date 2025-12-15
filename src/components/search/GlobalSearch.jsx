@@ -102,9 +102,6 @@ export default function GlobalSearch({ open, onOpenChange }) {
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
-             <kbd className="hidden sm:inline-flex h-6 select-none items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 font-mono text-[11px] font-medium text-slate-400 shadow-sm">
-              ESC
-            </kbd>
           </div>
         </div>
 

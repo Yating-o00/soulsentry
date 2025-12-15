@@ -57,12 +57,10 @@ const navigationItems = [
 
 function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   const location = useLocation();
-  const { isMobile, setOpenMobile } = useSidebar();
+  const { setOpenMobile } = useSidebar();
 
   const handleMobileClick = () => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
+    setOpenMobile(false);
   };
 
   return (

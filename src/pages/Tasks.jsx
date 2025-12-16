@@ -243,30 +243,7 @@ export default function Tasks() {
       </motion.div>
 
       <div className="mb-8">
-        <Tabs defaultValue="quick" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-slate-100 p-1 rounded-xl mb-4">
-            <TabsTrigger
-              value="quick"
-              className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#384877] data-[state=active]:shadow-sm transition-all font-medium py-2">
-
-              快速创建
-            </TabsTrigger>
-            <TabsTrigger
-              value="smart"
-              className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#d5495f] data-[state=active]:shadow-sm transition-all font-medium py-2">
-
-              智能文本解析
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="quick" className="mt-0 focus-visible:ring-0">
-            <QuickAddTask onAdd={(data) => createTask(data)} />
-          </TabsContent>
-          
-          <TabsContent value="smart" className="mt-0 focus-visible:ring-0">
-            <SmartTextParser onTasksGenerated={handleBulkCreate} />
-          </TabsContent>
-        </Tabs>
+        <QuickAddTask onAdd={(data) => createTask(data)} />
       </div>
 
       <motion.div

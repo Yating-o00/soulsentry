@@ -32,7 +32,7 @@ const PRIORITIES = [
   { value: "urgent", label: "紧急", color: "bg-red-50 text-red-600 border-red-300" },
 ];
 
-export default function AITaskEnhancer({ taskTitle, currentDescription, onApply }) {
+export default function AITaskEnhancer({ taskTitle, currentDescription, availableTemplates, onApply }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [newTag, setNewTag] = useState("");
@@ -101,6 +101,14 @@ ${JSON.stringify(suggestions)}
     setIsAnalyzing(true);
     try {
       const now = new Date().toISOString();
+      
+      const templatesInfo = availableTemplates && availableTemplates.length > 0
+          ? `现有模板列表 (格式: ID: 名称 - 描述):
+${availableTemplates.map(t => `${t.id}: ${t.name} - ${t.description || '无描述'}`).join('\n')}
+
+如果用户的输入明显匹配某个模板的内容或场景，请推荐使用该模板，并返回其 ID。`
+          : "";
+
       const response = await base44.integrations.Core.InvokeLLM({
         prompt: `你是一个约定管理AI助手。请根据用户输入，提供智能生成和润色建议。
 
@@ -108,10 +116,13 @@ ${JSON.stringify(suggestions)}
 ${currentDescription ? `当前描述：${currentDescription}` : ""}
 当前时间：${now}
 
+${templatesInfo}
+
 任务目标：
 1. **内容生成**：如果用户仅输入了关键词或简短提示（如"周报"、"会议纪要"），请自动生成详细的模板或内容（如包含本周进展、下周计划等结构）。
 2. **润色优化**：优化语言风格，使其专业、清晰；纠正可能存在的语法错误。
 3. **信息提取**：提取关键信息生成标签和元数据。
+4. **模板匹配**：判断是否适用现有模板。
 
 请分析并提供以下JSON格式的建议：
 1. 完善的约定描述：经过生成、润色和纠错后的详细内容。
@@ -158,13 +169,33 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
             risks: { type: "array", items: { type: "string" } },
             risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
             dependencies: { type: "array", items: { type: "string" } },
-            reasoning: { type: "string" }
+            reasoning: { type: "string" },
+            recommended_template_id: { type: "string", description: "如果匹配到模板，返回模板ID" }
           },
           required: ["description", "category", "priority", "tags", "reasoning", "risk_level"]
         }
       });
 
-      setSuggestions(response);
+      // 如果推荐了模板，将模板内容合并到建议中
+      let finalResponse = response;
+      if (response.recommended_template_id && availableTemplates) {
+          const template = availableTemplates.find(t => t.id === response.recommended_template_id);
+          if (template && template.template_data) {
+              const data = template.template_data;
+              finalResponse = {
+                  ...response,
+                  // 优先使用模板的结构化数据，但保留 AI 生成的针对性描述
+                  category: data.category || response.category,
+                  priority: data.priority || response.priority,
+                  subtasks: (data.subtasks && data.subtasks.map(s => typeof s === 'string' ? s : s.title)) || response.subtasks,
+                  reasoning: `(基于模板 "${template.name}") ${response.reasoning}`,
+                  // 可以在这里合并更多字段
+              };
+              toast("已自动匹配约定模板: " + template.name, { icon: "📋" });
+          }
+      }
+
+      setSuggestions(finalResponse);
       toast.success("✨ AI分析完成！");
     } catch (error) {
       console.error("AI分析失败:", error);

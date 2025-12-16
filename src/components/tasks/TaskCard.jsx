@@ -28,7 +28,7 @@ import {
   Bell,
   Volume2,
   TimerReset,
-  // FileText removed to avoid duplicate
+  FileText,
   StickyNote,
   ChevronDown,
   ChevronRight,

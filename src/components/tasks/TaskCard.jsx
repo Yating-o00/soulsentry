@@ -91,6 +91,17 @@ const PRIORITY_LABELS = {
   urgent: "紧急",
 };
 
+const CATEGORY_LABELS = {
+  work: "工作",
+  personal: "个人",
+  health: "健康",
+  study: "学习",
+  family: "家庭",
+  shopping: "购物",
+  finance: "财务",
+  other: "其他",
+};
+
 export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
@@ -369,7 +380,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                     className={`${CATEGORY_COLORS[task.category]} border rounded-[8px] text-[13px] font-medium`}
                   >
                     <CategoryIcon className="w-3 h-3 mr-1" />
-                    {task.category}
+                    {CATEGORY_LABELS[task.category] || task.category}
                   </Badge>
 
                   <Badge

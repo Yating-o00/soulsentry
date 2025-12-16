@@ -304,6 +304,8 @@ export default function Tasks() {
               </button>
             </div>
 
+            <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
+
             <AdvancedTaskFilters 
                 filters={advancedFilters} 
                 onChange={setAdvancedFilters} 

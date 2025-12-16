@@ -147,91 +147,7 @@ export default function Tasks() {
     updateTask({ id: editingTask.id, data });
   };
 
-  const handleSmartPrioritize = async () => {
-    const pendingTasks = tasks.filter(t => t.status === 'pending');
-    if (pendingTasks.length === 0) {
-      toast.info("没有待处理的约定需要排序");
-      return;
-    }
-
-    setIsPrioritizing(true);
-    toast.loading("AI 正在分析约定优先级...", { id: "smart-sort" });
-
-    try {
-      // Prepare simplified task list for AI
-      const taskList = pendingTasks.map(t => ({
-        id: t.id,
-        title: t.title,
-        description: t.description || "",
-        reminder_time: t.reminder_time,
-        current_priority: t.priority
-      }));
-
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `你是一个时间管理专家。请根据以下约定的截止时间、重要性和内容，重新评估并分配优先级 (urgent, high, medium, low)。
-        
-        规则：
-        1. 截止时间临近（24小时内）或标题包含紧急关键词的，应设为 urgent 或 high。
-        2. 长期任务或无明确截止时间的，设为 medium 或 low。
-        3. 仅返回需要修改优先级的约定。
-        
-        约定列表：
-        ${JSON.stringify(taskList)}
-        
-        请返回一个JSON对象，包含需要更新优先级的约定ID和新优先级。`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            updates: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id: { type: "string" },
-                  new_priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-                  reason: { type: "string" }
-                },
-                required: ["id", "new_priority"]
-              }
-            }
-          },
-          required: ["updates"]
-        }
-      });
-
-      if (response.updates && response.updates.length > 0) {
-        let updateCount = 0;
-        for (const update of response.updates) {
-          const task = pendingTasks.find(t => t.id === update.id);
-          if (task && task.priority !== update.new_priority) {
-            // Using direct update to avoid rapid state thrashing, or we can use the mutation loop
-            // Since we have useTaskOperations hook, we might not have exposed a batch update.
-            // We'll loop updateTask.
-            // Note: updateTask calls mutation which invalidates query.
-            // For batch, ideally we'd have a bulk update endpoint.
-            // We'll update sequentially for now.
-            await base44.entities.Task.update(update.id, { 
-                priority: update.new_priority,
-                ai_analysis: {
-                    ...task.ai_analysis,
-                    suggested_priority: update.new_priority,
-                    priority_reasoning: update.reason || "AI 智能排序调整"
-                }
-            });
-            updateCount++;
-          }
-        }
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        toast.success(`AI 已优化 ${updateCount} 个约定的优先级`, { id: "smart-sort" });
-      } else {
-        toast.success("当前优先级已是最佳状态", { id: "smart-sort" });
-      }
-    } catch (error) {
-      console.error("Smart sort error:", error);
-      toast.error("智能排序失败", { id: "smart-sort" });
-    }
-    setIsPrioritizing(false);
-  };
+  // Smart sort removed - handled by Soul Sentry agent conversation
 
   const handleBulkCreate = async (parsedTasks) => {
     if (!parsedTasks || parsedTasks.length === 0) {
@@ -396,15 +312,7 @@ export default function Tasks() {
                 onClear={() => setAdvancedFilters({ createdBy: 'all', tags: [], dateRange: undefined })} 
             />
 
-            <button
-              onClick={handleSmartPrioritize}
-              disabled={isPrioritizing}
-              className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-3 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all disabled:opacity-50"
-              title="AI 智能排序"
-            >
-              {isPrioritizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              <span className="text-sm font-medium hidden md:inline">智能排序</span>
-            </button>
+
 
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-32 border-0 bg-white shadow-lg rounded-xl">

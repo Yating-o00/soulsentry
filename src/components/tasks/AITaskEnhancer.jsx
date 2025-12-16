@@ -45,6 +45,7 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
 
     setIsRefining(true);
     try {
+      const now = new Date().toISOString();
       const response = await base44.integrations.Core.InvokeLLM({
         prompt: `你是一个智能助手，帮助用户微调约定建议。
         
@@ -52,11 +53,12 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
 ${JSON.stringify(suggestions)}
 
 用户的修改指令: "${refineInstruction}"
+当前时间: ${now}
 
 请根据用户指令更新上述 JSON 数据。
 规则：
-1. 仅修改用户提到的部分，保持其他字段不变。
-2. 如果用户提到时间调整（如"推迟一天"），请基于当前值计算新的ISO时间。
+1. 仅修改用户提到的部分，但如果用户的修改隐含了其他字段的变化（例如修改描述暗示了时间、优先级或标签的变化），请一并智能更新相关字段。
+2. 如果用户提到时间调整（如"推迟一天"、"明天下午"），请基于当前时间和当前建议值计算新的ISO时间。
 3. 返回更新后的完整 JSON 对象。`,
         response_json_schema: {
           type: "object",

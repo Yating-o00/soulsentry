@@ -811,10 +811,14 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                                     value={task.time}
                                     onChange={(e) => {
                                       const newTime = e.target.value;
-                                      const baseDate = task.reminder_time ? new Date(task.reminder_time) : new Date();
-                                      const [hours, minutes] = newTime.split(':');
-                                      baseDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-                                      setTask({ ...task, time: newTime, reminder_time: baseDate });
+                                      const updates = { time: newTime };
+                                      if (task.reminder_time) {
+                                        const [h, m] = newTime.split(':');
+                                        const newDate = new Date(task.reminder_time);
+                                        newDate.setHours(parseInt(h), parseInt(m));
+                                        updates.reminder_time = newDate;
+                                      }
+                                      setTask({ ...task, ...updates });
                                     }}
                                     className="p-0 border-0 h-auto text-sm font-bold text-slate-700 bg-transparent focus:ring-0 w-[54px] cursor-pointer"
                                  />
@@ -826,10 +830,19 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                                             value={task.end_time_str}
                                             onChange={(e) => {
                                               const newTime = e.target.value;
-                                              const baseDate = task.end_time ? new Date(task.end_time) : (task.reminder_time ? new Date(task.reminder_time) : new Date());
-                                              const [hours, minutes] = newTime.split(':');
-                                              baseDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-                                              setTask({ ...task, end_time_str: newTime, end_time: baseDate });
+                                              const updates = { end_time_str: newTime };
+                                              if (task.end_time) {
+                                                const [h, m] = newTime.split(':');
+                                                const newDate = new Date(task.end_time);
+                                                newDate.setHours(parseInt(h), parseInt(m));
+                                                updates.end_time = newDate;
+                                              } else if (task.reminder_time) {
+                                                const [h, m] = newTime.split(':');
+                                                const newDate = new Date(task.reminder_time);
+                                                newDate.setHours(parseInt(h), parseInt(m));
+                                                updates.end_time = newDate;
+                                              }
+                                              setTask({ ...task, ...updates });
                                             }}
                                             className="p-0 border-0 h-auto text-sm font-bold text-slate-700 bg-transparent focus:ring-0 w-[54px] cursor-pointer"
                                           />

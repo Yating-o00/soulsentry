@@ -325,21 +325,22 @@ export default function Dashboard() {
         transition={{ delay: 0.1 }}
         className="grid grid-cols-1 md:grid-cols-3 gap-4"
       >
-        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
-            <ListTodo className="w-24 h-24 transform rotate-12 text-blue-600" />
+        <Card className="bg-[#384877] border-none shadow-xl text-white relative overflow-hidden group">
+          <div className="absolute top-2 right-2 p-4 opacity-[0.1] group-hover:opacity-[0.15] transition-opacity">
+            <ListTodo className="w-28 h-28 transform rotate-12 text-white" />
           </div>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-slate-500 font-medium text-sm flex items-center justify-between">
-              今日待办
-              <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-            </CardTitle>
+          <CardHeader className="pb-2 relative z-10">
+            <CardTitle className="text-blue-100 font-medium text-sm">今日待办</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold text-slate-800 mb-1 group-hover:text-blue-600 transition-colors">{todayTasks.length}</div>
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-              <Progress value={completionRate} className="h-1.5 bg-slate-100 flex-1" indicatorClassName="bg-blue-500" />
-              <span>{completionRate}%</span>
+          <CardContent className="relative z-10">
+            <div className="text-5xl font-bold mb-6">{todayTasks.length}</div>
+            <div className="flex items-center gap-3 text-blue-100 text-sm">
+              <Progress 
+                value={completionRate} 
+                className="h-2 bg-[#2a3659] flex-1" 
+                indicatorClassName="bg-[#5a7bd6]" 
+              />
+              <span className="font-medium">{completionRate}%</span>
             </div>
           </CardContent>
         </Card>

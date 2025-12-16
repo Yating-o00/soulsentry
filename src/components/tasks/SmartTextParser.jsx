@@ -23,6 +23,18 @@ export default function SmartTextParser({ onTasksGenerated }) {
   const [refiningState, setRefiningState] = useState(null); // { taskIndex, subIndex }
   const [batchRefineInstruction, setBatchRefineInstruction] = useState("");
   const [isBatchRefining, setIsBatchRefining] = useState(false);
+  const [openDatePopover, setOpenDatePopover] = useState(null); // { taskIndex, subIndex: null | number }
+
+  const handleDateSelect = (date, currentIso, callback) => {
+    if (!date) return;
+    const current = currentIso ? new Date(currentIso) : new Date();
+    const newDate = new Date(date);
+    newDate.setHours(current.getHours());
+    newDate.setMinutes(current.getMinutes());
+    newDate.setSeconds(current.getSeconds());
+    callback(newDate.toISOString());
+    setOpenDatePopover(null);
+  };
 
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
@@ -579,7 +591,10 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                           </SelectContent>
                         </Select>
 
-                        <Popover>
+                        <Popover 
+                          open={openDatePopover?.taskIndex === index && openDatePopover?.subIndex === undefined}
+                          onOpenChange={(open) => setOpenDatePopover(open ? { taskIndex: index } : null)}
+                        >
                           <PopoverTrigger asChild>
                             <Button variant="ghost" className="h-7 gap-1.5 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded-md px-2 text-xs font-medium text-[#384877] shadow-none">
                               <CalendarIcon className="w-3 h-3" />
@@ -590,7 +605,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                             <Calendar
                               mode="single"
                               selected={task.reminder_time ? new Date(task.reminder_time) : undefined}
-                              onSelect={(date) => date && handleEditTask(index, 'reminder_time', date.toISOString())}
+                              onSelect={(date) => handleDateSelect(date, task.reminder_time, (val) => handleEditTask(index, 'reminder_time', val))}
                               locale={zhCN}
                               initialFocus
                             />
@@ -691,7 +706,10 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                       </SelectContent>
                                     </Select>
 
-                                    <Popover>
+                                    <Popover
+                                      open={openDatePopover?.taskIndex === index && openDatePopover?.subIndex === subIndex}
+                                      onOpenChange={(open) => setOpenDatePopover(open ? { taskIndex: index, subIndex } : null)}
+                                    >
                                       <PopoverTrigger asChild>
                                         <Button variant="ghost" className="h-6 gap-1 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded px-1.5 text-[10px] font-medium text-[#384877] shadow-none">
                                           <Clock className="w-3 h-3" />
@@ -702,7 +720,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                         <Calendar
                                           mode="single"
                                           selected={subtask.reminder_time ? new Date(subtask.reminder_time) : undefined}
-                                          onSelect={(date) => date && handleEditSubtask(index, subIndex, 'reminder_time', date.toISOString())}
+                                          onSelect={(date) => handleDateSelect(date, subtask.reminder_time, (val) => handleEditSubtask(index, subIndex, 'reminder_time', val))}
                                           locale={zhCN}
                                           initialFocus
                                         />

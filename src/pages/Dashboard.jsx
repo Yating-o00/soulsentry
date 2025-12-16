@@ -499,7 +499,7 @@ export default function Dashboard() {
       />
 
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto scrollbar-hide">
           <DialogHeader>
             <DialogTitle>编辑约定</DialogTitle>
           </DialogHeader>

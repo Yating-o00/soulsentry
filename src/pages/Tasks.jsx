@@ -417,7 +417,7 @@ export default function Tasks() {
 
 
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>编辑约定</DialogTitle>
           </DialogHeader>

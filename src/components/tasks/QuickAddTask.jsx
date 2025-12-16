@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, MessageSquare } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, MessageSquare, BookTemplate } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -66,6 +66,12 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isSuggestingTags, setIsSuggestingTags] = useState(false);
   
+  const { data: templates } = useQuery({
+    queryKey: ['task-templates'],
+    queryFn: () => base44.entities.TaskTemplate.list(),
+    enabled: isExpanded // only fetch when form is open
+  });
+
   const [task, setTask] = useState({
     title: initialData?.title || "",
     description: initialData?.description || "",
@@ -1013,6 +1019,26 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                       </Badge>
                     )}
                   </Button>
+
+                  {/* 模板选择 */}
+                  {templates && templates.length > 0 && (
+                      <Select onValueChange={(val) => {
+                          const t = templates.find(t => t.id === val);
+                          loadTemplate(t);
+                      }}>
+                          <SelectTrigger className="w-auto border-dashed border-purple-200 bg-purple-50/50 hover:bg-purple-50 text-purple-700 rounded-[10px]">
+                              <div className="flex items-center gap-2">
+                                  <BookTemplate className="h-4 w-4" />
+                                  <span className="font-medium">从模板加载</span>
+                              </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                              {templates.map(t => (
+                                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                              ))}
+                          </SelectContent>
+                      </Select>
+                  )}
                 </div>
 
                 {/* 高级设置 */}

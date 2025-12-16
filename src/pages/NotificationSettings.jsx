@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Plus, Trash2, Volume2, BellOff, Settings, Sparkles } from "lucide-react";
+import { Bell, Plus, Trash2, Volume2, BellOff, Settings, Sparkles, Mail, Smartphone, Globe } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -52,6 +53,7 @@ export default function NotificationSettingsPage() {
     condition_priority: "all",
     action_mute: false,
     action_sound: "default",
+    action_channels: ["in_app"],
     is_enabled: true
   });
 
@@ -116,6 +118,7 @@ export default function NotificationSettingsPage() {
         condition_priority: "all",
         action_mute: false,
         action_sound: "default",
+        action_channels: ["in_app"],
         is_enabled: true
       });
       toast.success("规则创建成功");
@@ -398,6 +401,36 @@ export default function NotificationSettingsPage() {
                             </Select>
                           </div>
                         )}
+                        
+                        <div className="space-y-2 pt-2 border-t">
+                            <Label className="text-xs text-slate-500">通知渠道</Label>
+                            <div className="flex gap-4">
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox 
+                                        id="ch-inapp" 
+                                        checked={newRule.action_channels?.includes("in_app")}
+                                        onCheckedChange={(c) => {
+                                            const current = newRule.action_channels || [];
+                                            const next = c ? [...current, "in_app"] : current.filter(x => x !== "in_app");
+                                            setNewRule({...newRule, action_channels: next});
+                                        }}
+                                    />
+                                    <Label htmlFor="ch-inapp" className="font-normal text-sm">应用内</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox 
+                                        id="ch-email" 
+                                        checked={newRule.action_channels?.includes("email")}
+                                        onCheckedChange={(c) => {
+                                            const current = newRule.action_channels || [];
+                                            const next = c ? [...current, "email"] : current.filter(x => x !== "email");
+                                            setNewRule({...newRule, action_channels: next});
+                                        }}
+                                    />
+                                    <Label htmlFor="ch-email" className="font-normal text-sm">邮件</Label>
+                                </div>
+                            </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -448,6 +481,16 @@ export default function NotificationSettingsPage() {
                           <span className="text-slate-500">
                             音效: {SOUNDS.find(s => s.value === rule.action_sound)?.label}
                           </span>
+                        )}
+                        {rule.action_channels && rule.action_channels.length > 0 && (
+                            <>
+                                <span className="text-slate-300">|</span>
+                                <div className="flex gap-1">
+                                    {rule.action_channels.includes('in_app') && <Smartphone className="w-3 h-3 text-blue-500" title="应用内" />}
+                                    {rule.action_channels.includes('email') && <Mail className="w-3 h-3 text-purple-500" title="邮件" />}
+                                    {rule.action_channels.includes('browser') && <Globe className="w-3 h-3 text-green-500" title="浏览器" />}
+                                </div>
+                            </>
                         )}
                       </div>
                     </div>

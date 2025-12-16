@@ -7,7 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Palette, Moon, Sun } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -18,6 +20,11 @@ export default function Account() {
   const [formData, setFormData] = useState({
     full_name: "",
     assistant_name: "小雅",
+  });
+  const [themePrefs, setThemePrefs] = useState({
+    primary_color: "#384877",
+    font_size: "medium",
+    dark_mode: false
   });
 
   useEffect(() => {
@@ -32,6 +39,9 @@ export default function Account() {
         full_name: currentUser.full_name || "",
         assistant_name: currentUser.assistant_name || "小雅",
       });
+      if (currentUser.theme_preferences) {
+        setThemePrefs(currentUser.theme_preferences);
+      }
     } catch (error) {
       console.error("Load user error:", error);
       toast.error("加载用户信息失败");
@@ -41,7 +51,19 @@ export default function Account() {
 
   const handleSave = async () => {
     try {
-      await base44.auth.updateMe(formData);
+      await base44.auth.updateMe({
+        ...formData,
+        theme_preferences: themePrefs
+      });
+      // Dispatch event to update layout immediately
+      window.dispatchEvent(new CustomEvent('theme-change', { 
+        detail: { 
+            primary: themePrefs.primary_color, 
+            fontSize: themePrefs.font_size, 
+            darkMode: themePrefs.dark_mode 
+        } 
+      }));
+      
       await loadUser();
       setEditing(false);
       toast.success("✅ 个人信息更新成功");
@@ -103,6 +125,73 @@ export default function Account() {
           我的账户
         </h1>
         <p className="text-slate-600">管理您的个人信息和账户设置</p>
+      </motion.div>
+
+      {/* 外观设置卡片 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        <Card className="border-0 shadow-lg mb-6">
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50">
+                <CardTitle className="flex items-center gap-2">
+                    <Palette className="w-5 h-5 text-indigo-600" />
+                    外观设置
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-3">
+                        <Label>主题色</Label>
+                        <div className="flex gap-3">
+                            {['#384877', '#059669', '#d97706', '#db2777', '#7c3aed'].map(color => (
+                                <button
+                                    key={color}
+                                    onClick={() => editing && setThemePrefs({...themePrefs, primary_color: color})}
+                                    disabled={!editing}
+                                    className={`w-8 h-8 rounded-full border-2 transition-transform ${
+                                        themePrefs.primary_color === color ? 'border-slate-900 scale-110' : 'border-transparent'
+                                    }`}
+                                    style={{ backgroundColor: color }}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        <Label>字体大小</Label>
+                        <Select 
+                            disabled={!editing}
+                            value={themePrefs.font_size} 
+                            onValueChange={(v) => setThemePrefs({...themePrefs, font_size: v})}
+                        >
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="small">小</SelectItem>
+                                <SelectItem value="medium">标准</SelectItem>
+                                <SelectItem value="large">大</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-3">
+                        <Label className="flex items-center gap-2">
+                            {themePrefs.dark_mode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                            深色模式
+                        </Label>
+                        <div className="flex items-center gap-2">
+                            <Switch 
+                                disabled={!editing}
+                                checked={themePrefs.dark_mode}
+                                onCheckedChange={(c) => setThemePrefs({...themePrefs, dark_mode: c})}
+                            />
+                            <span className="text-sm text-slate-500">{themePrefs.dark_mode ? "已开启" : "已关闭"}</span>
+                        </div>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
       </motion.div>
 
       {/* 用户信息卡片 */}

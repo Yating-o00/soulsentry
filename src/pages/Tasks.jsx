@@ -129,8 +129,8 @@ export default function Tasks() {
         if (taskDate < from || taskDate > to) matchesAdvanced = false;
     }
 
-    return matchesStatus && matchesCategory && matchesSearch && matchesAdvanced;
-  }), [tasks, statusFilter, categoryFilter, searchQuery, advancedFilters]);
+    return matchesStatus && matchesSearch && matchesAdvanced;
+  }), [tasks, statusFilter, searchQuery, advancedFilters]);
 
   // Group tasks logic
   // Only show top-level tasks in the list

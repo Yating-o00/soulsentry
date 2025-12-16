@@ -52,8 +52,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
-  const [showSmartTextDialog, setShowSmartTextDialog] = useState(false);
-  const [smartText, setSmartText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -549,33 +547,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   />
                 </button>
 
-                {/* 智能文本输入 */}
-                <button
-                  onClick={() => setShowSmartTextDialog(true)}
-                  className="w-full sm:flex-1 h-[84px] sm:h-auto group relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-dashed border-purple-200 hover:border-purple-300 transition-all duration-300"
-                >
-                  <div className="relative flex items-center h-full px-4 sm:px-5 gap-3 sm:gap-4">
-                    <div className="relative flex-shrink-0">
-                      <div className="h-12 w-12 rounded-xl bg-white border border-purple-200 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
-                        <MessageSquare className="w-6 h-6 text-purple-600" strokeWidth={2.5} />
-                      </div>
-                    </div>
-                    <div className="text-left">
-                      <div className="text-[16px] font-semibold text-[#222222] mb-0.5">
-                        自然语言
-                      </div>
-                      <div className="text-[13px] text-[#52525b]">
-                        如: 明早9点开会
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <motion.div
-                    className="absolute inset-0 bg-purple-500/5"
-                    initial={{ opacity: 0 }}
-                    whileHover={{ opacity: 1 }}
-                  />
-                </button>
+{/* 自然语言模块已移除 */}
 
                 {/* 语音输入按钮 - 高亮强调 */}
                 {browserSupported && (
@@ -1149,43 +1121,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         </DialogContent>
       </Dialog>
 
-      {/* 智能文本输入对话框 */}
-      <Dialog open={showSmartTextDialog} onOpenChange={setShowSmartTextDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-slate-800">
-              <Sparkles className="w-5 h-5 text-purple-600" />
-              <span>智能自然语言创建</span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <Textarea 
-              placeholder="请输入约定内容，例如：&#10;下周一上午9点提醒我发送项目周报&#10;明天下午3点和张三开会，准备PPT"
-              value={smartText}
-              onChange={(e) => setSmartText(e.target.value)}
-              className="min-h-[150px] text-base resize-none border-purple-200 focus-visible:ring-purple-500"
-              autoFocus
-            />
-            <Button 
-              onClick={() => parseSmartInput(smartText)} 
-              disabled={!smartText.trim() || isProcessing}
-              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  AI 解析中...
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  智能生成约定
-                </>
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+{/* 智能文本输入对话框已移除 */}
 
       {/* 语音输入对话框 */}
       <Dialog open={showVoiceDialog} onOpenChange={setShowVoiceDialog}>

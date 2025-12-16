@@ -526,12 +526,12 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                 <div className="flex gap-4 h-[120px]">
                   <button
                     onClick={() => setIsExpanded(true)}
-                    className="flex-1 group relative rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-3"
+                    className="flex-1 group relative rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex flex-row items-center justify-center gap-4 px-6"
                   >
-                    <div className="h-12 w-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                    <div className="h-12 w-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
                       <Plus className="w-6 h-6 text-[#384877]" strokeWidth={2.5} />
                     </div>
-                    <div className="text-center">
+                    <div className="text-left">
                       <div className="font-semibold text-slate-800 text-[16px]">手动创建</div>
                       <div className="text-xs text-slate-500">点击输入详情</div>
                     </div>
@@ -540,9 +540,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   {browserSupported && (
                     <button
                       onClick={startVoiceInput}
-                      className="flex-1 group relative rounded-2xl bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex flex-col items-center justify-center gap-3 shadow-lg shadow-blue-900/20"
+                      className="flex-1 group relative rounded-2xl bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex flex-row items-center justify-center gap-4 shadow-lg shadow-blue-900/20 px-6"
                     >
-                      <div className="relative">
+                      <div className="relative flex-shrink-0">
                         <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm">
                           <Mic className="w-6 h-6 text-white" />
                         </div>
@@ -552,7 +552,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                           transition={{ duration: 2, repeat: Infinity }}
                         />
                       </div>
-                      <div className="text-center">
+                      <div className="text-left">
                         <div className="font-semibold text-[16px]">语音创建</div>
                         <div className="text-xs text-blue-100/80">AI 识别</div>
                       </div>

@@ -21,7 +21,6 @@ import {
 import { useSearchParams } from "react-router-dom";
 import NotificationManager from "../components/notifications/NotificationManager";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
-import SmartTextParser from "../components/tasks/SmartTextParser";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -152,81 +151,6 @@ export default function Tasks() {
   };
 
   // Smart sort removed - handled by Soul Sentry agent conversation
-
-  const handleBulkCreate = async (parsedTasks) => {
-    if (!parsedTasks || parsedTasks.length === 0) {
-      toast.error("没有约定需要创建");
-      return;
-    }
-
-    let createdCount = 0;
-    let createdSubtasksCount = 0;
-
-    try {
-      toast.loading("正在创建约定...", { id: 'bulk-create' });
-
-      for (const taskData of parsedTasks) {
-        const hasSubtasks = taskData.subtasks && taskData.subtasks.length > 0;
-
-        // 创建主约定，确保包含所有字段和初始进度
-        const mainTaskData = {
-          title: taskData.title,
-          description: taskData.description || "",
-          reminder_time: taskData.reminder_time,
-          priority: taskData.priority || "medium",
-          category: taskData.category || "personal",
-          status: "pending",
-          progress: 0, // 初始进度为0
-          notification_sound: taskData.notification_sound || "default",
-          persistent_reminder: taskData.persistent_reminder || false,
-          notification_interval: taskData.notification_interval || 15,
-          advance_reminders: taskData.advance_reminders || [],
-          assigned_to: taskData.assigned_to || []
-        };
-
-        const createdMainTask = await base44.entities.Task.create(mainTaskData);
-        createdCount++;
-
-        // 如果有子约定，创建子约定
-        if (hasSubtasks) {
-          for (let i = 0; i < taskData.subtasks.length; i++) {
-            const subtask = taskData.subtasks[i];
-            const subtaskData = {
-              title: `${subtask.order || i + 1}. ${typeof subtask.title === 'object' ? subtask.title.title || subtask.title.text || "未命名子约定" : subtask.title}`, // 添加序号到标题
-              description: subtask.description || "",
-              reminder_time: subtask.reminder_time || taskData.reminder_time,
-              priority: subtask.priority || taskData.priority || "medium",
-              category: taskData.category, // 子约定继承父约定的类别
-              status: "pending",
-              parent_task_id: createdMainTask.id, // 关联父约定
-              progress: 0, // 子约定也有progress字段
-              notification_sound: taskData.notification_sound || "default",
-              persistent_reminder: false, // 子约定默认不持续提醒
-              advance_reminders: [],
-              assigned_to: taskData.assigned_to || []
-            };
-
-            await base44.entities.Task.create(subtaskData);
-            createdSubtasksCount++;
-          }
-        }
-        
-        // Manual invalidate as we used direct SDK calls for bulk operation
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      }
-
-      toast.success(
-        `✅ 成功创建 ${createdCount} 个主约定${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子约定` : ''}！`,
-        { id: 'bulk-create' }
-      );
-    } catch (error) {
-      console.error("Error creating bulk tasks:", error);
-      toast.error(
-        `创建约定时出错。已成功创建 ${createdCount} 个主约定${createdSubtasksCount > 0 ? `和 ${createdSubtasksCount} 个子约定` : ''}。`,
-        { id: 'bulk-create' }
-      );
-    }
-  };
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">

@@ -37,6 +37,7 @@ export default function Tasks() {
   const [editingTask, setEditingTask] = useState(null);
   const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
   const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt' | 'kanban'
+  const [isPrioritizing, setIsPrioritizing] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   
   const {
@@ -146,7 +147,7 @@ export default function Tasks() {
     updateTask({ id: editingTask.id, data });
   };
 
-
+  // Smart sort removed - handled by Soul Sentry agent conversation
 
   const handleBulkCreate = async (parsedTasks) => {
     if (!parsedTasks || parsedTasks.length === 0) {
@@ -270,39 +271,40 @@ export default function Tasks() {
         transition={{ delay: 0.1 }}
         className="space-y-4">
 
-        <div className="flex flex-col md:flex-row items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-          <div className="relative flex-1 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
               placeholder="搜索约定..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-10 border-0 bg-slate-50 hover:bg-slate-100 focus:bg-white transition-colors rounded-xl text-sm" />
+
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end overflow-x-auto">
-            <div className="bg-slate-100 p-1 rounded-xl flex gap-1 flex-shrink-0">
+          <div className="flex gap-3">
+            <div className="bg-white p-1 rounded-xl shadow-lg flex gap-1 border border-slate-100">
               <button
                 onClick={() => setViewMode("list")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
                 title="列表视图">
+
                 <LayoutList className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode("gantt")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
                 title="甘特图视图">
                 <BarChart3 className="w-4 h-4" />
               </button>
+              
               <button
                 onClick={() => setViewMode("kanban")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
                 title="看板视图">
                 <KanbanSquare className="w-4 h-4" />
               </button>
             </div>
-
-            <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
 
             <AdvancedTaskFilters 
                 filters={advancedFilters} 
@@ -313,22 +315,9 @@ export default function Tasks() {
 
 
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[120px] h-10 border-0 bg-slate-50 hover:bg-slate-100 rounded-xl text-sm font-medium text-slate-600">
-                <div className="flex items-center gap-2 truncate">
-                  <Filter className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="truncate">{categoryFilter === 'all' ? '全部类别' : (
-                    {
-                      work: '工作',
-                      personal: '个人',
-                      health: '健康',
-                      study: '学习',
-                      family: '家庭',
-                      shopping: '购物',
-                      finance: '财务',
-                      other: '其他'
-                    }[categoryFilter] || categoryFilter
-                  )}</span>
-                </div>
+              <SelectTrigger className="w-32 border-0 bg-white shadow-lg rounded-xl">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="类别" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部类别</SelectItem>

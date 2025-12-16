@@ -122,7 +122,7 @@ export default function TaskAssignment({ selectedUsers = [], onUpdate, onClose }
         <div className="flex gap-2 pt-4">
           <Button
             onClick={handleSave}
-            className="flex-1 bg-blue-600 hover:bg-black text-white hover:text-white shadow-md border border-blue-600 hover:border-black transition-all duration-200 active:scale-95"
+            className="flex-1 bg-blue-600 hover:bg-black text-white hover:text-white shadow-md border border-blue-600 hover:border-black transition-all duration-200 active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-black"
           >
             确认分配
           </Button>

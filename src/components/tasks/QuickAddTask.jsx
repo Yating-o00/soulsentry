@@ -526,35 +526,35 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                 <div className="flex gap-4 h-[120px]">
                   <button
                     onClick={() => setIsExpanded(true)}
-                    className="flex-1 group relative rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex flex-row items-center justify-center gap-4 px-6"
+                    className="flex-1 group relative rounded-[20px] border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex flex-row items-center justify-center gap-5 px-4 py-6"
                   >
-                    <div className="h-12 w-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
-                      <Plus className="w-6 h-6 text-[#384877]" strokeWidth={2.5} />
+                    <div className="h-14 w-14 rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
+                      <Plus className="w-7 h-7 text-[#384877]" strokeWidth={2.5} />
                     </div>
                     <div className="text-left">
-                      <div className="font-semibold text-slate-800 text-[16px]">手动创建</div>
-                      <div className="text-xs text-slate-500">点击输入详情</div>
+                      <div className="font-bold text-slate-800 text-lg mb-0.5">手动创建</div>
+                      <div className="text-sm text-slate-500 font-medium">点击输入详情</div>
                     </div>
                   </button>
 
                   {browserSupported && (
                     <button
                       onClick={startVoiceInput}
-                      className="flex-1 group relative rounded-2xl bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex flex-row items-center justify-center gap-4 shadow-lg shadow-blue-900/20 px-6"
+                      className="flex-1 group relative rounded-[20px] bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex flex-row items-center justify-center gap-5 shadow-xl shadow-blue-900/20 px-4 py-6"
                     >
                       <div className="relative flex-shrink-0">
-                        <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm">
-                          <Mic className="w-6 h-6 text-white" />
+                        <div className="h-14 w-14 rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm border border-white/10">
+                          <Mic className="w-7 h-7 text-white" />
                         </div>
                         <motion.div
-                          className="absolute inset-0 rounded-xl bg-white/20"
-                          animate={{ scale: [1, 1.4, 1], opacity: [0, 0.5, 0] }}
+                          className="absolute inset-0 rounded-2xl bg-white/20"
+                          animate={{ scale: [1, 1.3, 1], opacity: [0, 0.3, 0] }}
                           transition={{ duration: 2, repeat: Infinity }}
                         />
                       </div>
                       <div className="text-left">
-                        <div className="font-semibold text-[16px]">语音创建</div>
-                        <div className="text-xs text-blue-100/80">AI 识别</div>
+                        <div className="font-bold text-lg mb-0.5">语音创建</div>
+                        <div className="text-sm text-blue-100/80 font-medium">AI 识别</div>
                       </div>
                     </button>
                   )}

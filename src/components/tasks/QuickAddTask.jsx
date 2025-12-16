@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2 } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, MessageSquare } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -52,6 +52,8 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
+  const [showSmartTextDialog, setShowSmartTextDialog] = useState(false);
+  const [smartText, setSmartText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -210,20 +212,20 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     recognitionRef.current?.stop();
     
     if (transcript.trim()) {
-      parseVoiceInput();
+      parseSmartInput(transcript);
     } else {
       toast.error("未检测到语音内容");
       setShowVoiceDialog(false);
     }
   };
 
-  const parseVoiceInput = async () => {
+  const parseSmartInput = async (inputText) => {
     setIsProcessing(true);
     try {
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `从以下语音内容中提取约定信息，识别主约定和子约定。
+        prompt: `从以下自然语言内容中提取约定信息，识别主约定和子约定。
 
-语音内容：${transcript}
+内容：${inputText}
 
 提取：标题、描述、时间、优先级、类别、子约定。
 时间规则：具体时间转ISO格式，相对时间（明天/下周）计算日期，默认明天9点。
@@ -269,7 +271,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
 
       if (response.tasks && response.tasks.length > 0) {
         setShowVoiceDialog(false);
+        setShowSmartTextDialog(false);
         setTranscript("");
+        setSmartText("");
         setIsProcessing(false);
         
         if (response.tasks.length > 1 || response.tasks.some(t => t.subtasks?.length > 0)) {
@@ -292,17 +296,18 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
             advance_reminders: [],
           });
           setIsExpanded(true);
-          toast.success("✨ 语音内容已填充到表单");
+          toast.success("✨ 内容已智能填充到表单");
         }
       } else {
         toast.error("未能识别约定信息");
         setShowVoiceDialog(false);
-        setTranscript("");
+        setShowSmartTextDialog(false);
       }
     } catch (error) {
       console.error("Parse error:", error);
       toast.error("解析失败");
       setShowVoiceDialog(false);
+      setShowSmartTextDialog(false);
     }
     setIsProcessing(false);
   };
@@ -526,13 +531,41 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                         手动创建
                       </div>
                       <div className="text-[13px] text-[#52525b]">
-                        点击输入约定详情
+                        点击输入详情
                       </div>
                     </div>
                   </div>
                   
                   <motion.div
                     className="absolute inset-0 bg-blue-500/5"
+                    initial={{ opacity: 0 }}
+                    whileHover={{ opacity: 1 }}
+                  />
+                </button>
+
+                {/* 智能文本输入 */}
+                <button
+                  onClick={() => setShowSmartTextDialog(true)}
+                  className="w-full sm:flex-1 h-[84px] sm:h-auto group relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-dashed border-purple-200 hover:border-purple-300 transition-all duration-300"
+                >
+                  <div className="relative flex items-center h-full px-4 sm:px-5 gap-3 sm:gap-4">
+                    <div className="relative flex-shrink-0">
+                      <div className="h-12 w-12 rounded-xl bg-white border border-purple-200 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
+                        <MessageSquare className="w-6 h-6 text-purple-600" strokeWidth={2.5} />
+                      </div>
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[16px] font-semibold text-[#222222] mb-0.5">
+                        自然语言
+                      </div>
+                      <div className="text-[13px] text-[#52525b]">
+                        如: 明早9点开会
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <motion.div
+                    className="absolute inset-0 bg-purple-500/5"
                     initial={{ opacity: 0 }}
                     whileHover={{ opacity: 1 }}
                   />
@@ -560,7 +593,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                           语音创建
                         </div>
                         <div className="text-[12px] text-blue-100/90">
-                          AI 自动识别
+                          AI 识别
                         </div>
                       </div>
                     </div>
@@ -1067,6 +1100,44 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
             }}
             onClose={() => setShowAssignment(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* 智能文本输入对话框 */}
+      <Dialog open={showSmartTextDialog} onOpenChange={setShowSmartTextDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-800">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              <span>智能自然语言创建</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Textarea 
+              placeholder="请输入约定内容，例如：&#10;下周一上午9点提醒我发送项目周报&#10;明天下午3点和张三开会，准备PPT"
+              value={smartText}
+              onChange={(e) => setSmartText(e.target.value)}
+              className="min-h-[150px] text-base resize-none border-purple-200 focus-visible:ring-purple-500"
+              autoFocus
+            />
+            <Button 
+              onClick={() => parseSmartInput(smartText)} 
+              disabled={!smartText.trim() || isProcessing}
+              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  AI 解析中...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  智能生成约定
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

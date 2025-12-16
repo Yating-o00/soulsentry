@@ -102,7 +102,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
          const res = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-completed_at", 1);
          return res[0];
      },
-     enabled: !!task.id && !isTrash
+     enabled: !!task.id && !isTrash && task.repeat_rule !== 'none'
   });
 
   // 查询子约定 (如果外部未传入)

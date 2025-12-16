@@ -395,6 +395,7 @@ export default function Dashboard() {
                   <TaskCard
                     key={task.id}
                     task={task}
+                    subtasks={allTasks.filter(t => t.parent_task_id === task.id)}
                     onComplete={() => handleComplete(task)}
                     onDelete={() => deleteTaskMutation.mutate(task.id)}
                     onEdit={() => setEditingTask(task)}
@@ -426,6 +427,7 @@ export default function Dashboard() {
                     <TaskCard
                       key={task.id}
                       task={task}
+                      subtasks={allTasks.filter(t => t.parent_task_id === task.id)}
                       onComplete={() => handleComplete(task)}
                       onDelete={() => deleteTaskMutation.mutate(task.id)}
                       onEdit={() => setEditingTask(task)}

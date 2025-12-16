@@ -1005,6 +1005,25 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     </motion.div>
                   )}
 
+                  {templates && templates.length > 0 && (
+                      <Select onValueChange={(val) => {
+                          const t = templates.find(t => t.id === val);
+                          loadTemplate(t);
+                      }}>
+                          <SelectTrigger className="w-auto border-dashed border-purple-200 bg-purple-50/50 hover:bg-purple-50 text-purple-700 rounded-[10px] mr-2">
+                              <div className="flex items-center gap-2">
+                                  <BookTemplate className="h-4 w-4" />
+                                  <span className="font-medium">模板</span>
+                              </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                              {templates.map(t => (
+                                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                              ))}
+                          </SelectContent>
+                      </Select>
+                  )}
+
                   <Button
                     type="button"
                     variant="outline"

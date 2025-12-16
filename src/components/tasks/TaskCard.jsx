@@ -17,6 +17,7 @@ import {
   Sparkles,
   ShieldAlert,
   CalendarClock,
+  FileText,
   Briefcase,
   User,
   Heart,
@@ -102,7 +103,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
          const res = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-completed_at", 1);
          return res[0];
      },
-     enabled: !!task.id && !isTrash && task.repeat_rule !== 'none'
+     enabled: !!task.id && !isTrash
   });
 
   // 查询子约定 (如果外部未传入)
@@ -436,6 +437,20 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                       <CalendarClock className="w-3 h-3 mr-1" />
                       建议: {format(new Date(task.ai_analysis.recommended_execution_start), "MM-dd HH:mm")}
                     </Badge>
+                  )}
+
+                  {task.ai_analysis?.status_summary && (
+                      <div className="w-full mt-2 pt-2 border-t border-dashed border-slate-200">
+                          <div className="flex items-start gap-2 bg-gradient-to-r from-purple-50/50 to-indigo-50/50 p-2 rounded-lg">
+                              <FileText className="w-3.5 h-3.5 text-purple-500 mt-0.5 flex-shrink-0" />
+                              <div className="flex-1">
+                                  <p className="text-xs font-semibold text-purple-700 mb-0.5">AI 状态摘要</p>
+                                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-2" title={task.ai_analysis.status_summary}>
+                                      {task.ai_analysis.status_summary}
+                                  </p>
+                              </div>
+                          </div>
+                      </div>
                   )}
 
                   {hasSubtasks && (

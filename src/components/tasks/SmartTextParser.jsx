@@ -114,6 +114,11 @@ ${text}
                     items: { type: "string" },
                     description: "提到的参与者姓名"
                   },
+                  dependencies: {
+                     type: "array",
+                     items: { type: "string" },
+                     description: "依赖的前置任务描述（如果提到的话）"
+                  },
                   subtasks: {
                     type: "array",
                     items: {

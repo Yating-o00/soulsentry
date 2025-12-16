@@ -31,6 +31,7 @@ export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("default"); // default | smart | priority | date
   const [advancedFilters, setAdvancedFilters] = useState({ createdBy: 'all', tags: [], dateRange: undefined });
   
   const [selectedTask, setSelectedTask] = useState(null);
@@ -130,7 +131,43 @@ export default function Tasks() {
     }
 
     return matchesStatus && matchesCategory && matchesSearch && matchesAdvanced;
-  }), [tasks, statusFilter, categoryFilter, searchQuery, advancedFilters]);
+  }).sort((a, b) => {
+    if (sortBy === 'smart') {
+        const getScore = (task) => {
+            let score = 0;
+            // Priority
+            if (task.priority === 'urgent') score += 100;
+            if (task.priority === 'high') score += 50;
+            if (task.priority === 'medium') score += 20;
+
+            // Due date
+            if (task.reminder_time) {
+                const due = new Date(task.reminder_time);
+                const now = new Date();
+                const diffHours = (due - now) / (1000 * 60 * 60);
+                if (diffHours < 0) score += 90; // Overdue
+                else if (diffHours < 24) score += 70; // Due within 24h
+                else if (diffHours < 72) score += 40; // Due within 3 days
+            }
+
+            // Risk (from AI)
+            if (task.ai_analysis?.risk_level === 'critical') score += 40;
+            if (task.ai_analysis?.risk_level === 'high') score += 25;
+
+            return score;
+        };
+        return getScore(b) - getScore(a);
+    }
+    if (sortBy === 'priority') {
+        const pMap = { urgent: 4, high: 3, medium: 2, low: 1 };
+        return (pMap[b.priority] || 0) - (pMap[a.priority] || 0);
+    }
+    if (sortBy === 'date') {
+        return new Date(a.reminder_time || '9999-12-31') - new Date(b.reminder_time || '9999-12-31');
+    }
+    // Default (usually by created or updated date from backend, but here we preserve list order which is reminder_time desc from query)
+    return 0;
+  }), [tasks, statusFilter, categoryFilter, searchQuery, advancedFilters, sortBy]);
 
   // Group tasks logic
   // Only show top-level tasks in the list
@@ -308,6 +345,21 @@ export default function Tasks() {
                 onChange={setAdvancedFilters} 
                 onClear={() => setAdvancedFilters({ createdBy: 'all', tags: [], dateRange: undefined })} 
             />
+
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-32 border-0 bg-white shadow-lg rounded-xl">
+                <div className="flex items-center gap-2">
+                    {sortBy === 'smart' ? <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" /> : <Filter className="w-4 h-4 text-slate-400" />}
+                    <SelectValue placeholder="排序" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">默认排序</SelectItem>
+                <SelectItem value="smart">✨ 智能排序</SelectItem>
+                <SelectItem value="priority">按优先级</SelectItem>
+                <SelectItem value="date">按截止时间</SelectItem>
+              </SelectContent>
+            </Select>
 
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-32 border-0 bg-white shadow-lg rounded-xl">

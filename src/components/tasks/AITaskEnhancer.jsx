@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle, X, Plus, ListTodo, Clock, Calendar, ShieldAlert, BookTemplate } from "lucide-react";
+import { Sparkles, Loader2, Wand2, TrendingUp, Tag, AlertCircle, X, Plus, ListTodo, Clock, Calendar, ShieldAlert } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,7 +32,7 @@ const PRIORITIES = [
   { value: "urgent", label: "紧急", color: "bg-red-50 text-red-600 border-red-300" },
 ];
 
-export default function AITaskEnhancer({ taskTitle, currentDescription, onApply, availableTemplates = [] }) {
+export default function AITaskEnhancer({ taskTitle, currentDescription, availableTemplates, onApply }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [newTag, setNewTag] = useState("");
@@ -60,7 +60,8 @@ ${JSON.stringify(suggestions)}
 1. 根据用户的修改指令智能更新相关字段。例如：如果用户修改了描述中包含时间信息（如"明天开会"），请务必同步更新 reminder_time 和 execution_start/end。
 2. 如果涉及时间调整，请基于当前时间 (${now}) 或原建议时间进行计算，确保生成有效的 ISO 8601 时间格式。
 3. 保持其他未受影响字段不变。
-4. 返回更新后的完整 JSON 对象。`,
+4. 返回更新后的完整 JSON 对象。
+5. 确保所有文本内容使用中文。`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -102,9 +103,12 @@ ${JSON.stringify(suggestions)}
     try {
       const now = new Date().toISOString();
       
-      const templatesContext = availableTemplates && availableTemplates.length > 0
-        ? `\n可用约定模板 (JSON): ${JSON.stringify(availableTemplates.map(t => ({id: t.id, name: t.name, description: t.description})))}`
-        : "";
+      const templatesInfo = availableTemplates && availableTemplates.length > 0
+          ? `现有模板列表 (格式: ID: 名称 - 描述):
+${availableTemplates.map(t => `${t.id}: ${t.name} - ${t.description || '无描述'}`).join('\n')}
+
+如果用户的输入明显匹配某个模板的内容或场景，请推荐使用该模板，并返回其 ID。`
+          : "";
 
       const response = await base44.integrations.Core.InvokeLLM({
         prompt: `你是一个约定管理AI助手。请根据用户输入，提供智能生成和润色建议。
@@ -112,13 +116,14 @@ ${JSON.stringify(suggestions)}
 用户约定标题：${taskTitle}
 ${currentDescription ? `当前描述：${currentDescription}` : ""}
 当前时间：${now}
-${templatesContext}
+
+${templatesInfo}
 
 任务目标：
 1. **内容生成**：如果用户仅输入了关键词或简短提示（如"周报"、"会议纪要"），请自动生成详细的模板或内容（如包含本周进展、下周计划等结构）。
 2. **润色优化**：优化语言风格，使其专业、清晰；纠正可能存在的语法错误。
 3. **信息提取**：提取关键信息生成标签和元数据。
-4. **模板匹配**：如果用户的输入与某个可用模板高度匹配，请返回该模板的ID。
+4. **模板匹配**：判断是否适用现有模板。
 
 请分析并提供以下JSON格式的建议：
 1. 完善的约定描述：经过生成、润色和纠错后的详细内容。
@@ -135,9 +140,9 @@ ${templatesContext}
    - 风险等级 (risk_level): low/medium/high/critical。
    - 关键依赖 (dependencies): 隐含的前置条件。
 8. 分析原因 (reasoning): 总体建议理由。
-9. 推荐模板ID (recommended_template_id): 如果匹配到模板，返回其ID，否则为null。
 
-注意：所有时间必须为ISO 8601格式 (YYYY-MM-DDTHH:mm:ss.sssZ)。`,
+注意：所有时间必须为ISO 8601格式 (YYYY-MM-DDTHH:mm:ss.sssZ)。
+重点：所有返回的文本内容（描述、理由、分析等）必须使用中文。`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -167,13 +172,32 @@ ${templatesContext}
             risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
             dependencies: { type: "array", items: { type: "string" } },
             reasoning: { type: "string" },
-            recommended_template_id: { type: "string" }
+            recommended_template_id: { type: "string", description: "如果匹配到模板，返回模板ID" }
           },
           required: ["description", "category", "priority", "tags", "reasoning", "risk_level"]
         }
       });
 
-      setSuggestions(response);
+      // 如果推荐了模板，将模板内容合并到建议中
+      let finalResponse = response;
+      if (response.recommended_template_id && availableTemplates) {
+          const template = availableTemplates.find(t => t.id === response.recommended_template_id);
+          if (template && template.template_data) {
+              const data = template.template_data;
+              finalResponse = {
+                  ...response,
+                  // 优先使用模板的结构化数据，但保留 AI 生成的针对性描述
+                  category: data.category || response.category,
+                  priority: data.priority || response.priority,
+                  subtasks: (data.subtasks && data.subtasks.map(s => typeof s === 'string' ? s : s.title)) || response.subtasks,
+                  reasoning: `(基于模板 "${template.name}") ${response.reasoning}`,
+                  // 可以在这里合并更多字段
+              };
+              toast("已自动匹配约定模板: " + template.name, { icon: "📋" });
+          }
+      }
+
+      setSuggestions(finalResponse);
       toast.success("✨ AI分析完成！");
     } catch (error) {
       console.error("AI分析失败:", error);
@@ -264,41 +288,11 @@ ${templatesContext}
           >
             <Card className="border-2 border-[#384877]/30 bg-gradient-to-br from-[#f0f9ff] to-white p-5 space-y-4">
               {/* AI建议标题 */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#384877] to-[#2a3659] flex items-center justify-center">
-                    <Wand2 className="w-4 h-4 text-white" />
-                  </div>
-                  <h3 className="text-[16px] font-semibold text-[#222222]">AI智能建议</h3>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#384877] to-[#2a3659] flex items-center justify-center">
+                  <Wand2 className="w-4 h-4 text-white" />
                 </div>
-                {suggestions.recommended_template_id && (
-                  <div className="flex items-center gap-2 bg-gradient-to-r from-purple-50 to-pink-50 px-3 py-1.5 rounded-full border border-purple-100">
-                    <BookTemplate className="w-3.5 h-3.5 text-purple-600" />
-                    <span className="text-xs font-medium text-purple-700">
-                      推荐模板: {availableTemplates.find(t => t.id === suggestions.recommended_template_id)?.name || "未知模板"}
-                    </span>
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="h-5 px-2 text-[10px] bg-white hover:bg-purple-100 text-purple-700 border border-purple-200"
-                      onClick={() => {
-                        const t = availableTemplates.find(t => t.id === suggestions.recommended_template_id);
-                        if (t && t.template_data) {
-                          // Merge template data with suggestions
-                          updateSuggestion('description', t.template_data.description || suggestions.description);
-                          updateSuggestion('category', t.template_data.category || suggestions.category);
-                          updateSuggestion('priority', t.template_data.priority || suggestions.priority);
-                          if (t.template_data.subtasks && t.template_data.subtasks.length > 0) {
-                             updateSuggestion('subtasks', t.template_data.subtasks.map(st => st.title));
-                          }
-                          toast.success("已加载模板内容");
-                        }
-                      }}
-                    >
-                      加载内容
-                    </Button>
-                  </div>
-                )}
+                <h3 className="text-[16px] font-semibold text-[#222222]">AI智能建议</h3>
               </div>
 
               {/* 描述建议 - 可编辑 */}

@@ -50,7 +50,8 @@ ${behaviors.length > 0 ? behaviors.map(b => `
 3. 考虑约定优先级，推荐3个最佳提醒时间。**注意：推荐的时间必须晚于当前时间（${new Date().toISOString()}），严禁推荐过去的时间。**
 4. 给出推荐理由
 
-当前时间：${new Date().toISOString()}`;
+当前时间：${new Date().toISOString()}
+重点：所有返回的文本内容（推荐理由、洞察等）必须使用中文。`;
 
       const analysis = await base44.integrations.Core.InvokeLLM({
         prompt,

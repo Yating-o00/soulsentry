@@ -89,7 +89,8 @@ ${text}
 - finance: 财务相关
 - other: 其他
 
-当前时间：${new Date().toISOString()}`,
+当前时间：${new Date().toISOString()}
+重点：所有返回的文本内容（标题、描述等）必须使用中文。`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -113,11 +114,6 @@ ${text}
                     type: "array",
                     items: { type: "string" },
                     description: "提到的参与者姓名"
-                  },
-                  dependencies: {
-                     type: "array",
-                     items: { type: "string" },
-                     description: "依赖的前置任务描述（如果提到的话）"
                   },
                   subtasks: {
                     type: "array",
@@ -195,7 +191,8 @@ ${JSON.stringify(parsedTasks.map(t => ({ title: t.title, description: t.descript
 1. 可以批量修改时间（如"所有任务推迟一小时"）、优先级、分类等。
 2. 可以增加或删除任务。
 3. 保持 JSON 结构一致。
-4. 返回更新后的 tasks 数组。`,
+4. 返回更新后的 tasks 数组。
+5. 确保所有文本内容使用中文。`,
             response_json_schema: {
                 type: "object",
                 properties: {
@@ -357,7 +354,8 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
 2. 【内容完善】：优化标题使其更清晰；如果描述为空，生成简短实用的执行步骤；如果已有描述，进行润色。
 3. 【属性推断】：基于主约定时间和子约定内容，推断合理的提醒时间（应早于主约定）和优先级。
 
-当前时间：${new Date().toISOString()}`,
+当前时间：${new Date().toISOString()}
+重点：所有返回的文本内容（标题、描述等）必须使用中文。`,
         response_json_schema: {
           type: "object",
           properties: {

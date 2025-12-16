@@ -37,7 +37,6 @@ export default function Tasks() {
   const [editingTask, setEditingTask] = useState(null);
   const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
   const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt' | 'kanban'
-  const [isPrioritizing, setIsPrioritizing] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   
   const {
@@ -147,7 +146,7 @@ export default function Tasks() {
     updateTask({ id: editingTask.id, data });
   };
 
-  // Smart sort removed - handled by Soul Sentry agent conversation
+
 
   const handleBulkCreate = async (parsedTasks) => {
     if (!parsedTasks || parsedTasks.length === 0) {

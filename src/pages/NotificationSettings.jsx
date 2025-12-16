@@ -60,6 +60,19 @@ export default function NotificationSettingsPage() {
     queryFn: () => base44.entities.NotificationRule.list(),
   });
 
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+  });
+
+  const updateDNDMutation = useMutation({
+    mutationFn: (dndSettings) => base44.auth.updateMe({ dnd_settings: dndSettings }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+      toast.success("免打扰设置已更新");
+    }
+  });
+
   const createRuleMutation = useMutation({
     mutationFn: (data) => base44.entities.NotificationRule.create(data),
     onSuccess: () => {
@@ -147,6 +160,69 @@ export default function NotificationSettingsPage() {
             )}
           </div>
         </CardHeader>
+      </Card>
+
+      {/* Do Not Disturb Section */}
+      <Card className="border-0 shadow-lg bg-white">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <BellOff className="w-5 h-5 text-purple-500" />
+            免打扰时段
+          </CardTitle>
+          <CardDescription>
+            设置不接收任何通知的时间段，让您专注工作或休息
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between mb-4">
+            <div className="space-y-0.5">
+              <Label className="text-base">启用免打扰</Label>
+              <p className="text-sm text-slate-500">在指定时间段内自动静音所有通知</p>
+            </div>
+            <Switch
+              checked={currentUser?.dnd_settings?.enabled || false}
+              onCheckedChange={(checked) => {
+                updateDNDMutation.mutate({
+                  ...currentUser?.dnd_settings,
+                  enabled: checked,
+                  start_time: currentUser?.dnd_settings?.start_time || "22:00",
+                  end_time: currentUser?.dnd_settings?.end_time || "08:00"
+                });
+              }}
+            />
+          </div>
+          
+          {currentUser?.dnd_settings?.enabled && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              className="grid grid-cols-2 gap-4 pt-4 border-t"
+            >
+              <div className="space-y-2">
+                <Label>开始时间</Label>
+                <Input
+                  type="time"
+                  value={currentUser?.dnd_settings?.start_time || "22:00"}
+                  onChange={(e) => updateDNDMutation.mutate({
+                    ...currentUser?.dnd_settings,
+                    start_time: e.target.value
+                  })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>结束时间</Label>
+                <Input
+                  type="time"
+                  value={currentUser?.dnd_settings?.end_time || "08:00"}
+                  onChange={(e) => updateDNDMutation.mutate({
+                    ...currentUser?.dnd_settings,
+                    end_time: e.target.value
+                  })}
+                />
+              </div>
+            </motion.div>
+          )}
+        </CardContent>
       </Card>
 
       {/* Rules Section */}

@@ -26,6 +26,7 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
   });
 
   const [testSound, setTestSound] = useState(null);
+  const [customAdvanceTime, setCustomAdvanceTime] = useState("");
 
   const handleSoundTest = (sound) => {
     setTestSound(sound);
@@ -116,6 +117,48 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
                 {minutes < 60 ? `${minutes}分钟` : `${minutes / 60}小时`}前
               </Badge>
             ))}
+            {/* Show custom times if any */}
+            {settings.advance_reminders?.filter(m => ![5, 15, 30, 60, 120].includes(m)).map((minutes) => (
+               <Badge
+                key={minutes}
+                variant="default"
+                className="cursor-pointer px-4 py-2 text-sm bg-gradient-to-r from-blue-500 to-purple-600"
+                onClick={() => toggleAdvanceReminder(minutes)}
+              >
+                {minutes < 60 ? `${minutes}分钟` : `${(minutes / 60).toFixed(1)}小时`}前
+              </Badge>
+            ))}
+          </div>
+          
+          <div className="flex items-center gap-2 mt-4">
+             <Label className="text-sm shrink-0">自定义(分钟):</Label>
+             <input 
+               type="number" 
+               className="w-20 h-8 border rounded-md px-2 text-sm" 
+               placeholder="分钟"
+               value={customAdvanceTime}
+               onChange={(e) => setCustomAdvanceTime(e.target.value)}
+               onKeyDown={(e) => {
+                   if (e.key === 'Enter' && customAdvanceTime) {
+                       const mins = parseInt(customAdvanceTime);
+                       if (mins > 0) {
+                           toggleAdvanceReminder(mins);
+                           setCustomAdvanceTime("");
+                       }
+                   }
+               }}
+             />
+             <Button 
+               size="sm" 
+               variant="outline" 
+               onClick={() => {
+                   const mins = parseInt(customAdvanceTime);
+                   if (mins > 0) {
+                       toggleAdvanceReminder(mins);
+                       setCustomAdvanceTime("");
+                   }
+               }}
+             >添加</Button>
           </div>
         </CardContent>
       </Card>

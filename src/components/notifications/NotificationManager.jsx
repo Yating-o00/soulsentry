@@ -41,6 +41,11 @@ export default function NotificationManager() {
     initialData: [],
   });
 
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+  });
+
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => {
@@ -72,6 +77,31 @@ export default function NotificationManager() {
 
   const sendNotification = (task, isAdvanceReminder = false) => {
     if (permission !== "granted") return;
+
+    // Check DND
+    if (currentUser?.dnd_settings?.enabled) {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      const [startH, startM] = (currentUser.dnd_settings.start_time || "22:00").split(':').map(Number);
+      const [endH, endM] = (currentUser.dnd_settings.end_time || "08:00").split(':').map(Number);
+      const startMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+
+      let isDND = false;
+      if (startMinutes < endMinutes) {
+        // Same day range (e.g. 09:00 to 17:00)
+        isDND = currentMinutes >= startMinutes && currentMinutes < endMinutes;
+      } else {
+        // Overnight range (e.g. 22:00 to 08:00)
+        isDND = currentMinutes >= startMinutes || currentMinutes < endMinutes;
+      }
+
+      if (isDND) {
+        console.log("Notification muted by DND mode");
+        return;
+      }
+    }
 
     // Check for matching rules
     const matchingRule = rules.find(rule => 

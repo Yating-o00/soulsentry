@@ -24,8 +24,16 @@ import {
   CheckCircle2,
   Circle,
   StickyNote,
-  History // Added History icon
+  History, 
+  Clock, 
+  Repeat, 
+  Volume2, 
+  Bell 
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import RecurrenceEditor from "./RecurrenceEditor";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,6 +49,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const [uploading, setUploading] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
   const [newNote, setNewNote] = useState("");
+  const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch completion history
@@ -411,15 +420,148 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               <TabsTrigger value="comments" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 评论
               </TabsTrigger>
+              <TabsTrigger value="reminders" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-blue-500" />
+                提醒
+              </TabsTrigger>
               <TabsTrigger value="history" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1.5">
                 <History className="w-3.5 h-3.5 text-slate-500" />
                 历史
               </TabsTrigger>
-              <TabsTrigger value="strategy" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1.5">
-                <BrainCircuit className="w-3.5 h-3.5 text-indigo-500" />
-                AI 提醒
-              </TabsTrigger>
             </TabsList>
+
+              {/* Reminders Tab */}
+              <TabsContent value="reminders" className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                      {/* Sound & Persistence */}
+                      <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                              <Bell className="w-4 h-4 text-slate-500" />
+                              基础设置
+                          </h4>
+                          
+                          <div className="space-y-3">
+                              <div className="space-y-1">
+                                  <Label className="text-xs text-slate-500">提醒音效</Label>
+                                  <Select 
+                                      value={task.notification_sound || "default"} 
+                                      onValueChange={(val) => updateTaskMutation.mutate({ id: task.id, data: { notification_sound: val } })}
+                                  >
+                                      <SelectTrigger className="bg-white">
+                                          <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                          <SelectItem value="default">默认</SelectItem>
+                                          <SelectItem value="gentle">轻柔</SelectItem>
+                                          <SelectItem value="urgent">紧急</SelectItem>
+                                          <SelectItem value="chime">铃声</SelectItem>
+                                          <SelectItem value="bells">钟声</SelectItem>
+                                          <SelectItem value="none">静音</SelectItem>
+                                      </SelectContent>
+                                  </Select>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2">
+                                  <div className="space-y-0.5">
+                                      <Label className="text-sm">持续提醒</Label>
+                                      <p className="text-[10px] text-slate-500">过期后持续响铃直到完成</p>
+                                  </div>
+                                  <Switch 
+                                      checked={task.persistent_reminder || false}
+                                      onCheckedChange={(checked) => updateTaskMutation.mutate({ id: task.id, data: { persistent_reminder: checked } })}
+                                  />
+                              </div>
+
+                              {task.persistent_reminder && (
+                                  <div className="space-y-1">
+                                      <Label className="text-xs text-slate-500">提醒间隔 (分钟)</Label>
+                                      <Input 
+                                          type="number" 
+                                          min="1"
+                                          value={task.notification_interval || 15}
+                                          onChange={(e) => updateTaskMutation.mutate({ id: task.id, data: { notification_interval: parseInt(e.target.value) || 15 } })}
+                                          className="bg-white"
+                                      />
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+
+                      {/* Recurrence & Advance */}
+                      <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                           <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-slate-500" />
+                              时间规则
+                          </h4>
+
+                          {/* Recurrence */}
+                          <div className="bg-white p-3 rounded-lg border border-slate-200">
+                              <div className="flex justify-between items-center mb-2">
+                                  <span className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                      <Repeat className="w-3.5 h-3.5 text-blue-500" />
+                                      重复规则
+                                  </span>
+                                  <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      onClick={() => setShowRecurrenceEditor(true)}
+                                      className="h-6 text-xs text-blue-600 hover:text-blue-700"
+                                  >
+                                      编辑
+                                  </Button>
+                              </div>
+                              <p className="text-xs text-slate-500">
+                                  {task.repeat_rule === 'none' ? '不重复' : 
+                                   task.repeat_rule === 'custom' ? '自定义重复' : 
+                                   {daily: '每天', weekly: '每周', monthly: '每月'}[task.repeat_rule]}
+                              </p>
+                          </div>
+
+                          {/* Advance Reminders */}
+                          <div className="space-y-2">
+                              <Label className="text-xs text-slate-500">提前提醒 (分钟)</Label>
+                              <div className="flex flex-wrap gap-2">
+                                  {(task.advance_reminders || []).map((min, idx) => (
+                                      <Badge key={idx} variant="secondary" className="bg-white border border-slate-200 text-slate-600 gap-1 hover:bg-red-50 hover:text-red-600 hover:border-red-200 cursor-pointer group" onClick={() => {
+                                          const newMins = task.advance_reminders.filter(m => m !== min);
+                                          updateTaskMutation.mutate({ id: task.id, data: { advance_reminders: newMins } });
+                                      }}>
+                                          {min < 60 ? `${min}m` : `${min/60}h`}
+                                          <X className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                                      </Badge>
+                                  ))}
+                                  <Popover>
+                                      <PopoverTrigger asChild>
+                                          <Button variant="outline" size="sm" className="h-6 text-xs px-2 border-dashed bg-white">
+                                              <Plus className="w-3 h-3 mr-1" /> 添加
+                                          </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-40 p-2">
+                                          <div className="grid grid-cols-2 gap-2">
+                                              {[15, 30, 60, 120].map(m => (
+                                                  <Button 
+                                                      key={m} 
+                                                      variant="ghost" 
+                                                      size="sm" 
+                                                      className="text-xs justify-start"
+                                                      onClick={() => {
+                                                          const current = task.advance_reminders || [];
+                                                          if (!current.includes(m)) {
+                                                              updateTaskMutation.mutate({ id: task.id, data: { advance_reminders: [...current, m].sort((a,b) => a-b) } });
+                                                          }
+                                                      }}
+                                                  >
+                                                      {m < 60 ? `${m}分钟` : `${m/60}小时`}
+                                                  </Button>
+                                              ))}
+                                          </div>
+                                      </PopoverContent>
+                                  </Popover>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </TabsContent>
 
               {/* AI Strategy Tab */}
               <TabsContent value="strategy" className="space-y-4">
@@ -803,6 +945,30 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
         </div>
       </DialogContent>
+
+      {showRecurrenceEditor && (
+        <Dialog open={showRecurrenceEditor} onOpenChange={setShowRecurrenceEditor}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>编辑重复规则</DialogTitle>
+                </DialogHeader>
+                <RecurrenceEditor 
+                    value={task.custom_recurrence || { frequency: task.repeat_rule === 'none' ? 'weekly' : task.repeat_rule, interval: 1 }}
+                    onChange={(recurrence) => {
+                        updateTaskMutation.mutate({ 
+                            id: task.id, 
+                            data: { 
+                                repeat_rule: 'custom',
+                                custom_recurrence: recurrence 
+                            } 
+                        });
+                        setShowRecurrenceEditor(false);
+                    }}
+                    onClose={() => setShowRecurrenceEditor(false)}
+                />
+            </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

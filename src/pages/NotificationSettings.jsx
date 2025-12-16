@@ -73,6 +73,38 @@ export default function NotificationSettingsPage() {
     }
   });
 
+  const updateCategorySoundMutation = useMutation({
+    mutationFn: async ({ category, sound }) => {
+      // Find existing rule for this category (priority 'all')
+      const existingRule = rules.find(r => 
+        r.condition_category === category && 
+        r.condition_priority === 'all'
+      );
+
+      if (existingRule) {
+        if (sound === 'default') {
+           // If setting to default, maybe delete the rule? Or just set sound to default. 
+           // Let's delete the rule to keep it clean if it's just a sound rule.
+           return base44.entities.NotificationRule.delete(existingRule.id);
+        }
+        return base44.entities.NotificationRule.update(existingRule.id, { action_sound: sound });
+      } else {
+        if (sound === 'default') return; // Nothing to do
+        return base44.entities.NotificationRule.create({
+          title: `${CATEGORIES.find(c => c.value === category)?.label || category} 默认提示音`,
+          condition_category: category,
+          condition_priority: 'all',
+          action_sound: sound,
+          is_enabled: true
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notificationRules'] });
+      toast.success("提示音已更新");
+    }
+  });
+
   const createRuleMutation = useMutation({
     mutationFn: (data) => base44.entities.NotificationRule.create(data),
     onSuccess: () => {
@@ -162,75 +194,118 @@ export default function NotificationSettingsPage() {
         </CardHeader>
       </Card>
 
-      {/* Do Not Disturb Section */}
-      <Card className="border-0 shadow-lg bg-white">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <BellOff className="w-5 h-5 text-purple-500" />
-            免打扰时段
-          </CardTitle>
-          <CardDescription>
-            设置不接收任何通知的时间段，让您专注工作或休息
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between mb-4">
-            <div className="space-y-0.5">
-              <Label className="text-base">启用免打扰</Label>
-              <p className="text-sm text-slate-500">在指定时间段内自动静音所有通知</p>
-            </div>
-            <Switch
-              checked={currentUser?.dnd_settings?.enabled || false}
-              onCheckedChange={(checked) => {
-                updateDNDMutation.mutate({
-                  ...currentUser?.dnd_settings,
-                  enabled: checked,
-                  start_time: currentUser?.dnd_settings?.start_time || "22:00",
-                  end_time: currentUser?.dnd_settings?.end_time || "08:00"
-                });
-              }}
-            />
-          </div>
-          
-          {currentUser?.dnd_settings?.enabled && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              className="grid grid-cols-2 gap-4 pt-4 border-t"
-            >
-              <div className="space-y-2">
-                <Label>开始时间</Label>
-                <Input
-                  type="time"
-                  value={currentUser?.dnd_settings?.start_time || "22:00"}
-                  onChange={(e) => updateDNDMutation.mutate({
-                    ...currentUser?.dnd_settings,
-                    start_time: e.target.value
-                  })}
+      {/* DND & Category Sounds Grid */}
+      <div className="grid md:grid-cols-2 gap-6">
+          {/* Do Not Disturb Section */}
+          <Card className="border-0 shadow-lg bg-white h-full">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <BellOff className="w-5 h-5 text-purple-500" />
+                免打扰时段
+              </CardTitle>
+              <CardDescription>
+                设置不接收任何通知的时间段
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between mb-4">
+                <div className="space-y-0.5">
+                  <Label className="text-base">启用免打扰</Label>
+                  <p className="text-sm text-slate-500">指定时间段内自动静音</p>
+                </div>
+                <Switch
+                  checked={currentUser?.dnd_settings?.enabled || false}
+                  onCheckedChange={(checked) => {
+                    updateDNDMutation.mutate({
+                      ...currentUser?.dnd_settings,
+                      enabled: checked,
+                      start_time: currentUser?.dnd_settings?.start_time || "22:00",
+                      end_time: currentUser?.dnd_settings?.end_time || "08:00"
+                    });
+                  }}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>结束时间</Label>
-                <Input
-                  type="time"
-                  value={currentUser?.dnd_settings?.end_time || "08:00"}
-                  onChange={(e) => updateDNDMutation.mutate({
-                    ...currentUser?.dnd_settings,
-                    end_time: e.target.value
-                  })}
-                />
-              </div>
-            </motion.div>
-          )}
-        </CardContent>
-      </Card>
+              
+              {currentUser?.dnd_settings?.enabled && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="grid grid-cols-2 gap-4 pt-4 border-t"
+                >
+                  <div className="space-y-2">
+                    <Label>开始时间</Label>
+                    <Input
+                      type="time"
+                      value={currentUser?.dnd_settings?.start_time || "22:00"}
+                      onChange={(e) => updateDNDMutation.mutate({
+                        ...currentUser?.dnd_settings,
+                        start_time: e.target.value
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>结束时间</Label>
+                    <Input
+                      type="time"
+                      value={currentUser?.dnd_settings?.end_time || "08:00"}
+                      onChange={(e) => updateDNDMutation.mutate({
+                        ...currentUser?.dnd_settings,
+                        end_time: e.target.value
+                      })}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Category Sounds Section */}
+          <Card className="border-0 shadow-lg bg-white h-full">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Volume2 className="w-5 h-5 text-blue-500" />
+                分类提示音
+              </CardTitle>
+              <CardDescription>
+                为不同类型的约定设置专属提示音
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                {CATEGORIES.filter(c => c.value !== 'all').map(category => {
+                    const rule = rules.find(r => r.condition_category === category.value && r.condition_priority === 'all');
+                    const currentSound = rule?.action_sound || 'default';
+                    
+                    return (
+                        <div key={category.value} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
+                            <span className="text-sm font-medium text-slate-700">{category.label}</span>
+                            <Select
+                                value={currentSound}
+                                onValueChange={(val) => updateCategorySoundMutation.mutate({ category: category.value, sound: val })}
+                            >
+                                <SelectTrigger className="w-[120px] h-8 text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {SOUNDS.map(s => (
+                                        <SelectItem key={s.value} value={s.value} className="text-xs">
+                                            {s.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    );
+                })}
+            </CardContent>
+          </Card>
+      </div>
 
       {/* Rules Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
             <Settings className="w-5 h-5 text-[#384877]" />
-            自定义通知规则
+            高级通知规则
           </h2>
           <Button onClick={() => setShowAddRule(!showAddRule)} variant={showAddRule ? "secondary" : "default"} className="bg-[#384877] hover:bg-[#2c3b63] text-white">
             <Plus className="w-4 h-4 mr-2" />

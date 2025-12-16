@@ -28,14 +28,14 @@ import {
   Bell,
   Volume2,
   TimerReset,
-  FileText,
+  // FileText removed to avoid duplicate
   StickyNote,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   Circle,
   CheckCircle2,
-  Share2, // Added Share2 icon
+  Share2,
   RotateCcw,
   Link as LinkIcon,
   Ban,

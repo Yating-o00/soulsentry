@@ -15,11 +15,15 @@ import {
   eachDayOfInterval,
   addWeeks,
   subWeeks,
-  isSameMonth
+  isSameMonth,
+  startOfDay,
+  endOfDay,
+  isWithinInterval
 } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, CheckCircle2, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, StickyNote } from "lucide-react";
+import { Clock, CheckCircle2, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, StickyNote, Filter, Tag } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TaskCard from "../tasks/TaskCard";
 import NoteCard from "../notes/NoteCard";
 import TaskDetailModal from "../tasks/TaskDetailModal";
@@ -39,6 +43,9 @@ export default function CalendarView() {
   const [viewMode, setViewMode] = useState("month"); // "month" or "week"
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickAddDate, setQuickAddDate] = useState(null);
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  
   const queryClient = useQueryClient();
 
   const { data: allTasks = [] } = useQuery({
@@ -53,7 +60,18 @@ export default function CalendarView() {
     initialData: [],
   });
 
-  const tasks = useMemo(() => allTasks.filter(task => !task.parent_task_id && !task.deleted_at), [allTasks]);
+  const tasks = useMemo(() => {
+    return allTasks.filter(task => {
+      if (task.parent_task_id || task.deleted_at) return false;
+      if (filterCategory !== "all" && task.category !== filterCategory) return false;
+      if (filterStatus !== "all") {
+         if (filterStatus === "completed" && task.status !== "completed") return false;
+         if (filterStatus === "pending" && task.status !== "pending") return false;
+      }
+      return true;
+    });
+  }, [allTasks, filterCategory, filterStatus]);
+
   const notes = useMemo(() => allNotes.filter(note => !note.deleted_at), [allNotes]);
 
   const { 
@@ -182,14 +200,45 @@ export default function CalendarView() {
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col md:flex-row md:items-center justify-between gap-4"
       >
-        <div className="flex items-center gap-3 ml-auto">
+        <div className="flex flex-wrap items-center gap-3 ml-auto">
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[100px] h-9 bg-white shadow-sm border-slate-200 rounded-[10px]">
+              <div className="flex items-center gap-2">
+                <Tag className="w-3.5 h-3.5 text-slate-500" />
+                <SelectValue placeholder="分类" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部分类</SelectItem>
+              <SelectItem value="work">工作</SelectItem>
+              <SelectItem value="personal">个人</SelectItem>
+              <SelectItem value="health">健康</SelectItem>
+              <SelectItem value="study">学习</SelectItem>
+              <SelectItem value="family">家庭</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[100px] h-9 bg-white shadow-sm border-slate-200 rounded-[10px]">
+              <div className="flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-slate-500" />
+                <SelectValue placeholder="状态" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="pending">进行中</SelectItem>
+              <SelectItem value="completed">已完成</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Tabs value={viewMode} onValueChange={setViewMode}>
-              <TabsList className="bg-white shadow-md rounded-[12px]">
-                <TabsTrigger value="month" className="rounded-[10px] data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">月视图</TabsTrigger>
-                <TabsTrigger value="week" className="rounded-[10px] data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">周视图</TabsTrigger>
+              <TabsList className="bg-white shadow-md rounded-[12px] h-9 p-1">
+                <TabsTrigger value="month" className="rounded-[8px] text-xs px-3 py-1 data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">月</TabsTrigger>
+                <TabsTrigger value="week" className="rounded-[8px] text-xs px-3 py-1 data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">周</TabsTrigger>
               </TabsList>
             </Tabs>
-          <Button onClick={handleToday} variant="outline" className="shadow-lg">
+          <Button onClick={handleToday} variant="outline" size="sm" className="shadow-sm h-9">
             今天
           </Button>
         </div>
@@ -510,15 +559,23 @@ export default function CalendarView() {
             </DialogTitle>
           </DialogHeader>
           <QuickAddTask
+            initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
             onAdd={(taskData) => {
-              const reminderDateTime = quickAddDate ? new Date(quickAddDate) : new Date();
-              if (taskData.reminder_time) {
-                const taskTime = new Date(taskData.reminder_time);
-                reminderDateTime.setHours(taskTime.getHours(), taskTime.getMinutes());
+              // QuickAddTask already handles the time merging with its internal state logic if initialData is passed correctly,
+              // or we can trust the returned taskData.reminder_time if it's fully formed.
+              // However, reusing the logic to ensure we respect the selected date:
+              let finalReminderTime = taskData.reminder_time;
+              
+              if (quickAddDate && taskData.reminder_time) {
+                 const selected = new Date(quickAddDate);
+                 const setTime = new Date(taskData.reminder_time);
+                 selected.setHours(setTime.getHours(), setTime.getMinutes());
+                 finalReminderTime = selected.toISOString();
               }
+
               handleCreateTask({
                 ...taskData,
-                reminder_time: reminderDateTime.toISOString()
+                reminder_time: finalReminderTime
               });
             }}
           />

@@ -14,6 +14,10 @@ export default function SmartReminderSuggestion({ task, onApply }) {
   const [suggestions, setSuggestions] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
 
+  React.useEffect(() => {
+    analyzeBehavior();
+  }, []);
+
   const analyzeBehavior = async () => {
     setAnalyzing(true);
     setLoading(true);
@@ -43,7 +47,7 @@ ${behaviors.length > 0 ? behaviors.map(b => `
 请分析：
 1. 用户在什么时间段对该类别约定响应最快？
 2. 用户在哪天完成该类别约定效率最高？
-3. 考虑约定优先级，推荐3个最佳提醒时间
+3. 考虑约定优先级，推荐3个最佳提醒时间。**注意：推荐的时间必须晚于当前时间（${new Date().toISOString()}），严禁推荐过去的时间。**
 4. 给出推荐理由
 
 当前时间：${new Date().toISOString()}`;

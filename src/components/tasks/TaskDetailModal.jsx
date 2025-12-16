@@ -28,14 +28,12 @@ import {
   Clock, 
   Repeat, 
   Volume2, 
-  Bell,
-  Calendar as CalendarIcon
+  Bell 
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import RecurrenceEditor from "./RecurrenceEditor";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -360,7 +358,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-6 border-b shrink-0 bg-white z-10">
           <DialogTitle className="text-[20px] font-semibold tracking-tight text-[#222222] line-clamp-1 pr-8">
             {task.title}
@@ -496,46 +494,6 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                               <Clock className="w-4 h-4 text-slate-500" />
                               时间规则
                           </h4>
-
-                          {/* Reminder Time */}
-                          <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                              <Label className="text-xs text-slate-500">执行时间</Label>
-                              <div className="flex gap-2">
-                                  <Popover>
-                                      <PopoverTrigger asChild>
-                                          <Button variant="outline" size="sm" className="flex-1 justify-start text-left font-normal h-8 text-xs">
-                                              <CalendarIcon className="mr-2 h-3 w-3" />
-                                              {task.reminder_time ? format(new Date(task.reminder_time), "yyyy-MM-dd") : "设置日期"}
-                                          </Button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-auto p-0">
-                                          <Calendar
-                                              mode="single"
-                                              selected={task.reminder_time ? new Date(task.reminder_time) : undefined}
-                                              onSelect={(date) => {
-                                                  if (date) {
-                                                      const current = task.reminder_time ? new Date(task.reminder_time) : new Date();
-                                                      current.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-                                                      updateTaskMutation.mutate({ id: task.id, data: { reminder_time: current.toISOString() } });
-                                                  }
-                                              }}
-                                              initialFocus
-                                          />
-                                      </PopoverContent>
-                                  </Popover>
-                                  <Input 
-                                      type="time" 
-                                      className="w-24 h-8 text-xs" 
-                                      value={task.reminder_time ? format(new Date(task.reminder_time), "HH:mm") : "09:00"}
-                                      onChange={(e) => {
-                                          const [h, m] = e.target.value.split(':');
-                                          const current = task.reminder_time ? new Date(task.reminder_time) : new Date();
-                                          current.setHours(parseInt(h), parseInt(m));
-                                          updateTaskMutation.mutate({ id: task.id, data: { reminder_time: current.toISOString() } });
-                                      }}
-                                  />
-                              </div>
-                          </div>
 
                           {/* Recurrence */}
                           <div className="bg-white p-3 rounded-lg border border-slate-200">

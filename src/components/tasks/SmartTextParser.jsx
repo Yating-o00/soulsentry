@@ -37,20 +37,21 @@ export default function SmartTextParser({ onTasksGenerated }) {
     setParsing(true);
     try {
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `你是一个约定拆解专家。请从以下文本中提取约定信息，并识别大约定与子约定的层级关系。
+        prompt: `你是一个约定拆解专家。请从以下文本中提取或生成约定信息，并识别大约定与子约定的层级关系。
 
 文本内容：
 ${text}
 
 请分析文本并提取以下信息：
-1. 识别主要约定（大约定）和子约定（小约定）的关系
-   - 例如："准备晚餐"是主约定，"购买食材"、"炒菜"、"做汤"是子约定
-   - 例如："完成项目报告"是主约定，"收集数据"、"分析数据"、"撰写报告"是子约定
-2. 为每个约定提取：标题、描述、提醒时间、优先级、类别
-3. 子约定的提醒时间应该早于或等于父约定的提醒时间
-4. 如果文本中没有明确的层级关系，但约定可以拆解，请智能拆解
-5. 为子约定添加序号标识（如：步骤1、步骤2等）
-6. 提取参与者/负责人：从文本中识别提到的人名（如"和张三"、"交给李四"），返回名字列表
+1. **智能生成与拆解**：
+   - 如果文本是详细的，提取主要约定（大约定）和子约定（小约定）的关系。
+   - 如果文本是简短指令（如"安排下周的入职培训"、"制定旅游计划"），请**自动生成**详细的子约定步骤（如"准备电脑"、"办理手续"等）和描述。
+2. 为每个约定提取或生成：标题、描述（包含生成的会议纪要模板或任务详情）、提醒时间、优先级、类别。
+3. 子约定的提醒时间应该早于或等于父约定的提醒时间。
+4. 如果文本中没有明确的层级关系，但约定可以拆解，请智能拆解。
+5. 为子约定添加序号标识（如：步骤1、步骤2等）。
+6. 提取参与者/负责人：从文本中识别提到的人名（如"和张三"、"交给李四"），返回名字列表。
+7. **语言优化**：确保生成的标题和描述语言通顺、专业，无语法错误。
 
 提醒时间规则：
 - 如果提到具体时间，转换为ISO格式
@@ -93,11 +94,6 @@ ${text}
                   category: { 
                     type: "string",
                     enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"]
-                  },
-                  tags: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "从文本中提取的关键词标签"
                   },
                   participants: {
                     type: "array",
@@ -483,17 +479,6 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                             ))}
                           </SelectContent>
                         </Select>
-
-                        {/* 显示提取的标签 */}
-                        {task.tags && task.tags.length > 0 && (
-                          <div className="flex gap-1">
-                            {task.tags.map((tag, tagIdx) => (
-                              <Badge key={tagIdx} variant="outline" className="h-7 border-[#dce4ed] bg-white text-xs font-normal text-slate-500">
-                                #{tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
 
                         <Popover>
                           <PopoverTrigger asChild>

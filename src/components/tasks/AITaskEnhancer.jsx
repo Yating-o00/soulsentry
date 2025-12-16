@@ -48,24 +48,23 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
     try {
       const now = new Date().toISOString();
       const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `你是一个约定管理AI助手。根据用户输入的约定信息，提供智能建议。
+        prompt: `你是一个约定管理AI助手。请根据用户输入，提供智能生成和润色建议。
 
 用户约定标题：${taskTitle}
 ${currentDescription ? `当前描述：${currentDescription}` : ""}
 当前时间：${now}
 
+任务目标：
+1. **内容生成**：如果用户仅输入了关键词或简短提示（如"周报"、"会议纪要"），请自动生成详细的模板或内容（如包含本周进展、下周计划等结构）。
+2. **润色优化**：优化语言风格，使其专业、清晰；纠正可能存在的语法错误。
+3. **信息提取**：提取关键信息生成标签和元数据。
+
 请分析并提供以下JSON格式的建议：
-1. **智能内容生成与润色**：
-   - **自动生成**：如果用户输入简短（如仅有标题或关键词），请发挥想象力扩写为详细的约定内容。例如：
-     - 如果是会议，生成包含议程、参与人、预期的会议纪要结构的详细描述。
-     - 如果是任务，生成具体的执行步骤和标准。
-   - **润色优化**：如果用户已输入详细内容，请优化语言风格（更专业或更清晰），纠正语法错误。
+1. 完善的约定描述：经过生成、润色和纠错后的详细内容。
 2. 推荐分类：work/personal/health/study/family/shopping/finance/other。
 3. 推荐优先级：low/medium/high/urgent。
-4. **关键信息提取**：
-   - 建议标签：提取3-5个关键词作为标签。
-   - 摘要：如果内容很长，生成一句话摘要（放在reasoning中）。
-5. 推荐子约定：按执行顺序拆解任务。
+4. 建议标签：3-5个。
+5. 推荐子约定：按执行顺序。
 6. **智能时间建议**：
    - 最佳提醒时间 (reminder_time): 综合考虑约定性质和当前时间。
    - 最佳执行时间段 (execution_start/end): 建议何时开始和完成此约定最佳。

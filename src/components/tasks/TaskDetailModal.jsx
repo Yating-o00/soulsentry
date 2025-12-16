@@ -28,12 +28,14 @@ import {
   Clock, 
   Repeat, 
   Volume2, 
-  Bell 
+  Bell,
+  Calendar as CalendarIcon
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import RecurrenceEditor from "./RecurrenceEditor";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";

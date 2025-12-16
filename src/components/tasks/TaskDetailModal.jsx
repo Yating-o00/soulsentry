@@ -495,6 +495,46 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                               时间规则
                           </h4>
 
+                          {/* Reminder Time */}
+                          <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
+                              <Label className="text-xs text-slate-500">执行时间</Label>
+                              <div className="flex gap-2">
+                                  <Popover>
+                                      <PopoverTrigger asChild>
+                                          <Button variant="outline" size="sm" className="flex-1 justify-start text-left font-normal h-8 text-xs">
+                                              <CalendarIcon className="mr-2 h-3 w-3" />
+                                              {task.reminder_time ? format(new Date(task.reminder_time), "yyyy-MM-dd") : "设置日期"}
+                                          </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-auto p-0">
+                                          <Calendar
+                                              mode="single"
+                                              selected={task.reminder_time ? new Date(task.reminder_time) : undefined}
+                                              onSelect={(date) => {
+                                                  if (date) {
+                                                      const current = task.reminder_time ? new Date(task.reminder_time) : new Date();
+                                                      current.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                                                      updateTaskMutation.mutate({ id: task.id, data: { reminder_time: current.toISOString() } });
+                                                  }
+                                              }}
+                                              initialFocus
+                                          />
+                                      </PopoverContent>
+                                  </Popover>
+                                  <Input 
+                                      type="time" 
+                                      className="w-24 h-8 text-xs" 
+                                      value={task.reminder_time ? format(new Date(task.reminder_time), "HH:mm") : "09:00"}
+                                      onChange={(e) => {
+                                          const [h, m] = e.target.value.split(':');
+                                          const current = task.reminder_time ? new Date(task.reminder_time) : new Date();
+                                          current.setHours(parseInt(h), parseInt(m));
+                                          updateTaskMutation.mutate({ id: task.id, data: { reminder_time: current.toISOString() } });
+                                      }}
+                                  />
+                              </div>
+                          </div>
+
                           {/* Recurrence */}
                           <div className="bg-white p-3 rounded-lg border border-slate-200">
                               <div className="flex justify-between items-center mb-2">

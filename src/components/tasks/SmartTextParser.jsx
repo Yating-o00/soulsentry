@@ -94,6 +94,11 @@ ${text}
                     type: "string",
                     enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"]
                   },
+                  tags: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "从文本中提取的关键词标签"
+                  },
                   participants: {
                     type: "array",
                     items: { type: "string" },
@@ -478,6 +483,17 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                             ))}
                           </SelectContent>
                         </Select>
+
+                        {/* 显示提取的标签 */}
+                        {task.tags && task.tags.length > 0 && (
+                          <div className="flex gap-1">
+                            {task.tags.map((tag, tagIdx) => (
+                              <Badge key={tagIdx} variant="outline" className="h-7 border-[#dce4ed] bg-white text-xs font-normal text-slate-500">
+                                #{tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
 
                         <Popover>
                           <PopoverTrigger asChild>

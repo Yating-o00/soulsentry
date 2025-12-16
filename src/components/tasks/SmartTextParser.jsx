@@ -15,7 +15,7 @@ import { Sparkles, Loader2, Wand2, X, CheckCircle2, ChevronRight, ChevronDown, P
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
-export default function SmartTextParser({ onTasksGenerated }) {
+export default function SmartTextParser({ onTasksGenerated, className = "" }) {
   const [text, setText] = useState("");
   const [parsing, setParsing] = useState(false);
   const [parsedTasks, setParsedTasks] = useState([]);
@@ -411,7 +411,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
   };
 
   return (
-    <Card className="border border-[#e5e9ef] shadow-md hover:shadow-lg transition-all bg-white rounded-[16px]">
+    <Card className={`border border-[#e5e9ef] shadow-md hover:shadow-lg transition-all bg-white rounded-[16px] ${className}`}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
           <Wand2 className="w-5 h-5 text-[#384877]" />

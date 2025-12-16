@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, MessageSquare, BookTemplate } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -53,7 +54,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
-  const [showSmartTextDialog, setShowSmartTextDialog] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -65,7 +65,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [showAIEnhancer, setShowAIEnhancer] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isSuggestingTags, setIsSuggestingTags] = useState(false);
-  const [activeTab, setActiveTab] = useState("quick");
   
   const { data: templates } = useQuery({
     queryKey: ['task-templates'],
@@ -505,46 +504,17 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
 
   return (
     <>
-      {!initialData && (
-        <div className="bg-slate-100/80 p-1 rounded-xl flex gap-1 mb-4">
-          <button
-            onClick={() => setActiveTab('quick')}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              activeTab === 'quick'
-                ? 'bg-white text-[#384877] shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-            }`}
-          >
-            快速创建
-          </button>
-          <button
-            onClick={() => setActiveTab('smart')}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              activeTab === 'smart'
-                ? 'bg-white text-[#384877] shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-            }`}
-          >
-            智能文本解析
-          </button>
-        </div>
-      )}
-
-      {activeTab === 'smart' && !initialData ? (
-        <SmartTextParser 
-          onTasksGenerated={async (tasks) => {
-            await handleBulkCreateDirect(tasks);
-            setActiveTab('quick');
-          }} 
-        />
-      ) : (
       <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm">
         <div className="p-6">
           {!isExpanded ? (
-            <div className="space-y-4">
-              {/* AI 智能助手标识 */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+            <Tabs defaultValue="quick" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6 h-12 bg-slate-100/50 p-1 rounded-xl">
+                <TabsTrigger value="quick" className="rounded-[10px] text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">快速创建</TabsTrigger>
+                <TabsTrigger value="smart" className="rounded-[10px] text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">智能文本解析</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="quick" className="mt-0 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
                   <div className="flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-blue-500" />
                     <span className="text-xs font-medium text-blue-600 tracking-wide">AI 助手</span>
@@ -552,46 +522,28 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   <span className="text-xs text-slate-400">·</span>
                   <span className="text-xs text-slate-500">智能创建约定</span>
                 </div>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:h-[100px]">
-                {/* 文本输入按钮 */}
-                <button
-                  onClick={() => setIsExpanded(true)}
-                  className="w-full sm:flex-1 h-[84px] sm:h-auto group relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-50 to-blue-50/30 border-2 border-dashed border-slate-200 hover:border-blue-300 transition-all duration-300"
-                >
-                  <div className="relative flex items-center h-full px-4 sm:px-5 gap-3 sm:gap-4">
-                    <div className="relative flex-shrink-0">
-                      <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
-                        <Plus className="w-6 h-6 text-[#3b5aa2]" strokeWidth={2.5} />
-                      </div>
-                    </div>
-                    <div className="text-left">
-                      <div className="text-[16px] font-semibold text-[#222222] mb-0.5">
-                        手动创建
-                      </div>
-                      <div className="text-[13px] text-[#52525b]">
-                        点击输入详情
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <motion.div
-                    className="absolute inset-0 bg-blue-500/5"
-                    initial={{ opacity: 0 }}
-                    whileHover={{ opacity: 1 }}
-                  />
-                </button>
 
-                {/* 语音输入按钮 - 高亮强调 */}
-                {browserSupported && (
+                <div className="flex gap-4 h-[120px]">
                   <button
-                    onClick={startVoiceInput}
-                    className="w-full sm:flex-[0.8] h-[84px] sm:h-auto group relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] text-white shadow-lg shadow-[#3b5aa2]/25 hover:shadow-[#3b5aa2]/40 hover:-translate-y-0.5 transition-all duration-300"
+                    onClick={() => setIsExpanded(true)}
+                    className="flex-1 group relative rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-3"
                   >
-                    <div className="relative flex items-center justify-start sm:justify-center h-full gap-3 px-4">
+                    <div className="h-12 w-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                      <Plus className="w-6 h-6 text-[#384877]" strokeWidth={2.5} />
+                    </div>
+                    <div className="text-center">
+                      <div className="font-semibold text-slate-800 text-[16px]">手动创建</div>
+                      <div className="text-xs text-slate-500">点击输入详情</div>
+                    </div>
+                  </button>
+
+                  {browserSupported && (
+                    <button
+                      onClick={startVoiceInput}
+                      className="flex-1 group relative rounded-2xl bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex flex-col items-center justify-center gap-3 shadow-lg shadow-blue-900/20"
+                    >
                       <div className="relative">
-                        <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
+                        <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm">
                           <Mic className="w-6 h-6 text-white" />
                         </div>
                         <motion.div
@@ -600,23 +552,22 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                           transition={{ duration: 2, repeat: Infinity }}
                         />
                       </div>
-                      <div className="text-left">
-                        <div className="text-[16px] font-bold">
-                          语音创建
-                        </div>
-                        <div className="text-[12px] text-blue-100/90">
-                          AI 识别
-                        </div>
+                      <div className="text-center">
+                        <div className="font-semibold text-[16px]">语音创建</div>
+                        <div className="text-xs text-blue-100/80">AI 识别</div>
                       </div>
-                    </div>
-                    
-                    {/* 装饰光效 */}
-                    <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
-                    <div className="absolute bottom-0 left-0 w-16 h-16 bg-blue-400/20 rounded-full blur-xl -ml-8 -mb-8 pointer-events-none" />
-                  </button>
-                )}
-              </div>
-            </div>
+                    </button>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="smart" className="mt-0">
+                <SmartTextParser 
+                  onTasksGenerated={handleBulkCreateDirect} 
+                  className="border-0 shadow-none bg-transparent" 
+                />
+              </TabsContent>
+            </Tabs>
           ) : (
             <AnimatePresence>
               <motion.form
@@ -1150,7 +1101,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
           )}
         </div>
       </Card>
-      )}
 
       {/* 重复规则编辑器 */}
       <Dialog open={showRecurrence} onOpenChange={setShowRecurrence}>
@@ -1181,17 +1131,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         </DialogContent>
       </Dialog>
 
-      {/* 智能文本输入对话框 */}
-      <Dialog open={showSmartTextDialog} onOpenChange={setShowSmartTextDialog}>
-        <DialogContent className="max-w-2xl">
-          <SmartTextParser 
-            onTasksGenerated={async (tasks) => {
-              setShowSmartTextDialog(false);
-              await handleBulkCreateDirect(tasks);
-            }} 
-          />
-        </DialogContent>
-      </Dialog>
+
 
       {/* 语音输入对话框 */}
       <Dialog open={showVoiceDialog} onOpenChange={setShowVoiceDialog}>

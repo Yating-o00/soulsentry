@@ -141,6 +141,8 @@ export default function CalendarView() {
   const onCompleteTask = (task) => handleComplete(task, allTasks);
   const onSubtaskToggleWrapper = (subtask) => handleSubtaskToggle(subtask, allTasks);
 
+  const getSubtasks = (taskId) => allTasks.filter(t => t.parent_task_id === taskId);
+
   const handleDateClick = (date) => {
     setSelectedDate(date);
     setQuickAddDate(date);
@@ -448,6 +450,7 @@ export default function CalendarView() {
                         <TaskCard
                           key={`task-${task.id}`}
                           task={task}
+                          subtasks={getSubtasks(task.id)}
                           onComplete={() => onCompleteTask(task)}
                           onDelete={() => deleteTask(task.id)}
                           onEdit={() => setSelectedTask(task)}

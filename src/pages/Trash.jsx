@@ -93,6 +93,7 @@ export default function Trash() {
             <TaskCard
               key={task.id}
               task={task}
+              subtasks={allTasks.filter(t => t.parent_task_id === task.id)}
               isTrash={true}
               onRestore={() => restoreTaskMutation.mutate(task.id)}
               onDeleteForever={() => {

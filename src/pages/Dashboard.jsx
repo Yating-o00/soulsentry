@@ -147,6 +147,7 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       setEditingTask(null);
+      toast.success("约定已更新");
       
       if (variables.data.status === 'completed') {
         logUserBehavior("task_completed", { id: variables.id, ...variables.data });
@@ -395,7 +396,6 @@ export default function Dashboard() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    subtasks={allTasks.filter(t => t.parent_task_id === task.id)}
                     onComplete={() => handleComplete(task)}
                     onDelete={() => deleteTaskMutation.mutate(task.id)}
                     onEdit={() => setEditingTask(task)}
@@ -427,7 +427,6 @@ export default function Dashboard() {
                     <TaskCard
                       key={task.id}
                       task={task}
-                      subtasks={allTasks.filter(t => t.parent_task_id === task.id)}
                       onComplete={() => handleComplete(task)}
                       onDelete={() => deleteTaskMutation.mutate(task.id)}
                       onEdit={() => setEditingTask(task)}

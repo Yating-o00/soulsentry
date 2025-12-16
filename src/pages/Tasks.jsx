@@ -143,7 +143,12 @@ export default function Tasks() {
 
   const handleUpdateTask = (taskData) => {
     const { id, ...data } = taskData;
-    updateTask({ id: editingTask.id, data });
+    updateTask({ id: editingTask.id, data }, {
+      onSuccess: () => {
+        setEditingTask(null);
+        toast.success("约定已更新");
+      }
+    });
   };
 
   // Smart sort removed - handled by Soul Sentry agent conversation

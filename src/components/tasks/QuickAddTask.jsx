@@ -1001,12 +1001,12 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     type="button"
                     variant="outline"
                     onClick={() => setShowAssignment(true)}
-                    className="border border-[#dce4ed] bg-white hover:bg-[#f9fafb] hover:border-[#5a647d] rounded-[10px]"
+                    className="border border-blue-100 bg-blue-50/50 hover:bg-blue-50 hover:border-blue-300 rounded-[10px] group transition-all"
                   >
-                    <Users className="h-4 w-4 mr-2 text-[#52525b]" />
-                    <span className="text-[#222222] font-medium">团队分配</span>
+                    <Users className="h-4 w-4 mr-2 text-blue-600 group-hover:scale-110 transition-transform" />
+                    <span className="text-blue-700 font-medium">团队分配</span>
                     {task.assigned_to && task.assigned_to.length > 0 && (
-                      <Badge className="ml-2 bg-[#06b6d4] text-white rounded-md">
+                      <Badge className="ml-2 bg-blue-600 text-white rounded-md">
                         {task.assigned_to.length}
                       </Badge>
                     )}

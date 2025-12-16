@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare } from "lucide-react";
+import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare, Sparkles, Loader2 } from "lucide-react";
 import GanttView from "../components/tasks/GanttView";
 import KanbanView from "../components/tasks/KanbanView";
 import AdvancedTaskFilters from "../components/tasks/AdvancedTaskFilters";
@@ -31,16 +31,16 @@ export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState("default"); // default | smart | priority | date
   const [advancedFilters, setAdvancedFilters] = useState({ createdBy: 'all', tags: [], dateRange: undefined });
   
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
   const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt' | 'kanban'
+  const [isPrioritizing, setIsPrioritizing] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   
-  const { 
+  const {
     updateTask, 
     createTask, 
     deleteTask, 
@@ -131,43 +131,7 @@ export default function Tasks() {
     }
 
     return matchesStatus && matchesCategory && matchesSearch && matchesAdvanced;
-  }).sort((a, b) => {
-    if (sortBy === 'smart') {
-        const getScore = (task) => {
-            let score = 0;
-            // Priority
-            if (task.priority === 'urgent') score += 100;
-            if (task.priority === 'high') score += 50;
-            if (task.priority === 'medium') score += 20;
-
-            // Due date
-            if (task.reminder_time) {
-                const due = new Date(task.reminder_time);
-                const now = new Date();
-                const diffHours = (due - now) / (1000 * 60 * 60);
-                if (diffHours < 0) score += 90; // Overdue
-                else if (diffHours < 24) score += 70; // Due within 24h
-                else if (diffHours < 72) score += 40; // Due within 3 days
-            }
-
-            // Risk (from AI)
-            if (task.ai_analysis?.risk_level === 'critical') score += 40;
-            if (task.ai_analysis?.risk_level === 'high') score += 25;
-
-            return score;
-        };
-        return getScore(b) - getScore(a);
-    }
-    if (sortBy === 'priority') {
-        const pMap = { urgent: 4, high: 3, medium: 2, low: 1 };
-        return (pMap[b.priority] || 0) - (pMap[a.priority] || 0);
-    }
-    if (sortBy === 'date') {
-        return new Date(a.reminder_time || '9999-12-31') - new Date(b.reminder_time || '9999-12-31');
-    }
-    // Default (usually by created or updated date from backend, but here we preserve list order which is reminder_time desc from query)
-    return 0;
-  }), [tasks, statusFilter, categoryFilter, searchQuery, advancedFilters, sortBy]);
+  }), [tasks, statusFilter, categoryFilter, searchQuery, advancedFilters]);
 
   // Group tasks logic
   // Only show top-level tasks in the list
@@ -181,6 +145,92 @@ export default function Tasks() {
   const handleUpdateTask = (taskData) => {
     const { id, ...data } = taskData;
     updateTask({ id: editingTask.id, data });
+  };
+
+  const handleSmartPrioritize = async () => {
+    const pendingTasks = tasks.filter(t => t.status === 'pending');
+    if (pendingTasks.length === 0) {
+      toast.info("没有待处理的约定需要排序");
+      return;
+    }
+
+    setIsPrioritizing(true);
+    toast.loading("AI 正在分析约定优先级...", { id: "smart-sort" });
+
+    try {
+      // Prepare simplified task list for AI
+      const taskList = pendingTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || "",
+        reminder_time: t.reminder_time,
+        current_priority: t.priority
+      }));
+
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt: `你是一个时间管理专家。请根据以下约定的截止时间、重要性和内容，重新评估并分配优先级 (urgent, high, medium, low)。
+        
+        规则：
+        1. 截止时间临近（24小时内）或标题包含紧急关键词的，应设为 urgent 或 high。
+        2. 长期任务或无明确截止时间的，设为 medium 或 low。
+        3. 仅返回需要修改优先级的约定。
+        
+        约定列表：
+        ${JSON.stringify(taskList)}
+        
+        请返回一个JSON对象，包含需要更新优先级的约定ID和新优先级。`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            updates: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  new_priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                  reason: { type: "string" }
+                },
+                required: ["id", "new_priority"]
+              }
+            }
+          },
+          required: ["updates"]
+        }
+      });
+
+      if (response.updates && response.updates.length > 0) {
+        let updateCount = 0;
+        for (const update of response.updates) {
+          const task = pendingTasks.find(t => t.id === update.id);
+          if (task && task.priority !== update.new_priority) {
+            // Using direct update to avoid rapid state thrashing, or we can use the mutation loop
+            // Since we have useTaskOperations hook, we might not have exposed a batch update.
+            // We'll loop updateTask.
+            // Note: updateTask calls mutation which invalidates query.
+            // For batch, ideally we'd have a bulk update endpoint.
+            // We'll update sequentially for now.
+            await base44.entities.Task.update(update.id, { 
+                priority: update.new_priority,
+                ai_analysis: {
+                    ...task.ai_analysis,
+                    suggested_priority: update.new_priority,
+                    priority_reasoning: update.reason || "AI 智能排序调整"
+                }
+            });
+            updateCount++;
+          }
+        }
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        toast.success(`AI 已优化 ${updateCount} 个约定的优先级`, { id: "smart-sort" });
+      } else {
+        toast.success("当前优先级已是最佳状态", { id: "smart-sort" });
+      }
+    } catch (error) {
+      console.error("Smart sort error:", error);
+      toast.error("智能排序失败", { id: "smart-sort" });
+    }
+    setIsPrioritizing(false);
   };
 
   const handleBulkCreate = async (parsedTasks) => {
@@ -346,20 +396,15 @@ export default function Tasks() {
                 onClear={() => setAdvancedFilters({ createdBy: 'all', tags: [], dateRange: undefined })} 
             />
 
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-32 border-0 bg-white shadow-lg rounded-xl">
-                <div className="flex items-center gap-2">
-                    {sortBy === 'smart' ? <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" /> : <Filter className="w-4 h-4 text-slate-400" />}
-                    <SelectValue placeholder="排序" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">默认排序</SelectItem>
-                <SelectItem value="smart">✨ 智能排序</SelectItem>
-                <SelectItem value="priority">按优先级</SelectItem>
-                <SelectItem value="date">按截止时间</SelectItem>
-              </SelectContent>
-            </Select>
+            <button
+              onClick={handleSmartPrioritize}
+              disabled={isPrioritizing}
+              className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-3 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all disabled:opacity-50"
+              title="AI 智能排序"
+            >
+              {isPrioritizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              <span className="text-sm font-medium hidden md:inline">智能排序</span>
+            </button>
 
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-32 border-0 bg-white shadow-lg rounded-xl">

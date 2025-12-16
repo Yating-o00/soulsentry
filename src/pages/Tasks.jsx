@@ -271,8 +271,8 @@ export default function Tasks() {
         transition={{ delay: 0.1 }}
         className="space-y-4">
 
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
+        <div className="flex flex-col md:flex-row items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+          <div className="relative flex-1 w-full md:w-auto">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
               placeholder="搜索约定..."

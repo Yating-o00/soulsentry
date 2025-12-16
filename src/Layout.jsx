@@ -48,11 +48,6 @@ const navigationItems = [
     icon: User,
   },
   {
-    title: "约定模板",
-    url: createPageUrl("Templates"),
-    icon: StickyNote,
-  },
-  {
     title: "通知设置",
     url: createPageUrl("NotificationSettings"),
     icon: Bell,

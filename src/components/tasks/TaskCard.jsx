@@ -28,7 +28,7 @@ import {
   Bell,
   Volume2,
   TimerReset,
-  FileText,
+  FileText as FileIcon,
   StickyNote,
   ChevronDown,
   ChevronRight,
@@ -478,7 +478,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
 
                   {task.attachments && task.attachments.length > 0 && (
                     <Badge variant="outline" className="rounded-[8px] text-[13px] text-[#10b981] border-[#86efac] bg-[#f0fdf4]">
-                      <FileText className="w-3 h-3 mr-1" />
+                      <FileIcon className="w-3 h-3 mr-1" />
                       {task.attachments.length}个附件
                     </Badge>
                   )}

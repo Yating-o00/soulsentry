@@ -333,7 +333,9 @@ export default function Dashboard() {
             <CardTitle className="text-blue-100 font-medium text-sm">今日待办</CardTitle>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="text-5xl font-bold mb-6">{todayTasks.length}</div>
+            <div className="text-5xl font-bold mb-6">
+              {todayTasks.filter(t => t.status === 'pending').length}
+            </div>
             <div className="flex items-center gap-3 text-blue-100 text-sm">
               <Progress 
                 value={completionRate} 

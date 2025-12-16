@@ -65,6 +65,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [showAIEnhancer, setShowAIEnhancer] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isSuggestingTags, setIsSuggestingTags] = useState(false);
+  const [activeTab, setActiveTab] = useState("quick");
   
   const { data: templates } = useQuery({
     queryKey: ['task-templates'],
@@ -504,6 +505,39 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
 
   return (
     <>
+      {!initialData && (
+        <div className="bg-slate-100/80 p-1 rounded-xl flex gap-1 mb-4">
+          <button
+            onClick={() => setActiveTab('quick')}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
+              activeTab === 'quick'
+                ? 'bg-white text-[#384877] shadow-sm'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+            }`}
+          >
+            快速创建
+          </button>
+          <button
+            onClick={() => setActiveTab('smart')}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
+              activeTab === 'smart'
+                ? 'bg-white text-[#384877] shadow-sm'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+            }`}
+          >
+            智能文本解析
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'smart' && !initialData ? (
+        <SmartTextParser 
+          onTasksGenerated={async (tasks) => {
+            await handleBulkCreateDirect(tasks);
+            setActiveTab('quick');
+          }} 
+        />
+      ) : (
       <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm">
         <div className="p-6">
           {!isExpanded ? (
@@ -544,34 +578,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   
                   <motion.div
                     className="absolute inset-0 bg-blue-500/5"
-                    initial={{ opacity: 0 }}
-                    whileHover={{ opacity: 1 }}
-                  />
-                </button>
-
-                {/* 智能文本按钮 */}
-                <button
-                  onClick={() => setShowSmartTextDialog(true)}
-                  className="w-full sm:flex-1 h-[84px] sm:h-auto group relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-50 to-purple-50/30 border-2 border-dashed border-purple-200 hover:border-purple-300 transition-all duration-300"
-                >
-                  <div className="relative flex items-center h-full px-4 sm:px-5 gap-3 sm:gap-4">
-                    <div className="relative flex-shrink-0">
-                      <div className="h-12 w-12 rounded-xl bg-white border border-purple-200 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
-                        <Wand2 className="w-6 h-6 text-purple-600" strokeWidth={2.5} />
-                      </div>
-                    </div>
-                    <div className="text-left">
-                      <div className="text-[16px] font-semibold text-[#222222] mb-0.5">
-                        智能文本
-                      </div>
-                      <div className="text-[13px] text-[#52525b]">
-                        自动拆解粘贴内容
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <motion.div
-                    className="absolute inset-0 bg-purple-500/5"
                     initial={{ opacity: 0 }}
                     whileHover={{ opacity: 1 }}
                   />
@@ -1144,6 +1150,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
           )}
         </div>
       </Card>
+      )}
 
       {/* 重复规则编辑器 */}
       <Dialog open={showRecurrence} onOpenChange={setShowRecurrence}>

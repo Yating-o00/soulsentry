@@ -112,12 +112,12 @@ export default function Tasks() {
 
   const filteredTasks = React.useMemo(() => tasks.filter((task) => {
     const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-    const matchesCategory = categoryFilter === "all" || task.category === categoryFilter;
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.description?.toLowerCase().includes(searchQuery.toLowerCase());
 
     // Advanced Filters
     let matchesAdvanced = true;
+    if (advancedFilters.category && advancedFilters.category !== 'all' && task.category !== advancedFilters.category) matchesAdvanced = false;
     if (advancedFilters.createdBy !== 'all' && task.created_by !== advancedFilters.createdBy) matchesAdvanced = false;
     if (advancedFilters.tags && advancedFilters.tags.length > 0) {
         if (!task.tags || !advancedFilters.tags.every(tag => task.tags.includes(tag))) matchesAdvanced = false;

@@ -438,20 +438,6 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                     </Badge>
                   )}
 
-                  {task.ai_analysis?.status_summary && (
-                      <div className="w-full mt-2 pt-2 border-t border-dashed border-slate-200">
-                          <div className="flex items-start gap-2 bg-gradient-to-r from-purple-50/50 to-indigo-50/50 p-2 rounded-lg">
-                              <FileText className="w-3.5 h-3.5 text-purple-500 mt-0.5 flex-shrink-0" />
-                              <div className="flex-1">
-                                  <p className="text-xs font-semibold text-purple-700 mb-0.5">AI 状态摘要</p>
-                                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-2" title={task.ai_analysis.status_summary}>
-                                      {task.ai_analysis.status_summary}
-                                  </p>
-                              </div>
-                          </div>
-                      </div>
-                  )}
-
                   {hasSubtasks && (
                     <Badge 
                       className={`bg-[#384877] text-white rounded-[8px] text-[13px] ${onToggleSubtasks ? 'cursor-pointer hover:bg-[#2c3b63] transition-colors' : ''}`}
@@ -517,6 +503,13 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                     </Badge>
                   )}
                 </div>
+
+                {task.ai_analysis?.status_summary && (
+                  <div className="mt-3 text-xs text-slate-600 bg-gradient-to-r from-indigo-50/50 to-purple-50/50 p-2.5 rounded-lg border border-indigo-100 flex items-start gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-500 mt-0.5 flex-shrink-0" />
+                    <span className="leading-relaxed">{task.ai_analysis.status_summary}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

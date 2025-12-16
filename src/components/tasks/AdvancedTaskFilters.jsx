@@ -10,7 +10,14 @@ import {
     User, 
     Tag, 
     X,
-    Check
+    Check,
+    Briefcase,
+    Heart,
+    GraduationCap,
+    Users,
+    ShoppingCart,
+    Wallet,
+    MoreHorizontal
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -28,8 +35,13 @@ export default function AdvancedTaskFilters({ filters, onChange, onClear }) {
     const activeFilterCount = [
         filters.dateRange?.from,
         filters.createdBy !== 'all',
-        filters.tags?.length > 0
+        filters.tags?.length > 0,
+        filters.category && filters.category !== 'all'
     ].filter(Boolean).length;
+
+    const handleCategoryChange = (value) => {
+        onChange({ ...filters, category: value });
+    };
 
     const handleDateSelect = (range) => {
         onChange({ ...filters, dateRange: range });
@@ -67,7 +79,63 @@ export default function AdvancedTaskFilters({ filters, onChange, onClear }) {
             </PopoverTrigger>
             <PopoverContent className="w-80 p-4" align="end">
                 <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                {/* Category Filter */}
+                <div className="space-y-2">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                        <Filter className="w-3.5 h-3.5" />
+                        类别
+                    </label>
+                    <Select value={filters.category || "all"} onValueChange={handleCategoryChange}>
+                        <SelectTrigger className="h-9">
+                            <SelectValue placeholder="选择类别" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">全部类别</SelectItem>
+                            <SelectItem value="work">
+                                <div className="flex items-center gap-2">
+                                    <Briefcase className="w-3.5 h-3.5" /> 工作
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="personal">
+                                <div className="flex items-center gap-2">
+                                    <User className="w-3.5 h-3.5" /> 个人
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="health">
+                                <div className="flex items-center gap-2">
+                                    <Heart className="w-3.5 h-3.5" /> 健康
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="study">
+                                <div className="flex items-center gap-2">
+                                    <GraduationCap className="w-3.5 h-3.5" /> 学习
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="family">
+                                <div className="flex items-center gap-2">
+                                    <Users className="w-3.5 h-3.5" /> 家庭
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="shopping">
+                                <div className="flex items-center gap-2">
+                                    <ShoppingCart className="w-3.5 h-3.5" /> 购物
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="finance">
+                                <div className="flex items-center gap-2">
+                                    <Wallet className="w-3.5 h-3.5" /> 财务
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="other">
+                                <div className="flex items-center gap-2">
+                                    <MoreHorizontal className="w-3.5 h-3.5" /> 其他
+                                </div>
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="flex items-center justify-between">
                         <h4 className="font-medium text-slate-900">高级筛选</h4>
                         {activeFilterCount > 0 && (
                             <Button variant="ghost" size="sm" onClick={onClear} className="h-8 text-xs text-slate-500 hover:text-red-600">

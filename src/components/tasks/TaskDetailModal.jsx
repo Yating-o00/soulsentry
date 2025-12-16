@@ -306,7 +306,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
           `;
 
           const res = await base44.integrations.Core.InvokeLLM({
-              prompt: `基于提供的上下文和附件（图片/视频），分析此约定的状态、风险和依赖关系。请务必使用中文回答所有文本内容。
+              prompt: `基于提供的上下文和附件（图片/视频），分析此约定的状态、风险和依赖关系。
               
               Context:
               ${context}
@@ -321,7 +321,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               7. 风险评估：评估约定风险等级（low/medium/high/critical）。
               8. 时间建议：基于约定性质，建议最佳执行时间段（start/end）及理由。
               
-              Return ONLY JSON. All string values in the response must be in Chinese (except for enum keys like priority). Time format: ISO 8601.`,
+              STRICT REQUIREMENT: All generated text content MUST be in SIMPLIFIED CHINESE (简体中文). Do NOT use English for descriptions, summaries, reasons, or suggestions. Even if the input is English, the output MUST be Chinese.
+              
+              Return ONLY JSON. Time format: ISO 8601.`,
               file_urls: mediaAttachments.length > 0 ? mediaAttachments : undefined,
               response_json_schema: {
                   type: "object",

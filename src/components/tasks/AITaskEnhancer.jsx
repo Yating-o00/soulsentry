@@ -61,7 +61,7 @@ ${JSON.stringify(suggestions)}
 2. 如果涉及时间调整，请基于当前时间 (${now}) 或原建议时间进行计算，确保生成有效的 ISO 8601 时间格式。
 3. 保持其他未受影响字段不变。
 4. 返回更新后的完整 JSON 对象。
-5. 确保所有文本内容使用中文。`,
+5. 确保所有文本内容使用简体中文 (Simplified Chinese)。不要使用英文。`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -142,7 +142,7 @@ ${templatesInfo}
 8. 分析原因 (reasoning): 总体建议理由。
 
 注意：所有时间必须为ISO 8601格式 (YYYY-MM-DDTHH:mm:ss.sssZ)。
-重点：所有返回的文本内容（描述、理由、分析等）必须使用中文。`,
+重点：所有返回的文本内容（描述、理由、分析等）必须使用简体中文 (Simplified Chinese)。即使输入包含英文，输出也必须完全翻译或重写为中文。严禁在输出的文本字段中包含英文句子。`,
         response_json_schema: {
           type: "object",
           properties: {

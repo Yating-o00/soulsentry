@@ -286,21 +286,19 @@ export default function Tasks() {
             <div className="bg-slate-100 p-1 rounded-xl flex gap-1 flex-shrink-0">
               <button
                 onClick={() => setViewMode("list")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="列表视图">
-
                 <LayoutList className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode("gantt")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="甘特图视图">
                 <BarChart3 className="w-4 h-4" />
               </button>
-              
               <button
                 onClick={() => setViewMode("kanban")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-[#384877] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="看板视图">
                 <KanbanSquare className="w-4 h-4" />
               </button>

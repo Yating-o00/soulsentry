@@ -18,6 +18,7 @@ import RecurrenceEditor from "./RecurrenceEditor";
 import TaskAssignment from "./TaskAssignment";
 import SmartReminderSuggestion from "./SmartReminderSuggestion";
 import AITaskEnhancer from "./AITaskEnhancer";
+import SmartTextParser from "./SmartTextParser";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
+  const [showSmartTextDialog, setShowSmartTextDialog] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -547,7 +549,33 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   />
                 </button>
 
-{/* 自然语言模块已移除 */}
+                {/* 智能文本按钮 */}
+                <button
+                  onClick={() => setShowSmartTextDialog(true)}
+                  className="w-full sm:flex-1 h-[84px] sm:h-auto group relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-50 to-purple-50/30 border-2 border-dashed border-purple-200 hover:border-purple-300 transition-all duration-300"
+                >
+                  <div className="relative flex items-center h-full px-4 sm:px-5 gap-3 sm:gap-4">
+                    <div className="relative flex-shrink-0">
+                      <div className="h-12 w-12 rounded-xl bg-white border border-purple-200 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
+                        <Wand2 className="w-6 h-6 text-purple-600" strokeWidth={2.5} />
+                      </div>
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[16px] font-semibold text-[#222222] mb-0.5">
+                        智能文本
+                      </div>
+                      <div className="text-[13px] text-[#52525b]">
+                        自动拆解粘贴内容
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <motion.div
+                    className="absolute inset-0 bg-purple-500/5"
+                    initial={{ opacity: 0 }}
+                    whileHover={{ opacity: 1 }}
+                  />
+                </button>
 
                 {/* 语音输入按钮 - 高亮强调 */}
                 {browserSupported && (
@@ -1146,7 +1174,17 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         </DialogContent>
       </Dialog>
 
-{/* 智能文本输入对话框已移除 */}
+      {/* 智能文本输入对话框 */}
+      <Dialog open={showSmartTextDialog} onOpenChange={setShowSmartTextDialog}>
+        <DialogContent className="max-w-2xl">
+          <SmartTextParser 
+            onTasksGenerated={async (tasks) => {
+              setShowSmartTextDialog(false);
+              await handleBulkCreateDirect(tasks);
+            }} 
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* 语音输入对话框 */}
       <Dialog open={showVoiceDialog} onOpenChange={setShowVoiceDialog}>

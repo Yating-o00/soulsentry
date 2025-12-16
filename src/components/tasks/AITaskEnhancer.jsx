@@ -37,6 +37,57 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, onApply 
   const [suggestions, setSuggestions] = useState(null);
   const [newTag, setNewTag] = useState("");
   const [preserveDescription, setPreserveDescription] = useState(false);
+  const [refineInstruction, setRefineInstruction] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
+
+  const handleRefine = async () => {
+    if (!refineInstruction.trim() || !suggestions) return;
+
+    setIsRefining(true);
+    try {
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt: `你是一个智能助手，帮助用户微调约定建议。
+        
+当前建议数据 (JSON):
+${JSON.stringify(suggestions)}
+
+用户的修改指令: "${refineInstruction}"
+
+请根据用户指令更新上述 JSON 数据。
+规则：
+1. 仅修改用户提到的部分，保持其他字段不变。
+2. 如果用户提到时间调整（如"推迟一天"），请基于当前值计算新的ISO时间。
+3. 返回更新后的完整 JSON 对象。`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            description: { type: "string" },
+            category: { type: "string" },
+            priority: { type: "string" },
+            tags: { type: "array", items: { type: "string" } },
+            subtasks: { type: "array", items: { type: "string" } },
+            reminder_time: { type: "string" },
+            execution_start: { type: "string" },
+            execution_end: { type: "string" },
+            time_reasoning: { type: "string" },
+            risks: { type: "array", items: { type: "string" } },
+            risk_level: { type: "string" },
+            dependencies: { type: "array", items: { type: "string" } },
+            reasoning: { type: "string" }
+          },
+          required: ["description", "category", "priority", "tags"]
+        }
+      });
+
+      setSuggestions(response);
+      setRefineInstruction("");
+      toast.success("已根据您的指令调整建议");
+    } catch (error) {
+      console.error("Refine error:", error);
+      toast.error("调整失败，请重试");
+    }
+    setIsRefining(false);
+  };
 
   const handleAnalyze = async () => {
     if (!taskTitle.trim()) {
@@ -433,6 +484,31 @@ ${currentDescription ? `当前描述：${currentDescription}` : ""}
                     <p className="text-[13px] text-[#52525b] leading-relaxed">{suggestions.reasoning}</p>
                   </div>
                 </div>
+              </div>
+
+              {/* 快速微调输入框 */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                 <Label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-purple-500" />
+                    对建议不满意？告诉AI如何调整
+                 </Label>
+                 <div className="flex gap-2">
+                    <Input 
+                        value={refineInstruction}
+                        onChange={(e) => setRefineInstruction(e.target.value)}
+                        placeholder="例如：把优先级调低点、时间改到明天下午、再加个子任务..."
+                        className="h-9 text-sm bg-white"
+                        onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
+                    />
+                    <Button 
+                        size="sm"
+                        onClick={handleRefine}
+                        disabled={isRefining || !refineInstruction.trim()}
+                        className="h-9 bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-200"
+                    >
+                        {isRefining ? <Loader2 className="w-4 h-4 animate-spin" /> : "调整"}
+                    </Button>
+                 </div>
               </div>
 
               {/* 操作按钮 */}

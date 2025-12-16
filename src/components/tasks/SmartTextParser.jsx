@@ -21,6 +21,8 @@ export default function SmartTextParser({ onTasksGenerated }) {
   const [parsedTasks, setParsedTasks] = useState([]);
   const [expandedTasks, setExpandedTasks] = useState(new Set());
   const [refiningState, setRefiningState] = useState(null); // { taskIndex, subIndex }
+  const [batchRefineInstruction, setBatchRefineInstruction] = useState("");
+  const [isBatchRefining, setIsBatchRefining] = useState(false);
 
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
@@ -156,6 +158,81 @@ ${text}
       console.error("Parse error:", error);
     }
     setParsing(false);
+  };
+
+  const handleBatchRefine = async () => {
+    if (!batchRefineInstruction.trim() || parsedTasks.length === 0) return;
+
+    setIsBatchRefining(true);
+    try {
+        const response = await base44.integrations.Core.InvokeLLM({
+            prompt: `你是一个约定整理专家。用户希望批量调整已解析的任务列表。
+
+当前任务列表 (JSON):
+${JSON.stringify(parsedTasks.map(t => ({ title: t.title, description: t.description, reminder_time: t.reminder_time, priority: t.priority, category: t.category, subtasks: t.subtasks })))}
+
+用户的批量调整指令: "${batchRefineInstruction}"
+
+请根据指令更新列表。
+规则：
+1. 可以批量修改时间（如"所有任务推迟一小时"）、优先级、分类等。
+2. 可以增加或删除任务。
+3. 保持 JSON 结构一致。
+4. 返回更新后的 tasks 数组。`,
+            response_json_schema: {
+                type: "object",
+                properties: {
+                    tasks: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                title: { type: "string" },
+                                description: { type: "string" },
+                                reminder_time: { type: "string" },
+                                priority: { type: "string" },
+                                category: { type: "string" },
+                                subtasks: { 
+                                    type: "array", 
+                                    items: { 
+                                        type: "object",
+                                        properties: {
+                                            title: { type: "string" },
+                                            description: { type: "string" },
+                                            reminder_time: { type: "string" },
+                                            priority: { type: "string" },
+                                            order: { type: "number" }
+                                        }
+                                    } 
+                                }
+                            },
+                            required: ["title", "reminder_time"]
+                        }
+                    }
+                },
+                required: ["tasks"]
+            }
+        });
+
+        if (response?.tasks) {
+            // 保留原有的 assigned_to 等字段（LLM可能丢失）
+            // 这里简单处理，假设主要修改内容属性
+            const updatedTasks = response.tasks.map((newTask, i) => {
+                const original = parsedTasks[i] || {};
+                return {
+                    ...newTask,
+                    assigned_to: original.assigned_to || [], // 尝试保留，如果不匹配则为空
+                };
+            });
+            setParsedTasks(updatedTasks);
+            setBatchRefineInstruction("");
+            toast.success("列表已批量更新");
+        }
+    } catch (error) {
+        console.error("Batch refine error:", error);
+        toast.error("批量调整失败");
+    }
+    setIsBatchRefining(false);
   };
 
   const handleCreateAll = async () => {
@@ -377,19 +454,41 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
               exit={{ opacity: 0, y: -20 }}
               className="space-y-3"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-[#d5495f]" />
-                  <span className="font-semibold text-slate-800">
-                    解析结果 ({parsedTasks.length} 个主约定)
-                  </span>
-                </div>
-                <Button
-                  onClick={handleCreateAll}
-                  className="bg-[#d5495f] hover:bg-[#c03d50] shadow-md hover:shadow-lg transition-all rounded-[12px]"
-                  >
-                  创建全部约定
-                  </Button>
+              <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-[#d5495f]" />
+                      <span className="font-semibold text-slate-800">
+                        解析结果 ({parsedTasks.length} 个主约定)
+                      </span>
+                    </div>
+                    <Button
+                      onClick={handleCreateAll}
+                      className="bg-[#d5495f] hover:bg-[#c03d50] shadow-md hover:shadow-lg transition-all rounded-[12px]"
+                      >
+                      创建全部约定
+                      </Button>
+                  </div>
+                  
+                  {/* 批量微调栏 */}
+                  <div className="flex gap-2 items-center bg-purple-50 p-2 rounded-xl border border-purple-100">
+                      <Sparkles className="w-4 h-4 text-purple-500 ml-2" />
+                      <Input 
+                          value={batchRefineInstruction}
+                          onChange={(e) => setBatchRefineInstruction(e.target.value)}
+                          placeholder="批量调整：例如 '所有任务时间推迟2小时' 或 '把工作类别的优先级都设为高'..."
+                          className="border-0 bg-transparent shadow-none focus-visible:ring-0 placeholder:text-purple-300 text-purple-800 h-8 text-sm"
+                          onKeyDown={(e) => e.key === 'Enter' && handleBatchRefine()}
+                      />
+                      <Button 
+                          size="sm" 
+                          onClick={handleBatchRefine}
+                          disabled={isBatchRefining || !batchRefineInstruction.trim()}
+                          className="h-8 bg-white text-purple-600 hover:bg-purple-100 border border-purple-200 shadow-sm"
+                      >
+                          {isBatchRefining ? <Loader2 className="w-3 h-3 animate-spin" /> : "AI 调整"}
+                      </Button>
+                  </div>
               </div>
 
               <div className="space-y-2">

@@ -308,41 +308,8 @@ export default function Tasks() {
             <AdvancedTaskFilters 
                 filters={advancedFilters} 
                 onChange={setAdvancedFilters} 
-                onClear={() => setAdvancedFilters({ createdBy: 'all', tags: [], dateRange: undefined })} 
+                onClear={() => setAdvancedFilters({ category: 'all', createdBy: 'all', tags: [], dateRange: undefined })} 
             />
-
-
-
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[120px] h-10 border-0 bg-slate-50 hover:bg-slate-100 rounded-xl text-sm font-medium text-slate-600">
-                <div className="flex items-center gap-2 truncate">
-                  <Filter className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="truncate">{categoryFilter === 'all' ? '全部类别' : (
-                    {
-                      work: '工作',
-                      personal: '个人',
-                      health: '健康',
-                      study: '学习',
-                      family: '家庭',
-                      shopping: '购物',
-                      finance: '财务',
-                      other: '其他'
-                    }[categoryFilter] || categoryFilter
-                  )}</span>
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部类别</SelectItem>
-                <SelectItem value="work">工作</SelectItem>
-                <SelectItem value="personal">个人</SelectItem>
-                <SelectItem value="health">健康</SelectItem>
-                <SelectItem value="study">学习</SelectItem>
-                <SelectItem value="family">家庭</SelectItem>
-                <SelectItem value="shopping">购物</SelectItem>
-                <SelectItem value="finance">财务</SelectItem>
-                <SelectItem value="other">其他</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
 

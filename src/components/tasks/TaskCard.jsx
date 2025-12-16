@@ -17,7 +17,6 @@ import {
   Sparkles,
   ShieldAlert,
   CalendarClock,
-  FileText,
   Briefcase,
   User,
   Heart,

@@ -48,11 +48,15 @@ const navigationItems = [
     icon: User,
   },
   {
+    title: "约定模板",
+    url: createPageUrl("Templates"),
+    icon: StickyNote,
+  },
+  {
     title: "通知设置",
     url: createPageUrl("NotificationSettings"),
     icon: Bell,
   },
-
 ];
 
 function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
@@ -178,6 +182,37 @@ export default function Layout({ children }) {
   const location = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  
+  // Fetch user theme preferences
+  const [theme, setTheme] = useState({
+    primary: "#384877",
+    fontSize: "medium", 
+    darkMode: false
+  });
+
+  React.useEffect(() => {
+    const fetchTheme = async () => {
+        try {
+            const user = await base44.auth.me();
+            if (user?.theme_preferences) {
+                setTheme({
+                    primary: user.theme_preferences.primary_color || "#384877",
+                    fontSize: user.theme_preferences.font_size || "medium",
+                    darkMode: user.theme_preferences.dark_mode || false
+                });
+            }
+        } catch (e) {
+            console.error("Failed to load theme", e);
+        }
+    };
+    fetchTheme();
+    // Listen for theme changes event (dispatched from Account page)
+    const handleThemeChange = (e) => {
+        if (e.detail) setTheme(prev => ({ ...prev, ...e.detail }));
+    };
+    window.addEventListener('theme-change', handleThemeChange);
+    return () => window.removeEventListener('theme-change', handleThemeChange);
+  }, []);
 
   React.useEffect(() => {
     const down = (e) => {
@@ -193,60 +228,79 @@ export default function Layout({ children }) {
   return (
     <SidebarProvider>
       <style>{`
-          :root {
-            /* Main Primary Colors - Tech Blue */
-            --primary-main: 56 72 119;      /* #384877 */
-            --primary-enhance: 59 90 162;   /* #3b5aa2 */
+      :root {
+        /* Main Primary Colors - Tech Blue */
+        --primary-rgb: ${parseInt(theme.primary.slice(1, 3), 16)} ${parseInt(theme.primary.slice(3, 5), 16)} ${parseInt(theme.primary.slice(5, 7), 16)};
+        --primary-main: var(--primary-rgb);      
 
-            /* Secondary Colors - Vibrant Red/Rose */
-            --secondary-main: 213 73 95;    /* #d5495f */
-            --secondary-light: 222 109 126; /* #de6d7e */
-            --secondary-lighter: 224 145 158; /* #e0919e */
+        /* Font Size Scaling */
+        --base-font-size: ${theme.fontSize === 'small' ? '14px' : theme.fontSize === 'large' ? '18px' : '16px'};
+        --scale-factor: ${theme.fontSize === 'small' ? '0.875' : theme.fontSize === 'large' ? '1.125' : '1'};
 
-            /* Neutral/Background Colors */
-            --bg-white: 255 255 255;
-            --bg-grey-minimal: 249 250 251; /* #f9fafb */
-            --text-dark: 34 34 34;          /* #222222 */
+        /* Neutral/Background Colors */
+        --bg-white: ${theme.darkMode ? '30 41 59' : '255 255 255'};
+        --bg-grey-minimal: ${theme.darkMode ? '15 23 42' : '249 250 251'};
+        --text-dark: ${theme.darkMode ? '241 245 249' : '34 34 34'};
+        --text-muted: ${theme.darkMode ? '148 163 184' : '100 116 139'};
 
-            /* Legacy Variables Mapped to New System */
-            --color-primary: var(--primary-main);
-            --color-secondary: var(--text-dark);
-            --slate-50: var(--bg-grey-minimal);
-            --slate-900: var(--text-dark);
-          }
+        /* Legacy Variables Mapped to New System */
+        --color-primary: var(--primary-main);
+        --color-secondary: var(--text-dark);
+        --slate-50: var(--bg-grey-minimal);
+        --slate-900: var(--text-dark);
+      }
 
-          /* Global Overrides for Cinematic/Tech Feel */
-          body {
-            color: rgb(34, 34, 34);
-            background-color: rgb(249, 250, 251);
-          }
+      /* Global Overrides for Cinematic/Tech Feel */
+      body {
+        color: rgb(var(--text-dark));
+        background-color: rgb(var(--bg-grey-minimal));
+        font-size: var(--base-font-size);
+      }
 
-          /* Override Blue/Purple classes to use our new Primary Tech Blue */
-          .bg-blue-600, .bg-blue-500, .bg-purple-600 { background-color: rgb(56, 72, 119) !important; }
-          .text-blue-600, .text-blue-500, .text-purple-600 { color: rgb(56, 72, 119) !important; }
-          .border-blue-600, .border-purple-600 { border-color: rgb(56, 72, 119) !important; }
+      /* Dark mode specific overrides */
+      ${theme.darkMode ? `
+        .bg-white { background-color: rgb(30 41 59) !important; }
+        .bg-slate-50 { background-color: rgb(15 23 42) !important; }
+        .bg-slate-100 { background-color: rgb(30 41 59) !important; }
+        .text-slate-900 { color: rgb(241 245 249) !important; }
+        .text-slate-700 { color: rgb(226 232 240) !important; }
+        .text-slate-600 { color: rgb(203 213 225) !important; }
+        .text-slate-500 { color: rgb(148 163 184) !important; }
+        .border-slate-200 { border-color: rgb(51 65 85) !important; }
+        .border-slate-100 { border-color: rgb(30 41 59) !important; }
+        input, textarea, select { 
+            background-color: rgb(30 41 59) !important; 
+            color: rgb(241 245 249) !important;
+            border-color: rgb(51 65 85) !important;
+        }
+      ` : ''}
 
-          /* Hover states */
-          .hover\\:bg-blue-700:hover { background-color: rgb(44, 56, 95) !important; }
+      /* Override Blue/Purple classes to use our new Primary Tech Blue */
+      .bg-blue-600, .bg-blue-500, .bg-purple-600 { background-color: rgb(var(--primary-main)) !important; }
+      .text-blue-600, .text-blue-500, .text-purple-600 { color: rgb(var(--primary-main)) !important; }
+      .border-blue-600, .border-purple-600 { border-color: rgb(var(--primary-main)) !important; }
 
-          /* Gradients - Primary */
-          .bg-gradient-to-r.from-blue-500, 
-          .bg-gradient-to-r.from-blue-600,
-          .from-purple-500 { 
-            background-image: linear-gradient(135deg, rgb(56, 72, 119) 0%, rgb(59, 90, 162) 100%) !important; 
-          }
+      /* Hover states */
+      .hover\\:bg-blue-700:hover { background-color: rgba(var(--primary-main), 0.8) !important; }
 
-          .bg-gradient-to-br.from-blue-500 {
-            background-image: linear-gradient(135deg, rgb(56, 72, 119) 0%, rgb(59, 90, 162) 100%) !important;
-          }
+      /* Gradients - Primary */
+      .bg-gradient-to-r.from-blue-500, 
+      .bg-gradient-to-r.from-blue-600,
+      .from-purple-500 { 
+        background-image: linear-gradient(135deg, rgb(var(--primary-main)) 0%, rgba(var(--primary-main), 0.8) 100%) !important; 
+      }
 
-          /* Secondary Accents (Red) where needed specifically */
-          .text-red-500, .text-rose-500 { color: rgb(213, 73, 95) !important; }
+      .bg-gradient-to-br.from-blue-500 {
+        background-image: linear-gradient(135deg, rgb(var(--primary-main)) 0%, rgba(var(--primary-main), 0.8) 100%) !important;
+      }
 
-          /* Soft Backgrounds */
-          .bg-blue-50, .bg-purple-50 { background-color: rgba(56, 72, 119, 0.05) !important; }
-          .bg-blue-100 { background-color: rgba(56, 72, 119, 0.1) !important; }
-        `}</style>
+      /* Secondary Accents (Red) where needed specifically */
+      .text-red-500, .text-rose-500 { color: rgb(213, 73, 95) !important; }
+
+      /* Soft Backgrounds */
+      .bg-blue-50, .bg-purple-50 { background-color: rgba(var(--primary-main), 0.05) !important; }
+      .bg-blue-100 { background-color: rgba(var(--primary-main), 0.1) !important; }
+      `}</style>
         
         <AppSidebar setSearchOpen={setSearchOpen} setFeedbackOpen={setFeedbackOpen} />
 

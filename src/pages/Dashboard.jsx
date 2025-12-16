@@ -325,15 +325,18 @@ export default function Dashboard() {
         transition={{ delay: 0.1 }}
         className="grid grid-cols-1 md:grid-cols-3 gap-4"
       >
-        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
+            <ListTodo className="w-24 h-24 transform rotate-12 text-blue-600" />
+          </div>
           <CardHeader className="pb-2">
             <CardTitle className="text-slate-500 font-medium text-sm flex items-center justify-between">
               今日待办
-              <ListTodo className="w-4 h-4 text-blue-500" />
+              <div className="h-2 w-2 rounded-full bg-blue-500"></div>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold mb-1 text-slate-800">{todayTasks.length}</div>
+            <div className="text-4xl font-bold text-slate-800 mb-1 group-hover:text-blue-600 transition-colors">{todayTasks.length}</div>
             <div className="flex items-center gap-2 text-slate-500 text-sm">
               <Progress value={completionRate} className="h-1.5 bg-slate-100 flex-1" indicatorClassName="bg-blue-500" />
               <span>{completionRate}%</span>

@@ -73,7 +73,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
             <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
               心灵存放站
             </h2>
-            <p className="text-xs text-slate-500">智能提醒，贴心陪伴</p>
+            <p className="text-xs text-slate-500">坚定守护，适时轻唤</p>
           </div>
         </div>
       </SidebarHeader>

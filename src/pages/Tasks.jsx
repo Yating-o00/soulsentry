@@ -29,9 +29,8 @@ import { useTaskOperations } from "../components/hooks/useTaskOperations";
 
 export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [advancedFilters, setAdvancedFilters] = useState({ createdBy: 'all', tags: [], dateRange: undefined });
+  const [advancedFilters, setAdvancedFilters] = useState({ category: 'all', createdBy: 'all', tags: [], dateRange: undefined });
   
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);

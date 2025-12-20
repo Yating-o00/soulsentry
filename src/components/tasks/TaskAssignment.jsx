@@ -29,12 +29,42 @@ export default function TaskAssignment({ selectedUsers = [], onUpdate, onClose }
     );
   };
 
-  const handleSave = () => {
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
+  });
+
+  const handleSave = async () => {
+    // Determine new assignees to notify
+    const prevUsers = selectedUsers || [];
+    const newUsers = assignedUsers.filter(id => !prevUsers.includes(id) && id !== currentUser?.id);
+    
+    // Update task
     onUpdate({
       assigned_to: assignedUsers,
       is_shared: isShared,
       team_visibility: assignedUsers.length > 0 ? 'team' : 'private'
     });
+
+    // Send notifications to new assignees
+    if (newUsers.length > 0) {
+      try {
+        for (const userId of newUsers) {
+          await base44.entities.Notification.create({
+            recipient_id: userId,
+            type: "assignment",
+            title: "新约定分配",
+            content: `${currentUser?.full_name || "有人"} 分配了一个新约定给你`,
+            is_read: false,
+            link: "/Tasks", // Ideally deep link to task
+            sender_id: currentUser?.id
+          });
+        }
+      } catch (e) {
+        console.error("Failed to send notifications", e);
+      }
+    }
+
     onClose();
   };
 

@@ -48,8 +48,8 @@ const navigationItems = [
     icon: User,
   },
   {
-    title: "通知设置",
-    url: createPageUrl("NotificationSettings"),
+    title: "消息通知",
+    url: createPageUrl("Notifications"),
     icon: Bell,
   },
 ];

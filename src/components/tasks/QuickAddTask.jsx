@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import RecurrenceEditor from "./RecurrenceEditor";
+import CustomTimePicker from "./CustomTimePicker";
 import TaskAssignment from "./TaskAssignment";
 import SmartReminderSuggestion from "./SmartReminderSuggestion";
 import AITaskEnhancer from "./AITaskEnhancer";
@@ -62,6 +63,8 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   
   const [showAssignment, setShowAssignment] = useState(false);
   const [showSmartSuggestion, setShowSmartSuggestion] = useState(false);
+  const [isStartTimeOpen, setIsStartTimeOpen] = useState(false);
+  const [isEndTimeOpen, setIsEndTimeOpen] = useState(false);
   const [showAIEnhancer, setShowAIEnhancer] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isSuggestingTags, setIsSuggestingTags] = useState(false);
@@ -791,24 +794,32 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                                  </button>
                              </div>
                              <div className="flex items-center gap-1">
-                                 <input
-                                    type="time"
-                                    value={task.time}
-                                    onChange={(e) => {
-                                      const newTime = e.target.value;
-                                      const updates = { time: newTime };
-                                      if (task.reminder_time) {
-                                        const [h, m] = newTime.split(':');
-                                        const newDate = new Date(task.reminder_time);
-                                        newDate.setHours(parseInt(h), parseInt(m));
-                                        updates.reminder_time = newDate;
-                                      }
-                                      setTask({ ...task, ...updates });
-                                    }}
-                                    className="p-0 border-0 h-auto text-sm font-bold text-slate-700 bg-transparent focus:ring-0 w-[90px] cursor-pointer"
-                                    onClick={(e) => e.target.focus()}
-                                    onDoubleClick={(e) => e.target.blur()}
-                                 />
+                                 <Popover open={isStartTimeOpen} onOpenChange={setIsStartTimeOpen}>
+                                    <PopoverTrigger asChild>
+                                        <button 
+                                            type="button"
+                                            className="p-0 border-0 h-auto text-sm font-bold text-slate-700 bg-transparent focus:ring-0 w-[50px] cursor-pointer text-left hover:text-blue-600 transition-colors"
+                                        >
+                                            {task.time}
+                                        </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="p-0 w-auto" align="start">
+                                        <CustomTimePicker 
+                                            value={task.time}
+                                            onChange={(newTime) => {
+                                                const updates = { time: newTime };
+                                                if (task.reminder_time) {
+                                                    const [h, m] = newTime.split(':');
+                                                    const newDate = new Date(task.reminder_time);
+                                                    newDate.setHours(parseInt(h), parseInt(m));
+                                                    updates.reminder_time = newDate;
+                                                }
+                                                setTask({ ...task, ...updates });
+                                            }}
+                                            onClose={() => setIsStartTimeOpen(false)}
+                                        />
+                                    </PopoverContent>
+                                 </Popover>
                                  {task.has_end_time && (
                                      <>
                                          <span className="text-slate-300">-</span>

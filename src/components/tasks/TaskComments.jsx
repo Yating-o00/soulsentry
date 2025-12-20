@@ -11,7 +11,8 @@ import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { toast } from "sonner";
 
-export default function TaskComments({ taskId }) {
+export default function TaskComments({ task }) {
+  const taskId = task?.id;
   const [newComment, setNewComment] = useState("");
   const queryClient = useQueryClient();
 
@@ -35,10 +36,45 @@ export default function TaskComments({ taskId }) {
 
   const createCommentMutation = useMutation({
     mutationFn: (data) => base44.entities.Comment.create(data),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['comments', taskId] });
       setNewComment("");
       toast.success("评论已发布");
+
+      // Send notifications
+      if (task && currentUser) {
+        const recipients = new Set();
+        
+        // Notify assignees
+        if (task.assigned_to) {
+          task.assigned_to.forEach(uid => recipients.add(uid));
+        }
+
+        // Notify creator (need to find ID by email)
+        const creator = allUsers.find(u => u.email === task.created_by);
+        if (creator) recipients.add(creator.id);
+
+        // Remove current user
+        recipients.delete(currentUser.id);
+
+        // Send
+        for (const recipientId of recipients) {
+          try {
+            await base44.entities.Notification.create({
+              recipient_id: recipientId,
+              type: "comment",
+              title: "新评论",
+              content: `${currentUser.full_name} 评论了约定: ${task.title}`,
+              is_read: false,
+              link: "/Tasks", // Ideally deep link
+              sender_id: currentUser.id,
+              related_entity_id: task.id
+            });
+          } catch (e) {
+            console.error("Failed to send notification", e);
+          }
+        }
+      }
     },
   });
 

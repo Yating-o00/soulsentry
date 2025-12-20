@@ -793,7 +793,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
             {/* Comments Tab */}
             <TabsContent value="comments" className="space-y-4">
-              <TaskComments taskId={task.id} />
+              <TaskComments task={task} />
             </TabsContent>
 
             {/* History Tab */}

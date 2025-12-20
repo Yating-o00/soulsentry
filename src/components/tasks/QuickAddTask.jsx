@@ -807,6 +807,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                                     }}
                                     className="p-0 border-0 h-auto text-sm font-bold text-slate-700 bg-transparent focus:ring-0 w-[90px] cursor-pointer"
                                     onClick={(e) => e.target.focus()}
+                                    onDoubleClick={(e) => e.target.blur()}
                                  />
                                  {task.has_end_time && (
                                      <>
@@ -832,6 +833,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                                             }}
                                             className="p-0 border-0 h-auto text-sm font-bold text-slate-700 bg-transparent focus:ring-0 w-[90px] cursor-pointer"
                                     onClick={(e) => e.target.focus()}
+                                    onDoubleClick={(e) => e.target.blur()}
                                           />
                                      </>
                                  )}

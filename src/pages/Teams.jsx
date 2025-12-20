@@ -141,7 +141,7 @@ export default function Teams() {
       </motion.div>
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="border-0 shadow-md bg-gradient-to-br from-[#E8F4F8] to-[#D4E9F2] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -184,23 +184,7 @@ export default function Teams() {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-[16px]">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[15px] text-indigo-700 font-semibold mb-1">总体进度</p>
-                <p className="text-3xl font-bold text-indigo-900">
-                  {sharedTasks.length > 0 
-                    ? Math.round((sharedTasks.filter(t => t.status === 'completed').length / sharedTasks.length) * 100) 
-                    : 0}%
-                </p>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                <Filter className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
       </div>
 
       {/* 团队成员 */}

@@ -22,15 +22,15 @@ export default function CustomTimePicker({ value, onChange, onClose }) {
     }, []); // Run once on mount
 
     return (
-        <div className="flex h-64 w-48 bg-white text-slate-900">
-            <div ref={hoursRef} className="flex-1 overflow-y-auto scrollbar-hide p-1 border-r border-slate-100">
+        <div className="flex h-64 w-48 bg-white text-slate-900 overflow-hidden rounded-md">
+            <div ref={hoursRef} className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] border-r border-slate-100 snap-y snap-mandatory py-[calc(8rem-1rem)]">
                 {hoursList.map(h => (
                     <div
                         key={h}
                         data-value={h}
                         className={cn(
-                            "flex items-center justify-center h-8 w-full rounded-md text-sm cursor-pointer transition-colors mb-0.5",
-                            h === hours ? "bg-blue-600 text-white font-medium shadow-sm" : "text-slate-700 hover:bg-slate-100"
+                            "flex items-center justify-center h-8 w-full text-sm cursor-pointer transition-colors snap-center hover:bg-slate-50",
+                            h === hours ? "bg-blue-600 text-white font-medium shadow-sm rounded-md" : "text-slate-700"
                         )}
                         onClick={() => onChange(`${h}:${minutes}`)}
                         onDoubleClick={() => {
@@ -42,14 +42,14 @@ export default function CustomTimePicker({ value, onChange, onClose }) {
                     </div>
                 ))}
             </div>
-            <div ref={minutesRef} className="flex-1 overflow-y-auto scrollbar-hide p-1">
+            <div ref={minutesRef} className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-y snap-mandatory py-[calc(8rem-1rem)]">
                 {minutesList.map(m => (
                     <div
                         key={m}
                         data-value={m}
                         className={cn(
-                            "flex items-center justify-center h-8 w-full rounded-md text-sm cursor-pointer transition-colors mb-0.5",
-                            m === minutes ? "bg-blue-600 text-white font-medium shadow-sm" : "text-slate-700 hover:bg-slate-100"
+                            "flex items-center justify-center h-8 w-full text-sm cursor-pointer transition-colors snap-center hover:bg-slate-50",
+                            m === minutes ? "bg-blue-600 text-white font-medium shadow-sm rounded-md" : "text-slate-700"
                         )}
                         onClick={() => onChange(`${hours}:${m}`)}
                         onDoubleClick={() => {

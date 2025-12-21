@@ -7,184 +7,125 @@ export default function CustomTimePicker({ value, onChange, onClose }) {
     const minutesRef = useRef(null);
     const isScrolling = useRef(false);
     const scrollTimeout = useRef(null);
-    
-    // Drag state
-    const isDragging = useRef(false);
-    const startY = useRef(0);
-    const startScrollTop = useRef(0);
-    const lastY = useRef(0); // To check if it was a click or drag
 
     const hoursList = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
     const minutesList = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
     
-    const ITEM_HEIGHT = 32;
-    const PADDING_Y = 112; 
+    const ITEM_HEIGHT = 36; // Slightly larger for better touch target
+    const VISIBLE_ITEMS = 5; // Show 5 items
+    // Center is index 2 (0,1,2,3,4). PADDING = 2 * ITEM_HEIGHT
+    const PADDING_Y = ITEM_HEIGHT * 2; 
 
-    const scrollToValue = (container, val) => {
+    const scrollToValue = (container, val, smooth = false) => {
         const index = parseInt(val, 10);
-        if (container && !isScrolling.current && !isDragging.current) {
-            container.scrollTop = index * ITEM_HEIGHT;
+        if (container) {
+            container.scrollTo({
+                top: index * ITEM_HEIGHT,
+                behavior: smooth ? 'smooth' : 'auto'
+            });
         }
     };
 
+    // Initial scroll
     useEffect(() => {
-        if (hoursRef.current) scrollToValue(hoursRef.current, hours);
-        if (minutesRef.current) scrollToValue(minutesRef.current, minutes);
+        // Use timeout to ensure layout is ready
+        setTimeout(() => {
+            if (hoursRef.current) scrollToValue(hoursRef.current, hours);
+            if (minutesRef.current) scrollToValue(minutesRef.current, minutes);
+        }, 0);
     }, []);
 
-    const snapToPosition = (container, type) => {
-        const scrollTop = container.scrollTop;
-        const index = Math.round(scrollTop / ITEM_HEIGHT);
-        
-        const list = type === 'hours' ? hoursList : minutesList;
-        const safeIndex = Math.min(Math.max(0, index), list.length - 1);
-        const newValue = list[safeIndex];
-
-        container.scrollTo({
-            top: safeIndex * ITEM_HEIGHT,
-            behavior: 'smooth'
-        });
-
-        const currentValue = type === 'hours' ? hours : minutes;
-        if (newValue !== currentValue) {
-            if (type === 'hours') {
-                onChange(`${newValue}:${minutes}`);
-            } else {
-                onChange(`${hours}:${newValue}`);
-            }
-        }
-    };
-
     const handleScroll = (e, type) => {
-        if (isDragging.current) return;
-
-        isScrolling.current = true;
-        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-
         const container = e.target;
-        scrollTimeout.current = setTimeout(() => {
-            snapToPosition(container, type);
-            isScrolling.current = false;
-        }, 150);
-    };
+        if (!container) return;
 
-    const handleMouseDown = (e, ref) => {
-        isDragging.current = true;
-        isScrolling.current = true;
-        startY.current = e.clientY;
-        lastY.current = e.clientY;
-        startScrollTop.current = ref.current.scrollTop;
+        // Clear existing timeout
         if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+
+        // Set scrolling flag
+        isScrolling.current = true;
+
+        // Debounce value update
+        scrollTimeout.current = setTimeout(() => {
+            const scrollTop = container.scrollTop;
+            const index = Math.round(scrollTop / ITEM_HEIGHT);
+            
+            const list = type === 'hours' ? hoursList : minutesList;
+            const safeIndex = Math.min(Math.max(0, index), list.length - 1);
+            const newValue = list[safeIndex];
+
+            // Snap visually if needed (though CSS snap usually handles this, 
+            // explicit snap ensures perfect alignment after momentum scroll)
+            if (Math.abs(container.scrollTop - (safeIndex * ITEM_HEIGHT)) > 2) {
+                container.scrollTo({
+                    top: safeIndex * ITEM_HEIGHT,
+                    behavior: 'smooth'
+                });
+            }
+
+            const currentVal = type === 'hours' ? hours : minutes;
+            if (newValue !== currentVal) {
+                if (type === 'hours') onChange(`${newValue}:${minutes}`);
+                else onChange(`${hours}:${newValue}`);
+            }
+            
+            isScrolling.current = false;
+        }, 100);
     };
 
-    const handleMouseMove = (e, ref) => {
-        if (!isDragging.current) return;
-        e.preventDefault();
-        const deltaY = e.clientY - startY.current;
-        ref.current.scrollTop = startScrollTop.current - deltaY;
-        lastY.current = e.clientY;
-    };
-
-    const handleMouseUp = (e, ref, type) => {
-        if (!isDragging.current) return;
-        isDragging.current = false;
-        
-        const moveDist = Math.abs(e.clientY - startY.current);
-        if (moveDist < 5) {
-            // It was a click, let the onClick handler of items work?
-            // Or handle click logic here manually
-            // Actually events bubble, so item onClick triggers.
-        } else {
-            // It was a drag, snap
-            snapToPosition(ref.current, type);
-        }
-        
-        // Reset scrolling flag after a small delay to allow snap to finish
-        setTimeout(() => { isScrolling.current = false; }, 300);
-    };
-
-    const handleMouseLeave = (e, ref, type) => {
-        if (isDragging.current) {
-            isDragging.current = false;
-            snapToPosition(ref.current, type);
-            setTimeout(() => { isScrolling.current = false; }, 300);
-        }
-    };
-
-    // Helper to center item on click
     const handleItemClick = (val, type, ref) => {
-        // Only if not dragged
-        if (Math.abs(lastY.current - startY.current) > 5 && isScrolling.current) return;
-        
-        const index = parseInt(val, 10);
-        ref.current.scrollTo({
-            top: index * ITEM_HEIGHT,
-            behavior: 'smooth'
-        });
-        
+        scrollToValue(ref.current, val, true);
+        // Immediate update on click
         if (type === 'hours') onChange(`${val}:${minutes}`);
         else onChange(`${hours}:${val}`);
     };
 
     return (
-        <div className="flex h-64 w-48 bg-white text-slate-900 overflow-hidden rounded-xl shadow-2xl border border-slate-100 select-none">
-            {/* Hours Column */}
+        <div className="flex h-[180px] w-48 bg-white text-slate-900 overflow-hidden rounded-xl shadow-2xl border border-slate-100 select-none relative">
+            {/* Selection Highlight / Lens */}
+            <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-[36px] bg-[#384877]/5 pointer-events-none z-0 mx-2 rounded-lg" />
+            
+            {/* Hours */}
             <div 
-                ref={hoursRef} 
-                className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] border-r border-slate-100 snap-y snap-mandatory py-[112px] cursor-grab active:cursor-grabbing"
+                ref={hoursRef}
+                className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] border-r border-slate-100/50 snap-y snap-mandatory relative z-10"
+                style={{ paddingBlock: PADDING_Y }}
                 onScroll={(e) => handleScroll(e, 'hours')}
-                onMouseDown={(e) => handleMouseDown(e, hoursRef)}
-                onMouseMove={(e) => handleMouseMove(e, hoursRef)}
-                onMouseUp={(e) => handleMouseUp(e, hoursRef, 'hours')}
-                onMouseLeave={(e) => handleMouseLeave(e, hoursRef, 'hours')}
             >
                 {hoursList.map(h => (
                     <div
                         key={h}
                         className={cn(
-                            "flex items-center justify-center h-8 w-full text-sm font-medium transition-all snap-center",
+                            "flex items-center justify-center h-[36px] w-full text-sm font-medium transition-all snap-center cursor-pointer",
                             h === hours 
-                                ? "bg-[#384877] text-white scale-110 rounded-lg shadow-sm z-10 mx-1 w-[calc(100%-8px)]" 
+                                ? "text-[#384877] font-bold text-lg scale-110" 
                                 : "text-slate-400 hover:text-slate-600"
                         )}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleItemClick(h, 'hours', hoursRef);
-                        }}
+                        onClick={() => handleItemClick(h, 'hours', hoursRef)}
                     >
                         {h}
                     </div>
                 ))}
             </div>
 
-            {/* Minutes Column */}
+            {/* Minutes */}
             <div 
-                ref={minutesRef} 
-                className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-y snap-mandatory py-[112px] cursor-grab active:cursor-grabbing"
+                ref={minutesRef}
+                className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-y snap-mandatory relative z-10"
+                style={{ paddingBlock: PADDING_Y }}
                 onScroll={(e) => handleScroll(e, 'minutes')}
-                onMouseDown={(e) => handleMouseDown(e, minutesRef)}
-                onMouseMove={(e) => handleMouseMove(e, minutesRef)}
-                onMouseUp={(e) => handleMouseUp(e, minutesRef, 'minutes')}
-                onMouseLeave={(e) => handleMouseLeave(e, minutesRef, 'minutes')}
             >
                 {minutesList.map(m => (
                     <div
                         key={m}
                         className={cn(
-                            "flex items-center justify-center h-8 w-full text-sm font-medium transition-all snap-center",
+                            "flex items-center justify-center h-[36px] w-full text-sm font-medium transition-all snap-center cursor-pointer",
                             m === minutes 
-                                ? "bg-[#384877] text-white scale-110 rounded-lg shadow-sm z-10 mx-1 w-[calc(100%-8px)]" 
+                                ? "text-[#384877] font-bold text-lg scale-110" 
                                 : "text-slate-400 hover:text-slate-600"
                         )}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleItemClick(m, 'minutes', minutesRef);
-                        }}
-                        onDoubleClick={() => {
-                             if (Math.abs(lastY.current - startY.current) < 5) {
-                                onClose?.();
-                             }
-                        }}
+                        onClick={() => handleItemClick(m, 'minutes', minutesRef)}
+                        onDoubleClick={() => onClose?.()}
                     >
                         {m}
                     </div>

@@ -514,7 +514,7 @@ import React, { useState, useEffect, useRef } from "react";
        if (toolCall.name.includes("delete")) return <AlertCircle className="w-3 h-3" />;
        return <AlertCircle className="w-3 h-3" />;
      };
-   
+
      const getLabel = () => {
        const isTask = toolCall.name.includes("Task");
        const suffix = isTask ? "约定" : "数据";
@@ -525,14 +525,101 @@ import React, { useState, useEffect, useRef } from "react";
        if (toolCall.name.includes("delete")) return `删除${suffix}`;
        return "执行操作";
      };
-   
+
+     const renderResults = () => {
+       if (!toolCall.results) return null;
+       if (!toolCall.name.includes("Task")) return null;
+
+       try {
+         const data = typeof toolCall.results === 'string' ? JSON.parse(toolCall.results) : toolCall.results;
+         if (!data) return null;
+
+         // Handle array of tasks (list/filter)
+         if (Array.isArray(data)) {
+            if (data.length === 0) return <div className="text-[10px] text-slate-400 pl-1">未找到相关约定</div>;
+            return (
+              <div className="flex flex-col gap-2 mt-2 w-full">
+                {data.slice(0, 3).map(task => <MiniTaskCard key={task.id} task={task} />)}
+                {data.length > 3 && (
+                  <div className="text-[10px] text-center text-slate-400 bg-slate-50 py-1 rounded-lg">
+                    还有 {data.length - 3} 个约定...
+                  </div>
+                )}
+              </div>
+            );
+         }
+
+         // Handle single task (create/update/get)
+         if (typeof data === 'object' && data.id) {
+            return (
+              <div className="mt-2 w-full">
+                <MiniTaskCard task={data} isHighlight={toolCall.name.includes("create")} />
+              </div>
+            );
+         }
+       } catch (e) {
+         console.error("Failed to parse tool results", e);
+         return null;
+       }
+       return null;
+     };
+
      return (
-       <Badge
-         variant="outline"
-         className="text-[10px] bg-[#f9fafb] text-[#5a647d] border-[#dce4ed] gap-0.5 px-1.5 py-0.5"
-       >
-         {getIcon()}
-         {getLabel()}
-       </Badge>
+       <div className="flex flex-col items-start gap-1 w-full">
+           <Badge
+             variant="outline"
+             className="text-[10px] bg-[#f9fafb] text-[#5a647d] border-[#dce4ed] gap-0.5 px-1.5 py-0.5"
+           >
+             {getIcon()}
+             {getLabel()}
+           </Badge>
+           {renderResults()}
+       </div>
      );
+   }
+
+   function MiniTaskCard({ task, isHighlight }) {
+      const isCompleted = task.status === 'completed';
+      const priorityColor = {
+        low: "bg-slate-200",
+        medium: "bg-blue-200",
+        high: "bg-orange-200",
+        urgent: "bg-red-400"
+      }[task.priority] || "bg-slate-200";
+
+      return (
+        <div className={`
+           flex items-start gap-2 p-2.5 rounded-xl border w-full text-left transition-all
+           ${isHighlight ? 'bg-[#f0f9ff] border-blue-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-200'}
+           ${isCompleted ? 'opacity-60 grayscale-[0.5]' : ''}
+        `}>
+            {/* Status Indicator */}
+            <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${isCompleted ? 'bg-green-400' : priorityColor}`} />
+
+            <div className="flex-1 min-w-0">
+               <div className="flex items-center justify-between gap-2">
+                  <h4 className={`text-xs font-medium truncate ${isCompleted ? 'line-through text-slate-500' : 'text-slate-700'}`}>
+                    {task.title}
+                  </h4>
+                  {task.priority === 'urgent' && !isCompleted && (
+                    <span className="text-[9px] px-1 py-0.5 bg-red-50 text-red-500 rounded flex-shrink-0">紧急</span>
+                  )}
+               </div>
+
+               <div className="flex items-center gap-2 mt-1">
+                  {task.reminder_time && (
+                    <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                       <Clock className="w-2.5 h-2.5" />
+                       <span>{format(new Date(task.reminder_time), "MM-dd HH:mm", { locale: zhCN })}</span>
+                    </div>
+                  )}
+                  {task.category && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-50 text-slate-500 rounded border border-slate-100">
+                      {task.category}
+                    </span>
+                  )}
+               </div>
+            </div>
+        </div>
+      );
    }

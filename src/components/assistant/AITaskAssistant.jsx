@@ -528,10 +528,21 @@ import React, { useState, useEffect, useRef } from "react";
 
      const renderResults = () => {
        if (!toolCall.results) return null;
+       // Only render tasks for now
        if (!toolCall.name.includes("Task")) return null;
 
        try {
-         const data = typeof toolCall.results === 'string' ? JSON.parse(toolCall.results) : toolCall.results;
+         // Handle potential stringified JSON
+         let data = toolCall.results;
+         if (typeof data === 'string') {
+            try {
+               data = JSON.parse(data);
+            } catch (e) {
+               // If parsing fails, it might be a plain string message or error
+               return null; 
+            }
+         }
+
          if (!data) return null;
 
          // Handle array of tasks (list/filter)

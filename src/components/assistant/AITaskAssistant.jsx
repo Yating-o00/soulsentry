@@ -40,6 +40,8 @@ import React, { useState, useEffect, useRef } from "react";
      const [isSpeaking, setIsSpeaking] = useState(false);
      const [isLoading, setIsLoading] = useState(false);
      const [voiceEnabled, setVoiceEnabled] = useState(false);
+     const [showSummary, setShowSummary] = useState(false);
+     const [discussedTasks, setDiscussedTasks] = useState([]);
      const messagesEndRef = useRef(null);
      const recognitionRef = useRef(null);
      const synthRef = useRef(null);
@@ -105,6 +107,34 @@ import React, { useState, useEffect, useRef } from "react";
        const unsubscribe = base44.agents.subscribeToConversation(conversationId, (data) => {
          const newMessages = data.messages || [];
          setMessages(newMessages);
+
+         // Track discussed tasks for summary
+         const tasksInConversation = [];
+         newMessages.forEach(msg => {
+             if (msg.role === 'assistant' && msg.tool_calls) {
+                 msg.tool_calls.forEach(tc => {
+                     if (tc.name.includes('Task') && tc.results) {
+                         try {
+                             let taskData = typeof tc.results === 'string' ? JSON.parse(tc.results) : tc.results;
+                             if (Array.isArray(taskData)) {
+                                 taskData.forEach(task => {
+                                     if (task.id && !tasksInConversation.find(t => t.id === task.id)) {
+                                         tasksInConversation.push(task);
+                                     }
+                                 });
+                             } else if (taskData && taskData.id) {
+                                 if (!tasksInConversation.find(t => t.id === taskData.id)) {
+                                     tasksInConversation.push(taskData);
+                                 }
+                             }
+                         } catch (e) {
+                             console.error('Failed to parse task data', e);
+                         }
+                     }
+                 });
+             }
+         });
+         setDiscussedTasks(tasksInConversation);
 
          // Check for completed tool calls to invalidate queries
          newMessages.forEach(msg => {
@@ -289,6 +319,20 @@ import React, { useState, useEffect, useRef } from "react";
                  </div>
                </div>
                <div className="flex items-center gap-1">
+                 {discussedTasks.length > 0 && (
+                   <Button
+                     size="icon"
+                     variant="ghost"
+                     onClick={() => setShowSummary(!showSummary)}
+                     className="h-7 w-7 text-white hover:bg-white/20 relative"
+                     title="对话摘要"
+                   >
+                     <BarChart3 className="w-3.5 h-3.5" />
+                     <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-yellow-400 text-[8px] font-bold text-slate-800 rounded-full flex items-center justify-center">
+                       {discussedTasks.length}
+                     </span>
+                   </Button>
+                 )}
                  <Button
                    size="icon"
                    variant="ghost"
@@ -309,6 +353,13 @@ import React, { useState, useEffect, useRef } from "react";
              </div>
            </div>
    
+           {/* 对话摘要 */}
+           <AnimatePresence>
+             {showSummary && discussedTasks.length > 0 && (
+               <ConversationSummary tasks={discussedTasks} onClose={() => setShowSummary(false)} />
+             )}
+           </AnimatePresence>
+
            {/* 消息区域 - 缩小版 */}
            <div className="h-64 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-[#f9fafb] to-white">
              {messages.length === 0 && isLoading && (
@@ -693,6 +744,129 @@ import React, { useState, useEffect, useRef } from "react";
            )}
          </div>
        </div>
+     );
+   }
+
+   function ConversationSummary({ tasks, onClose }) {
+     const pending = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length;
+     const completed = tasks.filter(t => t.status === 'completed').length;
+     const urgent = tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length;
+
+     const priorityLabels = {
+       low: "低",
+       medium: "中", 
+       high: "高",
+       urgent: "紧急"
+     };
+
+     const statusLabels = {
+       pending: "待办",
+       in_progress: "进行中",
+       completed: "已完成",
+       cancelled: "已取消",
+       snoozed: "已推迟",
+       blocked: "阻塞中"
+     };
+
+     return (
+       <motion.div
+         initial={{ opacity: 0, y: -20 }}
+         animate={{ opacity: 1, y: 0 }}
+         exit={{ opacity: 0, y: -20 }}
+         className="border-b border-slate-200 bg-gradient-to-br from-amber-50 via-white to-blue-50 p-3 shadow-sm"
+       >
+         <div className="flex items-center justify-between mb-2">
+           <div className="flex items-center gap-2">
+             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
+               <BarChart3 className="w-4 h-4 text-white" />
+             </div>
+             <div>
+               <h3 className="text-xs font-bold text-slate-800">本次对话摘要</h3>
+               <p className="text-[10px] text-slate-500">共讨论 {tasks.length} 个约定</p>
+             </div>
+           </div>
+           <Button
+             size="icon"
+             variant="ghost"
+             onClick={onClose}
+             className="h-6 w-6 hover:bg-slate-100 rounded-lg"
+           >
+             <span className="text-xs">✕</span>
+           </Button>
+         </div>
+
+         {/* Stats */}
+         <div className="flex gap-2 mb-3">
+           <div className="flex-1 bg-white rounded-lg p-2 border border-blue-100 text-center">
+             <div className="text-[10px] text-slate-500 mb-0.5">待办</div>
+             <div className="text-sm font-bold text-[#384877]">{pending}</div>
+           </div>
+           <div className="flex-1 bg-white rounded-lg p-2 border border-green-100 text-center">
+             <div className="text-[10px] text-green-600 mb-0.5">完成</div>
+             <div className="text-sm font-bold text-green-600">{completed}</div>
+           </div>
+           {urgent > 0 && (
+             <div className="flex-1 bg-red-50 rounded-lg p-2 border border-red-200 text-center">
+               <div className="text-[10px] text-red-600 mb-0.5">紧急</div>
+               <div className="text-sm font-bold text-red-600">{urgent}</div>
+             </div>
+           )}
+         </div>
+
+         {/* Task List */}
+         <div className="space-y-2 max-h-48 overflow-y-auto">
+           {tasks.map((task, index) => {
+             const isPast = (() => {
+               const checkDate = task.end_time ? new Date(task.end_time) : new Date(task.reminder_time);
+               return checkDate < new Date() && task.status !== 'completed';
+             })();
+
+             return (
+               <motion.div
+                 key={task.id}
+                 initial={{ opacity: 0, x: -10 }}
+                 animate={{ opacity: 1, x: 0 }}
+                 transition={{ delay: index * 0.05 }}
+                 className="bg-white rounded-lg p-2 border border-slate-200 hover:border-slate-300 transition-all"
+               >
+                 <div className="flex items-start gap-2">
+                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 text-[10px] font-bold text-slate-600 flex items-center justify-center">
+                     {index + 1}
+                   </span>
+                   <div className="flex-1 min-w-0">
+                     <h4 className={`text-xs font-semibold mb-1 ${task.status === 'completed' ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                       {task.title}
+                     </h4>
+                     <div className="flex flex-wrap gap-1.5 text-[10px]">
+                       {task.reminder_time && (
+                         <span className={`px-1.5 py-0.5 rounded ${isPast ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>
+                           <Clock className="w-2.5 h-2.5 inline mr-0.5" />
+                           {format(new Date(task.reminder_time), "MM-dd HH:mm", { locale: zhCN })}
+                         </span>
+                       )}
+                       <span className={`px-1.5 py-0.5 rounded font-medium ${
+                         task.priority === 'urgent' ? 'bg-red-100 text-red-600' :
+                         task.priority === 'high' ? 'bg-orange-100 text-orange-600' :
+                         task.priority === 'medium' ? 'bg-blue-100 text-blue-600' :
+                         'bg-slate-100 text-slate-600'
+                       }`}>
+                         优先级：{priorityLabels[task.priority] || task.priority}
+                       </span>
+                       <span className={`px-1.5 py-0.5 rounded font-medium ${
+                         task.status === 'completed' ? 'bg-green-100 text-green-600' :
+                         task.status === 'in_progress' ? 'bg-blue-100 text-blue-600' :
+                         'bg-slate-100 text-slate-600'
+                       }`}>
+                         {statusLabels[task.status] || task.status}
+                       </span>
+                     </div>
+                   </div>
+                 </div>
+               </motion.div>
+             );
+           })}
+         </div>
+       </motion.div>
      );
    }
 

@@ -18,7 +18,13 @@ import React, { useState, useEffect, useRef } from "react";
      CheckCircle2,
      AlertCircle,
      Calendar,
-     Clock
+     Clock,
+     ChevronRight,
+     Target,
+     TrendingUp,
+     BarChart3,
+     Circle,
+     Zap
    } from "lucide-react";
    import { motion, AnimatePresence } from "framer-motion";
    import { toast } from "sonner";
@@ -547,15 +553,42 @@ import React, { useState, useEffect, useRef } from "react";
 
          // Handle array of tasks (list/filter)
          if (Array.isArray(data)) {
-            if (data.length === 0) return <div className="text-[10px] text-slate-400 pl-1">未找到相关约定</div>;
+            if (data.length === 0) {
+              return (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="text-[10px] text-slate-400 bg-slate-50 py-2 px-3 rounded-lg mt-2 text-center border border-slate-100"
+                >
+                  未找到相关约定
+                </motion.div>
+              );
+            }
+
             return (
-              <div className="flex flex-col gap-2 mt-2 w-full">
-                {data.slice(0, 3).map(task => <MiniTaskCard key={task.id} task={task} />)}
-                {data.length > 3 && (
-                  <div className="text-[10px] text-center text-slate-400 bg-slate-50 py-1 rounded-lg">
-                    还有 {data.length - 3} 个约定...
-                  </div>
-                )}
+              <div className="mt-2 w-full">
+                <TaskListSummary tasks={data} />
+                <div className="flex flex-col gap-2 mt-2">
+                  {data.slice(0, 4).map((task, idx) => (
+                    <motion.div
+                      key={task.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                    >
+                      <MiniTaskCard task={task} />
+                    </motion.div>
+                  ))}
+                  {data.length > 4 && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-[10px] text-center text-slate-500 bg-gradient-to-r from-slate-50 via-white to-slate-50 py-1.5 rounded-lg border border-dashed border-slate-200"
+                    >
+                      还有 {data.length - 4} 个约定...
+                    </motion.div>
+                  )}
+                </div>
               </div>
             );
          }
@@ -563,9 +596,13 @@ import React, { useState, useEffect, useRef } from "react";
          // Handle single task (create/update/get)
          if (typeof data === 'object' && data.id) {
             return (
-              <div className="mt-2 w-full">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mt-2 w-full"
+              >
                 <MiniTaskCard task={data} isHighlight={toolCall.name.includes("create")} />
-              </div>
+              </motion.div>
             );
          }
        } catch (e) {
@@ -589,48 +626,201 @@ import React, { useState, useEffect, useRef } from "react";
      );
    }
 
+   function TaskListSummary({ tasks }) {
+     const completed = tasks.filter(t => t.status === 'completed').length;
+     const pending = tasks.filter(t => t.status === 'pending').length;
+     const overdue = tasks.filter(t => {
+       const checkDate = t.end_time ? new Date(t.end_time) : new Date(t.reminder_time);
+       return checkDate < new Date() && t.status !== 'completed';
+     }).length;
+     const urgent = tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length;
+
+     const completionRate = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+
+     return (
+       <div className="bg-gradient-to-br from-[#f8fafc] to-[#f1f5f9] border border-slate-200/60 rounded-xl p-2.5 space-y-2">
+         <div className="flex items-center justify-between">
+           <div className="flex items-center gap-1.5">
+             <BarChart3 className="w-3.5 h-3.5 text-[#384877]" />
+             <span className="text-[11px] font-semibold text-slate-700">约定概览</span>
+           </div>
+           <span className="text-[10px] text-slate-500">共 {tasks.length} 项</span>
+         </div>
+
+         {/* Progress Bar */}
+         <div className="space-y-1">
+           <div className="flex justify-between text-[10px]">
+             <span className="text-slate-600">完成率</span>
+             <span className={`font-semibold ${completionRate >= 70 ? 'text-green-600' : completionRate >= 40 ? 'text-amber-600' : 'text-red-600'}`}>
+               {completionRate}%
+             </span>
+           </div>
+           <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+             <motion.div 
+               initial={{ width: 0 }}
+               animate={{ width: `${completionRate}%` }}
+               transition={{ duration: 0.8, ease: "easeOut" }}
+               className={`h-full rounded-full ${
+                 completionRate >= 70 ? 'bg-gradient-to-r from-green-400 to-green-500' :
+                 completionRate >= 40 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                 'bg-gradient-to-r from-red-400 to-red-500'
+               }`}
+             />
+           </div>
+         </div>
+
+         {/* Stats Grid */}
+         <div className="grid grid-cols-4 gap-1.5">
+           <div className="bg-white rounded-lg p-1.5 border border-slate-100 text-center">
+             <div className="text-[10px] text-slate-500 mb-0.5">待办</div>
+             <div className="text-sm font-bold text-[#384877]">{pending}</div>
+           </div>
+           <div className="bg-white rounded-lg p-1.5 border border-green-100 text-center">
+             <div className="text-[10px] text-green-600 mb-0.5">完成</div>
+             <div className="text-sm font-bold text-green-600">{completed}</div>
+           </div>
+           {overdue > 0 && (
+             <div className="bg-red-50 rounded-lg p-1.5 border border-red-200 text-center">
+               <div className="text-[10px] text-red-600 mb-0.5">过期</div>
+               <div className="text-sm font-bold text-red-600">{overdue}</div>
+             </div>
+           )}
+           {urgent > 0 && (
+             <div className="bg-orange-50 rounded-lg p-1.5 border border-orange-200 text-center">
+               <div className="text-[10px] text-orange-600 mb-0.5">紧急</div>
+               <div className="text-sm font-bold text-orange-600">{urgent}</div>
+             </div>
+           )}
+         </div>
+       </div>
+     );
+   }
+
    function MiniTaskCard({ task, isHighlight }) {
       const isCompleted = task.status === 'completed';
-      const priorityColor = {
-        low: "bg-slate-200",
-        medium: "bg-blue-200",
-        high: "bg-orange-200",
-        urgent: "bg-red-400"
-      }[task.priority] || "bg-slate-200";
+      const isPast = (() => {
+        const checkDate = task.end_time ? new Date(task.end_time) : new Date(task.reminder_time);
+        return checkDate < new Date() && !isCompleted;
+      })();
+
+      const priorityConfig = {
+        low: { bg: "bg-slate-100", text: "text-slate-600", border: "border-slate-200", dot: "bg-slate-400" },
+        medium: { bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-200", dot: "bg-blue-400" },
+        high: { bg: "bg-orange-50", text: "text-orange-600", border: "border-orange-200", dot: "bg-orange-400" },
+        urgent: { bg: "bg-red-50", text: "text-red-600", border: "border-red-300", dot: "bg-red-500" }
+      }[task.priority] || { bg: "bg-slate-100", text: "text-slate-600", border: "border-slate-200", dot: "bg-slate-400" };
+
+      const categoryIcons = {
+        work: "💼",
+        personal: "👤",
+        health: "❤️",
+        study: "📚",
+        family: "👨‍👩‍👧",
+        shopping: "🛒",
+        finance: "💰",
+        other: "📌"
+      };
 
       return (
         <div className={`
-           flex items-start gap-2 p-2.5 rounded-xl border w-full text-left transition-all
-           ${isHighlight ? 'bg-[#f0f9ff] border-blue-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-200'}
-           ${isCompleted ? 'opacity-60 grayscale-[0.5]' : ''}
+           group relative overflow-hidden rounded-xl border transition-all duration-200
+           ${isHighlight ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300 shadow-md ring-2 ring-blue-200/50' : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'}
+           ${isCompleted ? 'opacity-70' : ''}
+           ${isPast ? 'border-l-4 border-l-red-500' : ''}
         `}>
-            {/* Status Indicator */}
-            <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${isCompleted ? 'bg-green-400' : priorityColor}`} />
+            {/* Highlight indicator for new tasks */}
+            {isHighlight && (
+              <div className="absolute top-0 right-0">
+                <div className="bg-gradient-to-bl from-blue-500 to-transparent w-12 h-12 opacity-20" />
+                <Sparkles className="absolute top-1 right-1 w-3 h-3 text-blue-500" />
+              </div>
+            )}
 
-            <div className="flex-1 min-w-0">
-               <div className="flex items-center justify-between gap-2">
-                  <h4 className={`text-xs font-medium truncate ${isCompleted ? 'line-through text-slate-500' : 'text-slate-700'}`}>
-                    {task.title}
-                  </h4>
-                  {task.priority === 'urgent' && !isCompleted && (
-                    <span className="text-[9px] px-1 py-0.5 bg-red-50 text-red-500 rounded flex-shrink-0">紧急</span>
-                  )}
+            <div className="flex items-start gap-2.5 p-2.5">
+               {/* Visual Status Indicator */}
+               <div className="relative flex-shrink-0 mt-0.5">
+                 {isCompleted ? (
+                   <div className="w-5 h-5 rounded-full bg-gradient-to-br from-green-400 to-green-500 flex items-center justify-center shadow-sm">
+                     <CheckCircle2 className="w-3 h-3 text-white" />
+                   </div>
+                 ) : (
+                   <div className={`w-5 h-5 rounded-full ${priorityConfig.bg} ${priorityConfig.border} border-2 flex items-center justify-center`}>
+                     <div className={`w-2 h-2 rounded-full ${priorityConfig.dot}`} />
+                   </div>
+                 )}
+                 {task.priority === 'urgent' && !isCompleted && (
+                   <motion.div
+                     animate={{ scale: [1, 1.2, 1] }}
+                     transition={{ duration: 1.5, repeat: Infinity }}
+                     className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full"
+                   />
+                 )}
                </div>
 
-               <div className="flex items-center gap-2 mt-1">
-                  {task.reminder_time && (
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                       <Clock className="w-2.5 h-2.5" />
-                       <span>{format(new Date(task.reminder_time), "MM-dd HH:mm", { locale: zhCN })}</span>
-                    </div>
+               <div className="flex-1 min-w-0">
+                  {/* Title & Priority Badge */}
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                     <h4 className={`text-xs font-semibold leading-snug ${isCompleted ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                       {task.title}
+                     </h4>
+                     {!isCompleted && (
+                       <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-medium flex-shrink-0 ${priorityConfig.bg} ${priorityConfig.text} ${priorityConfig.border} border`}>
+                         {task.priority === 'urgent' ? '🔥 紧急' : task.priority === 'high' ? '⚡ 高' : task.priority === 'medium' ? '📌 中' : '📋 低'}
+                       </span>
+                     )}
+                  </div>
+
+                  {/* Description snippet if available */}
+                  {task.description && (
+                    <p className="text-[10px] text-slate-500 mb-1.5 line-clamp-1">{task.description}</p>
                   )}
-                  {task.category && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-50 text-slate-500 rounded border border-slate-100">
-                      {task.category}
-                    </span>
+
+                  {/* Time & Category */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                     {task.reminder_time && (
+                       <div className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${isPast ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>
+                          <Clock className="w-2.5 h-2.5" />
+                          <span className="font-medium">{format(new Date(task.reminder_time), "MM-dd HH:mm", { locale: zhCN })}</span>
+                       </div>
+                     )}
+                     {task.category && (
+                       <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 rounded border border-slate-200">
+                         <span>{categoryIcons[task.category] || '📌'}</span>
+                         <span className="font-medium">{task.category}</span>
+                       </div>
+                     )}
+                     {isCompleted && task.completed_at && (
+                       <div className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
+                         <CheckCircle2 className="w-2.5 h-2.5" />
+                         <span>{format(new Date(task.completed_at), "MM-dd 完成", { locale: zhCN })}</span>
+                       </div>
+                     )}
+                  </div>
+
+                  {/* Progress bar for tasks with subtasks */}
+                  {task.progress !== undefined && task.progress > 0 && (
+                    <div className="mt-2 space-y-0.5">
+                      <div className="flex justify-between text-[9px] text-slate-500">
+                        <span>进度</span>
+                        <span className="font-semibold">{task.progress}%</span>
+                      </div>
+                      <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full transition-all duration-500"
+                          style={{ width: `${task.progress}%` }}
+                        />
+                      </div>
+                    </div>
                   )}
                </div>
             </div>
+
+            {/* Hover indicator */}
+            {!isHighlight && (
+              <div className="absolute bottom-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ChevronRight className="w-3 h-3 text-slate-400 mr-1 mb-1" />
+              </div>
+            )}
         </div>
       );
    }

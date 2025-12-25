@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles } from "lucide-react";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
-import QuickAddTask from "../components/tasks/QuickAddTask"; // Added import
+import NoteFilters from "../components/notes/NoteFilters";
+import QuickAddTask from "../components/tasks/QuickAddTask";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -22,8 +23,9 @@ export default function Notes() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
-  const [taskCreationNote, setTaskCreationNote] = useState(null); // State for task creation
-  const [viewMode, setViewMode] = useState("grid"); // grid | list
+  const [taskCreationNote, setTaskCreationNote] = useState(null);
+  const [filters, setFilters] = useState({});
+  const [viewMode, setViewMode] = useState("grid");
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
 
@@ -106,16 +108,64 @@ export default function Notes() {
     }
   });
 
-  // Filter and Sort
+  // Get all unique tags
+  const allTags = useMemo(() => {
+    const tagSet = new Set();
+    notes.forEach(note => {
+      if (note.tags && Array.isArray(note.tags)) {
+        note.tags.forEach(tag => tagSet.add(tag));
+      }
+    });
+    return Array.from(tagSet).sort();
+  }, [notes]);
+
+  // Enhanced Filter and Sort
   const filteredNotes = useMemo(() => {
     let result = notes.filter((note) => !note.deleted_at);
 
+    // Full-text search (content + tags)
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
       result = result.filter((note) =>
-      note.plain_text && note.plain_text.toLowerCase().includes(lowerQuery) ||
-      note.tags && note.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
+        (note.plain_text && note.plain_text.toLowerCase().includes(lowerQuery)) ||
+        (note.content && note.content.toLowerCase().includes(lowerQuery)) ||
+        (note.tags && note.tags.some((tag) => tag.toLowerCase().includes(lowerQuery)))
       );
+    }
+
+    // Color filter
+    if (filters.colors && filters.colors.length > 0) {
+      result = result.filter((note) => filters.colors.includes(note.color || 'white'));
+    }
+
+    // Tag filter
+    if (filters.tags && filters.tags.length > 0) {
+      result = result.filter((note) => 
+        note.tags && filters.tags.some(filterTag => note.tags.includes(filterTag))
+      );
+    }
+
+    // Pinned filter
+    if (filters.pinnedOnly === true) {
+      result = result.filter((note) => note.is_pinned === true);
+    }
+
+    // Date range filter
+    if (filters.dateRange?.from) {
+      const fromDate = new Date(filters.dateRange.from);
+      fromDate.setHours(0, 0, 0, 0);
+      
+      result = result.filter((note) => {
+        const noteDate = new Date(note.created_date);
+        noteDate.setHours(0, 0, 0, 0);
+        
+        if (filters.dateRange.to) {
+          const toDate = new Date(filters.dateRange.to);
+          toDate.setHours(23, 59, 59, 999);
+          return noteDate >= fromDate && noteDate <= toDate;
+        }
+        return noteDate >= fromDate;
+      });
     }
 
     // Sort: Pinned first, then by date
@@ -124,7 +174,7 @@ export default function Notes() {
       if (!a.is_pinned && b.is_pinned) return 1;
       return new Date(b.created_date) - new Date(a.created_date);
     });
-  }, [notes, searchQuery]);
+  }, [notes, searchQuery, filters]);
 
   const handlePin = (note) => {
     updateNoteMutation.mutate({
@@ -153,17 +203,41 @@ export default function Notes() {
           <p className="text-slate-600">让想法的碎片尽情落下</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative w-full md:w-64">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="搜索标签或内容..."
-              className="pl-9 bg-white border-slate-200 rounded-xl"
+              placeholder="🔍 搜索内容、标签..."
+              className="pl-9 bg-white border-slate-200 rounded-xl focus:ring-2 focus:ring-[#384877]/20"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)} />
-
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <span className="text-sm">✕</span>
+              </button>
+            )}
           </div>
-          {/* View Toggle (Optional, simpler to just stick to masonry-ish grid) */}
+        </div>
+      </motion.div>
+
+      {/* Filters */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.15 }}
+        className="flex items-center justify-between gap-3"
+      >
+        <NoteFilters 
+          filters={filters} 
+          onFiltersChange={setFilters}
+          allTags={allTags}
+        />
+        <div className="text-sm text-slate-500">
+          共 <span className="font-semibold text-[#384877]">{filteredNotes.length}</span> 条心签
         </div>
       </motion.div>
 

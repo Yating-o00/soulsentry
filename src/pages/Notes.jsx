@@ -10,6 +10,8 @@ import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIc
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
+import NoteShareDialog from "../components/notes/NoteShareDialog";
+import NoteComments from "../components/notes/NoteComments";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import { toast } from "sonner";
 import {
@@ -24,6 +26,7 @@ export default function Notes() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [taskCreationNote, setTaskCreationNote] = useState(null);
+  const [sharingNote, setSharingNote] = useState(null);
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
   const queryClient = useQueryClient();
@@ -308,6 +311,7 @@ export default function Notes() {
             onEdit={setEditingNote}
             onDelete={(n) => deleteNoteMutation.mutate(n.id)}
             onPin={handlePin}
+            onShare={setSharingNote}
             onConvertToTask={(n) => setTaskCreationNote(n)} />
 
           )}
@@ -331,19 +335,33 @@ export default function Notes() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingNote} onOpenChange={(open) => !open && setEditingNote(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>编辑心签</DialogTitle>
           </DialogHeader>
-          {editingNote &&
-          <NoteEditor
-            initialData={editingNote}
-            onSave={(data) => updateNoteMutation.mutate({ id: editingNote.id, data })}
-            onClose={() => setEditingNote(null)} />
-
-          }
+          {editingNote && (
+            <div className="space-y-6">
+              <NoteEditor
+                initialData={editingNote}
+                onSave={(data) => updateNoteMutation.mutate({ id: editingNote.id, data })}
+                onClose={() => setEditingNote(null)}
+              />
+              
+              {/* Comments Section */}
+              <div className="pt-6 border-t border-slate-200">
+                <NoteComments noteId={editingNote.id} />
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
+
+      {/* Share Dialog */}
+      <NoteShareDialog
+        note={sharingNote}
+        open={!!sharingNote}
+        onOpenChange={(open) => !open && setSharingNote(null)}
+      />
 
       {/* Create Task Dialog */}
       <Dialog open={!!taskCreationNote} onOpenChange={(open) => !open && setTaskCreationNote(null)}>

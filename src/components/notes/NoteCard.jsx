@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles } from "lucide-react";
+import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import {
@@ -25,7 +25,7 @@ const COLORS = {
   pink: "bg-pink-50 hover:border-pink-300",
 };
 
-export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask }) {
+export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare }) {
   const colorClass = COLORS[note.color] || COLORS.white;
 
   const handleCopy = () => {
@@ -97,10 +97,10 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
             </div>
           )}
 
-          {/* Tags */}
-          {note.tags && note.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {note.tags.map(tag => (
+          {/* Tags & Status */}
+          {((note.tags && note.tags.length > 0) || note.is_shared) && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              {note.tags?.map(tag => (
                 <Badge 
                   key={tag} 
                   variant="secondary" 
@@ -109,6 +109,12 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
                   #{tag}
                 </Badge>
               ))}
+              {note.is_shared && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 text-blue-600">
+                  <Users className="w-2.5 h-2.5 mr-0.5" />
+                  已协作
+                </Badge>
+              )}
             </div>
           )}
 
@@ -154,6 +160,12 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
                     <ListTodo className="w-4 h-4 mr-2" />
                     转为任务
                   </DropdownMenuItem>
+                  {onShare && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare(note); }}>
+                      <Share2 className="w-4 h-4 mr-2" />
+                      分享协作
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem 
                     onClick={(e) => { e.stopPropagation(); onDelete(note); }}
                     className="text-red-600 focus:text-red-700 focus:bg-red-50"

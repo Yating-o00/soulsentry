@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles } from "lucide-react";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import QuickAddTask from "../components/tasks/QuickAddTask"; // Added import
@@ -25,6 +25,23 @@ export default function Notes() {
   const [viewMode, setViewMode] = useState("grid"); // grid | list
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+
+  // Keyboard shortcut: Ctrl+N to quick create
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        setIsCreating(true);
+        // Auto-focus on editor after a short delay
+        setTimeout(() => {
+          const quillEditor = document.querySelector('.ql-editor');
+          if (quillEditor) quillEditor.focus();
+        }, 100);
+      }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
 
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ['notes'],
@@ -149,26 +166,58 @@ export default function Notes() {
         </div>
       </motion.div>
 
-      {/* Create Area */}
+      {/* Quick Create Area - Always Visible */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}>
+        transition={{ delay: 0.1 }}
+        className="sticky top-0 z-10 bg-gradient-to-b from-white via-white to-transparent pb-4"
+      >
+        {!isCreating ? (
+          <div
+            onClick={() => setIsCreating(true)}
+            className="group relative overflow-hidden bg-gradient-to-br from-white to-slate-50 border-2 border-dashed border-slate-200 hover:border-[#384877] rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-[#384877]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            
+            <div className="relative flex items-center gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20 group-hover:scale-110 transition-transform duration-300">
+                <Plus className="w-6 h-6 text-white" />
+              </div>
+              
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-800 group-hover:text-[#384877] transition-colors mb-1">
+                  快速记录心签
+                </h3>
+                <p className="text-sm text-slate-500">
+                  💭 随手记下灵感 | 🎯 快捷键：<kbd className="px-1.5 py-0.5 text-xs bg-slate-100 border border-slate-300 rounded">Ctrl+N</kbd>
+                </p>
+              </div>
 
-        {!isCreating ?
-        <div
-          onClick={() => setIsCreating(true)}
-          className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 cursor-text hover:shadow-md transition-all flex items-center text-slate-500 gap-3 group">
-
-            <Plus className="w-5 h-5 text-slate-400 group-hover:text-[#384877]" />
-            <span className="font-medium">添加新心签...</span>
-          </div> :
-
-        <NoteEditor
-          onSave={(data) => createNoteMutation.mutate(data)}
-          onClose={() => setIsCreating(false)} />
-
-        }
+              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <Badge variant="outline" className="text-xs border-[#384877] text-[#384877]">
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  AI 辅助
+                </Badge>
+                <Badge variant="outline" className="text-xs border-purple-500 text-purple-600">
+                  快速创建
+                </Badge>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative"
+          >
+            <div className="absolute -inset-4 bg-gradient-to-br from-[#384877]/10 via-transparent to-purple-500/10 rounded-3xl blur-2xl" />
+            <NoteEditor
+              onSave={(data) => createNoteMutation.mutate(data)}
+              onClose={() => setIsCreating(false)}
+            />
+          </motion.div>
+        )}
       </motion.div>
 
       {/* Notes Grid - Using CSS Columns for Masonry effect */}

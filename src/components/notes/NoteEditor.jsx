@@ -293,25 +293,26 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   };
 
   return (
-    <div className={`rounded-xl border shadow-sm overflow-hidden transition-colors duration-300 ${COLORS.find(c => c.name === color)?.class || "bg-white border-slate-200"}`}>
-      <div className="p-4">
-        <div className="min-h-[120px] mb-4 bg-white/50 rounded-lg">
+    <div className={`rounded-2xl border-2 shadow-xl overflow-hidden transition-all duration-300 ${COLORS.find(c => c.name === color)?.class || "bg-white border-slate-200"} hover:shadow-2xl`}>
+      <div className="p-5">
+        <div className="mb-5 bg-white/80 rounded-xl border border-slate-100 overflow-hidden shadow-inner">
             <ReactQuill
             theme="snow"
             value={content}
             onChange={setContent}
             ref={quillRef}
-            placeholder="记下你的想法、粘贴图片或链接..."
+            placeholder="✨ 在这里记下你的想法、粘贴图片或链接... 支持丰富的格式编辑"
             modules={{
                 toolbar: [
                 ['bold', 'italic', 'underline', 'strike'],
                 ['blockquote', 'code-block'],
                 [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                [{ 'header': [1, 2, 3, false] }],
                 ['link', 'image', 'video'],
                 ['clean']
                 ],
             }}
-            className="border-none"
+            className="border-none [&_.ql-container]:min-h-[140px] [&_.ql-editor]:text-base [&_.ql-editor]:leading-relaxed"
             />
         </div>
 
@@ -356,9 +357,9 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 size="sm"
                 onClick={handleAnalyze}
                 disabled={isAnalyzing}
-                className="h-7 text-xs text-[#384877] hover:bg-[#384877]/10 rounded-full gap-1.5 border border-[#384877]/20"
+                className="h-8 text-xs font-medium text-white bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200"
             >
-                {isAnalyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                {isAnalyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                 AI 智能分析
             </Button>
             
@@ -367,9 +368,9 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-xs text-purple-700 hover:bg-purple-100 rounded-full gap-1.5 border border-purple-200"
+                        className="h-8 text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200"
                     >
-                        <Wand2 className="w-3 h-3" />
+                        <Wand2 className="w-3.5 h-3.5" />
                         AI 写作助手
                     </Button>
                 </DialogTrigger>
@@ -472,22 +473,26 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             </motion.div>
         )}
 
-        <div className="flex items-center justify-between pt-2 border-t border-black/5">
-            <div className="flex gap-1">
-                {COLORS.map(c => (
-                    <button
-                    key={c.name}
-                    onClick={() => setColor(c.name)}
-                    className={`w-6 h-6 rounded-full border ${c.name === 'white' ? 'bg-white' : `bg-${c.name}-100`} ${color === c.name ? 'ring-2 ring-offset-1 ring-slate-400' : 'hover:scale-110'} transition-all`}
-                    style={{ backgroundColor: c.name === 'white' ? '#ffffff' : undefined }} // Tailwind dyn classes fix
-                    />
-                ))}
+        <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+            <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-slate-600">颜色标记</span>
+                <div className="flex gap-1.5">
+                    {COLORS.map(c => (
+                        <button
+                        key={c.name}
+                        onClick={() => setColor(c.name)}
+                        className={`w-7 h-7 rounded-lg border-2 ${c.name === 'white' ? 'bg-white' : `bg-${c.name}-100`} ${color === c.name ? 'ring-2 ring-offset-2 ring-[#384877] scale-110' : 'hover:scale-110 hover:border-slate-300'} transition-all duration-200 shadow-sm`}
+                        style={{ backgroundColor: c.name === 'white' ? '#ffffff' : undefined }}
+                        title={c.name}
+                        />
+                    ))}
+                </div>
             </div>
             <div className="flex gap-2">
                 {onClose && (
-                    <Button variant="ghost" onClick={onClose}>取消</Button>
+                    <Button variant="outline" onClick={onClose} className="rounded-lg">取消</Button>
                 )}
-                <Button onClick={handleSave} className="bg-[#384877] hover:bg-[#2c3b63] text-white">
+                <Button onClick={handleSave} className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200">
                     <Save className="w-4 h-4 mr-2" />
                     保存心签
                 </Button>

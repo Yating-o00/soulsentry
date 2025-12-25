@@ -1,25 +1,29 @@
-import Tasks from './pages/Tasks';
 import Account from './pages/Account';
-import Teams from './pages/Teams';
-import Trash from './pages/Trash';
-import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
+import GeminiTest from './pages/GeminiTest';
+import Home from './pages/Home';
+import Notes from './pages/Notes';
 import NotificationSettings from './pages/NotificationSettings';
-import Templates from './pages/Templates';
 import Notifications from './pages/Notifications';
+import Tasks from './pages/Tasks';
+import Teams from './pages/Teams';
+import Templates from './pages/Templates';
+import Trash from './pages/Trash';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Tasks": Tasks,
     "Account": Account,
-    "Teams": Teams,
-    "Trash": Trash,
-    "Notes": Notes,
     "Dashboard": Dashboard,
+    "GeminiTest": GeminiTest,
+    "Home": Home,
+    "Notes": Notes,
     "NotificationSettings": NotificationSettings,
-    "Templates": Templates,
     "Notifications": Notifications,
+    "Tasks": Tasks,
+    "Teams": Teams,
+    "Templates": Templates,
+    "Trash": Trash,
 }
 
 export const pagesConfig = {

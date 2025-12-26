@@ -14,6 +14,7 @@ import NoteShareDialog from "../components/notes/NoteShareDialog";
 import NoteComments from "../components/notes/NoteComments";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import AINotesOrganizer from "../components/notes/AINotesOrganizer";
+import AINotesOrganizer from "../components/notes/AINotesOrganizer";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -28,6 +29,7 @@ export default function Notes() {
   const [editingNote, setEditingNote] = useState(null);
   const [taskCreationNote, setTaskCreationNote] = useState(null);
   const [sharingNote, setSharingNote] = useState(null);
+  const [showAIOrganizer, setShowAIOrganizer] = useState(false);
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
   const [showAIOrganizer, setShowAIOrganizer] = useState(false);
@@ -242,15 +244,27 @@ export default function Notes() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.15 }}
-        className="flex items-center justify-between gap-3"
+        className="flex items-center justify-between gap-3 flex-wrap"
       >
         <NoteFilters 
           filters={filters} 
           onFiltersChange={setFilters}
           allTags={allTags}
         />
-        <div className="text-sm text-slate-500">
-          共 <span className="font-semibold text-[#384877]">{filteredNotes.length}</span> 条心签
+
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => setShowAIOrganizer(true)}
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            AI 智能整理
+          </Button>
+          <div className="text-sm text-slate-500">
+            共 <span className="font-semibold text-[#384877]">{filteredNotes.length}</span> 条心签
+          </div>
         </div>
       </motion.div>
 
@@ -371,6 +385,13 @@ export default function Notes() {
         note={sharingNote}
         open={!!sharingNote}
         onOpenChange={(open) => !open && setSharingNote(null)}
+      />
+
+      {/* AI Organizer */}
+      <AINotesOrganizer
+        notes={notes}
+        open={showAIOrganizer}
+        onOpenChange={setShowAIOrganizer}
       />
 
       {/* AI Organizer */}

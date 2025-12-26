@@ -9,6 +9,7 @@ import Tasks from './pages/Tasks';
 import Teams from './pages/Teams';
 import Templates from './pages/Templates';
 import Trash from './pages/Trash';
+import Pricing from './pages/Pricing';
 import __Layout from './Layout.jsx';
 
 
@@ -24,6 +25,7 @@ export const PAGES = {
     "Teams": Teams,
     "Templates": Templates,
     "Trash": Trash,
+    "Pricing": Pricing,
 }
 
 export const pagesConfig = {

@@ -73,6 +73,9 @@ export default function Pricing() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
+          <Badge className="mb-4 bg-gradient-to-r from-amber-400 to-amber-500 text-white border-0 text-sm px-4 py-1.5">
+            🚀 内测功能 · 即将推出
+          </Badge>
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
             选择适合你的计划
           </h1>

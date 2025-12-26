@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Crown } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import {
   Sidebar,
@@ -131,30 +131,6 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
       </SidebarContent>
       <SidebarFooter className="p-3 border-t border-slate-200/50">
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton 
-              asChild
-              className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
-                location.pathname === createPageUrl("Pricing") 
-                  ? 'bg-gradient-to-r from-amber-400/10 to-amber-500/10 text-amber-700 border border-amber-200' 
-                  : 'hover:bg-gradient-to-r hover:from-amber-400/10 hover:to-amber-500/10 text-slate-700'
-              }`}
-            >
-              <Link 
-                to={createPageUrl("Pricing")} 
-                onClick={handleMobileClick}
-                className="flex items-center gap-3 px-4 py-3"
-              >
-                <Crown className={`w-5 h-5 transition-all duration-300 ${
-                  location.pathname === createPageUrl("Pricing") 
-                    ? 'text-amber-600 scale-110' 
-                    : 'text-amber-500 group-hover:text-amber-600 group-hover:scale-110'
-                }`} />
-                <span className="font-medium">升级专业版</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
           <SidebarMenuItem>
             <SidebarMenuButton 
               onClick={() => {

@@ -121,7 +121,10 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
           setSuggestedTags(newSuggestions);
         }
       } catch (e) {
-        console.error("Tag suggestion failed", e);
+        console.error("AI标签推荐失败:", e);
+        if (e.message) {
+          console.error("错误详情:", e.message);
+        }
       } finally {
         setIsSuggestingTags(false);
       }
@@ -313,8 +316,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         setShowSmartTextDialog(false);
       }
     } catch (error) {
-      console.error("Parse error:", error);
-      toast.error("解析失败");
+      console.error("AI解析失败:", error);
+      const errorMsg = error?.message || error?.toString() || "未知错误";
+      toast.error(`解析失败: ${errorMsg}`);
       setShowVoiceDialog(false);
       setShowSmartTextDialog(false);
     }
@@ -395,8 +399,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
         // onAdd(createdMainTask); // complicated because we created multiple
       }
     } catch (error) {
-      console.error("Error creating tasks:", error);
-      toast.error("创建约定时出错", { id: 'bulk-create' });
+      console.error("批量创建约定失败:", error);
+      const errorMsg = error?.message || error?.toString() || "未知错误";
+      toast.error(`创建约定时出错: ${errorMsg}`, { id: 'bulk-create' });
     }
   };
 

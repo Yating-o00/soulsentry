@@ -6,13 +6,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, FolderSync } from "lucide-react";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
 import NoteShareDialog from "../components/notes/NoteShareDialog";
 import NoteComments from "../components/notes/NoteComments";
 import QuickAddTask from "../components/tasks/QuickAddTask";
+import AINotesOrganizer from "../components/notes/AINotesOrganizer";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -29,6 +30,7 @@ export default function Notes() {
   const [sharingNote, setSharingNote] = useState(null);
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
+  const [showAIOrganizer, setShowAIOrganizer] = useState(false);
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
 
@@ -224,6 +226,14 @@ export default function Notes() {
               </button>
             )}
           </div>
+          <Button
+            onClick={() => setShowAIOrganizer(true)}
+            variant="outline"
+            className="border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 gap-2"
+          >
+            <FolderSync className="w-4 h-4" />
+            AI 整理
+          </Button>
         </div>
       </motion.div>
 
@@ -361,6 +371,13 @@ export default function Notes() {
         note={sharingNote}
         open={!!sharingNote}
         onOpenChange={(open) => !open && setSharingNote(null)}
+      />
+
+      {/* AI Organizer */}
+      <AINotesOrganizer
+        notes={notes}
+        open={showAIOrganizer}
+        onOpenChange={setShowAIOrganizer}
       />
 
       {/* Create Task Dialog */}

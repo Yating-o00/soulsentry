@@ -87,8 +87,9 @@ response_json_schema: {
       setRefineInstruction("");
       toast.success("已根据您的指令调整建议");
     } catch (error) {
-      console.error("Refine error:", error);
-      toast.error("调整失败，请重试");
+      console.error("AI调整失败:", error);
+      const errorMsg = error?.message || error?.toString() || "未知错误";
+      toast.error(`调整失败: ${errorMsg}`);
     }
     setIsRefining(false);
   };
@@ -201,7 +202,8 @@ response_json_schema: {
       toast.success("✨ AI分析完成！");
     } catch (error) {
       console.error("AI分析失败:", error);
-      toast.error("AI分析失败，请重试");
+      const errorMsg = error?.message || error?.toString() || "未知错误";
+      toast.error(`AI分析失败: ${errorMsg}`);
     }
     setIsAnalyzing(false);
   };

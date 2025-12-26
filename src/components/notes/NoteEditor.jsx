@@ -62,7 +62,10 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
           setSuggestedTags(newSuggestions);
         }
       } catch (e) {
-        console.error("Tag suggestion failed", e);
+        console.error("AI标签建议失败:", e);
+        if (e.message) {
+          console.error("错误详情:", e.message);
+        }
       }
     }, 2000); // 2s debounce for notes
 
@@ -138,8 +141,9 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
       // Update state
       setContent(editor.root.innerHTML);
     } catch (error) {
-      console.error("AI Generation failed", error);
-      toast.error("生成失败，请重试");
+      console.error("AI生成失败:", error);
+      const errorMsg = error?.message || error?.toString() || "未知错误";
+      toast.error(`生成失败: ${errorMsg}`);
     } finally {
       setIsGenerating(false);
     }
@@ -253,8 +257,9 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
         toast.success("AI 深度分析完成");
       }
     } catch (error) {
-      console.error("AI Analysis failed", error);
-      toast.error("AI 分析失败");
+      console.error("AI分析失败:", error);
+      const errorMsg = error?.message || error?.toString() || "未知错误";
+      toast.error(`AI分析失败: ${errorMsg}`);
     } finally {
       setIsAnalyzing(false);
     }

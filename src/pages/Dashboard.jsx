@@ -167,7 +167,11 @@ export default function Dashboard() {
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
-    onSuccess: () => {
+    onSuccess: (newTask) => {
+      // Optimistically add the new task to the cache immediately
+      queryClient.setQueryData(['tasks'], (oldTasks) => {
+        return oldTasks ? [newTask, ...oldTasks] : [newTask];
+      });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success("约定创建成功");
     },

@@ -23,6 +23,7 @@ import CalendarView from "../components/calendar/CalendarView";
 import TaskCard from "../components/tasks/TaskCard";
 import UserBehaviorInsights from "../components/insights/UserBehaviorInsights";
 import NotificationManager from "../components/notifications/NotificationManager";
+import TeamOnboardingProgress from "../components/dashboard/TeamOnboardingProgress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -448,6 +449,14 @@ export default function Dashboard() {
 
         {/* Right Column: Insights & Summary */}
         <div className="space-y-6">
+          <motion.div
+             initial={{ opacity: 0, x: 20 }}
+             animate={{ opacity: 1, x: 0 }}
+             transition={{ delay: 0.25 }}
+          >
+            <TeamOnboardingProgress />
+          </motion.div>
+          
           <motion.div
              initial={{ opacity: 0, x: 20 }}
              animate={{ opacity: 1, x: 0 }}

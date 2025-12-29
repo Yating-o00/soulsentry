@@ -1,4 +1,5 @@
 import Account from './pages/Account';
+import Calendar from './pages/Calendar';
 import Dashboard from './pages/Dashboard';
 import GeminiTest from './pages/GeminiTest';
 import Home from './pages/Home';
@@ -10,12 +11,12 @@ import Tasks from './pages/Tasks';
 import Teams from './pages/Teams';
 import Templates from './pages/Templates';
 import Trash from './pages/Trash';
-import Calendar from './pages/Calendar';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Account": Account,
+    "Calendar": Calendar,
     "Dashboard": Dashboard,
     "GeminiTest": GeminiTest,
     "Home": Home,
@@ -27,7 +28,6 @@ export const PAGES = {
     "Teams": Teams,
     "Templates": Templates,
     "Trash": Trash,
-    "Calendar": Calendar,
 }
 
 export const pagesConfig = {

@@ -5,11 +5,12 @@ import Home from './pages/Home';
 import Notes from './pages/Notes';
 import NotificationSettings from './pages/NotificationSettings';
 import Notifications from './pages/Notifications';
+import Pricing from './pages/Pricing';
 import Tasks from './pages/Tasks';
 import Teams from './pages/Teams';
 import Templates from './pages/Templates';
 import Trash from './pages/Trash';
-import Pricing from './pages/Pricing';
+import Calendar from './pages/Calendar';
 import __Layout from './Layout.jsx';
 
 
@@ -21,11 +22,12 @@ export const PAGES = {
     "Notes": Notes,
     "NotificationSettings": NotificationSettings,
     "Notifications": Notifications,
+    "Pricing": Pricing,
     "Tasks": Tasks,
     "Teams": Teams,
     "Templates": Templates,
     "Trash": Trash,
-    "Pricing": Pricing,
+    "Calendar": Calendar,
 }
 
 export const pagesConfig = {

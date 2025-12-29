@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay, addDays, addMonths, addWeeks, startOfWeek, endOfWeek } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { 
   CheckCircle2, 
@@ -12,14 +12,18 @@ import {
   Sun,
   ListTodo,
   Edit,
-  StickyNote
+  StickyNote,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import QuickAddTask from "../components/tasks/QuickAddTask";
-import CalendarView from "../components/calendar/CalendarView";
+import CalendarMonthView from "../components/calendar/CalendarMonthView";
+import CalendarWeekView from "../components/calendar/CalendarWeekView";
+import CalendarDayView from "../components/calendar/CalendarDayView";
 import TaskCard from "../components/tasks/TaskCard";
 import UserBehaviorInsights from "../components/insights/UserBehaviorInsights";
 import NotificationManager from "../components/notifications/NotificationManager";
@@ -36,6 +40,10 @@ export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [calendarViewMode, setCalendarViewMode] = useState("month");
+  const [showCalendarQuickAdd, setShowCalendarQuickAdd] = useState(false);
+  const [calendarQuickAddDate, setCalendarQuickAddDate] = useState(null);
   const queryClient = useQueryClient();
 
   // Get current user
@@ -235,6 +243,68 @@ export default function Dashboard() {
         id: subtask.parent_task_id,
         data: { progress }
       });
+    }
+  };
+
+  // Calendar navigation handlers
+  const handleCalendarPrevious = () => {
+    if (calendarViewMode === "month") {
+      setCurrentDate(addMonths(currentDate, -1));
+    } else if (calendarViewMode === "week") {
+      setCurrentDate(addWeeks(currentDate, -1));
+    } else {
+      setCurrentDate(addDays(currentDate, -1));
+    }
+  };
+
+  const handleCalendarNext = () => {
+    if (calendarViewMode === "month") {
+      setCurrentDate(addMonths(currentDate, 1));
+    } else if (calendarViewMode === "week") {
+      setCurrentDate(addWeeks(currentDate, 1));
+    } else {
+      setCurrentDate(addDays(currentDate, 1));
+    }
+  };
+
+  const handleCalendarDateClick = (date) => {
+    setCalendarQuickAddDate(date);
+    setShowCalendarQuickAdd(true);
+  };
+
+  const handleCalendarTaskDrop = (taskId, newDate) => {
+    const task = allTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const oldDate = new Date(task.reminder_time);
+    const updatedDate = new Date(newDate);
+    updatedDate.setHours(oldDate.getHours(), oldDate.getMinutes(), 0, 0);
+
+    let newEndTime = null;
+    if (task.end_time) {
+      const oldEndDate = new Date(task.end_time);
+      const timeDiff = oldEndDate.getTime() - oldDate.getTime();
+      newEndTime = new Date(updatedDate.getTime() + timeDiff);
+    }
+
+    updateTaskMutation.mutate({
+      id: taskId,
+      data: {
+        reminder_time: updatedDate.toISOString(),
+        ...(newEndTime && { end_time: newEndTime.toISOString() })
+      }
+    });
+  };
+
+  const getCalendarDateLabel = () => {
+    if (calendarViewMode === "month") {
+      return format(currentDate, "yyyy年M月", { locale: zhCN });
+    } else if (calendarViewMode === "week") {
+      const weekStart = startOfWeek(currentDate, { locale: zhCN });
+      const weekEnd = endOfWeek(currentDate, { locale: zhCN });
+      return `${format(weekStart, "M月d日", { locale: zhCN })} - ${format(weekEnd, "M月d日", { locale: zhCN })}`;
+    } else {
+      return format(currentDate, "yyyy年M月d日 EEEE", { locale: zhCN });
     }
   };
 
@@ -500,8 +570,127 @@ export default function Dashboard() {
       </div>
       </TabsContent>
 
-      <TabsContent value="calendar">
-        <CalendarView />
+      <TabsContent value="calendar" className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => setCurrentDate(new Date())}
+              variant="outline"
+              className="rounded-xl"
+            >
+              今天
+            </Button>
+            
+            <div className="flex items-center gap-2 bg-white rounded-xl p-1 border border-slate-200">
+              {[
+                { value: "month", label: "月", icon: CalendarIcon },
+                { value: "week", label: "周", icon: ListTodo },
+                { value: "day", label: "日", icon: Clock },
+              ].map((mode) => {
+                const Icon = mode.icon;
+                return (
+                  <Button
+                    key={mode.value}
+                    onClick={() => setCalendarViewMode(mode.value)}
+                    variant={calendarViewMode === mode.value ? "default" : "ghost"}
+                    size="sm"
+                    className={`rounded-lg ${
+                      calendarViewMode === mode.value
+                        ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 mr-1.5" />
+                    {mode.label}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <Button
+            onClick={handleCalendarPrevious}
+            variant="ghost"
+            size="icon"
+            className="rounded-xl hover:bg-slate-100"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </Button>
+
+          <h2 className="text-xl font-semibold text-slate-800">
+            {getCalendarDateLabel()}
+          </h2>
+
+          <Button
+            onClick={handleCalendarNext}
+            variant="ghost"
+            size="icon"
+            className="rounded-xl hover:bg-slate-100"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </Button>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+          <AnimatePresence mode="wait">
+            {calendarViewMode === "month" && (
+              <CalendarMonthView
+                key="month"
+                currentDate={currentDate}
+                tasks={activeTasks}
+                notes={allNotes.filter(n => !n.deleted_at)}
+                onDateClick={handleCalendarDateClick}
+                onTaskDrop={handleCalendarTaskDrop}
+                onTaskClick={setSelectedTask}
+              />
+            )}
+            {calendarViewMode === "week" && (
+              <CalendarWeekView
+                key="week"
+                currentDate={currentDate}
+                tasks={activeTasks}
+                notes={allNotes.filter(n => !n.deleted_at)}
+                onDateClick={handleCalendarDateClick}
+                onTaskDrop={handleCalendarTaskDrop}
+                onTaskClick={setSelectedTask}
+              />
+            )}
+            {calendarViewMode === "day" && (
+              <CalendarDayView
+                key="day"
+                currentDate={currentDate}
+                tasks={activeTasks}
+                notes={allNotes.filter(n => !n.deleted_at)}
+                onDateClick={handleCalendarDateClick}
+                onTaskDrop={handleCalendarTaskDrop}
+                onTaskClick={setSelectedTask}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+
+        <Dialog open={showCalendarQuickAdd} onOpenChange={setShowCalendarQuickAdd}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                创建约定
+                {calendarQuickAddDate && (
+                  <span className="text-sm font-normal text-slate-500 ml-2">
+                    {format(calendarQuickAddDate, "yyyy年M月d日", { locale: zhCN })}
+                  </span>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            <QuickAddTask
+              initialData={{
+                reminder_time: calendarQuickAddDate || new Date(),
+              }}
+              onAdd={(taskData) => createTaskMutation.mutate(taskData)}
+            />
+          </DialogContent>
+        </Dialog>
       </TabsContent>
       </Tabs>
 

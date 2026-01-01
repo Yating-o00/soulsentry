@@ -362,27 +362,63 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
 
                   {/* 约定核心内容 */}
                   <div className="mt-8 mb-8">
-                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold mb-4 uppercase tracking-wider" 
-                        style={{ 
-                          backgroundColor: `${categoryColor.accent}15`, 
-                          color: categoryColor.accent 
-                        }}
-                     >
-                       <span className="w-2 h-2 rounded-full bg-current" />
-                       {CATEGORY_LABELS[task.category]}
-                     </div>
-                     
-                     <h1 className="text-3xl font-black text-slate-800 leading-tight mb-4">
-                       {task.title}
-                     </h1>
-                     
-                     {task.description && (
-                       <div className="relative pl-4 border-l-2 border-slate-200 py-1 mb-6">
-                         <p className="text-slate-600 text-sm italic leading-relaxed">
-                           "{task.description}"
-                         </p>
-                       </div>
-                     )}
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider" 
+                         style={{ 
+                           backgroundColor: `${categoryColor.accent}15`, 
+                           color: categoryColor.accent 
+                         }}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-current" />
+                        {CATEGORY_LABELS[task.category]}
+                      </div>
+
+                      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                        task.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                        task.priority === 'medium' ? 'bg-blue-100 text-blue-700' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        <span className="w-2 h-2 rounded-full bg-current" />
+                        {PRIORITY_LABELS[task.priority]}
+                      </div>
+                    </div>
+
+                    <h1 className="text-3xl font-black text-slate-800 leading-tight mb-4">
+                      {task.title}
+                    </h1>
+
+                    {task.description && (
+                      <div className="relative pl-4 border-l-2 border-slate-200 py-1 mb-6">
+                        <p className="text-slate-600 text-sm italic leading-relaxed">
+                          "{task.description}"
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 时间信息 */}
+                    <div className="grid grid-cols-1 gap-2 mt-4 mb-6 bg-slate-50/50 rounded-xl p-4 border border-slate-100">
+                      <div className="flex items-center gap-3 text-sm">
+                        <div className="flex items-center gap-2 text-slate-600 min-w-[80px]">
+                          <Clock className="w-4 h-4" />
+                          <span className="font-medium">提醒时间</span>
+                        </div>
+                        <span className="font-semibold text-slate-800">
+                          {format(new Date(task.reminder_time), "yyyy-MM-dd HH:mm", { locale: zhCN })}
+                        </span>
+                      </div>
+                      {task.end_time && (
+                        <div className="flex items-center gap-3 text-sm">
+                          <div className="flex items-center gap-2 text-slate-600 min-w-[80px]">
+                            <Target className="w-4 h-4" />
+                            <span className="font-medium">截止时间</span>
+                          </div>
+                          <span className="font-semibold text-slate-800">
+                            {format(new Date(task.end_time), "yyyy-MM-dd HH:mm", { locale: zhCN })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* 进度圆环/统计 */}

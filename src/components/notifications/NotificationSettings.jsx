@@ -104,29 +104,31 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
           </p>
           <div className="flex flex-wrap gap-3">
             {[5, 15, 30, 60, 120].map((minutes) => (
-              <Badge
+              <motion.button
                 key={minutes}
-                variant={settings.advance_reminders?.includes(minutes) ? "default" : "outline"}
-                className={`cursor-pointer px-4 py-2 text-sm ${
-                  settings.advance_reminders?.includes(minutes)
-                    ? "bg-gradient-to-r from-blue-500 to-purple-600"
-                    : "hover:bg-slate-100"
-                }`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => toggleAdvanceReminder(minutes)}
+                className={`px-5 py-3 rounded-xl border-2 font-semibold text-sm transition-all duration-200 ${
+                  settings.advance_reminders?.includes(minutes)
+                    ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white border-blue-500 shadow-lg shadow-blue-500/30 scale-105"
+                    : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-slate-50"
+                }`}
               >
                 {minutes < 60 ? `${minutes}分钟` : `${minutes / 60}小时`}前
-              </Badge>
+              </motion.button>
             ))}
             {/* Show custom times if any */}
             {settings.advance_reminders?.filter(m => ![5, 15, 30, 60, 120].includes(m)).map((minutes) => (
-               <Badge
+               <motion.button
                 key={minutes}
-                variant="default"
-                className="cursor-pointer px-4 py-2 text-sm bg-gradient-to-r from-blue-500 to-purple-600"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => toggleAdvanceReminder(minutes)}
+                className="px-5 py-3 rounded-xl border-2 font-semibold text-sm bg-gradient-to-r from-blue-500 to-purple-600 text-white border-blue-500 shadow-lg shadow-blue-500/30 scale-105"
               >
                 {minutes < 60 ? `${minutes}分钟` : `${(minutes / 60).toFixed(1)}小时`}前
-              </Badge>
+              </motion.button>
             ))}
           </div>
           

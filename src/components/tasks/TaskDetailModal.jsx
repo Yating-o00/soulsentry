@@ -30,7 +30,8 @@ import {
   Volume2, 
   Bell,
   Sparkles,
-  Loader2
+  Loader2,
+  Languages
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -57,6 +58,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
   const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
   const [originalContent, setOriginalContent] = useState({ title: "", description: "" });
+  const [isTranslating, setIsTranslating] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch completion history
@@ -370,6 +372,47 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
 
+  const handleTranslate = async () => {
+    setIsTranslating(true);
+    try {
+      const isChinese = /[\u4e00-\u9fa5]/.test(task.title + task.description);
+      const targetLang = isChinese ? "English" : "Chinese";
+      
+      const res = await base44.integrations.Core.InvokeLLM({
+        prompt: `Translate the following task to ${targetLang}. Keep the meaning accurate and natural.
+
+Title: ${task.title}
+Description: ${task.description || ""}
+
+Return JSON with translated title and description.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string" }
+          },
+          required: ["title"]
+        }
+      });
+
+      if (res) {
+        await updateTaskMutation.mutateAsync({
+          id: task.id,
+          data: {
+            title: res.title,
+            description: res.description || task.description
+          }
+        });
+        toast.success("翻译完成");
+      }
+    } catch (error) {
+      console.error("翻译失败:", error);
+      toast.error("翻译失败，请重试");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   const handleAIAnalysis = async () => {
       setIsAnalyzing(true);
       try {
@@ -455,12 +498,22 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
              <Button 
                 variant="outline" 
                 size="sm" 
+                onClick={handleTranslate}
+                disabled={isTranslating}
+                className="h-8 text-xs bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 text-blue-700 hover:from-blue-100 hover:to-cyan-100"
+             >
+                {isTranslating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Languages className="w-3.5 h-3.5 mr-1" />}
+                翻译
+             </Button>
+             <Button 
+                variant="outline" 
+                size="sm" 
                 onClick={handleAIAnalysis}
                 disabled={isAnalyzing}
                 className="h-8 text-xs bg-gradient-to-r from-indigo-50 to-purple-50 border-purple-200 text-purple-700 hover:from-indigo-100 hover:to-purple-100"
              >
                 {isAnalyzing ? <span className="animate-spin mr-1">⏳</span> : <span className="mr-1">✨</span>}
-                AI 状态分析
+                AI 分析
              </Button>
           </div>
         </DialogHeader>

@@ -515,8 +515,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
 
   return (
     <>
-      <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm">
-        <div className="p-6">
+      <Card className="overflow-hidden border-0 shadow-xl bg-white/95 backdrop-blur-xl relative group hover:shadow-2xl transition-all duration-500">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#384877]/5 via-transparent to-[#3b5aa2]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+        <div className="p-6 relative z-10">
           {!isExpanded ? (
             <Tabs defaultValue="quick" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6 h-12 bg-slate-100/50 p-1 rounded-xl">

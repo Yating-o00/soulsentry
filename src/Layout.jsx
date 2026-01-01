@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
+import { motion } from "framer-motion";
 import {
   Sidebar,
   SidebarContent,

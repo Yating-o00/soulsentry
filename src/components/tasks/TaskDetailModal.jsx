@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect as ReactUseEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -42,6 +42,7 @@ import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import TaskComments from "./TaskComments";
 import AITaskEnhancer from "./AITaskEnhancer";
 import TaskDependencySelector from "./TaskDependencySelector";
@@ -54,6 +55,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const [newNote, setNewNote] = useState("");
   const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
   const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
+  const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
+  const [originalContent, setOriginalContent] = useState({ title: "", description: "" });
   const queryClient = useQueryClient();
 
   // Fetch completion history
@@ -74,6 +77,16 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     initialData: initialTaskData,
   });
 
+  // Track original content to detect changes
+  React.useEffect(() => {
+    if (task && open) {
+      setOriginalContent({ 
+        title: task.title, 
+        description: task.description || "" 
+      });
+    }
+  }, [task?.id, open]);
+
   const { data: subtasks = [] } = useQuery({
     queryKey: ['subtasks', task?.id],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: task.id }),
@@ -83,10 +96,21 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: () => {
+    onSuccess: (updatedTask, { data }) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       queryClient.invalidateQueries({ queryKey: ['task', task?.id] });
+      
+      // Check if title or description changed and we have subtasks
+      if ((data.title || data.description) && subtasks.length > 0) {
+        const titleChanged = data.title && data.title !== originalContent.title;
+        const descChanged = data.description !== undefined && data.description !== originalContent.description;
+        
+        if (titleChanged || descChanged) {
+          setShowRegeneratePrompt(true);
+          setTimeout(() => setShowRegeneratePrompt(false), 8000);
+        }
+      }
     },
   });
 
@@ -650,6 +674,45 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
               {/* Subtasks Tab */}
             <TabsContent value="subtasks" className="space-y-4">
+              <AnimatePresence>
+                {showRegeneratePrompt && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <Alert className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
+                      <Sparkles className="h-4 w-4 text-purple-600" />
+                      <AlertDescription className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-slate-700">
+                          检测到约定内容已更改，是否需要重新生成子约定？
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowRegeneratePrompt(false)}
+                            className="h-7 text-xs"
+                          >
+                            忽略
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setShowRegeneratePrompt(false);
+                              handleAutoGenerateSubtasks();
+                            }}
+                            className="h-7 text-xs bg-purple-600 hover:bg-purple-700"
+                          >
+                            重新生成
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-slate-700">子约定管理</h3>
                 <Button

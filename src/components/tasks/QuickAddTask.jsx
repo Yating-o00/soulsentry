@@ -21,6 +21,7 @@ import TaskAssignment from "./TaskAssignment";
 import SmartReminderSuggestion from "./SmartReminderSuggestion";
 import AITaskEnhancer from "./AITaskEnhancer";
 import SmartTextParser from "./SmartTextParser";
+import TaskDependencySelector from "./TaskDependencySelector";
 import {
   Dialog,
   DialogContent,
@@ -63,6 +64,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   
   const [showAssignment, setShowAssignment] = useState(false);
   const [showSmartSuggestion, setShowSmartSuggestion] = useState(false);
+  const [showDependencies, setShowDependencies] = useState(false);
   const [isStartTimeOpen, setIsStartTimeOpen] = useState(false);
   const [isEndTimeOpen, setIsEndTimeOpen] = useState(false);
   const [showAIEnhancer, setShowAIEnhancer] = useState(false);
@@ -95,8 +97,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     assigned_to: initialData?.assigned_to || [],
     is_shared: initialData?.is_shared || false,
     team_visibility: initialData?.team_visibility || "private",
-    subtasks: initialData?.subtasks || [], // Note: fetching subtasks might be needed if they are separate entities, but here we assume passed in initialData or ignored for quick edit
-  });
+    subtasks: initialData?.subtasks || [],
+    dependencies: initialData?.dependencies || [],
+    });
 
   // 智能标签推荐 (Debounced)
   useEffect(() => {
@@ -1042,6 +1045,21 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                     )}
                   </Button>
 
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowDependencies(true)}
+                    className="border border-orange-100 bg-orange-50/50 hover:bg-orange-50 hover:border-orange-300 rounded-[10px] group transition-all"
+                  >
+                    <ListTodo className="h-4 w-4 mr-2 text-orange-600 group-hover:scale-110 transition-transform" />
+                    <span className="text-orange-700 font-medium">依赖约定</span>
+                    {task.dependencies && task.dependencies.length > 0 && (
+                      <Badge className="ml-2 bg-orange-600 text-white rounded-md">
+                        {task.dependencies.length}
+                      </Badge>
+                    )}
+                  </Button>
+
                   {/* 模板选择 */}
                   {templates && templates.length > 0 && (
                       <Select onValueChange={(val) => {
@@ -1147,6 +1165,26 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
               setTask({ ...task, ...settings });
             }}
             onClose={() => setShowAssignment(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* 依赖选择 */}
+      <Dialog open={showDependencies} onOpenChange={setShowDependencies}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListTodo className="w-5 h-5 text-orange-600" />
+              依赖约定
+            </DialogTitle>
+          </DialogHeader>
+          <TaskDependencySelector
+            selectedDependencies={task.dependencies}
+            currentTaskId={initialData?.id}
+            onUpdate={(deps) => {
+              setTask({ ...task, dependencies: deps });
+            }}
+            onClose={() => setShowDependencies(false)}
           />
         </DialogContent>
       </Dialog>

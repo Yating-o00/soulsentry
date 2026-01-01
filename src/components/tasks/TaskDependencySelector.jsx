@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Link as LinkIcon, X, AlertCircle, CheckCircle2 } from "lucide-react";
 
-export default function TaskDependencySelector({ currentTask, selectedDependencyIds = [], onUpdate }) {
+export default function TaskDependencySelector({ currentTaskId, selectedDependencies = [], onUpdate, onClose }) {
     const [searchQuery, setSearchQuery] = useState("");
 
     const { data: allTasks = [] } = useQuery({
@@ -17,23 +17,18 @@ export default function TaskDependencySelector({ currentTask, selectedDependency
         initialData: []
     });
 
-    // Filter tasks:
-    // 1. Exclude current task itself
-    // 2. Match search query
-    // 3. Exclude tasks that are already dependencies (they are shown separately)
-    // 4. Ideally exclude tasks that depend on THIS task (circular dependency prevention) - simplified for now
     const filteredTasks = allTasks.filter(task => 
-        task.id !== currentTask.id &&
+        task.id !== currentTaskId &&
         !task.deleted_at &&
         (task.title.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
-    const dependencies = allTasks.filter(t => selectedDependencyIds.includes(t.id));
+    const dependencies = allTasks.filter(t => selectedDependencies.includes(t.id));
 
     const handleToggle = (taskId) => {
-        const newIds = selectedDependencyIds.includes(taskId)
-            ? selectedDependencyIds.filter(id => id !== taskId)
-            : [...selectedDependencyIds, taskId];
+        const newIds = selectedDependencies.includes(taskId)
+            ? selectedDependencies.filter(id => id !== taskId)
+            : [...selectedDependencies, taskId];
         onUpdate(newIds);
     };
 
@@ -95,7 +90,7 @@ export default function TaskDependencySelector({ currentTask, selectedDependency
                             </div>
                         ) : (
                             filteredTasks.map(task => {
-                                const isSelected = selectedDependencyIds.includes(task.id);
+                                const isSelected = selectedDependencies.includes(task.id);
                                 return (
                                     <div
                                         key={task.id}
@@ -124,6 +119,12 @@ export default function TaskDependencySelector({ currentTask, selectedDependency
                     </div>
                 </ScrollArea>
             </div>
+
+            {onClose && (
+                <div className="flex justify-end pt-4 border-t">
+                    <Button onClick={onClose}>确定</Button>
+                </div>
+            )}
         </div>
     );
 }

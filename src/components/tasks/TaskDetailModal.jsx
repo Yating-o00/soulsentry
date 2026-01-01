@@ -376,34 +376,96 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     setIsTranslating(true);
     try {
       const isChinese = /[\u4e00-\u9fa5]/.test(task.title + task.description);
-      const targetLang = isChinese ? "English" : "Chinese";
+      const targetLang = isChinese ? "English" : "简体中文";
+      
+      // Prepare subtasks and notes for translation
+      const subtasksList = subtasks.map(st => ({
+        id: st.id,
+        title: st.title,
+        description: st.description || ""
+      }));
+      
+      const notesList = (task.notes || []).map((note, idx) => ({
+        index: idx,
+        content: note.content
+      }));
       
       const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Translate the following task to ${targetLang}. Keep the meaning accurate and natural.
+        prompt: `将以下任务的所有信息翻译为${targetLang}。保持准确性和自然性。
 
-Title: ${task.title}
-Description: ${task.description || ""}
+主任务标题: ${task.title}
+主任务描述: ${task.description || ""}
 
-Return JSON with translated title and description.`,
+子任务列表:
+${subtasksList.map(st => `- ID: ${st.id}, 标题: ${st.title}, 描述: ${st.description}`).join('\n')}
+
+笔记列表:
+${notesList.map(n => `- 序号: ${n.index}, 内容: ${n.content}`).join('\n')}
+
+返回JSON格式，包含翻译后的标题、描述、子任务数组（带id）、笔记数组（带index）。`,
         response_json_schema: {
           type: "object",
           properties: {
             title: { type: "string" },
-            description: { type: "string" }
+            description: { type: "string" },
+            subtasks: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  title: { type: "string" },
+                  description: { type: "string" }
+                }
+              }
+            },
+            notes: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  index: { type: "number" },
+                  content: { type: "string" }
+                }
+              }
+            }
           },
           required: ["title"]
         }
       });
 
       if (res) {
+        // Update main task
         await updateTaskMutation.mutateAsync({
           id: task.id,
           data: {
             title: res.title,
-            description: res.description || task.description
+            description: res.description || task.description,
+            notes: res.notes && res.notes.length > 0 ? 
+              (task.notes || []).map((note, idx) => {
+                const translated = res.notes.find(n => n.index === idx);
+                return translated ? { ...note, content: translated.content } : note;
+              }) : task.notes
           }
         });
-        toast.success("翻译完成");
+        
+        // Update subtasks
+        if (res.subtasks && res.subtasks.length > 0) {
+          for (const translatedSt of res.subtasks) {
+            const originalSt = subtasks.find(st => st.id === translatedSt.id);
+            if (originalSt) {
+              await updateTaskMutation.mutateAsync({
+                id: translatedSt.id,
+                data: {
+                  title: translatedSt.title,
+                  description: translatedSt.description || originalSt.description
+                }
+              });
+            }
+          }
+        }
+        
+        toast.success(`已翻译为${targetLang}`);
       }
     } catch (error) {
       console.error("翻译失败:", error);

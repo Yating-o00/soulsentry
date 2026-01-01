@@ -28,11 +28,6 @@ const navigationItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "日历",
-    url: createPageUrl("Calendar"),
-    icon: Calendar,
-  },
-  {
     title: "约定",
     url: createPageUrl("Tasks"),
     icon: ListTodo,

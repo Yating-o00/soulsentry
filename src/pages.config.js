@@ -1,5 +1,4 @@
 import Account from './pages/Account';
-import Calendar from './pages/Calendar';
 import Dashboard from './pages/Dashboard';
 import GeminiTest from './pages/GeminiTest';
 import Home from './pages/Home';
@@ -16,7 +15,6 @@ import __Layout from './Layout.jsx';
 
 export const PAGES = {
     "Account": Account,
-    "Calendar": Calendar,
     "Dashboard": Dashboard,
     "GeminiTest": GeminiTest,
     "Home": Home,

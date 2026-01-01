@@ -28,7 +28,9 @@ import {
   Clock, 
   Repeat, 
   Volume2, 
-  Bell 
+  Bell,
+  Sparkles,
+  Loader2
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -51,6 +53,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const [newSubtask, setNewSubtask] = useState("");
   const [newNote, setNewNote] = useState("");
   const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
+  const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch completion history
@@ -103,6 +106,65 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   });
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const handleAutoGenerateSubtasks = async () => {
+    if (!task.title && !task.description) {
+      toast.error("请先填写约定内容");
+      return;
+    }
+
+    setIsGeneratingSubtasks(true);
+    try {
+      const res = await base44.integrations.Core.InvokeLLM({
+        prompt: `根据以下约定信息，生成3-5个合理的子约定步骤。
+
+约定标题：${task.title}
+约定描述：${task.description || "无"}
+类别：${task.category}
+优先级：${task.priority}
+
+请生成具体、可执行的子约定，每个子约定应该是完成主约定的一个关键步骤。
+返回JSON数组，每个子约定包含 title 和 priority。`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            subtasks: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
+                },
+                required: ["title", "priority"]
+              }
+            }
+          },
+          required: ["subtasks"]
+        }
+      });
+
+      if (res && res.subtasks && res.subtasks.length > 0) {
+        for (const st of res.subtasks) {
+          await createSubtaskMutation.mutateAsync({
+            title: st.title,
+            description: "",
+            priority: st.priority,
+            category: task.category,
+            status: "pending",
+            parent_task_id: task.id,
+            reminder_time: task.reminder_time
+          });
+        }
+        toast.success(`已生成 ${res.subtasks.length} 个子约定`);
+      }
+    } catch (error) {
+      console.error("AI生成子约定失败:", error);
+      toast.error("生成失败，请重试");
+    } finally {
+      setIsGeneratingSubtasks(false);
+    }
+  };
 
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -588,6 +650,30 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
               {/* Subtasks Tab */}
             <TabsContent value="subtasks" className="space-y-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-slate-700">子约定管理</h3>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAutoGenerateSubtasks}
+                  disabled={isGeneratingSubtasks}
+                  className="border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 h-8"
+                >
+                  {isGeneratingSubtasks ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                      AI 生成子约定
+                    </>
+                  )}
+                </Button>
+              </div>
+
               <div className="flex gap-2">
                 <Input
                   placeholder="添加子约定..."

@@ -375,10 +375,16 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const handleTranslate = async () => {
     setIsTranslating(true);
     try {
-      const isChinese = /[\u4e00-\u9fa5]/.test(task.title + task.description);
-      const targetLang = isChinese ? "English" : "简体中文";
+      // 检测主要语言
+      const allText = task.title + (task.description || "");
+      const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
+      const totalChars = allText.length;
+      const isChinese = chineseChars > totalChars * 0.3;
       
-      // Prepare subtasks and notes for translation
+      const targetLang = isChinese ? "English" : "Simplified Chinese";
+      const targetLangDisplay = isChinese ? "英文" : "中文";
+      
+      // 准备子任务和笔记数据
       const subtasksList = subtasks.map(st => ({
         id: st.id,
         title: st.title,
@@ -390,19 +396,44 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
         content: note.content
       }));
       
+      const prompt = isChinese ? 
+        `请将以下任务的所有信息完整翻译为英文。要求：
+1. 必须翻译每一个字段，不能遗漏
+2. 翻译要准确、自然、流畅
+3. 保持原意不变
+4. 所有内容统一为英文，不能混杂中文
+
+主任务：
+- 标题: ${task.title}
+- 描述: ${task.description || "无"}
+
+子任务列表（共${subtasksList.length}个）：
+${subtasksList.map(st => `ID: ${st.id}\n  标题: ${st.title}\n  描述: ${st.description || "无"}`).join('\n\n')}
+
+笔记列表（共${notesList.length}个）：
+${notesList.map(n => `序号: ${n.index}\n  内容: ${n.content}`).join('\n\n')}
+
+返回完整的JSON，确保所有字段都已翻译。` : 
+        `Please translate all information of the following task to Simplified Chinese. Requirements:
+1. Must translate every field, no omissions
+2. Translation should be accurate, natural and fluent
+3. Keep the original meaning
+4. All content must be unified in Chinese, no mixed English
+
+Main Task:
+- Title: ${task.title}
+- Description: ${task.description || "None"}
+
+Subtasks (Total: ${subtasksList.length}):
+${subtasksList.map(st => `ID: ${st.id}\n  Title: ${st.title}\n  Description: ${st.description || "None"}`).join('\n\n')}
+
+Notes (Total: ${notesList.length}):
+${notesList.map(n => `Index: ${n.index}\n  Content: ${n.content}`).join('\n\n')}
+
+Return complete JSON with all fields translated.`;
+      
       const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `将以下任务的所有信息翻译为${targetLang}。保持准确性和自然性。
-
-主任务标题: ${task.title}
-主任务描述: ${task.description || ""}
-
-子任务列表:
-${subtasksList.map(st => `- ID: ${st.id}, 标题: ${st.title}, 描述: ${st.description}`).join('\n')}
-
-笔记列表:
-${notesList.map(n => `- 序号: ${n.index}, 内容: ${n.content}`).join('\n')}
-
-返回JSON格式，包含翻译后的标题、描述、子任务数组（带id）、笔记数组（带index）。`,
+        prompt,
         response_json_schema: {
           type: "object",
           properties: {
@@ -416,7 +447,8 @@ ${notesList.map(n => `- 序号: ${n.index}, 内容: ${n.content}`).join('\n')}
                   id: { type: "string" },
                   title: { type: "string" },
                   description: { type: "string" }
-                }
+                },
+                required: ["id", "title"]
               }
             },
             notes: {
@@ -426,21 +458,28 @@ ${notesList.map(n => `- 序号: ${n.index}, 内容: ${n.content}`).join('\n')}
                 properties: {
                   index: { type: "number" },
                   content: { type: "string" }
-                }
+                },
+                required: ["index", "content"]
               }
             }
           },
-          required: ["title"]
+          required: ["title", "description", "subtasks", "notes"]
         }
       });
 
       if (res) {
-        // Update main task
+        // 验证翻译结果
+        if (!res.title || res.title === task.title) {
+          toast.error("翻译失败：标题未翻译");
+          return;
+        }
+        
+        // 更新主任务
         await updateTaskMutation.mutateAsync({
           id: task.id,
           data: {
             title: res.title,
-            description: res.description || task.description,
+            description: res.description || "",
             notes: res.notes && res.notes.length > 0 ? 
               (task.notes || []).map((note, idx) => {
                 const translated = res.notes.find(n => n.index === idx);
@@ -449,23 +488,25 @@ ${notesList.map(n => `- 序号: ${n.index}, 内容: ${n.content}`).join('\n')}
           }
         });
         
-        // Update subtasks
+        // 更新子任务
         if (res.subtasks && res.subtasks.length > 0) {
-          for (const translatedSt of res.subtasks) {
+          const updatePromises = res.subtasks.map(translatedSt => {
             const originalSt = subtasks.find(st => st.id === translatedSt.id);
             if (originalSt) {
-              await updateTaskMutation.mutateAsync({
+              return updateTaskMutation.mutateAsync({
                 id: translatedSt.id,
                 data: {
                   title: translatedSt.title,
-                  description: translatedSt.description || originalSt.description
+                  description: translatedSt.description || ""
                 }
               });
             }
-          }
+          }).filter(Boolean);
+          
+          await Promise.all(updatePromises);
         }
         
-        toast.success(`已翻译为${targetLang}`);
+        toast.success(`✅ 已完整翻译为${targetLangDisplay}`);
       }
     } catch (error) {
       console.error("翻译失败:", error);

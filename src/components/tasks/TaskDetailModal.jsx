@@ -49,6 +49,7 @@ import AITaskEnhancer from "./AITaskEnhancer";
 import TaskDependencySelector from "./TaskDependencySelector";
 import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
+import ReactMarkdown from "react-markdown";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -645,7 +646,23 @@ Return complete JSON with all fields translated.`;
 
           {task.description && (
             <div className="bg-[#f9fafb] rounded-[12px] p-4 border border-[#e5e9ef]">
-              <p className="text-[15px] text-[#222222] leading-relaxed">{task.description}</p>
+              <ReactMarkdown 
+                className="prose prose-sm max-w-none text-[15px] text-[#222222] leading-relaxed
+                  prose-headings:text-slate-900 prose-headings:font-semibold prose-headings:mb-2 prose-headings:mt-3 first:prose-headings:mt-0
+                  prose-p:my-2 prose-p:leading-relaxed first:prose-p:mt-0 last:prose-p:mb-0
+                  prose-ul:my-2 prose-ul:list-disc prose-ul:pl-5 prose-ul:space-y-1
+                  prose-ol:my-2 prose-ol:list-decimal prose-ol:pl-5 prose-ol:space-y-1
+                  prose-li:text-[#222222] prose-li:leading-relaxed
+                  prose-strong:text-slate-900 prose-strong:font-semibold
+                  prose-em:text-slate-700 prose-em:italic
+                  prose-code:bg-slate-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:text-slate-800 prose-code:font-mono
+                  prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-pre:p-3 prose-pre:rounded-lg prose-pre:overflow-x-auto
+                  prose-blockquote:border-l-4 prose-blockquote:border-[#384877] prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-slate-600
+                  prose-hr:border-slate-200 prose-hr:my-4
+                  prose-a:text-[#384877] prose-a:underline prose-a:font-medium hover:prose-a:text-[#2c3659]"
+              >
+                {task.description}
+              </ReactMarkdown>
             </div>
           )}
 

@@ -495,7 +495,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   )}
 
                   {task.notes && task.notes.length > 0 && (
-                    <Badge variant="outline" className="rounded-lg text-amber-600 border-amber-300">
+                    <Badge variant="outline" className="rounded-[8px] text-[13px] text-amber-600 border-amber-300 bg-amber-50">
                       <StickyNote className="w-3 h-3 mr-1" />
                       {task.notes.length}条笔记
                     </Badge>
@@ -586,14 +586,14 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                           )}
 
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs bg-white text-slate-700 border-slate-300">
                               <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[subtask.priority]}`} />
                               {format(new Date(subtask.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
                             </Badge>
                             <Badge className={`text-[13px] ${
                               isSubtaskCompleted
-                                ? 'bg-[#10b981] text-white'
-                                : 'bg-[#f9fafb] text-[#222222] border border-[#dce4ed]'
+                                ? 'bg-[#10b981] text-white border-[#10b981]'
+                                : 'bg-white text-[#222222] border border-[#dce4ed]'
                             } rounded-[6px]`}>
                               {isSubtaskCompleted ? '✅ 已完成' : '📌 待完成'}
                             </Badge>

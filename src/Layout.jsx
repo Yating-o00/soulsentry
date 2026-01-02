@@ -268,6 +268,9 @@ export default function Layout({ children }) {
             color: rgb(241 245 249) !important;
             border-color: rgb(51 65 85) !important;
         }
+        /* Ensure text visibility on colored backgrounds */
+        .bg-amber-50 { background-color: rgb(55 48 28) !important; }
+        .text-amber-600 { color: rgb(253 224 71) !important; }
       ` : ''}
 
       /* Override Blue/Purple classes to use our new Primary Tech Blue */

@@ -179,7 +179,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
             category: task.category,
             status: "pending",
             parent_task_id: task.id,
-            reminder_time: task.reminder_time
+            reminder_time: task.reminder_time,
+            end_time: task.end_time
           });
         }
         toast.success(`已生成 ${res.subtasks.length} 个子约定`);

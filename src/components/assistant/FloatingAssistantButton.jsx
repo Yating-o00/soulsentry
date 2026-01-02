@@ -11,6 +11,7 @@ import { isSameDay, isPast } from "date-fns";
 export default function FloatingAssistantButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [shouldPrompt, setShouldPrompt] = useState(false);
+  const [lastActivityTime, setLastActivityTime] = useState(Date.now());
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
@@ -24,6 +25,11 @@ export default function FloatingAssistantButton() {
     queryFn: () => base44.entities.Task.list('-reminder_time'),
     initialData: [],
   });
+
+  // 监听任务变化，更新活动时间
+  useEffect(() => {
+    setLastActivityTime(Date.now());
+  }, [tasks]);
 
   useEffect(() => {
     // 检查是否有需要关注的约定
@@ -41,20 +47,23 @@ export default function FloatingAssistantButton() {
       !isSameDay(new Date(task.reminder_time), now)
     );
 
-    // 如果有今日约定或逾期约定，显示提示
+    // 只显示提示气泡，不自动弹出对话框
     if (todayTasks.length > 0 || overdueTasks.length > 0) {
-      setShouldPrompt(true);
-      
-      // 30秒后自动提示
-      const timer = setTimeout(() => {
-        if (!isOpen) {
-          setIsOpen(true);
-        }
-      }, 30000);
-
-      return () => clearTimeout(timer);
+      // 检查是否已经过了30秒无活动
+      const timeSinceLastActivity = Date.now() - lastActivityTime;
+      if (timeSinceLastActivity >= 30000) {
+        setShouldPrompt(true);
+      } else {
+        // 设置定时器在30秒后显示提示
+        const remainingTime = 30000 - timeSinceLastActivity;
+        const timer = setTimeout(() => {
+          setShouldPrompt(true);
+        }, remainingTime);
+        
+        return () => clearTimeout(timer);
+      }
     }
-  }, [tasks, isOpen]);
+  }, [tasks, lastActivityTime]);
 
   const pendingCount = tasks.filter(t => 
     !t.parent_task_id && 

@@ -27,21 +27,21 @@ const CATEGORY_COLORS = {
 };
 
 const CATEGORY_LABELS = {
-  work: "工作",
-  personal: "个人",
-  health: "健康",
-  study: "学习",
-  family: "家庭",
-  shopping: "购物",
-  finance: "财务",
-  other: "其他",
+  work: { zh: "工作", en: "Work" },
+  personal: { zh: "个人", en: "Personal" },
+  health: { zh: "健康", en: "Health" },
+  study: { zh: "学习", en: "Study" },
+  family: { zh: "家庭", en: "Family" },
+  shopping: { zh: "购物", en: "Shopping" },
+  finance: { zh: "财务", en: "Finance" },
+  other: { zh: "其他", en: "Other" },
 };
 
 const PRIORITY_LABELS = {
-  low: "低优先级",
-  medium: "中优先级",
-  high: "高优先级",
-  urgent: "紧急",
+  low: { zh: "低优先级", en: "Low Priority" },
+  medium: { zh: "中优先级", en: "Medium Priority" },
+  high: { zh: "高优先级", en: "High Priority" },
+  urgent: { zh: "紧急", en: "Urgent" },
 };
 
 export default function TaskShareCard({ task, open, onClose }) {
@@ -61,8 +61,16 @@ export default function TaskShareCard({ task, open, onClose }) {
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 100;
 
+  // Detect language
+  const isEnglish = React.useMemo(() => {
+    const allText = task.title + (task.description || "");
+    const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const totalChars = allText.length;
+    return chineseChars < totalChars * 0.3; // English if less than 30% Chinese
+  }, [task]);
+
   const [quote] = useState(() => {
-    const quotes = [
+    const quotesZh = [
       "每一个不曾起舞的日子，都是对生命的辜负。",
       "坚持不是因为看到了希望，而是因为坚持了才有希望。",
       "今日的努力，是明日的惊喜。",
@@ -74,6 +82,19 @@ export default function TaskShareCard({ task, open, onClose }) {
       "每天进步一点点，坚持带来大改变。",
       "专注当下，未来可期。"
     ];
+    const quotesEn = [
+      "The only way to do great work is to love what you do.",
+      "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+      "Believe you can and you're halfway there.",
+      "The future belongs to those who believe in the beauty of their dreams.",
+      "Don't watch the clock; do what it does. Keep going.",
+      "The secret of getting ahead is getting started.",
+      "It always seems impossible until it's done.",
+      "Small daily improvements are the key to staggering long-term results.",
+      "Focus on being productive instead of busy.",
+      "Your limitation—it's only your imagination."
+    ];
+    const quotes = isEnglish ? quotesEn : quotesZh;
     return quotes[Math.floor(Math.random() * quotes.length)];
   });
 
@@ -290,9 +311,13 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
               <div className="flex items-center gap-3">
                 <Sparkles className="w-5 h-5 text-blue-700" />
                 <div>
-                  <Label className="text-sm font-semibold text-blue-900">显示所有子约定</Label>
+                  <Label className="text-sm font-semibold text-blue-900">
+                    {isEnglish ? "Show All Subtasks" : "显示所有子约定"}
+                  </Label>
                   <p className="text-xs text-blue-700 mt-0.5">
-                    共 {subtasks.length} 个子约定，当前显示 {displayedSubtasks.length} 个
+                   {isEnglish 
+                     ? `Total ${subtasks.length} items, showing ${displayedSubtasks.length}`
+                     : `共 ${subtasks.length} 个子约定，当前显示 ${displayedSubtasks.length} 个`}
                   </p>
                 </div>
               </div>
@@ -337,7 +362,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     <div className="text-white">
                       <div className="flex items-center gap-2 mb-1 opacity-90">
                         <Calendar className="w-4 h-4" />
-                        <span className="text-sm font-medium tracking-wide">DAILY CHECK-IN</span>
+                        <span className="text-sm font-medium tracking-wide">{isEnglish ? "DAILY CHECK-IN" : "每日打卡"}</span>
                       </div>
                       <h3 className="text-3xl font-bold tracking-tight">
                         {format(new Date(), "dd")}
@@ -370,7 +395,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                          }}
                       >
                         <span className="w-2 h-2 rounded-full bg-current" />
-                        {CATEGORY_LABELS[task.category]}
+                        {CATEGORY_LABELS[task.category]?.[isEnglish ? 'en' : 'zh'] || task.category}
                       </div>
 
                       <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -380,7 +405,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         'bg-slate-100 text-slate-700'
                       }`}>
                         <span className="w-2 h-2 rounded-full bg-current" />
-                        {PRIORITY_LABELS[task.priority]}
+                        {PRIORITY_LABELS[task.priority]?.[isEnglish ? 'en' : 'zh'] || task.priority}
                       </div>
                     </div>
 
@@ -398,26 +423,26 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
 
                     {/* 时间信息 */}
                     <div className="grid grid-cols-1 gap-2 mt-4 mb-6 bg-slate-50/50 rounded-xl p-4 border border-slate-100">
+                    <div className="flex items-center gap-3 text-sm">
+                      <div className="flex items-center gap-2 text-slate-600 min-w-[80px]">
+                        <Clock className="w-4 h-4" />
+                        <span className="font-medium">{isEnglish ? "Start Time" : "提醒时间"}</span>
+                      </div>
+                      <span className="font-semibold text-slate-800">
+                        {format(new Date(task.reminder_time), isEnglish ? "MMM dd, yyyy HH:mm" : "yyyy-MM-dd HH:mm", { locale: isEnglish ? undefined : zhCN })}
+                      </span>
+                    </div>
+                    {task.end_time && (
                       <div className="flex items-center gap-3 text-sm">
                         <div className="flex items-center gap-2 text-slate-600 min-w-[80px]">
-                          <Clock className="w-4 h-4" />
-                          <span className="font-medium">提醒时间</span>
+                          <Target className="w-4 h-4" />
+                          <span className="font-medium">{isEnglish ? "End Time" : "截止时间"}</span>
                         </div>
                         <span className="font-semibold text-slate-800">
-                          {format(new Date(task.reminder_time), "yyyy-MM-dd HH:mm", { locale: zhCN })}
+                          {format(new Date(task.end_time), isEnglish ? "MMM dd, yyyy HH:mm" : "yyyy-MM-dd HH:mm", { locale: isEnglish ? undefined : zhCN })}
                         </span>
                       </div>
-                      {task.end_time && (
-                        <div className="flex items-center gap-3 text-sm">
-                          <div className="flex items-center gap-2 text-slate-600 min-w-[80px]">
-                            <Target className="w-4 h-4" />
-                            <span className="font-medium">截止时间</span>
-                          </div>
-                          <span className="font-semibold text-slate-800">
-                            {format(new Date(task.end_time), "yyyy-MM-dd HH:mm", { locale: zhCN })}
-                          </span>
-                        </div>
-                      )}
+                    )}
                     </div>
                   </div>
 
@@ -442,7 +467,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                               <span className="text-sm font-bold text-slate-700">{progress}%</span>
                            </div>
                         </div>
-                        <span className="text-xs text-slate-500 font-medium">完成进度</span>
+                        <span className="text-xs text-slate-500 font-medium">{isEnglish ? "Progress" : "完成进度"}</span>
                      </div>
 
                      <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center items-center text-center">
@@ -453,7 +478,9 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                           {completedSubtasks}
                         </div>
                         <span className="text-xs text-slate-500 font-medium">
-                          {completedSubtasks === subtasks.length && subtasks.length > 0 ? "全部完成" : "已完成项目"}
+                          {completedSubtasks === subtasks.length && subtasks.length > 0 
+                            ? (isEnglish ? "All Done" : "全部完成") 
+                            : (isEnglish ? "Completed" : "已完成项目")}
                         </span>
                      </div>
                   </div>
@@ -463,7 +490,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                      <div className="mb-8 bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50">
                         <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                           <span className="w-1 h-1 rounded-full bg-slate-300" />
-                          CHECKLIST
+                          {isEnglish ? "CHECKLIST" : "清单"}
                           <div className="h-px bg-slate-200 flex-1" />
                         </div>
                         <div className="space-y-2">
@@ -482,7 +509,9 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                           })}
                           {hasMoreSubtasks && (
                             <p className="text-xs text-slate-400 italic pl-7 pt-1">
-                              + 还有 {subtasks.length - displayedSubtasks.length} 项子约定
+                              + {isEnglish 
+                                  ? `${subtasks.length - displayedSubtasks.length} more items` 
+                                  : `还有 ${subtasks.length - displayedSubtasks.length} 项子约定`}
                             </p>
                           )}
                         </div>
@@ -507,15 +536,15 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                          <Sparkles className="w-4 h-4" />
                        </div>
                        <div>
-                         <p className="text-xs font-bold text-slate-900">SoulSentry</p>
-                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">Focus & Achieve</p>
+                         <p className="text-xs font-bold text-slate-900">{isEnglish ? "SoulSentry" : "心灵存放站"}</p>
+                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">{isEnglish ? "Focus & Achieve" : "坚定守护 · 适时轻唤"}</p>
                        </div>
                     </div>
                     
                     {/* 模拟二维码区域 */}
                     <div className="flex items-center gap-2">
                        <div className="text-right hidden sm:block">
-                         <p className="text-[10px] text-slate-400">Scan to view</p>
+                         <p className="text-[10px] text-slate-400">{isEnglish ? "Scan to view" : "扫码查看"}</p>
                          <p className="text-[10px] text-slate-400 font-mono">ID: {task.id.slice(0,4)}</p>
                        </div>
                        <div className="w-10 h-10 bg-slate-900 rounded-md p-1 opacity-90">
@@ -531,9 +560,9 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     <div className="absolute bottom-24 right-8 transform rotate-[-15deg] opacity-90 pointer-events-none">
                       <div className="w-32 h-32 border-4 border-green-600 rounded-full flex items-center justify-center p-2" style={{ maskImage: 'url("data:image/svg+xml;base64,...")' }}> {/* 模拟印章纹理可用CSS实现，这里简化 */}
                          <div className="w-full h-full border-2 border-green-600 rounded-full flex flex-col items-center justify-center text-green-600">
-                            <span className="text-xs font-bold tracking-widest uppercase">Mission</span>
-                            <span className="text-xl font-black uppercase tracking-wider">Completed</span>
-                            <span className="text-[10px] font-mono mt-1">{format(new Date(), "yyyy.MM.dd")}</span>
+                            <span className="text-xs font-bold tracking-widest uppercase">{isEnglish ? "Mission" : "任务"}</span>
+                            <span className="text-xl font-black uppercase tracking-wider">{isEnglish ? "Completed" : "已完成"}</span>
+                            <span className="text-[10px] font-mono mt-1">{format(new Date(), isEnglish ? "MM.dd.yyyy" : "yyyy.MM.dd")}</span>
                          </div>
                       </div>
                     </div>
@@ -578,12 +607,25 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
             <div className="flex gap-3">
               <Sparkles className="w-5 h-5 text-blue-700 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-blue-900 mb-1">智能生成提示</p>
+                <p className="text-sm font-semibold text-blue-900 mb-1">
+                  {isEnglish ? "Smart Generation Tips" : "智能生成提示"}
+                </p>
                 <ul className="text-xs text-blue-800 space-y-1">
-                  <li>• 长约定列表将自动优化图片质量以保证清晰度</li>
-                  <li>• 开启"显示所有子约定"可以生成包含完整列表的长图</li>
-                  <li>• 复制文本功能会包含所有子约定信息</li>
-                  <li>• 点击右上角展开按钮可以获得更大的预览视图</li>
+                  {isEnglish ? (
+                    <>
+                      <li>• Long task lists are automatically optimized for clarity</li>
+                      <li>• Enable "Show All Subtasks" to generate a complete long image</li>
+                      <li>• Copy text function includes all subtask information</li>
+                      <li>• Click the expand button for a larger preview</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>• 长约定列表将自动优化图片质量以保证清晰度</li>
+                      <li>• 开启"显示所有子约定"可以生成包含完整列表的长图</li>
+                      <li>• 复制文本功能会包含所有子约定信息</li>
+                      <li>• 点击右上角展开按钮可以获得更大的预览视图</li>
+                    </>
+                  )}
                 </ul>
               </div>
             </div>

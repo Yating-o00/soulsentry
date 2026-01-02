@@ -549,9 +549,10 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
             <Button
               onClick={handleDownload}
               disabled={generating}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white hover:shadow-lg disabled:opacity-50"
+              variant="outline"
+              className="border-slate-300 bg-white text-slate-900 hover:bg-slate-50 disabled:opacity-50"
             >
-              <Download className="w-4 h-4 mr-2" />
+              <Download className="w-4 h-4 mr-2 text-slate-900" />
               {generating ? "生成中..." : "下载图片"}
             </Button>
             <Button

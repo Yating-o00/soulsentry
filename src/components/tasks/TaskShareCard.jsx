@@ -549,7 +549,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
             <Button
               onClick={handleDownload}
               disabled={generating}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:shadow-lg"
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white hover:shadow-lg disabled:opacity-50"
             >
               <Download className="w-4 h-4 mr-2" />
               {generating ? "生成中..." : "下载图片"}
@@ -558,7 +558,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
               onClick={handleCopyImage}
               disabled={generating}
               variant="outline"
-              className="border-slate-300 hover:bg-slate-50"
+              className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
             >
               <Copy className="w-4 h-4 mr-2" />
               复制图片
@@ -566,7 +566,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
             <Button
               onClick={handleCopyText}
               variant="outline"
-              className="border-slate-300 hover:bg-slate-50"
+              className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900"
             >
               <Copy className="w-4 h-4 mr-2" />
               复制文本

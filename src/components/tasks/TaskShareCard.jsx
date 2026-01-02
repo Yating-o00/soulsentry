@@ -14,6 +14,7 @@ import { zhCN } from "date-fns/locale";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import ReactMarkdown from "react-markdown";
 
 const CATEGORY_COLORS = {
   work: { accent: "#1D4ED8", bg: "#EFF6FF" },
@@ -415,9 +416,21 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
 
                     {task.description && (
                       <div className="relative pl-4 border-l-2 border-slate-200 py-1 mb-6">
-                        <p className="text-slate-600 text-sm italic leading-relaxed">
-                          "{task.description}"
-                        </p>
+                        <ReactMarkdown 
+                          className="prose prose-sm max-w-none text-slate-600 text-sm leading-relaxed
+                            prose-headings:text-slate-800 prose-headings:font-semibold prose-headings:text-sm prose-headings:mb-1 prose-headings:mt-2 first:prose-headings:mt-0
+                            prose-p:my-1 prose-p:leading-relaxed first:prose-p:mt-0 last:prose-p:mb-0
+                            prose-ul:my-1 prose-ul:list-disc prose-ul:pl-4 prose-ul:space-y-0.5
+                            prose-ol:my-1 prose-ol:list-decimal prose-ol:pl-4 prose-ol:space-y-0.5
+                            prose-li:text-slate-600 prose-li:text-sm
+                            prose-strong:text-slate-800 prose-strong:font-semibold
+                            prose-em:text-slate-600 prose-em:italic
+                            prose-code:bg-slate-200 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
+                            prose-blockquote:border-l-2 prose-blockquote:border-slate-300 prose-blockquote:pl-2 prose-blockquote:italic
+                            prose-hr:border-slate-200 prose-hr:my-2"
+                        >
+                          {task.description}
+                        </ReactMarkdown>
                       </div>
                     )}
 

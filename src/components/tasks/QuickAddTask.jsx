@@ -516,12 +516,12 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   return (
     <>
       <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm">
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           {!isExpanded ? (
             <Tabs defaultValue="quick" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6 h-12 bg-slate-100/50 p-1 rounded-xl">
-                <TabsTrigger value="quick" className="rounded-[10px] text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">快速创建</TabsTrigger>
-                <TabsTrigger value="smart" className="rounded-[10px] text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">智能文本解析</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 mb-4 md:mb-6 h-10 md:h-12 bg-slate-100/50 p-1 rounded-xl">
+                <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">快速创建</TabsTrigger>
+                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">智能解析</TabsTrigger>
               </TabsList>
 
               <TabsContent value="quick" className="mt-0 space-y-4">
@@ -534,28 +534,28 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                   <span className="text-xs text-slate-500">智能创建约定</span>
                 </div>
 
-                <div className="flex gap-4 h-[120px]">
+                <div className="flex flex-col md:flex-row gap-3 md:gap-4">
                   <button
                     onClick={() => setIsExpanded(true)}
-                    className="flex-1 group relative rounded-[20px] border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex flex-row items-center justify-center gap-5 px-4 py-6"
+                    className="flex-1 group relative rounded-[20px] border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex flex-col md:flex-row items-center justify-center gap-3 md:gap-5 px-4 py-4 md:py-6 min-h-[100px] md:min-h-[120px]"
                   >
-                    <div className="h-14 w-14 rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
-                      <Plus className="w-7 h-7 text-[#384877]" strokeWidth={2.5} />
+                    <div className="h-12 w-12 md:h-14 md:w-14 rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
+                      <Plus className="w-6 h-6 md:w-7 md:h-7 text-[#384877]" strokeWidth={2.5} />
                     </div>
-                    <div className="text-left">
-                      <div className="font-bold text-slate-800 text-lg mb-0.5">手动创建</div>
-                      <div className="text-sm text-slate-500 font-medium">点击输入详情</div>
+                    <div className="text-center md:text-left">
+                      <div className="font-bold text-slate-800 text-base md:text-lg mb-0.5">手动创建</div>
+                      <div className="text-xs md:text-sm text-slate-500 font-medium">点击输入详情</div>
                     </div>
                   </button>
 
                   {browserSupported && (
                     <button
                       onClick={startVoiceInput}
-                      className="flex-1 group relative rounded-[20px] bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex flex-row items-center justify-center gap-5 shadow-xl shadow-blue-900/20 px-4 py-6"
+                      className="flex-1 group relative rounded-[20px] bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex flex-col md:flex-row items-center justify-center gap-3 md:gap-5 shadow-xl shadow-blue-900/20 px-4 py-4 md:py-6 min-h-[100px] md:min-h-[120px]"
                     >
                       <div className="relative flex-shrink-0">
-                        <div className="h-14 w-14 rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm border border-white/10">
-                          <Mic className="w-7 h-7 text-white" />
+                        <div className="h-12 w-12 md:h-14 md:w-14 rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm border border-white/10">
+                          <Mic className="w-6 h-6 md:w-7 md:h-7 text-white" />
                         </div>
                         <motion.div
                           className="absolute inset-0 rounded-2xl bg-white/20"
@@ -563,9 +563,9 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
                           transition={{ duration: 2, repeat: Infinity }}
                         />
                       </div>
-                      <div className="text-left">
-                        <div className="font-bold text-lg mb-0.5">语音创建</div>
-                        <div className="text-sm text-blue-100/80 font-medium">AI 识别</div>
+                      <div className="text-center md:text-left">
+                        <div className="font-bold text-base md:text-lg mb-0.5">语音创建</div>
+                        <div className="text-xs md:text-sm text-blue-100/80 font-medium">AI 识别</div>
                       </div>
                     </button>
                   )}

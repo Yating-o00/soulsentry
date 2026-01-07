@@ -153,7 +153,7 @@ export default function Tasks() {
   // Smart sort removed - handled by Soul Sentry agent conversation
 
   return (
-    <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto pb-20 md:pb-8">
       <NotificationManager />
       
       <motion.div
@@ -166,7 +166,7 @@ export default function Tasks() {
         <p className="text-sm md:text-base text-slate-600">你的点滴都是最重要的事</p>
       </motion.div>
 
-      <div className="mb-8">
+      <div className="mb-4 md:mb-8">
         <QuickAddTask onAdd={(data) => createTask(data)} />
       </div>
 
@@ -194,40 +194,41 @@ export default function Tasks() {
             />
           </div>
 
-          <div className="flex items-center justify-center md:justify-start">
+          <div className="flex items-center justify-between md:justify-start gap-2">
             <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
               <button
                 onClick={() => setViewMode("list")}
-                className={`p-1.5 md:p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="列表视图">
                 <LayoutList className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode("gantt")}
-                className={`p-1.5 md:p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-2 rounded-lg transition-all hidden sm:block ${viewMode === 'gantt' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="甘特图视图">
                 <BarChart3 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode("kanban")}
-                className={`p-1.5 md:p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="看板视图">
                 <KanbanSquare className="w-4 h-4" />
               </button>
             </div>
+            <span className="text-xs text-slate-500 md:hidden">{rootTasks.length} 个约定</span>
           </div>
         </div>
 
         <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
           <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
-            <TabsTrigger value="all" className="rounded-[10px] text-xs md:text-sm px-2 py-2 md:px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <span className="hidden sm:inline">全部</span> ({tasks.length})
+            <TabsTrigger value="all" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <span className="hidden sm:inline">全部</span><span className="sm:hidden">全部</span> <span className="ml-0.5">({tasks.length})</span>
             </TabsTrigger>
-            <TabsTrigger value="pending" className="rounded-[10px] text-xs md:text-sm px-2 py-2 md:px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <span className="hidden sm:inline">进行中</span><span className="sm:hidden">待办</span> ({tasks.filter((t) => t.status === "pending").length})
+            <TabsTrigger value="pending" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <span className="hidden sm:inline">进行中</span><span className="sm:hidden">待办</span> <span className="ml-0.5">({tasks.filter((t) => t.status === "pending").length})</span>
             </TabsTrigger>
-            <TabsTrigger value="completed" className="rounded-[10px] text-xs md:text-sm px-2 py-2 md:px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <span className="hidden sm:inline">已完成</span><span className="sm:hidden">完成</span> ({tasks.filter((t) => t.status === "completed").length})
+            <TabsTrigger value="completed" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <span className="hidden sm:inline">已完成</span><span className="sm:hidden">完成</span> <span className="ml-0.5">({tasks.filter((t) => t.status === "completed").length})</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -281,7 +282,7 @@ export default function Tasks() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="ml-8 relative pl-4 border-l-2 border-slate-200/50">
+                className="ml-4 md:ml-8 relative pl-3 md:pl-4 border-l-2 border-slate-200/50">
 
                     <TaskCard
                   task={subtask}
@@ -322,9 +323,9 @@ export default function Tasks() {
 
 
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] md:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>编辑约定</DialogTitle>
+            <DialogTitle className="text-base md:text-lg">编辑约定</DialogTitle>
           </DialogHeader>
           {editingTask &&
           <QuickAddTask

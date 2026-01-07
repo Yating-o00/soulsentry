@@ -153,17 +153,17 @@ export default function Tasks() {
   // Smart sort removed - handled by Soul Sentry agent conversation
 
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto">
       <NotificationManager />
       
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}>
 
-        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
+        <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-1 md:mb-2">
           全部约定
         </h1>
-        <p className="text-slate-600">你的点滴都是最重要的事</p>
+        <p className="text-sm md:text-base text-slate-600">你的点滴都是最重要的事</p>
       </motion.div>
 
       <div className="mb-8">
@@ -174,61 +174,60 @@ export default function Tasks() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="space-y-4">
+        className="space-y-3">
 
-        <div className="flex flex-col md:flex-row items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-          <div className="relative flex-1 w-full md:w-auto">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="搜索约定..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-10 border-0 bg-slate-50 hover:bg-slate-100 focus:bg-white transition-colors rounded-xl text-sm" />
+        <div className="flex flex-col gap-2 bg-white p-2 md:p-3 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="搜索约定..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 md:h-10 border-0 bg-slate-50 hover:bg-slate-100 focus:bg-white transition-colors rounded-xl text-sm" />
+            </div>
 
+            <AdvancedTaskFilters 
+              filters={advancedFilters} 
+              onChange={setAdvancedFilters} 
+              onClear={() => setAdvancedFilters({ category: 'all', createdBy: 'all', tags: [], dateRange: undefined })} 
+            />
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end overflow-x-auto">
-            <div className="bg-slate-100 p-1 rounded-xl flex gap-1 flex-shrink-0">
+          <div className="flex items-center justify-center md:justify-start">
+            <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
               <button
                 onClick={() => setViewMode("list")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-1.5 md:p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="列表视图">
                 <LayoutList className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode("gantt")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-1.5 md:p-2 rounded-lg transition-all ${viewMode === 'gantt' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="甘特图视图">
                 <BarChart3 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode("kanban")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`p-1.5 md:p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 title="看板视图">
                 <KanbanSquare className="w-4 h-4" />
               </button>
             </div>
-
-            <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
-
-            <AdvancedTaskFilters 
-                filters={advancedFilters} 
-                onChange={setAdvancedFilters} 
-                onClear={() => setAdvancedFilters({ category: 'all', createdBy: 'all', tags: [], dateRange: undefined })} 
-            />
           </div>
         </div>
 
         <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
-          <TabsList className="grid w-full md:w-auto grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
-            <TabsTrigger value="all" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              全部 ({tasks.length})
+          <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
+            <TabsTrigger value="all" className="rounded-[10px] text-xs md:text-sm px-2 py-2 md:px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <span className="hidden sm:inline">全部</span> ({tasks.length})
             </TabsTrigger>
-            <TabsTrigger value="pending" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              进行中 ({tasks.filter((t) => t.status === "pending").length})
+            <TabsTrigger value="pending" className="rounded-[10px] text-xs md:text-sm px-2 py-2 md:px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <span className="hidden sm:inline">进行中</span><span className="sm:hidden">待办</span> ({tasks.filter((t) => t.status === "pending").length})
             </TabsTrigger>
-            <TabsTrigger value="completed" className="rounded-[10px] data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              已完成 ({tasks.filter((t) => t.status === "completed").length})
+            <TabsTrigger value="completed" className="rounded-[10px] text-xs md:text-sm px-2 py-2 md:px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <span className="hidden sm:inline">已完成</span><span className="sm:hidden">完成</span> ({tasks.filter((t) => t.status === "completed").length})
             </TabsTrigger>
           </TabsList>
         </Tabs>

@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
+import { TranslationProvider, useTranslation } from "./components/TranslationContext";
 import {
   Sidebar,
   SidebarContent,
@@ -21,34 +22,34 @@ import { Trash2, MessageSquarePlus, Search } from "lucide-react";
 import FeedbackDialog from "@/components/feedback/FeedbackDialog";
 import GlobalSearch from "@/components/search/GlobalSearch";
 
-const navigationItems = [
+const getNavigationItems = (t) => [
   {
-    title: "今日",
+    title: t('today'),
     url: createPageUrl("Dashboard"),
     icon: LayoutDashboard,
   },
   {
-    title: "约定",
+    title: t('tasks'),
     url: createPageUrl("Tasks"),
     icon: ListTodo,
   },
   {
-    title: "心签",
+    title: t('notes'),
     url: createPageUrl("Notes"),
     icon: StickyNote,
   },
   {
-    title: "团队",
+    title: t('teams'),
     url: createPageUrl("Teams"),
     icon: Users,
   },
   {
-    title: "我的账户",
+    title: t('myAccount'),
     url: createPageUrl("Account"),
     icon: User,
   },
   {
-    title: "消息通知",
+    title: t('notifications'),
     url: createPageUrl("Notifications"),
     icon: Bell,
   },
@@ -57,6 +58,8 @@ const navigationItems = [
 function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   const location = useLocation();
   const { setOpenMobile } = useSidebar();
+  const { t, language, toggleLanguage } = useTranslation();
+  const navigationItems = getNavigationItems(t);
 
   const handleMobileClick = () => {
     setOpenMobile(false);
@@ -65,16 +68,25 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   return (
     <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
       <SidebarHeader className="border-b border-slate-200/50 p-6">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
-            <Bell className="w-5 h-5 text-white" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+              <Bell className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+                {t('soulSentry')}
+              </h2>
+              <p className="text-xs text-slate-500">{t('tagline')}</p>
+            </div>
           </div>
-          <div>
-            <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
-              心灵存放站
-            </h2>
-            <p className="text-xs text-slate-500">坚定守护，适时轻唤</p>
-          </div>
+          <button
+            onClick={toggleLanguage}
+            className="h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors group"
+            title={language === 'zh' ? 'Switch to English' : '切换到中文'}
+          >
+            <Languages className="w-4 h-4 text-slate-500 group-hover:text-[#384877]" />
+          </button>
         </div>
       </SidebarHeader>
 
@@ -141,7 +153,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
             >
               <div className="flex items-center gap-3 px-4 py-3 w-full">
                 <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-[#384877] group-hover:scale-110 transition-all duration-300" />
-                <span className="font-medium group-hover:text-[#384877] transition-colors">反馈与联系</span>
+                <span className="font-medium group-hover:text-[#384877] transition-colors">{t('feedback')}</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -163,7 +175,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                 <Trash2 className={`w-5 h-5 transition-transform duration-300 ${
                   location.pathname === createPageUrl("Trash") ? 'scale-110 text-[#d5495f]' : 'group-hover:scale-110 group-hover:text-[#d5495f] text-slate-500'
                 }`} />
-                <span className="font-medium">回收站</span>
+                <span className="font-medium">{t('trash')}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -173,10 +185,11 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   );
 }
 
-export default function Layout({ children }) {
+function LayoutContent({ children }) {
   const location = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const { t } = useTranslation();
   
   // Fetch user theme preferences
   const [theme, setTheme] = useState({
@@ -310,7 +323,7 @@ export default function Layout({ children }) {
             <div className="flex items-center gap-4">
               <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-all duration-200" />
               <h1 className="text-lg font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
-                心灵存放站
+                {t('soulSentry')}
               </h1>
             </div>
           </header>
@@ -320,5 +333,13 @@ export default function Layout({ children }) {
           </div>
         </main>
     </SidebarProvider>
-  );
-}
+    );
+    }
+
+    export default function Layout({ children }) {
+    return (
+    <TranslationProvider>
+    <LayoutContent>{children}</LayoutContent>
+    </TranslationProvider>
+    );
+    }

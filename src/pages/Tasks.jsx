@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "../components/TranslationContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare, Sparkles, Loader2 } from "lucide-react";
@@ -27,6 +28,7 @@ import { useTaskOperations } from "../components/hooks/useTaskOperations";
 
 
 export default function Tasks() {
+  const { t } = useTranslation();
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [advancedFilters, setAdvancedFilters] = useState({ category: 'all', createdBy: 'all', tags: [], dateRange: undefined });
@@ -161,9 +163,9 @@ export default function Tasks() {
         animate={{ opacity: 1, y: 0 }}>
 
         <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-1 md:mb-2">
-          全部约定
+          {t('allTasks')}
         </h1>
-        <p className="text-sm md:text-base text-slate-600">你的点滴都是最重要的事</p>
+        <p className="text-sm md:text-base text-slate-600">{t('yourMomentsMatter')}</p>
       </motion.div>
 
       <div className="mb-4 md:mb-8">
@@ -181,7 +183,7 @@ export default function Tasks() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="搜索约定..."
+                placeholder={t('searchTasks')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 h-9 md:h-10 border-0 bg-slate-50 hover:bg-slate-100 focus:bg-white transition-colors rounded-xl text-sm" />
@@ -222,13 +224,13 @@ export default function Tasks() {
         <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
           <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
             <TabsTrigger value="all" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <span className="hidden sm:inline">全部</span><span className="sm:hidden">全部</span> <span className="ml-0.5">({tasks.length})</span>
+              {t('all')} <span className="ml-0.5">({tasks.length})</span>
             </TabsTrigger>
             <TabsTrigger value="pending" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <span className="hidden sm:inline">进行中</span><span className="sm:hidden">待办</span> <span className="ml-0.5">({tasks.filter((t) => t.status === "pending").length})</span>
+              {t('pending')} <span className="ml-0.5">({tasks.filter((t) => t.status === "pending").length})</span>
             </TabsTrigger>
             <TabsTrigger value="completed" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              <span className="hidden sm:inline">已完成</span><span className="sm:hidden">完成</span> <span className="ml-0.5">({tasks.filter((t) => t.status === "completed").length})</span>
+              {t('completed')} <span className="ml-0.5">({tasks.filter((t) => t.status === "completed").length})</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -310,8 +312,8 @@ export default function Tasks() {
             <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
               <Search className="w-12 h-12 text-slate-400" />
             </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">未找到约定</h3>
-            <p className="text-slate-600">试试调整筛选条件或创建新约定</p>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">{t('noTasksFound')}</h3>
+            <p className="text-slate-600">{t('adjustFilters')}</p>
           </motion.div>
         }
       </motion.div>

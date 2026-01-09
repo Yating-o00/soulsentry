@@ -50,6 +50,7 @@ export function useTaskOperations() {
   });
 
   const handleComplete = async (task, allTasks = []) => {
+    const isRecurring = task.repeat_rule && task.repeat_rule !== 'none';
     const newStatus = task.status === "completed" ? "pending" : "completed";
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     
@@ -78,10 +79,11 @@ export function useTaskOperations() {
       }
     }
 
+    // For recurring tasks, keep status as pending but record completion
     updateTaskMutation.mutate({
       id: task.id,
       data: { 
-        status: newStatus,
+        status: isRecurring && newStatus === 'completed' ? 'pending' : newStatus,
         completed_at: completedAt
       }
     });
@@ -93,6 +95,10 @@ export function useTaskOperations() {
           status: "completed",
           completed_at: completedAt
         });
+        
+        if (isRecurring) {
+          toast.success("✓ 已记录完成，约定继续重复");
+        }
       } catch (e) {
         console.error("Failed to record completion", e);
       }

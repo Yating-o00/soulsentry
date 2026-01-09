@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic } from "lucide-react";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
@@ -16,6 +16,7 @@ import QuickAddTask from "../components/tasks/QuickAddTask";
 import AINotesOrganizer from "../components/notes/AINotesOrganizer";
 import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
 import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
+import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -33,6 +34,7 @@ export default function Notes() {
   const [showAIOrganizer, setShowAIOrganizer] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
   const [showKnowledgeManager, setShowKnowledgeManager] = useState(false);
+  const [showMobileInput, setShowMobileInput] = useState(false);
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
   const queryClient = useQueryClient();
@@ -317,7 +319,7 @@ export default function Notes() {
         </div>
       </motion.div>
 
-      {/* Quick Create Area - Always Visible */}
+      {/* Quick Create Area - Desktop / Mobile Adaptive */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -328,7 +330,7 @@ export default function Notes() {
           <button
             type="button"
             onClick={() => setIsCreating(true)}
-            className="w-full text-left group relative overflow-hidden bg-gradient-to-br from-white to-slate-50 border-2 border-dashed border-slate-200 hover:border-[#384877] rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
+            className="hidden md:flex w-full text-left group relative overflow-hidden bg-gradient-to-br from-white to-slate-50 border-2 border-dashed border-slate-200 hover:border-[#384877] rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-[#384877]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             
@@ -483,6 +485,30 @@ export default function Notes() {
           }
         </DialogContent>
       </Dialog>
+
+      {/* Mobile Quick Input */}
+      <AnimatePresence>
+        {showMobileInput && (
+          <MobileVoiceNoteInput
+            onSave={(data) => {
+              createNoteMutation.mutate(data);
+              setShowMobileInput(false);
+            }}
+            onClose={() => setShowMobileInput(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Mobile FAB */}
+      <motion.button
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={() => setShowMobileInput(true)}
+        className="md:hidden fixed bottom-6 right-6 z-40 h-16 w-16 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-2xl flex items-center justify-center"
+      >
+        <Plus className="w-8 h-8" />
+      </motion.button>
     </div>);
 
 }

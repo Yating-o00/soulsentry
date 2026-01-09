@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
-import { Loader2, Sparkles, X, Save, ListTodo, Wand2, RefreshCw, PenLine, Play } from "lucide-react";
+import { Loader2, Sparkles, X, Save, ListTodo, Wand2, RefreshCw, PenLine, Play, Camera, Upload } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -39,7 +39,9 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const quillRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // 智能标签推荐 (Debounced)
   React.useEffect(() => {
@@ -312,6 +314,29 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
+  const handleImageUpload = async (file) => {
+    if (!file || !quillRef.current) return;
+
+    setIsUploading(true);
+    try {
+      const response = await base44.integrations.Core.UploadFile({ file });
+      const imageUrl = response.file_url;
+
+      // Insert image into editor
+      const editor = quillRef.current.getEditor();
+      const range = editor.getSelection(true);
+      editor.insertEmbed(range.index, 'image', imageUrl);
+      editor.setSelection(range.index + 1);
+
+      toast.success("图片已上传");
+    } catch (error) {
+      console.error("上传失败:", error);
+      toast.error("图片上传失败");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div 
       className={`rounded-2xl border-2 shadow-xl overflow-hidden transition-all duration-300 ${COLORS.find(c => c.name === color)?.class || "bg-white border-slate-200"} hover:shadow-2xl`}
@@ -420,8 +445,34 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 className="h-8 px-3 text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
             >
                 <Wand2 className="w-3.5 h-3.5 mr-1" />
-                AI 写作助手
+                <span className="hidden sm:inline">AI 写作助手</span>
+                <span className="sm:hidden">AI</span>
             </button>
+
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                }}
+                disabled={isUploading}
+                className="h-8 px-3 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg gap-1.5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center disabled:opacity-50"
+            >
+                {isUploading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                    <Camera className="w-3.5 h-3.5" />
+                )}
+                <span className="hidden sm:inline">上传图片</span>
+            </button>
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleImageUpload(e.target.files?.[0])}
+            />
             
             <Dialog open={showAIWriter} onOpenChange={setShowAIWriter}>
                 <DialogTrigger asChild>

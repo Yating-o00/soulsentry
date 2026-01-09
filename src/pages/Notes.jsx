@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2 } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain } from "lucide-react";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
@@ -110,6 +110,31 @@ export default function Notes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       toast.success("心签已删除");
+    }
+  });
+
+  const saveToKnowledgeMutation = useMutation({
+    mutationFn: async (note) => {
+      const knowledgeData = {
+        title: note.ai_analysis?.summary || note.plain_text?.slice(0, 50) || "未命名知识",
+        content: note.ai_analysis?.key_points ? 
+          `${note.ai_analysis.summary}\n\n要点：\n${note.ai_analysis.key_points.map(p => `• ${p}`).join('\n')}\n\n原文：\n${note.plain_text}` :
+          note.plain_text,
+        source_type: "note",
+        source_id: note.id,
+        tags: note.tags || [],
+        category: "其他",
+        importance: 3,
+        embedding_summary: note.ai_analysis?.summary || note.plain_text?.slice(0, 200)
+      };
+      return base44.entities.KnowledgeBase.create(knowledgeData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['knowledge-base'] });
+      toast.success("已保存到知识库");
+    },
+    onError: () => {
+      toast.error("保存失败");
     }
   });
 
@@ -329,7 +354,8 @@ export default function Notes() {
             onDelete={(n) => deleteNoteMutation.mutate(n.id)}
             onPin={handlePin}
             onShare={setSharingNote}
-            onConvertToTask={(n) => setTaskCreationNote(n)} />
+            onConvertToTask={(n) => setTaskCreationNote(n)}
+            onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)} />
 
           )}
         </AnimatePresence>

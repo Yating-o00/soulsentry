@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users } from "lucide-react";
+import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import {
@@ -25,7 +25,7 @@ const COLORS = {
   pink: "bg-pink-50 hover:border-pink-300",
 };
 
-export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare }) {
+export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge }) {
   const colorClass = COLORS[note.color] || COLORS.white;
 
   const handleCopy = () => {
@@ -160,6 +160,12 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
                     <ListTodo className="w-4 h-4 mr-2" />
                     转为任务
                   </DropdownMenuItem>
+                  {onSaveToKnowledge && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSaveToKnowledge(note); }}>
+                      <Brain className="w-4 h-4 mr-2" />
+                      保存到知识库
+                    </DropdownMenuItem>
+                  )}
                   {onShare && (
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare(note); }}>
                       <Share2 className="w-4 h-4 mr-2" />

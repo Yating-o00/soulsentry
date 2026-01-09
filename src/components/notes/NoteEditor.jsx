@@ -80,6 +80,11 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   };
 
   const handleAIGenerate = async (mode) => {
+    if (!quillRef.current) {
+      toast.error("编辑器未就绪");
+      return;
+    }
+
     setIsGenerating(true);
     const editor = quillRef.current.getEditor();
     const currentText = editor.getText().trim();
@@ -150,6 +155,11 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   };
 
   const handleAnalyze = async () => {
+    if (!quillRef.current) {
+      toast.error("编辑器未就绪");
+      return;
+    }
+
     const editor = quillRef.current.getEditor();
     const text = editor.getText().trim();
     // Preserve formatting while getting HTML
@@ -266,6 +276,11 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   };
 
   const handleSave = () => {
+    if (!quillRef.current) {
+      toast.error("编辑器未就绪");
+      return;
+    }
+
     const editor = quillRef.current.getEditor();
     const plainText = editor.getText().trim();
     

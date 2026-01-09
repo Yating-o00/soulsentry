@@ -454,6 +454,13 @@ export default function Notes() {
         </DialogContent>
       </Dialog>
 
+      {/* AI Knowledge Base */}
+      <Dialog open={showKnowledgeBase} onOpenChange={setShowKnowledgeBase}>
+        <DialogContent className="max-w-3xl h-[80vh] p-0">
+          <AIKnowledgeBase open={showKnowledgeBase} onOpenChange={setShowKnowledgeBase} />
+        </DialogContent>
+      </Dialog>
+
       {/* Knowledge Base Manager */}
       <Dialog open={showKnowledgeManager} onOpenChange={setShowKnowledgeManager}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">

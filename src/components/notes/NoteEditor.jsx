@@ -313,7 +313,19 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   };
 
   return (
-    <div className={`rounded-2xl border-2 shadow-xl overflow-hidden transition-all duration-300 ${COLORS.find(c => c.name === color)?.class || "bg-white border-slate-200"} hover:shadow-2xl`}>
+    <div 
+      className={`rounded-2xl border-2 shadow-xl overflow-hidden transition-all duration-300 ${COLORS.find(c => c.name === color)?.class || "bg-white border-slate-200"} hover:shadow-2xl`}
+      onMouseDown={(e) => {
+        // Allow ReactQuill to handle its own events
+        if (e.target.closest('.ql-editor') || e.target.closest('.ql-toolbar')) {
+          return;
+        }
+      }}
+      onClick={(e) => {
+        // Prevent parent click handlers
+        e.stopPropagation();
+      }}
+    >
       <div className="p-5">
         <div className="mb-5 bg-white/80 rounded-xl border border-slate-100 overflow-hidden shadow-inner">
             <ReactQuill

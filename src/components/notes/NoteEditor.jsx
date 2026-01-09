@@ -336,7 +336,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             />
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4" onMouseDown={(e) => e.stopPropagation()}>
             <AnimatePresence>
             {tags.map(tag => (
                 <motion.div
@@ -347,8 +347,16 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 >
                 <Badge variant="secondary" className="bg-white/80 hover:bg-white text-slate-700 border border-slate-200 pl-2 pr-1 py-1 gap-1">
                     #{tag}
-                    <button onClick={() => removeTag(tag)} className="hover:bg-slate-200 rounded-full p-0.5">
-                    <X className="w-3 h-3" />
+                    <button 
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            removeTag(tag);
+                        }} 
+                        className="hover:bg-slate-200 rounded-full p-0.5"
+                    >
+                        <X className="w-3 h-3" />
                     </button>
                 </Badge>
                 </motion.div>
@@ -364,7 +372,11 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                             key={tag} 
                             variant="outline" 
                             className="cursor-pointer border-dashed border-purple-300 text-purple-600 hover:bg-purple-50 text-[10px] px-1.5"
-                            onClick={() => addSuggestedTag(tag)}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                addSuggestedTag(tag);
+                            }}
                         >
                             +{tag}
                         </Badge>
@@ -372,37 +384,36 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 </div>
             )}
 
-            <Button
+            <button
                 type="button"
-                variant="ghost"
-                size="sm"
                 onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     handleAnalyze();
                 }}
                 disabled={isAnalyzing}
-                className="h-8 text-xs font-medium text-white bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
+                className="h-8 px-3 text-xs font-medium text-white bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
-                {isAnalyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                {isAnalyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
                 AI 智能分析
-            </Button>
+            </button>
+            
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowAIWriter(true);
+                }}
+                className="h-8 px-3 text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
+            >
+                <Wand2 className="w-3.5 h-3.5 mr-1" />
+                AI 写作助手
+            </button>
             
             <Dialog open={showAIWriter} onOpenChange={setShowAIWriter}>
                 <DialogTrigger asChild>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                        }}
-                        className="h-8 text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
-                    >
-                        <Wand2 className="w-3.5 h-3.5" />
-                        AI 写作助手
-                    </Button>
+                    <span className="hidden" />
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
@@ -515,14 +526,19 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             </motion.div>
         )}
 
-        <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+        <div className="flex items-center justify-between pt-4 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
                 <span className="text-xs font-medium text-slate-600">颜色标记</span>
                 <div className="flex gap-1.5">
                     {COLORS.map(c => (
                         <button
                         key={c.name}
-                        onClick={() => setColor(c.name)}
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setColor(c.name);
+                        }}
                         className={`w-7 h-7 rounded-lg border-2 ${c.name === 'white' ? 'bg-white' : `bg-${c.name}-100`} ${color === c.name ? 'ring-2 ring-offset-2 ring-[#384877] scale-110' : 'hover:scale-110 hover:border-slate-300'} transition-all duration-200 shadow-sm`}
                         style={{ backgroundColor: c.name === 'white' ? '#ffffff' : undefined }}
                         title={c.name}
@@ -532,20 +548,30 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             </div>
             <div className="flex gap-2">
                 {onClose && (
-                    <Button variant="outline" onClick={onClose} className="rounded-lg">取消</Button>
+                    <button 
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onClose();
+                        }}
+                        className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors"
+                    >
+                        取消
+                    </button>
                 )}
-                <Button 
+                <button 
                     type="button"
                     onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         handleSave();
                     }} 
-                    className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer"
+                    className="px-4 py-2 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center"
                 >
                     <Save className="w-4 h-4 mr-2" />
                     保存心签
-                </Button>
+                </button>
             </div>
         </div>
       </div>

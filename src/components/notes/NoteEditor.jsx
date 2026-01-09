@@ -373,11 +373,16 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             )}
 
             <Button
+                type="button"
                 variant="ghost"
                 size="sm"
-                onClick={handleAnalyze}
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleAnalyze();
+                }}
                 disabled={isAnalyzing}
-                className="h-8 text-xs font-medium text-white bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200"
+                className="h-8 text-xs font-medium text-white bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
             >
                 {isAnalyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                 AI 智能分析
@@ -386,9 +391,14 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             <Dialog open={showAIWriter} onOpenChange={setShowAIWriter}>
                 <DialogTrigger asChild>
                     <Button
+                        type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-8 text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }}
+                        className="h-8 text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
                     >
                         <Wand2 className="w-3.5 h-3.5" />
                         AI 写作助手
@@ -419,9 +429,13 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                                 />
                             </div>
                             <Button 
-                                onClick={() => handleAIGenerate("draft")} 
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    handleAIGenerate("draft");
+                                }} 
                                 disabled={isGenerating || !aiPrompt.trim()}
-                                className="w-full bg-purple-600 hover:bg-purple-700"
+                                className="w-full bg-purple-600 hover:bg-purple-700 cursor-pointer"
                             >
                                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <PenLine className="w-4 h-4 mr-2" />}
                                 开始生成
@@ -433,9 +447,13 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                                 <p>AI 将根据当前心签的上下文，自动续写下一段内容。</p>
                             </div>
                             <Button 
-                                onClick={() => handleAIGenerate("continue")} 
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    handleAIGenerate("continue");
+                                }} 
                                 disabled={isGenerating}
-                                className="w-full bg-blue-600 hover:bg-blue-700"
+                                className="w-full bg-blue-600 hover:bg-blue-700 cursor-pointer"
                             >
                                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
                                 智能续写
@@ -448,9 +466,13 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                                 <p className="text-xs text-red-500 mt-2">* 注意：这将替换当前全部内容</p>
                             </div>
                             <Button 
-                                onClick={() => handleAIGenerate("rewrite")} 
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    handleAIGenerate("rewrite");
+                                }} 
                                 disabled={isGenerating}
-                                className="w-full bg-orange-500 hover:bg-orange-600"
+                                className="w-full bg-orange-500 hover:bg-orange-600 cursor-pointer"
                             >
                                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                                 一键润色
@@ -512,7 +534,15 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                 {onClose && (
                     <Button variant="outline" onClick={onClose} className="rounded-lg">取消</Button>
                 )}
-                <Button onClick={handleSave} className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200">
+                <Button 
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSave();
+                    }} 
+                    className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer"
+                >
                     <Save className="w-4 h-4 mr-2" />
                     保存心签
                 </Button>

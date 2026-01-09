@@ -266,9 +266,10 @@ export default function Notes() {
         className="sticky top-0 z-10 bg-gradient-to-b from-white via-white to-transparent pb-4"
       >
         {!isCreating ? (
-          <div
+          <button
+            type="button"
             onClick={() => setIsCreating(true)}
-            className="group relative overflow-hidden bg-gradient-to-br from-white to-slate-50 border-2 border-dashed border-slate-200 hover:border-[#384877] rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
+            className="w-full text-left group relative overflow-hidden bg-gradient-to-br from-white to-slate-50 border-2 border-dashed border-slate-200 hover:border-[#384877] rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-[#384877]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             
@@ -296,14 +297,16 @@ export default function Notes() {
                 </Badge>
               </div>
             </div>
-          </div>
+          </button>
         ) : (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="relative"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="absolute -inset-4 bg-gradient-to-br from-[#384877]/10 via-transparent to-purple-500/10 rounded-3xl blur-2xl" />
+            <div className="absolute -inset-4 bg-gradient-to-br from-[#384877]/10 via-transparent to-purple-500/10 rounded-3xl blur-2xl pointer-events-none" />
             <NoteEditor
               onSave={(data) => createNoteMutation.mutate(data)}
               onClose={() => setIsCreating(false)}

@@ -1,0 +1,280 @@
+import React, { useState, useRef, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Sparkles, Send, Loader2, BookOpen, Search, Trash2, Plus, Brain } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+
+export default function AIKnowledgeBase({ open, onOpenChange }) {
+  const [query, setQuery] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const scrollRef = useRef(null);
+  const queryClient = useQueryClient();
+
+  const { data: knowledgeItems = [] } = useQuery({
+    queryKey: ['knowledge-base'],
+    queryFn: () => base44.entities.KnowledgeBase.list('-created_date'),
+    enabled: open,
+    initialData: []
+  });
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleAsk = async () => {
+    if (!query.trim() || isProcessing) return;
+
+    const userMessage = query;
+    setQuery("");
+    setMessages(prev => [...prev, { role: "user", content: userMessage }]);
+    setIsProcessing(true);
+
+    try {
+      // 使用AI进行智能检索和回答
+      const searchPrompt = `Based on the user's question: "${userMessage}"
+      
+      Search through the following knowledge base entries and provide a comprehensive answer:
+      
+      ${knowledgeItems.slice(0, 20).map((item, idx) => `
+      [Entry ${idx + 1}]
+      Title: ${item.title}
+      Content: ${item.content.slice(0, 500)}...
+      Tags: ${item.tags?.join(", ") || "无"}
+      ${item.summary ? `Summary: ${item.summary}` : ""}
+      `).join("\n\n")}
+      
+      Instructions:
+      1. Find the most relevant entries for the user's question
+      2. Synthesize information from multiple entries if needed
+      3. Provide a clear, well-structured answer
+      4. If no relevant information is found, say so honestly
+      5. Include references to the entry titles you used
+      
+      Format your answer in markdown for better readability.`;
+
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt: searchPrompt,
+        add_context_from_internet: knowledgeItems.length === 0 // 如果知识库为空，从网络获取信息
+      });
+
+      setMessages(prev => [...prev, { 
+        role: "assistant", 
+        content: response 
+      }]);
+
+      // 更新被引用条目的访问次数
+      const referencedTitles = knowledgeItems
+        .filter(item => response.toLowerCase().includes(item.title.toLowerCase()))
+        .map(item => item.id);
+      
+      for (const id of referencedTitles) {
+        const item = knowledgeItems.find(k => k.id === id);
+        if (item) {
+          await base44.entities.KnowledgeBase.update(id, {
+            access_count: (item.access_count || 0) + 1,
+            last_accessed: new Date().toISOString()
+          });
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['knowledge-base'] });
+    } catch (error) {
+      console.error("AI问答失败:", error);
+      toast.error("获取回答失败: " + (error.message || "未知错误"));
+      setMessages(prev => [...prev, { 
+        role: "assistant", 
+        content: "抱歉，我无法处理您的问题。请稍后重试。" 
+      }]);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleQuickSearch = async (searchTerm) => {
+    setQuery(searchTerm);
+    // Auto-trigger search
+    setTimeout(() => {
+      handleAsk();
+    }, 100);
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-blue-50">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-lg">
+            <Brain className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">AI 知识库助手</h2>
+            <p className="text-xs text-slate-600">
+              已收录 {knowledgeItems.length} 条知识
+            </p>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="flex gap-2 flex-wrap">
+          <Badge 
+            variant="outline" 
+            className="cursor-pointer hover:bg-purple-50"
+            onClick={() => handleQuickSearch("总结一下最近的重要内容")}
+          >
+            <Sparkles className="w-3 h-3 mr-1" />
+            总结最近内容
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className="cursor-pointer hover:bg-blue-50"
+            onClick={() => handleQuickSearch("有哪些重要的待办事项？")}
+          >
+            <BookOpen className="w-3 h-3 mr-1" />
+            查找重要事项
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className="cursor-pointer hover:bg-green-50"
+            onClick={() => handleQuickSearch("我最近学到了什么？")}
+          >
+            <Search className="w-3 h-3 mr-1" />
+            学习回顾
+          </Badge>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+        <div className="space-y-4">
+          {messages.length === 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-12"
+            >
+              <Brain className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-700 mb-2">
+                开始对话
+              </h3>
+              <p className="text-sm text-slate-500 mb-4">
+                提出任何问题，我会从你的知识库中找到答案
+              </p>
+              <div className="flex flex-col gap-2 max-w-xs mx-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleQuickSearch("我最近记录了什么重要的想法？")}
+                >
+                  我最近记录了什么？
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleQuickSearch("帮我找一下关于健康的笔记")}
+                >
+                  查找特定主题
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          <AnimatePresence>
+            {messages.map((msg, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                    msg.role === "user"
+                      ? "bg-gradient-to-r from-purple-600 to-blue-600 text-white"
+                      : "bg-slate-100 text-slate-800"
+                  }`}
+                >
+                  {msg.role === "assistant" ? (
+                    <ReactMarkdown
+                      className="prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                        ul: ({ children }) => <ul className="ml-4 mb-2 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="ml-4 mb-2 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                        code: ({ inline, children }) => 
+                          inline ? (
+                            <code className="bg-slate-200 px-1 py-0.5 rounded text-xs">{children}</code>
+                          ) : (
+                            <code className="block bg-slate-200 p-2 rounded text-xs my-2">{children}</code>
+                          )
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-sm">{msg.content}</p>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {isProcessing && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex justify-start"
+            >
+              <div className="bg-slate-100 rounded-2xl px-4 py-3">
+                <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Input */}
+      <div className="p-4 border-t border-slate-200 bg-white">
+        <div className="flex gap-2">
+          <Input
+            placeholder="问我任何问题..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleAsk();
+              }
+            }}
+            className="flex-1"
+            disabled={isProcessing}
+          />
+          <Button
+            onClick={handleAsk}
+            disabled={!query.trim() || isProcessing}
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+          >
+            {isProcessing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </Button>
+        </div>
+        <p className="text-xs text-slate-500 mt-2">
+          💡 提示: 按 Enter 发送，Shift+Enter 换行
+        </p>
+      </div>
+    </div>
+  );
+}

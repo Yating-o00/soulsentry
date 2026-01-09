@@ -14,6 +14,8 @@ import NoteShareDialog from "../components/notes/NoteShareDialog";
 import NoteComments from "../components/notes/NoteComments";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import AINotesOrganizer from "../components/notes/AINotesOrganizer";
+import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
+import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -29,6 +31,8 @@ export default function Notes() {
   const [taskCreationNote, setTaskCreationNote] = useState(null);
   const [sharingNote, setSharingNote] = useState(null);
   const [showAIOrganizer, setShowAIOrganizer] = useState(false);
+  const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
+  const [showKnowledgeManager, setShowKnowledgeManager] = useState(false);
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
   const queryClient = useQueryClient();
@@ -112,6 +116,27 @@ export default function Notes() {
       toast.success("心签已删除");
     }
   });
+
+  const addToKnowledgeMutation = useMutation({
+    mutationFn: (data) => base44.entities.KnowledgeBase.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['knowledge-base'] });
+      toast.success("已添加到知识库");
+    }
+  });
+
+  const handleAddToKnowledge = async (note) => {
+    addToKnowledgeMutation.mutate({
+      title: note.ai_analysis?.summary || note.plain_text?.slice(0, 100) || "未命名知识",
+      content: note.plain_text || note.content,
+      source_type: "note",
+      source_id: note.id,
+      tags: note.tags || [],
+      summary: note.ai_analysis?.summary,
+      key_points: note.ai_analysis?.key_points || [],
+      category: note.tags?.[0] || "其他"
+    });
+  };
 
   const saveToKnowledgeMutation = useMutation({
     mutationFn: async (note) => {
@@ -269,6 +294,15 @@ export default function Notes() {
 
         <div className="flex items-center gap-3">
           <Button
+            onClick={() => setShowKnowledgeBase(true)}
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700"
+          >
+            <Brain className="w-3.5 h-3.5" />
+            AI 知识库
+          </Button>
+          <Button
             onClick={() => setShowAIOrganizer(true)}
             variant="outline"
             size="sm"
@@ -412,6 +446,23 @@ export default function Notes() {
         open={showAIOrganizer}
         onOpenChange={setShowAIOrganizer}
       />
+
+      {/* AI Knowledge Base */}
+      <Dialog open={showKnowledgeBase} onOpenChange={setShowKnowledgeBase}>
+        <DialogContent className="max-w-3xl h-[80vh] p-0">
+          <AIKnowledgeBase open={showKnowledgeBase} onOpenChange={setShowKnowledgeBase} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Knowledge Base Manager */}
+      <Dialog open={showKnowledgeManager} onOpenChange={setShowKnowledgeManager}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>知识库管理</DialogTitle>
+          </DialogHeader>
+          <KnowledgeBaseManager />
+        </DialogContent>
+      </Dialog>
 
       {/* Create Task Dialog */}
       <Dialog open={!!taskCreationNote} onOpenChange={(open) => !open && setTaskCreationNote(null)}>

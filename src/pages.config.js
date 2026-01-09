@@ -11,6 +11,7 @@ import Teams from './pages/Teams';
 import Templates from './pages/Templates';
 import Trash from './pages/Trash';
 import KnowledgeBase from './pages/KnowledgeBase';
+import Knowledge from './pages/Knowledge';
 import __Layout from './Layout.jsx';
 
 
@@ -28,6 +29,7 @@ export const PAGES = {
     "Templates": Templates,
     "Trash": Trash,
     "KnowledgeBase": KnowledgeBase,
+    "Knowledge": Knowledge,
 }
 
 export const pagesConfig = {

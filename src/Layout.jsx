@@ -71,29 +71,29 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   };
 
   return (
-    <Sidebar className="border-r border-slate-200/30 bg-white/95 backdrop-blur-xl">
-        <SidebarHeader className="border-b border-slate-200/30 p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-[18px] bg-gradient-to-br from-[rgb(var(--primary))] to-[rgb(var(--primary-dark))] flex items-center justify-center shadow-lg shadow-blue-500/20">
-                <Bell className="w-5 h-5 text-white" strokeWidth={2.5} />
-              </div>
-              <div>
-                <h2 className="font-semibold text-[17px] text-slate-900 -tracking-[0.02em]">
-                  {t('soulSentry')}
-                </h2>
-                <p className="text-[11px] text-slate-500 -tracking-[0.01em] mt-0.5">{t('tagline')}</p>
-              </div>
+    <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
+      <SidebarHeader className="border-b border-slate-200/50 p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+              <Bell className="w-5 h-5 text-white" />
             </div>
-            <button
-              onClick={toggleLanguage}
-              className="h-8 w-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-all group active:scale-95"
-              title={language === 'zh' ? 'Switch to English' : '切换到中文'}
-            >
-              <Languages className="w-4 h-4 text-slate-400 group-hover:text-blue-600" strokeWidth={2} />
-            </button>
+            <div>
+              <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+                {t('soulSentry')}
+              </h2>
+              <p className="text-xs text-slate-500">{t('tagline')}</p>
+            </div>
           </div>
-        </SidebarHeader>
+          <button
+            onClick={toggleLanguage}
+            className="h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors group"
+            title={language === 'zh' ? 'Switch to English' : '切换到中文'}
+          >
+            <Languages className="w-4 h-4 text-slate-500 group-hover:text-[#384877]" />
+          </button>
+        </div>
+      </SidebarHeader>
 
       <SidebarContent className="p-3">
         <div className="px-2 mb-4">
@@ -102,12 +102,12 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
               setSearchOpen(true);
               handleMobileClick();
             }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 bg-slate-50/80 hover:bg-slate-100 rounded-[12px] text-slate-500 text-[13px] transition-all border border-slate-200/50 hover:border-slate-300/50 font-medium"
+            className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-100 hover:bg-slate-200/70 rounded-xl text-slate-500 text-sm transition-colors border border-slate-200/50"
           >
-            <Search className="w-4 h-4" strokeWidth={2} />
+            <Search className="w-4 h-4" />
             <span>搜索...</span>
             <div className="ml-auto flex items-center gap-1">
-              <kbd className="inline-flex h-5 select-none items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 font-sans text-[10px] font-medium text-slate-500 shadow-sm">
+              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-slate-300 bg-white px-1.5 font-mono text-[10px] font-medium text-slate-500 opacity-100">
                 <span className="text-xs">⌘</span>K
               </kbd>
             </div>
@@ -122,24 +122,21 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton 
                       asChild 
-                      className={`group relative transition-all duration-200 rounded-[12px] mb-1.5 ${
+                      className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
                         isActive 
-                          ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20' 
-                          : 'hover:bg-slate-50 text-slate-700'
+                          ? 'bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white shadow-lg shadow-[#384877]/25' 
+                          : 'hover:bg-[#f9fafb] text-slate-700'
                       }`}
                     >
                       <Link 
                         to={item.url} 
                         onClick={handleMobileClick}
-                        className="flex items-center gap-3 px-3 py-2.5"
+                        className="flex items-center gap-3 px-4 py-3"
                       >
-                        <item.icon 
-                          className={`w-[18px] h-[18px] transition-transform duration-200 ${
-                            isActive ? '' : 'text-slate-500'
-                          }`}
-                          strokeWidth={isActive ? 2.5 : 2}
-                        />
-                        <span className="font-medium text-[14px] -tracking-[0.01em]">{item.title}</span>
+                        <item.icon className={`w-5 h-5 transition-transform duration-300 ${
+                          isActive ? 'scale-110' : 'group-hover:scale-110'
+                        }`} />
+                        <span className="font-medium">{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -149,7 +146,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-3 border-t border-slate-200/30">
+      <SidebarFooter className="p-3 border-t border-slate-200/50">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton 
@@ -157,11 +154,11 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                 setFeedbackOpen(true);
                 handleMobileClick();
               }}
-              className="group transition-all duration-200 rounded-[12px] mb-1.5 hover:bg-blue-50 text-slate-700 cursor-pointer"
+              className="group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 hover:bg-[#f0f9ff] text-slate-700 cursor-pointer"
             >
-              <div className="flex items-center gap-3 px-3 py-2.5 w-full">
-                <MessageSquarePlus className="w-[18px] h-[18px] text-slate-500 group-hover:text-blue-600 transition-colors" strokeWidth={2} />
-                <span className="font-medium text-[14px] group-hover:text-blue-600 transition-colors -tracking-[0.01em]">{t('feedback')}</span>
+              <div className="flex items-center gap-3 px-4 py-3 w-full">
+                <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-[#384877] group-hover:scale-110 transition-all duration-300" />
+                <span className="font-medium group-hover:text-[#384877] transition-colors">{t('feedback')}</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -169,21 +166,21 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
           <SidebarMenuItem>
             <SidebarMenuButton 
               asChild 
-              className={`group transition-all duration-200 rounded-[12px] mb-1.5 ${
+              className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
                 location.pathname === createPageUrl("Trash") 
-                  ? 'bg-red-50 text-red-600' 
-                  : 'hover:bg-red-50 hover:text-red-600 text-slate-700'
+                  ? 'bg-[#fff1f2] text-[#d5495f] shadow-sm border border-[#e0919e]' 
+                  : 'hover:bg-[#fff1f2] hover:text-[#d5495f] text-slate-700'
               }`}
             >
               <Link 
                 to={createPageUrl("Trash")} 
                 onClick={handleMobileClick}
-                className="flex items-center gap-3 px-3 py-2.5"
+                className="flex items-center gap-3 px-4 py-3"
               >
-                <Trash2 className={`w-[18px] h-[18px] transition-colors ${
-                  location.pathname === createPageUrl("Trash") ? '' : 'text-slate-500 group-hover:text-red-600'
-                }`} strokeWidth={2} />
-                <span className="font-medium text-[14px] -tracking-[0.01em]">{t('trash')}</span>
+                <Trash2 className={`w-5 h-5 transition-transform duration-300 ${
+                  location.pathname === createPageUrl("Trash") ? 'scale-110 text-[#d5495f]' : 'group-hover:scale-110 group-hover:text-[#d5495f] text-slate-500'
+                }`} />
+                <span className="font-medium">{t('trash')}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -245,127 +242,92 @@ function LayoutContent({ children }) {
     <SidebarProvider>
       <style>{`
       :root {
-        /* Apple-Style Design System */
-        --primary: 0 122 255;
-        --primary-dark: 10 88 202;
-        --text-primary: 29 29 31;
-        --text-secondary: 99 99 102;
-        --text-tertiary: 142 142 147;
-        --bg-primary: 255 255 255;
-        --bg-secondary: 247 247 247;
-        --bg-tertiary: 242 242 247;
-        --border-light: 229 229 234;
-        --success: 52 199 89;
-        --warning: 255 149 0;
-        --error: 255 59 48;
-        --accent: 88 86 214;
+        /* Main Primary Colors - Tech Blue */
+        --primary-rgb: ${parseInt(theme.primary.slice(1, 3), 16)} ${parseInt(theme.primary.slice(3, 5), 16)} ${parseInt(theme.primary.slice(5, 7), 16)};
+        --primary-main: var(--primary-rgb);      
 
         /* Font Size Scaling */
         --base-font-size: ${theme.fontSize === 'small' ? '14px' : theme.fontSize === 'large' ? '18px' : '16px'};
+        --scale-factor: ${theme.fontSize === 'small' ? '0.875' : theme.fontSize === 'large' ? '1.125' : '1'};
 
-        /* Dark Mode */
-        ${theme.darkMode ? `
-        --text-primary: 255 255 255;
-        --text-secondary: 174 174 178;
-        --text-tertiary: 142 142 147;
-        --bg-primary: 0 0 0;
-        --bg-secondary: 28 28 30;
-        --bg-tertiary: 44 44 46;
-        --border-light: 58 58 60;
-        ` : ''}
+        /* Neutral/Background Colors */
+        --bg-white: ${theme.darkMode ? '30 41 59' : '255 255 255'};
+        --bg-grey-minimal: ${theme.darkMode ? '15 23 42' : '249 250 251'};
+        --text-dark: ${theme.darkMode ? '241 245 249' : '34 34 34'};
+        --text-muted: ${theme.darkMode ? '148 163 184' : '100 116 139'};
+
+        /* Legacy Variables Mapped to New System */
+        --color-primary: var(--primary-main);
+        --color-secondary: var(--text-dark);
+        --slate-50: var(--bg-grey-minimal);
+        --slate-900: var(--text-dark);
       }
 
-      /* Apple-Style Global Styles */
-      * {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-
+      /* Global Overrides for Cinematic/Tech Feel */
       body {
-        color: rgb(var(--text-primary));
-        background-color: rgb(var(--bg-secondary));
+        color: rgb(var(--text-dark));
+        background-color: rgb(var(--bg-grey-minimal));
         font-size: var(--base-font-size);
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-        letter-spacing: -0.01em;
       }
 
-      /* Typography Hierarchy */
-      h1, h2, h3, h4, h5, h6 {
-        color: rgb(var(--text-primary));
-        font-weight: 600;
-        letter-spacing: -0.02em;
+      /* Dark mode specific overrides */
+      ${theme.darkMode ? `
+        .bg-white { background-color: rgb(30 41 59) !important; }
+        .bg-slate-50 { background-color: rgb(15 23 42) !important; }
+        .bg-slate-100 { background-color: rgb(30 41 59) !important; }
+        .text-slate-900 { color: rgb(241 245 249) !important; }
+        .text-slate-700 { color: rgb(226 232 240) !important; }
+        .text-slate-600 { color: rgb(203 213 225) !important; }
+        .text-slate-500 { color: rgb(148 163 184) !important; }
+        .border-slate-200 { border-color: rgb(51 65 85) !important; }
+        .border-slate-100 { border-color: rgb(30 41 59) !important; }
+        input, textarea, select { 
+            background-color: rgb(30 41 59) !important; 
+            color: rgb(241 245 249) !important;
+            border-color: rgb(51 65 85) !important;
+        }
+        /* Ensure text visibility on colored backgrounds */
+        .bg-amber-50 { background-color: rgb(55 48 28) !important; }
+        .text-amber-600 { color: rgb(253 224 71) !important; }
+      ` : ''}
+
+      /* Override Blue/Purple classes to use our new Primary Tech Blue */
+      .bg-blue-600, .bg-blue-500, .bg-purple-600 { background-color: rgb(var(--primary-main)) !important; }
+      .text-blue-600, .text-blue-500, .text-purple-600 { color: rgb(var(--primary-main)) !important; }
+      .border-blue-600, .border-purple-600 { border-color: rgb(var(--primary-main)) !important; }
+
+      /* Hover states */
+      .hover\\:bg-blue-700:hover { background-color: rgba(var(--primary-main), 0.8) !important; }
+
+      /* Gradients - Primary */
+      .bg-gradient-to-r.from-blue-500, 
+      .bg-gradient-to-r.from-blue-600,
+      .from-purple-500 { 
+        background-image: linear-gradient(135deg, rgb(var(--primary-main)) 0%, rgba(var(--primary-main), 0.8) 100%) !important; 
       }
 
-      /* Button Styles */
-      button {
-        font-weight: 500;
-        letter-spacing: -0.01em;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      .bg-gradient-to-br.from-blue-500 {
+        background-image: linear-gradient(135deg, rgb(var(--primary-main)) 0%, rgba(var(--primary-main), 0.8) 100%) !important;
       }
 
-      /* Card & Container Styles */
-      .bg-white {
-        background-color: rgb(var(--bg-primary)) !important;
-        border: 1px solid rgb(var(--border-light));
-      }
+      /* Secondary Accents (Red) where needed specifically */
+      .text-red-500, .text-rose-500 { color: rgb(213, 73, 95) !important; }
 
-      /* Text Colors with Better Contrast */
-      .text-slate-900 { color: rgb(var(--text-primary)) !important; }
-      .text-slate-700 { color: rgb(var(--text-primary)) !important; opacity: 0.85; }
-      .text-slate-600 { color: rgb(var(--text-secondary)) !important; }
-      .text-slate-500 { color: rgb(var(--text-tertiary)) !important; }
-
-      /* Primary Color System */
-      .bg-blue-600, .bg-blue-500 { 
-        background: linear-gradient(135deg, rgb(var(--primary)) 0%, rgb(var(--primary-dark)) 100%) !important;
-        box-shadow: 0 2px 12px rgba(var(--primary), 0.2);
-      }
-      .text-blue-600, .text-blue-500 { color: rgb(var(--primary)) !important; }
-      .border-blue-600 { border-color: rgb(var(--primary)) !important; }
-
-      /* Subtle Shadows */
-      .shadow-sm { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02); }
-      .shadow { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.03); }
-      .shadow-lg { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04); }
-      .shadow-xl { box-shadow: 0 16px 48px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.06); }
-
-      /* Borders */
-      .border-slate-200 { border-color: rgb(var(--border-light)) !important; }
-      .border-slate-100 { border-color: rgb(var(--border-light)) !important; opacity: 0.5; }
-
-      /* Backgrounds */
-      .bg-slate-50 { background-color: rgb(var(--bg-secondary)) !important; }
-      .bg-slate-100 { background-color: rgb(var(--bg-tertiary)) !important; }
-
-      /* Status Colors */
-      .text-green-600 { color: rgb(var(--success)) !important; }
-      .text-red-600, .text-red-500 { color: rgb(var(--error)) !important; }
-      .text-orange-600 { color: rgb(var(--warning)) !important; }
-      .text-purple-600 { color: rgb(var(--accent)) !important; }
-
-      /* Inputs */
-      input, textarea, select {
-        background-color: rgb(var(--bg-primary)) !important;
-        color: rgb(var(--text-primary)) !important;
-        border-color: rgb(var(--border-light)) !important;
-      }
-
-      input:focus, textarea:focus, select:focus {
-        border-color: rgb(var(--primary)) !important;
-        box-shadow: 0 0 0 3px rgba(var(--primary), 0.1) !important;
-      }
+      /* Soft Backgrounds */
+      .bg-blue-50, .bg-purple-50 { background-color: rgba(var(--primary-main), 0.05) !important; }
+      .bg-blue-100 { background-color: rgba(var(--primary-main), 0.1) !important; }
       `}</style>
         
         <AppSidebar setSearchOpen={setSearchOpen} setFeedbackOpen={setFeedbackOpen} />
 
         <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
-        <main className="flex-1 flex flex-col bg-slate-50 relative w-full overflow-hidden">
+        <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative w-full overflow-hidden">
           <FloatingAssistantButton />
-          <header className="bg-white/95 backdrop-blur-xl border-b border-slate-200/30 px-5 py-3.5 lg:hidden sticky top-0 z-10">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-full transition-all active:scale-95" />
-              <h1 className="text-[17px] font-semibold text-slate-900 -tracking-[0.02em]">
+          <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">
+            <div className="flex items-center gap-4">
+              <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-all duration-200" />
+              <h1 className="text-lg font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
                 {t('soulSentry')}
               </h1>
             </div>

@@ -270,6 +270,16 @@ export default function Dashboard() {
       ).length;
       const progress = siblings.length > 0 ? Math.round((completed / siblings.length) * 100) : 0;
 
+      // 乐观更新父任务进度
+      queryClient.setQueryData(['tasks'], (oldData) => {
+        if (!oldData) return oldData;
+        return oldData.map(t => 
+          t.id === subtask.parent_task_id 
+            ? { ...t, progress }
+            : t
+        );
+      });
+
       await updateTaskMutation.mutateAsync({
         id: subtask.parent_task_id,
         data: { progress }

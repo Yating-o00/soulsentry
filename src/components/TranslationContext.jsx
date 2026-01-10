@@ -117,7 +117,6 @@ const translations = {
     'kanbanView': '看板视图',
     
     // Time Related
-    'today': '今天',
     'tomorrow': '明天',
     'thisWeek': '本周',
     'nextWeek': '下周',
@@ -271,7 +270,6 @@ const translations = {
     'kanbanView': 'Board',
     
     // Time Related
-    'today': 'Today',
     'tomorrow': 'Tomorrow',
     'thisWeek': 'This Week',
     'nextWeek': 'Next Week',

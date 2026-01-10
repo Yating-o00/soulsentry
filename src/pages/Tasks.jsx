@@ -139,8 +139,34 @@ export default function Tasks() {
   const getSubtasks = (parentId) => filteredTasks.filter((t) => t.parent_task_id === parentId);
   const getAllSubtasks = (parentId) => tasks.filter((t) => t.parent_task_id === parentId);
 
-  const onCompleteTask = (task) => handleComplete(task, allTasks);
-  const onSubtaskToggleWrapper = (subtask) => handleSubtaskToggle(subtask, allTasks);
+  const onCompleteTask = (task) => {
+    // 触觉反馈（支持的设备）
+    if (navigator.vibrate && task.status !== "completed") {
+      navigator.vibrate(50);
+    }
+    
+    // 完成庆祝效果
+    if (task.status !== "completed") {
+      import('canvas-confetti').then((confetti) => {
+        confetti.default({
+          particleCount: 40,
+          spread: 50,
+          origin: { y: 0.6 },
+          colors: ['#10b981', '#34d399', '#6ee7b7']
+        });
+      });
+    }
+    
+    handleComplete(task, allTasks);
+  };
+  
+  const onSubtaskToggleWrapper = (subtask) => {
+    // 触觉反馈
+    if (navigator.vibrate && subtask.status !== "completed") {
+      navigator.vibrate(30);
+    }
+    handleSubtaskToggle(subtask, allTasks);
+  };
 
   const handleUpdateTask = (taskData) => {
     const { id, ...data } = taskData;

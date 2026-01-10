@@ -54,6 +54,17 @@ export function useTaskOperations() {
     const newStatus = task.status === "completed" ? "pending" : "completed";
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     
+    // 乐观更新 - 立即更新UI，无需等待服务器响应
+    const optimisticStatus = isRecurring && newStatus === 'completed' ? 'pending' : newStatus;
+    queryClient.setQueryData(['tasks'], (oldData) => {
+      if (!oldData) return oldData;
+      return oldData.map(t => 
+        t.id === task.id 
+          ? { ...t, status: optimisticStatus, completed_at: completedAt }
+          : t
+      );
+    });
+
     // Automation: Unblock dependent tasks if this task is completed
     if (newStatus === 'completed' && allTasks.length > 0) {
       const dependentTasks = allTasks.filter((t) =>
@@ -64,7 +75,6 @@ export function useTaskOperations() {
 
       for (const depTask of dependentTasks) {
         const dependencies = depTask.dependencies || [];
-        // Check if all OTHER dependencies are completed
         const otherDepIds = dependencies.filter((id) => id !== task.id);
         const otherDeps = allTasks.filter((t) => otherDepIds.includes(t.id));
         const allOthersCompleted = otherDeps.every((t) => t.status === 'completed');
@@ -79,11 +89,11 @@ export function useTaskOperations() {
       }
     }
 
-    // For recurring tasks, keep status as pending but record completion
+    // 后台异步更新服务器
     updateTaskMutation.mutate({
       id: task.id,
       data: { 
-        status: isRecurring && newStatus === 'completed' ? 'pending' : newStatus,
+        status: optimisticStatus,
         completed_at: completedAt
       }
     });
@@ -116,12 +126,32 @@ export function useTaskOperations() {
 
   const handleSubtaskToggle = async (subtask, allTasks = []) => {
     const newStatus = subtask.status === "completed" ? "pending" : "completed";
+    const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
+    
+    // 乐观更新子任务
+    queryClient.setQueryData(['tasks'], (oldData) => {
+      if (!oldData) return oldData;
+      return oldData.map(t => 
+        t.id === subtask.id 
+          ? { ...t, status: newStatus, completed_at: completedAt }
+          : t
+      );
+    });
+
+    queryClient.setQueryData(['subtasks', subtask.parent_task_id], (oldData) => {
+      if (!oldData) return oldData;
+      return oldData.map(t => 
+        t.id === subtask.id 
+          ? { ...t, status: newStatus, completed_at: completedAt }
+          : t
+      );
+    });
     
     await updateTaskMutation.mutateAsync({
       id: subtask.id,
       data: { 
         status: newStatus,
-        completed_at: newStatus === "completed" ? new Date().toISOString() : null
+        completed_at: completedAt
       }
     });
 

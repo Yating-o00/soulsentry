@@ -199,15 +199,20 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
           <div className="p-5">
             <div className="flex items-start gap-4">
               {!isTrash && (
-                <Checkbox
-                checked={isCompleted}
-                onCheckedChange={(e) => {
-                  e?.stopPropagation?.();
-                  onComplete();
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="mt-1 h-5 w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed]"
-                />
+                <motion.div
+                  whileTap={{ scale: 0.85 }}
+                  transition={{ duration: 0.1 }}
+                >
+                  <Checkbox
+                    checked={isCompleted}
+                    onCheckedChange={(e) => {
+                      e?.stopPropagation?.();
+                      onComplete();
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 h-5 w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150"
+                  />
+                </motion.div>
               )}
 
               <div className="flex-1 min-w-0">
@@ -562,15 +567,20 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                           {isSubtaskCompleted ? '✓' : orderNumber}
                         </div>
 
-                        <Checkbox
-                          checked={isSubtaskCompleted}
-                          onCheckedChange={(e) => {
-                            e?.stopPropagation?.();
-                            onSubtaskToggle?.(subtask);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-4 w-4 rounded data-[state=checked]:bg-[#10b981] mt-0.5"
-                        />
+                        <motion.div
+                          whileTap={{ scale: 0.85 }}
+                          transition={{ duration: 0.1 }}
+                        >
+                          <Checkbox
+                            checked={isSubtaskCompleted}
+                            onCheckedChange={(e) => {
+                              e?.stopPropagation?.();
+                              onSubtaskToggle?.(subtask);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4 rounded data-[state=checked]:bg-[#10b981] mt-0.5 transition-all duration-150"
+                          />
+                        </motion.div>
 
                         <div className="flex-1">
                           <span className={`block text-[15px] font-medium mb-1 ${

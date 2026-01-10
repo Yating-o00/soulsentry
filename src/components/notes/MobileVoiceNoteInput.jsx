@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Mic, MicOff, Camera, Image, Send, X, Loader2, Sparkles } from "lucide-react";
+import { Mic, MicOff, Camera, Image, Send, X, Loader2, Sparkles, Type } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
 export default function MobileVoiceNoteInput({ onSave, onClose }) {
+  const [inputMode, setInputMode] = useState("voice"); // "voice" or "text"
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -213,17 +214,52 @@ export default function MobileVoiceNoteInput({ onSave, onClose }) {
           )}
         </AnimatePresence>
 
-        {/* Transcript Display */}
-        <div className="min-h-[120px] max-h-[300px] overflow-y-auto bg-slate-50 rounded-xl p-4 border-2 border-dashed border-slate-200">
-          {transcript ? (
-            <p className="text-slate-700 text-base leading-relaxed">{transcript}</p>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-              <Mic className="w-12 h-12 mb-2" />
-              <p className="text-sm">点击麦克风开始语音输入...</p>
-            </div>
-          )}
+        {/* Input Mode Toggle */}
+        <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
+          <button
+            onClick={() => setInputMode("voice")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md transition-all ${
+              inputMode === "voice"
+                ? "bg-white shadow-sm text-[#384877] font-medium"
+                : "text-slate-500"
+            }`}
+          >
+            <Mic className="w-4 h-4" />
+            <span className="text-sm">语音</span>
+          </button>
+          <button
+            onClick={() => setInputMode("text")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md transition-all ${
+              inputMode === "text"
+                ? "bg-white shadow-sm text-[#384877] font-medium"
+                : "text-slate-500"
+            }`}
+          >
+            <Type className="w-4 h-4" />
+            <span className="text-sm">文字</span>
+          </button>
         </div>
+
+        {/* Input Area */}
+        {inputMode === "voice" ? (
+          <div className="min-h-[120px] max-h-[300px] overflow-y-auto bg-slate-50 rounded-xl p-4 border-2 border-dashed border-slate-200">
+            {transcript ? (
+              <p className="text-slate-700 text-base leading-relaxed">{transcript}</p>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                <Mic className="w-12 h-12 mb-2" />
+                <p className="text-sm">点击麦克风开始语音输入...</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <textarea
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+            placeholder="输入心签内容..."
+            className="w-full min-h-[120px] max-h-[300px] p-4 bg-slate-50 rounded-xl border-2 border-slate-200 focus:border-[#384877] focus:ring-2 focus:ring-[#384877]/20 outline-none resize-none text-base text-slate-700"
+          />
+        )}
 
         {/* Action Buttons */}
         <div className="grid grid-cols-3 gap-3">
@@ -246,22 +282,24 @@ export default function MobileVoiceNoteInput({ onSave, onClose }) {
             onChange={(e) => handleImageUpload(e.target.files?.[0])}
           />
 
-          {/* Voice */}
-          <Button
-            variant={isRecording ? "destructive" : "default"}
-            size="lg"
-            className={`h-16 flex-col gap-1 ${isRecording ? 'animate-pulse' : ''}`}
-            onClick={toggleRecording}
-          >
-            {isRecording ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-            <span className="text-xs">{isRecording ? "停止" : "语音"}</span>
-          </Button>
+          {/* Voice - Only in voice mode */}
+          {inputMode === "voice" && (
+            <Button
+              variant={isRecording ? "destructive" : "default"}
+              size="lg"
+              className={`h-16 flex-col gap-1 ${isRecording ? 'animate-pulse' : ''}`}
+              onClick={toggleRecording}
+            >
+              {isRecording ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+              <span className="text-xs">{isRecording ? "停止" : "语音"}</span>
+            </Button>
+          )}
 
           {/* Gallery */}
           <Button
             variant="outline"
             size="lg"
-            className="h-16 flex-col gap-1"
+            className={`h-16 flex-col gap-1 ${inputMode === "text" ? "col-span-2" : ""}`}
             onClick={() => fileInputRef.current?.click()}
           >
             <Image className="w-6 h-6" />
@@ -296,7 +334,7 @@ export default function MobileVoiceNoteInput({ onSave, onClose }) {
         </Button>
 
         <p className="text-xs text-center text-slate-500">
-          💡 支持语音输入、拍照记录和相册上传
+          💡 支持文字/语音输入、拍照记录和相册上传
         </p>
       </div>
     </motion.div>

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
+import confetti from "canvas-confetti";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -185,7 +186,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
         <Card
           className={`group border border-[#e5e9ef] hover:border-[#c8d1e0] hover:shadow-lg transition-all duration-200 bg-white rounded-[16px] ${
             isCompleted
-              ? 'opacity-60'
+              ? 'bg-green-50/30 border-green-200'
               : isBlocked
               ? 'border-l-[3px] border-l-[#f43f5e] bg-red-50/30'
               : isSnoozed
@@ -200,17 +201,26 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
             <div className="flex items-start gap-4">
               {!isTrash && (
                 <motion.div
-                  whileTap={{ scale: 0.85 }}
-                  transition={{ duration: 0.1 }}
+                  whileTap={{ scale: 0.8 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 >
                   <Checkbox
                     checked={isCompleted}
                     onCheckedChange={(e) => {
                       e?.stopPropagation?.();
+                      // 立即触发庆祝动画
+                      if (!isCompleted) {
+                        confetti({
+                          particleCount: 50,
+                          spread: 60,
+                          origin: { y: 0.7 },
+                          colors: ['#10b981', '#34d399', '#6ee7b7']
+                        });
+                      }
                       onComplete();
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="mt-1 h-5 w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150"
+                    className="mt-1 h-5 w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150 cursor-pointer hover:border-[#10b981]"
                   />
                 </motion.div>
               )}
@@ -568,17 +578,27 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                         </div>
 
                         <motion.div
-                          whileTap={{ scale: 0.85 }}
-                          transition={{ duration: 0.1 }}
+                          whileTap={{ scale: 0.8 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 17 }}
                         >
                           <Checkbox
                             checked={isSubtaskCompleted}
                             onCheckedChange={(e) => {
                               e?.stopPropagation?.();
+                              // 立即触发小型庆祝动画
+                              if (!isSubtaskCompleted) {
+                                confetti({
+                                  particleCount: 30,
+                                  spread: 50,
+                                  origin: { y: 0.7 },
+                                  colors: ['#10b981', '#34d399'],
+                                  scalar: 0.8
+                                });
+                              }
                               onSubtaskToggle?.(subtask);
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-4 w-4 rounded data-[state=checked]:bg-[#10b981] mt-0.5 transition-all duration-150"
+                            className="h-4 w-4 rounded data-[state=checked]:bg-[#10b981] mt-0.5 transition-all duration-150 cursor-pointer hover:border-[#10b981]"
                           />
                         </motion.div>
 

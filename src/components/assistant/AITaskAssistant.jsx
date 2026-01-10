@@ -178,11 +178,28 @@ import React, { useState, useEffect, useRef } from "react";
                  // 简单的去重播报逻辑，实际项目中可能需要更复杂的ID比对
                  speakText(lastMsg.content);
              }
-         }
-       });
-   
-       return () => unsubscribe();
-     }, [conversationId, voiceEnabled]);
+             }
+             });
+             } catch (error) {
+             if (isSubscribed) {
+             console.error("Subscription error:", error);
+             }
+             }
+             };
+
+             subscribe();
+
+             return () => {
+             isSubscribed = false;
+             if (unsubscribe && typeof unsubscribe === 'function') {
+             try {
+             unsubscribe();
+             } catch (error) {
+             console.error("Unsubscribe error:", error);
+             }
+             }
+             };
+             }, [conversationId, voiceEnabled]);
    
      const initConversation = async () => {
        try {

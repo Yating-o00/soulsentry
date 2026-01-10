@@ -57,6 +57,8 @@ import React, { useState, useEffect, useRef } from "react";
 
      useEffect(() => {
        if (isOpen && !conversationId) {
+         // 立即显示加载状态
+         setIsLoading(true);
          initConversation();
        }
      }, [isOpen]);
@@ -199,11 +201,17 @@ import React, { useState, useEffect, useRef } from "react";
    
      const triggerSmartAnalysis = async (convId) => {
        if (!convId) return;
-       
+
+       // 立即显示加载动画
        setIsLoading(true);
+       setMessages([{ 
+         role: "assistant", 
+         content: "正在分析您的约定..." 
+       }]);
+
        try {
          const conversation = await base44.agents.getConversation(convId);
-         
+
          const analysisPrompt = `请启动后台推理程序，调用工具读取我的所有约定数据（以及HealthLog数据），并严格按照【建设】、【执行】、【检查】的第一性原理模型进行深度分析。
 
             要求：
@@ -232,20 +240,26 @@ import React, { useState, useEffect, useRef } from "react";
    
      const sendMessage = async (text) => {
        if (!conversationId || !text.trim()) return;
-   
+
+       // 立即显示用户消息，提供即时反馈
+       const userMsg = { role: "user", content: text };
+       setMessages(prev => [...prev, userMsg]);
+       setInputText("");
        setIsLoading(true);
+
        try {
          const conversation = await base44.agents.getConversation(conversationId);
          await base44.agents.addMessage(conversation, {
            role: "user",
            content: text
          });
-         setInputText("");
-         // 不再使用 setTimeout，完全依赖 subscribeToConversation 更新状态
+         // 订阅会更新完整消息列表
        } catch (error) {
          console.error("Failed to send message:", error);
          toast.error("发送消息失败");
          setIsLoading(false);
+         // 发送失败，移除刚添加的用户消息
+         setMessages(prev => prev.filter(m => m !== userMsg));
        }
      };
    

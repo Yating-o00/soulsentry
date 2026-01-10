@@ -16,6 +16,7 @@ import QuickAddTask from "../components/tasks/QuickAddTask";
 import AINotesOrganizer from "../components/notes/AINotesOrganizer";
 import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
 import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
 import { toast } from "sonner";
 import {
@@ -35,6 +36,7 @@ export default function Notes() {
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
   const [showKnowledgeManager, setShowKnowledgeManager] = useState(false);
   const [showMobileInput, setShowMobileInput] = useState(false);
+  const [activeTab, setActiveTab] = useState("notes");
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
   const queryClient = useQueryClient();
@@ -259,6 +261,19 @@ export default function Notes() {
           </div>
           <p className="text-slate-600">让想法的碎片尽情落下</p>
         </div>
+        
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
+          <TabsList className="bg-white shadow-md rounded-xl p-1">
+            <TabsTrigger value="notes" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white">
+              <StickyNote className="w-4 h-4 mr-2" />
+              心签
+            </TabsTrigger>
+            <TabsTrigger value="knowledge" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white">
+              <Brain className="w-4 h-4 mr-2" />
+              知识库
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         <div className="flex items-center gap-3 flex-1">
           <div className="relative flex-1 max-w-md">
@@ -281,136 +296,150 @@ export default function Notes() {
         </div>
       </motion.div>
 
-      {/* Filters */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.15 }}
-        className="flex items-center justify-between gap-3 flex-wrap"
-      >
-        <NoteFilters 
-          filters={filters} 
-          onFiltersChange={setFilters}
-          allTags={allTags}
-        />
-
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={() => setShowKnowledgeBase(true)}
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700"
+      {activeTab === "notes" && (
+        <>
+          {/* Filters */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.15 }}
+            className="flex items-center justify-between gap-3 flex-wrap"
           >
-            <Brain className="w-3.5 h-3.5" />
-            AI 知识库
-          </Button>
-          <Button
-            onClick={() => setShowAIOrganizer(true)}
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700"
-          >
-            <Wand2 className="w-3.5 h-3.5" />
-            AI 智能整理
-          </Button>
-          <div className="text-sm text-slate-500">
-            共 <span className="font-semibold text-[#384877]">{filteredNotes.length}</span> 条心签
-          </div>
-        </div>
-      </motion.div>
+            <NoteFilters 
+              filters={filters} 
+              onFiltersChange={setFilters}
+              allTags={allTags}
+            />
 
-      {/* Quick Create Area - Desktop / Mobile Adaptive */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="sticky top-0 z-10 bg-gradient-to-b from-white via-white to-transparent pb-4"
-      >
-        {!isCreating ? (
-          <button
-            type="button"
-            onClick={() => setIsCreating(true)}
-            className="hidden md:flex w-full text-left group relative overflow-hidden bg-gradient-to-br from-white to-slate-50 border-2 border-dashed border-slate-200 hover:border-[#384877] rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-[#384877]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            
-            <div className="relative flex items-center gap-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20 group-hover:scale-110 transition-transform duration-300">
-                <Plus className="w-6 h-6 text-white" />
-              </div>
-              
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-slate-800 group-hover:text-[#384877] transition-colors mb-1">
-                  快速记录心签
-                </h3>
-                <p className="text-sm text-slate-500">
-                  💭 随手记下灵感 | 🎯 快捷键：<kbd className="px-1.5 py-0.5 text-xs bg-slate-100 border border-slate-300 rounded">Ctrl+N</kbd>
-                </p>
-              </div>
-
-              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <Badge variant="outline" className="text-xs border-[#384877] text-[#384877]">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  AI 辅助
-                </Badge>
-                <Badge variant="outline" className="text-xs border-purple-500 text-purple-600">
-                  快速创建
-                </Badge>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setShowKnowledgeBase(true)}
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700"
+              >
+                <Brain className="w-3.5 h-3.5" />
+                AI 问答
+              </Button>
+              <Button
+                onClick={() => setShowAIOrganizer(true)}
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                AI 智能整理
+              </Button>
+              <div className="text-sm text-slate-500">
+                共 <span className="font-semibold text-[#384877]">{filteredNotes.length}</span> 条心签
               </div>
             </div>
-          </button>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="relative"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="absolute -inset-4 bg-gradient-to-br from-[#384877]/10 via-transparent to-purple-500/10 rounded-3xl blur-2xl pointer-events-none" />
-            <NoteEditor
-              onSave={(data) => createNoteMutation.mutate(data)}
-              onClose={() => setIsCreating(false)}
-            />
           </motion.div>
-        )}
-      </motion.div>
 
-      {/* Notes Grid - Using CSS Columns for Masonry effect */}
-      <motion.div
-        layout
-        className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4 pb-20">
+          {/* Quick Create Area - Desktop / Mobile Adaptive */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="sticky top-0 z-10 bg-gradient-to-b from-white via-white to-transparent pb-4"
+          >
+            {!isCreating ? (
+              <button
+                type="button"
+                onClick={() => setIsCreating(true)}
+                className="hidden md:flex w-full text-left group relative overflow-hidden bg-gradient-to-br from-white to-slate-50 border-2 border-dashed border-slate-200 hover:border-[#384877] rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-[#384877]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                
+                <div className="relative flex items-center gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20 group-hover:scale-110 transition-transform duration-300">
+                    <Plus className="w-6 h-6 text-white" />
+                  </div>
+                  
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-slate-800 group-hover:text-[#384877] transition-colors mb-1">
+                      快速记录心签
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      💭 随手记下灵感 | 🎯 快捷键：<kbd className="px-1.5 py-0.5 text-xs bg-slate-100 border border-slate-300 rounded">Ctrl+N</kbd>
+                    </p>
+                  </div>
 
-        <AnimatePresence mode="popLayout">
-          {filteredNotes.map((note) =>
-          <NoteCard
-            key={note.id}
-            note={note}
-            onEdit={setEditingNote}
-            onDelete={(n) => deleteNoteMutation.mutate(n.id)}
-            onPin={handlePin}
-            onShare={setSharingNote}
-            onConvertToTask={(n) => setTaskCreationNote(n)}
-            onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)} />
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <Badge variant="outline" className="text-xs border-[#384877] text-[#384877]">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      AI 辅助
+                    </Badge>
+                    <Badge variant="outline" className="text-xs border-purple-500 text-purple-600">
+                      快速创建
+                    </Badge>
+                  </div>
+                </div>
+              </button>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="absolute -inset-4 bg-gradient-to-br from-[#384877]/10 via-transparent to-purple-500/10 rounded-3xl blur-2xl pointer-events-none" />
+                <NoteEditor
+                  onSave={(data) => createNoteMutation.mutate(data)}
+                  onClose={() => setIsCreating(false)}
+                />
+              </motion.div>
+            )}
+          </motion.div>
 
-          )}
-        </AnimatePresence>
-      </motion.div>
+          {/* Notes Grid - Using CSS Columns for Masonry effect */}
+          <motion.div
+            layout
+            className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4 pb-20">
 
-      {/* Empty State */}
-      {filteredNotes.length === 0 && !isCreating &&
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="text-center py-20">
+            <AnimatePresence mode="popLayout">
+              {filteredNotes.map((note) =>
+              <NoteCard
+                key={note.id}
+                note={note}
+                onEdit={setEditingNote}
+                onDelete={(n) => deleteNoteMutation.mutate(n.id)}
+                onPin={handlePin}
+                onShare={setSharingNote}
+                onConvertToTask={(n) => setTaskCreationNote(n)}
+                onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)} />
 
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-            <StickyNote className="w-10 h-10 text-slate-400" />
-          </div>
-          <h3 className="text-lg font-medium text-slate-700 mb-1">暂无心签</h3>
-          <p className="text-slate-500">记录下你的第一个灵感吧</p>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
+          {/* Empty State */}
+          {filteredNotes.length === 0 && !isCreating &&
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-20">
+
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
+                <StickyNote className="w-10 h-10 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-medium text-slate-700 mb-1">暂无心签</h3>
+              <p className="text-slate-500">记录下你的第一个灵感吧</p>
+            </motion.div>
+          }
+        </>
+      )}
+
+      {activeTab === "knowledge" && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+        >
+          <KnowledgeBaseManager />
         </motion.div>
-      }
+      )}
 
       {/* Edit Dialog */}
       <Dialog open={!!editingNote} onOpenChange={(open) => !open && setEditingNote(null)}>

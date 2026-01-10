@@ -41,11 +41,6 @@ const getNavigationItems = (t) => [
     icon: StickyNote,
   },
   {
-    title: "知识库",
-    url: createPageUrl("KnowledgeBase"),
-    icon: Brain,
-  },
-  {
     title: t('teams'),
     url: createPageUrl("Teams"),
     icon: Users,

@@ -4,6 +4,8 @@ import { createPageUrl } from "@/utils";
 import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Brain } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "./components/TranslationContext";
+import MobileNavigation from "./components/mobile/MobileNavigation";
+import { useOfflineManager } from "./components/offline/OfflineManager";
 import {
   Sidebar,
   SidebarContent,
@@ -195,6 +197,7 @@ function LayoutContent({ children }) {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { t } = useTranslation();
+  const { isOnline, pendingSync } = useOfflineManager();
   
   // Fetch user theme preferences
   const [theme, setTheme] = useState({
@@ -322,7 +325,15 @@ function LayoutContent({ children }) {
 
         <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
-        <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative w-full overflow-hidden">
+
+        {/* 离线状态提示 */}
+        {!isOnline && (
+          <div className="md:hidden fixed top-0 inset-x-0 z-50 bg-amber-500 text-white text-center py-2 text-sm">
+            📡 离线模式 {pendingSync > 0 && `· ${pendingSync} 项待同步`}
+          </div>
+        )}
+
+        <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative w-full overflow-hidden pb-16 md:pb-0">
           <FloatingAssistantButton />
           <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">
             <div className="flex items-center gap-4">
@@ -336,8 +347,11 @@ function LayoutContent({ children }) {
           <div className="flex-1 overflow-auto">
             {children}
           </div>
-        </main>
-    </SidebarProvider>
+          </main>
+
+          {/* 移动端底部导航 */}
+          <MobileNavigation />
+          </SidebarProvider>
     );
     }
 

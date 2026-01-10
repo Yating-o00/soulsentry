@@ -116,90 +116,90 @@ import React, { useState, useEffect, useRef } from "react";
              const newMessages = data.messages || [];
              setMessages(newMessages);
 
-         // Track discussed tasks for summary
-         const tasksInConversation = [];
-         newMessages.forEach(msg => {
-             if (msg.role === 'assistant' && msg.tool_calls) {
-                 msg.tool_calls.forEach(tc => {
-                     if (tc.name.includes('Task') && tc.results) {
-                         try {
-                             let taskData = typeof tc.results === 'string' ? JSON.parse(tc.results) : tc.results;
-                             if (Array.isArray(taskData)) {
-                                 taskData.forEach(task => {
-                                     if (task.id && !tasksInConversation.find(t => t.id === task.id)) {
-                                         tasksInConversation.push(task);
+             // Track discussed tasks for summary
+             const tasksInConversation = [];
+             newMessages.forEach(msg => {
+                 if (msg.role === 'assistant' && msg.tool_calls) {
+                     msg.tool_calls.forEach(tc => {
+                         if (tc.name.includes('Task') && tc.results) {
+                             try {
+                                 let taskData = typeof tc.results === 'string' ? JSON.parse(tc.results) : tc.results;
+                                 if (Array.isArray(taskData)) {
+                                     taskData.forEach(task => {
+                                         if (task.id && !tasksInConversation.find(t => t.id === task.id)) {
+                                             tasksInConversation.push(task);
+                                         }
+                                     });
+                                 } else if (taskData && taskData.id) {
+                                     if (!tasksInConversation.find(t => t.id === taskData.id)) {
+                                         tasksInConversation.push(taskData);
                                      }
-                                 });
-                             } else if (taskData && taskData.id) {
-                                 if (!tasksInConversation.find(t => t.id === taskData.id)) {
-                                     tasksInConversation.push(taskData);
                                  }
+                             } catch (e) {
+                                 console.error('Failed to parse task data', e);
                              }
-                         } catch (e) {
-                             console.error('Failed to parse task data', e);
                          }
-                     }
-                 });
-             }
-         });
-         setDiscussedTasks(tasksInConversation);
-
-         // Check for completed tool calls to invalidate queries
-         newMessages.forEach(msg => {
-             if (msg.role === 'assistant' && msg.tool_calls) {
-                 msg.tool_calls.forEach(tc => {
-                     // If tool call is successful (or has results) and not processed yet
-                     if ((tc.status === 'success' || tc.results) && !processedToolCallIds.current.has(tc.id)) {
-                         processedToolCallIds.current.add(tc.id);
-                         // Invalidate relevant queries based on entity
-                         if (tc.name.includes('Task')) {
-                             queryClient.invalidateQueries({ queryKey: ['tasks'] });
-                             queryClient.invalidateQueries({ queryKey: ['subtasks'] });
-                             queryClient.invalidateQueries({ queryKey: ['task'] });
-                         }
-                         if (tc.name.includes('HealthLog')) {
-                             queryClient.invalidateQueries({ queryKey: ['healthLogs'] });
-                         }
-                         if (tc.name.includes('UserBehavior')) {
-                             queryClient.invalidateQueries({ queryKey: ['recentBehaviors'] });
-                         }
-                     }
-                 });
-             }
-         });
-
-         // 智能判断加载状态：如果收到最新的助手消息，且该消息不是空的（正在生成中），则停止加载
-         const lastMsg = newMessages[newMessages.length - 1];
-         if (lastMsg && lastMsg.role === 'assistant') {
-             setIsLoading(false);
-             
-             // 自动语音播报（如果是新消息）
-             if (voiceEnabled && !isSpeaking && lastMsg.content) {
-                 // 简单的去重播报逻辑，实际项目中可能需要更复杂的ID比对
-                 speakText(lastMsg.content);
-             }
-             }
+                     });
+                 }
              });
-             } catch (error) {
-             if (isSubscribed) {
+             setDiscussedTasks(tasksInConversation);
+
+             // Check for completed tool calls to invalidate queries
+             newMessages.forEach(msg => {
+                 if (msg.role === 'assistant' && msg.tool_calls) {
+                     msg.tool_calls.forEach(tc => {
+                         // If tool call is successful (or has results) and not processed yet
+                         if ((tc.status === 'success' || tc.results) && !processedToolCallIds.current.has(tc.id)) {
+                             processedToolCallIds.current.add(tc.id);
+                             // Invalidate relevant queries based on entity
+                             if (tc.name.includes('Task')) {
+                                 queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                                 queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+                                 queryClient.invalidateQueries({ queryKey: ['task'] });
+                             }
+                             if (tc.name.includes('HealthLog')) {
+                                 queryClient.invalidateQueries({ queryKey: ['healthLogs'] });
+                             }
+                             if (tc.name.includes('UserBehavior')) {
+                                 queryClient.invalidateQueries({ queryKey: ['recentBehaviors'] });
+                             }
+                         }
+                     });
+                 }
+             });
+
+             // 智能判断加载状态：如果收到最新的助手消息，且该消息不是空的（正在生成中），则停止加载
+             const lastMsg = newMessages[newMessages.length - 1];
+             if (lastMsg && lastMsg.role === 'assistant') {
+                 setIsLoading(false);
+
+                 // 自动语音播报（如果是新消息）
+                 if (voiceEnabled && !isSpeaking && lastMsg.content) {
+                     // 简单的去重播报逻辑，实际项目中可能需要更复杂的ID比对
+                     speakText(lastMsg.content);
+                 }
+             }
+           });
+         } catch (error) {
+           if (isSubscribed) {
              console.error("Subscription error:", error);
-             }
-             }
-             };
+           }
+         }
+       };
 
-             subscribe();
+       subscribe();
 
-             return () => {
-             isSubscribed = false;
-             if (unsubscribe && typeof unsubscribe === 'function') {
-             try {
+       return () => {
+         isSubscribed = false;
+         if (unsubscribe && typeof unsubscribe === 'function') {
+           try {
              unsubscribe();
-             } catch (error) {
+           } catch (error) {
              console.error("Unsubscribe error:", error);
-             }
-             }
-             };
-             }, [conversationId, voiceEnabled]);
+           }
+         }
+       };
+     }, [conversationId, voiceEnabled]);
    
      const initConversation = async () => {
        try {

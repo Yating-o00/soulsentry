@@ -243,30 +243,14 @@ export default function Dashboard() {
       navigator.vibrate(30);
     }
     
-    // 乐观更新子任务和父任务进度
+    // 乐观更新子任务
     queryClient.setQueryData(['tasks'], (oldData) => {
       if (!oldData) return oldData;
-      
-      const updatedTasks = oldData.map(t => 
+      return oldData.map(t => 
         t.id === subtask.id 
           ? { ...t, status: newStatus, completed_at: completedAt }
           : t
       );
-      
-      // 如果有父任务，计算并更新进度
-      if (subtask.parent_task_id) {
-        const siblings = updatedTasks.filter((t) => t.parent_task_id === subtask.parent_task_id);
-        const completed = siblings.filter(s => s.status === "completed").length;
-        const progress = siblings.length > 0 ? Math.round((completed / siblings.length) * 100) : 0;
-        
-        return updatedTasks.map(t => 
-          t.id === subtask.parent_task_id 
-            ? { ...t, progress }
-            : t
-        );
-      }
-      
-      return updatedTasks;
     });
     
     // Update subtask

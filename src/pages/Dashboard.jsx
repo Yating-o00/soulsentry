@@ -189,6 +189,33 @@ export default function Dashboard() {
     const newStatus = task.status === "completed" ? "pending" : "completed";
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     
+    // 触觉反馈
+    if (navigator.vibrate && newStatus === "completed") {
+      navigator.vibrate(50);
+    }
+    
+    // 完成庆祝效果
+    if (newStatus === "completed") {
+      import('canvas-confetti').then((confetti) => {
+        confetti.default({
+          particleCount: 40,
+          spread: 50,
+          origin: { y: 0.6 },
+          colors: ['#10b981', '#34d399', '#6ee7b7']
+        });
+      });
+    }
+    
+    // 乐观更新 - 立即更新UI
+    queryClient.setQueryData(['tasks'], (oldData) => {
+      if (!oldData) return oldData;
+      return oldData.map(t => 
+        t.id === task.id 
+          ? { ...t, status: newStatus, completed_at: completedAt }
+          : t
+      );
+    });
+    
     updateTaskMutation.mutate({
       id: task.id,
       data: { 
@@ -221,13 +248,29 @@ export default function Dashboard() {
 
   const handleSubtaskToggle = async (subtask) => {
     const newStatus = subtask.status === "completed" ? "pending" : "completed";
+    const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
+    
+    // 触觉反馈
+    if (navigator.vibrate && newStatus === "completed") {
+      navigator.vibrate(30);
+    }
+    
+    // 乐观更新子任务
+    queryClient.setQueryData(['tasks'], (oldData) => {
+      if (!oldData) return oldData;
+      return oldData.map(t => 
+        t.id === subtask.id 
+          ? { ...t, status: newStatus, completed_at: completedAt }
+          : t
+      );
+    });
     
     // Update subtask
     await updateTaskMutation.mutateAsync({
       id: subtask.id,
       data: { 
         status: newStatus,
-        completed_at: newStatus === "completed" ? new Date().toISOString() : null
+        completed_at: completedAt
       }
     });
 

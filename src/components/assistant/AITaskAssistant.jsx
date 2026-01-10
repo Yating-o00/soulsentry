@@ -105,10 +105,16 @@ import React, { useState, useEffect, useRef } from "react";
    
      useEffect(() => {
        if (!conversationId) return;
-   
-       const unsubscribe = base44.agents.subscribeToConversation(conversationId, (data) => {
-         const newMessages = data.messages || [];
-         setMessages(newMessages);
+
+       let isSubscribed = true;
+       let unsubscribe = null;
+
+       const subscribe = async () => {
+         try {
+           unsubscribe = await base44.agents.subscribeToConversation(conversationId, (data) => {
+             if (!isSubscribed) return;
+             const newMessages = data.messages || [];
+             setMessages(newMessages);
 
          // Track discussed tasks for summary
          const tasksInConversation = [];

@@ -250,46 +250,46 @@ export default function Notes() {
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
-              <StickyNote className="w-6 h-6 text-white" />
+        <div className="flex-1">
+          <div className="flex items-center gap-2 md:gap-3 mb-1 md:mb-2">
+            <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+              <StickyNote className="w-4 h-4 md:w-6 md:h-6 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-slate-800">
+            <h1 className="text-xl md:text-3xl font-bold text-slate-800">
               灵感心签
             </h1>
           </div>
-          <p className="text-slate-600">让想法的碎片尽情落下</p>
+          <p className="text-xs md:text-base text-slate-600 hidden md:block">让想法的碎片尽情落下</p>
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
-          <TabsList className="bg-white shadow-md rounded-xl p-1">
-            <TabsTrigger value="notes" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white">
-              <StickyNote className="w-4 h-4 mr-2" />
-              心签
+          <TabsList className="bg-white shadow-md rounded-lg md:rounded-xl p-0.5 md:p-1 h-auto">
+            <TabsTrigger value="notes" className="rounded-md md:rounded-lg px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white">
+              <StickyNote className="w-3 h-3 md:w-4 md:h-4 md:mr-2" />
+              <span className="hidden md:inline">心签</span>
             </TabsTrigger>
-            <TabsTrigger value="knowledge" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white">
-              <Brain className="w-4 h-4 mr-2" />
-              知识库
+            <TabsTrigger value="knowledge" className="rounded-md md:rounded-lg px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white">
+              <Brain className="w-3 h-3 md:w-4 md:h-4 md:mr-2" />
+              <span className="hidden md:inline">知识库</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
 
-        <div className="flex items-center gap-3 flex-1">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <div className="flex items-center gap-2 flex-1 md:gap-3">
+          <div className="relative flex-1 md:max-w-md">
+            <Search className="absolute left-2 md:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 md:w-4 md:h-4 text-slate-400" />
             <Input
-              placeholder="🔍 搜索内容、标签..."
-              className="pl-9 bg-white border-slate-200 rounded-xl focus:ring-2 focus:ring-[#384877]/20"
+              placeholder="🔍 搜索..."
+              className="pl-8 md:pl-9 pr-8 h-9 md:h-10 text-sm md:text-base bg-white border-slate-200 rounded-lg md:rounded-xl focus:ring-2 focus:ring-[#384877]/20"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
               >
-                <span className="text-sm">✕</span>
+                <span className="text-xs md:text-sm">✕</span>
               </button>
             )}
           </div>
@@ -303,7 +303,7 @@ export default function Notes() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.15 }}
-            className="flex items-center justify-between gap-3 flex-wrap"
+            className="flex items-center justify-between gap-2 md:gap-3 flex-wrap"
           >
             <NoteFilters 
               filters={filters} 
@@ -311,27 +311,28 @@ export default function Notes() {
               allTags={allTags}
             />
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 md:gap-3">
               <Button
                 onClick={() => setShowKnowledgeBase(true)}
                 variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700"
+                className="h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs md:text-sm"
               >
-                <Brain className="w-3.5 h-3.5" />
-                AI 问答
+                <Brain className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span className="hidden sm:inline">AI 问答</span>
               </Button>
               <Button
                 onClick={() => setShowAIOrganizer(true)}
                 variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700"
+                className="h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs md:text-sm"
               >
-                <Wand2 className="w-3.5 h-3.5" />
-                AI 智能整理
+                <Wand2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span className="hidden sm:inline">智能整理</span>
               </Button>
-              <div className="text-sm text-slate-500">
-                共 <span className="font-semibold text-[#384877]">{filteredNotes.length}</span> 条心签
+              <div className="text-xs md:text-sm text-slate-500 whitespace-nowrap">
+                <span className="font-semibold text-[#384877]">{filteredNotes.length}</span>
+                <span className="hidden md:inline"> 条心签</span>
               </div>
             </div>
           </motion.div>
@@ -396,7 +397,7 @@ export default function Notes() {
           {/* Notes Grid - Using CSS Columns for Masonry effect */}
           <motion.div
             layout
-            className="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4 pb-20">
+            className="columns-1 md:columns-2 lg:columns-3 gap-3 md:gap-4 space-y-3 md:space-y-4 pb-20 md:pb-20">
 
             <AnimatePresence mode="popLayout">
               {filteredNotes.map((note) =>
@@ -443,9 +444,9 @@ export default function Notes() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingNote} onOpenChange={(open) => !open && setEditingNote(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] w-[95vw] md:w-auto overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>编辑心签</DialogTitle>
+            <DialogTitle className="text-lg md:text-xl">编辑心签</DialogTitle>
           </DialogHeader>
           {editingNote && (
             <div className="space-y-6">
@@ -480,17 +481,17 @@ export default function Notes() {
 
       {/* AI Knowledge Base */}
       <Dialog open={showKnowledgeBase} onOpenChange={setShowKnowledgeBase}>
-        <DialogContent className="max-w-3xl h-[80vh] p-0">
+        <DialogContent className="max-w-3xl w-[95vw] md:w-auto h-[85vh] md:h-[80vh] p-0">
           <AIKnowledgeBase open={showKnowledgeBase} onOpenChange={setShowKnowledgeBase} />
         </DialogContent>
       </Dialog>
 
       {/* Create Task Dialog */}
       <Dialog open={!!taskCreationNote} onOpenChange={(open) => !open && setTaskCreationNote(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl w-[95vw] md:w-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-blue-600" />
+            <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
+                <CalendarIcon className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                 从心签创建约定
             </DialogTitle>
           </DialogHeader>
@@ -528,16 +529,18 @@ export default function Notes() {
         )}
       </AnimatePresence>
 
-      {/* Mobile FAB */}
-      <motion.button
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        whileTap={{ scale: 0.9 }}
-        onClick={() => setShowMobileInput(true)}
-        className="md:hidden fixed bottom-6 right-6 z-40 h-16 w-16 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-2xl flex items-center justify-center"
-      >
-        <Plus className="w-8 h-8" />
-      </motion.button>
+      {/* Mobile FAB - Only show on notes tab */}
+      {activeTab === "notes" && (
+        <motion.button
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowMobileInput(true)}
+          className="md:hidden fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white shadow-2xl shadow-[#384877]/40 flex items-center justify-center active:shadow-lg transition-shadow"
+        >
+          <Plus className="w-7 h-7" strokeWidth={2.5} />
+        </motion.button>
+      )}
     </div>);
 
 }

@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain } from "lucide-react";
+import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain, Flame, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { getEphemeralTimeRemaining } from "./EphemeralNoteManager";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,26 @@ const COLORS = {
 
 export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge }) {
   const colorClass = COLORS[note.color] || COLORS.white;
+  const [timeRemaining, setTimeRemaining] = useState(null);
+
+  // 临时心签倒计时
+  useEffect(() => {
+    if (!note.is_ephemeral || !note.ephemeral_expires_at) return;
+
+    const updateTimer = () => {
+      const remaining = getEphemeralTimeRemaining(note.ephemeral_expires_at);
+      setTimeRemaining(remaining);
+      
+      // 如果已过期，触发删除
+      if (remaining?.expired) {
+        setTimeout(() => onDelete(note), 500);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [note.is_ephemeral, note.ephemeral_expires_at, onDelete, note]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(note.plain_text);
@@ -42,8 +63,30 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
       exit={{ opacity: 0, scale: 0.9 }}
       className="mb-4 break-inside-avoid"
     >
-      <Card className={`group relative border border-transparent shadow-sm hover:shadow-md transition-all duration-200 ${colorClass}`}>
+      <Card className={`group relative border shadow-sm hover:shadow-md transition-all duration-200 ${note.is_ephemeral ? 'border-orange-400 shadow-orange-200' : 'border-transparent'} ${colorClass}`}>
+        {/* 临时心签倒计时条 */}
+        {note.is_ephemeral && timeRemaining && !timeRemaining.expired && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200 overflow-hidden rounded-t-2xl">
+            <motion.div
+              className="h-full bg-gradient-to-r from-orange-500 to-red-500"
+              initial={{ width: '100%' }}
+              animate={{ width: `${timeRemaining.percentage}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+        )}
+        
         <div className="p-4">
+          {/* 临时心签标识 */}
+          {note.is_ephemeral && timeRemaining && !timeRemaining.expired && (
+            <div className="mb-3 flex items-center gap-2 px-2 py-1.5 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg border border-orange-200">
+              <Flame className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
+              <span className="text-xs font-medium text-orange-700">
+                阅后即焚 · 剩余 {timeRemaining.minutes}:{String(timeRemaining.seconds).padStart(2, '0')}
+              </span>
+              <Clock className="w-3 h-3 text-orange-500 ml-auto" />
+            </div>
+          )}
           {/* Content Preview */}
           <div 
             className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]"

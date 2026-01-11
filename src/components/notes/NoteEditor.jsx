@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
-import { Loader2, Sparkles, X, Save, ListTodo, Wand2, RefreshCw, PenLine, Play, Camera, Upload } from "lucide-react";
+import { Loader2, Sparkles, X, Save, ListTodo, Wand2, RefreshCw, PenLine, Play, Camera, Upload, Flame } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -40,6 +40,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isEphemeral, setIsEphemeral] = useState(initialData?.is_ephemeral || false);
   const quillRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -294,19 +295,31 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
         }
     }
 
-    onSave({
+    const saveData = {
       content,
       plain_text: plainText,
       tags,
       color,
       is_pinned: initialData?.is_pinned || false,
-      ai_analysis: aiAnalysis
-    });
+      ai_analysis: aiAnalysis,
+      is_ephemeral: isEphemeral,
+      last_interacted_at: new Date().toISOString()
+    };
+
+    // 如果是临时心签，设置过期时间为5分钟后
+    if (isEphemeral && !initialData) {
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 5);
+      saveData.ephemeral_expires_at = expiresAt.toISOString();
+    }
+
+    onSave(saveData);
     
     if (!initialData) {
         setContent("");
         setTags([]);
         setColor("white");
+        setIsEphemeral(false);
     }
   };
 
@@ -589,25 +602,48 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             </motion.div>
         )}
 
-        <div className="flex items-center justify-between pt-4 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-slate-600">颜色标记</span>
-                <div className="flex gap-1.5">
-                    {COLORS.map(c => (
-                        <button
-                        key={c.name}
+        <div className="flex flex-col gap-3 pt-4 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-slate-600">颜色标记</span>
+                    <div className="flex gap-1.5">
+                        {COLORS.map(c => (
+                            <button
+                            key={c.name}
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setColor(c.name);
+                            }}
+                            className={`w-7 h-7 rounded-lg border-2 ${c.name === 'white' ? 'bg-white' : `bg-${c.name}-100`} ${color === c.name ? 'ring-2 ring-offset-2 ring-[#384877] scale-110' : 'hover:scale-110 hover:border-slate-300'} transition-all duration-200 shadow-sm`}
+                            style={{ backgroundColor: c.name === 'white' ? '#ffffff' : undefined }}
+                            title={c.name}
+                            />
+                        ))}
+                    </div>
+                </div>
+                
+                {/* 临时心签开关 */}
+                {!initialData && (
+                    <button
                         type="button"
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            setColor(c.name);
+                            setIsEphemeral(!isEphemeral);
                         }}
-                        className={`w-7 h-7 rounded-lg border-2 ${c.name === 'white' ? 'bg-white' : `bg-${c.name}-100`} ${color === c.name ? 'ring-2 ring-offset-2 ring-[#384877] scale-110' : 'hover:scale-110 hover:border-slate-300'} transition-all duration-200 shadow-sm`}
-                        style={{ backgroundColor: c.name === 'white' ? '#ffffff' : undefined }}
-                        title={c.name}
-                        />
-                    ))}
-                </div>
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 text-xs font-medium transition-all duration-200 ${
+                            isEphemeral 
+                                ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white border-orange-500 shadow-lg' 
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300 hover:bg-orange-50'
+                        }`}
+                        title="开启后，心签将在5分钟内自动消失"
+                    >
+                        <Flame className={`w-4 h-4 ${isEphemeral ? 'animate-pulse' : ''}`} />
+                        <span className="hidden sm:inline">阅后即焚</span>
+                    </button>
+                )}
             </div>
             <div className="flex gap-2">
                 {onClose && (

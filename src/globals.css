@@ -2,59 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Mobile Optimizations */
+/* Mobile-first optimizations */
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
   }
-
+  
   body {
     @apply antialiased;
-    overscroll-behavior-y: none;
   }
 
-  /* Minimum touch target sizes for mobile */
+  /* Minimum touch target sizes on mobile */
   @media (max-width: 768px) {
-    button, a, input[type="checkbox"], input[type="radio"], select {
-      min-width: 44px;
+    button:not(.no-min-size), 
+    a:not(.no-min-size), 
+    [role="button"]:not(.no-min-size) {
       min-height: 44px;
     }
-  }
-
-  /* Prevent iOS zoom on input focus */
-  @media (max-width: 768px) {
+    
+    /* Prevent iOS zoom on input focus */
     input, textarea, select {
       font-size: 16px !important;
     }
   }
 
   /* Smooth scrolling */
-  @media (prefers-reduced-motion: no-preference) {
-    html {
-      scroll-behavior: smooth;
-    }
+  * {
+    -webkit-overflow-scrolling: touch;
   }
-
+  
   /* Responsive images */
   img {
     max-width: 100%;
     height: auto;
   }
 
-  /* Touch manipulation */
-  button, a {
+  /* Better touch feedback */
+  .touch-manipulation {
     touch-action: manipulation;
-  }
-}
-
-/* Keyframe for ephemeral notes countdown */
-@keyframes shrink {
-  from {
-    width: 100%;
-  }
-  to {
-    width: 0%;
+    -webkit-tap-highlight-color: transparent;
   }
 }

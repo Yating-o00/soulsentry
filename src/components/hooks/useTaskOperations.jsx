@@ -108,7 +108,12 @@ export function useTaskOperations() {
         
         if (isRecurring) {
           toast.success("✓ 已记录完成，约定继续重复");
+        } else {
+          toast.success("✓ 约定已完成");
         }
+
+        // AI完成总结和建议 (后台异步执行，不阻塞用户操作)
+        generateCompletionSummary(task, allTasks);
       } catch (e) {
         console.error("Failed to record completion", e);
       }
@@ -121,6 +126,76 @@ export function useTaskOperations() {
       } catch (e) {
         console.error("Failed to remove completion record", e);
       }
+    }
+  };
+
+  // AI完成总结和下一步建议
+  const generateCompletionSummary = async (task, allTasks = []) => {
+    try {
+      // 获取相关联的任务信息
+      const relatedTasks = allTasks.filter(t => 
+        (t.parent_task_id === task.id) || // 子任务
+        (task.dependencies && task.dependencies.includes(t.id)) || // 依赖任务
+        (t.category === task.category && t.status === 'pending') // 同类待办
+      );
+
+      const prompt = `分析用户刚完成的约定，提供简短总结和下一步建议。
+
+完成的约定:
+- 标题: ${task.title}
+- 描述: ${task.description || '无'}
+- 分类: ${task.category}
+- 优先级: ${task.priority}
+- 计划时间: ${task.reminder_time ? new Date(task.reminder_time).toLocaleString('zh-CN') : '无'}
+- 完成时间: ${new Date().toLocaleString('zh-CN')}
+
+${relatedTasks.length > 0 ? `相关约定 (${relatedTasks.length}个):
+${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` : ''}
+
+请提供:
+1. 完成总结: 一句话总结完成情况和成就
+2. 下一步建议: 2-3个具体的后续行动建议
+3. 激励语: 一句鼓励的话
+
+要求: 简洁、积极、实用`;
+
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            summary: { type: "string" },
+            next_steps: { type: "array", items: { type: "string" } },
+            encouragement: { type: "string" }
+          }
+        }
+      });
+
+      if (response) {
+        // 显示AI总结
+        toast.success(
+          <div className="space-y-2">
+            <p className="font-semibold">🎉 {response.summary}</p>
+            {response.next_steps && response.next_steps.length > 0 && (
+              <div className="text-sm">
+                <p className="font-medium mb-1">💡 下一步:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {response.next_steps.map((step, idx) => (
+                    <li key={idx}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {response.encouragement && (
+              <p className="text-sm italic opacity-80">"{response.encouragement}"</p>
+            )}
+          </div>,
+          { duration: 8000 }
+        );
+      }
+    } catch (error) {
+      console.error("AI总结生成失败:", error);
+      // 静默失败，不影响用户体验
     }
   };
 

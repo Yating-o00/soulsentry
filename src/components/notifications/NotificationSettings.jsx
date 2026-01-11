@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Bell, Volume2, Clock, Zap, Sparkles } from "lucide-react";
+import { Bell, Volume2, Clock, Zap, Sparkles, Mail, Smartphone } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
+import LocationReminderSettings from "./LocationReminderSettings";
 
 const SOUND_OPTIONS = [
   { value: "default", label: "默认", emoji: "🔔" },
@@ -23,6 +24,16 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
     persistent_reminder: taskDefaults?.persistent_reminder || false,
     notification_interval: taskDefaults?.notification_interval || 15,
     advance_reminders: taskDefaults?.advance_reminders || [],
+    notification_channels: taskDefaults?.notification_channels || ["in_app"],
+    email_reminder_enabled: taskDefaults?.email_reminder_enabled || false,
+    location_reminder: taskDefaults?.location_reminder || {
+      enabled: false,
+      latitude: null,
+      longitude: null,
+      address: "",
+      radius: 100,
+      trigger_on: "arrival"
+    }
   });
 
   const [testSound, setTestSound] = useState(null);
@@ -42,6 +53,17 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
       : [...current, minutes].sort((a, b) => b - a);
     
     const newSettings = { ...settings, advance_reminders: updated };
+    setSettings(newSettings);
+    onUpdate?.(newSettings);
+  };
+
+  const toggleNotificationChannel = (channel) => {
+    const current = settings.notification_channels || [];
+    const updated = current.includes(channel)
+      ? current.filter(c => c !== channel)
+      : [...current, channel];
+    
+    const newSettings = { ...settings, notification_channels: updated };
     setSettings(newSettings);
     onUpdate?.(newSettings);
   };
@@ -225,6 +247,91 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
           )}
         </CardContent>
       </Card>
+
+      <Card className="border-0 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Smartphone className="w-5 h-5 text-indigo-500" />
+            通知渠道
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-slate-600 mb-4">
+            选择接收提醒的方式
+          </p>
+          
+          <div className="space-y-3">
+            {/* In-App Notifications */}
+            <div className="flex items-center justify-between p-4 rounded-xl border-2 border-slate-200 hover:border-indigo-300 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                  <Bell className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <Label className="text-base font-medium cursor-pointer">应用内通知</Label>
+                  <p className="text-sm text-slate-600">在应用中显示提醒</p>
+                </div>
+              </div>
+              <Switch
+                checked={settings.notification_channels?.includes("in_app")}
+                onCheckedChange={() => toggleNotificationChannel("in_app")}
+              />
+            </div>
+
+            {/* Browser Push */}
+            <div className="flex items-center justify-between p-4 rounded-xl border-2 border-slate-200 hover:border-blue-300 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                  <Smartphone className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <Label className="text-base font-medium cursor-pointer">浏览器推送</Label>
+                  <p className="text-sm text-slate-600">系统级通知推送</p>
+                </div>
+              </div>
+              <Switch
+                checked={settings.notification_channels?.includes("browser")}
+                onCheckedChange={() => toggleNotificationChannel("browser")}
+              />
+            </div>
+
+            {/* Email Notifications */}
+            <div className="flex items-center justify-between p-4 rounded-xl border-2 border-slate-200 hover:border-green-300 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                  <Mail className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <Label className="text-base font-medium cursor-pointer">邮件提醒</Label>
+                  <p className="text-sm text-slate-600">发送邮件到注册邮箱</p>
+                </div>
+              </div>
+              <Switch
+                checked={settings.notification_channels?.includes("email")}
+                onCheckedChange={() => {
+                  toggleNotificationChannel("email");
+                  const newSettings = {
+                    ...settings,
+                    email_reminder_enabled: !settings.notification_channels?.includes("email")
+                  };
+                  setSettings(newSettings);
+                  onUpdate?.(newSettings);
+                }}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Location-based Reminders */}
+      <LocationReminderSettings
+        locationReminder={settings.location_reminder}
+        onUpdate={(locationSettings) => {
+          const newSettings = { ...settings, location_reminder: locationSettings };
+          setSettings(newSettings);
+          onUpdate?.(newSettings);
+        }}
+      />
 
       <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-50 to-blue-50">
         <CardContent className="pt-6">

@@ -1,30 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion';
+import React, { useState, useRef } from 'react';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { Trash2, Archive, Star, Edit } from 'lucide-react';
-
-interface SwipeAction {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  color: string;
-  onAction: () => void;
-}
-
-interface SwipeableItemProps {
-  children: React.ReactNode;
-  leftActions?: SwipeAction[];
-  rightActions?: SwipeAction[];
-  threshold?: number;
-}
 
 export default function SwipeableItem({
   children,
   leftActions = [],
   rightActions = [],
   threshold = 80
-}: SwipeableItemProps) {
+}) {
   const [isDragging, setIsDragging] = useState(false);
   const x = useMotionValue(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef(null);
 
   const backgroundColor = useTransform(
     x,
@@ -32,7 +18,7 @@ export default function SwipeableItem({
     ['rgba(239, 68, 68, 0.1)', 'rgba(255, 255, 255, 0)', 'rgba(34, 197, 94, 0.1)']
   );
 
-  const handleDragEnd = (event: any, info: PanInfo) => {
+  const handleDragEnd = (event, info) => {
     setIsDragging(false);
     
     const offset = info.offset.x;
@@ -119,28 +105,34 @@ export default function SwipeableItem({
 
 // 预设的滑动操作
 export const SwipeActions = {
-  delete: (onDelete: () => void): SwipeAction => ({
+  delete: {
     icon: Trash2,
     label: '删除',
     color: 'text-red-600',
-    onAction: onDelete
-  }),
-  archive: (onArchive: () => void): SwipeAction => ({
+    onAction: () => {}
+  },
+  archive: {
     icon: Archive,
     label: '归档',
     color: 'text-blue-600',
-    onAction: onArchive
-  }),
-  favorite: (onFavorite: () => void): SwipeAction => ({
+    onAction: () => {}
+  },
+  favorite: {
     icon: Star,
     label: '收藏',
     color: 'text-yellow-600',
-    onAction: onFavorite
-  }),
-  edit: (onEdit: () => void): SwipeAction => ({
+    onAction: () => {}
+  },
+  edit: {
     icon: Edit,
     label: '编辑',
     color: 'text-purple-600',
-    onAction: onEdit
-  })
+    onAction: () => {}
+  },
+  complete: {
+    icon: Star,
+    label: '完成',
+    color: 'text-green-600',
+    onAction: () => {}
+  }
 };

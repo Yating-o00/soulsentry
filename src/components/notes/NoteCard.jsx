@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain } from "lucide-react";
+import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain, Flame, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import {
@@ -27,6 +27,32 @@ const COLORS = {
 
 export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge }) {
   const colorClass = COLORS[note.color] || COLORS.white;
+  
+  // Calculate remaining time for ephemeral notes
+  const [remainingTime, setRemainingTime] = React.useState(null);
+  
+  React.useEffect(() => {
+    if (!note.is_ephemeral || !note.last_active_at) return;
+    
+    const updateRemainingTime = () => {
+      const lastActive = new Date(note.last_active_at);
+      const ttl = (note.ephemeral_ttl_minutes || 5) * 60 * 1000;
+      const expiresAt = lastActive.getTime() + ttl;
+      const remaining = expiresAt - Date.now();
+      
+      if (remaining <= 0) {
+        setRemainingTime(0);
+      } else {
+        const minutes = Math.floor(remaining / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        setRemainingTime(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+      }
+    };
+    
+    updateRemainingTime();
+    const interval = setInterval(updateRemainingTime, 1000);
+    return () => clearInterval(interval);
+  }, [note.is_ephemeral, note.last_active_at, note.ephemeral_ttl_minutes]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(note.plain_text);
@@ -42,8 +68,34 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
       exit={{ opacity: 0, scale: 0.9 }}
       className="mb-4 break-inside-avoid"
     >
-      <Card className={`group relative border border-transparent shadow-sm hover:shadow-md transition-all duration-200 ${colorClass}`}>
+      <Card className={`group relative border shadow-sm hover:shadow-md transition-all duration-200 ${
+        note.is_ephemeral ? 'border-orange-300 bg-gradient-to-br from-orange-50/50 to-red-50/50' : `border-transparent ${colorClass}`
+      }`}>
+        {note.is_ephemeral && remainingTime !== null && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 to-red-500 rounded-t-xl overflow-hidden">
+            <div 
+              className="h-full bg-white/30"
+              style={{
+                width: '100%',
+                animation: `shrink ${(note.ephemeral_ttl_minutes || 5) * 60}s linear`
+              }}
+            />
+          </div>
+        )}
         <div className="p-4">
+          {note.is_ephemeral && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-gradient-to-r from-orange-100 to-red-100 rounded-lg border border-orange-200">
+              <Flame className="w-4 h-4 text-orange-600 animate-pulse" />
+              <span className="text-xs font-medium text-orange-700">阅后即焚</span>
+              {remainingTime !== null && (
+                <>
+                  <span className="text-xs text-orange-600">·</span>
+                  <Clock className="w-3 h-3 text-orange-600" />
+                  <span className="text-xs font-mono text-orange-700">{remainingTime}</span>
+                </>
+              )}
+            </div>
+          )}
           {/* Content Preview */}
           <div 
             className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]"

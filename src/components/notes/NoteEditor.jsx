@@ -40,6 +40,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isEphemeral, setIsEphemeral] = useState(initialData?.is_ephemeral || false);
   const quillRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -300,13 +301,17 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
       tags,
       color,
       is_pinned: initialData?.is_pinned || false,
-      ai_analysis: aiAnalysis
+      ai_analysis: aiAnalysis,
+      is_ephemeral: isEphemeral,
+      last_active_at: new Date().toISOString(),
+      ephemeral_ttl_minutes: 5
     });
     
     if (!initialData) {
         setContent("");
         setTags([]);
         setColor("white");
+        setIsEphemeral(false);
     }
   };
 
@@ -589,7 +594,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             </motion.div>
         )}
 
-        <div className="flex items-center justify-between pt-4 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex flex-col gap-3 pt-4 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
                 <span className="text-xs font-medium text-slate-600">颜色标记</span>
                 <div className="flex gap-1.5">
@@ -609,32 +614,59 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                     ))}
                 </div>
             </div>
-            <div className="flex gap-2">
-                {onClose && (
+            
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsEphemeral(!isEphemeral);
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all duration-200 ${
+                        isEphemeral 
+                            ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white border-orange-500 shadow-lg' 
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-orange-300'
+                    }`}
+                >
+                    <span className="text-sm">🔥</span>
+                    <span className="text-xs font-medium">阅后即焚</span>
+                </button>
+                {isEphemeral && (
+                    <span className="text-xs text-orange-600">
+                        5分钟后自动删除
+                    </span>
+                )}
+            </div>
+            
+            <div className="flex justify-end">
+                <div className="flex gap-2">
+                    {onClose && (
+                        <button 
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onClose();
+                            }}
+                            className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors"
+                        >
+                            取消
+                        </button>
+                    )}
                     <button 
                         type="button"
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            onClose();
-                        }}
-                        className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors"
+                            handleSave();
+                        }} 
+                        className="px-4 py-2 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center"
                     >
-                        取消
+                        <Save className="w-4 h-4 mr-2" />
+                        保存心签
                     </button>
-                )}
-                <button 
-                    type="button"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleSave();
-                    }} 
-                    className="px-4 py-2 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center"
-                >
-                    <Save className="w-4 h-4 mr-2" />
-                    保存心签
-                </button>
+                </div>
             </div>
         </div>
       </div>

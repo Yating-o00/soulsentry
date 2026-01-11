@@ -196,12 +196,13 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
             }`}
             >
           {/* 主约定 */}
-          <div className="p-5">
-            <div className="flex items-start gap-4">
+          <div className="p-4 md:p-5">
+            <div className="flex items-start gap-3 md:gap-4">
               {!isTrash && (
                 <motion.div
                   whileTap={{ scale: 0.85 }}
                   transition={{ duration: 0.1 }}
+                  className="touch-manipulation"
                 >
                   <Checkbox
                     checked={isCompleted}
@@ -210,36 +211,36 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                       onComplete();
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="mt-1 h-5 w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150"
+                    className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150"
                   />
                 </motion.div>
               )}
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div className="flex items-center gap-2 flex-1 cursor-pointer" onClick={onClick}>
+                <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
+                  <div className="flex items-center gap-1.5 md:gap-2 flex-1 cursor-pointer touch-manipulation" onClick={onClick}>
                   {hasSubtasks && !hideSubtaskList && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setExpanded(!expanded);
                       }}
-                      className="hover:bg-[#e5e9ef] rounded-lg p-1 transition-colors"
+                      className="hover:bg-[#e5e9ef] rounded-lg p-1.5 md:p-1 transition-colors touch-manipulation min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
                     >
                       {expanded ? (
-                        <ChevronDown className="w-4 h-4 text-[#384877]" />
+                        <ChevronDown className="w-5 h-5 md:w-4 md:h-4 text-[#384877]" />
                       ) : (
-                        <ChevronRight className="w-4 h-4 text-[#384877]" />
+                        <ChevronRight className="w-5 h-5 md:w-4 md:h-4 text-[#384877]" />
                       )}
                     </button>
                   )}
-                  <h3 className={`text-[17px] font-semibold tracking-tight ${
+                  <h3 className={`text-base md:text-[17px] font-semibold tracking-tight leading-relaxed ${
                       isCompleted ? 'line-through text-[#a1a1aa]' : 'text-[#222222]'
                     }`}>
                       {task.title}
                     </h3>
                   </div>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <div className="flex gap-1.5 md:gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
                     {isTrash ? (
                       <>
                         <Button
@@ -348,7 +349,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                 </div>
 
                 {task.description && (
-                  <p className="text-[15px] text-[#52525b] mb-3 line-clamp-2 cursor-pointer leading-relaxed" onClick={onClick}>
+                  <p className="text-sm md:text-[15px] text-[#52525b] mb-3 line-clamp-2 cursor-pointer leading-relaxed touch-manipulation" onClick={onClick}>
                     {task.description}
                   </p>
                 )}
@@ -365,7 +366,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   </div>
                 )}
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
                   {isBlocked && (
                       <Badge className="bg-[#f43f5e] text-white rounded-[8px] text-[13px] border-[#f43f5e] flex items-center gap-1 animate-pulse">
                           <Ban className="w-3 h-3" />

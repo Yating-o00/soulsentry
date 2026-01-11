@@ -74,7 +74,7 @@ export default function FloatingAssistantButton() {
   return (
     <>
       <motion.div
-        className="fixed bottom-6 right-6 z-40"
+        className="fixed bottom-24 right-4 md:bottom-6 md:right-6 z-40"
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 20 }}
@@ -108,7 +108,7 @@ export default function FloatingAssistantButton() {
           {/* 小助按钮 - 缩小版 */}
           <motion.button
             onClick={() => setIsOpen(!isOpen)}
-            className="h-12 w-12 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] hover:from-[#4a5670] hover:to-[#152e50] shadow-lg hover:shadow-xl transition-all relative group"
+            className="h-14 w-14 md:h-12 md:w-12 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] hover:from-[#4a5670] hover:to-[#152e50] shadow-lg hover:shadow-xl transition-all relative group touch-manipulation"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >

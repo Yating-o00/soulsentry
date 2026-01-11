@@ -71,8 +71,8 @@ export default function MobileNavigation() {
   return (
     <>
       {/* 底部导航栏 */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 safe-area-inset-bottom">
-        <div className="flex items-center justify-around h-16 px-2">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 safe-area-inset-bottom shadow-2xl">
+        <div className="flex items-center justify-around h-16 px-1">
           {navItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = item.path && location.pathname === item.path;
@@ -82,13 +82,13 @@ export default function MobileNavigation() {
                 <button
                   key={index}
                   onClick={item.action}
-                  className="relative -mt-8"
+                  className="relative -mt-8 touch-manipulation"
                 >
                   <motion.div
                     whileTap={{ scale: 0.9 }}
-                    className="h-14 w-14 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 shadow-lg flex items-center justify-center"
+                    className="h-16 w-16 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 shadow-xl flex items-center justify-center active:shadow-2xl transition-shadow"
                   >
-                    <Plus className="w-6 h-6 text-white" />
+                    <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
                   </motion.div>
                 </button>
               );
@@ -99,16 +99,16 @@ export default function MobileNavigation() {
                 <Link
                   key={index}
                   to={item.path}
-                  className="flex-1 flex flex-col items-center justify-center gap-1 py-2"
+                  className="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[56px] relative touch-manipulation"
                 >
                   <Icon 
-                    className={`w-5 h-5 transition-colors ${
-                      isActive ? 'text-[#384877]' : 'text-slate-400'
+                    className={`w-6 h-6 transition-all ${
+                      isActive ? 'text-[#384877] scale-110' : 'text-slate-400'
                     }`} 
                   />
                   <span 
-                    className={`text-[10px] font-medium transition-colors ${
-                      isActive ? 'text-[#384877]' : 'text-slate-500'
+                    className={`text-[11px] font-medium transition-colors leading-tight ${
+                      isActive ? 'text-[#384877] font-semibold' : 'text-slate-500'
                     }`}
                   >
                     {item.label}
@@ -116,7 +116,7 @@ export default function MobileNavigation() {
                   {isActive && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#384877]"
+                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-[#384877]"
                     />
                   )}
                 </Link>

@@ -192,17 +192,17 @@ export default function Tasks() {
         </Tabs>
       </div>
 
-      <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto">
+      <div className="p-3 md:p-8 space-y-3 md:space-y-6 max-w-7xl mx-auto">
         {/* Desktop Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="hidden md:block">
+          className="hidden md:block mb-6">
 
-          <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-1 md:mb-2">
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
             {t('allTasks')}
           </h1>
-          <p className="text-sm md:text-base text-slate-600">{t('yourMomentsMatter')}</p>
+          <p className="text-base text-slate-600">{t('yourMomentsMatter')}</p>
         </motion.div>
 
         <div className="mb-4 md:mb-8">

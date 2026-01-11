@@ -10,6 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { OfflineStorage } from "../offline/OfflineManager";
 import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, MessageSquare, BookTemplate } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
@@ -101,40 +102,93 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     dependencies: initialData?.dependencies || [],
     });
 
-  // 智能标签推荐 (Debounced)
+  // 智能标签、优先级和截止日期推荐 (Debounced)
   useEffect(() => {
     if (!task.title || task.title.length < 2) return;
     
     const timer = setTimeout(async () => {
       setIsSuggestingTags(true);
       try {
+        const now = new Date().toISOString();
         const res = await base44.integrations.Core.InvokeLLM({
-          prompt: `Based on the task title "${task.title}", suggest 3 relevant short tags (e.g. "Work", "Meeting", "Urgent", "Study"). Return ONLY a JSON object: {"tags": ["tag1", "tag2", "tag3"]}. Tags should be in Chinese if the title is Chinese.`,
+          prompt: `分析约定标题和描述，智能推荐标签、优先级和截止日期。
+
+标题: "${task.title}"
+${task.description ? `描述: "${task.description}"` : ''}
+当前时间: ${now}
+
+请提供:
+1. 推荐标签 (3个简短标签)
+2. 推荐优先级 (low/medium/high/urgent)
+3. 截止日期和时间 (如果文本中提到，或根据约定性质推断合理的deadline)
+4. 简短理由
+
+返回JSON格式。`,
           response_json_schema: {
             type: "object",
             properties: {
-              tags: { type: "array", items: { type: "string" } }
+              tags: { type: "array", items: { type: "string" } },
+              priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+              suggested_deadline: { type: "string", format: "date-time" },
+              reasoning: { type: "string" }
             }
           }
         });
-        if (res && res.tags) {
-          // Filter out existing tags
-          const currentTags = task.tags || [];
-          const newSuggestions = res.tags.filter(t => !currentTags.includes(t));
-          setSuggestedTags(newSuggestions);
+        
+        if (res) {
+          // 更新标签建议
+          if (res.tags) {
+            const currentTags = task.tags || [];
+            const newSuggestions = res.tags.filter(t => !currentTags.includes(t));
+            setSuggestedTags(newSuggestions);
+          }
+
+          // 如果优先级与当前不同，显示建议
+          if (res.priority && res.priority !== task.priority) {
+            toast.info(
+              <div className="text-sm">
+                <p className="font-medium">💡 AI建议</p>
+                <p>优先级: {res.priority} - {res.reasoning}</p>
+              </div>,
+              { duration: 4000 }
+            );
+          }
+
+          // 如果检测到截止日期，提示用户
+          if (res.suggested_deadline && !task.reminder_time) {
+            const deadlineDate = new Date(res.suggested_deadline);
+            toast.info(
+              <div className="text-sm">
+                <p className="font-medium">📅 检测到截止日期</p>
+                <p>{format(deadlineDate, "MM月dd日 HH:mm", { locale: zhCN })}</p>
+                <button
+                  onClick={() => {
+                    setTask(prev => ({
+                      ...prev,
+                      reminder_time: deadlineDate,
+                      time: format(deadlineDate, "HH:mm"),
+                      priority: res.priority || prev.priority
+                    }));
+                    toast.success("已自动设置提醒时间");
+                  }}
+                  className="mt-1 px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                >
+                  应用建议
+                </button>
+              </div>,
+              { duration: 6000 }
+            );
+          }
         }
       } catch (e) {
-        console.error("AI标签推荐失败:", e);
-        if (e.message) {
-          console.error("错误详情:", e.message);
-        }
+        console.error("AI智能分析失败:", e);
       } finally {
         setIsSuggestingTags(false);
       }
-    }, 1000); // 1s debounce
+    }, 1500); // 1.5s debounce
 
     return () => clearTimeout(timer);
-  }, [task.title]);
+  }, [task.title, task.description]);
 
   const addTag = (tag) => {
     const currentTags = task.tags || [];
@@ -408,7 +462,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!task.title.trim() || !task.reminder_time) return;
@@ -450,14 +504,31 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       end_time: endDateTime ? endDateTime.toISOString() : null,
     };
 
-    if (!initialData && task.subtasks && task.subtasks.length > 0) {
-        handleBulkCreateDirect([taskToSubmit]);
-    } else {
-        onAdd(taskToSubmit);
-    }
+    // 保存到离线存储
+    try {
+      if (navigator.onLine) {
+        if (!initialData && task.subtasks && task.subtasks.length > 0) {
+          await handleBulkCreateDirect([taskToSubmit]);
+        } else {
+          onAdd(taskToSubmit);
+        }
+      } else {
+        // 离线模式：保存到本地
+        await OfflineStorage.addToSyncQueue({
+          type: initialData ? 'update_task' : 'create_task',
+          id: initialData?.id,
+          data: taskToSubmit
+        });
+        toast.success("📡 离线保存成功，将在上线时同步");
+      }
 
-    if (!initialData) {
+      if (!initialData) {
         logUserBehavior("task_created", taskToSubmit);
+      }
+    } catch (error) {
+      console.error("保存失败:", error);
+      toast.error("保存失败");
+      return;
     }
 
     if (!initialData) {
@@ -483,9 +554,6 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
       setIsExpanded(false);
       setShowSettings(false);
       setShowRecurrence(false);
-    } else {
-      // For edit mode, we might want to close the form/modal handled by parent, or just keep data?
-      // Usually parent closes modal on success.
     }
   };
 

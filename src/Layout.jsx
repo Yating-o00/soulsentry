@@ -323,17 +323,17 @@ function LayoutContent({ children }) {
 
         {/* 离线状态提示 */}
         {!isOnline && (
-          <div className="md:hidden fixed top-0 inset-x-0 z-50 bg-amber-500 text-white text-center py-2 text-sm">
+          <div className="md:hidden fixed top-0 inset-x-0 z-50 bg-amber-500 text-white text-center py-3 text-base font-medium">
             📡 离线模式 {pendingSync > 0 && `· ${pendingSync} 项待同步`}
           </div>
         )}
 
-        <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative w-full overflow-hidden pb-16 md:pb-0">
+        <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative w-full overflow-hidden pb-20 md:pb-0">
           <FloatingAssistantButton />
-          <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-6 py-4 lg:hidden sticky top-0 z-10">
-            <div className="flex items-center gap-4">
-              <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-all duration-200" />
-              <h1 className="text-lg font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+          <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-4 py-3 lg:hidden sticky top-0 z-10 min-h-[56px]">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="hover:bg-slate-100 p-2.5 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center" />
+              <h1 className="text-base font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
                 {t('soulSentry')}
               </h1>
             </div>

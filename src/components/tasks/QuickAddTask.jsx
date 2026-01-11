@@ -663,7 +663,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                     placeholder="输入约定标题..."
                     value={task.title}
                     onChange={(e) => setTask({ ...task, title: e.target.value })}
-                    className="text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors"
+                    className="text-lg md:text-xl font-medium border-0 border-b-2 border-slate-200 focus-visible:border-blue-500 rounded-none bg-transparent px-0 focus-visible:ring-0 transition-colors h-12 md:h-auto"
                     autoFocus
                   />
                   <motion.div
@@ -759,7 +759,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                   placeholder="添加详细描述（可选）"
                   value={task.description}
                   onChange={(e) => setTask({ ...task, description: e.target.value })}
-                  className="border-slate-200 bg-slate-50/50 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 rounded-xl resize-none text-sm"
+                  className="border-slate-200 bg-slate-50/50 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 rounded-xl resize-none text-base md:text-sm min-h-[100px] md:min-h-0"
                   rows={2}
                 />
 

@@ -307,18 +307,23 @@ export default function Tasks() {
                 <SwipeableItem
                   leftActions={[
                     {
-                      ...SwipeActions.complete,
+                      icon: SwipeActions.complete.icon,
                       label: task.status === 'completed' ? '未完成' : '完成',
+                      color: task.status === 'completed' ? 'text-slate-600' : 'text-green-600',
                       onAction: () => onCompleteTask(task)
                     }
                   ]}
                   rightActions={[
                     {
-                      ...SwipeActions.edit,
+                      icon: SwipeActions.edit.icon,
+                      label: '编辑',
+                      color: 'text-purple-600',
                       onAction: () => setEditingTask(task)
                     },
                     {
-                      ...SwipeActions.delete,
+                      icon: SwipeActions.delete.icon,
+                      label: '删除',
+                      color: 'text-red-600',
                       onAction: () => deleteTask(task.id)
                     }
                   ]}
@@ -369,14 +374,17 @@ export default function Tasks() {
                       <SwipeableItem
                         leftActions={[
                           {
-                            ...SwipeActions.complete,
+                            icon: SwipeActions.complete.icon,
                             label: subtask.status === 'completed' ? '未完成' : '完成',
+                            color: subtask.status === 'completed' ? 'text-slate-600' : 'text-green-600',
                             onAction: () => onSubtaskToggleWrapper(subtask)
                           }
                         ]}
                         rightActions={[
                           {
-                            ...SwipeActions.delete,
+                            icon: SwipeActions.delete.icon,
+                            label: '删除',
+                            color: 'text-red-600',
                             onAction: () => deleteTask(subtask.id)
                           }
                         ]}

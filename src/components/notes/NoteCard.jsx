@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain, Flame, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { getEphemeralTimeRemaining } from "./EphemeralNoteManager";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,33 +25,45 @@ const COLORS = {
   pink: "bg-pink-50 hover:border-pink-300",
 };
 
-export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge }) {
+export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge, onUpdateInteraction }) {
   const colorClass = COLORS[note.color] || COLORS.white;
-  const [timeRemaining, setTimeRemaining] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(null);
 
-  // 临时心签倒计时
+  // Calculate time left for burn after read notes
   useEffect(() => {
-    if (!note.is_ephemeral || !note.ephemeral_expires_at) return;
+    if (!note.burn_after_read || !note.last_interaction_at) return;
 
     const updateTimer = () => {
-      const remaining = getEphemeralTimeRemaining(note.ephemeral_expires_at);
-      setTimeRemaining(remaining);
-      
-      // 如果已过期，触发删除
-      if (remaining?.expired) {
-        setTimeout(() => onDelete(note), 500);
+      const lastInteraction = new Date(note.last_interaction_at);
+      const burnTimeMs = note.burn_timeout_minutes * 60 * 1000;
+      const expiryTime = lastInteraction.getTime() + burnTimeMs;
+      const now = Date.now();
+      const remaining = expiryTime - now;
+
+      if (remaining <= 0) {
+        setTimeLeft(null);
+      } else {
+        const minutes = Math.floor(remaining / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        setTimeLeft({ minutes, seconds, total: remaining });
       }
     };
 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [note.is_ephemeral, note.ephemeral_expires_at, onDelete, note]);
+  }, [note.burn_after_read, note.last_interaction_at, note.burn_timeout_minutes]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(note.plain_text);
     toast.success("内容已复制");
     if (onCopy) onCopy();
+  };
+
+  const handleInteraction = () => {
+    if (note.burn_after_read && onUpdateInteraction) {
+      onUpdateInteraction(note);
+    }
   };
 
   return (
@@ -62,31 +73,25 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       className="mb-4 break-inside-avoid"
+      onClick={handleInteraction}
     >
-      <Card className={`group relative border shadow-sm hover:shadow-md transition-all duration-200 ${note.is_ephemeral ? 'border-orange-400 shadow-orange-200' : 'border-transparent'} ${colorClass}`}>
-        {/* 临时心签倒计时条 */}
-        {note.is_ephemeral && timeRemaining && !timeRemaining.expired && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200 overflow-hidden rounded-t-2xl">
-            <motion.div
-              className="h-full bg-gradient-to-r from-orange-500 to-red-500"
-              initial={{ width: '100%' }}
-              animate={{ width: `${timeRemaining.percentage}%` }}
-              transition={{ duration: 0.5 }}
-            />
-          </div>
-        )}
-        
-        <div className="p-4">
-          {/* 临时心签标识 */}
-          {note.is_ephemeral && timeRemaining && !timeRemaining.expired && (
-            <div className="mb-3 flex items-center gap-2 px-2 py-1.5 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg border border-orange-200">
-              <Flame className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
-              <span className="text-xs font-medium text-orange-700">
-                阅后即焚 · 剩余 {timeRemaining.minutes}:{String(timeRemaining.seconds).padStart(2, '0')}
+      <Card className={`group relative border ${note.burn_after_read ? 'border-orange-300' : 'border-transparent'} shadow-sm hover:shadow-md transition-all duration-200 ${colorClass}`}>
+        {/* Burn After Read Timer */}
+        {note.burn_after_read && timeLeft && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="absolute top-2 right-2 z-10"
+          >
+            <Badge className="bg-orange-500 text-white border-0 shadow-lg flex items-center gap-1 px-2 py-1">
+              <Flame className="w-3 h-3 animate-pulse" />
+              <span className="text-xs font-mono">
+                {timeLeft.minutes}:{timeLeft.seconds.toString().padStart(2, '0')}
               </span>
-              <Clock className="w-3 h-3 text-orange-500 ml-auto" />
-            </div>
-          )}
+            </Badge>
+          </motion.div>
+        )}
+        <div className="p-4">
           {/* Content Preview */}
           <div 
             className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]"
@@ -182,7 +187,11 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 hover:bg-black/5"
-                onClick={(e) => { e.stopPropagation(); onEdit(note); }}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  handleInteraction();
+                  onEdit(note); 
+                }}
                 title="编辑"
               >
                 <Edit className="w-3.5 h-3.5" />

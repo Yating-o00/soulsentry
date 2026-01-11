@@ -17,6 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 const COLORS = [
   { name: "white", class: "bg-white border-slate-200" },
@@ -40,7 +41,8 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [isEphemeral, setIsEphemeral] = useState(initialData?.is_ephemeral || false);
+  const [burnAfterRead, setBurnAfterRead] = useState(initialData?.burn_after_read || false);
+  const [burnTimeout, setBurnTimeout] = useState(initialData?.burn_timeout_minutes || 5);
   const quillRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -295,31 +297,22 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
         }
     }
 
-    const saveData = {
+    onSave({
       content,
       plain_text: plainText,
       tags,
       color,
       is_pinned: initialData?.is_pinned || false,
       ai_analysis: aiAnalysis,
-      is_ephemeral: isEphemeral,
-      last_interacted_at: new Date().toISOString()
-    };
-
-    // 如果是临时心签，设置过期时间为5分钟后
-    if (isEphemeral && !initialData) {
-      const expiresAt = new Date();
-      expiresAt.setMinutes(expiresAt.getMinutes() + 5);
-      saveData.ephemeral_expires_at = expiresAt.toISOString();
-    }
-
-    onSave(saveData);
+      burn_after_read: burnAfterRead,
+      burn_timeout_minutes: burnTimeout,
+      last_interaction_at: burnAfterRead ? new Date().toISOString() : undefined
+    });
     
     if (!initialData) {
         setContent("");
         setTags([]);
         setColor("white");
-        setIsEphemeral(false);
     }
   };
 
@@ -602,48 +595,60 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             </motion.div>
         )}
 
-        <div className="flex flex-col gap-3 pt-4 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-slate-600">颜色标记</span>
-                    <div className="flex gap-1.5">
-                        {COLORS.map(c => (
-                            <button
-                            key={c.name}
-                            type="button"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setColor(c.name);
-                            }}
-                            className={`w-7 h-7 rounded-lg border-2 ${c.name === 'white' ? 'bg-white' : `bg-${c.name}-100`} ${color === c.name ? 'ring-2 ring-offset-2 ring-[#384877] scale-110' : 'hover:scale-110 hover:border-slate-300'} transition-all duration-200 shadow-sm`}
-                            style={{ backgroundColor: c.name === 'white' ? '#ffffff' : undefined }}
-                            title={c.name}
-                            />
-                        ))}
+        {/* Burn After Read Setting */}
+        <div className="flex items-center justify-between py-3 px-4 mb-4 border border-orange-200 bg-orange-50/50 rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+                <Flame className="w-5 h-5 text-orange-600" />
+                <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-700">阅后即焚</span>
+                        <Switch
+                            checked={burnAfterRead}
+                            onCheckedChange={setBurnAfterRead}
+                            className="data-[state=checked]:bg-orange-600"
+                        />
                     </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                        {burnAfterRead ? `将在 ${burnTimeout} 分钟无交互后自动删除` : '临时信息，用后即焚'}
+                    </p>
                 </div>
-                
-                {/* 临时心签开关 */}
-                {!initialData && (
-                    <button
+            </div>
+            {burnAfterRead && (
+                <select
+                    value={burnTimeout}
+                    onChange={(e) => setBurnTimeout(Number(e.target.value))}
+                    className="px-3 py-1.5 text-sm border border-orange-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <option value={1}>1分钟</option>
+                    <option value={3}>3分钟</option>
+                    <option value={5}>5分钟</option>
+                    <option value={10}>10分钟</option>
+                    <option value={30}>30分钟</option>
+                    <option value={60}>1小时</option>
+                </select>
+            )}
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-slate-600">颜色标记</span>
+                <div className="flex gap-1.5">
+                    {COLORS.map(c => (
+                        <button
+                        key={c.name}
                         type="button"
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            setIsEphemeral(!isEphemeral);
+                            setColor(c.name);
                         }}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 text-xs font-medium transition-all duration-200 ${
-                            isEphemeral 
-                                ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white border-orange-500 shadow-lg' 
-                                : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300 hover:bg-orange-50'
-                        }`}
-                        title="开启后，心签将在5分钟内自动消失"
-                    >
-                        <Flame className={`w-4 h-4 ${isEphemeral ? 'animate-pulse' : ''}`} />
-                        <span className="hidden sm:inline">阅后即焚</span>
-                    </button>
-                )}
+                        className={`w-7 h-7 rounded-lg border-2 ${c.name === 'white' ? 'bg-white' : `bg-${c.name}-100`} ${color === c.name ? 'ring-2 ring-offset-2 ring-[#384877] scale-110' : 'hover:scale-110 hover:border-slate-300'} transition-all duration-200 shadow-sm`}
+                        style={{ backgroundColor: c.name === 'white' ? '#ffffff' : undefined }}
+                        title={c.name}
+                        />
+                    ))}
+                </div>
             </div>
             <div className="flex gap-2">
                 {onClose && (

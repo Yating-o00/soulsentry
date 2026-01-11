@@ -113,6 +113,15 @@ export default function Notes() {
     }
   });
 
+  const updateInteractionMutation = useMutation({
+    mutationFn: ({ id }) => base44.entities.Note.update(id, { 
+      last_interaction_at: new Date().toISOString() 
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    }
+  });
+
   const deleteNoteMutation = useMutation({
     mutationFn: (id) => base44.entities.Note.delete(id), // Or soft delete if prefer
     onSuccess: () => {
@@ -241,6 +250,32 @@ export default function Notes() {
       data: { is_pinned: !note.is_pinned }
     });
   };
+
+  const handleUpdateInteraction = (note) => {
+    updateInteractionMutation.mutate({ id: note.id });
+  };
+
+  // Auto-delete expired burn-after-read notes
+  useEffect(() => {
+    const checkExpiredNotes = () => {
+      const now = Date.now();
+      notes.forEach(note => {
+        if (note.burn_after_read && note.last_interaction_at && !note.deleted_at) {
+          const lastInteraction = new Date(note.last_interaction_at).getTime();
+          const burnTimeMs = (note.burn_timeout_minutes || 5) * 60 * 1000;
+          const expiryTime = lastInteraction + burnTimeMs;
+          
+          if (now >= expiryTime) {
+            deleteNoteMutation.mutate(note.id);
+            toast.info("🔥 阅后即焚心签已自动删除", { duration: 2000 });
+          }
+        }
+      });
+    };
+
+    const interval = setInterval(checkExpiredNotes, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }, [notes]);
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen">
@@ -409,7 +444,8 @@ export default function Notes() {
                 onPin={handlePin}
                 onShare={setSharingNote}
                 onConvertToTask={(n) => setTaskCreationNote(n)}
-                onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)} />
+                onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
+                onUpdateInteraction={handleUpdateInteraction} />
 
               )}
             </AnimatePresence>

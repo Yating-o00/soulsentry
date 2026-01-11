@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare, Sparkles, Loader2 } from "lucide-react";
+import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare, Sparkles, Loader2, Archive, Star } from "lucide-react";
+import SwipeableItem, { SwipeActions } from "../components/mobile/SwipeableItem";
 import GanttView from "../components/tasks/GanttView";
 import KanbanView from "../components/tasks/KanbanView";
 import AdvancedTaskFilters from "../components/tasks/AdvancedTaskFilters";
@@ -163,30 +164,58 @@ export default function Tasks() {
   // Smart sort removed - handled by Soul Sentry agent conversation
 
   return (
-    <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto pb-20 md:pb-8">
+    <div className="pb-20 md:pb-8">
       <NotificationManager />
       
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}>
+      {/* Sticky Header - Mobile */}
+      <div className="md:hidden sticky top-0 z-40 bg-gradient-to-br from-slate-50 to-white border-b border-slate-200 shadow-sm">
+        <div className="p-3">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+            {t('allTasks')}
+          </h1>
+          <p className="text-xs text-slate-600">{rootTasks.length} 个约定</p>
+        </div>
 
-        <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-1 md:mb-2">
-          {t('allTasks')}
-        </h1>
-        <p className="text-sm md:text-base text-slate-600">{t('yourMomentsMatter')}</p>
-      </motion.div>
-
-      <div className="mb-4 md:mb-8">
-        <QuickAddTask onAdd={(data) => createTask(data)} />
+        {/* Sticky Tabs - Mobile */}
+        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full px-3 pb-2">
+          <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-xl p-1">
+            <TabsTrigger value="all" className="rounded-lg text-xs px-2 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              {t('all')} ({tasks.length})
+            </TabsTrigger>
+            <TabsTrigger value="pending" className="rounded-lg text-xs px-2 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              {t('pending')} ({tasks.filter((t) => t.status === "pending").length})
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="rounded-lg text-xs px-2 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              {t('completed')} ({tasks.filter((t) => t.status === "completed").length})
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="space-y-3">
+      <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto">
+        {/* Desktop Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="hidden md:block">
 
-        <div className="flex flex-col gap-2 bg-white p-2 md:p-3 rounded-2xl shadow-sm border border-slate-100">
+          <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-1 md:mb-2">
+            {t('allTasks')}
+          </h1>
+          <p className="text-sm md:text-base text-slate-600">{t('yourMomentsMatter')}</p>
+        </motion.div>
+
+        <div className="mb-4 md:mb-8">
+          <QuickAddTask onAdd={(data) => createTask(data)} />
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="space-y-3">
+
+          <div className="flex flex-col gap-2 bg-white p-2 md:p-3 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -229,7 +258,8 @@ export default function Tasks() {
           </div>
         </div>
 
-        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
+        {/* Desktop Tabs */}
+        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full hidden md:block">
           <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
             <TabsTrigger value="all" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
               {t('all')} <span className="ml-0.5">({tasks.length})</span>
@@ -272,18 +302,58 @@ export default function Tasks() {
         <AnimatePresence mode="popLayout">
           {rootTasks.map((task) =>
           <React.Fragment key={task.id}>
-              <TaskCard
-              task={task}
-              subtasks={getAllSubtasks(task.id)}
-              hideSubtaskList={true}
-              onComplete={() => onCompleteTask(task)}
-              onDelete={() => deleteTask(task.id)}
-              onEdit={() => setEditingTask(task)}
-              onUpdate={(data) => updateTask({ id: task.id, data })}
-              onClick={() => setSelectedTask(task)}
-              onSubtaskToggle={onSubtaskToggleWrapper}
-              onToggleSubtasks={() => toggleTaskExpansion(task.id)}
-              isExpanded={expandedTaskIds.has(task.id)} />
+              {/* Mobile: Swipeable wrapper */}
+              <div className="md:hidden">
+                <SwipeableItem
+                  leftActions={[
+                    {
+                      ...SwipeActions.complete,
+                      label: task.status === 'completed' ? '未完成' : '完成',
+                      onAction: () => onCompleteTask(task)
+                    }
+                  ]}
+                  rightActions={[
+                    {
+                      ...SwipeActions.edit,
+                      onAction: () => setEditingTask(task)
+                    },
+                    {
+                      ...SwipeActions.delete,
+                      onAction: () => deleteTask(task.id)
+                    }
+                  ]}
+                  threshold={80}
+                >
+                  <TaskCard
+                    task={task}
+                    subtasks={getAllSubtasks(task.id)}
+                    hideSubtaskList={true}
+                    onComplete={() => onCompleteTask(task)}
+                    onDelete={() => deleteTask(task.id)}
+                    onEdit={() => setEditingTask(task)}
+                    onUpdate={(data) => updateTask({ id: task.id, data })}
+                    onClick={() => setSelectedTask(task)}
+                    onSubtaskToggle={onSubtaskToggleWrapper}
+                    onToggleSubtasks={() => toggleTaskExpansion(task.id)}
+                    isExpanded={expandedTaskIds.has(task.id)} />
+                </SwipeableItem>
+              </div>
+
+              {/* Desktop: Regular card */}
+              <div className="hidden md:block">
+                <TaskCard
+                  task={task}
+                  subtasks={getAllSubtasks(task.id)}
+                  hideSubtaskList={true}
+                  onComplete={() => onCompleteTask(task)}
+                  onDelete={() => deleteTask(task.id)}
+                  onEdit={() => setEditingTask(task)}
+                  onUpdate={(data) => updateTask({ id: task.id, data })}
+                  onClick={() => setSelectedTask(task)}
+                  onSubtaskToggle={onSubtaskToggleWrapper}
+                  onToggleSubtasks={() => toggleTaskExpansion(task.id)}
+                  isExpanded={expandedTaskIds.has(task.id)} />
+              </div>
 
               <AnimatePresence>
                 {expandedTaskIds.has(task.id) && getSubtasks(task.id).map((subtask) =>
@@ -294,14 +364,46 @@ export default function Tasks() {
                 exit={{ opacity: 0, height: 0 }}
                 className="ml-4 md:ml-8 relative pl-3 md:pl-4 border-l-2 border-slate-200/50">
 
-                    <TaskCard
-                  task={subtask}
-                  hideSubtaskList={true}
-                  onComplete={() => onSubtaskToggleWrapper(subtask)}
-                  onDelete={() => deleteTask(subtask.id)}
-                  onEdit={() => setEditingTask(subtask)}
-                  onClick={() => setSelectedTask(subtask)}
-                  onSubtaskToggle={onSubtaskToggleWrapper} />
+                    {/* Mobile: Swipeable subtask */}
+                    <div className="md:hidden">
+                      <SwipeableItem
+                        leftActions={[
+                          {
+                            ...SwipeActions.complete,
+                            label: subtask.status === 'completed' ? '未完成' : '完成',
+                            onAction: () => onSubtaskToggleWrapper(subtask)
+                          }
+                        ]}
+                        rightActions={[
+                          {
+                            ...SwipeActions.delete,
+                            onAction: () => deleteTask(subtask.id)
+                          }
+                        ]}
+                        threshold={80}
+                      >
+                        <TaskCard
+                          task={subtask}
+                          hideSubtaskList={true}
+                          onComplete={() => onSubtaskToggleWrapper(subtask)}
+                          onDelete={() => deleteTask(subtask.id)}
+                          onEdit={() => setEditingTask(subtask)}
+                          onClick={() => setSelectedTask(subtask)}
+                          onSubtaskToggle={onSubtaskToggleWrapper} />
+                      </SwipeableItem>
+                    </div>
+
+                    {/* Desktop: Regular subtask */}
+                    <div className="hidden md:block">
+                      <TaskCard
+                        task={subtask}
+                        hideSubtaskList={true}
+                        onComplete={() => onSubtaskToggleWrapper(subtask)}
+                        onDelete={() => deleteTask(subtask.id)}
+                        onEdit={() => setEditingTask(subtask)}
+                        onClick={() => setSelectedTask(subtask)}
+                        onSubtaskToggle={onSubtaskToggleWrapper} />
+                    </div>
 
                   </motion.div>
               )}
@@ -326,25 +428,25 @@ export default function Tasks() {
         }
       </motion.div>
 
-      <TaskDetailModal
-        task={selectedTask}
-        open={!!selectedTask}
-        onClose={() => setSelectedTask(null)} />
+        <TaskDetailModal
+          task={selectedTask}
+          open={!!selectedTask}
+          onClose={() => setSelectedTask(null)} />
 
+        <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+          <DialogContent className="max-w-[95vw] md:max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-base md:text-lg">编辑约定</DialogTitle>
+            </DialogHeader>
+            {editingTask &&
+            <QuickAddTask
+              initialData={editingTask}
+              onAdd={handleUpdateTask} />
 
-      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
-        <DialogContent className="max-w-[95vw] md:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base md:text-lg">编辑约定</DialogTitle>
-          </DialogHeader>
-          {editingTask &&
-          <QuickAddTask
-            initialData={editingTask}
-            onAdd={handleUpdateTask} />
-
-          }
-        </DialogContent>
-      </Dialog>
+            }
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>);
 
 }

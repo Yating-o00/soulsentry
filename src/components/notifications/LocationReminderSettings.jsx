@@ -5,29 +5,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Navigation, Loader2, CheckCircle2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { MapPin, Navigation, Target, AlertCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
-export default function LocationReminderSettings({ locationReminder, onUpdate }) {
+export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
+  const [locationEnabled, setLocationEnabled] = useState(taskDefaults?.location_reminder?.enabled || false);
+  const [locationPermission, setLocationPermission] = useState("prompt");
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [settings, setSettings] = useState({
-    enabled: locationReminder?.enabled || false,
-    latitude: locationReminder?.latitude || null,
-    longitude: locationReminder?.longitude || null,
-    address: locationReminder?.address || "",
-    radius: locationReminder?.radius || 100,
-    trigger_on: locationReminder?.trigger_on || "arrival"
+    latitude: taskDefaults?.location_reminder?.latitude || null,
+    longitude: taskDefaults?.location_reminder?.longitude || null,
+    radius: taskDefaults?.location_reminder?.radius || 500,
+    location_name: taskDefaults?.location_reminder?.location_name || "",
+    trigger_on: taskDefaults?.location_reminder?.trigger_on || "enter"
   });
 
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
-  const [locationPermission, setLocationPermission] = useState("prompt");
-
   useEffect(() => {
-    // Check location permission status
     if (navigator.permissions) {
       navigator.permissions.query({ name: 'geolocation' }).then(result => {
         setLocationPermission(result.state);
-        result.onchange = () => setLocationPermission(result.state);
+        result.addEventListener('change', () => {
+          setLocationPermission(result.state);
+        });
       });
     }
   }, []);
@@ -38,60 +38,53 @@ export default function LocationReminderSettings({ locationReminder, onUpdate })
       return;
     }
 
-    setIsGettingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        
-        try {
-          // Reverse geocoding to get address
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-          );
-          const data = await response.json();
-          const address = data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    toast.loading("正在获取位置...", { id: "location" });
 
-          const newSettings = {
-            ...settings,
-            latitude,
-            longitude,
-            address,
-            enabled: true
-          };
-          
-          setSettings(newSettings);
-          onUpdate?.(newSettings);
-          toast.success("已获取当前位置");
-        } catch (error) {
-          const newSettings = {
-            ...settings,
-            latitude,
-            longitude,
-            address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
-            enabled: true
-          };
-          setSettings(newSettings);
-          onUpdate?.(newSettings);
-          toast.success("已获取当前位置");
-        }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setCurrentLocation({ latitude, longitude });
         
-        setIsGettingLocation(false);
+        const newSettings = {
+          ...settings,
+          latitude,
+          longitude,
+          location_name: settings.location_name || `位置 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+        };
+        
+        setSettings(newSettings);
+        handleUpdate(newSettings);
+        
+        toast.success("位置获取成功！", { id: "location" });
       },
       (error) => {
-        setIsGettingLocation(false);
-        if (error.code === error.PERMISSION_DENIED) {
-          toast.error("位置权限被拒绝，请在浏览器设置中允许位置访问");
-        } else {
-          toast.error("无法获取位置信息");
-        }
+        toast.error(`获取位置失败: ${error.message}`, { id: "location" });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
       }
     );
   };
 
-  const handleSettingChange = (key, value) => {
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-    onUpdate?.(newSettings);
+  const handleUpdate = (newSettings) => {
+    onUpdate?.({
+      location_reminder: {
+        enabled: locationEnabled,
+        ...newSettings
+      }
+    });
+  };
+
+  const handleToggle = (enabled) => {
+    setLocationEnabled(enabled);
+    onUpdate?.({
+      location_reminder: {
+        enabled,
+        ...settings
+      }
+    });
   };
 
   return (
@@ -109,113 +102,164 @@ export default function LocationReminderSettings({ locationReminder, onUpdate })
               启用位置提醒
             </Label>
             <p className="text-sm text-slate-600 mt-1">
-              到达或离开指定地点时接收提醒
+              到达或离开指定位置时自动提醒
             </p>
           </div>
           <Switch
             id="location-enabled"
-            checked={settings.enabled}
-            onCheckedChange={(checked) => handleSettingChange('enabled', checked)}
+            checked={locationEnabled}
+            onCheckedChange={handleToggle}
           />
         </div>
 
-        {settings.enabled && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            className="space-y-4 pt-4 border-t"
-          >
-            {/* Current Location Button */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={getCurrentLocation}
-              disabled={isGettingLocation || locationPermission === 'denied'}
-              className="w-full border-2 border-dashed border-green-300 hover:border-green-400 hover:bg-green-50"
+        <AnimatePresence>
+          {locationEnabled && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-4 pt-4 border-t"
             >
-              {isGettingLocation ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  正在获取位置...
-                </>
-              ) : settings.latitude && settings.longitude ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />
-                  更新当前位置
-                </>
-              ) : (
-                <>
-                  <Navigation className="w-4 h-4 mr-2" />
-                  使用当前位置
-                </>
+              {locationPermission === "denied" && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-red-700">
+                    <p className="font-medium">位置权限已被拒绝</p>
+                    <p className="text-xs mt-1">请在浏览器设置中允许位置访问</p>
+                  </div>
+                </div>
               )}
-            </Button>
 
-            {locationPermission === 'denied' && (
-              <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                ⚠️ 位置权限已被拒绝。请在浏览器设置中允许位置访问。
+              <div>
+                <Label className="text-sm font-medium mb-2 block">位置名称</Label>
+                <Input
+                  placeholder="例如：公司、家、健身房"
+                  value={settings.location_name}
+                  onChange={(e) => {
+                    const newSettings = { ...settings, location_name: e.target.value };
+                    setSettings(newSettings);
+                    handleUpdate(newSettings);
+                  }}
+                  className="bg-slate-50 border-slate-200"
+                />
               </div>
-            )}
 
-            {/* Address Display/Input */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">地点</Label>
-              <Input
-                value={settings.address}
-                onChange={(e) => handleSettingChange('address', e.target.value)}
-                placeholder="输入地址或地点名称"
-                className="border-slate-200"
-              />
-              {settings.latitude && settings.longitude && (
-                <p className="text-xs text-slate-500">
-                  坐标: {settings.latitude.toFixed(6)}, {settings.longitude.toFixed(6)}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">纬度</Label>
+                  <Input
+                    type="number"
+                    step="0.000001"
+                    placeholder="纬度"
+                    value={settings.latitude || ""}
+                    onChange={(e) => {
+                      const newSettings = { ...settings, latitude: parseFloat(e.target.value) };
+                      setSettings(newSettings);
+                      handleUpdate(newSettings);
+                    }}
+                    className="bg-slate-50 border-slate-200"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">经度</Label>
+                  <Input
+                    type="number"
+                    step="0.000001"
+                    placeholder="经度"
+                    value={settings.longitude || ""}
+                    onChange={(e) => {
+                      const newSettings = { ...settings, longitude: parseFloat(e.target.value) };
+                      setSettings(newSettings);
+                      handleUpdate(newSettings);
+                    }}
+                    className="bg-slate-50 border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={getCurrentLocation}
+                variant="outline"
+                className="w-full border-green-200 hover:bg-green-50"
+                disabled={locationPermission === "denied"}
+              >
+                <Navigation className="w-4 h-4 mr-2" />
+                使用当前位置
+              </Button>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">触发半径 (米)</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    step="50"
+                    min="50"
+                    max="5000"
+                    value={settings.radius}
+                    onChange={(e) => {
+                      const newSettings = { ...settings, radius: parseInt(e.target.value) };
+                      setSettings(newSettings);
+                      handleUpdate(newSettings);
+                    }}
+                    className="bg-slate-50 border-slate-200"
+                  />
+                  <span className="text-sm text-slate-600 whitespace-nowrap">米</span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  当距离目标位置 {settings.radius} 米内时触发提醒
                 </p>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">触发条件</Label>
+                <Select
+                  value={settings.trigger_on}
+                  onValueChange={(value) => {
+                    const newSettings = { ...settings, trigger_on: value };
+                    setSettings(newSettings);
+                    handleUpdate(newSettings);
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-50 border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="enter">
+                      <div className="flex items-center gap-2">
+                        <Target className="w-4 h-4 text-green-600" />
+                        <span>进入区域时</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="exit">
+                      <div className="flex items-center gap-2">
+                        <Target className="w-4 h-4 text-orange-600" />
+                        <span>离开区域时</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="both">
+                      <div className="flex items-center gap-2">
+                        <Target className="w-4 h-4 text-blue-600" />
+                        <span>进入和离开时</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {currentLocation && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-green-700 text-sm">
+                    <MapPin className="w-4 h-4" />
+                    <span className="font-medium">当前位置已设置</span>
+                  </div>
+                  <p className="text-xs text-green-600 mt-1">
+                    {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
+                  </p>
+                </div>
               )}
-            </div>
-
-            {/* Radius */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">触发半径</Label>
-              <Select
-                value={String(settings.radius)}
-                onValueChange={(value) => handleSettingChange('radius', parseInt(value))}
-              >
-                <SelectTrigger className="border-slate-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="50">50米</SelectItem>
-                  <SelectItem value="100">100米</SelectItem>
-                  <SelectItem value="200">200米</SelectItem>
-                  <SelectItem value="500">500米</SelectItem>
-                  <SelectItem value="1000">1公里</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Trigger Condition */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">触发条件</Label>
-              <Select
-                value={settings.trigger_on}
-                onValueChange={(value) => handleSettingChange('trigger_on', value)}
-              >
-                <SelectTrigger className="border-slate-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="arrival">到达时提醒</SelectItem>
-                  <SelectItem value="departure">离开时提醒</SelectItem>
-                  <SelectItem value="both">到达和离开都提醒</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-              💡 <strong>提示:</strong> 位置提醒需要您的设备持续允许位置访问。请确保在设备设置中授予必要权限。
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </CardContent>
     </Card>
   );

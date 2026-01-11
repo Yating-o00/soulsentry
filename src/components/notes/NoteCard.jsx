@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
+import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain, Flame, Clock } from "lucide-react";
@@ -100,6 +101,14 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
           <div 
             className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]"
             dangerouslySetInnerHTML={{ __html: note.content }}
+            onClick={(e) => {
+              // Update last_active_at on click
+              if (note.is_ephemeral) {
+                base44.entities.Note.update(note.id, {
+                  last_active_at: new Date().toISOString()
+                }).catch(err => console.error("Failed to update last_active_at:", err));
+              }
+            }}
           />
           
           {note.ai_analysis && (

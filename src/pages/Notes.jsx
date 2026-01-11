@@ -18,6 +18,7 @@ import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
 import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
+import EphemeralNotesCleaner from "../components/notes/EphemeralNotesCleaner";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -244,6 +245,7 @@ export default function Notes() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen">
+      <EphemeralNotesCleaner />
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}

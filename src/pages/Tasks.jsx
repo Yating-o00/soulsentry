@@ -12,13 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCard from "../components/tasks/TaskCard";
 import QuickAddTask from "../components/tasks/QuickAddTask";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue } from
-"@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSearchParams } from "react-router-dom";
 import NotificationManager from "../components/notifications/NotificationManager";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";

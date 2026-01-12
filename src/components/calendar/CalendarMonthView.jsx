@@ -179,11 +179,12 @@ export default function CalendarMonthView({
                                     <Clock className="w-2.5 h-2.5" />
                                     {format(new Date(task.reminder_time), "HH:mm")}
                                   </div>
-                                </div>
-                                </div>
                                 )}
-                                </Draggable>
-                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
                       
                       {dayTasks.length > 3 && (
                         <button

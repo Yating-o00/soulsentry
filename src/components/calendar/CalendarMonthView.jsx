@@ -171,9 +171,16 @@ export default function CalendarMonthView({
                       ))}
                       
                       {dayTasks.length > 3 && (
-                        <div className="text-[10px] text-slate-500 text-center py-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDateClick(day);
+                          }}
+                          className="w-full text-[10px] text-blue-600 hover:text-blue-700 font-medium text-center py-1 rounded hover:bg-blue-50 transition-colors"
+                        >
                           +{dayTasks.length - 3} 更多
-                        </div>
+                        </button>
                       )}
 
                       {/* Notes indicator */}

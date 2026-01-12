@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
-import { Loader2, Sparkles, X, Save, ListTodo, Wand2, RefreshCw, PenLine, Play, Camera, Upload } from "lucide-react";
+import { Loader2, Sparkles, X, Save, ListTodo, Wand2, RefreshCw, PenLine, Play, Camera, Upload, Flame } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,6 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 const COLORS = [
   { name: "white", class: "bg-white border-slate-200" },
@@ -40,6 +41,8 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isBurnAfterRead, setIsBurnAfterRead] = useState(initialData?.is_burn_after_read || false);
+  const [burnTimeout, setBurnTimeout] = useState(initialData?.burn_timeout_minutes || 5);
   const quillRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -300,13 +303,18 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
       tags,
       color,
       is_pinned: initialData?.is_pinned || false,
-      ai_analysis: aiAnalysis
+      ai_analysis: aiAnalysis,
+      is_burn_after_read: isBurnAfterRead,
+      burn_timeout_minutes: burnTimeout,
+      last_interaction_time: new Date().toISOString()
     });
     
     if (!initialData) {
         setContent("");
         setTags([]);
         setColor("white");
+        setIsBurnAfterRead(false);
+        setBurnTimeout(5);
     }
   };
 
@@ -589,7 +597,36 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             </motion.div>
         )}
 
-        <div className="flex items-center justify-between pt-4 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-4 pt-4 mb-3 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+                <Switch 
+                    checked={isBurnAfterRead}
+                    onCheckedChange={setIsBurnAfterRead}
+                    id="burn-mode"
+                />
+                <Label htmlFor="burn-mode" className="flex items-center gap-1 text-xs font-medium text-slate-600 cursor-pointer">
+                    <Flame className="w-3.5 h-3.5 text-orange-500" />
+                    阅后即焚
+                </Label>
+            </div>
+            {isBurnAfterRead && (
+                <div className="flex items-center gap-2">
+                    <Label className="text-xs text-slate-500">超时:</Label>
+                    <select 
+                        value={burnTimeout}
+                        onChange={(e) => setBurnTimeout(Number(e.target.value))}
+                        className="text-xs border border-slate-300 rounded px-2 py-1"
+                    >
+                        <option value={5}>5分钟</option>
+                        <option value={10}>10分钟</option>
+                        <option value={15}>15分钟</option>
+                        <option value={30}>30分钟</option>
+                    </select>
+                </div>
+            )}
+        </div>
+
+        <div className="flex items-center justify-between pt-3 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
                 <span className="text-xs font-medium text-slate-600">颜色标记</span>
                 <div className="flex gap-1.5">

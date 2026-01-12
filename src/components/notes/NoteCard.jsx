@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain } from "lucide-react";
+import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain, Flame, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import {
@@ -27,12 +27,38 @@ const COLORS = {
 
 export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge }) {
   const colorClass = COLORS[note.color] || COLORS.white;
+  const [timeRemaining, setTimeRemaining] = React.useState(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(note.plain_text);
     toast.success("内容已复制");
     if (onCopy) onCopy();
   };
+
+  // 计算阅后即焚倒计时
+  React.useEffect(() => {
+    if (!note.is_burn_after_read || !note.last_interaction_time) return;
+    
+    const updateTimer = () => {
+      const lastInteraction = new Date(note.last_interaction_time);
+      const timeoutMs = (note.burn_timeout_minutes || 5) * 60 * 1000;
+      const expiryTime = lastInteraction.getTime() + timeoutMs;
+      const now = Date.now();
+      const remaining = Math.max(0, expiryTime - now);
+      
+      if (remaining > 0) {
+        const minutes = Math.floor(remaining / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+      } else {
+        setTimeRemaining("即将销毁");
+      }
+    };
+    
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [note.is_burn_after_read, note.last_interaction_time, note.burn_timeout_minutes]);
 
   return (
     <motion.div
@@ -42,8 +68,22 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
       exit={{ opacity: 0, scale: 0.9 }}
       className="mb-4 break-inside-avoid"
     >
-      <Card className={`group relative border border-transparent shadow-sm hover:shadow-md transition-all duration-200 ${colorClass}`}>
-        <div className="p-4">
+      <Card className={`group relative border ${note.is_burn_after_read ? 'border-orange-300 shadow-orange-100' : 'border-transparent'} shadow-sm hover:shadow-md transition-all duration-200 ${colorClass}`}>
+        {note.is_burn_after_read && (
+          <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs px-3 py-1 flex items-center justify-between rounded-t-lg">
+            <div className="flex items-center gap-1">
+              <Flame className="w-3 h-3" />
+              <span>阅后即焚</span>
+            </div>
+            {timeRemaining && (
+              <div className="flex items-center gap-1 font-mono">
+                <Clock className="w-3 h-3" />
+                {timeRemaining}
+              </div>
+            )}
+          </div>
+        )}
+        <div className={`p-4 ${note.is_burn_after_read ? 'pt-9' : ''}`}>
           {/* Content Preview */}
           <div 
             className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]"

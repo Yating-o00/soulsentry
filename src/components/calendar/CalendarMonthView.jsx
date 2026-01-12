@@ -5,6 +5,7 @@ import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { StickyNote, Clock, Circle, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import DayDetailDialog from "./DayDetailDialog";
 
 const PRIORITY_COLORS = {
   urgent: "bg-red-500",
@@ -21,7 +22,8 @@ export default function CalendarMonthView({
   onTaskDrop,
   onTaskClick 
 }) {
-  const [expandedDate, setExpandedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
@@ -92,7 +94,6 @@ export default function CalendarMonthView({
             const isCurrentMonth = isSameMonth(day, currentDate);
             const isCurrentDay = isToday(day);
             const dateKey = format(day, "yyyy-MM-dd");
-            const isExpanded = expandedDate === dateKey;
 
             return (
               <Droppable key={dateKey} droppableId={dateKey}>
@@ -107,7 +108,6 @@ export default function CalendarMonthView({
                       ${isCurrentMonth ? "bg-white" : "bg-slate-50"}
                       ${isCurrentDay ? "border-blue-500 ring-2 ring-blue-500/20" : "border-slate-200"}
                       ${snapshot.isDraggingOver ? "border-blue-400 bg-blue-50" : "hover:border-slate-300"}
-                      ${isExpanded ? "row-span-2" : ""}
                     `}
                     onClick={() => onDateClick(day)}
                   >
@@ -148,7 +148,7 @@ export default function CalendarMonthView({
 
                     {/* Tasks */}
                     <div className="space-y-1">
-                      {(isExpanded ? dayTasks : dayTasks.slice(0, 3)).map((task, index) => (
+                      {dayTasks.slice(0, 3).map((task, index) => (
                         <Draggable
                           key={task.id}
                           draggableId={task.id}
@@ -186,63 +186,21 @@ export default function CalendarMonthView({
                         </Draggable>
                       ))}
                       
-                      {dayTasks.length > 3 && (
+                      {(dayTasks.length > 3 || dayNotes.length > 0) && (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setExpandedDate(isExpanded ? null : dateKey);
+                            setSelectedDate(day);
+                            setDialogOpen(true);
                           }}
                           className="w-full flex items-center justify-center gap-1 text-[10px] text-blue-600 hover:text-blue-700 font-medium py-1 rounded hover:bg-blue-50 transition-colors"
                         >
-                          {isExpanded ? (
-                            <>
-                              <ChevronUp className="w-3 h-3" />
-                              收起
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-3 h-3" />
-                              +{dayTasks.length - 3} 更多
-                            </>
-                          )}
+                          <ChevronDown className="w-3 h-3" />
+                          {dayTasks.length > 3 && `+${dayTasks.length - 3} 个约定`}
+                          {dayTasks.length > 3 && dayNotes.length > 0 && " · "}
+                          {dayNotes.length > 0 && `${dayNotes.length} 个心签`}
                         </button>
-                      )}
-
-                      {/* Notes indicator */}
-                      {isExpanded && dayNotes.length > 0 && (
-                        <AnimatePresence>
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="space-y-1 pt-2 border-t border-slate-100"
-                          >
-                            <div className="flex items-center gap-1 text-[10px] font-semibold text-purple-700 mb-1">
-                              <StickyNote className="w-3 h-3" />
-                              心签 ({dayNotes.length})
-                            </div>
-                            {dayNotes.slice(0, 2).map(note => (
-                              <div 
-                                key={note.id}
-                                className="p-1.5 rounded text-[10px] bg-purple-50 border border-purple-100 text-purple-700 line-clamp-1"
-                                dangerouslySetInnerHTML={{ __html: note.plain_text || note.content }}
-                              />
-                            ))}
-                            {dayNotes.length > 2 && (
-                              <div className="text-[10px] text-purple-600 text-center">
-                                +{dayNotes.length - 2} 个心签
-                              </div>
-                            )}
-                          </motion.div>
-                        </AnimatePresence>
-                      )}
-
-                      {!isExpanded && dayNotes.length > 0 && (
-                        <div className="flex items-center gap-1 p-1 rounded text-[10px] text-purple-600 bg-purple-50">
-                          <StickyNote className="w-3 h-3" />
-                          <span>{dayNotes.length} 心签</span>
-                        </div>
                       )}
                     </div>
 
@@ -253,6 +211,15 @@ export default function CalendarMonthView({
             );
           })}
         </div>
+
+        <DayDetailDialog 
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          date={selectedDate}
+          tasks={selectedDate ? getItemsForDate(selectedDate).tasks : []}
+          notes={selectedDate ? getItemsForDate(selectedDate).notes : []}
+          onTaskClick={onTaskClick}
+        />
       </div>
     </DragDropContext>
   );

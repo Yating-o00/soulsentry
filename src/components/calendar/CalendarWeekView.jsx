@@ -89,11 +89,11 @@ export default function CalendarWeekView({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="overflow-x-auto">
-        <div className="min-w-[800px]">
+      <div className="overflow-x-auto px-6 py-4">
+        <div className="min-w-[900px]">
           {/* Header with dates */}
-          <div className="grid grid-cols-8 border-b-2 border-slate-200 sticky top-0 bg-white z-10 shadow-sm">
-            <div className="p-3 text-sm font-bold text-slate-700 border-r border-slate-200">
+          <div className="grid grid-cols-8 border-b border-slate-200/50 sticky top-0 bg-gradient-to-b from-white to-slate-50/30 backdrop-blur-sm z-10 shadow-sm rounded-t-2xl overflow-hidden">
+            <div className="p-4 text-xs font-semibold tracking-wider text-slate-500 uppercase border-r border-slate-200/50 bg-slate-50/50">
               时间
             </div>
             {days.map((day) => {
@@ -104,17 +104,21 @@ export default function CalendarWeekView({
               return (
                 <div
                   key={format(day, "yyyy-MM-dd")}
-                  className={`p-3 text-center border-r border-slate-200 ${
-                    isCurrentDay ? "bg-blue-50 border-b-2 border-blue-500" : ""
+                  className={`p-4 text-center border-r border-slate-200/50 transition-all ${
+                    isCurrentDay 
+                      ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white" 
+                      : "hover:bg-slate-50/50"
                   }`}
                 >
-                  <div className="text-[11px] font-medium text-slate-500 mb-1">
+                  <div className={`text-[10px] font-medium uppercase tracking-wide mb-2 ${
+                    isCurrentDay ? "text-white/80" : "text-slate-500"
+                  }`}>
                     {format(day, "EEE", { locale: zhCN })}
                   </div>
                   <div
-                    className={`text-xl font-bold mb-2 ${
+                    className={`text-2xl font-bold mb-3 ${
                       isCurrentDay
-                        ? "text-white bg-blue-500 w-8 h-8 rounded-full flex items-center justify-center mx-auto"
+                        ? "text-white"
                         : "text-slate-800"
                     }`}
                   >
@@ -122,29 +126,25 @@ export default function CalendarWeekView({
                   </div>
                   
                   {/* Task & Notes count */}
-                  <div className="flex items-center justify-center gap-1">
+                  <div className="flex items-center justify-center gap-1.5">
                     {parentTasks.length > 0 && (
-                      <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
+                      <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${
                         isCurrentDay 
-                          ? "bg-blue-500 text-white border border-blue-600" 
-                          : "bg-blue-50 border border-blue-200"
+                          ? "bg-white/20 backdrop-blur-sm text-white" 
+                          : "bg-gradient-to-r from-blue-50 to-blue-100/50 text-blue-700"
                       }`}>
                         <Clock className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-blue-600"}`} />
-                        <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-blue-700"}`}>
-                          {parentTasks.length}
-                        </span>
+                        {parentTasks.length}
                       </div>
                     )}
                     {dayNotes.length > 0 && (
-                      <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
+                      <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${
                         isCurrentDay 
-                          ? "bg-purple-500 text-white border border-purple-600" 
-                          : "bg-purple-50 border border-purple-200"
+                          ? "bg-white/20 backdrop-blur-sm text-white" 
+                          : "bg-gradient-to-r from-purple-50 to-purple-100/50 text-purple-700"
                       }`}>
                         <StickyNote className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-purple-600"}`} />
-                        <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-purple-700"}`}>
-                          {dayNotes.length}
-                        </span>
+                        {dayNotes.length}
                       </div>
                     )}
                   </div>

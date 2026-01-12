@@ -551,14 +551,16 @@ export default function CalendarView() {
 
       {/* 快速添加约定对话框 */}
       <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-blue-600" />
-              为 {quickAddDate && format(quickAddDate, "M月d日", { locale: zhCN })} 添加约定
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+          <div className="px-6 pt-6 flex-shrink-0">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-blue-600" />
+                为 {quickAddDate && format(quickAddDate, "M月d日", { locale: zhCN })} 添加约定
+              </DialogTitle>
+            </DialogHeader>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 pb-6">
             <QuickAddTask
               initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
               onAdd={(taskData) => {

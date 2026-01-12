@@ -196,11 +196,11 @@ export default function CalendarDayView({
                                       initial={{ opacity: 0, x: -10 }}
                                       animate={{ opacity: 1, x: 0 }}
                                       className={`
-                                        p-3 rounded-lg cursor-pointer
-                                        transition-all
+                                        p-4 rounded-xl cursor-pointer
+                                        transition-all duration-200
                                         ${snapshot.isDragging 
-                                          ? "shadow-lg scale-105 z-50 bg-white border-2 border-blue-300" 
-                                          : "bg-white border border-slate-200 hover:shadow-md"
+                                          ? "shadow-2xl scale-105 z-50 bg-white border-2 border-[#384877] rotate-2" 
+                                          : "bg-gradient-to-br from-white to-slate-50/30 border border-slate-200/60 hover:border-[#384877]/40 hover:shadow-md hover:from-white hover:to-white"
                                         }
                                       `}
                                     >
@@ -211,7 +211,7 @@ export default function CalendarDayView({
                                               e.stopPropagation();
                                               toggleTaskExpand(task.id);
                                             }}
-                                            className="flex-shrink-0 mt-1 hover:bg-slate-100 rounded p-1"
+                                            className="flex-shrink-0 mt-1 hover:bg-slate-100 rounded p-1 transition-colors"
                                           >
                                             {isExpanded ? (
                                               <ChevronDown className="w-4 h-4 text-slate-600" />
@@ -220,7 +220,7 @@ export default function CalendarDayView({
                                             )}
                                           </button>
                                         )}
-                                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
+                                        <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 shadow-sm ${PRIORITY_COLORS[task.priority]}`} />
                                         <div 
                                           className="flex-1 min-w-0"
                                           onClick={(e) => {
@@ -228,22 +228,22 @@ export default function CalendarDayView({
                                             onTaskClick(task);
                                           }}
                                         >
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <h4 className="font-semibold text-slate-800">
+                                          <div className="flex items-center gap-2 mb-1.5">
+                                            <h4 className="font-semibold text-slate-800 text-sm">
                                               {task.title}
                                             </h4>
                                             {subtasks.length > 0 && (
-                                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700">
+                                              <Badge variant="secondary" className="text-xs h-5 px-2 bg-blue-50 text-blue-700 font-semibold">
                                                 {subtasks.length} 个子约定
                                               </Badge>
                                             )}
                                           </div>
                                           {task.description && (
-                                            <p className="text-xs text-slate-600 line-clamp-2 mb-2">
+                                            <p className="text-xs text-slate-600 line-clamp-2 mb-2 leading-relaxed">
                                               {task.description}
                                             </p>
                                           )}
-                                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                                          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
                                             <Clock className="w-3 h-3" />
                                             {format(new Date(task.reminder_time), "HH:mm")}
                                             {task.end_time && (

@@ -28,9 +28,6 @@ import TaskCard from "../tasks/TaskCard";
 import NoteCard from "../notes/NoteCard";
 import TaskDetailModal from "../tasks/TaskDetailModal";
 import QuickAddTask from "../tasks/QuickAddTask";
-import CalendarWeekView from "./CalendarWeekView";
-import CalendarMonthView from "./CalendarMonthView";
-import CalendarDayView from "./CalendarDayView";
 import {
   Dialog,
   DialogContent,
@@ -168,19 +165,6 @@ export default function CalendarView() {
     setSelectedDate(date);
     setQuickAddDate(date);
     setShowQuickAdd(true);
-  };
-
-  const handleQuickAddMove = (newDate) => {
-    setQuickAddDate(newDate);
-  };
-
-  const handleTaskDrop = (taskId, newDate) => {
-    const task = allTasks.find(t => t.id === taskId);
-    if (!task) return;
-    
-    updateTask(taskId, {
-      reminder_time: newDate.toISOString()
-    });
   };
 
   const handleNavigate = (direction) => {
@@ -362,16 +346,94 @@ export default function CalendarView() {
               />
             </Card>
           ) : (
-            <CalendarWeekView
-              currentDate={currentDate}
-              tasks={allTasks}
-              notes={notes}
-              onDateClick={handleDateClick}
-              onTaskDrop={handleTaskDrop}
-              onTaskClick={setSelectedTask}
-              activeQuickAdd={showQuickAdd && quickAddDate ? { date: quickAddDate } : null}
-              onQuickAddMove={handleQuickAddMove}
-            />
+            <Card className="border-0 shadow-xl bg-white overflow-hidden">
+              <div className="grid grid-cols-7">
+                {["日", "一", "二", "三", "四", "五", "六"].map((day, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 text-center font-semibold text-slate-600 bg-slate-50 border-b"
+                  >
+                    {day}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 divide-x">
+                {weekDays.map((day) => {
+                  const dateKey = format(day, 'yyyy-MM-dd');
+                  const dayEvents = eventsByDate[dateKey] || [];
+                  const isSelected = isSameDay(day, selectedDate);
+                  const isToday = isSameDay(day, new Date());
+
+                  return (
+                    <button
+                      key={dateKey}
+                      onClick={() => handleDateClick(day)}
+                      className={`min-h-[120px] p-2 hover:bg-blue-50 transition-all ${
+                        isSelected ? 'bg-blue-100' : ''
+                      }`}
+                    >
+                      <div className={`text-sm font-semibold mb-2 ${
+                        isToday ? 'text-blue-600' : 'text-slate-700'
+                      }`}>
+                        {format(day, 'd')}
+                        {isToday && (
+                          <span className="ml-1 text-xs bg-blue-500 text-white px-1.5 py-0.5 rounded">
+                            今
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        {dayEvents.slice(0, 3).map((event, idx) => {
+                          if (event.type === 'task') {
+                            const task = event.data;
+                            return (
+                              <div
+                                key={`task-${task.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTask(task);
+                                }}
+                                className={`text-xs p-1.5 rounded truncate text-left ${
+                                  task.status === 'completed'
+                                    ? 'bg-green-100 text-green-700 line-through'
+                                    : task.priority === 'urgent'
+                                    ? 'bg-red-100 text-red-700'
+                                    : task.priority === 'high'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : 'bg-purple-100 text-purple-700'
+                                }`}
+                              >
+                                {task.title}
+                              </div>
+                            );
+                          } else {
+                            const note = event.data;
+                            return (
+                              <div
+                                key={`note-${note.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Note details handled elsewhere or add note detail modal support
+                                }}
+                                className="text-xs p-1.5 rounded truncate text-left bg-yellow-50 text-yellow-700 border border-yellow-100"
+                              >
+                                <StickyNote className="w-3 h-3 inline mr-1" />
+                                {note.ai_analysis?.summary || "心签"}
+                              </div>
+                            );
+                          }
+                        })}
+                        {dayEvents.length > 3 && (
+                          <div className="text-xs text-slate-500 text-center">
+                            +{dayEvents.length - 3} 更多
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
           )}
         </motion.div>
 
@@ -497,11 +559,11 @@ export default function CalendarView() {
             </DialogTitle>
           </DialogHeader>
           <QuickAddTask
-            initialData={quickAddDate ? { 
-              reminder_time: quickAddDate,
-              time: format(quickAddDate, "HH:mm")
-            } : null}
+            initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
             onAdd={(taskData) => {
+              // QuickAddTask already handles the time merging with its internal state logic if initialData is passed correctly,
+              // or we can trust the returned taskData.reminder_time if it's fully formed.
+              // However, reusing the logic to ensure we respect the selected date:
               let finalReminderTime = taskData.reminder_time;
               
               if (quickAddDate && taskData.reminder_time) {

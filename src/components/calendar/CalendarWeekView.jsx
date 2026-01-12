@@ -23,9 +23,7 @@ export default function CalendarWeekView({
   onDateClick, 
   onTaskDrop,
   onTaskClick,
-  onCreateSubtask,
-  activeQuickAdd,
-  onQuickAddMove
+  onCreateSubtask
 }) {
   const [expandedTasks, setExpandedTasks] = useState(new Set());
   const weekStart = startOfWeek(currentDate, { locale: zhCN });
@@ -82,16 +80,6 @@ export default function CalendarWeekView({
     if (!result.destination) return;
     
     const taskId = result.draggableId;
-    
-    // Handle QuickAdd card movement
-    if (taskId === 'quick-add-card') {
-      const [dateStr, hourStr] = result.destination.droppableId.split("_");
-      const destinationDate = new Date(dateStr);
-      destinationDate.setHours(parseInt(hourStr), 0, 0, 0);
-      onQuickAddMove?.(destinationDate);
-      return;
-    }
-    
     const [dateStr, hourStr] = result.destination.droppableId.split("_");
     const destinationDate = new Date(dateStr);
     destinationDate.setHours(parseInt(hourStr), 0, 0, 0);
@@ -209,41 +197,6 @@ export default function CalendarWeekView({
                               </button>
                             </div>
                           )}
-                          
-                          {/* QuickAdd Card - Draggable */}
-                          {activeQuickAdd && 
-                           activeQuickAdd.date && 
-                           format(day, "yyyy-MM-dd") === format(new Date(activeQuickAdd.date), "yyyy-MM-dd") &&
-                           new Date(activeQuickAdd.date).getHours() === hour && (
-                            <Draggable draggableId="quick-add-card" index={0}>
-                              {(provided, snapshot) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  className={`
-                                    p-3 rounded-lg border-2 border-dashed transition-all
-                                    ${snapshot.isDragging 
-                                      ? "shadow-2xl scale-105 z-[100] bg-white border-blue-500 opacity-90" 
-                                      : "bg-blue-50/80 border-blue-300 hover:bg-blue-50 hover:border-blue-400"}
-                                  `}
-                                >
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <div 
-                                      {...provided.dragHandleProps}
-                                      className="flex-shrink-0 cursor-grab active:cursor-grabbing text-blue-600 hover:text-blue-700"
-                                    >
-                                      <GripVertical className="w-4 h-4" />
-                                    </div>
-                                    <div className="text-xs font-semibold text-blue-700">正在填写约定...</div>
-                                  </div>
-                                  <div className="text-[10px] text-blue-600 ml-6">
-                                    拖动此卡片可调整时间段
-                                  </div>
-                                </div>
-                              )}
-                            </Draggable>
-                          )}
-                          
                           <div className="space-y-1">
                             {hourTasks.map((task, index) => {
                               const subtasks = getSubtasks(task.id);

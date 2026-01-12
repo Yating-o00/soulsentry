@@ -114,17 +114,17 @@ export default function CalendarDayView({
 
         {/* Notes preview */}
         {dayNotes.length > 0 && (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {dayNotes.slice(0, 3).map(note => (
-              <div key={note.id} className="p-3 rounded-lg bg-purple-50 border border-purple-200">
+              <div key={note.id} className="p-4 rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100/30 border border-purple-200/50 hover:shadow-md transition-all">
                 <div 
-                  className="text-xs text-slate-700 line-clamp-2"
+                  className="text-xs text-slate-700 line-clamp-2 mb-2 leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: note.content }}
                 />
                 {note.tags && note.tags.length > 0 && (
-                  <div className="flex gap-1 mt-2">
+                  <div className="flex gap-1.5 flex-wrap">
                     {note.tags.slice(0, 2).map(tag => (
-                      <Badge key={tag} variant="secondary" className="text-[10px] h-5 bg-purple-100 text-purple-700">
+                      <Badge key={tag} variant="secondary" className="text-[10px] h-5 px-2 bg-purple-100/80 text-purple-700 font-medium">
                         #{tag}
                       </Badge>
                     ))}

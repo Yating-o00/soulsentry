@@ -124,15 +124,27 @@ export default function CalendarWeekView({
                   {/* Task & Notes count */}
                   <div className="flex items-center justify-center gap-1">
                     {parentTasks.length > 0 && (
-                      <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200">
-                        <Clock className="w-2.5 h-2.5 text-blue-600" />
-                        <span className="text-[10px] font-bold text-blue-700">{parentTasks.length}</span>
+                      <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
+                        isCurrentDay 
+                          ? "bg-blue-500 text-white border border-blue-600" 
+                          : "bg-blue-50 border border-blue-200"
+                      }`}>
+                        <Clock className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-blue-600"}`} />
+                        <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-blue-700"}`}>
+                          {parentTasks.length}
+                        </span>
                       </div>
                     )}
                     {dayNotes.length > 0 && (
-                      <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200">
-                        <StickyNote className="w-2.5 h-2.5 text-purple-600" />
-                        <span className="text-[10px] font-bold text-purple-700">{dayNotes.length}</span>
+                      <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
+                        isCurrentDay 
+                          ? "bg-purple-500 text-white border border-purple-600" 
+                          : "bg-purple-50 border border-purple-200"
+                      }`}>
+                        <StickyNote className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-purple-600"}`} />
+                        <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-purple-700"}`}>
+                          {dayNotes.length}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -160,7 +172,7 @@ export default function CalendarWeekView({
                           ref={provided.innerRef}
                           {...provided.droppableProps}
                           className={`
-                            p-1 min-h-[60px] border-r border-slate-200 cursor-pointer
+                            p-1 min-h-[60px] border-r border-slate-200 cursor-pointer group
                             ${snapshot.isDraggingOver ? "bg-blue-50" : "hover:bg-slate-50"}
                           `}
                           onDoubleClick={() => {
@@ -169,6 +181,22 @@ export default function CalendarWeekView({
                             onDateClick(clickDate);
                           }}
                         >
+                          {hourTasks.length === 0 && (
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center h-full">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const clickDate = new Date(day);
+                                  clickDate.setHours(hour, 0, 0, 0);
+                                  onDateClick(clickDate);
+                                }}
+                                className="text-xs text-slate-400 hover:text-blue-600 flex items-center gap-1 hover:bg-blue-50 px-2 py-1 rounded"
+                              >
+                                <Plus className="w-3 h-3" />
+                                添加
+                              </button>
+                            </div>
+                          )}
                           <div className="space-y-1">
                             {hourTasks.map((task, index) => {
                               const subtasks = getSubtasks(task.id);

@@ -132,15 +132,27 @@ export default function CalendarMonthView({
                       {(dayTasks.length > 0 || dayNotes.length > 0) && (
                         <div className="flex items-center gap-1">
                           {dayTasks.length > 0 && (
-                            <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100">
-                              <Clock className="w-2.5 h-2.5 text-blue-600" />
-                              <span className="text-[10px] font-semibold text-blue-700">{dayTasks.length}</span>
+                            <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
+                              isCurrentDay 
+                                ? "bg-blue-500 text-white border border-blue-600" 
+                                : "bg-blue-50 border border-blue-200"
+                            }`}>
+                              <Clock className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-blue-600"}`} />
+                              <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-blue-700"}`}>
+                                {dayTasks.length}
+                              </span>
                             </div>
                           )}
                           {dayNotes.length > 0 && (
-                            <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-50 border border-purple-100">
-                              <StickyNote className="w-2.5 h-2.5 text-purple-600" />
-                              <span className="text-[10px] font-semibold text-purple-700">{dayNotes.length}</span>
+                            <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
+                              isCurrentDay 
+                                ? "bg-purple-500 text-white border border-purple-600" 
+                                : "bg-purple-50 border border-purple-200"
+                            }`}>
+                              <StickyNote className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-purple-600"}`} />
+                              <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-purple-700"}`}>
+                                {dayNotes.length}
+                              </span>
                             </div>
                           )}
                         </div>

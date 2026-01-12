@@ -604,7 +604,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
 
   return (
     <>
-      <Card className="overflow-visible border-0 shadow-md bg-white/95 backdrop-blur-sm">
+      <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm">
         <div className="p-4 md:p-6">
           {!isExpanded ? (
             <Tabs defaultValue="quick" className="w-full">

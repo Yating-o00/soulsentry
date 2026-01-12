@@ -551,7 +551,7 @@ export default function CalendarView() {
 
       {/* 快速添加约定对话框 */}
       <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-blue-600" />
@@ -561,9 +561,6 @@ export default function CalendarView() {
           <QuickAddTask
             initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
             onAdd={(taskData) => {
-              // QuickAddTask already handles the time merging with its internal state logic if initialData is passed correctly,
-              // or we can trust the returned taskData.reminder_time if it's fully formed.
-              // However, reusing the logic to ensure we respect the selected date:
               let finalReminderTime = taskData.reminder_time;
               
               if (quickAddDate && taskData.reminder_time) {

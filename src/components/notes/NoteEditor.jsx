@@ -46,6 +46,19 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const quillRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  // 键盘快捷键：Ctrl/Cmd + Enter 保存
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [content, tags, color, aiAnalysis, isBurnAfterReading, burnDuration]);
+
   // 智能标签推荐 (Debounced)
   React.useEffect(() => {
     const plainText = content.replace(/<[^>]+>/g, '').trim(); // Simple strip
@@ -667,10 +680,13 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                         e.stopPropagation();
                         handleSave();
                     }} 
-                    className="px-4 py-2 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center"
+                    className="px-4 py-2 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2"
                 >
-                    <Save className="w-4 h-4 mr-2" />
+                    <Save className="w-4 h-4" />
                     保存心签
+                    <kbd className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/10 rounded border border-white/20">
+                      <span>⌘</span>↵
+                    </kbd>
                 </button>
                 </div>
                 </div>

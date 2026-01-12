@@ -465,6 +465,21 @@ ${task.description ? `描述: "${task.description}"` : ''}
     }
   };
 
+  // 键盘快捷键：Ctrl/Cmd + Enter 保存
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isExpanded) {
+        e.preventDefault();
+        if (task.title.trim() && task.reminder_time) {
+          handleSubmit(e);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isExpanded, task.title, task.reminder_time]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -1194,6 +1209,9 @@ ${task.description ? `描述: "${task.description}"` : ''}
                         创建约定
                       </>
                     )}
+                    <kbd className="ml-auto hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/10 rounded border border-white/20">
+                      <span>⌘</span>↵
+                    </kbd>
                   </Button>
                   <Button
                     type="button"

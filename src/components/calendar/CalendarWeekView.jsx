@@ -163,7 +163,7 @@ export default function CalendarWeekView({
                             p-1 min-h-[60px] border-r border-slate-200 cursor-pointer
                             ${snapshot.isDraggingOver ? "bg-blue-50" : "hover:bg-slate-50"}
                           `}
-                          onClick={() => {
+                          onDoubleClick={() => {
                             const clickDate = new Date(day);
                             clickDate.setHours(hour, 0, 0, 0);
                             onDateClick(clickDate);

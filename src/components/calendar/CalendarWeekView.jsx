@@ -217,17 +217,20 @@ export default function CalendarWeekView({
                                        ref={provided.innerRef}
                                        {...provided.draggableProps}
                                        className={`
-                                         p-2 rounded-md text-xs border group/card
-                                         transition-all
-                                         ${snapshot.isDragging ? "shadow-2xl scale-110 z-[100] bg-white border-blue-500 opacity-90 rotate-2" : "bg-white border-slate-200 hover:border-blue-400 hover:shadow-md"}
+                                         p-2.5 rounded-xl text-xs border group/card
+                                         transition-all duration-200
+                                         ${snapshot.isDragging 
+                                           ? "shadow-2xl scale-105 z-[100] bg-white border-2 border-[#384877] rotate-2" 
+                                           : "bg-gradient-to-br from-white to-slate-50/30 border-slate-200/60 hover:border-[#384877]/40 hover:shadow-md hover:from-white hover:to-white"
+                                         }
                                        `}
                                       >
-                                      <div className="flex items-start gap-1.5">
+                                      <div className="flex items-start gap-2">
                                         <div 
                                           {...provided.dragHandleProps}
-                                          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 mt-0.5"
+                                          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-400 hover:text-[#384877] mt-0.5 transition-colors"
                                         >
-                                          <GripVertical className="w-3 h-3" />
+                                          <GripVertical className="w-3.5 h-3.5" />
                                         </div>
                                         {subtasks.length > 0 && (
                                           <button
@@ -235,40 +238,40 @@ export default function CalendarWeekView({
                                               e.stopPropagation();
                                               toggleTaskExpand(task.id);
                                             }}
-                                            className="flex-shrink-0 mt-0.5 hover:bg-slate-100 rounded p-0.5"
+                                            className="flex-shrink-0 mt-0.5 hover:bg-slate-100 rounded p-0.5 transition-colors"
                                           >
                                             {isExpanded ? (
-                                              <ChevronDown className="w-3 h-3 text-slate-600" />
+                                              <ChevronDown className="w-3.5 h-3.5 text-slate-600" />
                                             ) : (
-                                              <ChevronRight className="w-3 h-3 text-slate-600" />
+                                              <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
                                             )}
                                           </button>
                                         )}
-                                        <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
+                                        <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 shadow-sm ${PRIORITY_COLORS[task.priority]}`} />
                                          <div 
-                                           className="flex-1 min-w-0"
+                                           className="flex-1 min-w-0 cursor-pointer"
                                            onClick={(e) => {
                                              e.stopPropagation();
                                              onTaskClick(task);
                                            }}
                                          >
-                                           <div className="flex items-center gap-1">
+                                           <div className="flex items-center gap-1.5 mb-0.5">
                                              <div className="font-semibold text-slate-800 truncate leading-tight">
                                                {task.title}
                                              </div>
                                              {subtasks.length > 0 && (
-                                               <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-blue-50 text-blue-700">
+                                               <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-blue-50 text-blue-700 font-semibold">
                                                  {subtasks.length}
                                                </Badge>
                                              )}
                                            </div>
-                                           <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
+                                           <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium">
                                              <Clock className="w-2.5 h-2.5" />
-                                             <span className="font-medium">{format(new Date(task.reminder_time), "HH:mm")}</span>
+                                             {format(new Date(task.reminder_time), "HH:mm")}
                                              {task.end_time && (
                                                <>
                                                  <span>-</span>
-                                                 <span className="font-medium">{format(new Date(task.end_time), "HH:mm")}</span>
+                                                 {format(new Date(task.end_time), "HH:mm")}
                                                </>
                                              )}
                                            </div>

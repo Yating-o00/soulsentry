@@ -327,7 +327,7 @@ export default function CalendarWeekView({
                                               e.stopPropagation();
                                               onCreateSubtask(task);
                                             }}
-                                            className="w-full p-1.5 rounded-md text-[10px] cursor-pointer border border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 flex items-center justify-center gap-1"
+                                            className="w-full p-2 rounded-lg text-[10px] font-medium cursor-pointer border border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 flex items-center justify-center gap-1 transition-all"
                                           >
                                             <Plus className="w-3 h-3" />
                                             添加子约定

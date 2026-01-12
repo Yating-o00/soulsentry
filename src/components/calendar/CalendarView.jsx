@@ -45,7 +45,6 @@ export default function CalendarView() {
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [showWeekQuickAdd, setShowWeekQuickAdd] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -165,12 +164,7 @@ export default function CalendarView() {
   const handleDateClick = (date) => {
     setSelectedDate(date);
     setQuickAddDate(date);
-    
-    if (viewMode === "week") {
-      setShowWeekQuickAdd(true);
-    } else {
-      setShowQuickAdd(true);
-    }
+    setShowQuickAdd(true);
   };
 
   const handleNavigate = (direction) => {
@@ -281,35 +275,6 @@ export default function CalendarView() {
           <ChevronRight className="w-5 h-5" />
         </Button>
       </motion.div>
-
-      {/* Week view inline QuickAdd */}
-      {viewMode === "week" && showWeekQuickAdd && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-4"
-        >
-          <QuickAddTask
-            initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
-            onAdd={(taskData) => {
-              let finalReminderTime = taskData.reminder_time;
-              
-              if (quickAddDate && taskData.reminder_time) {
-                 const selected = new Date(quickAddDate);
-                 const setTime = new Date(taskData.reminder_time);
-                 selected.setHours(setTime.getHours(), setTime.getMinutes());
-                 finalReminderTime = selected.toISOString();
-              }
-
-              handleCreateTask({
-                ...taskData,
-                reminder_time: finalReminderTime
-              });
-              setShowWeekQuickAdd(false);
-            }}
-          />
-        </motion.div>
-      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         <motion.div
@@ -584,37 +549,35 @@ export default function CalendarView() {
         </motion.div>
       </div>
 
-      {/* 月视图：快速添加约定对话框 */}
-      {viewMode === "month" && (
-        <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-blue-600" />
-                为 {quickAddDate && format(quickAddDate, "M月d日", { locale: zhCN })} 添加约定
-              </DialogTitle>
-            </DialogHeader>
-            <QuickAddTask
-              initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
-              onAdd={(taskData) => {
-                let finalReminderTime = taskData.reminder_time;
-                
-                if (quickAddDate && taskData.reminder_time) {
-                   const selected = new Date(quickAddDate);
-                   const setTime = new Date(taskData.reminder_time);
-                   selected.setHours(setTime.getHours(), setTime.getMinutes());
-                   finalReminderTime = selected.toISOString();
-                }
+      {/* 快速添加约定对话框 */}
+      <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5 text-blue-600" />
+              为 {quickAddDate && format(quickAddDate, "M月d日", { locale: zhCN })} 添加约定
+            </DialogTitle>
+          </DialogHeader>
+          <QuickAddTask
+            initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
+            onAdd={(taskData) => {
+              let finalReminderTime = taskData.reminder_time;
+              
+              if (quickAddDate && taskData.reminder_time) {
+                 const selected = new Date(quickAddDate);
+                 const setTime = new Date(taskData.reminder_time);
+                 selected.setHours(setTime.getHours(), setTime.getMinutes());
+                 finalReminderTime = selected.toISOString();
+              }
 
-                handleCreateTask({
-                  ...taskData,
-                  reminder_time: finalReminderTime
-                });
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
+              handleCreateTask({
+                ...taskData,
+                reminder_time: finalReminderTime
+              });
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       <TaskDetailModal
         task={selectedTask}

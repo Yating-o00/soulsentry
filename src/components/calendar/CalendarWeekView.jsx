@@ -177,26 +177,65 @@ export default function CalendarWeekView({
                   {hour.toString().padStart(2, '0')}:00
                 </div>
                 {days.map((day) => {
-                  const dateKey = format(day, "yyyy-MM-dd");
-                  const dropId = `${dateKey}_${hour}`;
-                  const hourTasks = getItemsForDateTime(day, hour);
+                   const dateKey = format(day, "yyyy-MM-dd");
+                   const dropId = `${dateKey}_${hour}`;
+                   const hourTasks = getItemsForDateTime(day, hour);
+                   const multiDayTasks = hour === 0 ? getMultiDayTasks(day) : [];
 
-                  return (
-                    <Droppable key={dropId} droppableId={dropId} type="TASK">
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.droppableProps}
-                          className={`
-                            p-1 min-h-[80px] border-r border-slate-200 cursor-pointer group relative
-                            ${snapshot.isDraggingOver ? "bg-blue-100 ring-2 ring-blue-300" : "hover:bg-slate-50"}
-                          `}
-                          onDoubleClick={() => {
-                            const clickDate = new Date(day);
-                            clickDate.setHours(hour, 0, 0, 0);
-                            onDateClick(clickDate);
-                          }}
-                        >
+                   return (
+                     <Droppable key={dropId} droppableId={dropId} type="TASK">
+                       {(provided, snapshot) => (
+                         <div
+                           ref={provided.innerRef}
+                           {...provided.droppableProps}
+                           className={`
+                             p-1 min-h-[80px] border-r border-slate-200 cursor-pointer group relative
+                             ${snapshot.isDraggingOver ? "bg-blue-100 ring-2 ring-blue-300" : "hover:bg-slate-50"}
+                           `}
+                           onDoubleClick={() => {
+                             const clickDate = new Date(day);
+                             clickDate.setHours(hour, 0, 0, 0);
+                             onDateClick(clickDate);
+                           }}
+                         >
+                           {/* Multi-day task indicators (shown at hour 0 only) */}
+                           {hour === 0 && multiDayTasks.length > 0 && (
+                             <div className="mb-1 space-y-1">
+                               {multiDayTasks.map((task) => {
+                                 const taskStart = new Date(task.reminder_time);
+                                 const taskEnd = new Date(task.end_time);
+                                 const isStartDay = isTaskFirstDay(task, day);
+                                 const dayDate = new Date(dateKey);
+
+                                 // Calculate if this is the last day
+                                 const nextDayStart = new Date(dayDate);
+                                 nextDayStart.setDate(nextDayStart.getDate() + 1);
+                                 const isEndDay = taskEnd < nextDayStart;
+
+                                 return (
+                                   <motion.div
+                                     key={task.id}
+                                     initial={{ opacity: 0, y: -5 }}
+                                     animate={{ opacity: 1, y: 0 }}
+                                     className={`
+                                       text-[9px] px-2 py-1.5 rounded cursor-pointer border-l-3
+                                       ${PRIORITY_COLORS[task.priority]} opacity-70 text-white truncate
+                                       ${isStartDay ? 'rounded-l-lg' : ''}
+                                       ${isEndDay ? 'rounded-r-lg' : ''}
+                                     `}
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       onTaskClick(task);
+                                     }}
+                                     title={task.title}
+                                   >
+                                     {isStartDay && <span className="font-semibold">{task.title}</span>}
+                                   </motion.div>
+                                 );
+                               })}
+                             </div>
+                           )}
+
                           {hourTasks.length === 0 && (
                             <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <button

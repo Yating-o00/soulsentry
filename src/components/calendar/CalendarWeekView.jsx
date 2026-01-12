@@ -38,29 +38,34 @@ export default function CalendarWeekView({
   }
 
   const getItemsForDateTime = (date, hour) => {
-    const dateStr = format(date, "yyyy-MM-dd");
-    
     // Return parent tasks that fall within or span this hour
     const parentTasks = tasks.filter(task => {
       if (!task.reminder_time || task.parent_task_id) return false;
-      const taskDate = new Date(task.reminder_time);
-      const taskDateStr = format(taskDate, "yyyy-MM-dd");
-      const taskStartHour = taskDate.getHours();
-      
-      if (taskDateStr !== dateStr) return false;
-      
-      // If task has end_time, check if current hour is within the range
-      if (task.end_time) {
-        const endDate = new Date(task.end_time);
-        const taskEndHour = endDate.getHours();
-        return hour >= taskStartHour && hour <= taskEndHour;
-      }
-      
-      // Otherwise, only show at start hour
-      return taskStartHour === hour;
+      return shouldTaskAppearAtDateTime(task, date, hour);
     });
 
     return parentTasks;
+  };
+
+  const getMultiDayTasks = (date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    // Return parent tasks that span multiple days (start on or before this date, end on or after)
+    return tasks.filter(task => {
+      if (!task.reminder_time || task.parent_task_id || !task.end_time) return false;
+      const taskStart = new Date(task.reminder_time);
+      const taskEnd = new Date(task.end_time);
+      const currentDate = new Date(dateStr);
+      
+      return taskStart <= currentDate && taskEnd >= currentDate;
+    });
+  };
+
+  const isTaskFirstDay = (task, date) => {
+    if (!task.reminder_time) return false;
+    const taskStart = new Date(task.reminder_time);
+    const dateStr = format(date, "yyyy-MM-dd");
+    const taskStartStr = format(taskStart, "yyyy-MM-dd");
+    return taskStartStr === dateStr;
   };
 
   const getSubtasks = (parentId) => {

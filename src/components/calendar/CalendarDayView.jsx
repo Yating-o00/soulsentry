@@ -6,6 +6,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { StickyNote, Clock, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { shouldTaskAppearAtDateTime } from "@/components/utils/recurrenceHelper";
 
 const PRIORITY_COLORS = {
   urgent: "bg-red-500",

@@ -217,11 +217,11 @@ export default function CalendarMonthView({
                             setSelectedDate(day);
                             setDialogOpen(true);
                           }}
-                          className="w-full flex items-center justify-center gap-1.5 text-[10px] text-slate-600 hover:text-[#384877] font-medium py-2 rounded-lg hover:bg-slate-50/80 transition-all duration-200 border border-dashed border-slate-200 hover:border-[#384877]/30"
+                          className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-600 hover:text-[#384877] font-semibold py-2.5 rounded-xl hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100/50 transition-all duration-200 border border-dashed border-slate-300/60 hover:border-[#384877]/40 hover:shadow-sm"
                         >
-                          <ChevronDown className="w-3 h-3" />
+                          <ChevronDown className="w-3.5 h-3.5" />
                           <span>
-                            {dayTasks.length > 2 && `+${dayTasks.length - 2}`}
+                            {dayTasks.length > 2 && `+${dayTasks.length - 2} 项`}
                             {dayTasks.length > 2 && dayNotes.length > 0 && " · "}
                             {dayNotes.length > 0 && `${dayNotes.length} 心签`}
                             {dayTasks.length <= 2 && dayNotes.length === 0 && "查看详情"}

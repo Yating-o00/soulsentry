@@ -6,7 +6,6 @@ import FloatingAssistantButton from "./components/assistant/FloatingAssistantBut
 import { TranslationProvider, useTranslation } from "./components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
 import { useOfflineManager } from "./components/offline/OfflineManager";
-import { base44 } from "@/api/base44Client";
 import {
   Sidebar,
   SidebarContent,

@@ -111,29 +111,36 @@ export default function CalendarMonthView({
                     `}
                     onClick={() => onDateClick(day)}
                   >
-                    {/* Date number */}
-                    <div className="flex items-center justify-between mb-2">
-                      <span
-                        className={`
-                          text-sm font-semibold
-                          ${isCurrentDay ? "text-white bg-blue-500 w-6 h-6 rounded-full flex items-center justify-center" : ""}
-                          ${!isCurrentMonth ? "text-slate-400" : "text-slate-700"}
-                        `}
-                      >
-                        {format(day, "d")}
-                      </span>
+                    {/* Date header */}
+                    <div className="flex items-center justify-between mb-2 pb-1 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`
+                            text-sm font-bold
+                            ${isCurrentDay ? "text-white bg-blue-500 w-6 h-6 rounded-full flex items-center justify-center" : ""}
+                            ${!isCurrentMonth ? "text-slate-400" : "text-slate-800"}
+                          `}
+                        >
+                          {format(day, "d")}
+                        </span>
+                        <span className={`text-[10px] font-medium ${!isCurrentMonth ? "text-slate-300" : "text-slate-400"}`}>
+                          {format(day, "EEE", { locale: zhCN })}
+                        </span>
+                      </div>
                       
                       {(dayTasks.length > 0 || dayNotes.length > 0) && (
                         <div className="flex items-center gap-1">
                           {dayTasks.length > 0 && (
-                            <Badge variant="secondary" className="h-5 text-[10px] px-1.5 bg-blue-100 text-blue-700">
-                              {dayTasks.length}
-                            </Badge>
+                            <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100">
+                              <Clock className="w-2.5 h-2.5 text-blue-600" />
+                              <span className="text-[10px] font-semibold text-blue-700">{dayTasks.length}</span>
+                            </div>
                           )}
                           {dayNotes.length > 0 && (
-                            <Badge variant="secondary" className="h-5 text-[10px] px-1.5 bg-purple-100 text-purple-700">
-                              {dayNotes.length}
-                            </Badge>
+                            <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-50 border border-purple-100">
+                              <StickyNote className="w-2.5 h-2.5 text-purple-600" />
+                              <span className="text-[10px] font-semibold text-purple-700">{dayNotes.length}</span>
+                            </div>
                           )}
                         </div>
                       )}
@@ -157,22 +164,26 @@ export default function CalendarMonthView({
                                 onTaskClick(task);
                               }}
                               className={`
-                                group p-1.5 rounded-lg text-xs cursor-pointer
-                                transition-all flex items-center gap-1
-                                ${snapshot.isDragging ? "shadow-lg scale-105 z-50 bg-white border border-blue-300" : "bg-slate-50 hover:bg-slate-100"}
+                                group p-1.5 rounded-md text-xs cursor-pointer
+                                transition-all flex items-start gap-1.5 border
+                                ${snapshot.isDragging ? "shadow-lg scale-105 z-50 bg-white border-blue-300" : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"}
                               `}
                             >
-                              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
-                              <span className="truncate flex-1 font-medium text-slate-700">
-                                {task.title}
-                              </span>
-                              {task.reminder_time && (
-                                <Clock className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                              )}
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
+                              <div className={`w-1 h-1 rounded-full flex-shrink-0 mt-1 ${PRIORITY_COLORS[task.priority]}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-slate-800 truncate leading-tight">
+                                  {task.title}
+                                </div>
+                                {task.reminder_time && (
+                                  <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    {format(new Date(task.reminder_time), "HH:mm")}
+                                  </div>
+                                </div>
+                                </div>
+                                )}
+                                </Draggable>
+                                ))}
                       
                       {dayTasks.length > 3 && (
                         <button

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
+import { StickyNote, Clock, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -84,22 +84,28 @@ export default function CalendarDayView({
   return (
     <div className="p-6">
       {/* Day header */}
-      <div className="mb-6 pb-4 border-b border-slate-200">
+      <div className="mb-6 pb-6 border-b border-slate-200/50">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">
+            <h2 className="text-3xl font-bold text-slate-800 mb-1">
               {format(currentDate, "M月d日", { locale: zhCN })}
             </h2>
-            <p className="text-sm text-slate-500">
-              {format(currentDate, "EEEE", { locale: zhCN })}
-              {isCurrentDay && <Badge className="ml-2 bg-blue-500">今天</Badge>}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-slate-500 font-medium">
+                {format(currentDate, "EEEE", { locale: zhCN })}
+              </p>
+              {isCurrentDay && (
+                <Badge className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white px-3 py-1 shadow-sm">
+                  今天
+                </Badge>
+              )}
+            </div>
           </div>
 
           {dayNotes.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-50 to-purple-100/50 rounded-xl border border-purple-200/50">
               <StickyNote className="w-4 h-4 text-purple-600" />
-              <span className="text-sm font-medium text-purple-600">
+              <span className="text-sm font-semibold text-purple-700">
                 {dayNotes.length} 个心签
               </span>
             </div>
@@ -172,13 +178,13 @@ export default function CalendarDayView({
                           点击添加约定
                         </div>
                       ) : (
-                        <div className="space-y-2">
-                           {hourTasks.map((task, index) => {
-                             const subtasks = getSubtasks(task.id);
-                             const isExpanded = expandedTasks.has(task.id);
+                        <div className="space-y-3">
+                          {hourTasks.map((task, index) => {
+                            const subtasks = getSubtasks(task.id);
+                            const isExpanded = expandedTasks.has(task.id);
                             
                             return (
-                              <div key={task.id} className="space-y-1">
+                              <div key={task.id} className="space-y-2">
                                 <Draggable
                                   draggableId={task.id}
                                   index={index}
@@ -187,39 +193,35 @@ export default function CalendarDayView({
                                     <motion.div
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
+                                      {...provided.dragHandleProps}
                                       initial={{ opacity: 0, x: -10 }}
                                       animate={{ opacity: 1, x: 0 }}
                                       className={`
-                                        p-2.5 rounded-md text-xs border group/card
+                                        p-3 rounded-lg cursor-pointer
                                         transition-all
                                         ${snapshot.isDragging 
-                                          ? "shadow-2xl scale-105 z-50 bg-white border-2 border-[#384877] rotate-2" 
-                                          : "bg-gradient-to-br from-white to-slate-50/30 border-slate-200/60 hover:border-[#384877]/40 hover:shadow-md hover:from-white hover:to-white"
+                                          ? "shadow-lg scale-105 z-50 bg-white border-2 border-blue-300" 
+                                          : "bg-white border border-slate-200 hover:shadow-md"
                                         }
                                       `}
                                     >
-                                      <div className="flex items-start gap-2.5">
-                                        <div 
-                                          {...provided.dragHandleProps}
-                                          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 mt-0.5"
-                                        >
-                                          {subtasks.length > 0 ? (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleTaskExpand(task.id);
-                                              }}
-                                              className="p-0"
-                                            >
-                                              {isExpanded ? (
-                                                <ChevronDown className="w-3.5 h-3.5 text-slate-600" />
-                                              ) : (
-                                                <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-                                              )}
-                                            </button>
-                                          ) : null}
-                                        </div>
-                                        <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]} shadow-sm`} />
+                                      <div className="flex items-start gap-3">
+                                        {subtasks.length > 0 && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleTaskExpand(task.id);
+                                            }}
+                                            className="flex-shrink-0 mt-1 hover:bg-slate-100 rounded p-1"
+                                          >
+                                            {isExpanded ? (
+                                              <ChevronDown className="w-4 h-4 text-slate-600" />
+                                            ) : (
+                                              <ChevronRight className="w-4 h-4 text-slate-600" />
+                                            )}
+                                          </button>
+                                        )}
+                                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
                                         <div 
                                           className="flex-1 min-w-0"
                                           onClick={(e) => {
@@ -227,17 +229,22 @@ export default function CalendarDayView({
                                             onTaskClick(task);
                                           }}
                                         >
-                                          <div className="flex items-center gap-1.5 mb-1">
-                                            <h4 className="font-semibold text-slate-800 truncate leading-tight">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <h4 className="font-semibold text-slate-800">
                                               {task.title}
                                             </h4>
                                             {subtasks.length > 0 && (
-                                              <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-blue-50 text-blue-700 flex-shrink-0">
-                                                {subtasks.length}
+                                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700">
+                                                {subtasks.length} 个子约定
                                               </Badge>
                                             )}
                                           </div>
-                                          <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
+                                          {task.description && (
+                                            <p className="text-xs text-slate-600 line-clamp-2 mb-2">
+                                              {task.description}
+                                            </p>
+                                          )}
+                                          <div className="flex items-center gap-2 text-xs text-slate-500">
                                             <Clock className="w-3 h-3" />
                                             {format(new Date(task.reminder_time), "HH:mm")}
                                             {task.end_time && (

@@ -166,7 +166,7 @@ export default function CalendarWeekView({
                   const hourTasks = getItemsForDateTime(day, hour);
 
                   return (
-                    <Droppable key={dropId} droppableId={dropId}>
+                    <Droppable key={dropId} droppableId={dropId} type="TASK">
                       {(provided, snapshot) => (
                         <div
                           ref={provided.innerRef}

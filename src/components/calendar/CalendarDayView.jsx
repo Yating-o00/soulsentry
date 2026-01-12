@@ -30,14 +30,24 @@ export default function CalendarDayView({
   const getItemsForHour = (hour) => {
     const dateStr = format(currentDate, "yyyy-MM-dd");
     
-    // Only return parent tasks
+    // Return parent tasks that fall within or span this hour
     const parentTasks = tasks.filter(task => {
       if (!task.reminder_time || task.parent_task_id) return false;
       const taskDate = new Date(task.reminder_time);
       const taskDateStr = format(taskDate, "yyyy-MM-dd");
-      const taskHour = taskDate.getHours();
+      const taskStartHour = taskDate.getHours();
       
-      return taskDateStr === dateStr && taskHour === hour;
+      if (taskDateStr !== dateStr) return false;
+      
+      // If task has end_time, check if current hour is within the range
+      if (task.end_time) {
+        const endDate = new Date(task.end_time);
+        const taskEndHour = endDate.getHours();
+        return hour >= taskStartHour && hour <= taskEndHour;
+      }
+      
+      // Otherwise, only show at start hour
+      return taskStartHour === hour;
     });
 
     return parentTasks;

@@ -117,16 +117,16 @@ export default function CalendarMonthView({
                     onClick={() => onDateClick(day)}
                   >
                     {/* Date header */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-start justify-between mb-3 pb-2 border-b border-slate-100/50">
+                      <div className="flex flex-col gap-0.5">
                         <span
                           className={`
-                            text-lg font-semibold transition-all
+                            text-2xl font-bold tracking-tight transition-all
                             ${isCurrentDay 
-                              ? "text-white bg-gradient-to-br from-[#384877] to-[#3b5aa2] w-8 h-8 rounded-xl flex items-center justify-center shadow-sm" 
+                              ? "text-white bg-gradient-to-br from-[#384877] to-[#3b5aa2] w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shadow-[#384877]/20" 
                               : ""
                             }
-                            ${!isCurrentMonth ? "text-slate-300" : isCurrentDay ? "" : "text-slate-700"}
+                            ${!isCurrentMonth ? "text-slate-300" : isCurrentDay ? "" : "text-slate-800"}
                           `}
                         >
                           {format(day, "d")}
@@ -134,33 +134,29 @@ export default function CalendarMonthView({
                       </div>
                       
                       {(dayTasks.length > 0 || dayNotes.length > 0) && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-col gap-1">
                           {dayTasks.length > 0 && (
                             <div className={`
-                              flex items-center gap-1 px-2 py-1 rounded-lg
+                              flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold
                               ${isCurrentDay 
-                                ? "bg-white/20 backdrop-blur-sm text-white border border-white/30" 
-                                : "bg-blue-50/80 border border-blue-200/50"
+                                ? "bg-white/20 backdrop-blur-sm text-white" 
+                                : "bg-gradient-to-r from-blue-50 to-blue-100/50 text-blue-700"
                               }
                             `}>
                               <Clock className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-blue-600"}`} />
-                              <span className={`text-xs font-semibold ${isCurrentDay ? "text-white" : "text-blue-700"}`}>
-                                {dayTasks.length}
-                              </span>
+                              {dayTasks.length}
                             </div>
                           )}
                           {dayNotes.length > 0 && (
                             <div className={`
-                              flex items-center gap-1 px-2 py-1 rounded-lg
+                              flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold
                               ${isCurrentDay 
-                                ? "bg-white/20 backdrop-blur-sm text-white border border-white/30" 
-                                : "bg-purple-50/80 border border-purple-200/50"
+                                ? "bg-white/20 backdrop-blur-sm text-white" 
+                                : "bg-gradient-to-r from-purple-50 to-purple-100/50 text-purple-700"
                               }
                             `}>
                               <StickyNote className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-purple-600"}`} />
-                              <span className={`text-xs font-semibold ${isCurrentDay ? "text-white" : "text-purple-700"}`}>
-                                {dayNotes.length}
-                              </span>
+                              {dayNotes.length}
                             </div>
                           )}
                         </div>
@@ -168,7 +164,7 @@ export default function CalendarMonthView({
                     </div>
 
                     {/* Tasks */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {dayTasks.slice(0, 2).map((task, index) => (
                         <Draggable
                           key={task.id}
@@ -185,23 +181,23 @@ export default function CalendarMonthView({
                                 onTaskClick(task);
                               }}
                               className={`
-                                group p-2 rounded-xl text-xs cursor-pointer
-                                transition-all duration-200 flex items-start gap-2
+                                group p-2.5 rounded-xl text-xs cursor-pointer
+                                transition-all duration-200 flex items-center gap-2.5
                                 ${snapshot.isDragging 
-                                  ? "shadow-2xl scale-105 z-50 bg-white border border-[#384877] rotate-2" 
-                                  : "bg-white/80 backdrop-blur-sm border border-slate-200/50 hover:border-[#384877]/30 hover:shadow-md hover:bg-white"
+                                  ? "shadow-2xl scale-105 z-50 bg-white border-2 border-[#384877] rotate-2" 
+                                  : "bg-gradient-to-br from-white to-slate-50/30 border border-slate-200/60 hover:border-[#384877]/40 hover:shadow-md hover:from-white hover:to-white"
                                 }
                               `}
                             >
-                              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${PRIORITY_COLORS[task.priority]}`} />
+                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_COLORS[task.priority]} shadow-sm`} />
                               <div className="flex-1 min-w-0">
-                                <div className="font-medium text-slate-800 truncate leading-snug">
+                                <div className="font-semibold text-slate-800 truncate leading-tight mb-0.5">
                                   {task.title}
                                 </div>
                                 {task.reminder_time && (
-                                  <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
+                                  <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium">
                                     <Clock className="w-2.5 h-2.5" />
-                                    <span className="font-medium">{format(new Date(task.reminder_time), "HH:mm")}</span>
+                                    {format(new Date(task.reminder_time), "HH:mm")}
                                   </div>
                                 )}
                               </div>

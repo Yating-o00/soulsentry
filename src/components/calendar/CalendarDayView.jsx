@@ -277,21 +277,21 @@ export default function CalendarDayView({
                                             e.stopPropagation();
                                             onTaskClick(subtask);
                                           }}
-                                          className="p-3 rounded-lg bg-blue-50/50 border border-blue-100 hover:border-blue-300 hover:bg-blue-50 cursor-pointer"
+                                          className="p-3 rounded-xl bg-blue-50/50 border border-blue-100 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all"
                                         >
-                                          <div className="flex items-start gap-2">
-                                            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_COLORS[subtask.priority]}`} />
+                                          <div className="flex items-start gap-2.5">
+                                            <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_COLORS[subtask.priority]}`} />
                                             <div className="flex-1 min-w-0">
-                                              <h5 className="font-medium text-slate-700 mb-1">
+                                              <h5 className="font-semibold text-slate-700 mb-1 text-sm">
                                                 {subtask.title}
                                               </h5>
                                               {subtask.description && (
-                                                <p className="text-xs text-slate-600 line-clamp-1 mb-1">
+                                                <p className="text-xs text-slate-600 line-clamp-1 mb-1.5 leading-relaxed">
                                                   {subtask.description}
                                                 </p>
                                               )}
                                               {subtask.reminder_time && (
-                                                <div className="flex items-center gap-1 text-xs text-slate-500">
+                                                <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
                                                   <Clock className="w-3 h-3" />
                                                   {format(new Date(subtask.reminder_time), "HH:mm")}
                                                   {subtask.end_time && (

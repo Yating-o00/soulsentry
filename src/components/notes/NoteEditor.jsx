@@ -645,8 +645,27 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                         />
                     ))}
                 </div>
+                </div>
+                
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsBurnAfterReading(!isBurnAfterReading);
+                    }}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                        isBurnAfterReading 
+                            ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white border-transparent shadow-md' 
+                            : 'bg-white text-slate-600 border-slate-300 hover:border-orange-400'
+                    }`}
+                >
+                    <Flame className={`w-3.5 h-3.5 ${isBurnAfterReading ? 'animate-pulse' : ''}`} />
+                    阅后即焚 (5分钟)
+                </button>
             </div>
-            <div className="flex gap-2">
+            
+            <div className="flex gap-2 justify-end">
                 {onClose && (
                     <button 
                         type="button"

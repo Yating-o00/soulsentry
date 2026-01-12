@@ -4,55 +4,39 @@ Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
         
-        // 获取所有阅后即焚心签
-        const burnNotes = await base44.asServiceRole.entities.Note.filter({
-            is_burn_after_read: true,
+        // 使用 service role 权限清理过期笔记
+        const notes = await base44.asServiceRole.entities.Note.filter({
+            is_burn_after_reading: true,
             deleted_at: null
         });
 
-        console.log(`检查 ${burnNotes.length} 条阅后即焚心签`);
-
+        const now = new Date();
         let deletedCount = 0;
-        const now = Date.now();
 
-        for (const note of burnNotes) {
-            if (!note.last_interaction_time) {
-                // 如果没有交互时间，使用创建时间
-                const createdTime = new Date(note.created_date).getTime();
-                const timeoutMs = (note.burn_timeout_minutes || 5) * 60 * 1000;
-                
-                if (now - createdTime > timeoutMs) {
-                    await base44.asServiceRole.entities.Note.update(note.id, {
-                        deleted_at: new Date().toISOString()
-                    });
-                    deletedCount++;
-                    console.log(`删除过期心签: ${note.id} (基于创建时间)`);
-                }
-            } else {
-                const lastInteraction = new Date(note.last_interaction_time).getTime();
-                const timeoutMs = (note.burn_timeout_minutes || 5) * 60 * 1000;
-                
-                if (now - lastInteraction > timeoutMs) {
-                    await base44.asServiceRole.entities.Note.update(note.id, {
-                        deleted_at: new Date().toISOString()
-                    });
-                    deletedCount++;
-                    console.log(`删除过期心签: ${note.id}`);
-                }
+        for (const note of notes) {
+            if (!note.last_active_at) continue;
+
+            const lastActive = new Date(note.last_active_at);
+            const expiresAt = new Date(lastActive.getTime() + (note.burn_duration_minutes || 5) * 60 * 1000);
+
+            if (now >= expiresAt) {
+                // 软删除过期笔记
+                await base44.asServiceRole.entities.Note.update(note.id, {
+                    deleted_at: now.toISOString()
+                });
+                deletedCount++;
             }
         }
 
-        return Response.json({ 
-            success: true, 
-            message: `清理完成，删除了 ${deletedCount} 条过期心签`,
-            checked: burnNotes.length,
-            deleted: deletedCount
+        return Response.json({
+            success: true,
+            message: `已清理 ${deletedCount} 条过期阅后即焚笔记`,
+            deletedCount
         });
     } catch (error) {
-        console.error('清理失败:', error);
-        return Response.json({ 
-            success: false, 
-            error: error.message 
+        console.error('清理阅后即焚笔记失败:', error);
+        return Response.json({
+            error: error.message
         }, { status: 500 });
     }
 });

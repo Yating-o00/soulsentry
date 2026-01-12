@@ -154,10 +154,10 @@ export default function CalendarWeekView({
           </div>
 
           {/* Time grid */}
-          <div className="max-h-[600px] overflow-y-auto">
+          <div className="max-h-[600px] overflow-y-auto bg-white/40 backdrop-blur-sm rounded-b-2xl border border-slate-200/50 border-t-0">
             {HOURS.map((hour) => (
-              <div key={hour} className="grid grid-cols-8 border-b border-slate-100">
-                <div className="p-2 text-xs font-semibold text-slate-600 border-r border-slate-200 bg-slate-50/50">
+              <div key={hour} className="grid grid-cols-8 border-b border-slate-100/50 last:border-b-0">
+                <div className="p-3 text-xs font-semibold text-slate-600 border-r border-slate-200/50 bg-gradient-to-r from-slate-50/80 to-transparent">
                   {hour.toString().padStart(2, '0')}:00
                 </div>
                 {days.map((day) => {

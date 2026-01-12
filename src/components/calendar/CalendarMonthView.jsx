@@ -106,16 +106,13 @@ export default function CalendarMonthView({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2 }}
                     className={`
-                      min-h-[140px] p-4 rounded-2xl transition-all duration-300 cursor-pointer
-                      ${isCurrentMonth 
-                        ? "bg-gradient-to-br from-white via-white to-slate-50/20 backdrop-blur-sm" 
-                        : "bg-gradient-to-br from-slate-50/60 to-slate-100/40"
-                      }
+                      min-h-[130px] p-3 rounded-2xl transition-all duration-300 cursor-pointer
+                      ${isCurrentMonth ? "bg-white/60 backdrop-blur-sm" : "bg-slate-50/40"}
                       ${isCurrentDay 
-                        ? "ring-2 ring-[#384877] shadow-xl shadow-[#384877]/15 scale-[1.02]" 
-                        : "border border-slate-200/60 hover:border-[#384877]/30 hover:shadow-lg hover:scale-[1.01]"
+                        ? "ring-2 ring-[#384877] shadow-lg shadow-[#384877]/10" 
+                        : "border border-slate-200/50 hover:border-slate-300/80 hover:shadow-md"
                       }
-                      ${snapshot.isDraggingOver ? "ring-2 ring-blue-400 bg-blue-50/50 scale-[1.03]" : ""}
+                      ${snapshot.isDraggingOver ? "ring-2 ring-blue-400 bg-blue-50/50 scale-[1.02]" : ""}
                     `}
                     onClick={() => onDateClick(day)}
                   >
@@ -217,11 +214,11 @@ export default function CalendarMonthView({
                             setSelectedDate(day);
                             setDialogOpen(true);
                           }}
-                          className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-600 hover:text-[#384877] font-semibold py-2.5 rounded-xl hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100/50 transition-all duration-200 border border-dashed border-slate-300/60 hover:border-[#384877]/40 hover:shadow-sm"
+                          className="w-full flex items-center justify-center gap-1.5 text-[10px] text-slate-600 hover:text-[#384877] font-medium py-2 rounded-lg hover:bg-slate-50/80 transition-all duration-200 border border-dashed border-slate-200 hover:border-[#384877]/30"
                         >
-                          <ChevronDown className="w-3.5 h-3.5" />
+                          <ChevronDown className="w-3 h-3" />
                           <span>
-                            {dayTasks.length > 2 && `+${dayTasks.length - 2} 项`}
+                            {dayTasks.length > 2 && `+${dayTasks.length - 2}`}
                             {dayTasks.length > 2 && dayNotes.length > 0 && " · "}
                             {dayNotes.length > 0 && `${dayNotes.length} 心签`}
                             {dayTasks.length <= 2 && dayNotes.length === 0 && "查看详情"}

@@ -106,13 +106,16 @@ export default function CalendarMonthView({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2 }}
                     className={`
-                      min-h-[130px] p-3 rounded-2xl transition-all duration-300 cursor-pointer
-                      ${isCurrentMonth ? "bg-white/60 backdrop-blur-sm" : "bg-slate-50/40"}
-                      ${isCurrentDay 
-                        ? "ring-2 ring-[#384877] shadow-lg shadow-[#384877]/10" 
-                        : "border border-slate-200/50 hover:border-slate-300/80 hover:shadow-md"
+                      min-h-[140px] p-4 rounded-2xl transition-all duration-300 cursor-pointer
+                      ${isCurrentMonth 
+                        ? "bg-gradient-to-br from-white via-white to-slate-50/20 backdrop-blur-sm" 
+                        : "bg-gradient-to-br from-slate-50/60 to-slate-100/40"
                       }
-                      ${snapshot.isDraggingOver ? "ring-2 ring-blue-400 bg-blue-50/50 scale-[1.02]" : ""}
+                      ${isCurrentDay 
+                        ? "ring-2 ring-[#384877] shadow-xl shadow-[#384877]/15 scale-[1.02]" 
+                        : "border border-slate-200/60 hover:border-[#384877]/30 hover:shadow-lg hover:scale-[1.01]"
+                      }
+                      ${snapshot.isDraggingOver ? "ring-2 ring-blue-400 bg-blue-50/50 scale-[1.03]" : ""}
                     `}
                     onClick={() => onDateClick(day)}
                   >

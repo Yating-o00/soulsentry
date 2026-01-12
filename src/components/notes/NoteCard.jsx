@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain, Flame, Clock } from "lucide-react";
+import { Pin, Trash2, Edit, Copy, MoreHorizontal, ListTodo, Sparkles, Share2, Users, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import {
@@ -25,45 +25,13 @@ const COLORS = {
   pink: "bg-pink-50 hover:border-pink-300",
 };
 
-export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge, onUpdateInteraction }) {
+export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge }) {
   const colorClass = COLORS[note.color] || COLORS.white;
-  const [timeLeft, setTimeLeft] = useState(null);
-
-  // Calculate time left for burn after read notes
-  useEffect(() => {
-    if (!note.burn_after_read || !note.last_interaction_at) return;
-
-    const updateTimer = () => {
-      const lastInteraction = new Date(note.last_interaction_at);
-      const burnTimeMs = note.burn_timeout_minutes * 60 * 1000;
-      const expiryTime = lastInteraction.getTime() + burnTimeMs;
-      const now = Date.now();
-      const remaining = expiryTime - now;
-
-      if (remaining <= 0) {
-        setTimeLeft(null);
-      } else {
-        const minutes = Math.floor(remaining / 60000);
-        const seconds = Math.floor((remaining % 60000) / 1000);
-        setTimeLeft({ minutes, seconds, total: remaining });
-      }
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [note.burn_after_read, note.last_interaction_at, note.burn_timeout_minutes]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(note.plain_text);
     toast.success("内容已复制");
     if (onCopy) onCopy();
-  };
-
-  const handleInteraction = () => {
-    if (note.burn_after_read && onUpdateInteraction) {
-      onUpdateInteraction(note);
-    }
   };
 
   return (
@@ -73,24 +41,8 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       className="mb-4 break-inside-avoid"
-      onClick={handleInteraction}
     >
-      <Card className={`group relative border ${note.burn_after_read ? 'border-orange-300' : 'border-transparent'} shadow-sm hover:shadow-md transition-all duration-200 ${colorClass}`}>
-        {/* Burn After Read Timer */}
-        {note.burn_after_read && timeLeft && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="absolute top-2 right-2 z-10"
-          >
-            <Badge className="bg-orange-500 text-white border-0 shadow-lg flex items-center gap-1 px-2 py-1">
-              <Flame className="w-3 h-3 animate-pulse" />
-              <span className="text-xs font-mono">
-                {timeLeft.minutes}:{timeLeft.seconds.toString().padStart(2, '0')}
-              </span>
-            </Badge>
-          </motion.div>
-        )}
+      <Card className={`group relative border border-transparent shadow-sm hover:shadow-md transition-all duration-200 ${colorClass}`}>
         <div className="p-4">
           {/* Content Preview */}
           <div 
@@ -187,11 +139,7 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 hover:bg-black/5"
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  handleInteraction();
-                  onEdit(note); 
-                }}
+                onClick={(e) => { e.stopPropagation(); onEdit(note); }}
                 title="编辑"
               >
                 <Edit className="w-3.5 h-3.5" />

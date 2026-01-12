@@ -18,7 +18,6 @@ import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
 import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
-import { useEphemeralNoteManager } from "../components/notes/EphemeralNoteManager";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -65,9 +64,6 @@ export default function Notes() {
     queryFn: () => base44.entities.Note.list('-created_date'),
     initialData: []
   });
-
-  // 启用临时心签自动管理
-  useEphemeralNoteManager(notes);
 
   // Handle URL param for opening specific note
   useEffect(() => {

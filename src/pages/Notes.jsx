@@ -107,7 +107,7 @@ export default function Notes() {
   const updateNoteMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Note.update(id, {
       ...data,
-      last_interaction_time: new Date().toISOString()
+      last_active_at: new Date().toISOString()
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
@@ -243,18 +243,20 @@ export default function Notes() {
       id: note.id,
       data: { 
         is_pinned: !note.is_pinned,
-        last_interaction_time: new Date().toISOString()
+        last_active_at: new Date().toISOString()
       }
     });
   };
 
-  // 当编辑心签时，更新最后交互时间
-  const handleEditNote = (note) => {
-    updateNoteMutation.mutate({
-      id: note.id,
-      data: { last_interaction_time: new Date().toISOString() }
-    });
-    setEditingNote(note);
+  // 更新心签活动时间
+  const handleUpdateActivity = (note) => {
+    if (note.is_burn_after_reading) {
+      base44.entities.Note.update(note.id, {
+        last_active_at: new Date().toISOString()
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+      });
+    }
   };
 
   return (
@@ -419,12 +421,13 @@ export default function Notes() {
               <NoteCard
                 key={note.id}
                 note={note}
-                onEdit={handleEditNote}
+                onEdit={setEditingNote}
                 onDelete={(n) => deleteNoteMutation.mutate(n.id)}
                 onPin={handlePin}
                 onShare={setSharingNote}
                 onConvertToTask={(n) => setTaskCreationNote(n)}
-                onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)} />
+                onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
+                onUpdateActivity={handleUpdateActivity} />
 
               )}
             </AnimatePresence>

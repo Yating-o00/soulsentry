@@ -41,8 +41,8 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [isBurnAfterRead, setIsBurnAfterRead] = useState(initialData?.is_burn_after_read || false);
-  const [burnTimeout, setBurnTimeout] = useState(initialData?.burn_timeout_minutes || 5);
+  const [isBurnAfterReading, setIsBurnAfterReading] = useState(initialData?.is_burn_after_reading || false);
+  const [burnDuration, setBurnDuration] = useState(initialData?.burn_duration_minutes || 5);
   const quillRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -304,17 +304,17 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
       color,
       is_pinned: initialData?.is_pinned || false,
       ai_analysis: aiAnalysis,
-      is_burn_after_read: isBurnAfterRead,
-      burn_timeout_minutes: burnTimeout,
-      last_interaction_time: new Date().toISOString()
+      is_burn_after_reading: isBurnAfterReading,
+      burn_duration_minutes: burnDuration,
+      last_active_at: new Date().toISOString()
     });
     
     if (!initialData) {
         setContent("");
         setTags([]);
         setColor("white");
-        setIsBurnAfterRead(false);
-        setBurnTimeout(5);
+        setIsBurnAfterReading(false);
+        setBurnDuration(5);
     }
   };
 
@@ -600,8 +600,8 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
         <div className="flex items-center gap-4 pt-4 mb-3 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2">
                 <Switch 
-                    checked={isBurnAfterRead}
-                    onCheckedChange={setIsBurnAfterRead}
+                    checked={isBurnAfterReading}
+                    onCheckedChange={setIsBurnAfterReading}
                     id="burn-mode"
                 />
                 <Label htmlFor="burn-mode" className="flex items-center gap-1 text-xs font-medium text-slate-600 cursor-pointer">
@@ -609,12 +609,12 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                     阅后即焚
                 </Label>
             </div>
-            {isBurnAfterRead && (
+            {isBurnAfterReading && (
                 <div className="flex items-center gap-2">
                     <Label className="text-xs text-slate-500">超时:</Label>
                     <select 
-                        value={burnTimeout}
-                        onChange={(e) => setBurnTimeout(Number(e.target.value))}
+                        value={burnDuration}
+                        onChange={(e) => setBurnDuration(Number(e.target.value))}
                         className="text-xs border border-slate-300 rounded px-2 py-1"
                     >
                         <option value={5}>5分钟</option>
@@ -645,27 +645,8 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                         />
                     ))}
                 </div>
-                </div>
-                
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsBurnAfterReading(!isBurnAfterReading);
-                    }}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                        isBurnAfterReading 
-                            ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white border-transparent shadow-md' 
-                            : 'bg-white text-slate-600 border-slate-300 hover:border-orange-400'
-                    }`}
-                >
-                    <Flame className={`w-3.5 h-3.5 ${isBurnAfterReading ? 'animate-pulse' : ''}`} />
-                    阅后即焚 (5分钟)
-                </button>
             </div>
-            
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2">
                 {onClose && (
                     <button 
                         type="button"

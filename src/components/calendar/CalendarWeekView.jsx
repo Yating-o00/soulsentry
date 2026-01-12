@@ -172,8 +172,12 @@ export default function CalendarWeekView({
                           ref={provided.innerRef}
                           {...provided.droppableProps}
                           className={`
-                            p-1 min-h-[80px] border-r border-slate-200 cursor-pointer group relative
-                            ${snapshot.isDraggingOver ? "bg-blue-100 ring-2 ring-blue-300" : "hover:bg-slate-50"}
+                            p-2 min-h-[90px] border-r border-slate-200/50 cursor-pointer group relative
+                            transition-all duration-200
+                            ${snapshot.isDraggingOver 
+                              ? "bg-blue-50/50 ring-2 ring-[#384877]/30 scale-[1.01]" 
+                              : "hover:bg-slate-50/50"
+                            }
                           `}
                           onDoubleClick={() => {
                             const clickDate = new Date(day);
@@ -182,7 +186,7 @@ export default function CalendarWeekView({
                           }}
                         >
                           {hourTasks.length === 0 && (
-                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -190,10 +194,10 @@ export default function CalendarWeekView({
                                   clickDate.setHours(hour, 0, 0, 0);
                                   onDateClick(clickDate);
                                 }}
-                                className="text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md border border-dashed border-slate-300 hover:border-blue-400 flex items-center gap-1.5 transition-all shadow-sm hover:shadow"
+                                className="text-xs text-slate-500 hover:text-[#384877] bg-white/80 hover:bg-white px-3 py-2 rounded-xl border border-slate-200/60 hover:border-[#384877]/40 flex items-center gap-1.5 transition-all shadow-sm hover:shadow-md backdrop-blur-sm"
                               >
                                 <Plus className="w-3.5 h-3.5" />
-                                <span className="font-medium">添加约定</span>
+                                <span className="font-medium">添加</span>
                               </button>
                             </div>
                           )}

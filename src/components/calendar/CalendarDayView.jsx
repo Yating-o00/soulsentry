@@ -199,23 +199,28 @@ export default function CalendarDayView({
                                         }
                                       `}
                                     >
-                                      <div className="flex items-start gap-3">
-                                        {subtasks.length > 0 && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              toggleTaskExpand(task.id);
-                                            }}
-                                            className="flex-shrink-0 mt-1 hover:bg-slate-100 rounded p-1"
-                                          >
-                                            {isExpanded ? (
-                                              <ChevronDown className="w-4 h-4 text-slate-600" />
-                                            ) : (
-                                              <ChevronRight className="w-4 h-4 text-slate-600" />
-                                            )}
-                                          </button>
-                                        )}
-                                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
+                                      <div className="flex items-start gap-2.5">
+                                        <div 
+                                          {...provided.dragHandleProps}
+                                          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 mt-0.5"
+                                        >
+                                          {subtasks.length > 0 ? (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleTaskExpand(task.id);
+                                              }}
+                                              className="p-0"
+                                            >
+                                              {isExpanded ? (
+                                                <ChevronDown className="w-3.5 h-3.5 text-slate-600" />
+                                              ) : (
+                                                <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                                              )}
+                                            </button>
+                                          ) : null}
+                                        </div>
+                                        <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]} shadow-sm`} />
                                         <div 
                                           className="flex-1 min-w-0"
                                           onClick={(e) => {
@@ -223,22 +228,17 @@ export default function CalendarDayView({
                                             onTaskClick(task);
                                           }}
                                         >
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <h4 className="font-semibold text-slate-800">
+                                          <div className="flex items-center gap-1.5 mb-1">
+                                            <h4 className="font-semibold text-slate-800 truncate leading-tight">
                                               {task.title}
                                             </h4>
                                             {subtasks.length > 0 && (
-                                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700">
-                                                {subtasks.length} 个子约定
+                                              <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-blue-50 text-blue-700 flex-shrink-0">
+                                                {subtasks.length}
                                               </Badge>
                                             )}
                                           </div>
-                                          {task.description && (
-                                            <p className="text-xs text-slate-600 line-clamp-2 mb-2">
-                                              {task.description}
-                                            </p>
-                                          )}
-                                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                                          <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
                                             <Clock className="w-3 h-3" />
                                             {format(new Date(task.reminder_time), "HH:mm")}
                                             {task.end_time && (

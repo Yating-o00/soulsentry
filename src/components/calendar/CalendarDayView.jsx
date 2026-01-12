@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
@@ -26,11 +26,12 @@ export default function CalendarDayView({
   onCreateSubtask
 }) {
   const [expandedTasks, setExpandedTasks] = useState(new Set());
+
   const getItemsForHour = (hour) => {
     const dateStr = format(currentDate, "yyyy-MM-dd");
     
-    // Only show parent tasks
-    const hourTasks = tasks.filter(task => {
+    // Only return parent tasks
+    const parentTasks = tasks.filter(task => {
       if (!task.reminder_time || task.parent_task_id) return false;
       const taskDate = new Date(task.reminder_time);
       const taskDateStr = format(taskDate, "yyyy-MM-dd");
@@ -39,14 +40,14 @@ export default function CalendarDayView({
       return taskDateStr === dateStr && taskHour === hour;
     });
 
-    return hourTasks;
+    return parentTasks;
   };
 
   const getSubtasks = (parentId) => {
     return tasks.filter(task => task.parent_task_id === parentId);
   };
 
-  const toggleExpanded = (taskId) => {
+  const toggleTaskExpand = (taskId) => {
     setExpandedTasks(prev => {
       const newSet = new Set(prev);
       if (newSet.has(taskId)) {
@@ -171,7 +172,7 @@ export default function CalendarDayView({
                           点击添加约定
                         </div>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           {hourTasks.map((task, index) => {
                             const subtasks = getSubtasks(task.id);
                             const isExpanded = expandedTasks.has(task.id);
@@ -203,7 +204,7 @@ export default function CalendarDayView({
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              toggleExpanded(task.id);
+                                              toggleTaskExpand(task.id);
                                             }}
                                             className="flex-shrink-0 mt-1 hover:bg-slate-100 rounded p-1"
                                           >
@@ -214,7 +215,7 @@ export default function CalendarDayView({
                                             )}
                                           </button>
                                         )}
-                                        <div className={`w-2 h-2 rounded-full mt-1.5 ${PRIORITY_COLORS[task.priority]}`} />
+                                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
                                         <div 
                                           className="flex-1 min-w-0"
                                           onClick={(e) => {
@@ -254,61 +255,67 @@ export default function CalendarDayView({
                                 </Draggable>
                                 
                                 {/* Subtasks */}
-                                {isExpanded && subtasks.length > 0 && (
-                                  <div className="ml-12 space-y-2">
-                                    {subtasks.map(subtask => (
-                                      <motion.div
-                                        key={subtask.id}
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: "auto" }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onTaskClick(subtask);
-                                        }}
-                                        className="p-3 rounded-lg bg-blue-50/50 border border-blue-100 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all"
-                                      >
-                                        <div className="flex items-start gap-2">
-                                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${PRIORITY_COLORS[subtask.priority]}`} />
-                                          <div className="flex-1 min-w-0">
-                                            <h5 className="text-sm font-medium text-slate-700 mb-1">
-                                              {subtask.title}
-                                            </h5>
-                                            {subtask.description && (
-                                              <p className="text-xs text-slate-600 line-clamp-1 mb-1">
-                                                {subtask.description}
-                                              </p>
-                                            )}
-                                            {subtask.reminder_time && (
-                                              <div className="flex items-center gap-1 text-xs text-slate-500">
-                                                <Clock className="w-2.5 h-2.5" />
-                                                {format(new Date(subtask.reminder_time), "HH:mm")}
-                                                {subtask.end_time && (
-                                                  <>
-                                                    <span>-</span>
-                                                    {format(new Date(subtask.end_time), "HH:mm")}
-                                                  </>
-                                                )}
-                                              </div>
-                                            )}
+                                <AnimatePresence>
+                                  {isExpanded && subtasks.length > 0 && (
+                                    <motion.div
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: "auto" }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                      className="ml-12 space-y-2"
+                                    >
+                                      {subtasks.map((subtask) => (
+                                        <motion.div
+                                          key={subtask.id}
+                                          initial={{ opacity: 0, x: -10 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onTaskClick(subtask);
+                                          }}
+                                          className="p-3 rounded-lg bg-blue-50/50 border border-blue-100 hover:border-blue-300 hover:bg-blue-50 cursor-pointer"
+                                        >
+                                          <div className="flex items-start gap-2">
+                                            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_COLORS[subtask.priority]}`} />
+                                            <div className="flex-1 min-w-0">
+                                              <h5 className="font-medium text-slate-700 mb-1">
+                                                {subtask.title}
+                                              </h5>
+                                              {subtask.description && (
+                                                <p className="text-xs text-slate-600 line-clamp-1 mb-1">
+                                                  {subtask.description}
+                                                </p>
+                                              )}
+                                              {subtask.reminder_time && (
+                                                <div className="flex items-center gap-1 text-xs text-slate-500">
+                                                  <Clock className="w-3 h-3" />
+                                                  {format(new Date(subtask.reminder_time), "HH:mm")}
+                                                  {subtask.end_time && (
+                                                    <>
+                                                      <span>-</span>
+                                                      {format(new Date(subtask.end_time), "HH:mm")}
+                                                    </>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
                                           </div>
-                                        </div>
-                                      </motion.div>
-                                    ))}
-                                    {onCreateSubtask && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onCreateSubtask(task.id);
-                                        }}
-                                        className="w-full p-3 rounded-lg border-2 border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-sm text-blue-600 flex items-center justify-center gap-2 transition-all"
-                                      >
-                                        <Plus className="w-4 h-4" />
-                                        添加子约定
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
+                                        </motion.div>
+                                      ))}
+                                      {onCreateSubtask && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onCreateSubtask(task);
+                                          }}
+                                          className="w-full p-3 rounded-lg text-sm cursor-pointer border-2 border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 flex items-center justify-center gap-2"
+                                        >
+                                          <Plus className="w-4 h-4" />
+                                          添加子约定
+                                        </button>
+                                      )}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
                               </div>
                             );
                           })}

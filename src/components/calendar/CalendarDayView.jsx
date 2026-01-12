@@ -174,86 +174,98 @@ export default function CalendarDayView({
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {hourTasks.map((task, index) => {
-                            const subtasks = getSubtasks(task.id);
-                            const isExpanded = expandedTasks.has(task.id);
-                            
-                            return (
-                              <div key={task.id} className="space-y-2">
-                                <Draggable
-                                  draggableId={task.id}
-                                  index={index}
-                                >
-                                  {(provided, snapshot) => (
-                                    <motion.div
-                                      ref={provided.innerRef}
-                                      {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
-                                      initial={{ opacity: 0, x: -10 }}
-                                      animate={{ opacity: 1, x: 0 }}
-                                      className={`
-                                        p-3 rounded-lg cursor-pointer
-                                        transition-all
-                                        ${snapshot.isDragging 
-                                          ? "shadow-lg scale-105 z-50 bg-white border-2 border-blue-300" 
-                                          : "bg-white border border-slate-200 hover:shadow-md"
-                                        }
-                                      `}
-                                    >
-                                      <div className="flex items-start gap-3">
-                                        {subtasks.length > 0 && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              toggleTaskExpand(task.id);
-                                            }}
-                                            className="flex-shrink-0 mt-1 hover:bg-slate-100 rounded p-1"
-                                          >
-                                            {isExpanded ? (
-                                              <ChevronDown className="w-4 h-4 text-slate-600" />
-                                            ) : (
-                                              <ChevronRight className="w-4 h-4 text-slate-600" />
-                                            )}
-                                          </button>
-                                        )}
-                                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
-                                        <div 
-                                          className="flex-1 min-w-0"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            onTaskClick(task);
-                                          }}
-                                        >
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <h4 className="font-semibold text-slate-800">
-                                              {task.title}
-                                            </h4>
-                                            {subtasks.length > 0 && (
-                                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700">
-                                                {subtasks.length} 个子约定
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          {task.description && (
-                                            <p className="text-xs text-slate-600 line-clamp-2 mb-2">
-                                              {task.description}
-                                            </p>
-                                          )}
-                                          <div className="flex items-center gap-2 text-xs text-slate-500">
-                                            <Clock className="w-3 h-3" />
-                                            {format(new Date(task.reminder_time), "HH:mm")}
-                                            {task.end_time && (
-                                              <>
-                                                <span>-</span>
-                                                {format(new Date(task.end_time), "HH:mm")}
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </Draggable>
+                           {hourTasks.map((task, index) => {
+                             const subtasks = getSubtasks(task.id);
+                             const isExpanded = expandedTasks.has(task.id);
+                             const isFirstHour = isTaskFirstHour(task, hour);
+
+                             return (
+                               <div key={task.id} className="space-y-2">
+                                 <Draggable
+                                   draggableId={task.id}
+                                   index={index}
+                                 >
+                                   {(provided, snapshot) => (
+                                     <motion.div
+                                       ref={provided.innerRef}
+                                       {...provided.draggableProps}
+                                       {...provided.dragHandleProps}
+                                       initial={{ opacity: 0, x: -10 }}
+                                       animate={{ opacity: 1, x: 0 }}
+                                       className={`
+                                         rounded-lg cursor-pointer transition-all
+                                         ${isFirstHour 
+                                           ? 'p-3 bg-white border border-slate-200 hover:shadow-md' 
+                                           : 'p-2 bg-gradient-to-r from-slate-50 to-white border-l-3 border-l-slate-300'
+                                         }
+                                         ${snapshot.isDragging 
+                                           ? "shadow-lg scale-105 z-50 bg-white border-2 border-blue-300" 
+                                           : ""
+                                         }
+                                       `}
+                                     >
+                                       <div className={`flex items-start gap-${isFirstHour ? '3' : '2'}`}>
+                                         {isFirstHour && subtasks.length > 0 && (
+                                           <button
+                                             onClick={(e) => {
+                                               e.stopPropagation();
+                                               toggleTaskExpand(task.id);
+                                             }}
+                                             className="flex-shrink-0 mt-1 hover:bg-slate-100 rounded p-1"
+                                           >
+                                             {isExpanded ? (
+                                               <ChevronDown className="w-4 h-4 text-slate-600" />
+                                             ) : (
+                                               <ChevronRight className="w-4 h-4 text-slate-600" />
+                                             )}
+                                           </button>
+                                         )}
+                                         <div className={`rounded-full flex-shrink-0 ${isFirstHour ? 'w-2 h-2 mt-1.5' : 'w-1.5 h-1.5 mt-1'} ${PRIORITY_COLORS[task.priority]}`} />
+                                         <div 
+                                           className="flex-1 min-w-0"
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             onTaskClick(task);
+                                           }}
+                                         >
+                                           {isFirstHour ? (
+                                             <>
+                                               <div className="flex items-center gap-2 mb-1">
+                                                 <h4 className="font-semibold text-slate-800">
+                                                   {task.title}
+                                                 </h4>
+                                                 {subtasks.length > 0 && (
+                                                   <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700">
+                                                     {subtasks.length} 个子约定
+                                                   </Badge>
+                                                 )}
+                                               </div>
+                                               {task.description && (
+                                                 <p className="text-xs text-slate-600 line-clamp-2 mb-2">
+                                                   {task.description}
+                                                 </p>
+                                               )}
+                                               <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                 <Clock className="w-3 h-3" />
+                                                 {format(new Date(task.reminder_time), "HH:mm")}
+                                                 {task.end_time && (
+                                                   <>
+                                                     <span>-</span>
+                                                     {format(new Date(task.end_time), "HH:mm")}
+                                                   </>
+                                                 )}
+                                               </div>
+                                             </>
+                                           ) : (
+                                             <p className="text-xs font-medium text-slate-700 truncate">
+                                               {task.title}
+                                             </p>
+                                           )}
+                                         </div>
+                                       </div>
+                                     </motion.div>
+                                   )}
+                                 </Draggable>
                                 
                                 {/* Subtasks */}
                                 <AnimatePresence>

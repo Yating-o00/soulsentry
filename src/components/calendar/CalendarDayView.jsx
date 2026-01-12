@@ -178,7 +178,7 @@ export default function CalendarDayView({
                              const isExpanded = expandedTasks.has(task.id);
                             
                             return (
-                              <div key={task.id} className="space-y-2">
+                              <div key={task.id} className="space-y-1">
                                 <Draggable
                                   draggableId={task.id}
                                   index={index}

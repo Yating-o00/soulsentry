@@ -297,18 +297,24 @@ export default function CalendarWeekView({
                                               e.stopPropagation();
                                               onTaskClick(subtask);
                                             }}
-                                            className="p-1.5 rounded-md text-xs cursor-pointer border bg-blue-50/50 border-blue-100 hover:border-blue-300 hover:bg-blue-50"
+                                            className="p-2 rounded-lg text-xs cursor-pointer border bg-blue-50/50 border-blue-100 hover:border-blue-300 hover:bg-blue-50 transition-all"
                                           >
-                                            <div className="flex items-start gap-1.5">
-                                              <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[subtask.priority]}`} />
+                                            <div className="flex items-start gap-2">
+                                              <div className={`w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[subtask.priority]}`} />
                                               <div className="flex-1 min-w-0">
-                                                <div className="font-medium text-slate-700 truncate leading-tight">
+                                                <div className="font-semibold text-slate-700 truncate leading-tight mb-0.5">
                                                   {subtask.title}
                                                 </div>
                                                 {subtask.reminder_time && (
-                                                  <div className="flex items-center gap-1 mt-0.5 text-[9px] text-slate-500">
-                                                    <Clock className="w-2 h-2" />
-                                                    <span>{format(new Date(subtask.reminder_time), "HH:mm")}</span>
+                                                  <div className="flex items-center gap-1 text-[9px] text-slate-500 font-medium">
+                                                    <Clock className="w-2.5 h-2.5" />
+                                                    {format(new Date(subtask.reminder_time), "HH:mm")}
+                                                    {subtask.end_time && (
+                                                      <>
+                                                        <span>-</span>
+                                                        {format(new Date(subtask.end_time), "HH:mm")}
+                                                      </>
+                                                    )}
                                                   </div>
                                                 )}
                                               </div>

@@ -72,39 +72,50 @@ export default function CalendarWeekView({
       <div className="overflow-x-auto">
         <div className="min-w-[800px]">
           {/* Header with dates */}
-          <div className="grid grid-cols-8 border-b border-slate-200 sticky top-0 bg-white z-10">
-            <div className="p-4 text-sm font-semibold text-slate-600 border-r border-slate-200">
+          <div className="grid grid-cols-8 border-b-2 border-slate-200 sticky top-0 bg-white z-10 shadow-sm">
+            <div className="p-3 text-sm font-bold text-slate-700 border-r border-slate-200">
               时间
             </div>
             {days.map((day) => {
               const isCurrentDay = isToday(day);
+              const dayTasks = tasks.filter(t => t.reminder_time && format(new Date(t.reminder_time), "yyyy-MM-dd") === format(day, "yyyy-MM-dd"));
+              const dayNotes = getNotesForDate(day);
+              
               return (
                 <div
                   key={format(day, "yyyy-MM-dd")}
-                  className={`p-4 text-center border-r border-slate-200 ${
-                    isCurrentDay ? "bg-blue-50" : ""
+                  className={`p-3 text-center border-r border-slate-200 ${
+                    isCurrentDay ? "bg-blue-50 border-b-2 border-blue-500" : ""
                   }`}
                 >
-                  <div className="text-xs text-slate-500">
+                  <div className="text-[11px] font-medium text-slate-500 mb-1">
                     {format(day, "EEE", { locale: zhCN })}
                   </div>
                   <div
-                    className={`text-xl font-bold ${
+                    className={`text-xl font-bold mb-2 ${
                       isCurrentDay
-                        ? "text-white bg-blue-500 w-8 h-8 rounded-full flex items-center justify-center mx-auto mt-1"
+                        ? "text-white bg-blue-500 w-8 h-8 rounded-full flex items-center justify-center mx-auto"
                         : "text-slate-800"
                     }`}
                   >
                     {format(day, "d")}
                   </div>
                   
-                  {/* Notes count */}
-                  {getNotesForDate(day).length > 0 && (
-                    <Badge variant="secondary" className="mt-2 h-5 text-[10px] bg-purple-100 text-purple-700">
-                      <StickyNote className="w-3 h-3 mr-1" />
-                      {getNotesForDate(day).length}
-                    </Badge>
-                  )}
+                  {/* Task & Notes count */}
+                  <div className="flex items-center justify-center gap-1">
+                    {dayTasks.length > 0 && (
+                      <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200">
+                        <Clock className="w-2.5 h-2.5 text-blue-600" />
+                        <span className="text-[10px] font-bold text-blue-700">{dayTasks.length}</span>
+                      </div>
+                    )}
+                    {dayNotes.length > 0 && (
+                      <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200">
+                        <StickyNote className="w-2.5 h-2.5 text-purple-600" />
+                        <span className="text-[10px] font-bold text-purple-700">{dayNotes.length}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -114,7 +125,7 @@ export default function CalendarWeekView({
           <div className="max-h-[600px] overflow-y-auto">
             {HOURS.map((hour) => (
               <div key={hour} className="grid grid-cols-8 border-b border-slate-100">
-                <div className="p-2 text-xs text-slate-500 border-r border-slate-200 font-medium">
+                <div className="p-2 text-xs font-semibold text-slate-600 border-r border-slate-200 bg-slate-50/50">
                   {hour.toString().padStart(2, '0')}:00
                 </div>
                 {days.map((day) => {
@@ -147,29 +158,37 @@ export default function CalendarWeekView({
                               >
                                 {(provided, snapshot) => (
                                   <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onTaskClick(task);
-                                    }}
-                                    className={`
-                                      p-1.5 rounded text-xs cursor-pointer
-                                      transition-all
-                                      ${snapshot.isDragging ? "shadow-lg scale-105 z-50 bg-white border border-blue-300" : "bg-blue-50 hover:bg-blue-100 border border-blue-200"}
-                                    `}
+                                   ref={provided.innerRef}
+                                   {...provided.draggableProps}
+                                   {...provided.dragHandleProps}
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     onTaskClick(task);
+                                   }}
+                                   className={`
+                                     p-2 rounded-md text-xs cursor-pointer border
+                                     transition-all
+                                     ${snapshot.isDragging ? "shadow-lg scale-105 z-50 bg-white border-blue-400" : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"}
+                                   `}
                                   >
-                                    <div className="flex items-center gap-1">
-                                      <div className={`w-1.5 h-1.5 rounded-full ${PRIORITY_COLORS[task.priority]}`} />
-                                      <span className="font-medium text-slate-700 truncate flex-1">
-                                        {task.title}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
-                                      <Clock className="w-3 h-3" />
-                                      {format(new Date(task.reminder_time), "HH:mm")}
-                                    </div>
+                                   <div className="flex items-start gap-1.5">
+                                     <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
+                                     <div className="flex-1 min-w-0">
+                                       <div className="font-semibold text-slate-800 truncate leading-tight">
+                                         {task.title}
+                                       </div>
+                                       <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
+                                         <Clock className="w-2.5 h-2.5" />
+                                         <span className="font-medium">{format(new Date(task.reminder_time), "HH:mm")}</span>
+                                         {task.end_time && (
+                                           <>
+                                             <span>-</span>
+                                             <span className="font-medium">{format(new Date(task.end_time), "HH:mm")}</span>
+                                           </>
+                                         )}
+                                       </div>
+                                     </div>
+                                   </div>
                                   </div>
                                 )}
                               </Draggable>

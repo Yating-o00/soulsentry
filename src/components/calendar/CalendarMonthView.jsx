@@ -42,8 +42,9 @@ export default function CalendarMonthView({
   const getItemsForDate = (date) => {
     const dateStr = format(date, "yyyy-MM-dd");
     
+    // Filter to only show parent tasks (tasks without parent_task_id)
     const dayTasks = tasks.filter(task => {
-      if (!task.reminder_time) return false;
+      if (!task.reminder_time || task.parent_task_id) return false;
       const taskDate = format(new Date(task.reminder_time), "yyyy-MM-dd");
       
       // Check if task spans multiple days

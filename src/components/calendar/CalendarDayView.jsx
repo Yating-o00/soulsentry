@@ -312,7 +312,7 @@ export default function CalendarDayView({
                                             e.stopPropagation();
                                             onCreateSubtask(task);
                                           }}
-                                          className="w-full p-3 rounded-lg text-sm cursor-pointer border-2 border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 flex items-center justify-center gap-2"
+                                          className="w-full p-3 rounded-xl text-sm font-medium cursor-pointer border border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 flex items-center justify-center gap-2 transition-all"
                                         >
                                           <Plus className="w-4 h-4" />
                                           添加子约定

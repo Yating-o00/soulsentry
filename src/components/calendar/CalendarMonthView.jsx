@@ -75,13 +75,13 @@ export default function CalendarMonthView({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="p-6">
+      <div className="px-8 py-6">
         {/* Weekday headers */}
-        <div className="grid grid-cols-7 gap-2 mb-4">
+        <div className="grid grid-cols-7 gap-3 mb-6">
           {["日", "一", "二", "三", "四", "五", "六"].map((day, i) => (
             <div
               key={i}
-              className="text-center text-sm font-semibold text-slate-600 py-2"
+              className="text-center text-xs font-medium tracking-wider text-slate-500 uppercase py-3"
             >
               {day}
             </div>
@@ -89,7 +89,7 @@ export default function CalendarMonthView({
         </div>
 
         {/* Calendar grid */}
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-3">
           {days.map((day) => {
             const { tasks: dayTasks, notes: dayNotes } = getItemsForDate(day);
             const isCurrentMonth = isSameMonth(day, currentDate);
@@ -102,55 +102,63 @@ export default function CalendarMonthView({
                   <motion.div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
                     className={`
-                      min-h-[120px] p-2 rounded-xl border-2 transition-all cursor-pointer
-                      ${isCurrentMonth ? "bg-white" : "bg-slate-50"}
-                      ${isCurrentDay ? "border-blue-500 ring-2 ring-blue-500/20" : "border-slate-200"}
-                      ${snapshot.isDraggingOver ? "border-blue-400 bg-blue-50" : "hover:border-slate-300"}
+                      min-h-[130px] p-3 rounded-2xl transition-all duration-300 cursor-pointer
+                      ${isCurrentMonth ? "bg-white/60 backdrop-blur-sm" : "bg-slate-50/40"}
+                      ${isCurrentDay 
+                        ? "ring-2 ring-[#384877] shadow-lg shadow-[#384877]/10" 
+                        : "border border-slate-200/50 hover:border-slate-300/80 hover:shadow-md"
+                      }
+                      ${snapshot.isDraggingOver ? "ring-2 ring-blue-400 bg-blue-50/50 scale-[1.02]" : ""}
                     `}
                     onClick={() => onDateClick(day)}
                   >
                     {/* Date header */}
-                    <div className="flex items-center justify-between mb-2 pb-1 border-b border-slate-100">
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span
                           className={`
-                            text-sm font-bold
-                            ${isCurrentDay ? "text-white bg-blue-500 w-6 h-6 rounded-full flex items-center justify-center" : ""}
-                            ${!isCurrentMonth ? "text-slate-400" : "text-slate-800"}
+                            text-lg font-semibold transition-all
+                            ${isCurrentDay 
+                              ? "text-white bg-gradient-to-br from-[#384877] to-[#3b5aa2] w-8 h-8 rounded-xl flex items-center justify-center shadow-sm" 
+                              : ""
+                            }
+                            ${!isCurrentMonth ? "text-slate-300" : isCurrentDay ? "" : "text-slate-700"}
                           `}
                         >
                           {format(day, "d")}
                         </span>
-                        <span className={`text-[10px] font-medium ${!isCurrentMonth ? "text-slate-300" : "text-slate-400"}`}>
-                          {format(day, "EEE", { locale: zhCN })}
-                        </span>
                       </div>
                       
                       {(dayTasks.length > 0 || dayNotes.length > 0) && (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           {dayTasks.length > 0 && (
-                            <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
-                              isCurrentDay 
-                                ? "bg-blue-500 text-white border border-blue-600" 
-                                : "bg-blue-50 border border-blue-200"
-                            }`}>
+                            <div className={`
+                              flex items-center gap-1 px-2 py-1 rounded-lg
+                              ${isCurrentDay 
+                                ? "bg-white/20 backdrop-blur-sm text-white border border-white/30" 
+                                : "bg-blue-50/80 border border-blue-200/50"
+                              }
+                            `}>
                               <Clock className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-blue-600"}`} />
-                              <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-blue-700"}`}>
+                              <span className={`text-xs font-semibold ${isCurrentDay ? "text-white" : "text-blue-700"}`}>
                                 {dayTasks.length}
                               </span>
                             </div>
                           )}
                           {dayNotes.length > 0 && (
-                            <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
-                              isCurrentDay 
-                                ? "bg-purple-500 text-white border border-purple-600" 
-                                : "bg-purple-50 border border-purple-200"
-                            }`}>
+                            <div className={`
+                              flex items-center gap-1 px-2 py-1 rounded-lg
+                              ${isCurrentDay 
+                                ? "bg-white/20 backdrop-blur-sm text-white border border-white/30" 
+                                : "bg-purple-50/80 border border-purple-200/50"
+                              }
+                            `}>
                               <StickyNote className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-purple-600"}`} />
-                              <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-purple-700"}`}>
+                              <span className={`text-xs font-semibold ${isCurrentDay ? "text-white" : "text-purple-700"}`}>
                                 {dayNotes.length}
                               </span>
                             </div>
@@ -160,8 +168,8 @@ export default function CalendarMonthView({
                     </div>
 
                     {/* Tasks */}
-                    <div className="space-y-1">
-                      {dayTasks.slice(0, 3).map((task, index) => (
+                    <div className="space-y-1.5">
+                      {dayTasks.slice(0, 2).map((task, index) => (
                         <Draggable
                           key={task.id}
                           draggableId={task.id}
@@ -177,20 +185,23 @@ export default function CalendarMonthView({
                                 onTaskClick(task);
                               }}
                               className={`
-                                group p-1.5 rounded-md text-xs cursor-pointer
-                                transition-all flex items-start gap-1.5 border
-                                ${snapshot.isDragging ? "shadow-lg scale-105 z-50 bg-white border-blue-300" : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"}
+                                group p-2 rounded-xl text-xs cursor-pointer
+                                transition-all duration-200 flex items-start gap-2
+                                ${snapshot.isDragging 
+                                  ? "shadow-2xl scale-105 z-50 bg-white border border-[#384877] rotate-2" 
+                                  : "bg-white/80 backdrop-blur-sm border border-slate-200/50 hover:border-[#384877]/30 hover:shadow-md hover:bg-white"
+                                }
                               `}
                             >
-                              <div className={`w-1 h-1 rounded-full flex-shrink-0 mt-1 ${PRIORITY_COLORS[task.priority]}`} />
+                              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${PRIORITY_COLORS[task.priority]}`} />
                               <div className="flex-1 min-w-0">
-                                <div className="font-medium text-slate-800 truncate leading-tight">
+                                <div className="font-medium text-slate-800 truncate leading-snug">
                                   {task.title}
                                 </div>
                                 {task.reminder_time && (
-                                  <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500">
+                                  <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
                                     <Clock className="w-2.5 h-2.5" />
-                                    {format(new Date(task.reminder_time), "HH:mm")}
+                                    <span className="font-medium">{format(new Date(task.reminder_time), "HH:mm")}</span>
                                   </div>
                                 )}
                               </div>
@@ -199,7 +210,7 @@ export default function CalendarMonthView({
                         </Draggable>
                       ))}
                       
-                      {(dayTasks.length > 3 || dayNotes.length > 0) && (
+                      {(dayTasks.length > 2 || (dayTasks.length === 0 && dayNotes.length > 0)) && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -207,12 +218,15 @@ export default function CalendarMonthView({
                             setSelectedDate(day);
                             setDialogOpen(true);
                           }}
-                          className="w-full flex items-center justify-center gap-1 text-[10px] text-blue-600 hover:text-blue-700 font-medium py-1 rounded hover:bg-blue-50 transition-colors"
+                          className="w-full flex items-center justify-center gap-1.5 text-[10px] text-slate-600 hover:text-[#384877] font-medium py-2 rounded-lg hover:bg-slate-50/80 transition-all duration-200 border border-dashed border-slate-200 hover:border-[#384877]/30"
                         >
                           <ChevronDown className="w-3 h-3" />
-                          {dayTasks.length > 3 && `+${dayTasks.length - 3} 个约定`}
-                          {dayTasks.length > 3 && dayNotes.length > 0 && " · "}
-                          {dayNotes.length > 0 && `${dayNotes.length} 个心签`}
+                          <span>
+                            {dayTasks.length > 2 && `+${dayTasks.length - 2}`}
+                            {dayTasks.length > 2 && dayNotes.length > 0 && " · "}
+                            {dayNotes.length > 0 && `${dayNotes.length} 心签`}
+                            {dayTasks.length <= 2 && dayNotes.length === 0 && "查看详情"}
+                          </span>
                         </button>
                       )}
                     </div>

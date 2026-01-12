@@ -105,7 +105,10 @@ export default function Notes() {
   });
 
   const updateNoteMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Note.update(id, data),
+    mutationFn: ({ id, data }) => base44.entities.Note.update(id, {
+      ...data,
+      last_interaction_time: new Date().toISOString()
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       setEditingNote(null);
@@ -238,8 +241,20 @@ export default function Notes() {
   const handlePin = (note) => {
     updateNoteMutation.mutate({
       id: note.id,
-      data: { is_pinned: !note.is_pinned }
+      data: { 
+        is_pinned: !note.is_pinned,
+        last_interaction_time: new Date().toISOString()
+      }
     });
+  };
+
+  // 当编辑心签时，更新最后交互时间
+  const handleEditNote = (note) => {
+    updateNoteMutation.mutate({
+      id: note.id,
+      data: { last_interaction_time: new Date().toISOString() }
+    });
+    setEditingNote(note);
   };
 
   return (
@@ -404,7 +419,7 @@ export default function Notes() {
               <NoteCard
                 key={note.id}
                 note={note}
-                onEdit={setEditingNote}
+                onEdit={handleEditNote}
                 onDelete={(n) => deleteNoteMutation.mutate(n.id)}
                 onPin={handlePin}
                 onShare={setSharingNote}

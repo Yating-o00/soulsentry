@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { startOfWeek, endOfWeek, addDays, format, isSameDay, isToday } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock, ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { StickyNote, Clock, ChevronDown, ChevronRight, Plus, GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -212,30 +212,35 @@ export default function CalendarWeekView({
                                       <div
                                        ref={provided.innerRef}
                                        {...provided.draggableProps}
-                                       {...provided.dragHandleProps}
                                        className={`
-                                         p-2 rounded-md text-xs cursor-move border
+                                         p-2 rounded-md text-xs border group/card
                                          transition-all
                                          ${snapshot.isDragging ? "shadow-2xl scale-110 z-[100] bg-white border-blue-500 opacity-90 rotate-2" : "bg-white border-slate-200 hover:border-blue-400 hover:shadow-md"}
                                        `}
                                       >
-                                       <div className="flex items-start gap-1.5">
-                                         {subtasks.length > 0 && (
-                                           <button
-                                             onClick={(e) => {
-                                               e.stopPropagation();
-                                               toggleTaskExpand(task.id);
-                                             }}
-                                             className="flex-shrink-0 mt-0.5 hover:bg-slate-100 rounded p-0.5"
-                                           >
-                                             {isExpanded ? (
-                                               <ChevronDown className="w-3 h-3 text-slate-600" />
-                                             ) : (
-                                               <ChevronRight className="w-3 h-3 text-slate-600" />
-                                             )}
-                                           </button>
-                                         )}
-                                         <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
+                                      <div className="flex items-start gap-1.5">
+                                        <div 
+                                          {...provided.dragHandleProps}
+                                          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 mt-0.5"
+                                        >
+                                          <GripVertical className="w-3 h-3" />
+                                        </div>
+                                        {subtasks.length > 0 && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleTaskExpand(task.id);
+                                            }}
+                                            className="flex-shrink-0 mt-0.5 hover:bg-slate-100 rounded p-0.5"
+                                          >
+                                            {isExpanded ? (
+                                              <ChevronDown className="w-3 h-3 text-slate-600" />
+                                            ) : (
+                                              <ChevronRight className="w-3 h-3 text-slate-600" />
+                                            )}
+                                          </button>
+                                        )}
+                                        <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
                                          <div 
                                            className="flex-1 min-w-0"
                                            onClick={(e) => {

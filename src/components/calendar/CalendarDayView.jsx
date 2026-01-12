@@ -187,15 +187,14 @@ export default function CalendarDayView({
                                     <motion.div
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
                                       initial={{ opacity: 0, x: -10 }}
                                       animate={{ opacity: 1, x: 0 }}
                                       className={`
-                                        p-3 rounded-lg cursor-pointer
+                                        p-2.5 rounded-md text-xs border group/card
                                         transition-all
                                         ${snapshot.isDragging 
-                                          ? "shadow-lg scale-105 z-50 bg-white border-2 border-blue-300" 
-                                          : "bg-white border border-slate-200 hover:shadow-md"
+                                          ? "shadow-2xl scale-105 z-50 bg-white border-2 border-[#384877] rotate-2" 
+                                          : "bg-gradient-to-br from-white to-slate-50/30 border-slate-200/60 hover:border-[#384877]/40 hover:shadow-md hover:from-white hover:to-white"
                                         }
                                       `}
                                     >

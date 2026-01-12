@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock, Plus, ChevronDown, ChevronRight } from "lucide-react";
+import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 

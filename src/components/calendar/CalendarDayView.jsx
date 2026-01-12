@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { format, isToday } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock, Plus } from "lucide-react";
+import { StickyNote, Clock, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -22,13 +22,16 @@ export default function CalendarDayView({
   notes, 
   onDateClick, 
   onTaskDrop,
-  onTaskClick 
+  onTaskClick,
+  onCreateSubtask
 }) {
+  const [expandedTasks, setExpandedTasks] = useState(new Set());
   const getItemsForHour = (hour) => {
     const dateStr = format(currentDate, "yyyy-MM-dd");
     
+    // Only show parent tasks
     const hourTasks = tasks.filter(task => {
-      if (!task.reminder_time) return false;
+      if (!task.reminder_time || task.parent_task_id) return false;
       const taskDate = new Date(task.reminder_time);
       const taskDateStr = format(taskDate, "yyyy-MM-dd");
       const taskHour = taskDate.getHours();
@@ -37,6 +40,22 @@ export default function CalendarDayView({
     });
 
     return hourTasks;
+  };
+
+  const getSubtasks = (parentId) => {
+    return tasks.filter(task => task.parent_task_id === parentId);
+  };
+
+  const toggleExpanded = (taskId) => {
+    setExpandedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
   };
 
   const getDayNotes = () => {
@@ -153,59 +172,146 @@ export default function CalendarDayView({
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {hourTasks.map((task, index) => (
-                            <Draggable
-                              key={task.id}
-                              draggableId={task.id}
-                              index={index}
-                            >
-                              {(provided, snapshot) => (
-                                <motion.div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  initial={{ opacity: 0, x: -10 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onTaskClick(task);
-                                  }}
-                                  className={`
-                                    p-3 rounded-lg cursor-pointer
-                                    transition-all
-                                    ${snapshot.isDragging 
-                                      ? "shadow-lg scale-105 z-50 bg-white border-2 border-blue-300" 
-                                      : "bg-white border border-slate-200 hover:shadow-md"
-                                    }
-                                  `}
+                          {hourTasks.map((task, index) => {
+                            const subtasks = getSubtasks(task.id);
+                            const isExpanded = expandedTasks.has(task.id);
+                            
+                            return (
+                              <div key={task.id} className="space-y-2">
+                                <Draggable
+                                  draggableId={task.id}
+                                  index={index}
                                 >
-                                  <div className="flex items-start gap-3">
-                                    <div className={`w-2 h-2 rounded-full mt-1.5 ${PRIORITY_COLORS[task.priority]}`} />
-                                    <div className="flex-1 min-w-0">
-                                      <h4 className="font-semibold text-slate-800 mb-1">
-                                        {task.title}
-                                      </h4>
-                                      {task.description && (
-                                        <p className="text-xs text-slate-600 line-clamp-2 mb-2">
-                                          {task.description}
-                                        </p>
-                                      )}
-                                      <div className="flex items-center gap-2 text-xs text-slate-500">
-                                        <Clock className="w-3 h-3" />
-                                        {format(new Date(task.reminder_time), "HH:mm")}
-                                        {task.end_time && (
-                                          <>
-                                            <span>-</span>
-                                            {format(new Date(task.end_time), "HH:mm")}
-                                          </>
+                                  {(provided, snapshot) => (
+                                    <motion.div
+                                      ref={provided.innerRef}
+                                      {...provided.draggableProps}
+                                      {...provided.dragHandleProps}
+                                      initial={{ opacity: 0, x: -10 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      className={`
+                                        p-3 rounded-lg cursor-pointer
+                                        transition-all
+                                        ${snapshot.isDragging 
+                                          ? "shadow-lg scale-105 z-50 bg-white border-2 border-blue-300" 
+                                          : "bg-white border border-slate-200 hover:shadow-md"
+                                        }
+                                      `}
+                                    >
+                                      <div className="flex items-start gap-3">
+                                        {subtasks.length > 0 && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleExpanded(task.id);
+                                            }}
+                                            className="flex-shrink-0 mt-1 hover:bg-slate-100 rounded p-1"
+                                          >
+                                            {isExpanded ? (
+                                              <ChevronDown className="w-4 h-4 text-slate-600" />
+                                            ) : (
+                                              <ChevronRight className="w-4 h-4 text-slate-600" />
+                                            )}
+                                          </button>
                                         )}
+                                        <div className={`w-2 h-2 rounded-full mt-1.5 ${PRIORITY_COLORS[task.priority]}`} />
+                                        <div 
+                                          className="flex-1 min-w-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onTaskClick(task);
+                                          }}
+                                        >
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <h4 className="font-semibold text-slate-800">
+                                              {task.title}
+                                            </h4>
+                                            {subtasks.length > 0 && (
+                                              <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700">
+                                                {subtasks.length} 个子约定
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          {task.description && (
+                                            <p className="text-xs text-slate-600 line-clamp-2 mb-2">
+                                              {task.description}
+                                            </p>
+                                          )}
+                                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                                            <Clock className="w-3 h-3" />
+                                            {format(new Date(task.reminder_time), "HH:mm")}
+                                            {task.end_time && (
+                                              <>
+                                                <span>-</span>
+                                                {format(new Date(task.end_time), "HH:mm")}
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
                                       </div>
-                                    </div>
+                                    </motion.div>
+                                  )}
+                                </Draggable>
+                                
+                                {/* Subtasks */}
+                                {isExpanded && subtasks.length > 0 && (
+                                  <div className="ml-12 space-y-2">
+                                    {subtasks.map(subtask => (
+                                      <motion.div
+                                        key={subtask.id}
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: "auto" }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onTaskClick(subtask);
+                                        }}
+                                        className="p-3 rounded-lg bg-blue-50/50 border border-blue-100 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all"
+                                      >
+                                        <div className="flex items-start gap-2">
+                                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${PRIORITY_COLORS[subtask.priority]}`} />
+                                          <div className="flex-1 min-w-0">
+                                            <h5 className="text-sm font-medium text-slate-700 mb-1">
+                                              {subtask.title}
+                                            </h5>
+                                            {subtask.description && (
+                                              <p className="text-xs text-slate-600 line-clamp-1 mb-1">
+                                                {subtask.description}
+                                              </p>
+                                            )}
+                                            {subtask.reminder_time && (
+                                              <div className="flex items-center gap-1 text-xs text-slate-500">
+                                                <Clock className="w-2.5 h-2.5" />
+                                                {format(new Date(subtask.reminder_time), "HH:mm")}
+                                                {subtask.end_time && (
+                                                  <>
+                                                    <span>-</span>
+                                                    {format(new Date(subtask.end_time), "HH:mm")}
+                                                  </>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </motion.div>
+                                    ))}
+                                    {onCreateSubtask && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onCreateSubtask(task.id);
+                                        }}
+                                        className="w-full p-3 rounded-lg border-2 border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-sm text-blue-600 flex items-center justify-center gap-2 transition-all"
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                        添加子约定
+                                      </button>
+                                    )}
                                   </div>
-                                </motion.div>
-                              )}
-                            </Draggable>
-                          ))}
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                       {provided.placeholder}

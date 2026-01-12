@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { startOfWeek, endOfWeek, addDays, format, isSameDay, isToday } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock } from "lucide-react";
+import { StickyNote, Clock, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const PRIORITY_COLORS = {
   urgent: "bg-red-500",
@@ -21,8 +22,10 @@ export default function CalendarWeekView({
   notes, 
   onDateClick, 
   onTaskDrop,
-  onTaskClick 
+  onTaskClick,
+  onCreateSubtask
 }) {
+  const [expandedTasks, setExpandedTasks] = useState(new Set());
   const weekStart = startOfWeek(currentDate, { locale: zhCN });
   const weekEnd = endOfWeek(currentDate, { locale: zhCN });
 
@@ -36,8 +39,9 @@ export default function CalendarWeekView({
   const getItemsForDateTime = (date, hour) => {
     const dateStr = format(date, "yyyy-MM-dd");
     
+    // Only show parent tasks (no parent_task_id)
     const dayTasks = tasks.filter(task => {
-      if (!task.reminder_time) return false;
+      if (!task.reminder_time || task.parent_task_id) return false;
       const taskDate = new Date(task.reminder_time);
       const taskDateStr = format(taskDate, "yyyy-MM-dd");
       const taskHour = taskDate.getHours();
@@ -46,6 +50,22 @@ export default function CalendarWeekView({
     });
 
     return dayTasks;
+  };
+
+  const getSubtasks = (parentId) => {
+    return tasks.filter(task => task.parent_task_id === parentId);
+  };
+
+  const toggleExpanded = (taskId) => {
+    setExpandedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
   };
 
   const getNotesForDate = (date) => {
@@ -150,49 +170,122 @@ export default function CalendarWeekView({
                           }}
                         >
                           <div className="space-y-1">
-                            {hourTasks.map((task, index) => (
-                              <Draggable
-                                key={task.id}
-                                draggableId={task.id}
-                                index={index}
-                              >
-                                {(provided, snapshot) => (
-                                  <div
-                                   ref={provided.innerRef}
-                                   {...provided.draggableProps}
-                                   {...provided.dragHandleProps}
-                                   onClick={(e) => {
-                                     e.stopPropagation();
-                                     onTaskClick(task);
-                                   }}
-                                   className={`
-                                     p-2 rounded-md text-xs cursor-pointer border
-                                     transition-all
-                                     ${snapshot.isDragging ? "shadow-lg scale-105 z-50 bg-white border-blue-400" : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"}
-                                   `}
+                            {hourTasks.map((task, index) => {
+                              const subtasks = getSubtasks(task.id);
+                              const isExpanded = expandedTasks.has(task.id);
+                              
+                              return (
+                                <div key={task.id}>
+                                  <Draggable
+                                    draggableId={task.id}
+                                    index={index}
                                   >
-                                   <div className="flex items-start gap-1.5">
-                                     <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
-                                     <div className="flex-1 min-w-0">
-                                       <div className="font-semibold text-slate-800 truncate leading-tight">
-                                         {task.title}
-                                       </div>
-                                       <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
-                                         <Clock className="w-2.5 h-2.5" />
-                                         <span className="font-medium">{format(new Date(task.reminder_time), "HH:mm")}</span>
-                                         {task.end_time && (
-                                           <>
-                                             <span>-</span>
-                                             <span className="font-medium">{format(new Date(task.end_time), "HH:mm")}</span>
-                                           </>
-                                         )}
-                                       </div>
-                                     </div>
-                                   </div>
-                                  </div>
-                                )}
-                              </Draggable>
-                            ))}
+                                    {(provided, snapshot) => (
+                                      <div
+                                        ref={provided.innerRef}
+                                        {...provided.draggableProps}
+                                        {...provided.dragHandleProps}
+                                        className={`
+                                          p-2 rounded-md text-xs cursor-pointer border
+                                          transition-all
+                                          ${snapshot.isDragging ? "shadow-lg scale-105 z-50 bg-white border-blue-400" : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"}
+                                        `}
+                                      >
+                                        <div className="flex items-start gap-1.5">
+                                          {subtasks.length > 0 && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleExpanded(task.id);
+                                              }}
+                                              className="flex-shrink-0 mt-0.5 hover:bg-slate-100 rounded p-0.5"
+                                            >
+                                              {isExpanded ? (
+                                                <ChevronDown className="w-3 h-3 text-slate-600" />
+                                              ) : (
+                                                <ChevronRight className="w-3 h-3 text-slate-600" />
+                                              )}
+                                            </button>
+                                          )}
+                                          <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
+                                          <div 
+                                            className="flex-1 min-w-0"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onTaskClick(task);
+                                            }}
+                                          >
+                                            <div className="flex items-center gap-1">
+                                              <div className="font-semibold text-slate-800 truncate leading-tight">
+                                                {task.title}
+                                              </div>
+                                              {subtasks.length > 0 && (
+                                                <Badge variant="secondary" className="text-[9px] h-3 px-1 bg-blue-50 text-blue-700">
+                                                  {subtasks.length}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
+                                              <Clock className="w-2.5 h-2.5" />
+                                              <span className="font-medium">{format(new Date(task.reminder_time), "HH:mm")}</span>
+                                              {task.end_time && (
+                                                <>
+                                                  <span>-</span>
+                                                  <span className="font-medium">{format(new Date(task.end_time), "HH:mm")}</span>
+                                                </>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </Draggable>
+                                  
+                                  {/* Subtasks */}
+                                  {isExpanded && subtasks.length > 0 && (
+                                    <div className="ml-4 mt-1 space-y-1">
+                                      {subtasks.map(subtask => (
+                                        <div
+                                          key={subtask.id}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onTaskClick(subtask);
+                                          }}
+                                          className="p-1.5 rounded bg-blue-50/50 border border-blue-100 hover:border-blue-300 cursor-pointer transition-all"
+                                        >
+                                          <div className="flex items-start gap-1">
+                                            <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[subtask.priority]}`} />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="text-[10px] font-medium text-slate-700 truncate">
+                                                {subtask.title}
+                                              </div>
+                                              {subtask.reminder_time && (
+                                                <div className="flex items-center gap-1 mt-0.5 text-[9px] text-slate-500">
+                                                  <Clock className="w-2 h-2" />
+                                                  {format(new Date(subtask.reminder_time), "HH:mm")}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                      {onCreateSubtask && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onCreateSubtask(task.id);
+                                          }}
+                                          className="w-full p-1.5 rounded border border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-[10px] text-blue-600 flex items-center justify-center gap-1 transition-all"
+                                        >
+                                          <Plus className="w-2.5 h-2.5" />
+                                          添加子约定
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                           {provided.placeholder}
                         </div>

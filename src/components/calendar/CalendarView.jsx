@@ -551,31 +551,33 @@ export default function CalendarView() {
 
       {/* 快速添加约定对话框 */}
       <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-blue-600" />
               为 {quickAddDate && format(quickAddDate, "M月d日", { locale: zhCN })} 添加约定
             </DialogTitle>
           </DialogHeader>
-          <QuickAddTask
-            initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
-            onAdd={(taskData) => {
-              let finalReminderTime = taskData.reminder_time;
-              
-              if (quickAddDate && taskData.reminder_time) {
-                 const selected = new Date(quickAddDate);
-                 const setTime = new Date(taskData.reminder_time);
-                 selected.setHours(setTime.getHours(), setTime.getMinutes());
-                 finalReminderTime = selected.toISOString();
-              }
+          <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+            <QuickAddTask
+              initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
+              onAdd={(taskData) => {
+                let finalReminderTime = taskData.reminder_time;
+                
+                if (quickAddDate && taskData.reminder_time) {
+                   const selected = new Date(quickAddDate);
+                   const setTime = new Date(taskData.reminder_time);
+                   selected.setHours(setTime.getHours(), setTime.getMinutes());
+                   finalReminderTime = selected.toISOString();
+                }
 
-              handleCreateTask({
-                ...taskData,
-                reminder_time: finalReminderTime
-              });
-            }}
-          />
+                handleCreateTask({
+                  ...taskData,
+                  reminder_time: finalReminderTime
+                });
+              }}
+            />
+          </div>
         </DialogContent>
       </Dialog>
 

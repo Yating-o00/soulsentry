@@ -138,16 +138,16 @@ export default function CalendarDayView({
 
       {/* Timeline */}
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="space-y-2 max-h-[600px] overflow-y-auto">
+        <div className="space-y-3 max-h-[600px] overflow-y-auto bg-white/40 backdrop-blur-sm rounded-2xl border border-slate-200/50 p-4">
           {HOURS.map((hour) => {
             const hourTasks = getItemsForHour(hour);
             const dropId = `hour_${hour}`;
 
             return (
-              <div key={hour} className="flex gap-4">
+              <div key={hour} className="flex gap-5">
                 {/* Time label */}
-                <div className="w-20 flex-shrink-0 text-right">
-                  <span className="text-sm font-semibold text-slate-600">
+                <div className="w-24 flex-shrink-0 text-right pt-1">
+                  <span className="text-sm font-semibold text-slate-700 bg-gradient-to-r from-slate-50/80 to-transparent px-3 py-1.5 rounded-lg">
                     {hour.toString().padStart(2, '0')}:00
                   </span>
                 </div>
@@ -159,11 +159,10 @@ export default function CalendarDayView({
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={`
-                        flex-1 min-h-[80px] p-3 rounded-xl border-2 border-dashed
-                        transition-all cursor-pointer
+                        flex-1 min-h-[90px] p-4 rounded-2xl border transition-all duration-200 cursor-pointer
                         ${snapshot.isDraggingOver 
-                          ? "border-blue-400 bg-blue-50" 
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                          ? "border-[#384877]/40 bg-blue-50/50 ring-2 ring-[#384877]/30 scale-[1.01]" 
+                          : "border-slate-200/60 border-dashed hover:border-slate-300 hover:bg-slate-50/50"
                         }
                       `}
                       onClick={() => {
@@ -173,8 +172,8 @@ export default function CalendarDayView({
                       }}
                     >
                       {hourTasks.length === 0 ? (
-                        <div className="flex items-center justify-center h-full text-xs text-slate-400">
-                          <Plus className="w-4 h-4 mr-1" />
+                        <div className="flex items-center justify-center h-full text-sm text-slate-500 font-medium">
+                          <Plus className="w-4 h-4 mr-2" />
                           点击添加约定
                         </div>
                       ) : (

@@ -672,14 +672,9 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                     <Save className="w-4 h-4 mr-2" />
                     保存心签
                 </button>
-            </div>
-        </div>
-      </div>
-      
-      {/* Tailwind dynamic classes safelist mostly handled by style tag or consistent naming, 
-          but for colors we might need to ensure they are generated. 
-          Since I can't config tailwind config, I used standard classes in the const. 
-      */}
-    </div>
-  );
-}
+                </div>
+                </div>
+                </div>
+                </div>
+                );
+                }

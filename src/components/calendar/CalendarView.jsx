@@ -45,6 +45,7 @@ export default function CalendarView() {
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [showWeekQuickAdd, setShowWeekQuickAdd] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -164,7 +165,12 @@ export default function CalendarView() {
   const handleDateClick = (date) => {
     setSelectedDate(date);
     setQuickAddDate(date);
-    setShowQuickAdd(true);
+    
+    if (viewMode === "week") {
+      setShowWeekQuickAdd(true);
+    } else {
+      setShowQuickAdd(true);
+    }
   };
 
   const handleNavigate = (direction) => {
@@ -275,6 +281,35 @@ export default function CalendarView() {
           <ChevronRight className="w-5 h-5" />
         </Button>
       </motion.div>
+
+      {/* Week view inline QuickAdd */}
+      {viewMode === "week" && showWeekQuickAdd && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4"
+        >
+          <QuickAddTask
+            initialData={quickAddDate ? { reminder_time: quickAddDate } : null}
+            onAdd={(taskData) => {
+              let finalReminderTime = taskData.reminder_time;
+              
+              if (quickAddDate && taskData.reminder_time) {
+                 const selected = new Date(quickAddDate);
+                 const setTime = new Date(taskData.reminder_time);
+                 selected.setHours(setTime.getHours(), setTime.getMinutes());
+                 finalReminderTime = selected.toISOString();
+              }
+
+              handleCreateTask({
+                ...taskData,
+                reminder_time: finalReminderTime
+              });
+              setShowWeekQuickAdd(false);
+            }}
+          />
+        </motion.div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         <motion.div

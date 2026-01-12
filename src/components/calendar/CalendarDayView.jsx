@@ -38,6 +38,12 @@ export default function CalendarDayView({
     return parentTasks;
   };
 
+  const isTaskFirstHour = (task, hour) => {
+    if (!task.reminder_time) return false;
+    const taskStart = new Date(task.reminder_time);
+    return taskStart.getHours() === hour;
+  };
+
   const getSubtasks = (parentId) => {
     return tasks.filter(task => task.parent_task_id === parentId);
   };

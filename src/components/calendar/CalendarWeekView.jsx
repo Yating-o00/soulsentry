@@ -89,11 +89,11 @@ export default function CalendarWeekView({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="overflow-x-auto px-6 py-4">
-        <div className="min-w-[900px]">
+      <div className="overflow-x-auto">
+        <div className="min-w-[800px]">
           {/* Header with dates */}
-          <div className="grid grid-cols-8 border-b border-slate-200/50 sticky top-0 bg-gradient-to-b from-white to-slate-50/30 backdrop-blur-sm z-10 shadow-sm rounded-t-2xl overflow-hidden">
-            <div className="p-4 text-xs font-semibold tracking-wider text-slate-500 uppercase border-r border-slate-200/50 bg-slate-50/50">
+          <div className="grid grid-cols-8 border-b-2 border-slate-200 sticky top-0 bg-white z-10 shadow-sm">
+            <div className="p-3 text-sm font-bold text-slate-700 border-r border-slate-200">
               时间
             </div>
             {days.map((day) => {
@@ -104,21 +104,17 @@ export default function CalendarWeekView({
               return (
                 <div
                   key={format(day, "yyyy-MM-dd")}
-                  className={`p-4 text-center border-r border-slate-200/50 transition-all ${
-                    isCurrentDay 
-                      ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white" 
-                      : "hover:bg-slate-50/50"
+                  className={`p-3 text-center border-r border-slate-200 ${
+                    isCurrentDay ? "bg-blue-50 border-b-2 border-blue-500" : ""
                   }`}
                 >
-                  <div className={`text-[10px] font-medium uppercase tracking-wide mb-2 ${
-                    isCurrentDay ? "text-white/80" : "text-slate-500"
-                  }`}>
+                  <div className="text-[11px] font-medium text-slate-500 mb-1">
                     {format(day, "EEE", { locale: zhCN })}
                   </div>
                   <div
-                    className={`text-2xl font-bold mb-3 ${
+                    className={`text-xl font-bold mb-2 ${
                       isCurrentDay
-                        ? "text-white"
+                        ? "text-white bg-blue-500 w-8 h-8 rounded-full flex items-center justify-center mx-auto"
                         : "text-slate-800"
                     }`}
                   >
@@ -126,25 +122,29 @@ export default function CalendarWeekView({
                   </div>
                   
                   {/* Task & Notes count */}
-                  <div className="flex items-center justify-center gap-1.5">
+                  <div className="flex items-center justify-center gap-1">
                     {parentTasks.length > 0 && (
-                      <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                      <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
                         isCurrentDay 
-                          ? "bg-white/20 backdrop-blur-sm text-white" 
-                          : "bg-gradient-to-r from-blue-50 to-blue-100/50 text-blue-700"
+                          ? "bg-blue-500 text-white border border-blue-600" 
+                          : "bg-blue-50 border border-blue-200"
                       }`}>
                         <Clock className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-blue-600"}`} />
-                        {parentTasks.length}
+                        <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-blue-700"}`}>
+                          {parentTasks.length}
+                        </span>
                       </div>
                     )}
                     {dayNotes.length > 0 && (
-                      <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                      <div className={`flex items-center gap-0.5 px-2 py-1 rounded-md shadow-sm ${
                         isCurrentDay 
-                          ? "bg-white/20 backdrop-blur-sm text-white" 
-                          : "bg-gradient-to-r from-purple-50 to-purple-100/50 text-purple-700"
+                          ? "bg-purple-500 text-white border border-purple-600" 
+                          : "bg-purple-50 border border-purple-200"
                       }`}>
                         <StickyNote className={`w-3 h-3 ${isCurrentDay ? "text-white" : "text-purple-600"}`} />
-                        {dayNotes.length}
+                        <span className={`text-xs font-bold ${isCurrentDay ? "text-white" : "text-purple-700"}`}>
+                          {dayNotes.length}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -154,10 +154,10 @@ export default function CalendarWeekView({
           </div>
 
           {/* Time grid */}
-          <div className="max-h-[600px] overflow-y-auto bg-white/40 backdrop-blur-sm rounded-b-2xl border border-slate-200/50 border-t-0">
+          <div className="max-h-[600px] overflow-y-auto">
             {HOURS.map((hour) => (
-              <div key={hour} className="grid grid-cols-8 border-b border-slate-100/50 last:border-b-0">
-                <div className="p-3 text-xs font-semibold text-slate-600 border-r border-slate-200/50 bg-gradient-to-r from-slate-50/80 to-transparent">
+              <div key={hour} className="grid grid-cols-8 border-b border-slate-100">
+                <div className="p-2 text-xs font-semibold text-slate-600 border-r border-slate-200 bg-slate-50/50">
                   {hour.toString().padStart(2, '0')}:00
                 </div>
                 {days.map((day) => {
@@ -172,12 +172,8 @@ export default function CalendarWeekView({
                           ref={provided.innerRef}
                           {...provided.droppableProps}
                           className={`
-                            p-2 min-h-[90px] border-r border-slate-200/50 cursor-pointer group relative
-                            transition-all duration-200
-                            ${snapshot.isDraggingOver 
-                              ? "bg-blue-50/50 ring-2 ring-[#384877]/30 scale-[1.01]" 
-                              : "hover:bg-slate-50/50"
-                            }
+                            p-1 min-h-[80px] border-r border-slate-200 cursor-pointer group relative
+                            ${snapshot.isDraggingOver ? "bg-blue-100 ring-2 ring-blue-300" : "hover:bg-slate-50"}
                           `}
                           onDoubleClick={() => {
                             const clickDate = new Date(day);
@@ -186,7 +182,7 @@ export default function CalendarWeekView({
                           }}
                         >
                           {hourTasks.length === 0 && (
-                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center">
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -194,10 +190,10 @@ export default function CalendarWeekView({
                                   clickDate.setHours(hour, 0, 0, 0);
                                   onDateClick(clickDate);
                                 }}
-                                className="text-xs text-slate-500 hover:text-[#384877] bg-white/80 hover:bg-white px-3 py-2 rounded-xl border border-slate-200/60 hover:border-[#384877]/40 flex items-center gap-1.5 transition-all shadow-sm hover:shadow-md backdrop-blur-sm"
+                                className="text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md border border-dashed border-slate-300 hover:border-blue-400 flex items-center gap-1.5 transition-all shadow-sm hover:shadow"
                               >
                                 <Plus className="w-3.5 h-3.5" />
-                                <span className="font-medium">添加</span>
+                                <span className="font-medium">添加约定</span>
                               </button>
                             </div>
                           )}
@@ -217,20 +213,17 @@ export default function CalendarWeekView({
                                        ref={provided.innerRef}
                                        {...provided.draggableProps}
                                        className={`
-                                         p-2.5 rounded-xl text-xs border group/card
-                                         transition-all duration-200
-                                         ${snapshot.isDragging 
-                                           ? "shadow-2xl scale-105 z-[100] bg-white border-2 border-[#384877] rotate-2" 
-                                           : "bg-gradient-to-br from-white to-slate-50/30 border-slate-200/60 hover:border-[#384877]/40 hover:shadow-md hover:from-white hover:to-white"
-                                         }
+                                         p-2 rounded-md text-xs border group/card
+                                         transition-all
+                                         ${snapshot.isDragging ? "shadow-2xl scale-110 z-[100] bg-white border-blue-500 opacity-90 rotate-2" : "bg-white border-slate-200 hover:border-blue-400 hover:shadow-md"}
                                        `}
                                       >
-                                      <div className="flex items-start gap-2">
+                                      <div className="flex items-start gap-1.5">
                                         <div 
                                           {...provided.dragHandleProps}
-                                          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-400 hover:text-[#384877] mt-0.5 transition-colors"
+                                          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 mt-0.5"
                                         >
-                                          <GripVertical className="w-3.5 h-3.5" />
+                                          <GripVertical className="w-3 h-3" />
                                         </div>
                                         {subtasks.length > 0 && (
                                           <button
@@ -238,40 +231,40 @@ export default function CalendarWeekView({
                                               e.stopPropagation();
                                               toggleTaskExpand(task.id);
                                             }}
-                                            className="flex-shrink-0 mt-0.5 hover:bg-slate-100 rounded p-0.5 transition-colors"
+                                            className="flex-shrink-0 mt-0.5 hover:bg-slate-100 rounded p-0.5"
                                           >
                                             {isExpanded ? (
-                                              <ChevronDown className="w-3.5 h-3.5 text-slate-600" />
+                                              <ChevronDown className="w-3 h-3 text-slate-600" />
                                             ) : (
-                                              <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                                              <ChevronRight className="w-3 h-3 text-slate-600" />
                                             )}
                                           </button>
                                         )}
-                                        <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 shadow-sm ${PRIORITY_COLORS[task.priority]}`} />
+                                        <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
                                          <div 
-                                           className="flex-1 min-w-0 cursor-pointer"
+                                           className="flex-1 min-w-0"
                                            onClick={(e) => {
                                              e.stopPropagation();
                                              onTaskClick(task);
                                            }}
                                          >
-                                           <div className="flex items-center gap-1.5 mb-0.5">
+                                           <div className="flex items-center gap-1">
                                              <div className="font-semibold text-slate-800 truncate leading-tight">
                                                {task.title}
                                              </div>
                                              {subtasks.length > 0 && (
-                                               <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-blue-50 text-blue-700 font-semibold">
+                                               <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-blue-50 text-blue-700">
                                                  {subtasks.length}
                                                </Badge>
                                              )}
                                            </div>
-                                           <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium">
+                                           <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
                                              <Clock className="w-2.5 h-2.5" />
-                                             {format(new Date(task.reminder_time), "HH:mm")}
+                                             <span className="font-medium">{format(new Date(task.reminder_time), "HH:mm")}</span>
                                              {task.end_time && (
                                                <>
                                                  <span>-</span>
-                                                 {format(new Date(task.end_time), "HH:mm")}
+                                                 <span className="font-medium">{format(new Date(task.end_time), "HH:mm")}</span>
                                                </>
                                              )}
                                            </div>
@@ -297,24 +290,18 @@ export default function CalendarWeekView({
                                               e.stopPropagation();
                                               onTaskClick(subtask);
                                             }}
-                                            className="p-2 rounded-lg text-xs cursor-pointer border bg-blue-50/50 border-blue-100 hover:border-blue-300 hover:bg-blue-50 transition-all"
+                                            className="p-1.5 rounded-md text-xs cursor-pointer border bg-blue-50/50 border-blue-100 hover:border-blue-300 hover:bg-blue-50"
                                           >
-                                            <div className="flex items-start gap-2">
-                                              <div className={`w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[subtask.priority]}`} />
+                                            <div className="flex items-start gap-1.5">
+                                              <div className={`w-1 h-1 rounded-full mt-1 flex-shrink-0 ${PRIORITY_COLORS[subtask.priority]}`} />
                                               <div className="flex-1 min-w-0">
-                                                <div className="font-semibold text-slate-700 truncate leading-tight mb-0.5">
+                                                <div className="font-medium text-slate-700 truncate leading-tight">
                                                   {subtask.title}
                                                 </div>
                                                 {subtask.reminder_time && (
-                                                  <div className="flex items-center gap-1 text-[9px] text-slate-500 font-medium">
-                                                    <Clock className="w-2.5 h-2.5" />
-                                                    {format(new Date(subtask.reminder_time), "HH:mm")}
-                                                    {subtask.end_time && (
-                                                      <>
-                                                        <span>-</span>
-                                                        {format(new Date(subtask.end_time), "HH:mm")}
-                                                      </>
-                                                    )}
+                                                  <div className="flex items-center gap-1 mt-0.5 text-[9px] text-slate-500">
+                                                    <Clock className="w-2 h-2" />
+                                                    <span>{format(new Date(subtask.reminder_time), "HH:mm")}</span>
                                                   </div>
                                                 )}
                                               </div>
@@ -327,7 +314,7 @@ export default function CalendarWeekView({
                                               e.stopPropagation();
                                               onCreateSubtask(task);
                                             }}
-                                            className="w-full p-2 rounded-lg text-[10px] font-medium cursor-pointer border border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 flex items-center justify-center gap-1 transition-all"
+                                            className="w-full p-1.5 rounded-md text-[10px] cursor-pointer border border-dashed border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-600 flex items-center justify-center gap-1"
                                           >
                                             <Plus className="w-3 h-3" />
                                             添加子约定

@@ -172,8 +172,8 @@ export default function CalendarWeekView({
                           ref={provided.innerRef}
                           {...provided.droppableProps}
                           className={`
-                            p-1 min-h-[60px] border-r border-slate-200 cursor-pointer group
-                            ${snapshot.isDraggingOver ? "bg-blue-50" : "hover:bg-slate-50"}
+                            p-1 min-h-[80px] border-r border-slate-200 cursor-pointer group relative
+                            ${snapshot.isDraggingOver ? "bg-blue-100 ring-2 ring-blue-300" : "hover:bg-slate-50"}
                           `}
                           onDoubleClick={() => {
                             const clickDate = new Date(day);
@@ -182,7 +182,7 @@ export default function CalendarWeekView({
                           }}
                         >
                           {hourTasks.length === 0 && (
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center h-full">
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -190,10 +190,10 @@ export default function CalendarWeekView({
                                   clickDate.setHours(hour, 0, 0, 0);
                                   onDateClick(clickDate);
                                 }}
-                                className="text-xs text-slate-400 hover:text-blue-600 flex items-center gap-1 hover:bg-blue-50 px-2 py-1 rounded"
+                                className="text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md border border-dashed border-slate-300 hover:border-blue-400 flex items-center gap-1.5 transition-all shadow-sm hover:shadow"
                               >
-                                <Plus className="w-3 h-3" />
-                                添加
+                                <Plus className="w-3.5 h-3.5" />
+                                <span className="font-medium">添加约定</span>
                               </button>
                             </div>
                           )}
@@ -214,9 +214,9 @@ export default function CalendarWeekView({
                                        {...provided.draggableProps}
                                        {...provided.dragHandleProps}
                                        className={`
-                                         p-2 rounded-md text-xs cursor-pointer border
+                                         p-2 rounded-md text-xs cursor-move border
                                          transition-all
-                                         ${snapshot.isDragging ? "shadow-lg scale-105 z-50 bg-white border-blue-400" : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"}
+                                         ${snapshot.isDragging ? "shadow-2xl scale-110 z-[100] bg-white border-blue-500 opacity-90 rotate-2" : "bg-white border-slate-200 hover:border-blue-400 hover:shadow-md"}
                                        `}
                                       >
                                        <div className="flex items-start gap-1.5">

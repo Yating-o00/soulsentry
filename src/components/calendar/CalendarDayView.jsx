@@ -172,10 +172,10 @@ export default function CalendarDayView({
                           点击添加约定
                         </div>
                       ) : (
-                        <div className="space-y-3">
-                          {hourTasks.map((task, index) => {
-                            const subtasks = getSubtasks(task.id);
-                            const isExpanded = expandedTasks.has(task.id);
+                        <div className="space-y-2">
+                           {hourTasks.map((task, index) => {
+                             const subtasks = getSubtasks(task.id);
+                             const isExpanded = expandedTasks.has(task.id);
                             
                             return (
                               <div key={task.id} className="space-y-2">

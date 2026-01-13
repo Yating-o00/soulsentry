@@ -12,6 +12,7 @@ import Tasks from './pages/Tasks';
 import Teams from './pages/Teams';
 import Templates from './pages/Templates';
 import Trash from './pages/Trash';
+import Welcome from './pages/Welcome';
 import __Layout from './Layout.jsx';
 
 
@@ -30,6 +31,7 @@ export const PAGES = {
     "Teams": Teams,
     "Templates": Templates,
     "Trash": Trash,
+    "Welcome": Welcome,
 }
 
 export const pagesConfig = {

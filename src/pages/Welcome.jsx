@@ -89,7 +89,7 @@ export default function Welcome() {
         });
 
         setTimeout(() => {
-          navigate(createPageUrl("Tasks"));
+          navigate(createPageUrl("Dashboard"));
         }, 1500);
       } else {
         // 创建笔记
@@ -107,12 +107,9 @@ export default function Welcome() {
         });
 
         setTimeout(() => {
-          navigate(createPageUrl("Notes"));
+          navigate(createPageUrl("Dashboard"));
         }, 1500);
       }
-
-      // 标记用户已访问过欢迎页
-      await base44.auth.updateMe({ has_seen_welcome: true });
 
     } catch (error) {
       console.error("处理失败:", error);
@@ -121,8 +118,7 @@ export default function Welcome() {
     }
   };
 
-  const handleSkip = async () => {
-    await base44.auth.updateMe({ has_seen_welcome: true });
+  const handleSkip = () => {
     navigate(createPageUrl("Dashboard"));
   };
 

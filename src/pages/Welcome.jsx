@@ -20,9 +20,6 @@ export default function Welcome() {
 
     setIsProcessing(true);
 
-    // 立即标记用户已看过欢迎页
-    await base44.auth.updateMe({ has_seen_welcome: true });
-
     try {
       // 使用 AI 识别内容类型和提取信息
       const aiResponse = await base44.integrations.Core.InvokeLLM({
@@ -113,6 +110,9 @@ export default function Welcome() {
           navigate(createPageUrl("Notes"));
         }, 1500);
       }
+
+      // 标记用户已访问过欢迎页
+      await base44.auth.updateMe({ has_seen_welcome: true });
 
     } catch (error) {
       console.error("处理失败:", error);

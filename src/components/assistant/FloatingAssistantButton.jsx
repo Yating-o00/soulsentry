@@ -18,7 +18,7 @@ export default function FloatingAssistantButton() {
     queryFn: () => base44.auth.me(),
   });
 
-  const assistantName = `SoulSentry-${user?.assistant_name || "小雅"}`;
+  const assistantName = user?.assistant_name ? `SoulSentry-${user.assistant_name}` : "SoulSentry-小雅";
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],

@@ -20,20 +20,31 @@ const safeSessionStorage = {
 };
 
 export default function WelcomeGuard({ children }) {
-  const [showWelcome, setShowWelcome] = useState(() => {
-    // 检查 sessionStorage 是否已访问过
-    return !safeSessionStorage.getItem("visited");
-  });
+  const [isClient, setIsClient] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
 
   useEffect(() => {
-    if (!showWelcome) {
+    setIsClient(true);
+    // 检查是否已访问过
+    const visited = safeSessionStorage.getItem("visited");
+    if (visited) {
+      setShowWelcome(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isClient && !showWelcome) {
       // 标记已访问
       safeSessionStorage.setItem("visited", "true");
     }
-  }, [showWelcome]);
+  }, [isClient, showWelcome]);
+
+  if (!isClient) {
+    return null;
+  }
 
   if (showWelcome) {
-    return <Welcome onComplete={() => setShowWelcome(false)} />;
+    return <Welcome />;
   }
 
   return children;

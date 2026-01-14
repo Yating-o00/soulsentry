@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useHapticFeedback } from "../mobile/TouchOptimizations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,6 +54,7 @@ const PRIORITIES = [
 
 export default function QuickAddTask({ onAdd, initialData = null }) {
   const queryClient = useQueryClient();
+  const triggerHaptic = useHapticFeedback();
   const [isExpanded, setIsExpanded] = useState(!!initialData);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
@@ -483,7 +485,12 @@ ${task.description ? `描述: "${task.description}"` : ''}
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!task.title.trim() || !task.reminder_time) return;
+    if (!task.title.trim() || !task.reminder_time) {
+      triggerHaptic('error');
+      return;
+    }
+
+    triggerHaptic('light');
 
     const reminderDateTime = new Date(task.reminder_time);
     let endDateTime = task.end_time ? new Date(task.end_time) : null;
@@ -524,6 +531,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
 
     // 保存到离线存储
     try {
+      triggerHaptic('success');
       if (navigator.onLine) {
         if (!initialData && task.subtasks && task.subtasks.length > 0) {
           await handleBulkCreateDirect([taskToSubmit]);

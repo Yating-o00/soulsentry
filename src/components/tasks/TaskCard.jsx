@@ -551,9 +551,9 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   const isSubtaskCompleted = subtask.status === "completed";
                   // 尝试从标题中提取序号，如果没有则使用索引
                   const title = subtask.title || '';
-                  const titleMatch = (title && typeof title === 'string') ? title.match(/^(\d+)\.\s*/) : null;
+                  const titleMatch = (title && typeof title === 'string' && title.includes('.')) ? title.match(/^(\d+)\.\s*/) : null;
                   const orderNumber = titleMatch ? titleMatch[1] : (subIndex + 1);
-                  const cleanTitle = titleMatch ? title.replace(/^\d+\.\s*/, '') : title;
+                  const cleanTitle = (titleMatch && title) ? title.replace(/^\d+\.\s*/, '') : title;
 
                   return (
                     <motion.div

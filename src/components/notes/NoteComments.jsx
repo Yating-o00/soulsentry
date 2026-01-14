@@ -92,8 +92,12 @@ export default function NoteComments({ noteId }) {
   };
 
   const getInitials = (name) => {
-    if (!name) return "?";
-    return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+    if (!name || typeof name !== 'string') return "?";
+    const trimmed = name.trim();
+    if (!trimmed) return "?";
+    const parts = trimmed.split(" ").filter(Boolean);
+    if (parts.length === 0) return "?";
+    return parts.map(n => (n && n.length > 0 ? n[0] : "")).filter(Boolean).join("").toUpperCase().slice(0, 2) || "?";
   };
 
   const getUserByEmail = (email) => {

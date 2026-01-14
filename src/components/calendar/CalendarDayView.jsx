@@ -72,11 +72,14 @@ export default function CalendarDayView({
     if (!result.destination) return;
     
     const taskId = result.draggableId;
-    const hourStr = result.destination.droppableId.replace("hour_", "");
+    const dropId = result.destination.droppableId;
+    if (!dropId || typeof dropId !== 'string') return;
+    
+    const hourStr = dropId.replace("hour_", "");
     if (!hourStr) return;
     
     const destinationDate = new Date(currentDate);
-    destinationDate.setHours(parseInt(hourStr), 0, 0, 0);
+    destinationDate.setHours(parseInt(hourStr) || 0, 0, 0, 0);
     
     onTaskDrop(taskId, destinationDate);
   };

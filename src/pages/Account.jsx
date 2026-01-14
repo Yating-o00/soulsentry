@@ -89,8 +89,8 @@ export default function Account() {
   }
 
   const getInitials = (name) => {
-    if (!name) return "U";
-    const parts = name.split(" ");
+    if (!name || typeof name !== 'string') return "U";
+    const parts = name.trim().split(" ").filter(Boolean);
     return parts
       .map((n) => n[0] || "")
       .join("")

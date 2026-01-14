@@ -7,7 +7,7 @@ import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
 
-export default function Welcome({ onComplete }) {
+export default function Welcome() {
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResult, setShowResult] = useState(null);
@@ -83,14 +83,13 @@ export default function Welcome({ onComplete }) {
 
         await base44.entities.Task.create(taskData);
         setShowResult({ type: "task", data: taskData });
-        
+
         toast.success("已创建约定", {
           description: taskData.title
         });
 
         setTimeout(() => {
-          if (onComplete) onComplete();
-          navigate(createPageUrl("Dashboard"));
+          navigate(createPageUrl("Tasks"));
         }, 1500);
       } else {
         // 创建笔记
@@ -102,14 +101,13 @@ export default function Welcome({ onComplete }) {
 
         await base44.entities.Note.create(noteData);
         setShowResult({ type: "note", data: noteData });
-        
+
         toast.success("已创建心签", {
           description: "笔记已保存"
         });
 
         setTimeout(() => {
-          if (onComplete) onComplete();
-          navigate(createPageUrl("Dashboard"));
+          navigate(createPageUrl("Notes"));
         }, 1500);
       }
 
@@ -121,7 +119,6 @@ export default function Welcome({ onComplete }) {
   };
 
   const handleSkip = () => {
-    if (onComplete) onComplete();
     navigate(createPageUrl("Dashboard"));
   };
 
@@ -133,112 +130,123 @@ export default function Welcome({ onComplete }) {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 0.1, scale: 1 }}
           transition={{ duration: 2, repeat: Infinity, repeatType: "reverse" }}
-          className="absolute top-20 right-20 w-96 h-96 bg-blue-400 rounded-full blur-3xl"
-        />
+          className="absolute top-20 right-20 w-96 h-96 bg-blue-400 rounded-full blur-3xl" />
+
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 0.1, scale: 1 }}
           transition={{ duration: 2.5, repeat: Infinity, repeatType: "reverse" }}
-          className="absolute bottom-20 left-20 w-96 h-96 bg-purple-400 rounded-full blur-3xl"
-        />
+          className="absolute bottom-20 left-20 w-96 h-96 bg-purple-400 rounded-full blur-3xl" />
+
       </div>
 
       <div className="relative z-10 w-full max-w-2xl">
         <AnimatePresence mode="wait">
-          {!showResult ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="text-center"
-            >
+          {!showResult ?
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="text-center">
+
               {/* Logo & 标题 */}
               <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.1 }}
-                className="mb-12"
-              >
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="mb-12">
+
                 <div className="inline-flex items-center justify-center w-20 h-20 mb-6 rounded-3xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] shadow-2xl shadow-[#384877]/30">
                   <Sparkles className="w-10 h-10 text-white" />
                 </div>
                 <h1 className="text-5xl font-bold bg-gradient-to-r from-[#384877] via-[#3b5aa2] to-purple-600 bg-clip-text text-transparent mb-4">
                   灵魂哨兵
                 </h1>
-                <p className="text-lg text-slate-600 max-w-md mx-auto">
-                  记录你的想法，管理你的约定
-                  <br />
-                  让 AI 为你智能分类
-                </p>
+                <p className="text-5xl font-bold bg-gradient-to-r from-[#384877] via-[#3b5aa2] to-purple-600 bg-clip-text text-transparent mb-4">心栈 SoulSentry
+
+
+
+              </p>
               </motion.div>
 
               {/* 输入框 */}
               <motion.form
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                onSubmit={handleSubmit}
-                className="mb-8"
-              >
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              onSubmit={handleSubmit}
+              className="mb-8">
+
                 <div className="relative">
                   <textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="随便写点什么... 比如「明天下午3点开会」或「今天学到了...」"
-                    disabled={isProcessing}
-                    className="w-full h-40 px-6 py-5 text-lg rounded-2xl border-2 border-slate-200 
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="随便写点什么... 比如「明天下午3点开会」或「今天学到了...」"
+                  disabled={isProcessing}
+                  className="w-full h-40 px-6 py-5 text-lg rounded-2xl border-2 border-slate-200 
                              focus:border-[#384877] focus:ring-4 focus:ring-[#384877]/10 
                              transition-all outline-none resize-none
                              bg-white/80 backdrop-blur-sm
                              placeholder:text-slate-400
                              disabled:opacity-50 disabled:cursor-not-allowed"
-                    autoFocus
-                  />
+
+
+
+
+
+                  autoFocus />
+
                   
-                  {isProcessing && (
-                    <div className="absolute inset-0 bg-white/50 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                  {isProcessing &&
+                <div className="absolute inset-0 bg-white/50 backdrop-blur-sm rounded-2xl flex items-center justify-center">
                       <div className="text-center">
                         <Loader2 className="w-8 h-8 text-[#384877] animate-spin mx-auto mb-3" />
                         <p className="text-sm text-slate-600 font-medium">AI 正在分析中...</p>
                       </div>
                     </div>
-                  )}
+                }
                 </div>
 
                 <motion.button
-                  type="submit"
-                  disabled={!input.trim() || isProcessing}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="mt-6 w-full py-4 px-8 bg-gradient-to-r from-[#384877] to-[#3b5aa2] 
+                type="submit"
+                disabled={!input.trim() || isProcessing}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="mt-6 w-full py-4 px-8 bg-gradient-to-r from-[#384877] to-[#3b5aa2] 
                            text-white text-lg font-semibold rounded-xl
                            shadow-lg shadow-[#384877]/30
                            hover:shadow-xl hover:shadow-[#384877]/40
                            disabled:opacity-50 disabled:cursor-not-allowed
                            transition-all duration-300
-                           flex items-center justify-center gap-2"
-                >
-                  {isProcessing ? (
-                    <>
+                           flex items-center justify-center gap-2">
+
+
+
+
+
+
+
+                  {isProcessing ?
+                <>
                       <Loader2 className="w-5 h-5 animate-spin" />
                       处理中...
-                    </>
-                  ) : (
-                    <>
+                    </> :
+
+                <>
                       开始使用
                       <ArrowRight className="w-5 h-5" />
                     </>
-                  )}
+                }
                 </motion.button>
               </motion.form>
 
               {/* 功能说明 */}
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto mb-6"
-              >
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto mb-6">
+
                 <div className="p-4 rounded-xl bg-white/60 backdrop-blur-sm border border-slate-200">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -266,69 +274,69 @@ export default function Welcome({ onComplete }) {
 
               {/* 跳过按钮 */}
               <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                onClick={handleSkip}
-                className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
-              >
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              onClick={handleSkip}
+              className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
+
                 跳过，直接进入
               </motion.button>
-            </motion.div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="text-center"
-            >
+            </motion.div> :
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center">
+
               <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", duration: 0.6 }}
-                className={`inline-flex items-center justify-center w-24 h-24 mb-6 rounded-3xl ${
-                  showResult.type === "task" 
-                    ? "bg-gradient-to-br from-blue-500 to-blue-600" 
-                    : "bg-gradient-to-br from-purple-500 to-purple-600"
-                } shadow-2xl`}
-              >
-                {showResult.type === "task" ? (
-                  <Calendar className="w-12 h-12 text-white" />
-                ) : (
-                  <StickyNote className="w-12 h-12 text-white" />
-                )}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", duration: 0.6 }}
+              className={`inline-flex items-center justify-center w-24 h-24 mb-6 rounded-3xl ${
+              showResult.type === "task" ?
+              "bg-gradient-to-br from-blue-500 to-blue-600" :
+              "bg-gradient-to-br from-purple-500 to-purple-600"} shadow-2xl`
+              }>
+
+                {showResult.type === "task" ?
+              <Calendar className="w-12 h-12 text-white" /> :
+
+              <StickyNote className="w-12 h-12 text-white" />
+              }
               </motion.div>
 
               <motion.h2
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-3xl font-bold text-slate-800 mb-3"
-              >
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-3xl font-bold text-slate-800 mb-3">
+
                 已创建{showResult.type === "task" ? "约定" : "心签"}
               </motion.h2>
 
               <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="text-lg text-slate-600 mb-8"
-              >
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-lg text-slate-600 mb-8">
+
                 {showResult.type === "task" ? showResult.data.title : "笔记已保存"}
               </motion.p>
 
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="flex items-center justify-center gap-2 text-sm text-slate-500"
-              >
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="flex items-center justify-center gap-2 text-sm text-slate-500">
+
                 <Loader2 className="w-4 h-4 animate-spin" />
                 正在跳转...
               </motion.div>
             </motion.div>
-          )}
+          }
         </AnimatePresence>
       </div>
-    </div>
-  );
+    </div>);
+
 }

@@ -53,7 +53,7 @@ import React, { useState, useEffect, useRef } from "react";
        queryFn: () => base44.auth.me(),
      });
 
-     const assistantName = user?.assistant_name && user.assistant_name.trim() 
+     const assistantName = user?.assistant_name && typeof user.assistant_name === 'string' && user.assistant_name.trim() 
     ? `SoulSentry-${user.assistant_name.trim().split(' ')[0]}` 
     : "SoulSentry-小雅";
 

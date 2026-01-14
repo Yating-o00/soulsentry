@@ -621,7 +621,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                     if (!timeValue || typeof timeValue !== 'string' || !timeValue.includes(':')) return;
                                     const parts = timeValue.split(':');
                                     if (!parts || parts.length < 2) return;
-                                    const [hours, minutes] = parts;
+                                    const [hours = '09', minutes = '00'] = parts;
                                     const date = task.reminder_time ? new Date(task.reminder_time) : new Date();
                                     date.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                                     handleEditTask(index, 'reminder_time', date.toISOString());
@@ -740,7 +740,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                               if (!timeValue || typeof timeValue !== 'string' || !timeValue.includes(':')) return;
                                               const parts = timeValue.split(':');
                                               if (!parts || parts.length < 2) return;
-                                              const [hours, minutes] = parts;
+                                              const [hours = '09', minutes = '00'] = parts;
                                               const date = subtask.reminder_time ? new Date(subtask.reminder_time) : new Date();
                                               date.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                                               handleEditSubtask(index, subIndex, 'reminder_time', date.toISOString());

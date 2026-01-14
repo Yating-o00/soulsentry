@@ -102,6 +102,13 @@ const CATEGORY_LABELS = {
   other: "其他",
 };
 
+// Add haptic feedback for mobile
+const triggerHaptic = () => {
+  if (navigator.vibrate) {
+    navigator.vibrate(10);
+  }
+};
+
 export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);

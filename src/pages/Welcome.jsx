@@ -89,6 +89,7 @@ export default function Welcome({ onComplete }) {
         });
 
         setTimeout(() => {
+          if (onComplete) onComplete();
           navigate(createPageUrl("Dashboard"));
         }, 1500);
       } else {
@@ -107,6 +108,7 @@ export default function Welcome({ onComplete }) {
         });
 
         setTimeout(() => {
+          if (onComplete) onComplete();
           navigate(createPageUrl("Dashboard"));
         }, 1500);
       }

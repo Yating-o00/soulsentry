@@ -617,10 +617,13 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                 type="time"
                                 value={task.reminder_time ? format(new Date(task.reminder_time), "HH:mm") : "09:00"}
                                 onChange={(e) => {
-                                  if (!e.target.value) return;
-                                  const [hours, minutes] = e.target.value.split(':');
+                                  const timeValue = e.target.value;
+                                  if (!timeValue || typeof timeValue !== 'string') return;
+                                  const parts = timeValue.split(':');
+                                  if (parts.length < 2) return;
+                                  const [hours, minutes] = parts;
                                   const date = task.reminder_time ? new Date(task.reminder_time) : new Date();
-                                  date.setHours(parseInt(hours), parseInt(minutes));
+                                  date.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                                   handleEditTask(index, 'reminder_time', date.toISOString());
                                 }}
                                 className="h-8"
@@ -733,10 +736,13 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                             type="time"
                                             value={subtask.reminder_time ? format(new Date(subtask.reminder_time), "HH:mm") : "09:00"}
                                             onChange={(e) => {
-                                              if (!e.target.value) return;
-                                              const [hours, minutes] = e.target.value.split(':');
+                                              const timeValue = e.target.value;
+                                              if (!timeValue || typeof timeValue !== 'string') return;
+                                              const parts = timeValue.split(':');
+                                              if (parts.length < 2) return;
+                                              const [hours, minutes] = parts;
                                               const date = subtask.reminder_time ? new Date(subtask.reminder_time) : new Date();
-                                              date.setHours(parseInt(hours), parseInt(minutes));
+                                              date.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                                               handleEditSubtask(index, subIndex, 'reminder_time', date.toISOString());
                                             }}
                                             className="h-8"

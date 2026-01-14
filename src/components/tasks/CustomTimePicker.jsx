@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export default function CustomTimePicker({ value, onChange, onClose }) {
-    const [hours, minutes] = value ? value.split(':') : ["00", "00"];
+    const [hours, minutes] = (value && typeof value === 'string') ? value.split(':') : ["00", "00"];
     const hoursRef = useRef(null);
     const minutesRef = useRef(null);
     const isScrolling = useRef(false);

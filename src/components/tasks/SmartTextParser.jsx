@@ -617,6 +617,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                 type="time"
                                 value={task.reminder_time ? format(new Date(task.reminder_time), "HH:mm") : "09:00"}
                                 onChange={(e) => {
+                                  if (!e.target.value) return;
                                   const [hours, minutes] = e.target.value.split(':');
                                   const date = task.reminder_time ? new Date(task.reminder_time) : new Date();
                                   date.setHours(parseInt(hours), parseInt(minutes));
@@ -732,6 +733,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                             type="time"
                                             value={subtask.reminder_time ? format(new Date(subtask.reminder_time), "HH:mm") : "09:00"}
                                             onChange={(e) => {
+                                              if (!e.target.value) return;
                                               const [hours, minutes] = e.target.value.split(':');
                                               const date = subtask.reminder_time ? new Date(subtask.reminder_time) : new Date();
                                               date.setHours(parseInt(hours), parseInt(minutes));

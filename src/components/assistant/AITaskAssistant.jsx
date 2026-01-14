@@ -53,9 +53,13 @@ import React, { useState, useEffect, useRef } from "react";
        queryFn: () => base44.auth.me(),
      });
 
-     const assistantName = user?.assistant_name && typeof user.assistant_name === 'string' && user.assistant_name.trim() 
-    ? `SoulSentry-${user.assistant_name.trim().split(' ')[0]}` 
-    : "SoulSentry-小雅";
+     const assistantName = (() => {
+       if (!user?.assistant_name || typeof user.assistant_name !== 'string') return "SoulSentry-小雅";
+       const trimmed = user.assistant_name.trim();
+       if (!trimmed) return "SoulSentry-小雅";
+       const parts = trimmed.includes(' ') ? trimmed.split(' ') : [trimmed];
+       return `SoulSentry-${parts[0] || '小雅'}`;
+     })();
 
      useEffect(() => {
        if (isOpen && !conversationId) {

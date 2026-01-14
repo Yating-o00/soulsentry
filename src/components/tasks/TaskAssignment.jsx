@@ -70,8 +70,11 @@ export default function TaskAssignment({ selectedUsers = [], onUpdate, onClose }
 
   const getInitials = (name) => {
     if (!name || typeof name !== 'string') return "?";
-    const parts = name.trim().split(" ").filter(Boolean);
-    return parts.map(n => n[0] || "").join("").toUpperCase().slice(0, 2) || "?";
+    const trimmed = name.trim();
+    if (!trimmed) return "?";
+    const parts = trimmed.includes(' ') ? trimmed.split(" ").filter(Boolean) : [trimmed];
+    if (parts.length === 0) return "?";
+    return parts.map(n => (n && n.length > 0 ? n[0] : "")).filter(Boolean).join("").toUpperCase().slice(0, 2) || "?";
   };
 
   return (

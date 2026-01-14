@@ -37,18 +37,18 @@ export default function GlobalSearch({ open, onOpenChange }) {
         ]);
 
         const matchedTasks = tasks.filter(t => 
-          t.title.toLowerCase().includes(lowerTerm) || 
-          t.description?.toLowerCase().includes(lowerTerm)
+          (t.title && typeof t.title === 'string' && t.title.toLowerCase().includes(lowerTerm)) || 
+          (t.description && typeof t.description === 'string' && t.description.toLowerCase().includes(lowerTerm))
         ).slice(0, 5);
 
         const matchedNotes = notes.filter(n => 
-          n.plain_text?.toLowerCase().includes(lowerTerm) || 
-          n.content?.toLowerCase().includes(lowerTerm)
+          (n.plain_text && typeof n.plain_text === 'string' && n.plain_text.toLowerCase().includes(lowerTerm)) || 
+          (n.content && typeof n.content === 'string' && n.content.toLowerCase().includes(lowerTerm))
         ).slice(0, 5);
 
         const matchedUsers = users.filter(u => 
-          u.full_name?.toLowerCase().includes(lowerTerm) || 
-          u.email?.toLowerCase().includes(lowerTerm)
+          (u.full_name && typeof u.full_name === 'string' && u.full_name.toLowerCase().includes(lowerTerm)) || 
+          (u.email && typeof u.email === 'string' && u.email.toLowerCase().includes(lowerTerm))
         ).slice(0, 5);
 
         setResults({

@@ -9,6 +9,7 @@ import { useOfflineManager } from "./components/offline/OfflineManager";
 import WelcomeGuard from "./components/WelcomeGuard";
 import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
+import { base44 } from "@/api/base44Client";
 import {
   Sidebar,
   SidebarContent,

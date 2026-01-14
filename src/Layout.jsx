@@ -7,9 +7,8 @@ import { TranslationProvider, useTranslation } from "./components/TranslationCon
 import MobileNavigation from "./components/mobile/MobileNavigation";
 import { useOfflineManager } from "./components/offline/OfflineManager";
 import WelcomeGuard from "./components/WelcomeGuard";
-import PWAInstallPrompt from "./components/mobile/PWAInstallPrompt";
-import { useTouchOptimizations } from "./components/mobile/TouchOptimizations";
-import { base44 } from "@/api/base44Client";
+import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
+import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import {
   Sidebar,
   SidebarContent,
@@ -198,9 +197,6 @@ function LayoutContent({ children }) {
   const { t } = useTranslation();
   const { isOnline, pendingSync } = useOfflineManager();
   
-  // 移动端触摸优化
-  useTouchOptimizations();
-  
   // Fetch user theme preferences
   const [theme, setTheme] = useState({
     primary: "#384877",
@@ -328,6 +324,7 @@ function LayoutContent({ children }) {
         <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
         <PWAInstallPrompt />
+        <PWAUpdateNotification />
 
         {/* 离线状态提示 */}
         {!isOnline && (

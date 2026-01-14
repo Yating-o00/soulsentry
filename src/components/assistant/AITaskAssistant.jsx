@@ -57,8 +57,8 @@ import React, { useState, useEffect, useRef } from "react";
        if (!user?.assistant_name || typeof user.assistant_name !== 'string') return "SoulSentry-小雅";
        const trimmed = user.assistant_name.trim();
        if (!trimmed) return "SoulSentry-小雅";
-       const parts = trimmed.includes(' ') ? trimmed.split(' ') : [trimmed];
-       return `SoulSentry-${parts[0] || '小雅'}`;
+       const parts = (trimmed.includes(' ') ? trimmed.split(' ') : [trimmed]).filter(Boolean);
+       return `SoulSentry-${(parts && parts.length > 0 && parts[0]) ? parts[0] : '小雅'}`;
      })();
 
      useEffect(() => {

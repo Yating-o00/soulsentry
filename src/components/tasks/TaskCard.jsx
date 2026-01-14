@@ -550,9 +550,9 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                 {subtasks.map((subtask, subIndex) => {
                   const isSubtaskCompleted = subtask.status === "completed";
                   // 尝试从标题中提取序号，如果没有则使用索引
-                  const titleMatch = subtask.title.match(/^(\d+)\.\s*/);
+                  const titleMatch = subtask.title ? subtask.title.match(/^(\d+)\.\s*/) : null;
                   const orderNumber = titleMatch ? titleMatch[1] : (subIndex + 1);
-                  const cleanTitle = titleMatch ? subtask.title.replace(/^\d+\.\s*/, '') : subtask.title;
+                  const cleanTitle = titleMatch && subtask.title ? subtask.title.replace(/^\d+\.\s*/, '') : (subtask.title || '');
 
                   return (
                     <motion.div

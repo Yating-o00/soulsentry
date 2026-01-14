@@ -120,8 +120,8 @@ export default function Teams() {
   };
 
   const getInitials = (name) => {
-    if (!name) return "?";
-    const parts = name.split(" ");
+    if (!name || typeof name !== 'string') return "?";
+    const parts = name.trim().split(" ").filter(Boolean);
     return parts.map((n) => n[0] || "").join("").toUpperCase().slice(0, 2) || "?";
   };
 

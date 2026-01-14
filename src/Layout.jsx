@@ -7,6 +7,8 @@ import { TranslationProvider, useTranslation } from "./components/TranslationCon
 import MobileNavigation from "./components/mobile/MobileNavigation";
 import { useOfflineManager } from "./components/offline/OfflineManager";
 import WelcomeGuard from "./components/WelcomeGuard";
+import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
+import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import PWAInstallPrompt from "./components/mobile/PWAInstallPrompt";
 import { useTouchOptimizations } from "./components/mobile/TouchOptimizations";
 import {
@@ -326,6 +328,8 @@ function LayoutContent({ children }) {
 
         <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+        <PWAInstallPrompt />
+        <PWAUpdateNotification />
         <PWAInstallPrompt />
 
         {/* 离线状态提示 */}

@@ -53,7 +53,7 @@ import React, { useState, useEffect, useRef } from "react";
        queryFn: () => base44.auth.me(),
      });
 
-     const assistantName = `SoulSentry-${user?.assistant_name || "小雅"}`;
+     const assistantName = user?.assistant_name ? `SoulSentry-${user.assistant_name.split(' ')[0]}` : "SoulSentry-小雅";
 
      useEffect(() => {
        if (isOpen && !conversationId) {

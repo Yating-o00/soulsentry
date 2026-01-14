@@ -498,7 +498,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
     if (!task.is_all_day) {
       const timeValue = task.time;
       const timeParts = (timeValue && typeof timeValue === 'string' && timeValue.includes(':')) ? timeValue.split(':') : ['09', '00'];
-      const [hours = '09', minutes = '00'] = timeParts.length >= 2 ? timeParts : ['09', '00'];
+      const [hours = '09', minutes = '00'] = (timeParts && timeParts.length >= 2) ? timeParts : ['09', '00'];
       reminderDateTime.setHours(parseInt(hours) || 9, parseInt(minutes) || 0, 0);
 
       if (task.has_end_time || (task.end_time && task.end_time.getTime() !== task.reminder_time.getTime())) {
@@ -511,7 +511,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
         // Using start time for consistency if not specified.
         const timeStr = task.has_end_time ? task.end_time_str : task.time;
         const endTimeParts = (timeStr && typeof timeStr === 'string' && timeStr.includes(':')) ? timeStr.split(':') : ['10', '00'];
-        const [endHours = '10', endMinutes = '00'] = endTimeParts.length >= 2 ? endTimeParts : ['10', '00'];
+        const [endHours = '10', endMinutes = '00'] = (endTimeParts && endTimeParts.length >= 2) ? endTimeParts : ['10', '00'];
         endDateTime.setHours(parseInt(endHours) || 10, parseInt(endMinutes) || 0, 0);
       } else {
         // Single day, no specific end time
@@ -594,7 +594,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
       const rec = task.custom_recurrence;
       if (rec.frequency === "weekly" && rec.days_of_week?.length > 0) {
         const days = ["日", "一", "二", "三", "四", "五", "六"];
-        return `每周${rec.days_of_week.map(d => days[d]).join("、")}`;
+        return `每周${rec.days_of_week.map(d => days[d]).filter(Boolean).join("、")}`;
       }
       if (rec.frequency === "monthly" && rec.days_of_month?.length > 0) {
         return `每月${rec.days_of_month.join("、")}日`;
@@ -915,10 +915,10 @@ ${task.description ? `描述: "${task.description}"` : ''}
                                         <CustomTimePicker 
                                             value={task.time}
                                             onChange={(newTime) => {
-                                               const updates = { time: newTime };
-                                               if (task.reminder_time && newTime && typeof newTime === 'string' && newTime.includes(':')) {
-                                                   const parts = newTime.split(':');
-                                                   const [h, m] = parts.length >= 2 ? parts : ['09', '00'];
+                                              const updates = { time: newTime };
+                                              if (task.reminder_time && newTime && typeof newTime === 'string' && newTime.includes(':')) {
+                                                  const parts = newTime.split(':');
+                                                  const [h, m] = (parts && parts.length >= 2) ? parts : ['09', '00'];
                                                    const newDate = new Date(task.reminder_time);
                                                    newDate.setHours(parseInt(h) || 9, parseInt(m) || 0);
                                                    updates.reminder_time = newDate;
@@ -939,8 +939,8 @@ ${task.description ? `描述: "${task.description}"` : ''}
                                               const newTime = e.target.value;
                                               const updates = { end_time_str: newTime };
                                               if (newTime && typeof newTime === 'string' && newTime.includes(':')) {
-                                                const parts = newTime.split(':');
-                                                const [h, m] = parts.length >= 2 ? parts : ['10', '00'];
+                                               const parts = newTime.split(':');
+                                               const [h, m] = (parts && parts.length >= 2) ? parts : ['10', '00'];
                                                 if (task.end_time) {
                                                   const newDate = new Date(task.end_time);
                                                   newDate.setHours(parseInt(h) || 10, parseInt(m) || 0);

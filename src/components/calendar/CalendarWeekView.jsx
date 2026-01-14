@@ -102,7 +102,7 @@ export default function CalendarWeekView({
     const parts = dropId.split("_");
     if (!parts || parts.length < 2) return;
     
-    const [dateStr, hourStr] = parts;
+    const [dateStr = '', hourStr = '0'] = parts;
     if (!dateStr) return;
     
     const destinationDate = new Date(dateStr);

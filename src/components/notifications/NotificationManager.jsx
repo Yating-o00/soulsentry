@@ -85,10 +85,10 @@ export default function NotificationManager() {
       
       const startTimeStr = currentUser.dnd_settings.start_time && typeof currentUser.dnd_settings.start_time === 'string' ? currentUser.dnd_settings.start_time : "22:00";
       const endTimeStr = currentUser.dnd_settings.end_time && typeof currentUser.dnd_settings.end_time === 'string' ? currentUser.dnd_settings.end_time : "08:00";
-      const startParts = startTimeStr.split(':');
-      const endParts = endTimeStr.split(':');
-      const [startH, startM] = startParts.length >= 2 ? startParts.map(Number) : [22, 0];
-      const [endH, endM] = endParts.length >= 2 ? endParts.map(Number) : [8, 0];
+      const startParts = (startTimeStr && typeof startTimeStr === 'string' && startTimeStr.includes(':')) ? startTimeStr.split(':') : ['22', '00'];
+      const endParts = (endTimeStr && typeof endTimeStr === 'string' && endTimeStr.includes(':')) ? endTimeStr.split(':') : ['08', '00'];
+      const [startH, startM] = (startParts && startParts.length >= 2) ? startParts.map(Number) : [22, 0];
+      const [endH, endM] = (endParts && endParts.length >= 2) ? endParts.map(Number) : [8, 0];
       const startMinutes = startH * 60 + startM;
       const endMinutes = endH * 60 + endM;
 
@@ -485,7 +485,7 @@ export default function NotificationManager() {
     // 清理已完成约定的检查记录
     const currentTaskIds = new Set(tasks.map(t => t.id));
     checkedTasks.current.forEach(id => {
-      const taskId = id && typeof id === 'string' ? id.split('-')[0] : '';
+      const taskId = (id && typeof id === 'string' && id.includes('-')) ? id.split('-')[0] : '';
       if (taskId && !currentTaskIds.has(taskId)) {
         checkedTasks.current.delete(id);
       }

@@ -485,7 +485,9 @@ export default function NotificationManager() {
     // 清理已完成约定的检查记录
     const currentTaskIds = new Set(tasks.map(t => t.id));
     checkedTasks.current.forEach(id => {
-      const taskId = (id && typeof id === 'string' && id.includes('-')) ? id.split('-')[0] : '';
+      if (!id || typeof id !== 'string' || !id.includes('-')) return;
+      const parts = id.split('-');
+      const taskId = (parts && parts.length > 0) ? parts[0] : '';
       if (taskId && !currentTaskIds.has(taskId)) {
         checkedTasks.current.delete(id);
       }

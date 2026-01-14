@@ -248,6 +248,9 @@ export default function TaskShareCard({ task, open, onClose }) {
   };
 
   const handleCopyText = () => {
+    const categoryLabel = CATEGORY_LABELS[task.category] || { zh: "其他", en: "Other" };
+    const priorityLabel = PRIORITY_LABELS[task.priority] || { zh: "中优先级", en: "Medium" };
+    
     const taskText = `
 【约定卡片】
 
@@ -255,13 +258,13 @@ export default function TaskShareCard({ task, open, onClose }) {
 
 ${task.description ? `📝 ${task.description}\n` : ''}
 📅 提醒时间：${format(new Date(task.reminder_time), "yyyy年M月d日 EEEE HH:mm", { locale: zhCN })}${task.end_time ? ` - ${format(new Date(task.end_time), "HH:mm", { locale: zhCN })}` : ''}
-🏷️ 类别：${CATEGORY_LABELS[task.category]}
-⚡ 优先级：${PRIORITY_LABELS[task.priority]}
+🏷️ 类别：${categoryLabel.zh}
+⚡ 优先级：${priorityLabel.zh}
 📊 完成进度：${progress}%
 ${task.status === "completed" ? "✅ 已完成" : "🔵 进行中"}
 ${subtasks.length > 0 ? `\n📌 子约定清单 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => {
-  const titleMatch = s.title.match(/^(\d+)\.\s*/);
-  const cleanTitle = titleMatch ? s.title.replace(/^\d+\.\s*/, '') : s.title;
+  const titleMatch = s.title ? s.title.match(/^(\d+)\.\s*/) : null;
+  const cleanTitle = titleMatch && s.title ? s.title.replace(/^\d+\.\s*/, '') : (s.title || '');
   return `${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`;
 }).join('\n')}` : ''}
 
@@ -507,19 +510,20 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                           <div className="h-px bg-slate-200 flex-1" />
                         </div>
                         <div className="space-y-2">
-                          {displayedSubtasks.map((subtask, index) => {
-                             const isCompleted = subtask.status === "completed";
-                             return (
-                               <div key={subtask.id} className="flex items-center gap-3">
-                                  <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>
-                                    {isCompleted && <Check className="w-3 h-3" />}
-                                  </div>
-                                  <span className={`text-sm ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                                    {subtask.title.replace(/^\d+\.\s*/, '')}
-                                  </span>
-                               </div>
-                             );
-                          })}
+                         {displayedSubtasks.map((subtask, index) => {
+                            const isCompleted = subtask.status === "completed";
+                            const cleanTitle = subtask.title ? subtask.title.replace(/^\d+\.\s*/, '') : '';
+                            return (
+                              <div key={subtask.id} className="flex items-center gap-3">
+                                 <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>
+                                   {isCompleted && <Check className="w-3 h-3" />}
+                                 </div>
+                                 <span className={`text-sm ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                   {cleanTitle}
+                                 </span>
+                              </div>
+                            );
+                         })}
                           {hasMoreSubtasks && (
                             <p className="text-xs text-slate-400 italic pl-7 pt-1">
                               + {isEnglish 

@@ -92,8 +92,8 @@ export default function Account() {
     if (!name || typeof name !== 'string') return "U";
     const trimmed = name.trim();
     if (!trimmed) return "U";
-    const parts = trimmed.split(" ").filter(Boolean);
-    if (parts.length === 0) return "U";
+    const parts = (trimmed.includes(' ') ? trimmed.split(" ") : [trimmed]).filter(Boolean);
+    if (!parts || parts.length === 0) return "U";
     return parts
       .map((n) => (n && n.length > 0 ? n[0] : ""))
       .filter(Boolean)

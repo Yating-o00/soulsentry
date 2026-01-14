@@ -593,7 +593,9 @@ Return complete JSON with all fields translated.`;
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) onClose();
+    }}>
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-6 border-b shrink-0 bg-white z-10">
           <DialogTitle className="text-[20px] font-semibold tracking-tight text-[#222222] line-clamp-1 pr-8">

@@ -731,7 +731,9 @@ export default function Dashboard() {
         onClose={() => setSelectedTask(null)}
       />
 
-      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+      <Dialog open={!!editingTask} onOpenChange={(isOpen) => {
+        if (!isOpen) setEditingTask(null);
+      }}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto scrollbar-hide">
           <DialogHeader>
             <DialogTitle>编辑约定</DialogTitle>

@@ -90,12 +90,12 @@ export default function Account() {
 
   const getInitials = (name) => {
     if (!name) return "U";
-    return name
-      .split(" ")
-      .map((n) => n[0])
+    const parts = name.split(" ");
+    return parts
+      .map((n) => n[0] || "")
       .join("")
       .toUpperCase()
-      .slice(0, 2);
+      .slice(0, 2) || "U";
   };
 
   return (

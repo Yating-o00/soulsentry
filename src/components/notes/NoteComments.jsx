@@ -95,8 +95,8 @@ export default function NoteComments({ noteId }) {
     if (!name || typeof name !== 'string') return "?";
     const trimmed = name.trim();
     if (!trimmed) return "?";
-    const parts = trimmed.split(" ").filter(Boolean);
-    if (parts.length === 0) return "?";
+    const parts = (trimmed.includes(' ') ? trimmed.split(" ") : [trimmed]).filter(Boolean);
+    if (!parts || parts.length === 0) return "?";
     return parts.map(n => (n && n.length > 0 ? n[0] : "")).filter(Boolean).join("").toUpperCase().slice(0, 2) || "?";
   };
 

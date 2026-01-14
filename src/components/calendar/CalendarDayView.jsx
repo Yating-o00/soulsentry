@@ -73,6 +73,8 @@ export default function CalendarDayView({
     
     const taskId = result.draggableId;
     const hourStr = result.destination.droppableId.replace("hour_", "");
+    if (!hourStr) return;
+    
     const destinationDate = new Date(currentDate);
     destinationDate.setHours(parseInt(hourStr), 0, 0, 0);
     

@@ -99,7 +99,8 @@ export default function TaskComments({ task }) {
 
   const getInitials = (name) => {
     if (!name) return "?";
-    return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+    const parts = name.split(" ").filter(Boolean);
+    return parts.map(n => n[0]).join("").toUpperCase().slice(0, 2) || "?";
   };
 
   const getUserByEmail = (email) => {

@@ -297,12 +297,12 @@ export default function Welcome({ onComplete }) {
               animate={{ scale: 1 }}
               transition={{ type: "spring", duration: 0.6 }}
               className={`inline-flex items-center justify-center w-24 h-24 mb-6 rounded-3xl ${
-              showResult.type === "task" ?
+              showResult?.type === "task" ?
               "bg-gradient-to-br from-blue-500 to-blue-600" :
               "bg-gradient-to-br from-purple-500 to-purple-600"} shadow-2xl`
               }>
 
-                {showResult.type === "task" ?
+                {showResult?.type === "task" ?
               <Calendar className="w-12 h-12 text-white" /> :
 
               <StickyNote className="w-12 h-12 text-white" />
@@ -315,7 +315,7 @@ export default function Welcome({ onComplete }) {
               transition={{ delay: 0.2 }}
               className="text-3xl font-bold text-slate-800 mb-3">
 
-                已创建{showResult.type === "task" ? "约定" : "心签"}
+                已创建{showResult?.type === "task" ? "约定" : "心签"}
               </motion.h2>
 
               <motion.p
@@ -324,7 +324,7 @@ export default function Welcome({ onComplete }) {
               transition={{ delay: 0.3 }}
               className="text-lg text-slate-600 mb-8">
 
-                {showResult.type === "task" ? showResult.data.title : "笔记已保存"}
+                {showResult?.type === "task" ? showResult?.data?.title : "笔记已保存"}
               </motion.p>
 
               <motion.div

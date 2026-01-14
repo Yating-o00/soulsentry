@@ -487,7 +487,7 @@ export default function NotificationManager() {
     checkedTasks.current.forEach(id => {
       if (!id || typeof id !== 'string' || !id.includes('-')) return;
       const parts = id.split('-');
-      const taskId = (parts && parts.length > 0) ? parts[0] : '';
+      const taskId = (parts && parts.length > 0 && parts[0]) ? parts[0] : '';
       if (taskId && !currentTaskIds.has(taskId)) {
         checkedTasks.current.delete(id);
       }

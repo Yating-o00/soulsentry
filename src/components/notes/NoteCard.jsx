@@ -49,12 +49,7 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
       if (remaining > 0) {
         const minutes = Math.floor(remaining / 60000);
         const seconds = Math.floor((remaining % 60000) / 1000);
-        const secondsStr = String(seconds);
-        if (secondsStr && typeof secondsStr === 'string') {
-          setTimeRemaining(`${minutes}:${secondsStr.padStart(2, '0')}`);
-        } else {
-          setTimeRemaining(`${minutes}:00`);
-        }
+        setTimeRemaining(`${minutes}:${String(seconds).padStart(2, '0')}`);
       } else {
         setTimeRemaining("即将销毁");
       }

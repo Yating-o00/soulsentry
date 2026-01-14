@@ -77,7 +77,7 @@ export default function CalendarDayView({
     
     const parts = dropId.split('_');
     if (!parts || parts.length < 2) return;
-    const hourStr = parts[1];
+    const [prefix = '', hourStr = '0'] = parts;
     if (!hourStr) return;
     
     const destinationDate = new Date(currentDate);

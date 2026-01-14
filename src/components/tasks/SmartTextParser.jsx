@@ -652,7 +652,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                const user = users.find(u => u.id === userId);
                                return user ? (
                                  <div key={userId} className="w-6 h-6 rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] text-blue-700" title={user.full_name || user.email || "用户"}>
-                                     {((user.full_name && typeof user.full_name === 'string' ? user.full_name : '') || (user.email && typeof user.email === 'string' ? user.email : '') || "?")[0].toUpperCase()}
+                                     {(((user.full_name && typeof user.full_name === 'string' ? user.full_name : '') || (user.email && typeof user.email === 'string' ? user.email : '') || "?")[0] || '?').toUpperCase()}
                                  </div>
                                ) : null;
                              })}

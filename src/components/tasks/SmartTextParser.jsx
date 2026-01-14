@@ -149,8 +149,8 @@ ${text}
              assignedIds = task.participants.map(name => {
                // Simple fuzzy match: check if user full_name or email contains the name
                const match = users.find(u => 
-                 (u.full_name && u.full_name.toLowerCase().includes(name.toLowerCase())) ||
-                 (u.email && u.email.toLowerCase().includes(name.toLowerCase()))
+                 (u.full_name && typeof u.full_name === 'string' && u.full_name.toLowerCase().includes(name.toLowerCase())) ||
+                 (u.email && typeof u.email === 'string' && u.email.toLowerCase().includes(name.toLowerCase()))
                );
                return match ? match.id : null;
              }).filter(Boolean);
@@ -651,8 +651,8 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                              {task.assigned_to.map(userId => {
                                const user = users.find(u => u.id === userId);
                                return user ? (
-                                 <div key={userId} className="w-6 h-6 rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] text-blue-700" title={user.full_name || user.email}>
-                                    {(user.full_name || user.email || "?")[0].toUpperCase()}
+                                 <div key={userId} className="w-6 h-6 rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] text-blue-700" title={user.full_name || user.email || "用户"}>
+                                     {((user.full_name && typeof user.full_name === 'string' ? user.full_name : '') || (user.email && typeof user.email === 'string' ? user.email : '') || "?")[0].toUpperCase()}
                                  </div>
                                ) : null;
                              })}

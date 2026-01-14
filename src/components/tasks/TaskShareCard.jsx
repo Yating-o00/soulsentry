@@ -263,8 +263,9 @@ ${task.description ? `📝 ${task.description}\n` : ''}
 📊 完成进度：${progress}%
 ${task.status === "completed" ? "✅ 已完成" : "🔵 进行中"}
 ${subtasks.length > 0 ? `\n📌 子约定清单 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => {
-  const titleMatch = s.title ? s.title.match(/^(\d+)\.\s*/) : null;
-  const cleanTitle = titleMatch && s.title ? s.title.replace(/^\d+\.\s*/, '') : (s.title || '');
+  const title = s.title || '';
+  const titleMatch = title.match(/^(\d+)\.\s*/);
+  const cleanTitle = titleMatch ? title.replace(/^\d+\.\s*/, '') : title;
   return `${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`;
 }).join('\n')}` : ''}
 
@@ -512,7 +513,8 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         <div className="space-y-2">
                          {displayedSubtasks.map((subtask, index) => {
                             const isCompleted = subtask.status === "completed";
-                            const cleanTitle = subtask.title ? subtask.title.replace(/^\d+\.\s*/, '') : '';
+                            const title = subtask.title || '';
+                            const cleanTitle = title.replace(/^\d+\.\s*/, '');
                             return (
                               <div key={subtask.id} className="flex items-center gap-3">
                                  <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>

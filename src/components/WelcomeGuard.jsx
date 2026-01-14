@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from "react";
 import Welcome from "@/pages/Welcome";
 
-// 安全访问 sessionStorage（iOS Safari 隐私模式兼容）
-const safeSessionStorage = {
+// 安全访问 localStorage（iOS Safari 隐私模式兼容）
+const safeLocalStorage = {
   getItem: (key) => {
     try {
-      return sessionStorage.getItem(key);
+      return localStorage.getItem(key);
     } catch (e) {
       return null;
     }
   },
   setItem: (key, value) => {
     try {
-      sessionStorage.setItem(key, value);
+      localStorage.setItem(key, value);
     } catch (e) {
       // 忽略错误
     }
@@ -21,30 +21,29 @@ const safeSessionStorage = {
 
 export default function WelcomeGuard({ children }) {
   const [isClient, setIsClient] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
-    // 检查是否已访问过
-    const visited = safeSessionStorage.getItem("visited");
-    if (visited) {
-      setShowWelcome(false);
+    // 检查是否已访问过（使用 localStorage 而非 sessionStorage）
+    const visited = safeLocalStorage.getItem("app_visited");
+    if (!visited) {
+      setShowWelcome(true);
     }
   }, []);
 
-  useEffect(() => {
-    if (isClient && !showWelcome) {
-      // 标记已访问
-      safeSessionStorage.setItem("visited", "true");
-    }
-  }, [isClient, showWelcome]);
+  const handleComplete = () => {
+    // 标记已访问
+    safeLocalStorage.setItem("app_visited", "true");
+    setShowWelcome(false);
+  };
 
   if (!isClient) {
     return null;
   }
 
   if (showWelcome) {
-    return <Welcome />;
+    return <Welcome onComplete={handleComplete} />;
   }
 
   return children;

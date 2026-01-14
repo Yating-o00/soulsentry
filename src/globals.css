@@ -8,10 +8,17 @@
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: 100%;
     touch-action: manipulation;
+    /* iOS Safari viewport fix */
+    height: -webkit-fill-available;
   }
   
   body {
     @apply antialiased;
+    /* 防止 iOS 滚动弹跳 */
+    overscroll-behavior-y: none;
+    /* iOS viewport height fix */
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
   }
 
   /* Minimum touch target sizes on mobile */
@@ -20,6 +27,7 @@
     a:not(.no-min-size), 
     [role="button"]:not(.no-min-size) {
       min-height: 44px;
+      min-width: 44px;
     }
     
     /* Prevent iOS zoom on input focus */
@@ -43,5 +51,64 @@
   .touch-manipulation {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 优化移动端滚动 */
+  @supports (-webkit-overflow-scrolling: touch) {
+    .scroll-smooth {
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+  }
+
+  /* 隐藏滚动条但保持功能 */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* PWA 全屏优化 */
+  @media (display-mode: standalone) {
+    body {
+      /* 添加安全区域内边距 */
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+  }
+
+  /* 移动端性能优化 */
+  @media (max-width: 768px) {
+    * {
+      /* 硬件加速 */
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+      /* 优化文本渲染 */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* 优化动画性能 */
+    @media (prefers-reduced-motion: no-preference) {
+      * {
+        will-change: auto;
+      }
+    }
+  }
+
+  /* 离线状态样式 */
+  .offline-indicator {
+    background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
   }
 }

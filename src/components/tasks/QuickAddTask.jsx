@@ -496,8 +496,9 @@ ${task.description ? `描述: "${task.description}"` : ''}
     let endDateTime = task.end_time ? new Date(task.end_time) : null;
 
     if (!task.is_all_day) {
-      const timeParts = (task.time && typeof task.time === 'string') ? task.time.split(':') : ['09', '00'];
-      const [hours, minutes] = timeParts;
+      const timeValue = task.time;
+      const timeParts = (timeValue && typeof timeValue === 'string') ? timeValue.split(':') : ['09', '00'];
+      const [hours = '09', minutes = '00'] = timeParts.length >= 2 ? timeParts : ['09', '00'];
       reminderDateTime.setHours(parseInt(hours) || 9, parseInt(minutes) || 0, 0);
 
       if (task.has_end_time || (task.end_time && task.end_time.getTime() !== task.reminder_time.getTime())) {
@@ -510,7 +511,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
         // Using start time for consistency if not specified.
         const timeStr = task.has_end_time ? task.end_time_str : task.time;
         const endTimeParts = (timeStr && typeof timeStr === 'string') ? timeStr.split(':') : ['10', '00'];
-        const [endHours, endMinutes] = endTimeParts;
+        const [endHours = '10', endMinutes = '00'] = endTimeParts.length >= 2 ? endTimeParts : ['10', '00'];
         endDateTime.setHours(parseInt(endHours) || 10, parseInt(endMinutes) || 0, 0);
       } else {
         // Single day, no specific end time

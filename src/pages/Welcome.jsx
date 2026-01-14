@@ -7,7 +7,7 @@ import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
 
-export default function Welcome() {
+export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResult, setShowResult] = useState(null);
@@ -119,6 +119,7 @@ export default function Welcome() {
   };
 
   const handleSkip = () => {
+    if (onComplete) onComplete();
     navigate(createPageUrl("Dashboard"));
   };
 

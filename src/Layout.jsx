@@ -6,6 +6,7 @@ import FloatingAssistantButton from "./components/assistant/FloatingAssistantBut
 import { TranslationProvider, useTranslation } from "./components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
 import { useOfflineManager } from "./components/offline/OfflineManager";
+import WelcomeGuard from "./components/WelcomeGuard";
 import {
   Sidebar,
   SidebarContent,
@@ -351,9 +352,11 @@ function LayoutContent({ children }) {
     }
 
     export default function Layout({ children }) {
-    return (
-    <TranslationProvider>
-    <LayoutContent>{children}</LayoutContent>
-    </TranslationProvider>
-    );
+      return (
+        <TranslationProvider>
+          <WelcomeGuard>
+            <LayoutContent>{children}</LayoutContent>
+          </WelcomeGuard>
+        </TranslationProvider>
+      );
     }

@@ -108,8 +108,11 @@ export default function Tasks() {
 
   const filteredTasks = React.useMemo(() => tasks.filter((task) => {
     const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-    const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const titleStr = task.title && typeof task.title === 'string' ? task.title : '';
+    const descStr = task.description && typeof task.description === 'string' ? task.description : '';
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = titleStr.toLowerCase().includes(searchLower) ||
+        descStr.toLowerCase().includes(searchLower);
 
     // Advanced Filters
     let matchesAdvanced = true;

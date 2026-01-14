@@ -97,13 +97,17 @@ export default function CalendarWeekView({
     
     const taskId = result.draggableId;
     const dropId = result.destination.droppableId;
-    if (!dropId || typeof dropId !== 'string') return;
+    if (!dropId || typeof dropId !== 'string' || !dropId.includes('_')) return;
     
     const parts = dropId.split("_");
-    if (parts.length < 2) return;
+    if (!parts || parts.length < 2) return;
     
     const [dateStr, hourStr] = parts;
+    if (!dateStr) return;
+    
     const destinationDate = new Date(dateStr);
+    if (isNaN(destinationDate.getTime())) return;
+    
     destinationDate.setHours(parseInt(hourStr) || 0, 0, 0, 0);
     
     onTaskDrop(taskId, destinationDate);

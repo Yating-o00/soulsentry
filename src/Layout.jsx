@@ -245,7 +245,7 @@ function LayoutContent({ children }) {
       <style>{`
       :root {
         /* Main Primary Colors - Tech Blue */
-        --primary-rgb: ${parseInt(theme.primary.slice(1, 3), 16)} ${parseInt(theme.primary.slice(3, 5), 16)} ${parseInt(theme.primary.slice(5, 7), 16)};
+        --primary-rgb: ${(theme.primary && typeof theme.primary === 'string' && theme.primary.length >= 7) ? parseInt(theme.primary.slice(1, 3), 16) : 56} ${(theme.primary && typeof theme.primary === 'string' && theme.primary.length >= 7) ? parseInt(theme.primary.slice(3, 5), 16) : 72} ${(theme.primary && typeof theme.primary === 'string' && theme.primary.length >= 7) ? parseInt(theme.primary.slice(5, 7), 16) : 119};
         --primary-main: var(--primary-rgb);      
 
         /* Font Size Scaling */

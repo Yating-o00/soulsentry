@@ -221,7 +221,7 @@ export default function RecurrenceEditor({ value, onChange, onClose }) {
             {recurrence.frequency === "weekly" && "周"}
             {recurrence.frequency === "monthly" && "月"}
             {recurrence.frequency === "weekly" && recurrence.days_of_week?.length > 0 && 
-              `的${recurrence.days_of_week.map(d => DAYS_OF_WEEK.find(day => day.value === d)?.label).filter(Boolean).join("、")}`
+              `的${recurrence.days_of_week.map(d => DAYS_OF_WEEK.find(day => day.value === d)?.label || '').filter(Boolean).join("、")}`
             }
             {recurrence.frequency === "monthly" && recurrence.days_of_month?.length > 0 && 
               `的${recurrence.days_of_month.join("、")}日`

@@ -353,7 +353,7 @@ response_json_schema: {
                       {PRIORITIES.map(pri => (
                         <SelectItem key={pri.value} value={pri.value}>
                           <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${pri.color.split(' ')[0].replace('bg-', 'bg-')}`} />
+                            <div className={`w-2 h-2 rounded-full ${(pri.color && typeof pri.color === 'string' && pri.color.includes(' ')) ? pri.color.split(' ')[0] : 'bg-slate-100'}`} />
                             <span>{pri.label}</span>
                           </div>
                         </SelectItem>

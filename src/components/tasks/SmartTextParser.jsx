@@ -701,8 +701,8 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
                                       onValueChange={(value) => handleEditSubtask(index, subIndex, 'priority', value)}
                                     >
                                       <SelectTrigger className="h-6 w-auto gap-1 border-0 bg-[#f4f6f8] hover:bg-[#e5e9ef] rounded px-1.5 text-[10px] font-medium text-[#384877] shadow-none focus:ring-0">
-                                        <div className={`w-1.5 h-1.5 rounded-full ${PRIORITY_LABELS[subtask.priority]?.color.split(' ')[0].replace('bg-', 'bg-')}`} />
-                                        <SelectValue />
+                                       <div className={`w-1.5 h-1.5 rounded-full ${(PRIORITY_LABELS[subtask.priority]?.color && typeof PRIORITY_LABELS[subtask.priority].color === 'string' && PRIORITY_LABELS[subtask.priority].color.includes(' ')) ? PRIORITY_LABELS[subtask.priority].color.split(' ')[0] : 'bg-slate-100'}`} />
+                                       <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
                                         {Object.entries(PRIORITY_LABELS).map(([key, config]) => (

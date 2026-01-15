@@ -28,11 +28,12 @@ export default function NotificationManager() {
     refetchInterval: 30000, // 每30秒检查一次
   });
 
-  // 获取最近的用户行为，用于动态调整提醒
+  // 获取最近的用户行为，用于动态调整提醒 - reduced frequency
   const { data: recentBehaviors = [] } = useQuery({
     queryKey: ['recentBehaviors'],
     queryFn: () => base44.entities.UserBehavior.list('-created_date', 20),
-    refetchInterval: 60000, 
+    refetchInterval: 5 * 60 * 1000, // Every 5 minutes instead of 1 minute
+    staleTime: 3 * 60 * 1000,
   });
 
   const { data: rules = [] } = useQuery({

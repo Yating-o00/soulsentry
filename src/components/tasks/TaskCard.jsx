@@ -113,14 +113,15 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
   
-  // Fetch latest completion history (only if task is recurring or has history)
+  // Fetch latest completion history (only for recurring tasks to avoid excessive API calls)
   const { data: latestCompletion } = useQuery({
      queryKey: ['task-completion-latest', task.id],
      queryFn: async () => {
          const res = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-completed_at", 1);
          return res[0];
      },
-     enabled: !!task.id && !isTrash
+     enabled: !!task.id && !isTrash && task.repeat_rule && task.repeat_rule !== 'none',
+     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
   // 查询子约定 (如果外部未传入)
@@ -400,7 +401,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                     variant="outline"
                     className="rounded-[8px] text-[13px] border-[#dce4ed]"
                   >
-                    <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[task.priority]}`} />
+                    <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[task.priority] || ''}`} />
                     {isSnoozed 
                       ? format(new Date(task.snooze_until), "M月d日 HH:mm", { locale: zhCN })
                       : task.end_time
@@ -425,10 +426,10 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
 
                   <Badge
                     variant="outline"
-                    className={`${PRIORITY_COLORS[task.priority]} border-current rounded-[8px] text-[13px]`}
+                    className={`${PRIORITY_COLORS[task.priority] || ''} border-current rounded-[8px] text-[13px]`}
                   >
                     <AlertCircle className="w-3 h-3 mr-1" />
-                    {PRIORITY_LABELS[task.priority]}
+                    {PRIORITY_LABELS[task.priority] || task.priority || '中'}
                   </Badge>
 
                   {task.ai_analysis?.suggested_priority && task.ai_analysis.suggested_priority !== task.priority && (
@@ -605,10 +606,12 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                           )}
 
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="outline" className="text-xs bg-white text-slate-700 border-slate-300">
-                              <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[subtask.priority]}`} />
-                              {format(new Date(subtask.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
-                            </Badge>
+                            {subtask.reminder_time && (
+                              <Badge variant="outline" className="text-xs bg-white text-slate-700 border-slate-300">
+                                <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[subtask.priority] || ''}`} />
+                                {format(new Date(subtask.reminder_time), "M月d日 HH:mm", { locale: zhCN })}
+                              </Badge>
+                            )}
                             <Badge className={`text-[13px] ${
                               isSubtaskCompleted
                                 ? 'bg-[#10b981] text-white border-[#10b981]'

@@ -10,23 +10,36 @@ export default function UserBehaviorInsights() {
   const [insights, setInsights] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Fetch recent behaviors
-  const { data: behaviors } = useQuery({
+  // Fetch recent behaviors - disabled auto-fetch to reduce API load
+  const { data: behaviors = [] } = useQuery({
     queryKey: ['userBehaviors'],
-    queryFn: () => base44.entities.UserBehavior.list({
-        sort: { created_date: -1 },
-        limit: 50
-    }),
-    initialData: [],
+    queryFn: () => base44.entities.UserBehavior.list('-created_date', 50),
+    enabled: false, // Only fetch when user clicks "生成建议"
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
   });
 
   const generateInsights = async () => {
-    if (!behaviors || behaviors.length === 0) return;
-    
     setIsAnalyzing(true);
+    
+    // Fetch behaviors on demand
+    let behaviorData = behaviors;
+    if (!behaviorData || behaviorData.length === 0) {
+      try {
+        behaviorData = await base44.entities.UserBehavior.list('-created_date', 50);
+      } catch (e) {
+        console.error("Failed to fetch behaviors:", e);
+        setIsAnalyzing(false);
+        return;
+      }
+    }
+    
+    if (!behaviorData || behaviorData.length === 0) {
+      setIsAnalyzing(false);
+      return;
+    }
     try {
       // Prepare data summary for AI
-      const behaviorSummary = behaviors.map(b => ({
+      const behaviorSummary = behaviorData.map(b => ({
         type: b.event_type,
         time: `${b.day_of_week} ${b.hour_of_day}:00`,
         category: b.category

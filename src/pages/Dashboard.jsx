@@ -403,7 +403,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
           >
             <h1 className="text-3xl font-bold text-slate-900 mb-1 flex items-center gap-2">
-              {greeting}，{user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? (user.email.split('@')[0] || '朋友') : "朋友")} 
+              {greeting}，{user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")} 
               <Sun className="w-6 h-6 text-amber-500 fill-amber-500 animate-pulse" />
             </h1>
             <p className="text-slate-500">

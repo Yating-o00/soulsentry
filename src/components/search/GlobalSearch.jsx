@@ -235,7 +235,7 @@ export default function GlobalSearch({ open, onOpenChange }) {
                           className="w-full text-left px-3 py-2 rounded-xl hover:bg-indigo-50/50 transition-all group border border-transparent hover:border-indigo-100 flex items-center gap-3"
                         >
                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow-md shadow-indigo-200">
-                               {(user.full_name && typeof user.full_name === 'string' && user.full_name[0]) || (user.email && typeof user.email === 'string' && user.email[0]) || '?'}
+                               {((user.full_name && typeof user.full_name === 'string' && user.full_name.length > 0) ? user.full_name[0] : '') || ((user.email && typeof user.email === 'string' && user.email.length > 0) ? user.email[0] : '') || '?'}
                            </div>
                            <div className="flex-1 min-w-0">
                               <div className="text-sm font-semibold text-slate-700">{user.full_name || "未命名用户"}</div>

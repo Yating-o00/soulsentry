@@ -304,6 +304,11 @@ export default function NotificationManager() {
         return;
       }
 
+      // Skip tasks without reminder_time
+      if (!task.reminder_time) {
+        return;
+      }
+
       const start = parseISO(task.reminder_time);
       // Determine if task is multi-day (has end_time on a different day)
       const end = task.end_time ? parseISO(task.end_time) : start;

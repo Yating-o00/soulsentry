@@ -118,9 +118,9 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
      queryKey: ['task-completion-latest', task.id],
      queryFn: async () => {
          const res = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-completed_at", 1);
-         return res[0];
+         return res[0] || null;
      },
-     enabled: !!task.id && !isTrash && task.repeat_rule && task.repeat_rule !== 'none',
+     enabled: !!task.id && !isTrash && !!task.repeat_rule && task.repeat_rule !== 'none',
      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 

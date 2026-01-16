@@ -1,6 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff } from "lucide-react";
+import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -11,75 +11,8 @@ export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResult, setShowResult] = useState(null);
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef(null);
   const navigate = useNavigate();
   const { t } = useTranslation();
-
-  // 语音识别
-  const startListening = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      toast.error("您的浏览器不支持语音输入");
-      return;
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.continuous = true;
-    recognitionRef.current.interimResults = true;
-    recognitionRef.current.lang = 'zh-CN';
-
-    recognitionRef.current.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognitionRef.current.onresult = (event) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
-        }
-      }
-
-      if (finalTranscript) {
-        setInput(prev => prev + finalTranscript);
-      }
-    };
-
-    recognitionRef.current.onerror = (event) => {
-      console.error("语音识别错误:", event.error);
-      setIsListening(false);
-      if (event.error === 'not-allowed') {
-        toast.error("请允许麦克风权限");
-      }
-    };
-
-    recognitionRef.current.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current.start();
-  };
-
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
-  };
-
-  const toggleListening = () => {
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -253,35 +186,18 @@ export default function Welcome({ onComplete }) {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="随便写点什么... 比如「明天下午3点开会」或「今天学到了...」"
                   disabled={isProcessing}
-                  className="w-full h-40 px-6 py-5 pr-16 text-lg rounded-2xl border-2 border-slate-200 
+                  className="w-full h-40 px-6 py-5 text-lg rounded-2xl border-2 border-slate-200 
                              focus:border-[#384877] focus:ring-4 focus:ring-[#384877]/10 
                              transition-all outline-none resize-none
                              bg-white/80 backdrop-blur-sm
                              placeholder:text-slate-400
                              disabled:opacity-50 disabled:cursor-not-allowed"
+
+
+
+
+
                   autoFocus />
-
-                  {/* 语音输入按钮 */}
-                  <button
-                    type="button"
-                    onClick={toggleListening}
-                    disabled={isProcessing}
-                    className={`absolute right-4 top-4 p-3 rounded-xl transition-all duration-300 
-                      ${isListening 
-                        ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse' 
-                        : 'bg-slate-100 text-slate-500 hover:bg-[#384877] hover:text-white hover:shadow-lg hover:shadow-[#384877]/30'
-                      }
-                      disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                  </button>
-
-                  {/* 语音识别状态提示 */}
-                  {isListening && (
-                    <div className="absolute right-4 top-16 bg-red-500 text-white text-xs px-2 py-1 rounded-lg">
-                      正在听...
-                    </div>
-                  )}
 
                   
                   {isProcessing &&

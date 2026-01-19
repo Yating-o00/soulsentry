@@ -25,9 +25,9 @@ export default function WelcomeGuard({ children }) {
 
   useEffect(() => {
     setIsClient(true);
-    // 检查是否已访问过（使用 localStorage 而非 sessionStorage）
-    const visited = safeLocalStorage.getItem("app_visited");
-    if (!visited) {
+    // 每次刷新都显示先导页（使用 sessionStorage 检查本次会话是否已访问）
+    const visitedThisSession = sessionStorage.getItem("session_visited");
+    if (!visitedThisSession) {
       setShowWelcome(true);
     }
   }, []);

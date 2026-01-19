@@ -33,8 +33,8 @@ export default function WelcomeGuard({ children }) {
   }, []);
 
   const handleComplete = () => {
-    // 标记已访问
-    safeLocalStorage.setItem("app_visited", "true");
+    // 标记本次会话已访问（刷新后会重置）
+    sessionStorage.setItem("session_visited", "true");
     setShowWelcome(false);
   };
 

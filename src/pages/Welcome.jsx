@@ -17,52 +17,57 @@ export default function Welcome({ onComplete }) {
   const { t } = useTranslation();
 
   const startVoiceInput = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      toast.error("您的浏览器不支持语音输入");
-      return;
-    }
+    try {
+      // 检查是否支持语音识别
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognitionAPI) {
+        toast.error("您的浏览器不支持语音输入");
+        return;
+      }
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.continuous = true;
-    recognitionRef.current.interimResults = true;
-    recognitionRef.current.lang = 'zh-CN';
+      recognitionRef.current = new SpeechRecognitionAPI();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'zh-CN';
 
-    recognitionRef.current.onstart = () => {
-      setIsListening(true);
-    };
+      recognitionRef.current.onstart = function() {
+        setIsListening(true);
+      };
 
-    recognitionRef.current.onresult = (event) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-      
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
+      recognitionRef.current.onresult = function(event) {
+        var finalTranscript = '';
+        
+        for (var i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i] && event.results[i][0]) {
+            var transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript;
+            }
+          }
         }
-      }
-      
-      if (finalTranscript) {
-        setInput(prev => prev + finalTranscript);
-      }
-    };
+        
+        if (finalTranscript) {
+          setInput(function(prev) { return prev + finalTranscript; });
+        }
+      };
 
-    recognitionRef.current.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
-      setIsListening(false);
-      if (event.error === 'not-allowed') {
-        toast.error("请允许麦克风权限");
-      }
-    };
+      recognitionRef.current.onerror = function(event) {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          toast.error("请允许麦克风权限");
+        }
+      };
 
-    recognitionRef.current.onend = () => {
-      setIsListening(false);
-    };
+      recognitionRef.current.onend = function() {
+        setIsListening(false);
+      };
 
-    recognitionRef.current.start();
+      recognitionRef.current.start();
+    } catch (e) {
+      console.error('Voice input error:', e);
+      toast.error("语音输入初始化失败");
+    }
   };
 
   const stopVoiceInput = () => {

@@ -228,15 +228,15 @@ function LayoutContent({ children }) {
     return function() { window.removeEventListener('theme-change', handleThemeChange); };
   }, []);
 
-  React.useEffect(() => {
-    const down = (e) => {
+  React.useEffect(function() {
+    var down = function(e) {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setSearchOpen((open) => !open);
+        setSearchOpen(function(open) { return !open; });
       }
     };
     document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
+    return function() { document.removeEventListener("keydown", down); };
   }, []);
 
   return (

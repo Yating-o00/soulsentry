@@ -16,7 +16,19 @@ const NOTIFICATION_SOUNDS = {
 };
 
 export default function NotificationManager() {
-  const [permission, setPermission] = useState(Notification.permission);
+  // 检查浏览器是否支持 Notification API（iOS Safari 旧版本不支持）
+  const notificationSupported = typeof window !== 'undefined' && 'Notification' in window;
+  
+  const [permission, setPermission] = useState(function() {
+    if (notificationSupported) {
+      try {
+        return Notification.permission;
+      } catch (e) {
+        return 'denied';
+      }
+    }
+    return 'denied';
+  });
   const checkedTasks = useRef(new Set());
   const audioRef = useRef(null);
   const queryClient = useQueryClient();

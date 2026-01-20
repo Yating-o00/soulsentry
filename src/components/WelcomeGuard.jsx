@@ -26,8 +26,13 @@ export default function WelcomeGuard({ children }) {
   useEffect(() => {
     setIsClient(true);
     // 每次刷新都显示先导页（使用 sessionStorage 检查本次会话是否已访问）
-    const visitedThisSession = sessionStorage.getItem("session_visited");
-    if (!visitedThisSession) {
+    try {
+      var visitedThisSession = sessionStorage.getItem("session_visited");
+      if (!visitedThisSession) {
+        setShowWelcome(true);
+      }
+    } catch (e) {
+      // Safari 隐私模式兼容
       setShowWelcome(true);
     }
   }, []);

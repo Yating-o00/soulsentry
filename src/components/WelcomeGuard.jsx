@@ -39,7 +39,11 @@ export default function WelcomeGuard({ children }) {
 
   const handleComplete = () => {
     // 标记本次会话已访问（刷新后会重置）
-    sessionStorage.setItem("session_visited", "true");
+    try {
+      sessionStorage.setItem("session_visited", "true");
+    } catch (e) {
+      // 忽略存储错误
+    }
     setShowWelcome(false);
   };
 

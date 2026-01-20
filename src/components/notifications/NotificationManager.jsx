@@ -169,28 +169,28 @@ export default function NotificationManager() {
     var notification;
     try {
       notification = new Notification(title, {
-      body,
-      icon: "/favicon.ico",
-      tag: task.id,
-      requireInteraction: task.persistent_reminder,
-      silent: soundToPlay === "none",
-    });
-
-    playSound(soundToPlay);
-
-    notification.onclick = function() {
-      window.focus();
-      notification.close();
-      
-      logBehaviorMutation.mutate({
-        event_type: "notification_interacted",
-        task_id: task.id,
-        hour_of_day: new Date().getHours(),
-        day_of_week: new Date().getDay(),
-        category: task.category,
-        response_time_seconds: 0,
+        body: body,
+        icon: "/favicon.ico",
+        tag: task.id,
+        requireInteraction: task.persistent_reminder,
+        silent: soundToPlay === "none",
       });
-    };
+
+      playSound(soundToPlay);
+
+      notification.onclick = function() {
+        window.focus();
+        notification.close();
+        
+        logBehaviorMutation.mutate({
+          event_type: "notification_interacted",
+          task_id: task.id,
+          hour_of_day: new Date().getHours(),
+          day_of_week: new Date().getDay(),
+          category: task.category,
+          response_time_seconds: 0,
+        });
+      };
     } catch (e) {
       console.log("Notification creation failed:", e);
     }

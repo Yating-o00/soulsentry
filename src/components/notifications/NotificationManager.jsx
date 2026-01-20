@@ -15,10 +15,15 @@ const NOTIFICATION_SOUNDS = {
   none: null
 };
 
+// 在组件外检查 Notification 支持，避免 iOS Safari 报错
+var notificationSupported = false;
+try {
+  notificationSupported = typeof window !== 'undefined' && typeof Notification !== 'undefined';
+} catch (e) {
+  notificationSupported = false;
+}
+
 export default function NotificationManager() {
-  // 检查浏览器是否支持 Notification API（iOS Safari 旧版本不支持）
-  const notificationSupported = typeof window !== 'undefined' && 'Notification' in window;
-  
   const [permission, setPermission] = useState(function() {
     if (notificationSupported) {
       try {
@@ -78,7 +83,7 @@ export default function NotificationManager() {
         console.log("Notification request failed:", e);
       }
     }
-  }, [permission, notificationSupported]);
+  }, [permission]);
 
   const playSound = (soundType) => {
     const soundUrl = NOTIFICATION_SOUNDS[soundType];
@@ -92,9 +97,8 @@ export default function NotificationManager() {
     audioRef.current.play().catch(err => console.log("Sound play failed:", err));
   };
 
-  var sendNotification = function(task, isAdvanceReminder) {
-    if (typeof isAdvanceReminder === 'undefined') isAdvanceReminder = false;
-    if (!notificationSupported || permission !== "granted") return;
+  const sendNotification = (task, isAdvanceReminder = false) => {
+    if (permission !== "granted") return;
 
     // Check DND
     if (currentUser?.dnd_settings?.enabled) {
@@ -166,15 +170,21 @@ export default function NotificationManager() {
         if (messageType === 'summary') title = `📊 状态摘要：${task.title}`;
     }
 
-    var notification;
-    try {
-      notification = new Notification(title, {
-      body,
-      icon: "/favicon.ico",
-      tag: task.id,
-      requireInteraction: task.persistent_reminder,
-      silent: soundToPlay === "none",
-    });
+    // 仅在支持 Notification 时创建
+    var notification = null;
+    if (notificationSupported) {
+      try {
+        notification = new Notification(title, {
+          body: body,
+          icon: "/favicon.ico",
+          tag: task.id,
+          requireInteraction: task.persistent_reminder,
+          silent: soundToPlay === "none",
+        });
+      } catch (e) {
+        console.log("Failed to create notification:", e);
+      }
+    }
 
     playSound(soundToPlay);
 

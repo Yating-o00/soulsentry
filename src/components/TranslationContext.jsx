@@ -338,12 +338,12 @@ export function TranslationProvider({ children }) {
     }
   }, [language]);
 
-  const t = (key) => {
-    return translations[language][key] || key;
+  var t = function(key) {
+    return (translations[language] && translations[language][key]) ? translations[language][key] : key;
   };
 
-  const toggleLanguage = () => {
-    setLanguage(prev => prev === 'zh' ? 'en' : 'zh');
+  var toggleLanguage = function() {
+    setLanguage(function(prev) { return prev === 'zh' ? 'en' : 'zh'; });
   };
 
   return (

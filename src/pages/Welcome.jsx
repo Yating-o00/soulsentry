@@ -71,8 +71,13 @@ export default function Welcome({ onComplete }) {
   };
 
   const stopVoiceInput = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        setIsListening(false);
+      }
+    } catch (e) {
+      console.error('Stop voice input error:', e);
       setIsListening(false);
     }
   };

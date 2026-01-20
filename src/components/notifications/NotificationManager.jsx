@@ -15,10 +15,15 @@ const NOTIFICATION_SOUNDS = {
   none: null
 };
 
+// 在组件外检查 Notification 支持，避免 iOS Safari 报错
+var notificationSupported = false;
+try {
+  notificationSupported = typeof window !== 'undefined' && typeof Notification !== 'undefined';
+} catch (e) {
+  notificationSupported = false;
+}
+
 export default function NotificationManager() {
-  // 检查浏览器是否支持 Notification API（iOS Safari 旧版本不支持）
-  const notificationSupported = typeof window !== 'undefined' && 'Notification' in window;
-  
   const [permission, setPermission] = useState(function() {
     if (notificationSupported) {
       try {

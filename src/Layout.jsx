@@ -205,28 +205,27 @@ function LayoutContent({ children }) {
     darkMode: false
   });
 
-  React.useEffect(() => {
-    const fetchTheme = async () => {
-        try {
-            const user = await base44.auth.me();
-            if (user?.theme_preferences) {
+  React.useEffect(function() {
+    var fetchTheme = function() {
+        base44.auth.me().then(function(user) {
+            if (user && user.theme_preferences) {
                 setTheme({
                     primary: user.theme_preferences.primary_color || "#384877",
                     fontSize: user.theme_preferences.font_size || "medium",
                     darkMode: user.theme_preferences.dark_mode || false
                 });
             }
-        } catch (e) {
+        }).catch(function(e) {
             console.error("Failed to load theme", e);
-        }
+        });
     };
     fetchTheme();
     // Listen for theme changes event (dispatched from Account page)
-    const handleThemeChange = (e) => {
-        if (e.detail) setTheme(prev => ({ ...prev, ...e.detail }));
+    var handleThemeChange = function(e) {
+        if (e.detail) setTheme(function(prev) { return Object.assign({}, prev, e.detail); });
     };
     window.addEventListener('theme-change', handleThemeChange);
-    return () => window.removeEventListener('theme-change', handleThemeChange);
+    return function() { window.removeEventListener('theme-change', handleThemeChange); };
   }, []);
 
   React.useEffect(() => {

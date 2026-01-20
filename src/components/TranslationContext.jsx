@@ -314,17 +314,27 @@ const translations = {
 };
 
 export function TranslationProvider({ children }) {
-  const [language, setLanguage] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('app_language') || 'zh';
-    }
-    return 'zh';
-  });
+  const [language, setLanguage] = useState('zh');
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    // 初始化时读取语言设置
+    try {
+      var savedLang = localStorage.getItem('app_language');
+      if (savedLang) {
+        setLanguage(savedLang);
+      }
+    } catch (e) {
+      // Safari 隐私模式可能阻止 localStorage
+      console.warn('localStorage not available');
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
       localStorage.setItem('app_language', language);
       document.documentElement.lang = language;
+    } catch (e) {
+      // 忽略存储错误
     }
   }, [language]);
 

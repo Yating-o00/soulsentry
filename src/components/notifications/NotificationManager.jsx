@@ -70,11 +70,15 @@ export default function NotificationManager() {
     mutationFn: (data) => base44.entities.UserBehavior.create(data),
   });
 
-  useEffect(() => {
-    if (permission === "default") {
-      Notification.requestPermission().then(setPermission);
+  useEffect(function() {
+    if (notificationSupported && permission === "default") {
+      try {
+        Notification.requestPermission().then(setPermission);
+      } catch (e) {
+        console.log("Notification request failed:", e);
+      }
     }
-  }, [permission]);
+  }, [permission, notificationSupported]);
 
   const playSound = (soundType) => {
     const soundUrl = NOTIFICATION_SOUNDS[soundType];

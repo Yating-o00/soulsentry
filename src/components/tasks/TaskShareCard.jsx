@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check } from "lucide-react";
 import { format } from "date-fns";
+import { createPageUrl } from "@/utils";
 import { zhCN } from "date-fns/locale";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
@@ -61,6 +62,12 @@ export default function TaskShareCard({ task, open, onClose }) {
 
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 100;
+
+  const taskUrl = typeof window !== 'undefined' 
+    ? `${window.location.origin}${createPageUrl("Tasks")}?taskId=${task.id}`
+    : "";
+
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(taskUrl)}&bgcolor=ffffff`;
 
   // Detect language
   const isEnglish = React.useMemo(() => {
@@ -560,16 +567,20 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                        </div>
                     </div>
                     
-                    {/* 模拟二维码区域 */}
+                    {/* 二维码区域 */}
                     <div className="flex items-center gap-2">
                        <div className="text-right hidden sm:block">
                          <p className="text-[10px] text-slate-400">{isEnglish ? "Scan to view" : "扫码查看"}</p>
                          <p className="text-[10px] text-slate-400 font-mono">ID: {task.id.slice(0,4)}</p>
                        </div>
-                       <div className="w-10 h-10 bg-slate-900 rounded-md p-1 opacity-90">
-                         <div className="w-full h-full bg-white p-0.5">
-                            <div className="w-full h-full bg-slate-900" style={{ clipPath: 'polygon(0% 0%, 0% 100%, 25% 100%, 25% 25%, 75% 25%, 75% 75%, 25% 75%, 25% 100%, 100% 100%, 100% 0%)' }}></div>
-                         </div>
+                       <div className="w-12 h-12 bg-white rounded-md p-0.5 shadow-sm border border-slate-100">
+                         {/* 使用跨域属性以允许 html2canvas 捕获 */}
+                         <img 
+                            src={qrCodeUrl} 
+                            alt="QR Code" 
+                            crossOrigin="anonymous"
+                            className="w-full h-full object-contain"
+                         />
                        </div>
                     </div>
                   </div>

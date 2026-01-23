@@ -435,7 +435,7 @@ export default function Welcome({ onComplete }) {
 
                 <motion.button
                 type="submit"
-                disabled={!input.trim() || isProcessing}
+                disabled={(!input.trim() && !imageFile) || isProcessing}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className="mt-6 w-full py-4 px-8 bg-gradient-to-r from-[#384877] to-[#3b5aa2] 

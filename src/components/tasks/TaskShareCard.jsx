@@ -60,6 +60,18 @@ export default function TaskShareCard({ task, open, onClose }) {
     initialData: [],
   });
 
+  const { data: dependencyTasks = [] } = useQuery({
+    queryKey: ['dependencies', task?.id],
+    queryFn: async () => {
+      if (!task?.dependencies?.length) return [];
+      const results = await Promise.all(task.dependencies.map(id => 
+        base44.entities.Task.filter({ id }).then(res => res[0]).catch(() => null)
+      ));
+      return results.filter(Boolean);
+    },
+    enabled: !!task?.dependencies?.length,
+  });
+
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 100;
 

@@ -561,8 +561,13 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                   {/* 底部 Footer */}
                   <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                     <div className="flex items-center gap-2.5">
-                       <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white">
-                         <Sparkles className="w-4 h-4" />
+                       <div className="w-8 h-8 rounded-lg overflow-hidden bg-transparent flex items-center justify-center">
+                         <img 
+                           src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/6909eb4cffc0d0cc8e4c8442/e19e5553e_image.png"
+                           alt="Logo"
+                           crossOrigin="anonymous"
+                           className="w-full h-full object-contain"
+                         />
                        </div>
                        <div>
                          <p className="text-xs font-bold text-slate-900">{isEnglish ? "SoulSentry" : "心灵存放站"}</p>

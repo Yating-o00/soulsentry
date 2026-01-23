@@ -234,10 +234,12 @@ export default function Welcome({ onComplete }) {
           description: result.description || textToAnalyze,
           priority: result.priority || "medium",
           category: result.category || "personal",
-          status: "pending",
-          // 没有明确时间时默认使用当前时间
-          reminder_time: result.reminder_time || new Date().toISOString()
+          status: "pending"
         };
+
+        if (result.reminder_time) {
+          taskData.reminder_time = result.reminder_time;
+        }
 
         await base44.entities.Task.create(taskData);
         setShowResult({ type: "task", data: taskData });

@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
+import html2canvas from "html2canvas";
 
 const CATEGORY_COLORS = {
   work: { accent: "#1D4ED8", bg: "#EFF6FF" },
@@ -118,16 +119,7 @@ export default function TaskShareCard({ task, open, onClose }) {
     return quotes[Math.floor(Math.random() * quotes.length)];
   });
 
-  // 使用动态导入 html2canvas
-  const loadHtml2Canvas = async () => {
-    try {
-      const html2canvas = (await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/+esm')).default;
-      return html2canvas;
-    } catch (error) {
-      console.error("Failed to load html2canvas:", error);
-      throw new Error("图片生成库加载失败");
-    }
-  };
+  // html2canvas is now imported directly for better performance
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
@@ -138,8 +130,6 @@ export default function TaskShareCard({ task, open, onClose }) {
     let originalOverflow = '';
 
     try {
-      const html2canvas = await loadHtml2Canvas();
-      
       // 临时移除预览区域的高度限制，确保捕获完整内容
       previewContainer = cardRef.current.parentElement;
       if (previewContainer) {
@@ -200,8 +190,6 @@ export default function TaskShareCard({ task, open, onClose }) {
     let originalOverflow = '';
 
     try {
-      const html2canvas = await loadHtml2Canvas();
-      
       // 临时移除预览区域的高度限制
       previewContainer = cardRef.current.parentElement;
       if (previewContainer) {

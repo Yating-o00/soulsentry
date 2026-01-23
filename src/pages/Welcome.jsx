@@ -248,7 +248,7 @@ export default function Welcome({ onComplete }) {
 
         setTimeout(() => {
           if (onComplete) onComplete();
-          navigate(createPageUrl("Dashboard"));
+          navigate(createPageUrl("Tasks"));
         }, 1500);
       } else {
         // 创建笔记

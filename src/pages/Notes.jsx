@@ -117,10 +117,20 @@ export default function Notes() {
   });
 
   const deleteNoteMutation = useMutation({
-    mutationFn: (id) => base44.entities.Note.delete(id), // Or soft delete if prefer
+    mutationFn: (id) => base44.entities.Note.update(id, { deleted_at: new Date().toISOString() }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['notes'] });
+      const previousNotes = queryClient.getQueryData(['notes']);
+      queryClient.setQueryData(['notes'], (old) => old ? old.filter(n => n.id !== id) : []);
+      return { previousNotes };
+    },
+    onError: (err, id, context) => {
+      queryClient.setQueryData(['notes'], context.previousNotes);
+      toast.error("删除失败");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
-      toast.success("心签已删除");
+      toast.success("已移至回收站");
     }
   });
 

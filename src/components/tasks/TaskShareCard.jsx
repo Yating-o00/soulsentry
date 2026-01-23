@@ -391,11 +391,12 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         className="w-12 h-12 rounded-xl flex items-center justify-center bg-white shadow-lg"
                         style={{ color: categoryColor.accent }}
                       >
-                         {task.status === "completed" ? (
-                           <CheckCircle2 className="w-8 h-8" strokeWidth={3} />
-                         ) : (
-                           <Target className="w-8 h-8" strokeWidth={2.5} />
-                         )}
+                         <img 
+                            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/6909eb4cffc0d0cc8e4c8442/e19e5553e_image.png"
+                            alt="Logo"
+                            crossOrigin="anonymous"
+                            className="w-10 h-10 object-contain"
+                         />
                       </div>
                     </div>
                   </div>

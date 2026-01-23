@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check, Paperclip, FileText, Link as LinkIcon, StickyNote } from "lucide-react";
+import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check, Paperclip, FileText, Link as LinkIcon, StickyNote, Palette, RefreshCw, Wand2, Image as ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { zhCN } from "date-fns/locale";

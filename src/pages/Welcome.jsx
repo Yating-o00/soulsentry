@@ -230,8 +230,8 @@ export default function Welcome({ onComplete }) {
       if (result.type === "task") {
         // 创建任务
         const taskData = {
-          title: result.title || input.substring(0, 50),
-          description: result.description || input,
+          title: result.title || textToAnalyze.substring(0, 50),
+          description: result.description || textToAnalyze,
           priority: result.priority || "medium",
           category: result.category || "personal",
           status: "pending"

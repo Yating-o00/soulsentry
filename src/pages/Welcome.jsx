@@ -344,9 +344,9 @@ export default function Welcome({ onComplete }) {
                   <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="随便写点什么... 比如「明天下午3点开会」或「今天学到了...」"
+                  placeholder="随便写点什么... 比如「明天下午3点开会」或「今天学到了...」，也可以上传图片"
                   disabled={isProcessing}
-                  className="w-full h-40 px-6 py-5 pr-14 text-lg rounded-2xl border-2 border-slate-200 
+                  className="w-full h-40 px-6 py-5 pr-28 text-lg rounded-2xl border-2 border-slate-200 
                              focus:border-[#384877] focus:ring-4 focus:ring-[#384877]/10 
                              transition-all outline-none resize-none
                              bg-white/80 backdrop-blur-sm
@@ -354,23 +354,67 @@ export default function Welcome({ onComplete }) {
                              disabled:opacity-50 disabled:cursor-not-allowed"
                   autoFocus />
 
-                  {/* 语音输入按钮 */}
-                  <button
-                    type="button"
-                    onClick={isListening ? stopVoiceInput : startVoiceInput}
-                    disabled={isProcessing}
-                    className={`absolute right-4 top-4 w-10 h-10 rounded-full flex items-center justify-center
-                               transition-all duration-300 ${
-                                 isListening 
-                                   ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' 
-                                   : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                               } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                  </button>
+                  {/* 右上角按钮组 */}
+                  <div className="absolute right-4 top-4 flex gap-2">
+                    {/* 图片上传按钮 */}
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current && imageInputRef.current.click()}
+                      disabled={isProcessing}
+                      className="w-10 h-10 rounded-full flex items-center justify-center
+                                 transition-all duration-300 bg-slate-100 hover:bg-slate-200 text-slate-600
+                                 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="上传图片"
+                    >
+                      <ImagePlus className="w-5 h-5" />
+                    </button>
+
+                    {/* 语音输入按钮 */}
+                    <button
+                      type="button"
+                      onClick={isListening ? stopVoiceInput : startVoiceInput}
+                      disabled={isProcessing}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center
+                                 transition-all duration-300 ${
+                                   isListening 
+                                     ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' 
+                                     : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </button>
+                  </div>
+
+                  {/* 图片预览 */}
+                  {imagePreview && (
+                    <div className="absolute left-4 bottom-4 flex items-center gap-2">
+                      <div className="relative">
+                        <img 
+                          src={imagePreview} 
+                          alt="预览" 
+                          className="h-16 w-16 object-cover rounded-lg border-2 border-slate-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <span className="text-xs text-slate-500">已添加图片</span>
+                    </div>
+                  )}
 
                   {/* 录音中提示 */}
-                  {isListening && (
+                  {isListening && !imagePreview && (
                     <div className="absolute left-4 bottom-4 flex items-center gap-2 text-red-500 text-sm">
                       <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                       正在录音...

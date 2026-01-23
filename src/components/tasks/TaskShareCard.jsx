@@ -485,68 +485,60 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     )}
                     </div>
 
-                    {/* 附加信息区域：附件、笔记、依赖 */}
-                    {(task.attachments?.length > 0 || task.notes?.length > 0 || dependencyTasks.length > 0) && (
-                      <div className="grid grid-cols-1 gap-3 mb-6">
-                        
-                        {/* 附件 */}
-                        {task.attachments?.length > 0 && (
-                          <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100">
-                             <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                               <Paperclip className="w-3 h-3" />
-                               {isEnglish ? "Attachments" : "附件"}
-                             </div>
-                             <div className="space-y-1">
-                               {task.attachments.map((file, idx) => (
-                                 <div key={idx} className="flex items-center gap-2 text-sm text-slate-700 bg-white px-2 py-1.5 rounded border border-slate-200/50">
-                                   <FileText className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                                   <span className="truncate">{file.file_name}</span>
-                                 </div>
-                               ))}
-                             </div>
-                          </div>
-                        )}
-
-                        {/* 笔记 */}
-                        {task.notes?.length > 0 && (
-                          <div className="bg-amber-50/50 rounded-xl p-3 border border-amber-100/50">
-                             <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-amber-600/70 uppercase tracking-wider">
-                               <StickyNote className="w-3 h-3" />
-                               {isEnglish ? "Notes" : "笔记"}
-                             </div>
-                             <div className="space-y-2">
-                               {task.notes.map((note, idx) => (
-                                 <div key={idx} className="text-sm text-slate-700 bg-white/80 px-2.5 py-2 rounded-lg border border-amber-100 shadow-sm relative">
-                                   <div className="text-xs text-slate-400 mb-0.5 transform scale-90 origin-left">
-                                     {format(new Date(note.created_at), "MM-dd HH:mm")}
-                                   </div>
-                                   <div className="line-clamp-3 whitespace-pre-wrap">{note.content}</div>
-                                 </div>
-                               ))}
-                             </div>
-                          </div>
-                        )}
-
-                        {/* 依赖 */}
-                        {dependencyTasks.length > 0 && (
-                          <div className="bg-purple-50/50 rounded-xl p-3 border border-purple-100/50">
-                             <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-purple-600/70 uppercase tracking-wider">
-                               <LinkIcon className="w-3 h-3" />
-                               {isEnglish ? "Dependencies" : "前置依赖"}
-                             </div>
-                             <div className="space-y-1">
-                               {dependencyTasks.map((dep, idx) => (
-                                 <div key={idx} className="flex items-center gap-2 text-sm text-slate-700 bg-white/80 px-2 py-1.5 rounded border border-purple-100/50">
-                                   <div className={`w-1.5 h-1.5 rounded-full ${dep.status === 'completed' ? 'bg-green-400' : 'bg-slate-300'}`} />
-                                   <span className={dep.status === 'completed' ? 'line-through opacity-60' : ''}>
-                                     {dep.title}
-                                   </span>
-                                 </div>
-                               ))}
-                             </div>
-                          </div>
-                        )}
+                    {/* 附件信息 */}
+                    {task.attachments && task.attachments.length > 0 && (
+                      <div className="mb-4">
+                        <div className="flex items-center gap-2 text-slate-500 mb-2">
+                          <Paperclip className="w-3.5 h-3.5" />
+                          <span className="text-xs font-medium uppercase tracking-wider">{isEnglish ? "Attachments" : "相关附件"}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {task.attachments.map((att, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-600">
+                              <FileText className="w-3 h-3 text-slate-400" />
+                              <span className="truncate max-w-[150px]">{att.file_name}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    )}
+
+                    {/* 依赖任务 */}
+                    {dependencyTasks.length > 0 && (
+                      <div className="mb-4">
+                         <div className="flex items-center gap-2 text-slate-500 mb-2">
+                          <LinkIcon className="w-3.5 h-3.5" />
+                          <span className="text-xs font-medium uppercase tracking-wider">{isEnglish ? "Dependencies" : "前置依赖"}</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                           {dependencyTasks.map((dep, idx) => (
+                             <div key={dep.id} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                               <span className="w-4 h-4 flex items-center justify-center bg-slate-200 rounded-full text-[10px] font-mono text-slate-500">{idx+1}</span>
+                               <span className="line-clamp-1">{dep.title}</span>
+                             </div>
+                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 笔记 */}
+                    {task.notes && task.notes.length > 0 && (
+                       <div className="mb-6">
+                         <div className="flex items-center gap-2 text-slate-500 mb-2">
+                          <StickyNote className="w-3.5 h-3.5" />
+                          <span className="text-xs font-medium uppercase tracking-wider">{isEnglish ? "Notes" : "相关笔记"}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {task.notes.slice(0, 3).map((note, idx) => (
+                            <div key={idx} className="bg-yellow-50/50 p-3 rounded-xl border border-yellow-100/50 text-xs text-slate-600 leading-relaxed relative">
+                              <div className="absolute top-0 left-0 w-1 h-full bg-yellow-200/50 rounded-l-xl"></div>
+                              <div className="pl-2">
+                                {note.content.replace(/<[^>]+>/g, '').slice(0, 100)}{note.content.length > 100 ? '...' : ''}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                       </div>
                     )}
                   </div>
 

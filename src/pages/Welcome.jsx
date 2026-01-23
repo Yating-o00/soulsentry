@@ -196,7 +196,7 @@ export default function Welcome({ onComplete }) {
 - 日记、心情
 - 没有明确的时间或待办性质
 
-用户输入："""${input}"""
+用户输入："""${textToAnalyze}"""
 
 请返回JSON格式：
 {

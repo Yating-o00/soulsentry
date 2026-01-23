@@ -255,7 +255,7 @@ export default function Welcome({ onComplete }) {
       } else {
         // 创建笔记
         const noteData = {
-          content: result.content || input,
+          content: result.content || textToAnalyze,
           tags: result.tags || [],
           color: "white"
         };

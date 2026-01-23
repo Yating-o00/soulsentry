@@ -122,11 +122,65 @@ export default function Welcome({ onComplete }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!input.trim() || isProcessing) return;
+    if ((!input.trim() && !imageFile) || isProcessing) return;
 
     setIsProcessing(true);
 
     try {
+      let textToAnalyze = input;
+      let imageUrl = null;
+
+      // 如果有图片，先上传并进行 OCR 识别
+      if (imageFile) {
+        setIsUploadingImage(true);
+        try {
+          // 上传图片
+          const uploadResult = await base44.integrations.Core.UploadFile({ file: imageFile });
+          imageUrl = uploadResult.file_url;
+
+          // 使用 AI 识别图片内容
+          const ocrResponse = await base44.integrations.Core.InvokeLLM({
+            prompt: `请仔细分析这张图片，提取其中所有的文字内容。如果图片中包含：
+- 日程、会议、约会信息
+- 待办事项、任务清单
+- 笔记、备忘录
+- 截图中的重要文字
+
+请完整提取文字内容，保持原有格式。如果图片不包含文字，请描述图片内容。`,
+            file_urls: [imageUrl],
+            response_json_schema: {
+              type: "object",
+              properties: {
+                extracted_text: { type: "string", description: "提取的文字内容" },
+                has_text: { type: "boolean", description: "图片是否包含文字" },
+                image_description: { type: "string", description: "图片内容描述" }
+              },
+              required: ["extracted_text", "has_text"]
+            }
+          });
+
+          if (ocrResponse.has_text && ocrResponse.extracted_text) {
+            textToAnalyze = input.trim() 
+              ? `${input}\n\n[图片内容]:\n${ocrResponse.extracted_text}`
+              : ocrResponse.extracted_text;
+          } else if (ocrResponse.image_description) {
+            textToAnalyze = input.trim()
+              ? `${input}\n\n[图片描述]: ${ocrResponse.image_description}`
+              : `[图片描述]: ${ocrResponse.image_description}`;
+          }
+        } catch (uploadError) {
+          console.error("图片处理失败:", uploadError);
+          toast.error("图片处理失败，将仅使用文字内容");
+        }
+        setIsUploadingImage(false);
+      }
+
+      if (!textToAnalyze.trim()) {
+        toast.error("无法识别内容，请输入文字或使用更清晰的图片");
+        setIsProcessing(false);
+        return;
+      }
+
       // 使用 AI 识别内容类型和提取信息
       const aiResponse = await base44.integrations.Core.InvokeLLM({
         prompt: `分析以下用户输入，判断这是一个"任务/约定"还是"笔记/心签"。

@@ -48,11 +48,11 @@ export default function Notes() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault();
         setIsCreating(true);
-        // Auto-focus on editor after a short delay
+        // Auto-focus on editor immediately
         setTimeout(() => {
           const quillEditor = document.querySelector('.ql-editor');
           if (quillEditor) quillEditor.focus();
-        }, 100);
+        }, 10);
       }
     };
     window.addEventListener('keydown', handleKeyPress);
@@ -319,7 +319,7 @@ export default function Notes() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.15 }}
+            transition={{ delay: 0.05 }}
             className="flex items-center justify-between gap-2 md:gap-3 flex-wrap"
           >
             <NoteFilters 
@@ -358,7 +358,7 @@ export default function Notes() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            transition={{ delay: 0 }}
             className="sticky top-0 z-10 bg-gradient-to-b from-white via-white to-transparent pb-4"
           >
             {!isCreating ? (
@@ -454,7 +454,7 @@ export default function Notes() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0 }}
         >
           <KnowledgeBaseManager />
         </motion.div>

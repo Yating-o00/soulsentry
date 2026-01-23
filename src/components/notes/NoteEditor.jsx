@@ -85,7 +85,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
           console.error("错误详情:", e.message);
         }
       }
-    }, 2000); // 2s debounce for notes
+    }, 800); // 0.8s debounce for notes
 
     return () => clearTimeout(timer);
   }, [content, tags]);

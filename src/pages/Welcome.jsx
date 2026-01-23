@@ -12,9 +12,47 @@ export default function Welcome({ onComplete }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResult, setShowResult] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const recognitionRef = useRef(null);
+  const imageInputRef = useRef(null);
   const navigate = useNavigate();
   const { t } = useTranslation();
+
+  const handleImageSelect = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    // 验证文件类型
+    if (!file.type.startsWith('image/')) {
+      toast.error("请选择图片文件");
+      return;
+    }
+
+    // 验证文件大小 (最大 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("图片大小不能超过 10MB");
+      return;
+    }
+
+    setImageFile(file);
+    
+    // 创建预览
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      setImagePreview(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
+  };
 
   const startVoiceInput = () => {
     try {

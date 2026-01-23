@@ -47,6 +47,11 @@ import React, { useState, useEffect, useRef } from "react";
      const synthRef = useRef(null);
      const queryClient = useQueryClient();
      const processedToolCallIds = useRef(new Set());
+     const voiceEnabledRef = useRef(voiceEnabled);
+
+     useEffect(() => {
+       voiceEnabledRef.current = voiceEnabled;
+     }, [voiceEnabled]);
 
      const { data: user } = useQuery({
        queryKey: ['currentUser'],
@@ -174,7 +179,7 @@ import React, { useState, useEffect, useRef } from "react";
              setIsLoading(false);
              
              // 自动语音播报（如果是新消息）
-             if (voiceEnabled && !isSpeaking && lastMsg.content) {
+             if (voiceEnabledRef.current && !isSpeaking && lastMsg.content) {
                  // 简单的去重播报逻辑，实际项目中可能需要更复杂的ID比对
                  speakText(lastMsg.content);
              }
@@ -182,7 +187,7 @@ import React, { useState, useEffect, useRef } from "react";
        });
    
        return () => unsubscribe();
-     }, [conversationId, voiceEnabled]);
+     }, [conversationId]); // Removed voiceEnabled dependency to prevent websocket reconnection loops
    
      const initConversation = async () => {
        try {

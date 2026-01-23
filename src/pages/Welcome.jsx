@@ -234,12 +234,9 @@ export default function Welcome({ onComplete }) {
           description: result.description || textToAnalyze,
           priority: result.priority || "medium",
           category: result.category || "personal",
-          status: "pending"
+          status: "pending",
+          reminder_time: result.reminder_time || new Date().toISOString()
         };
-
-        if (result.reminder_time) {
-          taskData.reminder_time = result.reminder_time;
-        }
 
         await base44.entities.Task.create(taskData);
         setShowResult({ type: "task", data: taskData });

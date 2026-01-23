@@ -276,6 +276,9 @@ ${subtasks.length > 0 ? `\n📌 子约定清单 (${completedSubtasks}/${subtasks
   return `${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`;
 }).join('\n')}` : ''}
 
+🔗 查看详情：
+${taskUrl}
+
 ---
 来自「约定管家」智能提醒系统
 ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}

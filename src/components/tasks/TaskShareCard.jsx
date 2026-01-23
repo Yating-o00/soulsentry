@@ -346,7 +346,52 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* 控制选项 */}
+          {/* 样式控制选项 */}
+          <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+               <Palette className="w-4 h-4" />
+               <span>{isEnglish ? "Header Style" : "卡片顶图"}</span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+               {/* Default Gradient */}
+               <button 
+                 onClick={() => setHeaderImage(null)}
+                 className={`w-14 h-14 rounded-xl border-2 flex-shrink-0 transition-all shadow-sm ${!headerImage ? 'border-blue-600 ring-2 ring-blue-100 ring-offset-1' : 'border-transparent hover:border-slate-300'}`}
+                 style={{ background: `linear-gradient(135deg, ${categoryColor.accent}, ${categoryColor.accent}dd)` }}
+                 title={isEnglish ? "Default Color" : "默认颜色"}
+               />
+               
+               {/* Presets */}
+               {PRESET_HEADERS.map((img, idx) => (
+                 <button 
+                   key={idx}
+                   onClick={() => setHeaderImage(img)}
+                   className={`w-14 h-14 rounded-xl border-2 flex-shrink-0 overflow-hidden relative transition-all shadow-sm ${headerImage === img ? 'border-blue-600 ring-2 ring-blue-100 ring-offset-1' : 'border-transparent hover:border-slate-300'}`}
+                 >
+                   <img src={img} className="w-full h-full object-cover" alt="preset" crossOrigin="anonymous" />
+                 </button>
+               ))}
+
+               {/* AI Generate */}
+               <button 
+                 onClick={handleGenerateAIImage}
+                 disabled={isGeneratingImage}
+                 className="w-14 h-14 rounded-xl border-2 border-slate-200 border-dashed flex flex-col items-center justify-center gap-1 flex-shrink-0 bg-white hover:bg-slate-50 transition-colors group"
+                 title={isEnglish ? "AI Generate" : "AI生成"}
+               >
+                 {isGeneratingImage ? (
+                   <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+                 ) : (
+                   <>
+                     <Wand2 className="w-5 h-5 text-purple-500 group-hover:scale-110 transition-transform" />
+                     <span className="text-[10px] text-slate-500 font-medium">AI</span>
+                   </>
+                 )}
+               </button>
+            </div>
+          </div>
+
+          {/* 列表控制选项 */}
           {subtasks.length > 6 && (
             <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
               <div className="flex items-center gap-3">

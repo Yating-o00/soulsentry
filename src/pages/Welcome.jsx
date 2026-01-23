@@ -181,9 +181,14 @@ export default function Welcome({ onComplete }) {
         return;
       }
 
+      // 获取当前时间作为默认时间
+      const currentTime = new Date().toISOString();
+
       // 使用 AI 识别内容类型和提取信息
       const aiResponse = await base44.integrations.Core.InvokeLLM({
         prompt: `分析以下用户输入，判断这是一个"任务/约定"还是"笔记/心签"。
+
+当前时间是：${currentTime}
 
 任务/约定的特征：
 - 包含时间、日期、提醒
@@ -204,7 +209,7 @@ export default function Welcome({ onComplete }) {
   "title": "提取的标题（任务用）",
   "description": "详细描述",
   "content": "完整内容（笔记用）",
-  "reminder_time": "提取的时间（ISO格式，如果有）",
+  "reminder_time": "提取的时间（ISO格式）- 重要：如果用户没有明确指定时间，请使用当前时间 ${currentTime}",
   "priority": "low/medium/high/urgent（任务用）",
   "category": "work/personal/health/study等（任务用）",
   "tags": ["标签1", "标签2"]（笔记用）

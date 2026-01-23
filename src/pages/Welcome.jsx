@@ -425,7 +425,9 @@ export default function Welcome({ onComplete }) {
                 <div className="absolute inset-0 bg-white/50 backdrop-blur-sm rounded-2xl flex items-center justify-center">
                       <div className="text-center">
                         <Loader2 className="w-8 h-8 text-[#384877] animate-spin mx-auto mb-3" />
-                        <p className="text-sm text-slate-600 font-medium">AI 正在分析中...</p>
+                        <p className="text-sm text-slate-600 font-medium">
+                          {isUploadingImage ? "正在识别图片内容..." : "AI 正在分析中..."}
+                        </p>
                       </div>
                     </div>
                 }

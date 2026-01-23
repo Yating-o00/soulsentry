@@ -242,9 +242,8 @@ export default function Welcome({ onComplete }) {
           status: "pending"
         };
 
-        if (result.reminder_time) {
-          taskData.reminder_time = result.reminder_time;
-        }
+        // 如果没有指定时间，使用当前时间
+        taskData.reminder_time = result.reminder_time || currentTime;
 
         await base44.entities.Task.create(taskData);
         setShowResult({ type: "task", data: taskData });

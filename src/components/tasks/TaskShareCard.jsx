@@ -380,14 +380,34 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                   boxShadow: `0 20px 60px -10px ${categoryColor.accent}30`
                 }}
               >
-                {/* 顶部渐变背景 */}
-                <div 
-                  className="h-32 w-full absolute top-0 left-0"
-                  style={{
-                    background: `linear-gradient(135deg, ${categoryColor.accent}, ${categoryColor.accent}dd)`,
-                    clipPath: 'polygon(0 0, 100% 0, 100% 70%, 0 100%)'
-                  }}
-                />
+                {/* 顶部背景 */}
+                {headerImage ? (
+                  <>
+                    <img 
+                      src={headerImage}
+                      className="h-32 w-full absolute top-0 left-0 object-cover"
+                      style={{
+                        clipPath: 'polygon(0 0, 100% 0, 100% 70%, 0 100%)'
+                      }}
+                      crossOrigin="anonymous"
+                      alt="Header"
+                    />
+                    <div 
+                      className="h-32 w-full absolute top-0 left-0 bg-black/20"
+                      style={{
+                        clipPath: 'polygon(0 0, 100% 0, 100% 70%, 0 100%)'
+                      }}
+                    />
+                  </>
+                ) : (
+                  <div 
+                    className="h-32 w-full absolute top-0 left-0"
+                    style={{
+                      background: `linear-gradient(135deg, ${categoryColor.accent}, ${categoryColor.accent}dd)`,
+                      clipPath: 'polygon(0 0, 100% 0, 100% 70%, 0 100%)'
+                    }}
+                  />
+                )}
 
                 {/* 装饰圆环 */}
                 <div className="absolute top-0 right-0 w-32 h-32 opacity-10 transform translate-x-10 -translate-y-10">

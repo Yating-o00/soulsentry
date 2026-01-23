@@ -52,6 +52,32 @@ export default function TaskShareCard({ task, open, onClose }) {
   const [generating, setGenerating] = useState(false);
   const [showAllSubtasks, setShowAllSubtasks] = useState(false);
   const [expandedView, setExpandedView] = useState(false);
+  const [headerImage, setHeaderImage] = useState(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+
+  const PRESET_HEADERS = [
+    "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&q=80", // Landscape
+    "https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?w=800&q=80", // Nature
+    "https://images.unsplash.com/photo-1534224039826-c7a0eda0e6b3?w=800&q=80", // Gradient art
+    "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=800&q=80", // Tech
+    "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80", // Texture
+  ];
+
+  const handleGenerateAIImage = async () => {
+    setIsGeneratingImage(true);
+    try {
+      const { url } = await base44.integrations.Core.GenerateImage({
+        prompt: `A beautiful abstract wallpaper background for a task named "${task.title}". minimalist, artistic, high quality, 4k, suitable for card header.`,
+      });
+      setHeaderImage(url);
+      toast.success(isEnglish ? "Header image generated" : "顶图已生成");
+    } catch (error) {
+      console.error(error);
+      toast.error(isEnglish ? "Generation failed" : "生成失败");
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
 
   // 查询子约定
   const { data: subtasks = [] } = useQuery({

@@ -225,9 +225,6 @@ export default function TaskShareCard({ task, open, onClose }) {
         previewContainer.style.overflow = 'visible';
       }
       
-      // 等待DOM更新
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
       const cardHeight = cardRef.current.scrollHeight;
       const scaleFactor = cardHeight > 1500 ? 1.2 : cardHeight > 1000 ? 1.5 : 2;
       
@@ -245,38 +242,30 @@ export default function TaskShareCard({ task, open, onClose }) {
       if (previewContainer) {
         previewContainer.style.maxHeight = originalMaxHeight;
         previewContainer.style.overflow = originalOverflow;
+        previewContainer = null; // 标记已恢复
       }
 
-      canvas.toBlob(async (blob) => {
-        try {
-          if (navigator.clipboard && ClipboardItem) {
-            await navigator.clipboard.write([
-              new ClipboardItem({ 'image/png': blob })
-            ]);
-            toast.success("约定卡片已复制到剪贴板");
-          } else {
-            throw new Error("浏览器不支持复制图片");
-          }
-        } catch (err) {
-          console.error("Copy error:", err);
-          toast.error("复制失败，请使用下载功能");
-        } finally {
-          setGenerating(false);
-        }
-      }, 'image/png', 0.95);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+      
+      if (!blob) throw new Error("图片生成失败");
+
+      if (navigator.clipboard && navigator.clipboard.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        toast.success("约定卡片已复制到剪贴板");
+      } else {
+        throw new Error("浏览器不支持复制图片");
+      }
     } catch (error) {
       console.error("Copy error:", error);
-      toast.error(error.message || "复制失败，请重试");
+      toast.error("复制失败，请重试");
     } finally {
-      // Ensure styles are restored even if an error occurs
       if (previewContainer) {
         previewContainer.style.maxHeight = originalMaxHeight;
         previewContainer.style.overflow = originalOverflow;
       }
-      // setGenerating(false) is handled in canvas.toBlob callback
-      if (!navigator.clipboard || !ClipboardItem) {
-        setGenerating(false); // If clipboard isn't supported, set generating to false here
-      }
+      setGenerating(false);
     }
   };
 

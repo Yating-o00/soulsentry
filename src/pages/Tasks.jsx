@@ -131,68 +131,9 @@ export default function Tasks() {
     return matchesStatus && matchesSearch && matchesAdvanced;
   }), [tasks, statusFilter, searchQuery, advancedFilters]);
 
-  // 智能排序逻辑
-  const sortedTasks = React.useMemo(() => {
-    const now = new Date();
-    const priorityWeight = { urgent: 4, high: 3, medium: 2, low: 1 };
-    
-    return [...filteredTasks].sort((a, b) => {
-      // 1. 已完成的任务排最后
-      if (a.status === 'completed' && b.status !== 'completed') return 1;
-      if (b.status === 'completed' && a.status !== 'completed') return -1;
-      
-      // 2. 如果都已完成，按完成时间倒序
-      if (a.status === 'completed' && b.status === 'completed') {
-        const aCompletedAt = a.completed_at ? new Date(a.completed_at) : new Date(a.updated_date);
-        const bCompletedAt = b.completed_at ? new Date(b.completed_at) : new Date(b.updated_date);
-        return bCompletedAt - aCompletedAt;
-      }
-      
-      // 3. 未完成任务的排序逻辑
-      const aTime = a.reminder_time ? new Date(a.reminder_time) : null;
-      const bTime = b.reminder_time ? new Date(b.reminder_time) : null;
-      const aPriority = priorityWeight[a.priority] || 2;
-      const bPriority = priorityWeight[b.priority] || 2;
-      
-      // 过期任务优先（按过期程度）
-      const aOverdue = aTime && aTime < now;
-      const bOverdue = bTime && bTime < now;
-      
-      if (aOverdue && !bOverdue) return -1;
-      if (bOverdue && !aOverdue) return 1;
-      
-      // 都过期时，优先级高的先显示，同优先级按过期时间
-      if (aOverdue && bOverdue) {
-        if (aPriority !== bPriority) return bPriority - aPriority;
-        return aTime - bTime; // 过期越久越靠前
-      }
-      
-      // 未过期任务：综合考虑时间紧迫度和优先级
-      // 计算分数：时间越近分数越高，优先级越高分数越高
-      const getUrgencyScore = (task, time, priority) => {
-        if (!time) return priority * 10; // 无时间的按优先级排
-        const hoursUntil = (time - now) / (1000 * 60 * 60);
-        // 24小时内的任务紧迫度很高
-        if (hoursUntil <= 24) return priority * 20 + (24 - hoursUntil);
-        // 一周内的任务
-        if (hoursUntil <= 168) return priority * 10 + (168 - hoursUntil) / 10;
-        // 更远的任务
-        return priority * 5;
-      };
-      
-      const aScore = getUrgencyScore(a, aTime, aPriority);
-      const bScore = getUrgencyScore(b, bTime, bPriority);
-      
-      if (Math.abs(aScore - bScore) > 0.1) return bScore - aScore;
-      
-      // 分数相近时按创建时间（新的在前）
-      return new Date(b.created_date) - new Date(a.created_date);
-    });
-  }, [filteredTasks]);
-
   // Group tasks logic
   // Only show top-level tasks in the list
-  const rootTasks = React.useMemo(() => sortedTasks.filter((t) => !t.parent_task_id), [sortedTasks]);
+  const rootTasks = React.useMemo(() => filteredTasks.filter((t) => !t.parent_task_id), [filteredTasks]);
   const getSubtasks = (parentId) => filteredTasks.filter((t) => t.parent_task_id === parentId);
   const getAllSubtasks = (parentId) => tasks.filter((t) => t.parent_task_id === parentId);
 

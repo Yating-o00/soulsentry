@@ -234,10 +234,12 @@ export default function Welcome({ onComplete }) {
           description: result.description || textToAnalyze,
           priority: result.priority || "medium",
           category: result.category || "personal",
-          status: "pending",
-          // 如果有明确时间则使用，否则默认当前时间
-          reminder_time: result.reminder_time || new Date().toISOString()
+          status: "pending"
         };
+
+        if (result.reminder_time) {
+          taskData.reminder_time = result.reminder_time;
+        }
 
         await base44.entities.Task.create(taskData);
         setShowResult({ type: "task", data: taskData });
@@ -248,7 +250,7 @@ export default function Welcome({ onComplete }) {
 
         setTimeout(() => {
           if (onComplete) onComplete();
-          navigate(createPageUrl("Dashboard"));
+          navigate(createPageUrl("Tasks"));
         }, 1500);
       } else {
         // 创建笔记
@@ -267,7 +269,7 @@ export default function Welcome({ onComplete }) {
 
         setTimeout(() => {
           if (onComplete) onComplete();
-          navigate(createPageUrl("Dashboard"));
+          navigate(createPageUrl("Notes"));
         }, 1500);
       }
 

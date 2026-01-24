@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare, Sparkles, Loader2, Archive, Star } from "lucide-react";
+import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare, Sparkles, Loader2, Archive, Star, CheckSquare, Share2, X } from "lucide-react";
 import SwipeableItem, { SwipeActions } from "../components/mobile/SwipeableItem";
 import GanttView from "../components/tasks/GanttView";
 import KanbanView from "../components/tasks/KanbanView";
@@ -20,6 +20,7 @@ import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
+import MultiTaskShareCard from "../components/tasks/MultiTaskShareCard";
 
 
 export default function Tasks() {
@@ -34,6 +35,9 @@ export default function Tasks() {
   const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt' | 'kanban'
   const [isPrioritizing, setIsPrioritizing] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
+  const [showMultiShare, setShowMultiShare] = useState(false);
   
   const {
     updateTask, 
@@ -57,6 +61,32 @@ export default function Tasks() {
       }
       return next;
     });
+  };
+
+  const toggleSelection = (task) => {
+    setSelectedTaskIds(prev => {
+        const next = new Set(prev);
+        if (next.has(task.id)) {
+            next.delete(task.id);
+        } else {
+            next.add(task.id);
+        }
+        return next;
+    });
+  };
+
+  const handleEnterSelectionMode = () => {
+    setIsSelectionMode(true);
+    setSelectedTaskIds(new Set());
+  };
+
+  const handleExitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedTaskIds(new Set());
+  };
+
+  const getSelectedTasksObjects = () => {
+    return allTasks.filter(t => selectedTaskIds.has(t.id));
   };
 
   const { data: allTasks = [], isLoading } = useQuery({
@@ -260,6 +290,28 @@ export default function Tasks() {
                 <KanbanSquare className="w-4 h-4" />
               </button>
             </div>
+            
+            <div className="flex items-center gap-2">
+                 {!isSelectionMode ? (
+                    <button
+                        onClick={handleEnterSelectionMode}
+                        className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all flex items-center gap-1.5 text-xs font-medium"
+                        title="多选分享"
+                    >
+                        <CheckSquare className="w-4 h-4" />
+                        <span className="hidden sm:inline">选择</span>
+                    </button>
+                 ) : (
+                    <button
+                        onClick={handleExitSelectionMode}
+                        className="p-2 rounded-lg bg-slate-200 text-slate-800 hover:bg-slate-300 transition-all flex items-center gap-1.5 text-xs font-medium"
+                    >
+                        <X className="w-4 h-4" />
+                        取消
+                    </button>
+                 )}
+            </div>
+            
             <span className="text-xs text-slate-500 md:hidden">{rootTasks.length} 个约定</span>
           </div>
         </div>
@@ -343,10 +395,14 @@ export default function Tasks() {
                     onDelete={() => deleteTask(task.id)}
                     onEdit={() => setEditingTask(task)}
                     onUpdate={(data) => updateTask({ id: task.id, data })}
-                    onClick={() => setSelectedTask(task)}
+                    onClick={() => isSelectionMode ? toggleSelection(task) : setSelectedTask(task)}
                     onSubtaskToggle={onSubtaskToggleWrapper}
                     onToggleSubtasks={() => toggleTaskExpansion(task.id)}
-                    isExpanded={expandedTaskIds.has(task.id)} />
+                    isExpanded={expandedTaskIds.has(task.id)}
+                    selectable={isSelectionMode}
+                    selected={selectedTaskIds.has(task.id)}
+                    onSelect={() => toggleSelection(task)}
+                  />
                 </SwipeableItem>
               </div>
 
@@ -360,10 +416,14 @@ export default function Tasks() {
                   onDelete={() => deleteTask(task.id)}
                   onEdit={() => setEditingTask(task)}
                   onUpdate={(data) => updateTask({ id: task.id, data })}
-                  onClick={() => setSelectedTask(task)}
+                  onClick={() => isSelectionMode ? toggleSelection(task) : setSelectedTask(task)}
                   onSubtaskToggle={onSubtaskToggleWrapper}
                   onToggleSubtasks={() => toggleTaskExpansion(task.id)}
-                  isExpanded={expandedTaskIds.has(task.id)} />
+                  isExpanded={expandedTaskIds.has(task.id)}
+                  selectable={isSelectionMode}
+                  selected={selectedTaskIds.has(task.id)}
+                  onSelect={() => toggleSelection(task)}
+                />
               </div>
 
               <AnimatePresence>
@@ -402,8 +462,12 @@ export default function Tasks() {
                           onComplete={() => onSubtaskToggleWrapper(subtask)}
                           onDelete={() => deleteTask(subtask.id)}
                           onEdit={() => setEditingTask(subtask)}
-                          onClick={() => setSelectedTask(subtask)}
-                          onSubtaskToggle={onSubtaskToggleWrapper} />
+                          onClick={() => isSelectionMode ? toggleSelection(subtask) : setSelectedTask(subtask)}
+                          onSubtaskToggle={onSubtaskToggleWrapper}
+                          selectable={isSelectionMode}
+                          selected={selectedTaskIds.has(subtask.id)}
+                          onSelect={() => toggleSelection(subtask)}
+                        />
                       </SwipeableItem>
                     </div>
 
@@ -415,8 +479,12 @@ export default function Tasks() {
                         onComplete={() => onSubtaskToggleWrapper(subtask)}
                         onDelete={() => deleteTask(subtask.id)}
                         onEdit={() => setEditingTask(subtask)}
-                        onClick={() => setSelectedTask(subtask)}
-                        onSubtaskToggle={onSubtaskToggleWrapper} />
+                        onClick={() => isSelectionMode ? toggleSelection(subtask) : setSelectedTask(subtask)}
+                        onSubtaskToggle={onSubtaskToggleWrapper}
+                        selectable={isSelectionMode}
+                        selected={selectedTaskIds.has(subtask.id)}
+                        onSelect={() => toggleSelection(subtask)}
+                      />
                     </div>
 
                   </motion.div>
@@ -460,6 +528,33 @@ export default function Tasks() {
             }
           </DialogContent>
         </Dialog>
+
+        {isSelectionMode && selectedTaskIds.size > 0 && (
+            <motion.div
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 100, opacity: 0 }}
+                className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white rounded-full shadow-xl border border-slate-200 px-6 py-3 flex items-center gap-4 z-50"
+            >
+                <div className="text-sm font-medium text-slate-700">
+                    已选择 {selectedTaskIds.size} 项
+                </div>
+                <div className="h-4 w-px bg-slate-200" />
+                <button
+                    onClick={() => setShowMultiShare(true)}
+                    className="flex items-center gap-2 text-blue-600 font-medium hover:text-blue-700 transition-colors"
+                >
+                    <Share2 className="w-4 h-4" />
+                    分享选中项
+                </button>
+            </motion.div>
+        )}
+
+        <MultiTaskShareCard
+            tasks={getSelectedTasksObjects()}
+            open={showMultiShare}
+            onClose={() => setShowMultiShare(false)}
+        />
       </div>
     </div>);
 

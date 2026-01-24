@@ -109,7 +109,7 @@ const triggerHaptic = () => {
   }
 };
 
-export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false }) {
+export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false, selectable = false, selected = false, onSelect }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
   
@@ -212,15 +212,27 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   transition={{ duration: 0.1 }}
                   className="touch-manipulation"
                 >
-                  <Checkbox
-                    checked={isCompleted}
-                    onCheckedChange={(e) => {
-                      e?.stopPropagation?.();
-                      onComplete();
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150"
-                  />
+                  {selectable ? (
+                    <Checkbox
+                      checked={selected}
+                      onCheckedChange={(e) => {
+                        e?.stopPropagation?.();
+                        onSelect?.(task);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-[#384877] border-[#dce4ed] transition-all duration-150"
+                    />
+                  ) : (
+                    <Checkbox
+                      checked={isCompleted}
+                      onCheckedChange={(e) => {
+                        e?.stopPropagation?.();
+                        onComplete();
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150"
+                    />
+                  )}
                 </motion.div>
               )}
 
@@ -581,15 +593,43 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                           whileTap={{ scale: 0.85 }}
                           transition={{ duration: 0.1 }}
                         >
-                          <Checkbox
-                            checked={isSubtaskCompleted}
-                            onCheckedChange={(e) => {
-                              e?.stopPropagation?.();
-                              onSubtaskToggle?.(subtask);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-4 w-4 rounded data-[state=checked]:bg-[#10b981] mt-0.5 transition-all duration-150"
-                          />
+                          {selectable ? (
+                             <Checkbox
+                               checked={selected} // NOTE: This logic needs to be handled in parent. Actually subtasks need own selection logic if we want to select individual subtasks.
+                               // But here 'selected' prop is for the TaskCard itself. 
+                               // We need to pass a way to check if subtask is selected.
+                               // However, the current component structure makes it hard to pass individual subtask selection state without refactoring TaskCard to accept subtaskSelection map.
+                               // For simplicity, let's assume if parent is selectable, we might want to select subtasks too. 
+                               // Or we can just disable subtask toggle in selection mode and allow selecting subtasks if they are rendered as individual items (which they are here).
+                               // Wait, 'subtasks.map' renders subtasks inside the card.
+                               // If we want to select subtasks ACROSS tasks, we need to be able to check them here.
+                               // Let's modify TaskCard to accept `selectedIds` set instead of boolean `selected`.
+                               // BUT `TaskCard` is also used for the subtask itself when rendered as a card in the list (if they were separate).
+                               // In `Tasks.js`, subtasks are rendered separately if expanded.
+                               // So `TaskCard` receives `task` which is the subtask.
+                               // So `selected` prop refers to the `task` (subtask) passed to it.
+                               // BUT here in the `map` loop, we are rendering subtasks MANUALLY.
+                               // We should update this manual rendering to also support selection.
+                               // OR, in `Tasks.js`, we use `TaskCard` for subtasks too (lines 409 and 396).
+                               // So if `Tasks.js` passes `selectable` and `selected` correctly, it works for the expanded subtasks in the list.
+                               // However, for the *internal* subtask list (inside the card, lines 551+), we also need selection checkboxes if we want to allow selecting them there.
+                               // For now, let's just disable the completion checkbox in internal list when selectable is true, or maybe not render internal list in selection mode?
+                               // Or better, just keep them as completion checkboxes? No, that's confusing.
+                               // If `selectable` is true, we probably shouldn't show the internal subtask list's checkboxes as interactive for completion.
+                               // Let's just hide the internal subtask checkboxes or make them read-only in selection mode.
+                               // For "selecting subtasks across different tasks", user likely expands the task in the main list and selects the subtask row.
+                               null 
+                             ) : (
+                              <Checkbox
+                                checked={isSubtaskCompleted}
+                                onCheckedChange={(e) => {
+                                  e?.stopPropagation?.();
+                                  onSubtaskToggle?.(subtask);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-4 w-4 rounded data-[state=checked]:bg-[#10b981] mt-0.5 transition-all duration-150"
+                              />
+                             )}
                         </motion.div>
 
                         <div className="flex-1">

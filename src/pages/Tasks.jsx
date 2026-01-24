@@ -37,7 +37,9 @@ export default function Tasks() {
   
   const {
     updateTask, 
-    createTask, 
+    createTask,
+    updateTaskAsync,
+    createTaskAsync,
     deleteTask, 
     handleComplete, 
     handleSubtaskToggle 
@@ -154,14 +156,15 @@ export default function Tasks() {
     handleSubtaskToggle(subtask, allTasks);
   };
 
-  const handleUpdateTask = (taskData) => {
+  const handleUpdateTask = async (taskData) => {
     const { id, ...data } = taskData;
-    updateTask({ id: editingTask.id, data }, {
-      onSuccess: () => {
-        setEditingTask(null);
-        toast.success("约定已更新");
-      }
-    });
+    try {
+      await updateTaskAsync({ id: editingTask.id, data });
+      setEditingTask(null);
+      toast.success("约定已更新");
+    } catch (e) {
+      // Error handled in hook or just logged
+    }
   };
 
   // Smart sort removed - handled by Soul Sentry agent conversation
@@ -209,7 +212,7 @@ export default function Tasks() {
         </motion.div>
 
         <div className="mb-4 md:mb-8">
-          <QuickAddTask onAdd={(data) => createTask(data)} />
+          <QuickAddTask onAdd={(data) => createTaskAsync(data)} />
         </div>
 
         <motion.div

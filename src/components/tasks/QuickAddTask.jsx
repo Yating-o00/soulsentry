@@ -73,6 +73,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [showAIEnhancer, setShowAIEnhancer] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isSuggestingTags, setIsSuggestingTags] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const { data: templates } = useQuery({
     queryKey: ['task-templates'],
@@ -485,11 +486,14 @@ ${task.description ? `描述: "${task.description}"` : ''}
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (isSubmitting) return;
+
     if (!task.title.trim() || !task.reminder_time) {
       triggerHaptic('error');
       return;
     }
 
+    setIsSubmitting(true);
     triggerHaptic('light');
 
     const reminderDateTime = new Date(task.reminder_time);
@@ -539,7 +543,8 @@ ${task.description ? `描述: "${task.description}"` : ''}
         if (!initialData && task.subtasks && task.subtasks.length > 0) {
           await handleBulkCreateDirect([taskToSubmit]);
         } else {
-          onAdd(taskToSubmit);
+          // Wrap onAdd in a promise if it isn't one, to ensure we wait for it
+          await Promise.resolve(onAdd(taskToSubmit));
         }
       } else {
         // 离线模式：保存到本地
@@ -554,38 +559,39 @@ ${task.description ? `描述: "${task.description}"` : ''}
       if (!initialData) {
         logUserBehavior("task_created", taskToSubmit);
       }
+
+      if (!initialData) {
+        setTask({
+        title: "",
+        description: "",
+        reminder_time: null,
+        time: "09:00",
+        priority: "medium",
+        category: "personal",
+        repeat_rule: "none",
+        custom_recurrence: null,
+        is_all_day: false,
+        notification_sound: "default",
+        persistent_reminder: false,
+        notification_interval: 15,
+        advance_reminders: [],
+        notification_channels: ["in_app", "browser"],
+        email_reminder: { enabled: false, advance_hours: [] },
+        location_reminder: { enabled: false },
+        assigned_to: [],
+        is_shared: false,
+        team_visibility: "private",
+        subtasks: []
+        });
+        setIsExpanded(false);
+        setShowSettings(false);
+        setShowRecurrence(false);
+      }
     } catch (error) {
       console.error("保存失败:", error);
       toast.error("保存失败");
-      return;
-    }
-
-    if (!initialData) {
-      setTask({
-      title: "",
-      description: "",
-      reminder_time: null,
-      time: "09:00",
-      priority: "medium",
-      category: "personal",
-      repeat_rule: "none",
-      custom_recurrence: null,
-      is_all_day: false,
-      notification_sound: "default",
-      persistent_reminder: false,
-      notification_interval: 15,
-      advance_reminders: [],
-      notification_channels: ["in_app", "browser"],
-      email_reminder: { enabled: false, advance_hours: [] },
-      location_reminder: { enabled: false },
-      assigned_to: [],
-      is_shared: false,
-      team_visibility: "private",
-      subtasks: []
-      });
-      setIsExpanded(false);
-      setShowSettings(false);
-      setShowRecurrence(false);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1209,23 +1215,32 @@ ${task.description ? `描述: "${task.description}"` : ''}
                 <div className="flex items-center gap-2 md:gap-3 pt-2">
                   <Button
                     type="submit"
-                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] text-white rounded-xl h-11 md:h-12 text-sm md:text-base font-semibold shadow-lg shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all"
-                    disabled={!task.title.trim() || !task.reminder_time}
+                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] text-white rounded-xl h-11 md:h-12 text-sm md:text-base font-semibold shadow-lg shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                    disabled={!task.title.trim() || !task.reminder_time || isSubmitting}
                   >
-                    {initialData ? (
+                    {isSubmitting ? (
                       <>
-                        <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-1.5 md:mr-2" strokeWidth={2.5} />
-                        保存修改
+                        <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-1.5 md:mr-2 animate-spin" strokeWidth={2.5} />
+                        {initialData ? "保存中..." : "创建中..."}
                       </>
                     ) : (
-                      <>
-                        <Plus className="w-4 h-4 md:w-5 md:h-5 mr-1.5 md:mr-2" strokeWidth={2.5} />
-                        创建约定
-                      </>
+                      initialData ? (
+                        <>
+                          <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-1.5 md:mr-2" strokeWidth={2.5} />
+                          保存修改
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 md:w-5 md:h-5 mr-1.5 md:mr-2" strokeWidth={2.5} />
+                          创建约定
+                        </>
+                      )
                     )}
-                    <kbd className="ml-auto hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/10 rounded border border-white/20">
-                      <span>⌘</span>↵
-                    </kbd>
+                    {!isSubmitting && (
+                      <kbd className="ml-auto hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/10 rounded border border-white/20">
+                        <span>⌘</span>↵
+                      </kbd>
+                    )}
                   </Button>
                   <Button
                     type="button"

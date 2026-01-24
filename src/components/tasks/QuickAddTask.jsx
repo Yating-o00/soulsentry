@@ -74,6 +74,7 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [suggestedTags, setSuggestedTags] = useState([]);
   const [isSuggestingTags, setIsSuggestingTags] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openSubtaskTimeIdx, setOpenSubtaskTimeIdx] = useState(null);
   
   const { data: templates } = useQuery({
     queryKey: ['task-templates'],
@@ -818,6 +819,38 @@ ${task.description ? `描述: "${task.description}"` : ''}
                                           }}
                                           className="h-8 border-none bg-transparent focus-visible:ring-0 p-0"
                                       />
+                                      
+                                      <Popover open={openSubtaskTimeIdx === idx} onOpenChange={(open) => setOpenSubtaskTimeIdx(open ? idx : null)}>
+                                        <PopoverTrigger asChild>
+                                            <button 
+                                                type="button"
+                                                className="h-6 px-1.5 rounded text-xs font-medium text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors flex items-center gap-1 bg-slate-50"
+                                                title="调整时间"
+                                            >
+                                                <Clock className="w-3 h-3" />
+                                                {st.reminder_time ? format(new Date(st.reminder_time), "HH:mm") : "时间"}
+                                            </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="p-0 w-auto" align="end">
+                                            <CustomTimePicker 
+                                                value={st.reminder_time ? format(new Date(st.reminder_time), "HH:mm") : (task.time || "09:00")}
+                                                onChange={(newTime) => {
+                                                    const newSubtasks = [...task.subtasks];
+                                                    if (newTime && typeof newTime === 'string' && newTime.includes(':')) {
+                                                        const parts = newTime.split(':');
+                                                        const [h, m] = (parts && parts.length >= 2) ? parts : ['09', '00'];
+                                                        // Use subtask's existing date or parent's reminder time date
+                                                        const baseDate = st.reminder_time ? new Date(st.reminder_time) : (task.reminder_time ? new Date(task.reminder_time) : new Date());
+                                                        baseDate.setHours(parseInt(h) || 0, parseInt(m) || 0);
+                                                        newSubtasks[idx].reminder_time = baseDate.toISOString();
+                                                        setTask({...task, subtasks: newSubtasks});
+                                                    }
+                                                }}
+                                                onClose={() => setOpenSubtaskTimeIdx(null)}
+                                            />
+                                        </PopoverContent>
+                                      </Popover>
+
                                       <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => {
                                           const newSubtasks = task.subtasks.filter((_, i) => i !== idx);
                                           setTask({...task, subtasks: newSubtasks});

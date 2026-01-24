@@ -42,14 +42,37 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
   const handleDownload = async () => {
     if (!cardRef.current) return;
     setGenerating(true);
+    let previewContainer = null;
+    let originalMaxHeight = '';
+    let originalOverflow = '';
+
     try {
+      // Temporarily remove height restrictions to capture full content
+      previewContainer = cardRef.current.parentElement;
+      if (previewContainer) {
+        originalMaxHeight = previewContainer.style.maxHeight;
+        originalOverflow = previewContainer.style.overflow;
+        previewContainer.style.maxHeight = 'none';
+        previewContainer.style.overflow = 'visible';
+      }
+
+      // Wait for DOM update
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#ffffff',
         scale: 2,
         useCORS: true,
         allowTaint: true,
+        windowHeight: cardRef.current.scrollHeight,
       });
       
+      // Restore styles immediately
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
+
       const link = document.createElement('a');
       link.download = `约定清单-${format(new Date(), "yyyyMMddHHmmss")}.png`;
       link.href = canvas.toDataURL('image/png');
@@ -59,6 +82,10 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
       console.error(error);
       toast.error("保存失败");
     } finally {
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
       setGenerating(false);
     }
   };
@@ -66,13 +93,36 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
   const handleCopyImage = async () => {
       if (!cardRef.current) return;
       setGenerating(true);
+      let previewContainer = null;
+      let originalMaxHeight = '';
+      let originalOverflow = '';
+
       try {
+        // Temporarily remove height restrictions
+        previewContainer = cardRef.current.parentElement;
+        if (previewContainer) {
+          originalMaxHeight = previewContainer.style.maxHeight;
+          originalOverflow = previewContainer.style.overflow;
+          previewContainer.style.maxHeight = 'none';
+          previewContainer.style.overflow = 'visible';
+        }
+
+        // Wait for DOM update
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         const canvas = await html2canvas(cardRef.current, {
           backgroundColor: '#ffffff',
           scale: 2,
           useCORS: true,
           allowTaint: true,
+          windowHeight: cardRef.current.scrollHeight,
         });
+        
+        // Restore styles immediately
+        if (previewContainer) {
+            previewContainer.style.maxHeight = originalMaxHeight;
+            previewContainer.style.overflow = originalOverflow;
+        }
         
         canvas.toBlob(async (blob) => {
             if (!blob) {
@@ -90,6 +140,10 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
         console.error(error);
         toast.error("生成失败");
       } finally {
+        if (previewContainer) {
+            previewContainer.style.maxHeight = originalMaxHeight;
+            previewContainer.style.overflow = originalOverflow;
+        }
         setGenerating(false);
       }
   };

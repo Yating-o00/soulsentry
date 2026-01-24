@@ -184,16 +184,39 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
                                     <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs text-white flex-shrink-0 ${task.status === 'completed' ? 'bg-green-500' : 'bg-slate-400'}`}>
                                         {idx + 1}
                                     </div>
-                                    <div className="flex-1">
-                                        <div className={`font-medium ${task.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                    <div className="flex-1 min-w-0">
+                                        <div className={`font-medium text-base mb-1 ${task.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
                                             {task.title}
                                         </div>
-                                        {task.reminder_time && (
-                                            <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                                                {format(new Date(task.reminder_time), "MM-dd HH:mm")}
+                                        
+                                        {task.description && (
+                                            <div className="text-sm text-slate-600 mb-2 leading-relaxed bg-white/50 p-2 rounded-lg border border-slate-100/50">
+                                                {task.description}
                                             </div>
                                         )}
+
+                                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                                            {task.reminder_time && (
+                                                <div className="text-xs text-slate-500 flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                                                    {format(new Date(task.reminder_time), "MM-dd HH:mm")}
+                                                </div>
+                                            )}
+                                            {task.category && (
+                                                <div className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200/50 px-1.5 py-0.5 rounded">
+                                                    {task.category}
+                                                </div>
+                                            )}
+                                            {task.priority && task.priority !== 'medium' && (
+                                                <div className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                                                    task.priority === 'high' || task.priority === 'urgent' 
+                                                        ? 'bg-red-50 text-red-600' 
+                                                        : 'bg-slate-100 text-slate-500'
+                                                }`}>
+                                                    {task.priority}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                     {task.status === 'completed' && (
                                         <div className="text-green-600 text-xs font-bold px-2 py-1 bg-green-50 rounded-lg">完成</div>

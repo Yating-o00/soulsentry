@@ -7,6 +7,8 @@ import { zhCN } from "date-fns/locale";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { Check, Circle } from "lucide-react";
 
 const PRESET_HEADERS = [
   "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&q=80",
@@ -22,6 +24,20 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
   const [headerImage, setHeaderImage] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [expandedView, setExpandedView] = useState(false);
+
+  // Fetch subtasks for all tasks
+  const { data: allSubtasks = {} } = useQuery({
+    queryKey: ['subtasks-multi', tasks.map(t => t.id).join(',')],
+    queryFn: async () => {
+      const result = {};
+      await Promise.all(tasks.map(async (task) => {
+        const subs = await base44.entities.Task.filter({ parent_task_id: task.id });
+        result[task.id] = subs || [];
+      }));
+      return result;
+    },
+    enabled: tasks.length > 0
+  });
 
   const handleGenerateAIImage = async () => {
     setIsGeneratingImage(true);
@@ -234,7 +250,8 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
                         
                         <div className="space-y-3 pb-8">
                             {tasks.map((task, idx) => (
-                                <div key={task.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                <React.Fragment key={task.id}>
+                                <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
                                     <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs text-white flex-shrink-0 ${task.status === 'completed' ? 'bg-green-500' : 'bg-slate-400'}`}>
                                         {idx + 1}
                                     </div>
@@ -276,6 +293,25 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
                                         <div className="text-green-600 text-xs font-bold px-2 py-1 bg-green-50 rounded-lg">完成</div>
                                     )}
                                 </div>
+                                
+                                {/* 子约定列表 */}
+                                {allSubtasks[task.id] && allSubtasks[task.id].length > 0 && (
+                                    <div className="ml-11 mt-2 mb-4 space-y-1">
+                                        {allSubtasks[task.id].map((st, sIdx) => (
+                                            <div key={st.id} className="flex items-center gap-2 text-sm text-slate-600">
+                                                {st.status === 'completed' ? (
+                                                    <Check className="w-3.5 h-3.5 text-green-500" />
+                                                ) : (
+                                                    <Circle className="w-3.5 h-3.5 text-slate-300" />
+                                                )}
+                                                <span className={st.status === 'completed' ? 'line-through text-slate-400' : ''}>
+                                                    {st.title}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </React.Fragment>
                             ))}
                         </div>
 

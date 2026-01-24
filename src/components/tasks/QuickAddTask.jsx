@@ -810,7 +810,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                       {task.subtasks && task.subtasks.length > 0 && (
                           <div className="space-y-2 pl-2 border-l-2 border-slate-100">
                               {task.subtasks.map((st, idx) => (
-                                  <div key={idx} className="flex items-center gap-2 text-sm">
+                                  <div key={idx} className="flex items-center gap-2 text-sm group/subtask">
                                       <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
                                       <Input 
                                           value={st.title} 
@@ -820,7 +820,44 @@ ${task.description ? `描述: "${task.description}"` : ''}
                                               setTask({...task, subtasks: newSubtasks});
                                           }}
                                           className="h-8 border-none bg-transparent focus-visible:ring-0 p-0"
+                                          placeholder="子约定名称"
                                       />
+                                      
+                                      <Popover open={openSubtaskTimeIdx === idx} onOpenChange={(open) => setOpenSubtaskTimeIdx(open ? idx : null)}>
+                                        <PopoverTrigger asChild>
+                                            <button 
+                                                type="button"
+                                                className={`h-6 px-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                                                  st.reminder_time 
+                                                    ? 'text-blue-600 bg-blue-50' 
+                                                    : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100 opacity-0 group-hover/subtask:opacity-100'
+                                                }`}
+                                                title="调整时间"
+                                            >
+                                                <Clock className="w-3 h-3" />
+                                                {st.reminder_time ? format(new Date(st.reminder_time), "HH:mm") : "时间"}
+                                            </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="p-0 w-auto" align="end">
+                                            <CustomTimePicker 
+                                                value={st.reminder_time ? format(new Date(st.reminder_time), "HH:mm") : (task.time || "09:00")}
+                                                onChange={(newTime) => {
+                                                    if (newTime && typeof newTime === 'string' && newTime.includes(':')) {
+                                                        const parts = newTime.split(':');
+                                                        const [h, m] = (parts && parts.length >= 2) ? parts : ['09', '00'];
+                                                        // Use subtask's existing date or parent's reminder time date
+                                                        const baseDate = st.reminder_time ? new Date(st.reminder_time) : (task.reminder_time ? new Date(task.reminder_time) : new Date());
+                                                        baseDate.setHours(parseInt(h) || 0, parseInt(m) || 0);
+                                                        
+                                                        const newSubtasks = [...task.subtasks];
+                                                        newSubtasks[idx].reminder_time = baseDate.toISOString();
+                                                        setTask({...task, subtasks: newSubtasks});
+                                                    }
+                                                }}
+                                                onClose={() => setOpenSubtaskTimeIdx(null)}
+                                            />
+                                        </PopoverContent>
+                                      </Popover>
                                       
                                       <Popover open={openSubtaskTimeIdx === idx} onOpenChange={(open) => setOpenSubtaskTimeIdx(open ? idx : null)}>
                                         <PopoverTrigger asChild>
@@ -853,7 +890,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                                         </PopoverContent>
                                       </Popover>
 
-                                      <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => {
+                                      <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500 opacity-0 group-hover/subtask:opacity-100 transition-opacity" onClick={() => {
                                           const newSubtasks = task.subtasks.filter((_, i) => i !== idx);
                                           setTask({...task, subtasks: newSubtasks});
                                       }}>

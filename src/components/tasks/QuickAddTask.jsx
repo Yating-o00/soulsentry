@@ -215,6 +215,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
         end_time: initialData.end_time ? new Date(initialData.end_time) : prev.end_time,
         end_time_str: initialData.end_time ? format(new Date(initialData.end_time), "HH:mm") : prev.end_time_str,
         has_end_time: !!initialData.end_time || prev.has_end_time,
+        subtasks: initialData.subtasks || prev.subtasks || [],
       }));
       setIsExpanded(true);
     }

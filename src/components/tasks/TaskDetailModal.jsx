@@ -55,6 +55,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const [uploading, setUploading] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
   const [newNote, setNewNote] = useState("");
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [isAddingNote, setIsAddingNote] = useState(false);
   const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
   const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
   const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
@@ -237,17 +239,22 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   };
 
   const handleAddSubtask = async () => {
-    if (!newSubtask.trim()) return;
+    if (!newSubtask.trim() || isAddingSubtask) return;
 
-    await createSubtaskMutation.mutateAsync({
-      title: newSubtask,
-      parent_task_id: task.id,
-      reminder_time: task.reminder_time,
-      end_time: task.end_time,
-      category: task.category,
-      priority: task.priority,
-      status: "pending",
-    });
+    setIsAddingSubtask(true);
+    try {
+      await createSubtaskMutation.mutateAsync({
+        title: newSubtask,
+        parent_task_id: task.id,
+        reminder_time: task.reminder_time,
+        end_time: task.end_time,
+        category: task.category,
+        priority: task.priority,
+        status: "pending",
+      });
+    } finally {
+      setIsAddingSubtask(false);
+    }
   };
 
   const handleToggleSubtask = async (subtask) => {
@@ -304,24 +311,29 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   };
 
   const handleAddNote = async () => {
-    if (!newNote.trim()) return;
+    if (!newNote.trim() || isAddingNote) return;
 
-    const currentNotes = task.notes || [];
-    const newNoteObj = {
-      content: newNote,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    setIsAddingNote(true);
+    try {
+      const currentNotes = task.notes || [];
+      const newNoteObj = {
+        content: newNote,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-    await updateTaskMutation.mutateAsync({
-      id: task.id,
-      data: {
-        notes: [...currentNotes, newNoteObj]
-      }
-    });
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: {
+          notes: [...currentNotes, newNoteObj]
+        }
+      });
 
-    setNewNote("");
-    };
+      setNewNote("");
+    } finally {
+      setIsAddingNote(false);
+    }
+  };
 
     const handleUpdateDependencies = async (newDependencyIds) => {
       // Check if we need to update status
@@ -923,10 +935,10 @@ Return complete JSON with all fields translated.`;
                 />
                 <Button
                   onClick={handleAddSubtask}
-                  disabled={!newSubtask.trim()}
+                  disabled={!newSubtask.trim() || isAddingSubtask}
                   className="bg-[#5a647d] hover:bg-[#4a5670] rounded-[10px]"
                 >
-                  <Plus className="w-4 h-4" />
+                  {isAddingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 </Button>
               </div>
 
@@ -1071,11 +1083,15 @@ Return complete JSON with all fields translated.`;
               </div>
               <Button
                 onClick={handleAddNote}
-                disabled={!newNote.trim()}
+                disabled={!newNote.trim() || isAddingNote}
                 className="w-full bg-[#5a647d] hover:bg-[#4a5670] rounded-[10px]"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                添加笔记
+                {isAddingNote ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4 mr-2" />
+                )}
+                {isAddingNote ? "添加中..." : "添加笔记"}
               </Button>
 
               <div className="space-y-3">

@@ -804,8 +804,8 @@ ${task.description ? `描述: "${task.description}"` : ''}
                   rows={2}
                 />
 
-                {/* 子约定列表 (仅在创建模式下显示) */}
-                {!initialData && (
+                {/* 子约定列表 */}
+                {/*  */}
                   <div className="space-y-2">
                       {task.subtasks && task.subtasks.length > 0 && (
                           <div className="space-y-2 pl-2 border-l-2 border-slate-100">
@@ -873,7 +873,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                           添加子约定
                       </Button>
                   </div>
-                )}
+                {/*  */}
 
                 {/* 快速设置栏 - 卡片式布局 */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">

@@ -29,10 +29,9 @@ import {
 export default function Notes() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isAnalyzingNote, setIsAnalyzingNote] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [taskCreationNote, setTaskCreationNote] = useState(null);
-  const [taskInitialData, setTaskInitialData] = useState(null);
-  const [isAnalyzingTask, setIsAnalyzingTask] = useState(false);
   const [sharingNote, setSharingNote] = useState(null);
   const [showAIOrganizer, setShowAIOrganizer] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
@@ -83,6 +82,63 @@ export default function Notes() {
       }
     }
   }, [searchParams, notes]);
+
+  const handleSmartConvertToTask = async (note) => {
+    setIsAnalyzingNote(true);
+    toast.info("AI 正在分析笔记内容以生成约定...", { duration: 3000 });
+
+    try {
+        const content = note.plain_text || note.content || "";
+        
+        // 调用 LLM 分析
+        const analysis = await base44.integrations.Core.InvokeLLM({
+            prompt: `请分析以下笔记内容，并将其转换为一个待办事项（约定）。提取或生成合适的标题、描述、优先级、分类和建议的截止时间（如果有时间相关描述）。
+            
+            笔记内容：
+            """
+            ${content}
+            """
+            
+            当前时间：${new Date().toISOString()}
+            
+            请返回 JSON 格式：
+            {
+                "title": "简明扼要的任务标题",
+                "description": "详细的任务描述，可以包含笔记原文或整理后的要点",
+                "priority": "low/medium/high/urgent",
+                "category": "work/personal/health/study/family/shopping/finance/other",
+                "reminder_time": "ISO 8601格式的时间字符串，如果笔记中没有明确时间，则留空或设为null"
+            }`,
+            response_json_schema: {
+                type: "object",
+                properties: {
+                    title: { type: "string" },
+                    description: { type: "string" },
+                    priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                    category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                    reminder_time: { type: "string", format: "date-time" }
+                },
+                required: ["title", "description", "priority", "category"]
+            }
+        });
+
+        // 打开创建对话框，并填充数据
+        setTaskCreationNote({
+            ...note, // 保留原始笔记引用
+            smartData: analysis // 附带智能分析数据
+        });
+        
+        toast.success("分析完成，请确认约定详情");
+
+    } catch (error) {
+        console.error("AI 分析失败:", error);
+        toast.error("智能分析失败，将使用原始内容");
+        // 降级处理：直接使用原始笔记内容
+        setTaskCreationNote(note);
+    } finally {
+        setIsAnalyzingNote(false);
+    }
+  };
 
   // Mutations
   const createNoteMutation = useMutation({
@@ -155,76 +211,6 @@ export default function Notes() {
       key_points: note.ai_analysis?.key_points || [],
       category: note.tags?.[0] || "其他"
     });
-  };
-
-  const handleConvertToTask = async (note) => {
-    setIsAnalyzingTask(true);
-    const toastId = toast.loading("正在AI智能分析心签内容...");
-
-    try {
-      const content = note.plain_text || note.content;
-      // 调用LLM分析内容，提取任务信息
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `请分析以下笔记内容，并将其转换为任务（约定）。
-请智能提取关键信息，并返回JSON格式。
-
-笔记内容：
-${content}
-
-${note.ai_analysis?.summary ? `笔记摘要参考：${note.ai_analysis.summary}` : ''}
-
-请提取以下字段：
-1. title: 任务标题（简练，概括核心行动，不超过50字）
-2. description: 任务描述（包含笔记中的重要细节、背景、要点）
-3. priority: 优先级 (low/medium/high/urgent) - 根据紧急程度判断
-4. category: 分类 (work/personal/health/study/family/shopping/finance/other) - 智能归类
-5. reminder_time: 如果内容中包含具体时间点（如“明天下午三点”、“下周一”），请转换为ISO 8601格式的时间字符串。如果没有提到时间，返回 null。
-6. tags: 推荐的标签数组（基于内容提取3-5个）
-
-当前时间：${new Date().toISOString()}
-`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            description: { type: "string" },
-            priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
-            reminder_time: { type: "string", format: "date-time" },
-            tags: { type: "array", items: { type: "string" } }
-          },
-          required: ["title"]
-        }
-      });
-
-      const extractedData = {
-        title: response.title || note.ai_analysis?.summary || "新约定",
-        description: response.description || content,
-        priority: response.priority || "medium",
-        category: response.category || "personal",
-        reminder_time: response.reminder_time,
-        tags: response.tags || [],
-      };
-
-      setTaskInitialData(extractedData);
-      setTaskCreationNote(note); // 打开Dialog
-      toast.dismiss(toastId);
-      toast.success("✨ AI分析完成，已自动填充");
-
-    } catch (error) {
-      console.error("AI分析失败", error);
-      toast.dismiss(toastId);
-      toast.error("AI分析失败，将使用原始内容");
-      
-      // Fallback
-      setTaskInitialData({
-          title: note.ai_analysis?.summary || note.plain_text?.slice(0, 50) || "新约定",
-          description: note.plain_text || note.content
-      });
-      setTaskCreationNote(note);
-    } finally {
-      setIsAnalyzingTask(false);
-    }
   };
 
   const saveToKnowledgeMutation = useMutation({
@@ -507,7 +493,7 @@ ${note.ai_analysis?.summary ? `笔记摘要参考：${note.ai_analysis.summary}`
                 onDelete={(n) => deleteNoteMutation.mutate(n.id)}
                 onPin={handlePin}
                 onShare={setSharingNote}
-                onConvertToTask={handleConvertToTask}
+                onConvertToTask={handleSmartConvertToTask}
                 onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
                 onUpdateActivity={handleUpdateActivity} />
 
@@ -587,28 +573,27 @@ ${note.ai_analysis?.summary ? `笔记摘要参考：${note.ai_analysis.summary}`
       </Dialog>
 
       {/* Create Task Dialog */}
-      <Dialog open={!!taskCreationNote} onOpenChange={(open) => {
-        if (!open) {
-          setTaskCreationNote(null);
-          setTaskInitialData(null);
-        }
-      }}>
+      <Dialog open={!!taskCreationNote} onOpenChange={(open) => !open && setTaskCreationNote(null)}>
         <DialogContent className="max-w-2xl w-[95vw] md:w-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
                 <CalendarIcon className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                 从心签创建约定
-                {taskInitialData && <Badge variant="secondary" className="ml-2 bg-blue-50 text-blue-600 text-xs font-normal border-blue-100">AI 智能填充</Badge>}
             </DialogTitle>
           </DialogHeader>
           {taskCreationNote &&
           <QuickAddTask
-            initialData={taskInitialData || {
-              title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新约定",
-              description: taskCreationNote.ai_analysis?.key_points ?
-              `要点总结：\n- ${taskCreationNote.ai_analysis.key_points.join('\n- ')}\n\n原文内容：\n${taskCreationNote.plain_text || ""}` :
-              taskCreationNote.plain_text || ""
-            }}
+            initialData={
+              taskCreationNote.smartData ? {
+                  ...taskCreationNote.smartData,
+                  reminder_time: taskCreationNote.smartData.reminder_time || new Date().toISOString()
+              } : {
+                  title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新约定",
+                  description: taskCreationNote.ai_analysis?.key_points ?
+                  `要点总结：\n- ${taskCreationNote.ai_analysis.key_points.join('\n- ')}\n\n原文内容：\n${taskCreationNote.plain_text || ""}` :
+                  taskCreationNote.plain_text || ""
+              }
+            }
             onAdd={(taskData) => {
               // Ensure reminder_time is set if QuickAddTask doesn't enforce it strictly or if user didn't change it
               const dataToSubmit = {

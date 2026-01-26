@@ -212,11 +212,14 @@ ${task.description ? `描述: "${task.description}"` : ''}
         ...prev,
         title: initialData.title || prev.title,
         description: initialData.description || prev.description,
+        reminder_time: initialData.reminder_time ? new Date(initialData.reminder_time) : prev.reminder_time,
+        time: initialData.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : prev.time,
+        priority: initialData.priority || prev.priority,
+        category: initialData.category || prev.category,
         subtasks: initialData.subtasks || prev.subtasks || [],
         end_time: initialData.end_time ? new Date(initialData.end_time) : prev.end_time,
         end_time_str: initialData.end_time ? format(new Date(initialData.end_time), "HH:mm") : prev.end_time_str,
         has_end_time: !!initialData.end_time || prev.has_end_time,
-        subtasks: initialData.subtasks || prev.subtasks || [],
       }));
       setIsExpanded(true);
     }

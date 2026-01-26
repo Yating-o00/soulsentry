@@ -31,6 +31,8 @@ export default function Notes() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [taskCreationNote, setTaskCreationNote] = useState(null);
+  const [taskInitialData, setTaskInitialData] = useState(null);
+  const [isAnalyzingTask, setIsAnalyzingTask] = useState(false);
   const [sharingNote, setSharingNote] = useState(null);
   const [showAIOrganizer, setShowAIOrganizer] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
@@ -153,6 +155,76 @@ export default function Notes() {
       key_points: note.ai_analysis?.key_points || [],
       category: note.tags?.[0] || "其他"
     });
+  };
+
+  const handleConvertToTask = async (note) => {
+    setIsAnalyzingTask(true);
+    const toastId = toast.loading("正在AI智能分析心签内容...");
+
+    try {
+      const content = note.plain_text || note.content;
+      // 调用LLM分析内容，提取任务信息
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt: `请分析以下笔记内容，并将其转换为任务（约定）。
+请智能提取关键信息，并返回JSON格式。
+
+笔记内容：
+${content}
+
+${note.ai_analysis?.summary ? `笔记摘要参考：${note.ai_analysis.summary}` : ''}
+
+请提取以下字段：
+1. title: 任务标题（简练，概括核心行动，不超过50字）
+2. description: 任务描述（包含笔记中的重要细节、背景、要点）
+3. priority: 优先级 (low/medium/high/urgent) - 根据紧急程度判断
+4. category: 分类 (work/personal/health/study/family/shopping/finance/other) - 智能归类
+5. reminder_time: 如果内容中包含具体时间点（如“明天下午三点”、“下周一”），请转换为ISO 8601格式的时间字符串。如果没有提到时间，返回 null。
+6. tags: 推荐的标签数组（基于内容提取3-5个）
+
+当前时间：${new Date().toISOString()}
+`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string" },
+            priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+            reminder_time: { type: "string", format: "date-time" },
+            tags: { type: "array", items: { type: "string" } }
+          },
+          required: ["title"]
+        }
+      });
+
+      const extractedData = {
+        title: response.title || note.ai_analysis?.summary || "新约定",
+        description: response.description || content,
+        priority: response.priority || "medium",
+        category: response.category || "personal",
+        reminder_time: response.reminder_time,
+        tags: response.tags || [],
+      };
+
+      setTaskInitialData(extractedData);
+      setTaskCreationNote(note); // 打开Dialog
+      toast.dismiss(toastId);
+      toast.success("✨ AI分析完成，已自动填充");
+
+    } catch (error) {
+      console.error("AI分析失败", error);
+      toast.dismiss(toastId);
+      toast.error("AI分析失败，将使用原始内容");
+      
+      // Fallback
+      setTaskInitialData({
+          title: note.ai_analysis?.summary || note.plain_text?.slice(0, 50) || "新约定",
+          description: note.plain_text || note.content
+      });
+      setTaskCreationNote(note);
+    } finally {
+      setIsAnalyzingTask(false);
+    }
   };
 
   const saveToKnowledgeMutation = useMutation({
@@ -435,7 +507,7 @@ export default function Notes() {
                 onDelete={(n) => deleteNoteMutation.mutate(n.id)}
                 onPin={handlePin}
                 onShare={setSharingNote}
-                onConvertToTask={(n) => setTaskCreationNote(n)}
+                onConvertToTask={handleConvertToTask}
                 onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
                 onUpdateActivity={handleUpdateActivity} />
 
@@ -515,17 +587,23 @@ export default function Notes() {
       </Dialog>
 
       {/* Create Task Dialog */}
-      <Dialog open={!!taskCreationNote} onOpenChange={(open) => !open && setTaskCreationNote(null)}>
+      <Dialog open={!!taskCreationNote} onOpenChange={(open) => {
+        if (!open) {
+          setTaskCreationNote(null);
+          setTaskInitialData(null);
+        }
+      }}>
         <DialogContent className="max-w-2xl w-[95vw] md:w-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
                 <CalendarIcon className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                 从心签创建约定
+                {taskInitialData && <Badge variant="secondary" className="ml-2 bg-blue-50 text-blue-600 text-xs font-normal border-blue-100">AI 智能填充</Badge>}
             </DialogTitle>
           </DialogHeader>
           {taskCreationNote &&
           <QuickAddTask
-            initialData={{
+            initialData={taskInitialData || {
               title: taskCreationNote.ai_analysis?.summary || taskCreationNote.plain_text?.slice(0, 50) || "新约定",
               description: taskCreationNote.ai_analysis?.key_points ?
               `要点总结：\n- ${taskCreationNote.ai_analysis.key_points.join('\n- ')}\n\n原文内容：\n${taskCreationNote.plain_text || ""}` :

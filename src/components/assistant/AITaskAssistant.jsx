@@ -116,10 +116,12 @@ import React, { useState, useEffect, useRef } from "react";
    
      useEffect(() => {
        if (!conversationId) return;
-   
-       const unsubscribe = base44.agents.subscribeToConversation(conversationId, (data) => {
-         const newMessages = data.messages || [];
-         setMessages(newMessages);
+
+       let unsubscribe;
+       try {
+         unsubscribe = base44.agents.subscribeToConversation(conversationId, (data) => {
+           const newMessages = data.messages || [];
+           setMessages(newMessages);
 
          // Track discussed tasks for summary
          const tasksInConversation = [];
@@ -177,17 +179,29 @@ import React, { useState, useEffect, useRef } from "react";
          const lastMsg = newMessages[newMessages.length - 1];
          if (lastMsg && lastMsg.role === 'assistant') {
              setIsLoading(false);
-             
+
              // 自动语音播报（如果是新消息）
              if (voiceEnabledRef.current && !isSpeaking && lastMsg.content) {
                  // 简单的去重播报逻辑，实际项目中可能需要更复杂的ID比对
                  speakText(lastMsg.content);
              }
          }
-       });
-   
-       return () => unsubscribe();
-     }, [conversationId]); // Removed voiceEnabled dependency to prevent websocket reconnection loops
+         });
+         } catch (e) {
+         console.error("Subscribe error:", e);
+         }
+
+         return () => {
+         if (unsubscribe && typeof unsubscribe === 'function') {
+           try {
+             unsubscribe();
+           } catch (e) {
+             // Ignore websocket closing errors on unmount
+             console.warn("Unsubscribe error:", e);
+           }
+         }
+         };
+         }, [conversationId]); // Removed voiceEnabled dependency to prevent websocket reconnection loops
    
      const initConversation = async () => {
        try {

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, ImagePlus, X } from "lucide-react";
+import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, ImagePlus, X, Archive, CheckCircle2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -15,6 +15,8 @@ export default function Welcome({ onComplete }) {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [archivedItems, setArchivedItems] = useState([]);
   const recognitionRef = useRef(null);
   const imageInputRef = useRef(null);
   const navigate = useNavigate();
@@ -52,6 +54,20 @@ export default function Welcome({ onComplete }) {
     if (imageInputRef.current) {
       imageInputRef.current.value = '';
     }
+  };
+
+  const toggleSelection = (id) => {
+    if (selectedItems.includes(id)) {
+      setSelectedItems(selectedItems.filter(item => item !== id));
+    } else {
+      setSelectedItems([...selectedItems, id]);
+    }
+  };
+
+  const handleArchive = () => {
+    setArchivedItems([...archivedItems, ...selectedItems]);
+    setSelectedItems([]);
+    toast.success("已归档选中项");
   };
 
   const startVoiceInput = () => {
@@ -470,30 +486,66 @@ export default function Welcome({ onComplete }) {
               transition={{ delay: 0.4 }}
               className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto mb-6">
 
-                <div className="p-4 rounded-xl bg-white/60 backdrop-blur-sm border border-slate-200">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-blue-600" />
+                {!archivedItems.includes('task') && (
+                  <div 
+                    onClick={() => toggleSelection('task')}
+                    className={`p-4 rounded-xl bg-white/60 backdrop-blur-sm border transition-all cursor-pointer relative group ${selectedItems.includes('task') ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200 hover:border-blue-300'}`}
+                  >
+                    {selectedItems.includes('task') && (
+                      <div className="absolute top-2 right-2">
+                        <CheckCircle2 className="w-5 h-5 text-blue-500 fill-blue-50" />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                        <Calendar className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <h3 className="font-semibold text-slate-800">智能约定</h3>
                     </div>
-                    <h3 className="font-semibold text-slate-800">智能约定</h3>
+                    <p className="text-sm text-slate-600">
+                      自动识别时间、任务，创建提醒
+                    </p>
                   </div>
-                  <p className="text-sm text-slate-600">
-                    自动识别时间、任务，创建提醒
-                  </p>
-                </div>
+                )}
 
-                <div className="p-4 rounded-xl bg-white/60 backdrop-blur-sm border border-slate-200">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <StickyNote className="w-5 h-5 text-purple-600" />
+                {!archivedItems.includes('note') && (
+                  <div 
+                    onClick={() => toggleSelection('note')}
+                    className={`p-4 rounded-xl bg-white/60 backdrop-blur-sm border transition-all cursor-pointer relative group ${selectedItems.includes('note') ? 'border-purple-500 ring-2 ring-purple-500/20' : 'border-slate-200 hover:border-purple-300'}`}
+                  >
+                    {selectedItems.includes('note') && (
+                      <div className="absolute top-2 right-2">
+                        <CheckCircle2 className="w-5 h-5 text-purple-500 fill-purple-50" />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                        <StickyNote className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <h3 className="font-semibold text-slate-800">灵感心签</h3>
                     </div>
-                    <h3 className="font-semibold text-slate-800">灵感心签</h3>
+                    <p className="text-sm text-slate-600">
+                      记录想法、笔记，自动打标签
+                    </p>
                   </div>
-                  <p className="text-sm text-slate-600">
-                    记录想法、笔记，自动打标签
-                  </p>
-                </div>
+                )}
               </motion.div>
+
+              {selectedItems.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6"
+                >
+                  <button
+                    onClick={handleArchive}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg"
+                  >
+                    <Archive className="w-4 h-4" />
+                    归档选中项 ({selectedItems.length})
+                  </button>
+                </motion.div>
+              )}
 
               {/* 跳过按钮 */}
               <motion.button

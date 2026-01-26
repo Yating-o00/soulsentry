@@ -431,45 +431,12 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
                 }
                 </div>
 
-                <motion.button
-                type="submit"
-                disabled={(!input.trim() && !imageFile) || isProcessing}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="mt-6 w-full py-4 px-8 bg-gradient-to-r from-[#384877] to-[#3b5aa2] 
-                           text-white text-lg font-semibold rounded-xl
-                           shadow-lg shadow-[#384877]/30
-                           hover:shadow-xl hover:shadow-[#384877]/40
-                           disabled:opacity-50 disabled:cursor-not-allowed
-                           transition-all duration-300
-                           flex items-center justify-center gap-2">
-
-
-
-
-
-
-
-                  {isProcessing ?
-                <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      处理中...
-                    </> :
-
-                <>
-                      开始使用
-                      <ArrowRight className="w-5 h-5" />
-                    </>
-                }
-                </motion.button>
-              </motion.form>
-
               {/* 功能说明 - 可选择类型 */}
               <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto mb-6">
+              transition={{ delay: 0.3 }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 
                 <div 
                   onClick={() => setSelectedType(selectedType === 'task' ? null : 'task')}
@@ -521,6 +488,41 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
                   </p>
                 </div>
               </motion.div>
+
+                <motion.button
+                type="submit"
+                disabled={(!input.trim() && !imageFile) || isProcessing}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="mt-6 w-full py-4 px-8 bg-gradient-to-r from-[#384877] to-[#3b5aa2] 
+                           text-white text-lg font-semibold rounded-xl
+                           shadow-lg shadow-[#384877]/30
+                           hover:shadow-xl hover:shadow-[#384877]/40
+                           disabled:opacity-50 disabled:cursor-not-allowed
+                           transition-all duration-300
+                           flex items-center justify-center gap-2">
+
+
+
+
+
+
+
+                  {isProcessing ?
+                <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      处理中...
+                    </> :
+
+                <>
+                      开始使用
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                }
+                </motion.button>
+              </motion.form>
+
+
 
               {/* 跳过按钮 */}
               <motion.button

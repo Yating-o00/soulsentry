@@ -12,6 +12,7 @@ export default function Welcome({ onComplete }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResult, setShowResult] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [selectedType, setSelectedType] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -184,7 +185,7 @@ export default function Welcome({ onComplete }) {
       // 使用 AI 识别内容类型和提取信息
       const aiResponse = await base44.integrations.Core.InvokeLLM({
         prompt: `分析以下用户输入，判断这是一个"任务/约定"还是"笔记/心签"。
-
+${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedType === 'task' ? '任务/约定' : '笔记/心签'}"，请务必将返回JSON中的 type 字段设置为 "${selectedType}"，并提取对应字段。\n` : ''}
 任务/约定的特征：
 - 包含时间、日期、提醒
 - 包含动作词汇（做、完成、去、买、开会等）
@@ -463,33 +464,59 @@ export default function Welcome({ onComplete }) {
                 </motion.button>
               </motion.form>
 
-              {/* 功能说明 */}
+              {/* 功能说明 - 可选择类型 */}
               <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
               className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto mb-6">
 
-                <div className="p-4 rounded-xl bg-white/60 backdrop-blur-sm border border-slate-200">
+                <div 
+                  onClick={() => setSelectedType(selectedType === 'task' ? null : 'task')}
+                  className={`p-4 rounded-xl backdrop-blur-sm border-2 cursor-pointer transition-all duration-200 ${
+                    selectedType === 'task' 
+                      ? 'bg-blue-50 border-blue-500 shadow-md transform scale-105' 
+                      : 'bg-white/60 border-slate-200 hover:bg-white/80 hover:border-blue-300'
+                  }`}
+                >
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-blue-600" />
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+                      selectedType === 'task' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      <Calendar className="w-5 h-5" />
                     </div>
-                    <h3 className="font-semibold text-slate-800">智能约定</h3>
+                    <h3 className={`font-semibold transition-colors ${
+                      selectedType === 'task' ? 'text-blue-700' : 'text-slate-800'
+                    }`}>智能约定</h3>
                   </div>
-                  <p className="text-sm text-slate-600">
+                  <p className={`text-sm transition-colors ${
+                    selectedType === 'task' ? 'text-blue-600/80' : 'text-slate-600'
+                  }`}>
                     自动识别时间、任务，创建提醒
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-white/60 backdrop-blur-sm border border-slate-200">
+                <div 
+                  onClick={() => setSelectedType(selectedType === 'note' ? null : 'note')}
+                  className={`p-4 rounded-xl backdrop-blur-sm border-2 cursor-pointer transition-all duration-200 ${
+                    selectedType === 'note' 
+                      ? 'bg-purple-50 border-purple-500 shadow-md transform scale-105' 
+                      : 'bg-white/60 border-slate-200 hover:bg-white/80 hover:border-purple-300'
+                  }`}
+                >
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <StickyNote className="w-5 h-5 text-purple-600" />
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+                      selectedType === 'note' ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-600'
+                    }`}>
+                      <StickyNote className="w-5 h-5" />
                     </div>
-                    <h3 className="font-semibold text-slate-800">灵感心签</h3>
+                    <h3 className={`font-semibold transition-colors ${
+                      selectedType === 'note' ? 'text-purple-700' : 'text-slate-800'
+                    }`}>灵感心签</h3>
                   </div>
-                  <p className="text-sm text-slate-600">
+                  <p className={`text-sm transition-colors ${
+                    selectedType === 'note' ? 'text-purple-600/80' : 'text-slate-600'
+                  }`}>
                     记录想法、笔记，自动打标签
                   </p>
                 </div>

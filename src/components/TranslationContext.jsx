@@ -351,7 +351,12 @@ export function TranslationProvider({ children }) {
   };
 
   var toggleLanguage = function() {
-    setLanguage(function(prev) { return prev === 'zh' ? 'en' : 'zh'; });
+    setLanguage(function(prev) {
+      const nextLang = prev === 'zh' ? 'en' : 'zh';
+      // Sync AI mode with language: Enable if English, Disable if Chinese
+      setIsAIMode(nextLang === 'en');
+      return nextLang;
+    });
   };
 
   var toggleAIMode = function() {

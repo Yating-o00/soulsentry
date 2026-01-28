@@ -33,6 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
+import AIText from "@/components/AIText";
 
 const CATEGORIES = [
   { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
@@ -632,8 +633,8 @@ ${task.description ? `描述: "${task.description}"` : ''}
           {!isExpanded ? (
             <Tabs defaultValue="quick" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4 md:mb-6 h-10 md:h-12 bg-slate-100/50 p-1 rounded-xl">
-                <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">快速创建</TabsTrigger>
-                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">智能解析</TabsTrigger>
+                <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>快速创建</AIText></TabsTrigger>
+                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>智能解析</AIText></TabsTrigger>
               </TabsList>
 
               <TabsContent value="quick" className="mt-0 space-y-3 md:space-y-4">
@@ -655,8 +656,8 @@ ${task.description ? `描述: "${task.description}"` : ''}
                       <Plus className="w-6 h-6 md:w-7 md:h-7 text-[#384877]" strokeWidth={2.5} />
                     </div>
                     <div className="text-left flex-1">
-                      <div className="font-bold text-slate-800 text-base md:text-lg whitespace-nowrap">手动创建</div>
-                      <div className="text-xs md:text-sm text-slate-500 font-medium whitespace-nowrap">点击输入详情</div>
+                      <div className="font-bold text-slate-800 text-base md:text-lg whitespace-nowrap"><AIText>手动创建</AIText></div>
+                      <div className="text-xs md:text-sm text-slate-500 font-medium whitespace-nowrap"><AIText>点击输入详情</AIText></div>
                     </div>
                   </button>
 
@@ -676,8 +677,8 @@ ${task.description ? `描述: "${task.description}"` : ''}
                         />
                       </div>
                       <div className="text-left flex-1">
-                        <div className="font-bold text-base md:text-lg whitespace-nowrap">语音创建</div>
-                        <div className="text-xs md:text-sm text-blue-100/80 font-medium whitespace-nowrap">AI 识别</div>
+                        <div className="font-bold text-base md:text-lg whitespace-nowrap"><AIText>语音创建</AIText></div>
+                        <div className="text-xs md:text-sm text-blue-100/80 font-medium whitespace-nowrap"><AIText>AI 识别</AIText></div>
                       </div>
                     </button>
                   )}

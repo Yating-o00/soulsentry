@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
-import AIText from "@/components/AIText";
+import AITranslatedText from "@/components/AITranslatedText";
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
@@ -322,10 +322,10 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
                   <Sparkles className="w-10 h-10 text-white" />
                 </div>
                 <h1 className="text-5xl font-bold bg-gradient-to-r from-[#384877] via-[#3b5aa2] to-purple-600 bg-clip-text text-transparent mb-4">
-                  <AIText>灵魂哨兵</AIText>
+                  <AITranslatedText text="灵魂哨兵" />
                 </h1>
-                <p className="text-2xl font-medium text-slate-600 mb-8">
-                  <AIText>坚定守护，适时轻唤</AIText>
+                <p className="text-xl text-slate-500 mb-8 font-light tracking-wide">
+                  <AITranslatedText text="坚定守护，适时轻唤 - 你的心灵存放站" />
                 </p>
               </motion.div>
 
@@ -453,12 +453,12 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
                     </div>
                     <h3 className={`font-semibold transition-colors ${
                       selectedType === 'task' ? 'text-blue-700' : 'text-slate-800'
-                    }`}><AIText>智能约定</AIText></h3>
+                    }`}>智能约定</h3>
                   </div>
                   <p className={`text-sm transition-colors ${
                     selectedType === 'task' ? 'text-blue-600/80' : 'text-slate-600'
                   }`}>
-                    <AIText>自动识别时间、任务，创建提醒</AIText>
+                    自动识别时间、任务，创建提醒
                   </p>
                 </div>
 
@@ -478,12 +478,12 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
                     </div>
                     <h3 className={`font-semibold transition-colors ${
                       selectedType === 'note' ? 'text-purple-700' : 'text-slate-800'
-                    }`}><AIText>灵感心签</AIText></h3>
+                    }`}>灵感心签</h3>
                   </div>
                   <p className={`text-sm transition-colors ${
                     selectedType === 'note' ? 'text-purple-600/80' : 'text-slate-600'
                   }`}>
-                    <AIText>记录想法、笔记，自动打标签</AIText>
+                    记录想法、笔记，自动打标签
                   </p>
                 </div>
               </motion.div>
@@ -514,7 +514,7 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
                     </> :
 
                 <>
-                      <AIText>开始使用</AIText>
+                      开始使用
                       <ArrowRight className="w-5 h-5" />
                     </>
                 }
@@ -531,7 +531,7 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
               onClick={handleSkip}
               className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
 
-                <AIText>跳过，直接进入</AIText>
+                跳过，直接进入
               </motion.button>
             </motion.div> :
 

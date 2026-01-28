@@ -42,7 +42,8 @@ import {
   MoreHorizontal as MoreIcon
   } from "lucide-react";
   import { motion, AnimatePresence } from "framer-motion";
-  import {
+  import AITranslatedText from "@/components/AITranslatedText";
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -257,7 +258,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   <h3 className={`text-base md:text-[17px] font-semibold tracking-tight leading-relaxed ${
                       isCompleted ? 'line-through text-[#a1a1aa]' : 'text-[#222222]'
                     }`}>
-                      {task.title}
+                      <AITranslatedText text={task.title} />
                     </h3>
                   </div>
                   <div className="flex gap-1.5 md:gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
@@ -370,7 +371,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
 
                 {task.description && (
                   <p className="text-sm md:text-[15px] text-[#52525b] mb-3 line-clamp-2 cursor-pointer leading-relaxed touch-manipulation" onClick={onClick}>
-                    {task.description}
+                    <AITranslatedText text={task.description} />
                   </p>
                 )}
 

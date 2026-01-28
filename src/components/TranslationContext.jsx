@@ -313,22 +313,20 @@ const translations = {
   }
 };
 
-import { base44 } from '@/api/base44Client';
-
 export function TranslationProvider({ children }) {
   const [language, setLanguage] = useState('zh');
-  const [aiTranslations, setAiTranslations] = useState({});
-  const [pendingTranslations, setPendingTranslations] = useState(new Set());
+  const [isAIMode, setIsAIMode] = useState(false);
 
   useEffect(() => {
+    // 初始化时读取语言设置
     try {
       var savedLang = localStorage.getItem('app_language');
       if (savedLang) {
         setLanguage(savedLang);
       }
-      var savedAiTrans = localStorage.getItem('ai_translations');
-      if (savedAiTrans) {
-        setAiTranslations(JSON.parse(savedAiTrans));
+      var savedAIMode = localStorage.getItem('app_ai_translation_mode');
+      if (savedAIMode === 'true') {
+        setIsAIMode(true);
       }
     } catch (e) {
       console.warn('localStorage not available');
@@ -344,63 +342,24 @@ export function TranslationProvider({ children }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem('ai_translations', JSON.stringify(aiTranslations));
+      localStorage.setItem('app_ai_translation_mode', isAIMode);
     } catch (e) {}
-  }, [aiTranslations]);
+  }, [isAIMode]);
 
   var t = function(key) {
     return (translations[language] && translations[language][key]) ? translations[language][key] : key;
-  };
-
-  // AI Translate function
-  const translateText = async (text) => {
-    if (!text || language === 'zh') return text;
-    if (aiTranslations[text]) return aiTranslations[text];
-    
-    // Check if already fetching
-    if (pendingTranslations.has(text)) return text; // Return original while fetching
-
-    // Add to pending
-    setPendingTranslations(prev => new Set(prev).add(text));
-
-    try {
-      // Perform AI translation
-      const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Translate the following text to English. Keep it concise and preserve meaning. 
-        
-        Text: "${text}"
-        
-        Return ONLY the translated text JSON: {"translation": "..."}`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            translation: { type: "string" }
-          }
-        }
-      });
-
-      if (res && res.translation) {
-        setAiTranslations(prev => ({ ...prev, [text]: res.translation }));
-      }
-    } catch (error) {
-      console.error("Translation failed", error);
-    } finally {
-      setPendingTranslations(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(text);
-        return newSet;
-      });
-    }
-    
-    return text;
   };
 
   var toggleLanguage = function() {
     setLanguage(function(prev) { return prev === 'zh' ? 'en' : 'zh'; });
   };
 
+  var toggleAIMode = function() {
+    setIsAIMode(function(prev) { return !prev; });
+  };
+
   return (
-    <TranslationContext.Provider value={{ language, t, toggleLanguage, translateText, aiTranslations }}>
+    <TranslationContext.Provider value={{ language, t, toggleLanguage, isAIMode, toggleAIMode }}>
       {children}
     </TranslationContext.Provider>
   );

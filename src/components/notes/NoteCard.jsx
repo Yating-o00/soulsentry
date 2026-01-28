@@ -13,6 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import AITranslatedText from "@/components/AITranslatedText";
+import { useTranslation } from "@/components/TranslationContext";
 
 const COLORS = {
   white: "bg-white hover:border-slate-300",
@@ -28,6 +30,7 @@ const COLORS = {
 export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConvertToTask, onShare, onSaveToKnowledge }) {
   const colorClass = COLORS[note.color] || COLORS.white;
   const [timeRemaining, setTimeRemaining] = React.useState(null);
+  const { isAIMode } = useTranslation();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(note.plain_text);
@@ -85,10 +88,16 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
         )}
         <div className={`p-4 ${note.is_burn_after_read ? 'pt-9' : ''}`}>
           {/* Content Preview */}
-          <div 
-            className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]"
-            dangerouslySetInnerHTML={{ __html: note.content }}
-          />
+          {isAIMode ? (
+            <div className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]">
+              <AITranslatedText text={note.plain_text || note.content.replace(/<[^>]+>/g, '')} />
+            </div>
+          ) : (
+            <div 
+              className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]"
+              dangerouslySetInnerHTML={{ __html: note.content }}
+            />
+          )}
           
           {note.ai_analysis && (
             <div className="mb-3 space-y-2">

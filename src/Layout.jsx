@@ -86,7 +86,15 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
               <p className="text-xs text-slate-500">{t('tagline')}</p>
             </div>
           </div>
-
+          <button
+            onClick={toggleAIMode}
+            className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors group ${
+              isAIMode ? 'bg-purple-100 text-purple-600' : 'hover:bg-slate-100 text-slate-500'
+            }`}
+            title={isAIMode ? '关闭 AI 翻译' : '开启 AI 全局翻译 (beta)'}
+          >
+            <Brain className={`w-4 h-4 ${isAIMode ? 'text-purple-600' : 'group-hover:text-purple-600'}`} />
+          </button>
           <button
             onClick={toggleLanguage}
             className="h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors group"

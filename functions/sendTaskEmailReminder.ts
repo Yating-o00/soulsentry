@@ -103,16 +103,51 @@ Deno.serve(async (req) => {
 </div>
     `;
 
-    // 使用 Core.SendEmail 发送邮件
-    await base44.asServiceRole.integrations.Core.SendEmail({
-      to: recipientEmail,
-      subject: `⏰ 任务提醒: ${task.title}`,
-      body: emailBody
+    // 使用 Gmail App Connector 发送邮件
+    const accessToken = await base44.asServiceRole.connectors.getAccessToken("gmail");
+    
+    const subject = `⏰ 任务提醒: ${task.title}`;
+    
+    // 构建 MIME 邮件
+    const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
+    const messageParts = [
+      `To: ${recipientEmail}`,
+      `Subject: ${utf8Subject}`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      emailBody
+    ];
+    
+    const rawMessage = messageParts.join("\r\n");
+    // Base64Url 编码
+    const encodedMessage = btoa(unescape(encodeURIComponent(rawMessage)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        raw: encodedMessage
+      })
     });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(`Gmail API error: ${JSON.stringify(errorData)}`);
+    }
+
+    const data = await res.json();
 
     return Response.json({ 
       success: true, 
-      message: `Email sent to ${recipientEmail}` 
+      message: `Email sent to ${recipientEmail} via Gmail`,
+      id: data.id
     });
 
   } catch (error) {

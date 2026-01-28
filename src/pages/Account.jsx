@@ -4,10 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Camera, Loader2 } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -15,11 +15,10 @@ export default function Account() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const fileInputRef = React.useRef(null);
   const [formData, setFormData] = useState({
     full_name: "",
     assistant_name: "小雅",
+    avatar_url: "",
   });
 
 
@@ -34,6 +33,7 @@ export default function Account() {
       setFormData({
         full_name: currentUser.full_name || "",
         assistant_name: currentUser.assistant_name || "小雅",
+        avatar_url: currentUser.avatar_url || "",
       });
 
     } catch (error) {
@@ -58,45 +58,49 @@ export default function Account() {
     }
   };
 
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleAvatarUpload = async (event) => {
-    const file = event.target.files?.[0];
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
+    // Validate file type and size
     if (!file.type.startsWith('image/')) {
-      toast.error("请上传图片文件");
+      toast.error('请上传图片文件');
+      return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) { // 5MB
+      toast.error('图片大小不能超过 5MB');
       return;
     }
 
-    // Validate file size (e.g., max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("图片大小不能超过 5MB");
-      return;
-    }
-
-    setUploadingAvatar(true);
+    const toastId = toast.loading('正在上传头像...');
+    
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      
-      await base44.auth.updateMe({
-        avatar_url: file_url
+      // 1. Upload to Base44 storage
+      const result = await base44.integrations.Core.UploadFile({
+        file: file
       });
-
-      await loadUser();
-      toast.success("头像更新成功");
-    } catch (error) {
-      console.error("Avatar upload error:", error);
-      toast.error("头像上传失败，请重试");
-    } finally {
-      setUploadingAvatar(false);
-      // Clear input value to allow selecting same file again
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      
+      const fileUrl = result.file_url;
+      
+      // 2. Update local state
+      setFormData(prev => ({ ...prev, avatar_url: fileUrl }));
+      
+      // 3. If not in editing mode, save immediately
+      if (!editing) {
+        await base44.auth.updateMe({
+          avatar_url: fileUrl
+        });
+        await loadUser();
+        toast.success('头像更新成功');
+      } else {
+        toast.success('头像已上传，请点击保存');
       }
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error('头像上传失败，请重试');
+    } finally {
+      toast.dismiss(toastId);
     }
   };
 
@@ -214,36 +218,36 @@ export default function Account() {
               {/* 头像 */}
               <div className="flex flex-col items-center gap-3">
                 <div className="relative group">
-                  <Avatar className="h-24 w-24 bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold border-4 border-white shadow-md">
-                    <AvatarImage src={user.avatar_url} alt={user.full_name} className="object-cover" />
-                    <AvatarFallback className="bg-transparent">
-                      {getInitials(user.full_name)}
-                    </AvatarFallback>
+                  <Avatar className="h-24 w-24 bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold border-4 border-white shadow-sm">
+                    {(editing ? formData.avatar_url : user.avatar_url) ? (
+                      <img 
+                        src={editing ? formData.avatar_url : user.avatar_url} 
+                        alt="Avatar" 
+                        className="w-full h-full object-cover" 
+                      />
+                    ) : (
+                      <AvatarFallback className="bg-transparent">
+                        {getInitials(editing ? formData.full_name : user.full_name)}
+                      </AvatarFallback>
+                    )}
                   </Avatar>
                   
-                  <div 
-                    onClick={handleAvatarClick}
-                    className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-[2px]"
+                  {/* Upload Overlay */}
+                  <label 
+                    htmlFor="avatar-upload" 
+                    className={`absolute inset-0 flex items-center justify-center bg-black/40 rounded-full cursor-pointer transition-opacity duration-200 ${editing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                   >
-                    {uploadingAvatar ? (
-                      <Loader2 className="w-8 h-8 text-white animate-spin" />
-                    ) : (
-                      <Camera className="w-8 h-8 text-white" />
-                    )}
-                  </div>
-
-                  <div className="absolute bottom-0 right-0 bg-white rounded-full p-1.5 shadow-md border border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors" onClick={handleAvatarClick}>
-                    <Camera className="w-4 h-4 text-slate-600" />
-                  </div>
-                  
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleAvatarUpload}
-                    className="hidden"
-                    accept="image/*"
-                  />
+                    <Camera className="w-8 h-8 text-white drop-shadow-md" />
+                    <input 
+                      id="avatar-upload" 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleAvatarUpload}
+                    />
+                  </label>
                 </div>
+                
                 <Badge
                   variant="outline"
                   className={

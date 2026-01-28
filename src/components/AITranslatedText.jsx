@@ -22,12 +22,13 @@ export default function AITranslatedText({ text, className, as: Component = "spa
       }
 
       try {
+        const safeText = String(text).replace(/"/g, '\\"');
         const res = await base44.integrations.Core.InvokeLLM({
           prompt: `Translate the following text to English efficiently and accurately. 
           Context: UI element or user content in a productivity app.
           Keep it concise.
           
-          Text: "${text}"
+          Text: "${safeText}"
           
           Return ONLY the translated text, nothing else.`,
         });

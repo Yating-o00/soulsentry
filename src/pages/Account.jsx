@@ -4,10 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Camera, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -15,6 +15,8 @@ export default function Account() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = React.useRef(null);
   const [formData, setFormData] = useState({
     full_name: "",
     assistant_name: "小雅",
@@ -53,6 +55,48 @@ export default function Account() {
     } catch (error) {
       console.error("Update error:", error);
       toast.error("更新失败，请重试");
+    }
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error("请上传图片文件");
+      return;
+    }
+
+    // Validate file size (e.g., max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("图片大小不能超过 5MB");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      
+      await base44.auth.updateMe({
+        avatar_url: file_url
+      });
+
+      await loadUser();
+      toast.success("头像更新成功");
+    } catch (error) {
+      console.error("Avatar upload error:", error);
+      toast.error("头像上传失败，请重试");
+    } finally {
+      setUploadingAvatar(false);
+      // Clear input value to allow selecting same file again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -169,11 +213,37 @@ export default function Account() {
             <div className="flex flex-col md:flex-row gap-6">
               {/* 头像 */}
               <div className="flex flex-col items-center gap-3">
-                <Avatar className="h-24 w-24 bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold">
-                  <AvatarFallback className="bg-transparent">
-                    {getInitials(user.full_name)}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative group">
+                  <Avatar className="h-24 w-24 bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold border-4 border-white shadow-md">
+                    <AvatarImage src={user.avatar_url} alt={user.full_name} className="object-cover" />
+                    <AvatarFallback className="bg-transparent">
+                      {getInitials(user.full_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  
+                  <div 
+                    onClick={handleAvatarClick}
+                    className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-[2px]"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="w-8 h-8 text-white animate-spin" />
+                    ) : (
+                      <Camera className="w-8 h-8 text-white" />
+                    )}
+                  </div>
+
+                  <div className="absolute bottom-0 right-0 bg-white rounded-full p-1.5 shadow-md border border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors" onClick={handleAvatarClick}>
+                    <Camera className="w-4 h-4 text-slate-600" />
+                  </div>
+                  
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    accept="image/*"
+                  />
+                </div>
                 <Badge
                   variant="outline"
                   className={

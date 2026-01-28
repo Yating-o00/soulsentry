@@ -315,7 +315,7 @@ const translations = {
 
 export function TranslationProvider({ children }) {
   const [language, setLanguage] = useState('zh');
-  const [isAIMode, setIsAIMode] = useState(false);
+  const [isAIMode, setIsAIMode] = useState(true);
 
   useEffect(() => {
     // 初始化时读取语言设置

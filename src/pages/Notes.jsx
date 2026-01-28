@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic } from "lucide-react";
+import AIText from "@/components/AIText";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
@@ -341,10 +342,10 @@ export default function Notes() {
               <StickyNote className="w-4 h-4 md:w-6 md:h-6 text-white" />
             </div>
             <h1 className="text-xl md:text-3xl font-bold text-slate-800">
-              灵感心签
+              <AIText>灵感心签</AIText>
             </h1>
           </div>
-          <p className="text-xs md:text-base text-slate-600 hidden md:block">让想法的碎片尽情落下</p>
+          <p className="text-xs md:text-base text-slate-600 hidden md:block"><AIText>让想法的碎片尽情落下</AIText></p>
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
@@ -511,8 +512,8 @@ export default function Notes() {
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
                 <StickyNote className="w-10 h-10 text-slate-400" />
               </div>
-              <h3 className="text-lg font-medium text-slate-700 mb-1">暂无心签</h3>
-              <p className="text-slate-500">记录下你的第一个灵感吧</p>
+              <h3 className="text-lg font-medium text-slate-700 mb-1"><AIText>暂无心签</AIText></h3>
+              <p className="text-slate-500"><AIText>记录下你的第一个灵感吧</AIText></p>
             </motion.div>
           }
         </>

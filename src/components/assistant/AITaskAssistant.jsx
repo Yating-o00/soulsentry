@@ -291,13 +291,18 @@ import React, { useState, useEffect, useRef } from "react";
 
          // 注入丰富的上下文信息，增强AI的理解能力
          const now = new Date();
+         const timeOptions = { timeZone: 'Asia/Shanghai', hour12: false };
+         const dateOptions = { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' };
+         const weekdayOptions = { timeZone: 'Asia/Shanghai', weekday: 'long' };
+
          const contextInfo = `
-     [Context Info]
-     Current Time: ${now.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}
-     Current Date: ${now.toISOString().split('T')[0]}
-     Weekday: ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()]}
-     Language: zh-CN
-     `;
+         [Context Info]
+         Current Time: ${now.toLocaleTimeString('zh-CN', timeOptions)} (Asia/Shanghai)
+         Current Date: ${now.toLocaleDateString('zh-CN', dateOptions)}
+         Weekday: ${now.toLocaleDateString('zh-CN', weekdayOptions)}
+         Language: zh-CN
+         Timezone: Asia/Shanghai (UTC+8)
+         `;
 
          await base44.agents.addMessage(conversation, {
            role: "user",

@@ -124,56 +124,57 @@ import React, { useState, useEffect, useRef } from "react";
            setMessages(newMessages);
 
          // Track discussed tasks for summary
-         const tasksInConversation = [];
-         newMessages.forEach(msg => {
-             if (msg.role === 'assistant' && msg.tool_calls) {
-                 msg.tool_calls.forEach(tc => {
-                     if (tc.name.includes('Task') && tc.results) {
-                         try {
-                             let taskData = typeof tc.results === 'string' ? JSON.parse(tc.results) : tc.results;
-                             if (Array.isArray(taskData)) {
-                                 taskData.forEach(task => {
-                                     if (task.id && !tasksInConversation.find(t => t.id === task.id)) {
-                                         tasksInConversation.push(task);
+             const tasksInConversation = [];
+             newMessages.forEach(msg => {
+                 if (msg.role === 'assistant' && Array.isArray(msg.tool_calls)) {
+                     msg.tool_calls.forEach(tc => {
+                         if (tc?.name?.includes('Task') && tc.results) {
+                             try {
+                                 let taskData = typeof tc.results === 'string' ? JSON.parse(tc.results) : tc.results;
+                                 if (Array.isArray(taskData)) {
+                                     taskData.forEach(task => {
+                                         if (task?.id && !tasksInConversation.find(t => t.id === task.id)) {
+                                             tasksInConversation.push(task);
+                                         }
+                                     });
+                                 } else if (taskData && taskData.id) {
+                                     if (!tasksInConversation.find(t => t.id === taskData.id)) {
+                                         tasksInConversation.push(taskData);
                                      }
-                                 });
-                             } else if (taskData && taskData.id) {
-                                 if (!tasksInConversation.find(t => t.id === taskData.id)) {
-                                     tasksInConversation.push(taskData);
                                  }
+                             } catch (e) {
+                                 console.error('Failed to parse task data', e);
                              }
-                         } catch (e) {
-                             console.error('Failed to parse task data', e);
                          }
-                     }
-                 });
-             }
-         });
-         setDiscussedTasks(tasksInConversation);
+                     });
+                 }
+             });
+             setDiscussedTasks(tasksInConversation);
 
-         // Check for completed tool calls to invalidate queries
-         newMessages.forEach(msg => {
-             if (msg.role === 'assistant' && msg.tool_calls) {
-                 msg.tool_calls.forEach(tc => {
-                     // If tool call is successful (or has results) and not processed yet
-                     if ((tc.status === 'success' || tc.results) && !processedToolCallIds.current.has(tc.id)) {
-                         processedToolCallIds.current.add(tc.id);
-                         // Invalidate relevant queries based on entity
-                         if (tc.name.includes('Task')) {
-                             queryClient.invalidateQueries({ queryKey: ['tasks'] });
-                             queryClient.invalidateQueries({ queryKey: ['subtasks'] });
-                             queryClient.invalidateQueries({ queryKey: ['task'] });
+             // Check for completed tool calls to invalidate queries
+             newMessages.forEach(msg => {
+                 if (msg.role === 'assistant' && Array.isArray(msg.tool_calls)) {
+                     msg.tool_calls.forEach(tc => {
+                         // If tool call is successful (or has results) and not processed yet
+                         if (tc && (tc.status === 'success' || tc.results) && tc.id && !processedToolCallIds.current.has(tc.id)) {
+                             processedToolCallIds.current.add(tc.id);
+                             // Invalidate relevant queries based on entity
+                             const toolName = tc.name || '';
+                             if (toolName.includes('Task')) {
+                                 queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                                 queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+                                 queryClient.invalidateQueries({ queryKey: ['task'] });
+                             }
+                             if (toolName.includes('HealthLog')) {
+                                 queryClient.invalidateQueries({ queryKey: ['healthLogs'] });
+                             }
+                             if (toolName.includes('UserBehavior')) {
+                                 queryClient.invalidateQueries({ queryKey: ['recentBehaviors'] });
+                             }
                          }
-                         if (tc.name.includes('HealthLog')) {
-                             queryClient.invalidateQueries({ queryKey: ['healthLogs'] });
-                         }
-                         if (tc.name.includes('UserBehavior')) {
-                             queryClient.invalidateQueries({ queryKey: ['recentBehaviors'] });
-                         }
-                     }
-                 });
-             }
-         });
+                     });
+                 }
+             });
 
          // 智能判断加载状态：如果收到最新的助手消息，且该消息不是空的（正在生成中），则停止加载
          const lastMsg = newMessages[newMessages.length - 1];
@@ -621,29 +622,33 @@ import React, { useState, useEffect, useRef } from "react";
    }
    
    function ToolCallDisplay({ toolCall }) {
+     if (!toolCall || !toolCall.name) return null;
+
+     const toolName = toolCall.name || "";
+
      const getIcon = () => {
-       if (toolCall.name.includes("create")) return <CheckCircle2 className="w-3 h-3" />;
-       if (toolCall.name.includes("update")) return <Clock className="w-3 h-3" />;
-       if (toolCall.name.includes("read") || toolCall.name.includes("list")) return <Calendar className="w-3 h-3" />;
-       if (toolCall.name.includes("delete")) return <AlertCircle className="w-3 h-3" />;
+       if (toolName.includes("create")) return <CheckCircle2 className="w-3 h-3" />;
+       if (toolName.includes("update")) return <Clock className="w-3 h-3" />;
+       if (toolName.includes("read") || toolName.includes("list")) return <Calendar className="w-3 h-3" />;
+       if (toolName.includes("delete")) return <AlertCircle className="w-3 h-3" />;
        return <AlertCircle className="w-3 h-3" />;
      };
 
      const getLabel = () => {
-       const isTask = toolCall.name.includes("Task");
+       const isTask = toolName.includes("Task");
        const suffix = isTask ? "约定" : "数据";
 
-       if (toolCall.name.includes("create")) return `创建${suffix}`;
-       if (toolCall.name.includes("update")) return `更新${suffix}`;
-       if (toolCall.name.includes("read") || toolCall.name.includes("list")) return `查询${suffix}`;
-       if (toolCall.name.includes("delete")) return `删除${suffix}`;
+       if (toolName.includes("create")) return `创建${suffix}`;
+       if (toolName.includes("update")) return `更新${suffix}`;
+       if (toolName.includes("read") || toolName.includes("list")) return `查询${suffix}`;
+       if (toolName.includes("delete")) return `删除${suffix}`;
        return "执行操作";
      };
 
      const renderResults = () => {
        if (!toolCall.results) return null;
        // Only render tasks for now
-       if (!toolCall.name.includes("Task")) return null;
+       if (!toolName.includes("Task")) return null;
 
        try {
          // Handle potential stringified JSON

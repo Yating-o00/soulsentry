@@ -25,22 +25,24 @@ export default function WelcomeGuard({ children }) {
 
   useEffect(() => {
     setIsClient(true);
-    // 每次刷新都显示先导页（使用 sessionStorage 检查本次会话是否已访问）
+    // 使用 localStorage 替代 sessionStorage，确保持久化，并且使用新 key 来重置用户的状态
     try {
-      var visitedThisSession = sessionStorage.getItem("session_visited");
-      if (!visitedThisSession) {
+      // 检查版本化的 welcome key，这样我们可以强制重置
+      var welcomeCompleted = localStorage.getItem("soul_sentry_welcome_completed_v1");
+      
+      // 只有明确标记为完成时才不显示
+      if (!welcomeCompleted) {
         setShowWelcome(true);
       }
     } catch (e) {
-      // Safari 隐私模式兼容
       setShowWelcome(true);
     }
   }, []);
 
   const handleComplete = () => {
-    // 标记本次会话已访问（刷新后会重置）
+    // 标记为永久完成
     try {
-      sessionStorage.setItem("session_visited", "true");
+      localStorage.setItem("soul_sentry_welcome_completed_v1", "true");
     } catch (e) {
       // 忽略存储错误
     }

@@ -9,10 +9,23 @@ export default Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { task, minutes_before = 60 } = await req.json();
+    const { task_id, minutes_before = 60 } = await req.json();
 
-    if (!task || !task.title || !task.reminder_time) {
-      return Response.json({ error: 'Task with title and reminder_time is required' }, { status: 400 });
+    if (!task_id) {
+      return Response.json({ error: 'task_id is required' }, { status: 400 });
+    }
+
+    // 安全检查：使用当前用户权限获取任务，确保有权访问
+    // 如果任务不存在或无权访问，这里会抛出错误或返回空
+    const tasks = await base44.entities.Task.filter({ id: task_id });
+    const task = tasks[0];
+
+    if (!task) {
+      return Response.json({ error: 'Task not found or permission denied' }, { status: 404 });
+    }
+
+    if (!task.reminder_time) {
+      return Response.json({ error: 'Task has no reminder time set' }, { status: 400 });
     }
 
     // 获取 Google Calendar Access Token

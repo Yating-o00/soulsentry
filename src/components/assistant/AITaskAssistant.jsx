@@ -551,9 +551,16 @@ import React, { useState, useEffect, useRef } from "react";
    }
    
    function MessageBubble({ message, isSpeaking }) {
-     const isUser = message.role === "user";
-   
-     return (
+    const isUser = message.role === "user";
+
+    // 清理可能存在的上下文信息，避免在UI中显示
+    const cleanContent = message.content 
+      ? message.content.replace(/\[Context Info\][\s\S]*$/, '').trim() 
+      : '';
+
+    if (!cleanContent && !message.tool_calls) return null;
+
+    return (
        <motion.div
          initial={{ opacity: 0, y: 10 }}
          animate={{ opacity: 1, y: 0 }}
@@ -568,19 +575,19 @@ import React, { useState, useEffect, useRef } from "react";
    
          <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
            <div
-             className={`rounded-xl px-3 py-2 ${
-               isUser
-                 ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white"
-                 : "bg-white border border-[#e5e9ef] text-[#222222]"
-             }`}
+            className={`rounded-xl px-3 py-2 ${
+              isUser
+                ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white"
+                : "bg-white border border-[#e5e9ef] text-[#222222]"
+            }`}
            >
-             {isUser ? (
-               <p className="text-xs leading-relaxed">{message.content}</p>
-             ) : (
-               <div className="relative">
-                 <ReactMarkdown className="text-xs prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
-                   {message.content}
-                 </ReactMarkdown>
+            {isUser ? (
+              <p className="text-xs leading-relaxed">{cleanContent}</p>
+            ) : (
+              <div className="relative">
+                <ReactMarkdown className="text-xs prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
+                  {cleanContent}
+                </ReactMarkdown>
                  {isSpeaking && (
                    <motion.div
                      className="absolute -right-1.5 -top-1.5"

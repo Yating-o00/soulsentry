@@ -11,6 +11,10 @@ export function useTaskOperations() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       
+      // 自动同步到 Google Calendar (如果已设置提醒时间)
+      // 在后台静默执行，不阻塞用户
+      base44.functions.invoke('syncTaskToGoogleCalendar', { task_id: variables.id }).catch(console.error);
+      
       // Log behavior based on what changed
       if (variables.data.status === 'completed') {
         logUserBehavior("task_completed", { id: variables.id, ...variables.data });
@@ -29,6 +33,13 @@ export function useTaskOperations() {
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      
+      // 自动同步到 Google Calendar (如果已设置提醒时间)
+      // 在后台静默执行，不阻塞用户
+      if (data && data.id) {
+        base44.functions.invoke('syncTaskToGoogleCalendar', { task_id: data.id }).catch(console.error);
+      }
+      
       toast.success("任务创建成功");
       logUserBehavior("task_created", data);
     },

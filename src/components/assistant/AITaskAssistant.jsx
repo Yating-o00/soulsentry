@@ -226,7 +226,10 @@ import React, { useState, useEffect, useRef } from "react";
      };
    
      const triggerSmartAnalysis = async (convId) => {
-       if (!convId) return;
+       if (!convId) {
+           console.error("No conversation ID provided for analysis");
+           return;
+       }
 
        // 立即显示加载动画
        setIsLoading(true);
@@ -237,6 +240,9 @@ import React, { useState, useEffect, useRef } from "react";
 
        try {
          const conversation = await base44.agents.getConversation(convId);
+         if (!conversation || !conversation.id) {
+            throw new Error("Invalid conversation object");
+         }
 
          const analysisPrompt = `请启动后台推理程序，调用工具读取我的所有约定数据（以及HealthLog数据），并严格按照【建设】、【执行】、【检查】的第一性原理模型进行深度分析。
 
@@ -265,7 +271,11 @@ import React, { useState, useEffect, useRef } from "react";
      };
    
      const sendMessage = async (text) => {
-       if (!conversationId || !text.trim()) return;
+       if (!conversationId) {
+            console.error("No conversation ID available");
+            return;
+       }
+       if (!text.trim()) return;
 
        // 立即显示用户消息，提供即时反馈
        const userMsg = { role: "user", content: text };
@@ -275,6 +285,9 @@ import React, { useState, useEffect, useRef } from "react";
 
        try {
          const conversation = await base44.agents.getConversation(conversationId);
+         if (!conversation || !conversation.id) {
+            throw new Error("Invalid conversation object retrieved");
+         }
 
          // 注入丰富的上下文信息，增强AI的理解能力
          const now = new Date();
@@ -603,7 +616,7 @@ import React, { useState, useEffect, useRef } from "react";
            </div>
    
            {/* 工具调用显示 */}
-           {message.tool_calls?.length > 0 && (
+           {Array.isArray(message.tool_calls) && message.tool_calls.length > 0 && (
              <div className="mt-1.5 space-y-1">
                {message.tool_calls.map((tool, idx) => (
                  <ToolCallDisplay key={idx} toolCall={tool} />

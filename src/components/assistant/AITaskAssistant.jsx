@@ -274,9 +274,20 @@ import React, { useState, useEffect, useRef } from "react";
 
        try {
          const conversation = await base44.agents.getConversation(conversationId);
+
+         // 注入丰富的上下文信息，增强AI的理解能力
+         const now = new Date();
+         const contextInfo = `
+     [Context Info]
+     Current Time: ${now.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}
+     Current Date: ${now.toISOString().split('T')[0]}
+     Weekday: ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()]}
+     Language: zh-CN
+     `;
+
          await base44.agents.addMessage(conversation, {
            role: "user",
-           content: text
+           content: `${text}\n${contextInfo}` // 将上下文附加在消息后，AI可见但前端通过过滤或UI处理不显示这部分（Agent SDK返回的messages通常是处理后的，或者我们仅在发送时带上）
          });
          // 订阅会更新完整消息列表
        } catch (error) {

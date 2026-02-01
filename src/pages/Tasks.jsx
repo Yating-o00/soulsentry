@@ -165,7 +165,22 @@ export default function Tasks() {
 
   // Group tasks logic
   // Only show top-level tasks in the list
-  const rootTasks = React.useMemo(() => filteredTasks.filter((t) => !t.parent_task_id), [filteredTasks]);
+  const rootTasks = React.useMemo(() => {
+    const roots = filteredTasks.filter((t) => !t.parent_task_id);
+    // Sort: completed tasks at the bottom
+    return roots.sort((a, b) => {
+      const isCompletedA = a.status === 'completed';
+      const isCompletedB = b.status === 'completed';
+      
+      if (isCompletedA && !isCompletedB) return 1;
+      if (!isCompletedA && isCompletedB) return -1;
+      
+      // Secondary sort: reminder_time descending (keep original order)
+      const timeA = new Date(a.reminder_time || 0).getTime();
+      const timeB = new Date(b.reminder_time || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [filteredTasks]);
   const getSubtasks = (parentId) => filteredTasks.filter((t) => t.parent_task_id === parentId);
   const getAllSubtasks = (parentId) => tasks.filter((t) => t.parent_task_id === parentId);
 

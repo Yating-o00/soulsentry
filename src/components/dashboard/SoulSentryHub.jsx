@@ -112,7 +112,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             Return JSON in this EXACT structure:
             {
                 "devices": {
-                    "phone": { "strategies": [{"time": "string", "method": "string", "content": "string", "priority": "high|medium|low"}] },
+                    "phone": { "strategies": [{"time": "string", "method": "string (Chinese keyword)", "content": "string", "priority": "high|medium|low"}] },
                     "watch": { "strategies": [...] },
                     "glasses": { "strategies": [...] },
                     "car": { "strategies": [...] },

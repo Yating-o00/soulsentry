@@ -76,7 +76,16 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
   // Merge Devices with DB tasks
   const mergedDevices = useMemo(() => {
-    const devices = JSON.parse(JSON.stringify(data.devices)); // Deep clone
+    // Manually clone to preserve React components (icons) which would be lost with JSON.stringify
+    const devices = {};
+    if (data.devices) {
+        Object.keys(data.devices).forEach(key => {
+            devices[key] = { 
+                ...data.devices[key],
+                strategies: [...(data.devices[key].strategies || [])]
+            };
+        });
+    }
     
     dbTasks.forEach(task => {
         // Simple heuristic for device assignment

@@ -184,8 +184,22 @@ export default function Welcome({ onComplete }) {
       }
 
       // 使用 AI 识别内容类型和提取信息
+      const now = new Date();
+      const timeOptions = { timeZone: 'Asia/Shanghai', hour12: false };
+      const dateOptions = { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' };
+      const weekdayOptions = { timeZone: 'Asia/Shanghai', weekday: 'long' };
+      
+      const contextInfo = `
+[Context Info]
+Current Time: ${now.toLocaleTimeString('zh-CN', timeOptions)} (Asia/Shanghai)
+Current Date: ${now.toLocaleDateString('zh-CN', dateOptions)}
+Weekday: ${now.toLocaleDateString('zh-CN', weekdayOptions)}
+Timezone: Asia/Shanghai (UTC+8)
+`;
+
       const aiResponse = await base44.integrations.Core.InvokeLLM({
-        prompt: `分析以下用户输入，判断这是一个"任务/约定"还是"笔记/心签"。
+        prompt: `${contextInfo}
+分析以下用户输入，判断这是一个"任务/约定"还是"笔记/心签"。
 ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedType === 'task' ? '任务/约定' : '笔记/心签'}"，请务必将返回JSON中的 type 字段设置为 "${selectedType}"，并提取对应字段。\n` : ''}
 任务/约定的特征：
 - 包含时间、日期、提醒

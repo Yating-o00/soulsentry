@@ -15,10 +15,10 @@ const colors = {
   twilight: '#1e293b',
 };
 
-export default function SoulSentryHub() {
+export default function SoulSentryHub({ initialData, initialShowResults = false }) {
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showResults, setShowResults] = useState(false);
+  const [showResults, setShowResults] = useState(initialShowResults);
   const [parsingSteps, setParsingSteps] = useState([]);
   const [activeDevice, setActiveDevice] = useState("phone");
   const [aiData, setAiData] = useState(null);
@@ -37,7 +37,14 @@ export default function SoulSentryHub() {
     automations: []
   };
 
-  const [data, setData] = useState(defaultData);
+  const [data, setData] = useState(initialData || defaultData);
+
+  useEffect(() => {
+    if (initialData) {
+      setData(initialData);
+      setShowResults(true);
+    }
+  }, [initialData]);
 
   const autoResize = (e) => {
     e.target.style.height = 'auto';

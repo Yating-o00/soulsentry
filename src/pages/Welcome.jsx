@@ -185,16 +185,20 @@ export default function Welcome({ onComplete }) {
 
       // 使用 AI 识别内容类型和提取信息
       const now = new Date();
-      const timeOptions = { timeZone: 'Asia/Shanghai', hour12: false };
-      const dateOptions = { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' };
-      const weekdayOptions = { timeZone: 'Asia/Shanghai', weekday: 'long' };
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      const weekday = weekdays[now.getDay()];
       
       const contextInfo = `
-[Context Info]
-Current Time: ${now.toLocaleTimeString('zh-CN', timeOptions)} (Asia/Shanghai)
-Current Date: ${now.toLocaleDateString('zh-CN', dateOptions)}
-Weekday: ${now.toLocaleDateString('zh-CN', weekdayOptions)}
-Timezone: Asia/Shanghai (UTC+8)
+[System Time Reference]
+- Current Date: ${year}-${month}-${day} (${weekday})
+- Current Time: ${hours}:${minutes}
+- Timezone: Asia/Shanghai (UTC+8)
+- Instruction: You MUST use this reference time as "Today". 
 `;
 
       const aiResponse = await base44.integrations.Core.InvokeLLM({
@@ -220,7 +224,7 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
   "title": "提取的标题（任务用）",
   "description": "详细描述",
   "content": "完整内容（笔记用）",
-  "reminder_time": "提取的时间（ISO格式，必须基于Context Info计算绝对时间，如果用户只说'明天'，默认设为明天上午09:00）",
+  "reminder_time": "ISO 8601 time string (e.g. 2026-02-02T09:00:00+08:00). MUST calculate based on [System Time Reference]. If user says 'tomorrow', add 1 day to Current Date.",
   "priority": "low/medium/high/urgent（任务用）",
   "category": "work/personal/health/study等（任务用）",
   "tags": ["标签1", "标签2"]（笔记用）

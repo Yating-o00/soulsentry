@@ -51,16 +51,19 @@ export default function SmartTextParser({ onTasksGenerated, className = "" }) {
     setParsing(true);
     try {
       const now = new Date();
-      const timeOptions = { timeZone: 'Asia/Shanghai', hour12: false };
-      const dateOptions = { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' };
-      const weekdayOptions = { timeZone: 'Asia/Shanghai', weekday: 'long' };
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      const weekday = weekdays[now.getDay()];
       
       const contextInfo = `
-[Context Info]
-Current Time: ${now.toLocaleTimeString('zh-CN', timeOptions)} (Asia/Shanghai)
-Current Date: ${now.toLocaleDateString('zh-CN', dateOptions)}
-Weekday: ${now.toLocaleDateString('zh-CN', weekdayOptions)}
-Timezone: Asia/Shanghai (UTC+8)
+[System Time Reference]
+- Current Date: ${year}-${month}-${day} (${weekday})
+- Current Time: ${hours}:${minutes}
+- Timezone: Asia/Shanghai (UTC+8)
 `;
 
       const response = await base44.integrations.Core.InvokeLLM({

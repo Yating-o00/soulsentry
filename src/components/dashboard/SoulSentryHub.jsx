@@ -76,16 +76,18 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
   // Merge Devices with DB tasks
   const mergedDevices = useMemo(() => {
-    // Manually clone to preserve React components (icons) which would be lost with JSON.stringify
+    // Manually clone to preserve React components (icons)
     const devices = {};
-    if (data.devices) {
-        Object.keys(data.devices).forEach(key => {
-            devices[key] = { 
-                ...data.devices[key],
-                strategies: [...(data.devices[key].strategies || [])]
-            };
-        });
-    }
+    const sourceDevices = data.devices || defaultData.devices;
+    
+    Object.keys(sourceDevices).forEach(key => {
+        devices[key] = { 
+            ...sourceDevices[key],
+            // Ensure icon is present (fallback to default if missing in data)
+            icon: sourceDevices[key].icon || defaultData.devices[key]?.icon,
+            strategies: [...(sourceDevices[key].strategies || [])]
+        };
+    });
     
     dbTasks.forEach(task => {
         // Simple heuristic for device assignment
@@ -234,11 +236,18 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             }
         });
 
-        const mergedDevices = { ...defaultData.devices };
+        // Create a fresh copy of devices ensuring icons are preserved
+        const mergedDevices = {};
+        Object.keys(defaultData.devices).forEach(k => {
+            mergedDevices[k] = { ...defaultData.devices[k] };
+        });
+
         if (response.devices) {
-            Object.keys(response.devices).forEach(key => {
-                if (mergedDevices[key]) {
-                    mergedDevices[key].strategies = response.devices[key].strategies || [];
+            Object.keys(response.devices).forEach(responseKey => {
+                // Match keys case-insensitively
+                const targetKey = Object.keys(mergedDevices).find(k => k.toLowerCase() === responseKey.toLowerCase());
+                if (targetKey) {
+                    mergedDevices[targetKey].strategies = response.devices[responseKey].strategies || [];
                 }
             });
         }

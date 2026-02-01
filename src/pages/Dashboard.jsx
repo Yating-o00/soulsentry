@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay, addDays, addMonths, addWeeks, startOfWeek, endOfWeek } from "date-fns";
@@ -46,6 +47,8 @@ export default function Dashboard() {
   const [showCalendarQuickAdd, setShowCalendarQuickAdd] = useState(false);
   const [calendarQuickAddDate, setCalendarQuickAddDate] = useState(null);
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const soulSentryData = location.state?.soulSentryData;
 
   // Get current user
   const { data: user } = useQuery({
@@ -492,7 +495,7 @@ export default function Dashboard() {
         transition={{ delay: 0.2 }}
         className="mt-6"
       >
-        <SoulSentryHub />
+        <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
       </motion.div>
       </TabsContent>
 

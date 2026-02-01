@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import QuickAddTask from "../components/tasks/QuickAddTask";
+import SoulSentryHub from "../components/dashboard/SoulSentryHub";
 import CalendarMonthView from "../components/calendar/CalendarMonthView";
 import CalendarWeekView from "../components/calendar/CalendarWeekView";
 import CalendarDayView from "../components/calendar/CalendarDayView";

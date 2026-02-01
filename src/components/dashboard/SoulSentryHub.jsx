@@ -48,8 +48,8 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                mergedDevices[key] = { 
                    ...mergedDevices[key], 
                    ...initialData.devices[key],
-                   icon: mergedDevices[key].icon, 
-                   name: mergedDevices[key].name 
+                   icon: mergedDevices[key]?.icon, 
+                   name: mergedDevices[key]?.name 
                };
             }
          });
@@ -292,16 +292,18 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                             </div>
                             <div className="space-y-4">
                                 {parsingSteps.map((step, idx) => (
+                                    step ? (
                                     <motion.div 
                                         key={idx}
                                         initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         className="flex items-center gap-3 text-[#0a0a0f]/70"
                                     >
-                                        <step.icon className="w-5 h-5" />
+                                        {step.icon && <step.icon className="w-5 h-5" />}
                                         <span className="text-sm font-light flex-1">{step.text}</span>
                                         <Check className="w-4 h-4 text-[#10b981]" />
                                     </motion.div>
+                                    ) : null
                                 ))}
                             </div>
                         </div>

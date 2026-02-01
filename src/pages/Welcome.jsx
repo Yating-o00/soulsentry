@@ -353,16 +353,18 @@ export default function Welcome({ onComplete }) {
                       </div>
                       <div className="space-y-2 text-left w-full max-w-[200px]">
                           {parsingSteps.map((step, idx) => (
+                              step ? (
                               <motion.div 
                                   key={idx}
                                   initial={{ opacity: 0, x: -10 }}
                                   animate={{ opacity: 1, x: 0 }}
                                   className="flex items-center gap-3 text-slate-700"
                               >
-                                  <step.icon className="w-4 h-4 text-[#384877]" />
+                                  {step.icon && <step.icon className="w-4 h-4 text-[#384877]" />}
                                   <span className="text-sm font-medium">{step.text}</span>
                                   <Check className="w-3 h-3 text-green-500 ml-auto" />
                               </motion.div>
+                              ) : null
                           ))}
                       </div>
                     </div>

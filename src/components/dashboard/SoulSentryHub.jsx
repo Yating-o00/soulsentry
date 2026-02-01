@@ -131,12 +131,21 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
   useEffect(() => {
     if (initialData) {
       const mergedDevices = { ...defaultData.devices };
+      
       if (initialData.devices) {
+         // Create a lowercase map for case-insensitive matching
+         const initialDevicesLower = {};
+         Object.keys(initialData.devices).forEach(k => {
+             initialDevicesLower[k.toLowerCase()] = initialData.devices[k];
+         });
+
          Object.keys(mergedDevices).forEach(key => {
-            if (initialData.devices[key]) {
+            const matchedData = initialDevicesLower[key.toLowerCase()];
+            if (matchedData) {
                mergedDevices[key] = { 
                    ...mergedDevices[key], 
-                   ...initialData.devices[key],
+                   strategies: matchedData.strategies || [],
+                   // Explicitly preserve icon and name
                    icon: mergedDevices[key]?.icon, 
                    name: mergedDevices[key]?.name 
                };

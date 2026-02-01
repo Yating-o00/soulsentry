@@ -1,4 +1,3 @@
-css
 .soul-sentry-root {
   --soul-void: #0a0a0f;
   --soul-mist: #f5f5f0;

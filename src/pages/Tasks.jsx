@@ -181,7 +181,20 @@ export default function Tasks() {
       return timeB - timeA;
     });
   }, [filteredTasks]);
-  const getSubtasks = (parentId) => filteredTasks.filter((t) => t.parent_task_id === parentId);
+  const getSubtasks = (parentId) => {
+    const subs = filteredTasks.filter((t) => t.parent_task_id === parentId);
+    return subs.sort((a, b) => {
+      const isCompletedA = a.status === 'completed';
+      const isCompletedB = b.status === 'completed';
+      
+      if (isCompletedA && !isCompletedB) return 1;
+      if (!isCompletedA && isCompletedB) return -1;
+      
+      const timeA = new Date(a.reminder_time || 0).getTime();
+      const timeB = new Date(b.reminder_time || 0).getTime();
+      return timeB - timeA;
+    });
+  };
   const getAllSubtasks = (parentId) => tasks.filter((t) => t.parent_task_id === parentId);
 
   const onCompleteTask = (task) => {

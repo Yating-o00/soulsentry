@@ -425,7 +425,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-                            {Object.entries(data.devices).map(([key, device]) => (
+                            {Object.entries(mergedDevices).map(([key, device]) => (
                                 <DeviceCard 
                                     key={key} 
                                     id={key} 
@@ -447,21 +447,26 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                             >
                                 <div className="flex justify-between items-start mb-6">
                                     <div>
-                                        <h4 className="text-lg font-bold text-slate-800">{data.devices[activeDevice].name} 策略</h4>
+                                        <h4 className="text-lg font-bold text-slate-800">{mergedDevices[activeDevice].name} 策略</h4>
                                         <p className="text-sm text-slate-500 mt-1">基于场景的智能分发</p>
                                     </div>
                                 </div>
                                 <div className="grid gap-3">
-                                    {data.devices[activeDevice].strategies && data.devices[activeDevice].strategies.length > 0 ? (
-                                        data.devices[activeDevice].strategies.map((strat, idx) => (
-                                            <div key={idx} className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100 transition-colors">
-                                                <div className="w-8 h-8 bg-[#384877]/10 rounded-full flex items-center justify-center text-[#384877] text-sm font-bold flex-shrink-0">
-                                                    {idx + 1}
+                                    {mergedDevices[activeDevice].strategies && mergedDevices[activeDevice].strategies.length > 0 ? (
+                                        mergedDevices[activeDevice].strategies.map((strat, idx) => (
+                                            <div key={idx} className={`flex items-start gap-4 p-4 rounded-xl border transition-colors ${
+                                                strat.isDbTask ? 'bg-amber-50 border-amber-100 hover:bg-amber-100/50' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+                                            }`}>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                                                    strat.isDbTask ? 'bg-amber-100 text-amber-700' : 'bg-[#384877]/10 text-[#384877]'
+                                                }`}>
+                                                    {strat.isDbTask ? <Database className="w-4 h-4" /> : idx + 1}
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-start mb-1">
                                                         <span className="font-medium text-slate-700 text-sm">{strat.time}</span>
                                                         <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider ${
+                                                            strat.isDbTask ? 'bg-amber-100 text-amber-700 border border-amber-200' :
                                                             strat.priority === 'high' ? 'bg-red-50 text-red-600 border border-red-100' : 
                                                             'bg-blue-50 text-[#384877] border border-blue-100'
                                                         }`}>

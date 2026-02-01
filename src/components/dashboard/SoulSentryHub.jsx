@@ -74,6 +74,49 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     return combined;
   }, [data.timeline, dbTasks]);
 
+  // Merge Devices with DB tasks
+  const mergedDevices = useMemo(() => {
+    const devices = JSON.parse(JSON.stringify(data.devices)); // Deep clone
+    
+    dbTasks.forEach(task => {
+        // Simple heuristic for device assignment
+        const text = (task.title + task.description).toLowerCase();
+        let targetDevice = 'phone'; // Default
+        
+        if (/mail|email|ppt|doc|report|code|meeting|zoom|teams/.test(text)) targetDevice = 'pc';
+        else if (/drive|car|traffic|go to|commute/.test(text)) targetDevice = 'car';
+        else if (/run|walk|exercise|gym|heart|sleep/.test(text)) targetDevice = 'watch';
+        else if (/home|clean|cook|laundry|living|bedroom/.test(text)) targetDevice = 'home';
+        else if (/glass|ar|vr|vision/.test(text)) targetDevice = 'glasses';
+
+        if (devices[targetDevice]) {
+            let timeStr = "待定";
+            if (task.reminder_time) {
+                const date = parseISO(task.reminder_time);
+                if (isValid(date)) timeStr = format(date, 'HH:mm');
+            }
+
+            devices[targetDevice].strategies.push({
+                time: timeStr,
+                method: "待办事项",
+                content: task.title,
+                priority: task.priority || 'medium',
+                isDbTask: true,
+                id: task.id
+            });
+            
+            // Sort strategies by time
+            devices[targetDevice].strategies.sort((a, b) => {
+                 if (a.time === "待定") return 1;
+                 if (b.time === "待定") return -1;
+                 return a.time.localeCompare(b.time);
+            });
+        }
+    });
+    
+    return devices;
+  }, [data.devices, dbTasks]);
+
   useEffect(() => {
     if (initialData) {
       const mergedDevices = { ...defaultData.devices };
@@ -134,12 +177,19 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
     try {
         const now = new Date();
+        const existingTasksStr = dbTasks.map(t => `- ${t.title} (${t.reminder_time ? format(parseISO(t.reminder_time), 'HH:mm') : 'Anytime'})`).join('\n');
+
         const response = await base44.integrations.Core.InvokeLLM({
             prompt: `
             User Input: "${input}"
             Current Time: ${now.toLocaleString()}
             
+            Existing User Tasks for Today:
+            ${existingTasksStr}
+            
             Task: Analyze the user's input and generate a structured "SoulSentry" plan for device coordination, timeline, and automation.
+            Integrate the existing tasks into the plan where relevant (especially for device strategies and automations). 
+            Be careful not to duplicate timeline events for existing tasks unless you are adding significant new context.
             
             IMPORTANT: All generated text (titles, descriptions, strategies, content, methods) MUST BE IN SIMPLIFIED CHINESE (简体中文).
             

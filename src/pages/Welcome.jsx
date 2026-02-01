@@ -1,30 +1,26 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Loader2, Mic, MicOff, Image as ImagePlus, X, Send, Brain, MapPin, Zap, Check } from "lucide-react";
+import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, Image as ImagePlus, X, Brain, MapPin, Zap, Check } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
 import AITranslatedText from "@/components/AITranslatedText";
-import "../components/dashboard/SoulSentryHub.css"; // Reuse the styles
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [parsingSteps, setParsingSteps] = useState([]);
+  const [showResult, setShowResult] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const recognitionRef = useRef(null);
   const imageInputRef = useRef(null);
   const navigate = useNavigate();
   const { t } = useTranslation();
-
-  const autoResize = (e) => {
-    e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-  };
 
   const handleImageSelect = async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -109,13 +105,14 @@ export default function Welcome({ onComplete }) {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     if ((!input.trim() && !imageFile) || isProcessing) return;
 
     setIsProcessing(true);
     setParsingSteps([]);
 
-    // Steps animation
+    // Steps animation matching the SoulSentryHub design
     const steps = [
         { icon: Brain, text: '提取时间实体...', delay: 800 },
         { icon: Sparkles, text: '识别意图与优先级...', delay: 600 },
@@ -138,6 +135,7 @@ export default function Welcome({ onComplete }) {
       
       // Handle Image OCR if present
       if (imageFile) {
+         setIsUploadingImage(true);
          try {
            const uploadResult = await base44.integrations.Core.UploadFile({ file: imageFile });
            const ocrResponse = await base44.integrations.Core.InvokeLLM({
@@ -151,6 +149,7 @@ export default function Welcome({ onComplete }) {
          } catch (e) {
            console.error(e);
          }
+         setIsUploadingImage(false);
       }
 
       const now = new Date();
@@ -195,8 +194,11 @@ export default function Welcome({ onComplete }) {
       clearInterval(stepInterval);
       
       // Navigate to Dashboard with results
-      if (onComplete) onComplete();
-      navigate(createPageUrl("Dashboard"), { state: { soulSentryData: response } });
+      // Adding a small delay to let user see the final step if needed, or just go immediately
+      setTimeout(() => {
+          if (onComplete) onComplete();
+          navigate(createPageUrl("Dashboard"), { state: { soulSentryData: response } });
+      }, 1000);
 
     } catch (error) {
       console.error(error);
@@ -212,130 +214,207 @@ export default function Welcome({ onComplete }) {
   };
 
   return (
-    <div className="min-h-screen soul-sentry-root w-full bg-[#f5f5f0] flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Background Effects */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#e8d5b7]/20 rounded-full blur-[100px] animate-breathe pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#6366f1]/10 rounded-full blur-[100px] animate-breathe pointer-events-none" style={{ animationDelay: '3s' }} />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 flex items-center justify-center p-6 relative overflow-hidden">
+      {/* 背景装饰 */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 0.1, scale: 1 }}
+          transition={{ duration: 2, repeat: Infinity, repeatType: "reverse" }}
+          className="absolute top-20 right-20 w-96 h-96 bg-blue-400 rounded-full blur-3xl" />
 
-        <div className="relative z-10 w-full max-w-3xl flex flex-col items-center">
-            
-            {/* Input Section */}
-            <motion.div 
-                className="w-full transition-all duration-700"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-            >
-                <div className="text-center mb-10 space-y-4">
-                    <h1 className="text-4xl md:text-5xl font-serif font-light text-[#0a0a0f] tracking-tight">
-                        告诉我，<br />
-                        <span className="gradient-text-subtle italic">任何事情</span>
-                    </h1>
-                    <p className="text-[#0a0a0f]/50 font-light">
-                        像与朋友倾诉般自然。我会倾听、理解，<br />在所有设备上为你悄然安排妥当。
-                    </p>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 0.1, scale: 1 }}
+          transition={{ duration: 2.5, repeat: Infinity, repeatType: "reverse" }}
+          className="absolute bottom-20 left-20 w-96 h-96 bg-purple-400 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-2xl">
+        <AnimatePresence mode="wait">
+          {!showResult ?
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="text-center">
+
+              {/* Logo & 标题 */}
+              <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="mb-12">
+
+                <div className="inline-flex items-center justify-center w-20 h-20 mb-6 rounded-3xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] shadow-2xl shadow-[#384877]/30">
+                  <Sparkles className="w-10 h-10 text-white" />
                 </div>
+                <h1 className="text-5xl font-bold bg-gradient-to-r from-[#384877] via-[#3b5aa2] to-purple-600 bg-clip-text text-transparent mb-4">
+                  <AITranslatedText text="灵魂哨兵" />
+                </h1>
+                <p className="text-xl text-slate-500 mb-8 font-light tracking-wide">
+                  <AITranslatedText text="坚定守护，适时轻唤 - 你的心灵存放站" />
+                </p>
+              </motion.div>
 
-                <div className="w-full relative group input-glow rounded-3xl transition-all duration-500">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-[#e8d5b7]/30 to-[#6366f1]/20 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
-                    <div className="relative glass-refined rounded-3xl p-2">
-                        <div className="bg-white/40 rounded-2xl flex flex-col">
-                            <textarea
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onInput={autoResize}
-                                placeholder="明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料..."
-                                className="w-full bg-transparent border-none outline-none text-lg text-[#0a0a0f] placeholder-[#0a0a0f]/30 resize-none px-6 py-5 font-light leading-relaxed scrollbar-hide min-h-[140px]"
-                                disabled={isProcessing}
-                                autoFocus
-                            />
-                            
-                            {imagePreview && (
-                                <div className="px-6 pb-2">
-                                    <div className="relative inline-block">
-                                        <img src={imagePreview} alt="Preview" className="h-16 w-16 object-cover rounded-lg border border-[#e8d5b7]" />
-                                        <button onClick={removeImage} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 shadow-sm">
-                                            <X className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
+              {/* 输入框 */}
+              <motion.form
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              onSubmit={handleSubmit}
+              className="mb-8">
 
-                            <div className="flex items-center justify-between px-4 pb-4">
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={isListening ? stopVoiceInput : startVoiceInput}
-                                        className={`p-2 rounded-lg transition-colors ${isListening ? 'bg-red-500/10 text-red-500' : 'hover:bg-[#0a0a0f]/5 text-[#0a0a0f]/40'}`}
-                                    >
-                                        {isListening ? <MicOff className="w-5 h-5 animate-pulse" /> : <Mic className="w-5 h-5" />}
-                                    </button>
-                                    <button 
-                                        onClick={() => imageInputRef.current?.click()}
-                                        className="p-2 hover:bg-[#0a0a0f]/5 rounded-lg text-[#0a0a0f]/40 transition-colors"
-                                    >
-                                        <ImagePlus className="w-5 h-5" />
-                                    </button>
-                                    <input type="file" ref={imageInputRef} className="hidden" accept="image/*" onChange={handleImageSelect} />
-                                </div>
-                                <button 
-                                    onClick={handleSubmit}
-                                    disabled={isProcessing || (!input.trim() && !imageFile)}
-                                    className="btn-primary-soul px-6 py-2 rounded-full text-sm font-medium flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:shadow-none"
-                                >
-                                    {isProcessing ? '分析中...' : '开始'}
-                                    {!isProcessing && <Send className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <div className="relative">
+                  <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="随便写点什么... 比如「明天下午3点开会」或「今天学到了...」，也可以上传图片"
+                  disabled={isProcessing}
+                  className="w-full h-40 px-6 py-5 pr-28 text-lg rounded-2xl border-2 border-slate-200 
+                             focus:border-[#384877] focus:ring-4 focus:ring-[#384877]/10 
+                             transition-all outline-none resize-none
+                             bg-white/80 backdrop-blur-sm
+                             placeholder:text-slate-400
+                             disabled:opacity-50 disabled:cursor-not-allowed"
+                  autoFocus />
 
-                <div className="flex justify-center mt-6">
-                    <button 
-                        onClick={handleSkip}
-                        className="text-sm text-[#0a0a0f]/40 hover:text-[#0a0a0f]/70 transition-colors"
+                  {/* 右上角按钮组 */}
+                  <div className="absolute right-4 top-4 flex gap-2">
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current && imageInputRef.current.click()}
+                      disabled={isProcessing}
+                      className="w-10 h-10 rounded-full flex items-center justify-center
+                                 transition-all duration-300 bg-slate-100 hover:bg-slate-200 text-slate-600
+                                 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="上传图片"
                     >
-                        跳过，直接进入
+                      <ImagePlus className="w-5 h-5" />
                     </button>
-                </div>
-            </motion.div>
 
-            {/* Processing State */}
-            <AnimatePresence>
-                {isProcessing && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="w-full max-w-xl mt-8"
+                    <button
+                      type="button"
+                      onClick={isListening ? stopVoiceInput : startVoiceInput}
+                      disabled={isProcessing}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center
+                                 transition-all duration-300 ${
+                                   isListening 
+                                     ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' 
+                                     : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                        <div className="glass-refined rounded-2xl p-6 border-l-4 border-[#e8d5b7]">
-                            <div className="flex items-center gap-3 mb-6 text-[#0a0a0f]/70">
-                                <div className="flex gap-1.5">
-                                    <div className="w-2 h-2 bg-[#e8d5b7] rounded-full thinking-dot" />
-                                    <div className="w-2 h-2 bg-[#e8d5b7] rounded-full thinking-dot" />
-                                    <div className="w-2 h-2 bg-[#e8d5b7] rounded-full thinking-dot" />
-                                </div>
-                                <span className="font-serif italic text-sm">心栈正在理解语境...</span>
-                            </div>
-                            <div className="space-y-4">
-                                {parsingSteps.map((step, idx) => (
-                                    <motion.div 
-                                        key={idx}
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        className="flex items-center gap-3 text-[#0a0a0f]/70"
-                                    >
-                                        <step.icon className="w-5 h-5" />
-                                        <span className="text-sm font-light flex-1">{step.text}</span>
-                                        <Check className="w-4 h-4 text-[#10b981]" />
-                                    </motion.div>
-                                ))}
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
+                      {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </button>
+                  </div>
+
+                  {/* 图片预览 */}
+                  {imagePreview && (
+                    <div className="absolute left-4 bottom-4 flex items-center gap-2">
+                      <div className="relative">
+                        <img 
+                          src={imagePreview} 
+                          alt="预览" 
+                          className="h-16 w-16 object-cover rounded-lg border-2 border-slate-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <span className="text-xs text-slate-500">已添加图片</span>
+                    </div>
+                  )}
+
+                  {/* 录音中提示 */}
+                  {isListening && !imagePreview && (
+                    <div className="absolute left-4 bottom-4 flex items-center gap-2 text-red-500 text-sm">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                      正在录音...
+                    </div>
+                  )}
+                  
+                  {isProcessing &&
+                    <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center z-20">
+                      <div className="flex gap-1.5 mb-4">
+                          <div className="w-2 h-2 bg-[#384877] rounded-full animate-bounce" style={{ animationDelay: '-0.32s' }} />
+                          <div className="w-2 h-2 bg-[#384877] rounded-full animate-bounce" style={{ animationDelay: '-0.16s' }} />
+                          <div className="w-2 h-2 bg-[#384877] rounded-full animate-bounce" />
+                      </div>
+                      <div className="space-y-2 text-left w-full max-w-[200px]">
+                          {parsingSteps.map((step, idx) => (
+                              <motion.div 
+                                  key={idx}
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  className="flex items-center gap-3 text-slate-700"
+                              >
+                                  <step.icon className="w-4 h-4 text-[#384877]" />
+                                  <span className="text-sm font-medium">{step.text}</span>
+                                  <Check className="w-3 h-3 text-green-500 ml-auto" />
+                              </motion.div>
+                          ))}
+                      </div>
+                    </div>
+                  }
+                </div>
+
+                <motion.button
+                type="submit"
+                disabled={(!input.trim() && !imageFile) || isProcessing}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="mt-6 w-full py-4 px-8 bg-gradient-to-r from-[#384877] to-[#3b5aa2] 
+                           text-white text-lg font-semibold rounded-xl
+                           shadow-lg shadow-[#384877]/30
+                           hover:shadow-xl hover:shadow-[#384877]/40
+                           disabled:opacity-50 disabled:cursor-not-allowed
+                           transition-all duration-300
+                           flex items-center justify-center gap-2">
+                  {isProcessing ?
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      分析处理中...
+                    </> :
+                    <>
+                      开始分析与规划
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  }
+                </motion.button>
+              </motion.form>
+
+              {/* 跳过按钮 */}
+              <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              onClick={handleSkip}
+              className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
+                跳过，直接进入
+              </motion.button>
+            </motion.div> :
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center">
+                {/* Fallback loading or success state if needed, though we navigate away */}
+                <Loader2 className="w-12 h-12 text-[#384877] animate-spin mx-auto mb-4" />
+                <h2 className="text-2xl font-bold text-slate-800">正在生成您的专属安排...</h2>
+            </motion.div>
+          }
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

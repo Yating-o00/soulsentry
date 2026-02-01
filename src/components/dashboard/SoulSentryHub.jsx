@@ -1,19 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { base44 } from "@/api/base44Client";
-import { Mic, MicOff, Image as ImageIcon, Send, Sparkles, Smartphone, Watch, Glasses, Car, Home, Laptop, Check, Brain, MapPin, Zap } from "lucide-react";
+import { Mic, MicOff, Image as ImageIcon, Send, Sparkles, Smartphone, Watch, Glasses, Car, Home, Laptop, Check, Brain, MapPin, Zap, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import "./SoulSentryHub.css";
-
-// Color mapping for inline styles or arbitrary tailwind classes - Updated to match Product Tone
-const colors = {
-  void: '#1e293b', // Slate 800 - Main Text
-  mist: '#ffffff', // White - Backgrounds
-  dawn: '#384877', // Primary Blue - Accents/Highlights
-  ether: '#3b5aa2', // Lighter Blue - Gradients
-  breath: '#10b981', // Green - Success (Keep)
-  twilight: '#f8fafc', // Slate 50 - Backgrounds
-};
+import { Button } from "@/components/ui/button";
 
 export default function SoulSentryHub({ initialData, initialShowResults = false }) {
   const [input, setInput] = useState("");
@@ -21,9 +12,8 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
   const [showResults, setShowResults] = useState(initialShowResults);
   const [parsingSteps, setParsingSteps] = useState([]);
   const [activeDevice, setActiveDevice] = useState("phone");
-  const [aiData, setAiData] = useState(null);
   
-  // Default mock data structure (will be overwritten by AI)
+  // Default mock data structure
   const defaultData = {
     devices: {
       phone: { name: '智能手机', icon: Smartphone, strategies: [] },
@@ -80,7 +70,6 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     setParsingSteps([]);
     setShowResults(false);
 
-    // Simulate steps for UX
     const steps = [
         { icon: Brain, text: '提取时间实体...', delay: 800 },
         { icon: Sparkles, text: '识别意图与优先级...', delay: 600 },
@@ -141,7 +130,6 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             }
         });
 
-        // Merge AI response with default icons/names
         const mergedDevices = { ...defaultData.devices };
         if (response.devices) {
             Object.keys(response.devices).forEach(key => {
@@ -157,7 +145,6 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             automations: response.automations || []
         });
 
-        // Wait for steps animation to finish mostly
         setTimeout(() => {
             clearInterval(stepInterval);
             setIsProcessing(false);
@@ -180,26 +167,23 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
         <div 
             onClick={() => onClick(id)}
             className={`
-            device-card bg-white rounded-2xl p-4 text-center cursor-pointer transition-all duration-300 border-2 
-            ${active ? 'border-[#384877] shadow-md' : 'border-transparent hover:border-slate-200 hover:shadow-sm'}
-            hover:-translate-y-1
+                relative rounded-xl p-4 text-center cursor-pointer transition-all duration-300 border
+                ${active 
+                    ? 'bg-[#384877] text-white border-[#384877] shadow-lg shadow-[#384877]/20 scale-105' 
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-[#384877]/30 hover:shadow-md'
+                }
             `}
-            >
+        >
             <div className={`
-                w-10 h-10 mx-auto mb-3 rounded-2xl flex items-center justify-center text-white shadow-md
-                ${id === 'phone' ? 'bg-gradient-to-br from-[#384877] to-[#3b5aa2]' : ''}
-                ${id === 'watch' ? 'bg-gradient-to-br from-[#3b5aa2] to-[#384877]' : ''}
-                ${id === 'glasses' ? 'bg-gradient-to-br from-[#6366f1] to-purple-600' : ''}
-                ${id === 'car' ? 'bg-gradient-to-br from-emerald-600 to-teal-700' : ''}
-                ${id === 'home' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : ''}
-                ${id === 'pc' ? 'bg-gradient-to-br from-rose-500 to-pink-600' : ''}
+                w-10 h-10 mx-auto mb-3 rounded-lg flex items-center justify-center shadow-sm transition-colors
+                ${active ? 'bg-white/10 text-white' : 'bg-slate-50 text-slate-600'}
             `}>
                 <Icon className="w-5 h-5" />
             </div>
-            <h4 className="font-medium text-slate-700 text-sm mb-1">{device.name}</h4>
-            <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 bg-[#10b981]/10 rounded-full">
-                <div className="w-1.5 h-1.5 bg-[#10b981] rounded-full animate-pulse"></div>
-                <span className="text-[10px] text-[#10b981] font-medium">在线</span>
+            <h4 className={`font-bold text-sm mb-1 ${active ? 'text-white' : 'text-slate-800'}`}>{device.name}</h4>
+            <div className={`mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${active ? 'bg-white/10' : 'bg-green-50'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${active ? 'bg-green-400' : 'bg-green-500'}`}></div>
+                <span className={`text-[10px] font-medium ${active ? 'text-green-100' : 'text-green-600'}`}>在线</span>
             </div>
         </div>
     );

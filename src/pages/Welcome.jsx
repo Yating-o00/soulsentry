@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, ImagePlus, X } from "lucide-react";
+import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, Image as ImagePlus, X } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";

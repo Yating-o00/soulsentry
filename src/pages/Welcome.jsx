@@ -159,7 +159,9 @@ export default function Welcome({ onComplete }) {
             Current Time: ${now.toLocaleString()}
             
             Task: Analyze the user's input and generate a structured "SoulSentry" plan for device coordination, timeline, and automation.
-            
+
+            IMPORTANT: All generated text (titles, descriptions, strategies, content, methods) MUST BE IN SIMPLIFIED CHINESE (简体中文).
+
             Return JSON in this EXACT structure:
             {
                 "devices": {
@@ -180,6 +182,7 @@ export default function Welcome({ onComplete }) {
             
             Generate realistic strategies for each device based on the input context. If a device isn't relevant, provide a neutral strategy.
             For automations, identify tasks that can be automated.
+            Ensure all content is friendly, concise, and in Simplified Chinese.
             `,
             response_json_schema: {
                 type: "object",

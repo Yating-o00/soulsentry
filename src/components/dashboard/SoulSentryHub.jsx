@@ -107,6 +107,8 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             
             Task: Analyze the user's input and generate a structured "SoulSentry" plan for device coordination, timeline, and automation.
             
+            IMPORTANT: All generated text (titles, descriptions, strategies, content, methods) MUST BE IN SIMPLIFIED CHINESE (简体中文).
+            
             Return JSON in this EXACT structure:
             {
                 "devices": {

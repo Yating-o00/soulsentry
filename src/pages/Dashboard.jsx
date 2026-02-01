@@ -487,70 +487,9 @@ export default function Dashboard() {
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Quick Add & Tasks */}
-        <div className="lg:col-span-2 space-y-6">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <QuickAddTask onAdd={(data) => createTaskMutation.mutate(data)} />
-          </motion.div>
-
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-blue-500" />
-              今日约定
-            </h2>
-            
-            {todayTasks.length > 0 ? (
-              <div className="space-y-3">
-                {todayTasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={() => handleComplete(task)}
-                    onDelete={() => deleteTaskMutation.mutate(task.id)}
-                    onEdit={() => setEditingTask(task)}
-                    onClick={() => setSelectedTask(task)}
-                    onSubtaskToggle={handleSubtaskToggle}
-                  />
-                ))}
-              </div>
-            ) : (
-              <Card className="bg-slate-50 border-dashed border-2 border-slate-200">
-                <CardContent className="flex flex-col items-center justify-center py-10 text-slate-400">
-                  <div className="bg-white p-4 rounded-full mb-3 shadow-sm">
-                    <CalendarIcon className="w-8 h-8 text-slate-300" />
-                  </div>
-                  <p>今天暂无约定</p>
-                  <p className="text-xs mt-1">享受美好的一天，或者添加新约定</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {overdueTasks.length > 0 && (
-              <>
-                <h2 className="text-lg font-semibold text-red-600 flex items-center gap-2 mt-8">
-                  <AlertCircle className="w-5 h-5" />
-                  逾期约定
-                </h2>
-                <div className="space-y-3">
-                  {overdueTasks.map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onComplete={() => handleComplete(task)}
-                      onDelete={() => deleteTaskMutation.mutate(task.id)}
-                      onEdit={() => setEditingTask(task)}
-                      onClick={() => setSelectedTask(task)}
-                      onSubtaskToggle={handleSubtaskToggle}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+        {/* Left Column: SoulSentry Hub */}
+        <div className="lg:col-span-2">
+          <SoulSentryHub />
         </div>
 
         {/* Right Column: Insights & Summary */}

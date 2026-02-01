@@ -246,23 +246,27 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
         });
 
         // Create a fresh copy of devices ensuring icons are preserved
-        const mergedDevices = {};
+        // Note: We use a functional update to ensure we're basing this on the CURRENT data, 
+        // which might already have DB tasks merged if the user didn't refresh
+        // But for a new "processIntent" we want to start fresh from default + DB + new AI
+        // Actually, we want to respect the defaultData structure but populate it with new strategies.
+        
+        const newDevicesState = {};
         Object.keys(defaultData.devices).forEach(k => {
-            mergedDevices[k] = { ...defaultData.devices[k] };
+            newDevicesState[k] = { ...defaultData.devices[k], strategies: [] };
         });
 
         if (response.devices) {
             Object.keys(response.devices).forEach(responseKey => {
-                // Match keys case-insensitively
-                const targetKey = Object.keys(mergedDevices).find(k => k.toLowerCase() === responseKey.toLowerCase());
+                const targetKey = Object.keys(newDevicesState).find(k => k.toLowerCase() === responseKey.toLowerCase());
                 if (targetKey) {
-                    mergedDevices[targetKey].strategies = response.devices[responseKey].strategies || [];
+                    newDevicesState[targetKey].strategies = response.devices[responseKey].strategies || [];
                 }
             });
         }
 
         setData({
-            devices: mergedDevices,
+            devices: newDevicesState,
             timeline: response.timeline || [],
             automations: response.automations || []
         });

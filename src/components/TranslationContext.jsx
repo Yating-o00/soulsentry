@@ -116,8 +116,7 @@ const translations = {
     'ganttView': '甘特图视图',
     'kanbanView': '看板视图',
     
-    // Time Related
-    'today': '今天',
+    // Time Related (removed duplicate)
     'tomorrow': '明天',
     'thisWeek': '本周',
     'nextWeek': '下周',

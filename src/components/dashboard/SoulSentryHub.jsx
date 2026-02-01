@@ -146,7 +146,8 @@ export default function SoulSentryHub() {
   };
 
   const DeviceCard = ({ id, device, active, onClick }) => {
-    const Icon = device.icon;
+    if (!device) return null;
+    const Icon = device.icon || Smartphone;
     return (
         <div 
             onClick={() => onClick(id)}

@@ -269,8 +269,7 @@ const translations = {
     'ganttView': 'Gantt Chart',
     'kanbanView': 'Board',
     
-    // Time Related
-    'today': 'Today',
+    // Time Related (removed duplicate)
     'tomorrow': 'Tomorrow',
     'thisWeek': 'This Week',
     'nextWeek': 'Next Week',

@@ -112,7 +112,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             Return JSON in this EXACT structure:
             {
                 "devices": {
-                    "phone": { "strategies": [{"time": "string", "method": "string (Chinese keyword)", "content": "string", "priority": "high|medium|low"}] },
+                    "phone": { "strategies": [{"time": "string", "method": "string", "content": "string", "priority": "high|medium|low"}] },
                     "watch": { "strategies": [...] },
                     "glasses": { "strategies": [...] },
                     "car": { "strategies": [...] },
@@ -129,6 +129,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             
             Generate realistic strategies for each device based on the input context. If a device isn't relevant, provide a neutral strategy or leave empty (but better to provide something smart).
             For automations, identify tasks that can be automated (booking, navigation, reminders, file prep).
+            Ensure all content is friendly, concise, and in Simplified Chinese.
             `,
             response_json_schema: {
                 type: "object",

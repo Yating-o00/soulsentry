@@ -1,10 +1,12 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { base44 } from "@/api/base44Client";
-import { Mic, MicOff, Image as ImageIcon, Send, Sparkles, Smartphone, Watch, Glasses, Car, Home, Laptop, Check, Brain, MapPin, Zap, ChevronRight } from "lucide-react";
+import { Mic, MicOff, Image as ImageIcon, Send, Sparkles, Smartphone, Watch, Glasses, Car, Home, Laptop, Check, Brain, MapPin, Zap, ChevronRight, Calendar as CalendarIcon, Database } from "lucide-react";
 import { toast } from "sonner";
 import "./SoulSentryHub.css";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { isToday, parseISO, format, isValid } from "date-fns";
 
 export default function SoulSentryHub({ initialData, initialShowResults = false }) {
   const [input, setInput] = useState("");
@@ -28,6 +30,49 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
   };
 
   const [data, setData] = useState(defaultData);
+
+  // Fetch today's tasks from database
+  const { data: dbTasks = [] } = useQuery({
+    queryKey: ['tasks', 'today'],
+    queryFn: async () => {
+      const allTasks = await base44.entities.Task.list('-reminder_time');
+      return allTasks.filter(t => t.reminder_time && isToday(parseISO(t.reminder_time)) && t.status !== 'completed');
+    }
+  });
+
+  // Merge AI timeline with DB tasks
+  const mergedTimeline = useMemo(() => {
+    const aiItems = data.timeline || [];
+    
+    const dbItems = dbTasks.map(task => {
+        let timeStr = "全天";
+        if (task.reminder_time) {
+            const date = parseISO(task.reminder_time);
+            if (isValid(date)) {
+                timeStr = format(date, 'HH:mm');
+            }
+        }
+
+        return {
+            time: timeStr,
+            title: task.title,
+            desc: task.description || "来自待办清单",
+            icon: "📅", 
+            highlight: task.priority === 'high' || task.priority === 'urgent',
+            isDbTask: true,
+            id: task.id
+        };
+    });
+
+    // Combine and sort by time
+    const combined = [...aiItems, ...dbItems].sort((a, b) => {
+        if (a.time === "全天") return -1;
+        if (b.time === "全天") return 1;
+        return a.time.localeCompare(b.time);
+    });
+
+    return combined;
+  }, [data.timeline, dbTasks]);
 
   useEffect(() => {
     if (initialData) {
@@ -389,22 +434,42 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                     <section className="animate-fade-up" style={{ animationDelay: '0.2s' }}>
                         <h3 className="text-xl font-bold text-slate-800 mb-6">情境感知时间线</h3>
                         <div className="bg-white rounded-3xl p-8 relative border border-slate-100 shadow-sm">
-                            {data.timeline.map((event, idx) => (
-                                <div key={idx} className="timeline-item relative pl-12 pb-8 last:pb-0 group cursor-pointer">
-                                    <div className="timeline-line bg-slate-100"></div>
-                                    <div className={`absolute left-0 top-0 w-12 h-12 rounded-full ${event.highlight ? 'bg-[#384877]/10' : 'bg-slate-50'} flex items-center justify-center text-2xl border border-slate-100 shadow-sm z-10 group-hover:scale-110 transition-transform`}>
-                                        {event.icon}
-                                    </div>
-                                    <div className="pt-2">
-                                        <div className="flex items-baseline gap-3 mb-1">
-                                            <span className="font-mono text-slate-400 text-sm">{event.time}</span>
-                                            <h4 className={`font-bold text-lg ${event.highlight ? 'text-[#384877]' : 'text-slate-700'}`}>{event.title}</h4>
-                                            {event.highlight && <span className="px-2 py-0.5 bg-[#384877]/10 text-[#384877] text-[10px] rounded-full font-medium">重点</span>}
+                            {mergedTimeline.length === 0 ? (
+                                <div className="text-center text-slate-400 py-8">暂无日程安排</div>
+                            ) : (
+                                mergedTimeline.map((event, idx) => (
+                                    <div key={idx} className="timeline-item relative pl-12 pb-8 last:pb-0 group cursor-pointer">
+                                        <div className="timeline-line bg-slate-100"></div>
+                                        <div className={`absolute left-0 top-0 w-12 h-12 rounded-full ${
+                                            event.isDbTask ? 'bg-amber-50 border-amber-100' : 
+                                            event.highlight ? 'bg-[#384877]/10 border-[#384877]/20' : 'bg-slate-50 border-slate-100'
+                                        } flex items-center justify-center text-2xl border shadow-sm z-10 group-hover:scale-110 transition-transform`}>
+                                            {event.icon}
                                         </div>
-                                        <p className="text-slate-500 text-sm leading-relaxed max-w-md">{event.desc}</p>
+                                        <div className="pt-2">
+                                            <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                                <span className="font-mono text-slate-400 text-sm">{event.time}</span>
+                                                <h4 className={`font-bold text-lg ${
+                                                    event.isDbTask ? 'text-slate-800' : 
+                                                    event.highlight ? 'text-[#384877]' : 'text-slate-700'
+                                                }`}>{event.title}</h4>
+                                                
+                                                {event.isDbTask && (
+                                                    <span className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] rounded-md font-medium border border-amber-200">
+                                                        <Database className="w-3 h-3" />
+                                                        <span>已有日程</span>
+                                                    </span>
+                                                )}
+                                                
+                                                {!event.isDbTask && event.highlight && (
+                                                    <span className="px-2 py-0.5 bg-[#384877]/10 text-[#384877] text-[10px] rounded-full font-medium">重点</span>
+                                                )}
+                                            </div>
+                                            <p className="text-slate-500 text-sm leading-relaxed max-w-md">{event.desc}</p>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))
+                            )}
                         </div>
                     </section>
 

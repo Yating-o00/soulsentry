@@ -21,7 +21,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import QuickAddTask from "../components/tasks/QuickAddTask";
-import SoulSentryHub from "../components/dashboard/SoulSentryHub";
 import CalendarMonthView from "../components/calendar/CalendarMonthView";
 import CalendarWeekView from "../components/calendar/CalendarWeekView";
 import CalendarDayView from "../components/calendar/CalendarDayView";
@@ -36,6 +35,7 @@ import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
+import SoulSentryHub from "../components/dashboard/SoulSentryHub";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -485,60 +485,15 @@ export default function Dashboard() {
         </Card>
       </motion.div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: SoulSentry Hub */}
-        <div className="lg:col-span-2">
-          <SoulSentryHub />
-        </div>
-
-        {/* Right Column: Insights & Summary */}
-        <div className="space-y-6">
-          <motion.div
-             initial={{ opacity: 0, x: 20 }}
-             animate={{ opacity: 1, x: 0 }}
-             transition={{ delay: 0.25 }}
-          >
-            <TeamOnboardingProgress />
-          </motion.div>
-          
-          <motion.div
-             initial={{ opacity: 0, x: 20 }}
-             animate={{ opacity: 1, x: 0 }}
-             transition={{ delay: 0.3 }}
-          >
-            <UserBehaviorInsights />
-          </motion.div>
-
-          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-indigo-50 to-white">
-            <CardHeader>
-              <CardTitle className="text-indigo-900 flex items-center gap-2 text-base">
-                <TrendingUp className="w-4 h-4" />
-                近期概况
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-600">待办总数</span>
-                  <span className="font-semibold text-slate-900">{pendingTasks.length}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-600">本周完成</span>
-                  <span className="font-semibold text-green-600">
-                    {activeTasks.filter(t => t.status === 'completed' && !t.parent_task_id).length}
-                  </span>
-                </div>
-                <div className="pt-2 border-t border-indigo-100">
-                  <p className="text-xs text-indigo-400 leading-relaxed">
-                    💡 提示：定期清理逾期约定可以提高完成率和专注度。
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      {/* Main Content: SoulSentry Hub */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="mt-6"
+      >
+        <SoulSentryHub />
+      </motion.div>
       </TabsContent>
 
       <TabsContent value="calendar" className="space-y-6">

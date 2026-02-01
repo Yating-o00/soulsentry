@@ -220,7 +220,7 @@ ${selectedType ? `\n重要提示：用户已明确指定这是一个"${selectedT
   "title": "提取的标题（任务用）",
   "description": "详细描述",
   "content": "完整内容（笔记用）",
-  "reminder_time": "提取的时间（ISO格式，如果有）",
+  "reminder_time": "提取的时间（ISO格式，必须基于Context Info计算绝对时间，如果用户只说'明天'，默认设为明天上午09:00）",
   "priority": "low/medium/high/urgent（任务用）",
   "category": "work/personal/health/study等（任务用）",
   "tags": ["标签1", "标签2"]（笔记用）

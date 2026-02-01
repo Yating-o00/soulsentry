@@ -50,8 +50,22 @@ export default function SmartTextParser({ onTasksGenerated, className = "" }) {
 
     setParsing(true);
     try {
+      const now = new Date();
+      const timeOptions = { timeZone: 'Asia/Shanghai', hour12: false };
+      const dateOptions = { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' };
+      const weekdayOptions = { timeZone: 'Asia/Shanghai', weekday: 'long' };
+      
+      const contextInfo = `
+[Context Info]
+Current Time: ${now.toLocaleTimeString('zh-CN', timeOptions)} (Asia/Shanghai)
+Current Date: ${now.toLocaleDateString('zh-CN', dateOptions)}
+Weekday: ${now.toLocaleDateString('zh-CN', weekdayOptions)}
+Timezone: Asia/Shanghai (UTC+8)
+`;
+
       const response = await base44.integrations.Core.InvokeLLM({
         prompt: `你是一个约定拆解专家。请从以下文本中提取或生成约定信息，并识别大约定与子约定的层级关系。
+${contextInfo}
 
 文本内容：
 ${text}
@@ -68,9 +82,10 @@ ${text}
 7. **语言优化**：确保生成的标题和描述语言通顺、专业，无语法错误。
 
 提醒时间规则：
+- 必须基于 [Context Info] 中的当前时间计算相对时间
 - 如果提到具体时间，转换为ISO格式
 - 相对时间（如"明天"、"下周"）计算具体日期
-- 没有明确时间时，使用当前时间的第二天上午9点
+- 没有明确时间时，使用当前日期的第二天上午9点
 - 子约定时间应该合理分布在父约定之前
 
 优先级判断：

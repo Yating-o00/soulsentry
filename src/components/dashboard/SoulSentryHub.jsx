@@ -37,11 +37,29 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     automations: []
   };
 
-  const [data, setData] = useState(initialData || defaultData);
+  const [data, setData] = useState(defaultData);
 
   useEffect(() => {
     if (initialData) {
-      setData(initialData);
+      const mergedDevices = { ...defaultData.devices };
+      if (initialData.devices) {
+         Object.keys(mergedDevices).forEach(key => {
+            if (initialData.devices[key]) {
+               mergedDevices[key] = { 
+                   ...mergedDevices[key], 
+                   ...initialData.devices[key],
+                   icon: mergedDevices[key].icon, 
+                   name: mergedDevices[key].name 
+               };
+            }
+         });
+      }
+      
+      setData({
+          devices: mergedDevices,
+          timeline: initialData.timeline || [],
+          automations: initialData.automations || []
+      });
       setShowResults(true);
     }
   }, [initialData]);

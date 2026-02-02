@@ -221,8 +221,10 @@ export default function Welcome({ onComplete }) {
   };
 
   const handleSkip = () => {
-    if (onComplete) onComplete();
     navigate(createPageUrl("Dashboard"));
+    if (onComplete) {
+        setTimeout(onComplete, 50);
+    }
   };
 
   return (

@@ -196,12 +196,21 @@ export default function Welcome({ onComplete }) {
 
       clearInterval(stepInterval);
       
-      // Navigate to Dashboard with results
-      // Adding a small delay to let user see the final step if needed, or just go immediately
-      setTimeout(() => {
-          if (onComplete) onComplete();
-          navigate(createPageUrl("Dashboard"), { state: { soulSentryData: response } });
-      }, 1000);
+      // Ensure response has valid structure
+      const safeResponse = {
+          devices: response.devices || {},
+          timeline: response.timeline || [],
+          automations: response.automations || []
+      };
+
+      // Navigate first to ensure state is passed to the new route
+      navigate(createPageUrl("Dashboard"), { state: { soulSentryData: safeResponse } });
+
+      // Then mark welcome as complete to allow the guard to render the dashboard
+      // Using a small timeout to ensure navigation state is established
+      if (onComplete) {
+          setTimeout(onComplete, 50);
+      }
 
     } catch (error) {
       console.error(error);

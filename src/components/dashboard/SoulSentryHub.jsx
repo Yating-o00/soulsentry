@@ -1,12 +1,19 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { base44 } from "@/api/base44Client";
-import { Mic, MicOff, Image as ImageIcon, Send, Sparkles, Smartphone, Watch, Glasses, Car, Home, Laptop, Check, Brain, MapPin, Zap, ChevronRight, Calendar as CalendarIcon, Database } from "lucide-react";
+import { Mic, MicOff, Image as ImageIcon, Send, Sparkles, Smartphone, Watch, Glasses, Car, Home, Laptop, Check, Brain, MapPin, Zap } from "lucide-react";
 import { toast } from "sonner";
 import "./SoulSentryHub.css";
-import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
-import { isToday, parseISO, format, isValid } from "date-fns";
+
+// Color mapping for inline styles or arbitrary tailwind classes - Updated to match Product Tone
+const colors = {
+  void: '#1e293b', // Slate 800 - Main Text
+  mist: '#ffffff', // White - Backgrounds
+  dawn: '#384877', // Primary Blue - Accents/Highlights
+  ether: '#3b5aa2', // Lighter Blue - Gradients
+  breath: '#10b981', // Green - Success (Keep)
+  twilight: '#f8fafc', // Slate 50 - Backgrounds
+};
 
 export default function SoulSentryHub({ initialData, initialShowResults = false }) {
   const [input, setInput] = useState("");
@@ -14,8 +21,9 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
   const [showResults, setShowResults] = useState(initialShowResults);
   const [parsingSteps, setParsingSteps] = useState([]);
   const [activeDevice, setActiveDevice] = useState("phone");
+  const [aiData, setAiData] = useState(null);
   
-  // Default mock data structure
+  // Default mock data structure (will be overwritten by AI)
   const defaultData = {
     devices: {
       phone: { name: '智能手机', icon: Smartphone, strategies: [] },
@@ -30,49 +38,6 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
   };
 
   const [data, setData] = useState(defaultData);
-
-  // Fetch today's tasks from database
-  const { data: dbTasks = [] } = useQuery({
-    queryKey: ['tasks', 'today'],
-    queryFn: async () => {
-      const allTasks = await base44.entities.Task.list('-reminder_time');
-      return allTasks.filter(t => t.reminder_time && isToday(parseISO(t.reminder_time)) && t.status !== 'completed');
-    }
-  });
-
-  // Merge AI timeline with DB tasks
-  const mergedTimeline = useMemo(() => {
-    const aiItems = data.timeline || [];
-    
-    const dbItems = dbTasks.map(task => {
-        let timeStr = "全天";
-        if (task.reminder_time) {
-            const date = parseISO(task.reminder_time);
-            if (isValid(date)) {
-                timeStr = format(date, 'HH:mm');
-            }
-        }
-
-        return {
-            time: timeStr,
-            title: task.title,
-            desc: task.description || "来自待办清单",
-            icon: "📅", 
-            highlight: task.priority === 'high' || task.priority === 'urgent',
-            isDbTask: true,
-            id: task.id
-        };
-    });
-
-    // Combine and sort by time
-    const combined = [...aiItems, ...dbItems].sort((a, b) => {
-        if (a.time === "全天") return -1;
-        if (b.time === "全天") return 1;
-        return a.time.localeCompare(b.time);
-    });
-
-    return combined;
-  }, [data.timeline, dbTasks]);
 
   useEffect(() => {
     if (initialData) {
@@ -115,6 +80,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     setParsingSteps([]);
     setShowResults(false);
 
+    // Simulate steps for UX
     const steps = [
         { icon: Brain, text: '提取时间实体...', delay: 800 },
         { icon: Sparkles, text: '识别意图与优先级...', delay: 600 },
@@ -133,12 +99,48 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     }, 800);
 
     try {
-        const { data: response } = await base44.functions.invoke('analyzeIntent', { input });
+        const now = new Date();
+        const response = await base44.integrations.Core.InvokeLLM({
+            prompt: `
+            User Input: "${input}"
+            Current Time: ${now.toLocaleString()}
+            
+            Task: Analyze the user's input and generate a structured "SoulSentry" plan for device coordination, timeline, and automation.
+            
+            IMPORTANT: All generated text (titles, descriptions, strategies, content, methods) MUST BE IN SIMPLIFIED CHINESE (简体中文).
+            
+            Return JSON in this EXACT structure:
+            {
+                "devices": {
+                    "phone": { "strategies": [{"time": "string", "method": "string", "content": "string", "priority": "high|medium|low"}] },
+                    "watch": { "strategies": [...] },
+                    "glasses": { "strategies": [...] },
+                    "car": { "strategies": [...] },
+                    "home": { "strategies": [...] },
+                    "pc": { "strategies": [...] }
+                },
+                "timeline": [
+                    {"time": "HH:MM", "title": "string", "desc": "string", "icon": "string (emoji)", "highlight": boolean}
+                ],
+                "automations": [
+                    {"title": "string", "desc": "string", "status": "active|ready|monitoring|pending", "icon": "string (emoji)"}
+                ]
+            }
+            
+            Generate realistic strategies for each device based on the input context. If a device isn't relevant, provide a neutral strategy or leave empty (but better to provide something smart).
+            For automations, identify tasks that can be automated (booking, navigation, reminders, file prep).
+            `,
+            response_json_schema: {
+                type: "object",
+                properties: {
+                    devices: { type: "object" },
+                    timeline: { type: "array", items: { type: "object" } },
+                    automations: { type: "array", items: { type: "object" } }
+                }
+            }
+        });
 
-        if (response.error) {
-            throw new Error(response.details || response.error);
-        }
-
+        // Merge AI response with default icons/names
         const mergedDevices = { ...defaultData.devices };
         if (response.devices) {
             Object.keys(response.devices).forEach(key => {
@@ -154,6 +156,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             automations: response.automations || []
         });
 
+        // Wait for steps animation to finish mostly
         setTimeout(() => {
             clearInterval(stepInterval);
             setIsProcessing(false);
@@ -163,10 +166,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
     } catch (error) {
         console.error(error);
-        const errorMsg = error.message?.includes("404") 
-            ? "AI服务未连接，请检查API密钥配置" 
-            : (error.message || "分析失败，请重试");
-        toast.error(errorMsg);
+        toast.error("分析失败，请重试");
         setIsProcessing(false);
         clearInterval(stepInterval);
     }
@@ -179,23 +179,26 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
         <div 
             onClick={() => onClick(id)}
             className={`
-                relative rounded-xl p-4 text-center cursor-pointer transition-all duration-300 border
-                ${active 
-                    ? 'bg-[#384877] text-white border-[#384877] shadow-lg shadow-[#384877]/20 scale-105' 
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-[#384877]/30 hover:shadow-md'
-                }
+            device-card bg-white rounded-2xl p-4 text-center cursor-pointer transition-all duration-300 border-2 
+            ${active ? 'border-[#384877] shadow-md' : 'border-transparent hover:border-slate-200 hover:shadow-sm'}
+            hover:-translate-y-1
             `}
-        >
+            >
             <div className={`
-                w-10 h-10 mx-auto mb-3 rounded-lg flex items-center justify-center shadow-sm transition-colors
-                ${active ? 'bg-white/10 text-white' : 'bg-slate-50 text-slate-600'}
+                w-10 h-10 mx-auto mb-3 rounded-2xl flex items-center justify-center text-white shadow-md
+                ${id === 'phone' ? 'bg-gradient-to-br from-[#384877] to-[#3b5aa2]' : ''}
+                ${id === 'watch' ? 'bg-gradient-to-br from-[#3b5aa2] to-[#384877]' : ''}
+                ${id === 'glasses' ? 'bg-gradient-to-br from-[#6366f1] to-purple-600' : ''}
+                ${id === 'car' ? 'bg-gradient-to-br from-emerald-600 to-teal-700' : ''}
+                ${id === 'home' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : ''}
+                ${id === 'pc' ? 'bg-gradient-to-br from-rose-500 to-pink-600' : ''}
             `}>
                 <Icon className="w-5 h-5" />
             </div>
-            <h4 className={`font-bold text-sm mb-1 ${active ? 'text-white' : 'text-slate-800'}`}>{device.name}</h4>
-            <div className={`mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${active ? 'bg-white/10' : 'bg-green-50'}`}>
-                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${active ? 'bg-green-400' : 'bg-green-500'}`}></div>
-                <span className={`text-[10px] font-medium ${active ? 'text-green-100' : 'text-green-600'}`}>在线</span>
+            <h4 className="font-medium text-slate-700 text-sm mb-1">{device.name}</h4>
+            <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 bg-[#10b981]/10 rounded-full">
+                <div className="w-1.5 h-1.5 bg-[#10b981] rounded-full animate-pulse"></div>
+                <span className="text-[10px] text-[#10b981] font-medium">在线</span>
             </div>
         </div>
     );
@@ -401,42 +404,22 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                     <section className="animate-fade-up" style={{ animationDelay: '0.2s' }}>
                         <h3 className="text-xl font-bold text-slate-800 mb-6">情境感知时间线</h3>
                         <div className="bg-white rounded-3xl p-8 relative border border-slate-100 shadow-sm">
-                            {mergedTimeline.length === 0 ? (
-                                <div className="text-center text-slate-400 py-8">暂无日程安排</div>
-                            ) : (
-                                mergedTimeline.map((event, idx) => (
-                                    <div key={idx} className="timeline-item relative pl-12 pb-8 last:pb-0 group cursor-pointer">
-                                        <div className="timeline-line bg-slate-100"></div>
-                                        <div className={`absolute left-0 top-0 w-12 h-12 rounded-full ${
-                                            event.isDbTask ? 'bg-amber-50 border-amber-100' : 
-                                            event.highlight ? 'bg-[#384877]/10 border-[#384877]/20' : 'bg-slate-50 border-slate-100'
-                                        } flex items-center justify-center text-2xl border shadow-sm z-10 group-hover:scale-110 transition-transform`}>
-                                            {event.icon}
-                                        </div>
-                                        <div className="pt-2">
-                                            <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                                <span className="font-mono text-slate-400 text-sm">{event.time}</span>
-                                                <h4 className={`font-bold text-lg ${
-                                                    event.isDbTask ? 'text-slate-800' : 
-                                                    event.highlight ? 'text-[#384877]' : 'text-slate-700'
-                                                }`}>{event.title}</h4>
-                                                
-                                                {event.isDbTask && (
-                                                    <span className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] rounded-md font-medium border border-amber-200">
-                                                        <Database className="w-3 h-3" />
-                                                        <span>已有日程</span>
-                                                    </span>
-                                                )}
-                                                
-                                                {!event.isDbTask && event.highlight && (
-                                                    <span className="px-2 py-0.5 bg-[#384877]/10 text-[#384877] text-[10px] rounded-full font-medium">重点</span>
-                                                )}
-                                            </div>
-                                            <p className="text-slate-500 text-sm leading-relaxed max-w-md">{event.desc}</p>
-                                        </div>
+                            {data.timeline.map((event, idx) => (
+                                <div key={idx} className="timeline-item relative pl-12 pb-8 last:pb-0 group cursor-pointer">
+                                    <div className="timeline-line bg-slate-100"></div>
+                                    <div className={`absolute left-0 top-0 w-12 h-12 rounded-full ${event.highlight ? 'bg-[#384877]/10' : 'bg-slate-50'} flex items-center justify-center text-2xl border border-slate-100 shadow-sm z-10 group-hover:scale-110 transition-transform`}>
+                                        {event.icon}
                                     </div>
-                                ))
-                            )}
+                                    <div className="pt-2">
+                                        <div className="flex items-baseline gap-3 mb-1">
+                                            <span className="font-mono text-slate-400 text-sm">{event.time}</span>
+                                            <h4 className={`font-bold text-lg ${event.highlight ? 'text-[#384877]' : 'text-slate-700'}`}>{event.title}</h4>
+                                            {event.highlight && <span className="px-2 py-0.5 bg-[#384877]/10 text-[#384877] text-[10px] rounded-full font-medium">重点</span>}
+                                        </div>
+                                        <p className="text-slate-500 text-sm leading-relaxed max-w-md">{event.desc}</p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </section>
 

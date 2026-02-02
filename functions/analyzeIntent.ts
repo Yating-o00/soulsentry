@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // Helper to get the current date/time in Shanghai timezone
 const getShanghaiTime = () => {
@@ -34,47 +34,25 @@ Deno.serve(async (req) => {
         const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
         const openaiKey = Deno.env.get("OPENAI_API_KEY");
         
-        if (!moonshotKey && !openaiKey) {
-            return Response.json({ error: 'No AI API keys configured' }, { status: 500 });
-        }
-
-        // Fetch User Context for Personalization
+        // Fetch User Context
         let userContext = "";
         try {
             const [behaviors, recentTasks] = await Promise.all([
                 base44.entities.UserBehavior.list('-created_date', 10).catch(() => []),
                 base44.entities.Task.list('-created_date', 5).catch(() => [])
             ]);
-
             const behaviorSummary = behaviors.map(b => `${b.event_type} (${b.category})`).join(', ');
             const taskSummary = recentTasks.map(t => `${t.title} (${t.priority}, ${t.category})`).join(', ');
-            
-            userContext = `
-            Recent Behaviors: ${behaviorSummary}
-            Recent Tasks: ${taskSummary}
-            `;
+            userContext = `Recent Behaviors: ${behaviorSummary}\nRecent Tasks: ${taskSummary}`;
         } catch (e) {
             console.warn("Failed to fetch user context", e);
         }
 
         const systemPrompt = `
 You are "SoulSentry" (心栈), an advanced AI schedule hub. 
-Your goal is to analyze the user's input and generate a structured plan for device coordination, context-aware timeline, and automated execution.
+Your goal is to analyze the user's input and generate a structured plan.
 
-**1. Entity Recognition & Context Understanding:**
-- **Entities**: Identify Time (when), Location (where), People (who), Event (what).
-- **Implicit Context**: Infer underlying needs. (e.g., "Meeting with Boss" -> High priority, prepare files, dress code).
-- **User History**: Use the provided recent behaviors to tailor suggestions.
-
-**2. Multi-Device Synergy:**
-Analyze the scenario and distribute tasks intelligently:
-- **Meeting**: Phone (notify), PC (files), Car (nav), Watch (reminders).
-- **Travel**: Phone (ticket), Watch (gate), Home (security).
-- **Deep Work**: PC (focus), Phone (DND), Home (ambiance).
-
-**3. Output Requirement:**
-Return a valid JSON object strictly following this structure:
-
+**Output Structure (JSON):**
 {
   "devices": {
     "phone": { "name": "智能手机", "strategies": [{"time": "string", "method": "string", "content": "string", "priority": "high|medium|low"}] },
@@ -84,45 +62,24 @@ Return a valid JSON object strictly following this structure:
     "home": { "name": "智能家居", "strategies": [] },
     "pc": { "name": "工作站", "strategies": [] }
   },
-  "timeline": [
-    {
-      "time": "HH:MM", 
-      "title": "string", 
-      "desc": "string", 
-      "icon": "string (single emoji)", 
-      "highlight": boolean
-    }
-  ],
-  "automations": [
-    {
-      "title": "string", 
-      "desc": "string", 
-      "status": "active|ready|monitoring|pending", 
-      "icon": "string (single emoji)"
-    }
-  ]
+  "timeline": [{ "time": "HH:MM", "title": "string", "desc": "string", "icon": "string", "highlight": boolean }],
+  "automations": [{ "title": "string", "desc": "string", "status": "active|ready", "icon": "string" }]
 }
 
-**Input Analysis:**
+**Context:**
 Current Time: ${getShanghaiTime()}
 User Input: "${input}"
 User Context: ${userContext}
-
-**Generation Guidelines:**
-- **Tone**: Warm, empathetic, efficient (Simplified Chinese).
-- **Proactive**: Don't just remind; prepare.
 `;
 
         let result = null;
         let provider = null;
 
-        // Try Moonshot first
+        // 1. Try Moonshot
         if (moonshotKey) {
             try {
                 const cleanKey = moonshotKey.trim().replace(/[\r\n\s]/g, '');
-                console.log(`[Moonshot] Preparing request. Key length: ${cleanKey.length}`);
-                console.log(`[Moonshot] Key start/end: ${cleanKey.substring(0, 5)}...${cleanKey.substring(cleanKey.length - 4)}`);
-                
+                console.log(`Attempting Moonshot...`);
                 const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
                     method: "POST",
                     headers: {
@@ -141,26 +98,25 @@ User Context: ${userContext}
 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log("[Moonshot] Success. Tokens used:", data.usage);
                     const content = data.choices[0].message.content;
-                    if (content) {
-                        // Handle potential markdown code blocks
-                        const jsonStr = content.replace(/^```json\n|\n```$/g, '').trim();
-                        result = JSON.parse(jsonStr);
+                    // Attempt to extract JSON if wrapped in markdown
+                    const jsonMatch = content.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        result = JSON.parse(jsonMatch[0]);
+                        provider = 'moonshot';
+                    } else {
+                        result = JSON.parse(content);
                         provider = 'moonshot';
                     }
                 } else {
-                    const errText = await response.text();
-                    console.error(`[Moonshot] API Error: Status ${response.status}`);
-                    console.error(`[Moonshot] Headers:`, Object.fromEntries(response.headers.entries()));
-                    console.error(`[Moonshot] Body: ${errText}`);
+                    console.error(`Moonshot failed: ${response.status} ${await response.text()}`);
                 }
             } catch (e) {
-                console.error("Moonshot execution error:", e);
+                console.error("Moonshot error:", e);
             }
         }
 
-        // Fallback to OpenAI if Moonshot failed
+        // 2. Try OpenAI
         if (!result && openaiKey) {
             try {
                 console.log("Falling back to OpenAI...");
@@ -176,23 +132,49 @@ User Context: ${userContext}
                             { role: "system", content: systemPrompt },
                             { role: "user", content: input }
                         ],
-                        temperature: 0.3
+                        temperature: 0.3,
+                        response_format: { type: "json_object" }
                     })
                 });
 
                 if (response.ok) {
                     const data = await response.json();
-                    const content = data.choices[0].message.content;
-                    if (content) {
-                        result = JSON.parse(content);
-                        provider = 'openai';
-                    }
+                    result = JSON.parse(data.choices[0].message.content);
+                    provider = 'openai';
                 } else {
-                    const err = await response.text();
-                    console.error("OpenAI API failed:", response.status, err);
+                    console.error("OpenAI failed:", await response.text());
                 }
             } catch (e) {
                 console.error("OpenAI error:", e);
+            }
+        }
+
+        // 3. Fallback to Base44 Core (InvokeLLM)
+        if (!result) {
+            try {
+                console.log("Falling back to Base44 Core...");
+                const combinedPrompt = `${systemPrompt}\n\nUser Input: ${input}`;
+                
+                // Use service role to ensure access to integrations
+                const response = await base44.asServiceRole.integrations.Core.InvokeLLM({
+                    prompt: combinedPrompt,
+                    response_json_schema: {
+                        type: "object",
+                        properties: {
+                             devices: { type: "object", additionalProperties: true },
+                             timeline: { type: "array", items: { type: "object", additionalProperties: true } },
+                             automations: { type: "array", items: { type: "object", additionalProperties: true } }
+                        },
+                        required: ["devices", "timeline", "automations"]
+                    }
+                });
+                
+                if (response) {
+                    result = response;
+                    provider = 'base44-core';
+                }
+            } catch (e) {
+                console.error("Base44 Core error:", e);
             }
         }
 

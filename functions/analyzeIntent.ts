@@ -152,11 +152,11 @@ User Context: ${userContext}
         // 3. Fallback to Base44 Core (InvokeLLM)
         if (!result) {
             try {
-                console.log("Falling back to Base44 Core...");
+                console.error("Falling back to Base44 Core...");
                 const combinedPrompt = `${systemPrompt}\n\nUser Input: ${input}`;
                 
-                // Use service role to ensure access to integrations
-                const response = await base44.asServiceRole.integrations.Core.InvokeLLM({
+                // Use standard user client for integrations
+                const response = await base44.integrations.Core.InvokeLLM({
                     prompt: combinedPrompt,
                     response_json_schema: {
                         type: "object",
@@ -174,12 +174,13 @@ User Context: ${userContext}
                     provider = 'base44-core';
                 }
             } catch (e) {
-                console.error("Base44 Core error:", e);
+                console.error("Base44 Core error:", e.message);
+                if (e.response) console.error("Base44 Core response:", await e.response.text().catch(()=>""));
             }
         }
 
         if (!result) {
-            return Response.json({ error: 'All AI providers failed. Please check API keys.' }, { status: 500 });
+            return Response.json({ error: 'All AI providers failed (including fallback). Please check API keys.' }, { status: 500 });
         }
 
         result._meta = { provider };

@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
-import OpenAI from 'npm:openai@^4.28.0';
+// import OpenAI from 'npm:openai@^4.28.0'; // Removed unused import
 
 // Helper to get the current date/time in Shanghai timezone
 const getShanghaiTime = () => {

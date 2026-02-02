@@ -1,3 +1,5 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+
 Deno.serve(async (req) => {
     try {
         const apiKey = Deno.env.get("MOONSHOT_API_KEY");
@@ -6,8 +8,7 @@ Deno.serve(async (req) => {
         }
 
         const cleanKey = apiKey.trim();
-        console.log(`Testing Moonshot Key: ${cleanKey.substring(0, 5)}...${cleanKey.substring(cleanKey.length - 4)} (Length: ${cleanKey.length})`);
-
+        
         // Test with a simple chat completion
         const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
             method: "POST",
@@ -25,13 +26,19 @@ Deno.serve(async (req) => {
             })
         });
 
-        const data = await response.json();
+        let data;
+        const text = await response.text();
+        try {
+            data = JSON.parse(text);
+        } catch {
+            data = text;
+        }
 
         return Response.json({
             status: response.status,
             statusText: response.statusText,
             key_preview: `${cleanKey.substring(0, 5)}...`,
-            response_data: data
+            response: data
         });
 
     } catch (error) {

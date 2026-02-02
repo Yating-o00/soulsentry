@@ -129,8 +129,9 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
         }, 3500);
 
     } catch (error) {
-        console.error(error);
-        toast.error("分析失败，请重试");
+        console.error("Analysis failed:", error);
+        const errorMessage = error.response?.data?.error || error.message || "请求失败，请检查网络或稍后重试";
+        toast.error(`分析中断: ${errorMessage}`);
         setIsProcessing(false);
         clearInterval(stepInterval);
     }

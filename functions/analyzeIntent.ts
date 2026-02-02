@@ -120,7 +120,8 @@ User Context: ${userContext}
         if (moonshotKey) {
             try {
                 const cleanKey = moonshotKey.trim().replace(/[\r\n\s]/g, '');
-                console.error(`Attempting Moonshot with key: ${cleanKey.substring(0, 5)}...${cleanKey.substring(cleanKey.length - 4)}`);
+                console.log(`[Moonshot] Preparing request. Key length: ${cleanKey.length}`);
+                console.log(`[Moonshot] Key start/end: ${cleanKey.substring(0, 5)}...${cleanKey.substring(cleanKey.length - 4)}`);
                 
                 const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
                     method: "POST",
@@ -140,14 +141,19 @@ User Context: ${userContext}
 
                 if (response.ok) {
                     const data = await response.json();
+                    console.log("[Moonshot] Success. Tokens used:", data.usage);
                     const content = data.choices[0].message.content;
                     if (content) {
-                        result = JSON.parse(content);
+                        // Handle potential markdown code blocks
+                        const jsonStr = content.replace(/^```json\n|\n```$/g, '').trim();
+                        result = JSON.parse(jsonStr);
                         provider = 'moonshot';
                     }
                 } else {
                     const errText = await response.text();
-                    console.error(`Moonshot API failed: ${response.status} - ${errText}`);
+                    console.error(`[Moonshot] API Error: Status ${response.status}`);
+                    console.error(`[Moonshot] Headers:`, Object.fromEntries(response.headers.entries()));
+                    console.error(`[Moonshot] Body: ${errText}`);
                 }
             } catch (e) {
                 console.error("Moonshot execution error:", e);
@@ -187,44 +193,6 @@ User Context: ${userContext}
                 }
             } catch (e) {
                 console.error("OpenAI error:", e);
-            }
-        }
-
-        // Final fallback: Base44 Built-in Integration
-        if (!result) {
-            try {
-                console.log("Falling back to Base44 Built-in AI...");
-                // Construct a combined prompt since InvokeLLM takes a single prompt string
-                const combinedPrompt = `${systemPrompt}\n\nUser Input: ${input}`;
-                
-                const response = await base44.integrations.Core.InvokeLLM({
-                    prompt: combinedPrompt,
-                    response_json_schema: {
-                        type: "object",
-                        properties: {
-                             devices: { 
-                                type: "object",
-                                additionalProperties: true 
-                             },
-                             timeline: { 
-                                type: "array", 
-                                items: { type: "object", additionalProperties: true } 
-                             },
-                             automations: { 
-                                type: "array", 
-                                items: { type: "object", additionalProperties: true } 
-                             }
-                        },
-                        required: ["devices", "timeline", "automations"]
-                    }
-                });
-                
-                if (response) {
-                    result = response;
-                    provider = 'base44-core';
-                }
-            } catch (e) {
-                console.error("Base44 Core error:", e);
             }
         }
 

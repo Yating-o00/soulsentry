@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
             console.error("Moonshot API Key is missing");
             return Response.json({ error: 'Moonshot API Key not configured' }, { status: 500 });
         }
+        console.log("API Key configured (starts with):", apiKey.substring(0, 10) + "...");
 
         // Fetch User Context for Personalization
         let userContext = "";

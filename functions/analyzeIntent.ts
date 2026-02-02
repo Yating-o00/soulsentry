@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.11';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
 import OpenAI from 'npm:openai';
 
 // Helper to get the current date/time in Shanghai timezone
@@ -25,9 +25,9 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { input, image_urls } = await req.json();
+        const { input } = await req.json();
 
-        if (!input && (!image_urls || image_urls.length === 0)) {
+        if (!input) {
             return Response.json({ error: 'Input is required' }, { status: 400 });
         }
 
@@ -39,6 +39,8 @@ Deno.serve(async (req) => {
         // Fetch User Context for Personalization
         let userContext = "";
         try {
+            // Using service role to ensure access to data if needed, or standard client if RLS allows.
+            // Using standard client 'base44' here as it's user-scoped.
             const [behaviors, recentTasks] = await Promise.all([
                 base44.entities.UserBehavior.list('-created_date', 10),
                 base44.entities.Task.list('-created_date', 5)
@@ -132,12 +134,6 @@ User Context: ${userContext}
             { role: "system", content: systemPrompt },
             { role: "user", content: input }
         ];
-
-        // If images are present (not supported by all Kimi models yet, but Kimi Vision exists. 
-        // For 'kimi-k2-turbo-preview' specifically, it might be text-only. 
-        // If image support is needed, we'd need to confirm model capabilities. 
-        // Assuming text-only for now based on user's code snippet using 'kimi-k2-turbo-preview').
-        // If the user input contains image content description (from frontend OCR), it's already in 'input'.
 
         const completion = await client.chat.completions.create({
             model: "kimi-k2-turbo-preview", // User specified model

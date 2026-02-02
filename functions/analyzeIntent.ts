@@ -1,20 +1,11 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
 
+// Helper to get the current date/time in Shanghai timezone
 const getShanghaiTime = () => {
     return new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
 };
 
 Deno.serve(async (req) => {
-    const logs = [];
-    const log = (msg) => {
-        console.log(msg);
-        logs.push(msg);
-    };
-    const logError = (msg) => {
-        console.error(msg);
-        logs.push(`ERROR: ${msg}`);
-    };
-
     try {
         if (req.method === 'OPTIONS') {
             return new Response(null, {
@@ -30,39 +21,60 @@ Deno.serve(async (req) => {
         const user = await base44.auth.me();
         
         if (!user) {
-            return Response.json({ error: 'Unauthorized', logs }, { status: 401 });
+            return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const body = await req.json();
         const input = body.input;
 
         if (!input) {
-            return Response.json({ error: 'Input is required', logs }, { status: 400 });
+            return Response.json({ error: 'Input is required' }, { status: 400 });
         }
 
         const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
         const openaiKey = Deno.env.get("OPENAI_API_KEY");
         
-        // Fetch User Context
+        if (!moonshotKey && !openaiKey) {
+            return Response.json({ error: 'No AI API keys configured' }, { status: 500 });
+        }
+
+        // Fetch User Context for Personalization
         let userContext = "";
         try {
-            // Use parallel fetch
             const [behaviors, recentTasks] = await Promise.all([
                 base44.entities.UserBehavior.list('-created_date', 10).catch(() => []),
                 base44.entities.Task.list('-created_date', 5).catch(() => [])
             ]);
+
             const behaviorSummary = behaviors.map(b => `${b.event_type} (${b.category})`).join(', ');
             const taskSummary = recentTasks.map(t => `${t.title} (${t.priority}, ${t.category})`).join(', ');
-            userContext = `Recent Behaviors: ${behaviorSummary}\nRecent Tasks: ${taskSummary}`;
+            
+            userContext = `
+            Recent Behaviors: ${behaviorSummary}
+            Recent Tasks: ${taskSummary}
+            `;
         } catch (e) {
-            logError(`Failed to fetch context: ${e.message}`);
+            console.warn("Failed to fetch user context", e);
         }
 
         const systemPrompt = `
 You are "SoulSentry" (心栈), an advanced AI schedule hub. 
-Your goal is to analyze the user's input and generate a structured plan.
+Your goal is to analyze the user's input and generate a structured plan for device coordination, context-aware timeline, and automated execution.
 
-**Output Structure (JSON):**
+**1. Entity Recognition & Context Understanding:**
+- **Entities**: Identify Time (when), Location (where), People (who), Event (what).
+- **Implicit Context**: Infer underlying needs. (e.g., "Meeting with Boss" -> High priority, prepare files, dress code).
+- **User History**: Use the provided recent behaviors to tailor suggestions.
+
+**2. Multi-Device Synergy:**
+Analyze the scenario and distribute tasks intelligently:
+- **Meeting**: Phone (notify), PC (files), Car (nav), Watch (reminders).
+- **Travel**: Phone (ticket), Watch (gate), Home (security).
+- **Deep Work**: PC (focus), Phone (DND), Home (ambiance).
+
+**3. Output Requirement:**
+Return a valid JSON object strictly following this structure:
+
 {
   "devices": {
     "phone": { "name": "智能手机", "strategies": [{"time": "string", "method": "string", "content": "string", "priority": "high|medium|low"}] },
@@ -72,24 +84,46 @@ Your goal is to analyze the user's input and generate a structured plan.
     "home": { "name": "智能家居", "strategies": [] },
     "pc": { "name": "工作站", "strategies": [] }
   },
-  "timeline": [{ "time": "HH:MM", "title": "string", "desc": "string", "icon": "string", "highlight": boolean }],
-  "automations": [{ "title": "string", "desc": "string", "status": "active|ready", "icon": "string" }]
+  "timeline": [
+    {
+      "time": "HH:MM", 
+      "title": "string", 
+      "desc": "string", 
+      "icon": "string (single emoji)", 
+      "highlight": boolean
+    }
+  ],
+  "automations": [
+    {
+      "title": "string", 
+      "desc": "string", 
+      "status": "active|ready|monitoring|pending", 
+      "icon": "string (single emoji)"
+    }
+  ]
 }
 
-**Context:**
+**Input Analysis:**
 Current Time: ${getShanghaiTime()}
 User Input: "${input}"
 User Context: ${userContext}
+
+**Generation Guidelines:**
+- **Tone**: Warm, empathetic, efficient (Simplified Chinese).
+- **Proactive**: Don't just remind; prepare.
 `;
 
         let result = null;
         let provider = null;
+        const errors = [];
 
-        // 1. Try Moonshot
+        // Try Moonshot first
         if (moonshotKey) {
             try {
                 const cleanKey = moonshotKey.trim().replace(/[\r\n\s]/g, '');
-                log(`Attempting Moonshot with key length ${cleanKey.length}...`);
+                console.log(`[Moonshot] Preparing request. Key length: ${cleanKey.length}`);
+                console.log(`[Moonshot] Key start/end: ${cleanKey.substring(0, 5)}...${cleanKey.substring(cleanKey.length - 4)}`);
+                
                 const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
                     method: "POST",
                     headers: {
@@ -108,30 +142,29 @@ User Context: ${userContext}
 
                 if (response.ok) {
                     const data = await response.json();
+                    console.log("[Moonshot] Success. Tokens used:", data.usage);
                     const content = data.choices[0].message.content;
-                    try {
-                        // Handle potential markdown wrapping
-                        const jsonStr = content.replace(/^```json\s*|\s*```$/g, '');
+                    if (content) {
+                        // Handle potential markdown code blocks
+                        const jsonStr = content.replace(/^```json\n|\n```$/g, '').trim();
                         result = JSON.parse(jsonStr);
                         provider = 'moonshot';
-                        log("Moonshot success");
-                    } catch (parseErr) {
-                        logError("Moonshot JSON parse error: " + parseErr.message);
                     }
                 } else {
-                    logError(`Moonshot failed: ${response.status} ${await response.text()}`);
+                    const errText = await response.text();
+                    console.error(`[Moonshot] API Error: Status ${response.status}`);
+                    errors.push(`Moonshot: ${response.status}`);
                 }
             } catch (e) {
-                logError("Moonshot error: " + e.message);
+                console.error("Moonshot execution error:", e);
+                errors.push(`Moonshot Error: ${e.message}`);
             }
-        } else {
-            log("No Moonshot key");
         }
 
-        // 2. Try OpenAI
+        // Fallback to OpenAI if Moonshot failed
         if (!result && openaiKey) {
             try {
-                log("Falling back to OpenAI...");
+                console.log("Falling back to OpenAI...");
                 const response = await fetch("https://api.openai.com/v1/chat/completions", {
                     method: "POST",
                     headers: {
@@ -144,93 +177,37 @@ User Context: ${userContext}
                             { role: "system", content: systemPrompt },
                             { role: "user", content: input }
                         ],
-                        temperature: 0.3,
-                        response_format: { type: "json_object" }
+                        temperature: 0.3
                     })
                 });
 
                 if (response.ok) {
                     const data = await response.json();
-                    result = JSON.parse(data.choices[0].message.content);
-                    provider = 'openai';
-                    log("OpenAI success");
-                } else {
-                    logError("OpenAI failed: " + await response.text());
-                }
-            } catch (e) {
-                logError("OpenAI error: " + e.message);
-            }
-        }
-
-        // 3. Fallback to Base44 Core (InvokeLLM)
-        if (!result) {
-            try {
-                log("Falling back to Base44 Core...");
-                const combinedPrompt = `${systemPrompt}\n\nUser Input: ${input}`;
-                
-                // Try to use InvokeLLM without schema first to check if that's the issue, or with schema?
-                // Using schema is safer for the frontend.
-                // Check if base44.integrations exists
-                if (!base44.integrations || !base44.integrations.Core) {
-                     logError("base44.integrations.Core not found");
-                     // Try service role
-                     if (base44.asServiceRole && base44.asServiceRole.integrations && base44.asServiceRole.integrations.Core) {
-                        log("Using Service Role integrations...");
-                        const response = await base44.asServiceRole.integrations.Core.InvokeLLM({
-                            prompt: combinedPrompt,
-                            response_json_schema: {
-                                type: "object",
-                                properties: {
-                                     devices: { type: "object", additionalProperties: true },
-                                     timeline: { type: "array", items: { type: "object", additionalProperties: true } },
-                                     automations: { type: "array", items: { type: "object", additionalProperties: true } }
-                                },
-                                required: ["devices", "timeline", "automations"]
-                            }
-                        });
-                        if (response) {
-                            result = response;
-                            provider = 'base44-core-service';
-                        }
-                     } else {
-                        logError("Service Role integrations also not found");
-                     }
-                } else {
-                    // Use standard integrations
-                    const response = await base44.integrations.Core.InvokeLLM({
-                        prompt: combinedPrompt,
-                        response_json_schema: {
-                            type: "object",
-                            properties: {
-                                 devices: { type: "object", additionalProperties: true },
-                                 timeline: { type: "array", items: { type: "object", additionalProperties: true } },
-                                 automations: { type: "array", items: { type: "object", additionalProperties: true } }
-                            },
-                            required: ["devices", "timeline", "automations"]
-                        }
-                    });
-                    
-                    if (response) {
-                        result = response;
-                        provider = 'base44-core';
+                    const content = data.choices[0].message.content;
+                    if (content) {
+                        result = JSON.parse(content);
+                        provider = 'openai';
                     }
+                } else {
+                    const err = await response.text();
+                    console.error("OpenAI API failed:", response.status, err);
+                    errors.push(`OpenAI: ${response.status}`);
                 }
-
             } catch (e) {
-                logError("Base44 Core error: " + e.message);
-                if (e.stack) logError(e.stack);
+                console.error("OpenAI error:", e);
+                errors.push(`OpenAI Error: ${e.message}`);
             }
         }
 
         if (!result) {
-            return Response.json({ error: 'All AI providers failed. Please check API keys.', logs }, { status: 500 });
+            return Response.json({ error: `AI 服务连接失败: ${errors.join(', ')}。请检查 API Key 是否正确或过期。` }, { status: 500 });
         }
 
-        result._meta = { provider, logs };
+        result._meta = { provider };
         return Response.json(result);
 
     } catch (error) {
-        logError("Function fatal error: " + error.message);
-        return Response.json({ error: error.message, logs }, { status: 500 });
+        console.error("Function error:", error);
+        return Response.json({ error: error.message }, { status: 500 });
     }
 });

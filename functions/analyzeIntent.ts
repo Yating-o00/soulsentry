@@ -32,9 +32,10 @@ Deno.serve(async (req) => {
         }
 
         const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
+        const openaiKey = Deno.env.get("OPENAI_API_KEY");
         
-        if (!moonshotKey) {
-            return Response.json({ error: 'Moonshot API Key not configured' }, { status: 500 });
+        if (!moonshotKey && !openaiKey) {
+            return Response.json({ error: 'No AI API keys configured' }, { status: 500 });
         }
 
         // Fetch User Context for Personalization
@@ -112,45 +113,87 @@ User Context: ${userContext}
 - **Proactive**: Don't just remind; prepare.
 `;
 
-        console.log("Calling Moonshot API with key:", moonshotKey.substring(0, 10) + "...");
+        let result = null;
+        let provider = null;
 
-        const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${moonshotKey.trim()}`
-            },
-            body: JSON.stringify({
-                model: "moonshot-v1-8k",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: input }
-                ],
-                temperature: 0.3,
-                response_format: { type: "json_object" }
-            })
-        });
+        // Try Moonshot first
+        if (moonshotKey) {
+            try {
+                console.log("Calling Moonshot API...");
+                const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${moonshotKey.trim()}`
+                    },
+                    body: JSON.stringify({
+                        model: "moonshot-v1-8k",
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: input }
+                        ],
+                        temperature: 0.3,
+                        response_format: { type: "json_object" }
+                    })
+                });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Moonshot API failed:", response.status, errorText);
-            
-            // Handle specific 401 error
-            if (response.status === 401) {
-                 return Response.json({ error: 'Moonshot API Key is invalid or expired. Please check your secret.' }, { status: 401 });
+                if (response.ok) {
+                    const data = await response.json();
+                    const content = data.choices[0].message.content;
+                    if (content) {
+                        result = JSON.parse(content);
+                        provider = 'moonshot';
+                    }
+                } else {
+                    console.warn(`Moonshot API failed with status ${response.status}`);
+                }
+            } catch (e) {
+                console.error("Moonshot error:", e);
             }
-            
-            throw new Error(`Moonshot API failed: ${response.status} - ${errorText}`);
         }
 
-        const data = await response.json();
-        const content = data.choices[0].message.content;
+        // Fallback to OpenAI if Moonshot failed
+        if (!result && openaiKey) {
+            try {
+                console.log("Falling back to OpenAI...");
+                const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${openaiKey.trim()}`
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o-mini",
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: input }
+                        ],
+                        temperature: 0.3,
+                        response_format: { type: "json_object" }
+                    })
+                });
 
-        if (!content) {
-             throw new Error("Empty response from AI");
+                if (response.ok) {
+                    const data = await response.json();
+                    const content = data.choices[0].message.content;
+                    if (content) {
+                        result = JSON.parse(content);
+                        provider = 'openai';
+                    }
+                } else {
+                    const err = await response.text();
+                    console.error("OpenAI API failed:", response.status, err);
+                }
+            } catch (e) {
+                console.error("OpenAI error:", e);
+            }
         }
 
-        const result = JSON.parse(content);
+        if (!result) {
+            return Response.json({ error: 'All AI providers failed. Please check API keys.' }, { status: 500 });
+        }
+
+        result._meta = { provider };
         return Response.json(result);
 
     } catch (error) {

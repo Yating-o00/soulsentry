@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
-import OpenAI from 'npm:openai';
+import OpenAI from 'npm:openai@^4.28.0';
 
 // Helper to get the current date/time in Shanghai timezone
 const getShanghaiTime = () => {
@@ -25,7 +25,8 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { input } = await req.json();
+        const body = await req.json();
+        const input = body.input;
 
         if (!input) {
             return Response.json({ error: 'Input is required' }, { status: 400 });
@@ -33,17 +34,18 @@ Deno.serve(async (req) => {
 
         const apiKey = Deno.env.get("MOONSHOT_API_KEY");
         if (!apiKey) {
+            console.error("Moonshot API Key is missing");
             return Response.json({ error: 'Moonshot API Key not configured' }, { status: 500 });
         }
 
         // Fetch User Context for Personalization
         let userContext = "";
         try {
-            // Using service role to ensure access to data if needed, or standard client if RLS allows.
-            // Using standard client 'base44' here as it's user-scoped.
+            // Fetch recent behaviors and tasks for context
+            // Using a try-catch block for the entity calls to prevent failure if entities don't exist yet
             const [behaviors, recentTasks] = await Promise.all([
-                base44.entities.UserBehavior.list('-created_date', 10),
-                base44.entities.Task.list('-created_date', 5)
+                base44.entities.UserBehavior.list('-created_date', 10).catch(() => []),
+                base44.entities.Task.list('-created_date', 5).catch(() => [])
             ]);
 
             const behaviorSummary = behaviors.map(b => `${b.event_type} (${b.category})`).join(', ');
@@ -55,6 +57,7 @@ Deno.serve(async (req) => {
             `;
         } catch (e) {
             console.warn("Failed to fetch user context", e);
+            // Continue without context if fetching fails
         }
 
         const client = new OpenAI({
@@ -69,24 +72,13 @@ Your goal is to analyze the user's input and generate a structured plan for devi
 **1. Entity Recognition & Context Understanding:**
 - **Entities**: Identify Time (when), Location (where), People (who), Event (what).
 - **Implicit Context**: Infer underlying needs. (e.g., "Meeting with Boss" -> High priority, prepare files, dress code).
-- **User History**: Use the provided recent behaviors to tailor suggestions (e.g., if user prioritizes 'work', ensure work tasks are highlighted).
+- **User History**: Use the provided recent behaviors to tailor suggestions.
 
-**2. Multi-Device Synergy (The SoulSentry Core):**
+**2. Multi-Device Synergy:**
 Analyze the scenario and distribute tasks intelligently:
-- **Meeting Scenario**: 
-  - **Phone**: Primary notification, calendar view.
-  - **PC**: Auto-open relevant files/software 5 mins before.
-  - **Car**: Navigation to venue, traffic monitoring.
-  - **Watch**: Discreet time/agenda reminders during meeting.
-  - **Glasses**: AR name tags or key talking points.
-- **Travel Scenario**:
-  - **Phone**: E-ticket, itinerary.
-  - **Watch**: Boarding gate, flight status.
-  - **Home**: Security mode, thermostat adjustment.
-- **Deep Work Scenario**:
-  - **PC**: Focus mode, block distractions.
-  - **Phone**: DND mode, only urgent calls.
-  - **Home**: Ambient lighting, white noise.
+- **Meeting**: Phone (notify), PC (files), Car (nav), Watch (reminders).
+- **Travel**: Phone (ticket), Watch (gate), Home (security).
+- **Deep Work**: PC (focus), Phone (DND), Home (ambiance).
 
 **3. Output Requirement:**
 Return a valid JSON object strictly following this structure:
@@ -127,7 +119,6 @@ User Context: ${userContext}
 **Generation Guidelines:**
 - **Tone**: Warm, empathetic, efficient (Simplified Chinese).
 - **Proactive**: Don't just remind; prepare.
-- **Precision**: Use specific times and clear actions.
 `;
 
         const messages = [
@@ -136,14 +127,18 @@ User Context: ${userContext}
         ];
 
         const completion = await client.chat.completions.create({
-            model: "kimi-k2-turbo-preview", // User specified model
+            model: "kimi-k2-turbo-preview",
             messages: messages,
             temperature: 0.6,
-            response_format: { type: "json_object" } // Kimi supports this for structured output
+            response_format: { type: "json_object" }
         });
 
-        const result = JSON.parse(completion.choices[0].message.content);
+        const content = completion.choices[0].message.content;
+        if (!content) {
+             throw new Error("Empty response from AI");
+        }
 
+        const result = JSON.parse(content);
         return Response.json(result);
 
     } catch (error) {

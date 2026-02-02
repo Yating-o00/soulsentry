@@ -129,9 +129,21 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
         }, 3500);
 
     } catch (error) {
-        console.error("Analysis failed:", error);
-        const errorMessage = error.response?.data?.error || error.message || "请求失败，请检查网络或稍后重试";
-        toast.error(`分析中断: ${errorMessage}`);
+        console.error(error);
+        let errorMsg = "分析失败，请检查网络或重试";
+
+        if (error.response && error.response.data) {
+            // If backend returns specific error message
+            if (error.response.data.error) {
+                errorMsg = `分析失败: ${error.response.data.error}`;
+                // If logs are available, print them to console for debugging
+                if (error.response.data.logs) {
+                    console.warn("Backend Logs:", error.response.data.logs);
+                }
+            }
+        }
+
+        toast.error(errorMsg, { duration: 5000 });
         setIsProcessing(false);
         clearInterval(stepInterval);
     }

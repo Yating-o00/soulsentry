@@ -36,6 +36,25 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Moonshot API Key not configured' }, { status: 500 });
         }
 
+        // Fetch User Context for Personalization
+        let userContext = "";
+        try {
+            const [behaviors, recentTasks] = await Promise.all([
+                base44.entities.UserBehavior.list('-created_date', 10),
+                base44.entities.Task.list('-created_date', 5)
+            ]);
+
+            const behaviorSummary = behaviors.map(b => `${b.event_type} (${b.category})`).join(', ');
+            const taskSummary = recentTasks.map(t => `${t.title} (${t.priority}, ${t.category})`).join(', ');
+            
+            userContext = `
+            Recent Behaviors: ${behaviorSummary}
+            Recent Tasks: ${taskSummary}
+            `;
+        } catch (e) {
+            console.warn("Failed to fetch user context", e);
+        }
+
         const client = new OpenAI({
             apiKey: apiKey,
             baseURL: "https://api.moonshot.cn/v1",
@@ -45,17 +64,29 @@ Deno.serve(async (req) => {
 You are "SoulSentry" (心栈), an advanced AI schedule hub. 
 Your goal is to analyze the user's input and generate a structured plan for device coordination, context-aware timeline, and automated execution.
 
-**Core Philosophy:**
-- **Context-Aware**: Understand the implicit context (location, travel, weather, people).
-- **Device Synergy**: Distribute information to the most appropriate device (Phone, Watch, Glasses, Car, Home, PC).
-- **Proactive**: Don't just remind; prepare. (e.g., if meeting, prepare files; if traveling, check traffic).
-- **Tone**: Warm, empathetic, yet efficient. (Simplifed Chinese).
+**1. Entity Recognition & Context Understanding:**
+- **Entities**: Identify Time (when), Location (where), People (who), Event (what).
+- **Implicit Context**: Infer underlying needs. (e.g., "Meeting with Boss" -> High priority, prepare files, dress code).
+- **User History**: Use the provided recent behaviors to tailor suggestions (e.g., if user prioritizes 'work', ensure work tasks are highlighted).
 
-**Input Analysis:**
-Current Time: ${getShanghaiTime()}
-User Input: "${input}"
+**2. Multi-Device Synergy (The SoulSentry Core):**
+Analyze the scenario and distribute tasks intelligently:
+- **Meeting Scenario**: 
+  - **Phone**: Primary notification, calendar view.
+  - **PC**: Auto-open relevant files/software 5 mins before.
+  - **Car**: Navigation to venue, traffic monitoring.
+  - **Watch**: Discreet time/agenda reminders during meeting.
+  - **Glasses**: AR name tags or key talking points.
+- **Travel Scenario**:
+  - **Phone**: E-ticket, itinerary.
+  - **Watch**: Boarding gate, flight status.
+  - **Home**: Security mode, thermostat adjustment.
+- **Deep Work Scenario**:
+  - **PC**: Focus mode, block distractions.
+  - **Phone**: DND mode, only urgent calls.
+  - **Home**: Ambient lighting, white noise.
 
-**Output Requirement:**
+**3. Output Requirement:**
 Return a valid JSON object strictly following this structure:
 
 {
@@ -86,17 +117,15 @@ Return a valid JSON object strictly following this structure:
   ]
 }
 
-**Guidelines for Generation:**
-1. **Devices**: 
-   - 'phone' is the hub. 
-   - 'watch' for quick, tactile alerts. 
-   - 'glasses' for AR info/real-time aid. 
-   - 'car' for travel/navigation. 
-   - 'home' for morning/evening routines. 
-   - 'pc' for deep work/prep.
-   - If a device isn't relevant to the specific intent, provide a generic "Standby" or "Monitoring" strategy for it, or leave strategies empty if truly irrelevant.
-2. **Timeline**: Create a fluid timeline. Include preparation steps (e.g., "Sleep prep" the night before, "Wake up", "Depart", "Meeting", "Review").
-3. **Automations**: Identify tasks the system can do automatically (e.g., "Traffic monitoring", "File prep", "Weather check", "Meeting minutes").
+**Input Analysis:**
+Current Time: ${getShanghaiTime()}
+User Input: "${input}"
+User Context: ${userContext}
+
+**Generation Guidelines:**
+- **Tone**: Warm, empathetic, efficient (Simplified Chinese).
+- **Proactive**: Don't just remind; prepare.
+- **Precision**: Use specific times and clear actions.
 `;
 
         const messages = [

@@ -119,12 +119,14 @@ User Context: ${userContext}
         // Try Moonshot first
         if (moonshotKey) {
             try {
-                console.log("Calling Moonshot API...");
+                const cleanKey = moonshotKey.trim().replace(/[\r\n\s]/g, '');
+                console.error(`Attempting Moonshot with key: ${cleanKey.substring(0, 5)}...${cleanKey.substring(cleanKey.length - 4)}`);
+                
                 const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        "Authorization": `Bearer ${moonshotKey.trim()}`
+                        "Authorization": `Bearer ${cleanKey}`
                     },
                     body: JSON.stringify({
                         model: "moonshot-v1-8k",
@@ -145,10 +147,11 @@ User Context: ${userContext}
                         provider = 'moonshot';
                     }
                 } else {
-                    console.warn(`Moonshot API failed with status ${response.status}`);
+                    const errText = await response.text();
+                    console.error(`Moonshot API failed: ${response.status} - ${errText}`);
                 }
             } catch (e) {
-                console.error("Moonshot error:", e);
+                console.error("Moonshot execution error:", e);
             }
         }
 

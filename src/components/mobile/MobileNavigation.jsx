@@ -11,7 +11,7 @@ import {
   Plus,
   Brain
 } from 'lucide-react';
-import { useTranslation } from '../TranslationContext';
+import { useTranslation } from '@/components/TranslationContext';
 
 export default function MobileNavigation() {
   const location = useLocation();

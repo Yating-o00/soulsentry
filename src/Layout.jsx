@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Brain } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
-import { TranslationProvider, useTranslation } from "./components/TranslationContext";
+import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
 import { useOfflineManager } from "./components/offline/OfflineManager";
 import WelcomeGuard from "./components/WelcomeGuard";

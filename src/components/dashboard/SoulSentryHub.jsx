@@ -74,78 +74,15 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     return combined;
   }, [data.timeline, dbTasks]);
 
-  // Merge Devices with DB tasks
-  const mergedDevices = useMemo(() => {
-    // Manually clone to preserve React components (icons)
-    const devices = {};
-    const sourceDevices = data.devices || defaultData.devices;
-    
-    Object.keys(sourceDevices).forEach(key => {
-        devices[key] = { 
-            ...sourceDevices[key],
-            // Ensure icon is present (fallback to default if missing in data)
-            icon: sourceDevices[key].icon || defaultData.devices[key]?.icon,
-            strategies: [...(sourceDevices[key].strategies || [])]
-        };
-    });
-    
-    dbTasks.forEach(task => {
-        // Simple heuristic for device assignment
-        const text = (task.title + task.description).toLowerCase();
-        let targetDevice = 'phone'; // Default
-        
-        if (/mail|email|ppt|doc|report|code|meeting|zoom|teams/.test(text)) targetDevice = 'pc';
-        else if (/drive|car|traffic|go to|commute/.test(text)) targetDevice = 'car';
-        else if (/run|walk|exercise|gym|heart|sleep/.test(text)) targetDevice = 'watch';
-        else if (/home|clean|cook|laundry|living|bedroom/.test(text)) targetDevice = 'home';
-        else if (/glass|ar|vr|vision/.test(text)) targetDevice = 'glasses';
-
-        if (devices[targetDevice]) {
-            let timeStr = "待定";
-            if (task.reminder_time) {
-                const date = parseISO(task.reminder_time);
-                if (isValid(date)) timeStr = format(date, 'HH:mm');
-            }
-
-            devices[targetDevice].strategies.push({
-                time: timeStr,
-                method: "待办事项",
-                content: task.title,
-                priority: task.priority || 'medium',
-                isDbTask: true,
-                id: task.id
-            });
-            
-            // Sort strategies by time
-            devices[targetDevice].strategies.sort((a, b) => {
-                 if (a.time === "待定") return 1;
-                 if (b.time === "待定") return -1;
-                 return a.time.localeCompare(b.time);
-            });
-        }
-    });
-    
-    return devices;
-  }, [data.devices, dbTasks]);
-
   useEffect(() => {
     if (initialData) {
       const mergedDevices = { ...defaultData.devices };
-      
       if (initialData.devices) {
-         // Create a lowercase map for case-insensitive matching
-         const initialDevicesLower = {};
-         Object.keys(initialData.devices).forEach(k => {
-             initialDevicesLower[k.toLowerCase()] = initialData.devices[k];
-         });
-
          Object.keys(mergedDevices).forEach(key => {
-            const matchedData = initialDevicesLower[key.toLowerCase()];
-            if (matchedData) {
+            if (initialData.devices[key]) {
                mergedDevices[key] = { 
                    ...mergedDevices[key], 
-                   strategies: matchedData.strategies || [],
-                   // Explicitly preserve icon and name
+                   ...initialData.devices[key],
                    icon: mergedDevices[key]?.icon, 
                    name: mergedDevices[key]?.name 
                };
@@ -197,19 +134,12 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
     try {
         const now = new Date();
-        const existingTasksStr = dbTasks.map(t => `- ${t.title} (${t.reminder_time ? format(parseISO(t.reminder_time), 'HH:mm') : 'Anytime'})`).join('\n');
-
         const response = await base44.integrations.Core.InvokeLLM({
             prompt: `
             User Input: "${input}"
             Current Time: ${now.toLocaleString()}
             
-            Existing User Tasks for Today:
-            ${existingTasksStr}
-            
             Task: Analyze the user's input and generate a structured "SoulSentry" plan for device coordination, timeline, and automation.
-            Integrate the existing tasks into the plan where relevant (especially for device strategies and automations). 
-            Be careful not to duplicate timeline events for existing tasks unless you are adding significant new context.
             
             IMPORTANT: All generated text (titles, descriptions, strategies, content, methods) MUST BE IN SIMPLIFIED CHINESE (简体中文).
             
@@ -245,28 +175,17 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
             }
         });
 
-        // Create a fresh copy of devices ensuring icons are preserved
-        // Note: We use a functional update to ensure we're basing this on the CURRENT data, 
-        // which might already have DB tasks merged if the user didn't refresh
-        // But for a new "processIntent" we want to start fresh from default + DB + new AI
-        // Actually, we want to respect the defaultData structure but populate it with new strategies.
-        
-        const newDevicesState = {};
-        Object.keys(defaultData.devices).forEach(k => {
-            newDevicesState[k] = { ...defaultData.devices[k], strategies: [] };
-        });
-
+        const mergedDevices = { ...defaultData.devices };
         if (response.devices) {
-            Object.keys(response.devices).forEach(responseKey => {
-                const targetKey = Object.keys(newDevicesState).find(k => k.toLowerCase() === responseKey.toLowerCase());
-                if (targetKey) {
-                    newDevicesState[targetKey].strategies = response.devices[responseKey].strategies || [];
+            Object.keys(response.devices).forEach(key => {
+                if (mergedDevices[key]) {
+                    mergedDevices[key].strategies = response.devices[key].strategies || [];
                 }
             });
         }
 
         setData({
-            devices: newDevicesState,
+            devices: mergedDevices,
             timeline: response.timeline || [],
             automations: response.automations || []
         });
@@ -456,7 +375,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-                            {Object.entries(mergedDevices).map(([key, device]) => (
+                            {Object.entries(data.devices).map(([key, device]) => (
                                 <DeviceCard 
                                     key={key} 
                                     id={key} 
@@ -478,26 +397,21 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                             >
                                 <div className="flex justify-between items-start mb-6">
                                     <div>
-                                        <h4 className="text-lg font-bold text-slate-800">{mergedDevices[activeDevice].name} 策略</h4>
+                                        <h4 className="text-lg font-bold text-slate-800">{data.devices[activeDevice].name} 策略</h4>
                                         <p className="text-sm text-slate-500 mt-1">基于场景的智能分发</p>
                                     </div>
                                 </div>
                                 <div className="grid gap-3">
-                                    {mergedDevices[activeDevice].strategies && mergedDevices[activeDevice].strategies.length > 0 ? (
-                                        mergedDevices[activeDevice].strategies.map((strat, idx) => (
-                                            <div key={idx} className={`flex items-start gap-4 p-4 rounded-xl border transition-colors ${
-                                                strat.isDbTask ? 'bg-amber-50 border-amber-100 hover:bg-amber-100/50' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
-                                            }`}>
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                                                    strat.isDbTask ? 'bg-amber-100 text-amber-700' : 'bg-[#384877]/10 text-[#384877]'
-                                                }`}>
-                                                    {strat.isDbTask ? <Database className="w-4 h-4" /> : idx + 1}
+                                    {data.devices[activeDevice].strategies && data.devices[activeDevice].strategies.length > 0 ? (
+                                        data.devices[activeDevice].strategies.map((strat, idx) => (
+                                            <div key={idx} className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100 transition-colors">
+                                                <div className="w-8 h-8 bg-[#384877]/10 rounded-full flex items-center justify-center text-[#384877] text-sm font-bold flex-shrink-0">
+                                                    {idx + 1}
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-start mb-1">
                                                         <span className="font-medium text-slate-700 text-sm">{strat.time}</span>
                                                         <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider ${
-                                                            strat.isDbTask ? 'bg-amber-100 text-amber-700 border border-amber-200' :
                                                             strat.priority === 'high' ? 'bg-red-50 text-red-600 border border-red-100' : 
                                                             'bg-blue-50 text-[#384877] border border-blue-100'
                                                         }`}>

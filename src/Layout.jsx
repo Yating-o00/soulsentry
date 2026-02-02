@@ -2,13 +2,13 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Brain } from "lucide-react";
-import FloatingAssistantButton from "@/components/assistant/FloatingAssistantButton";
+import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
-import MobileNavigation from "@/components/mobile/MobileNavigation";
-import { useOfflineManager } from "@/components/offline/OfflineManager";
+import MobileNavigation from "./components/mobile/MobileNavigation";
+import { useOfflineManager } from "./components/offline/OfflineManager";
 import WelcomeGuard from "@/components/WelcomeGuard";
-import PWAInstallPrompt from "@/components/pwa/PWAInstallPrompt";
-import PWAUpdateNotification from "@/components/pwa/PWAUpdateNotification";
+import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
+import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import { base44 } from "@/api/base44Client";
 import {
   Sidebar,

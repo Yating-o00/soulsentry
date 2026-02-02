@@ -32,12 +32,12 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Input is required' }, { status: 400 });
         }
 
-        const apiKey = Deno.env.get("MOONSHOT_API_KEY");
-        if (!apiKey) {
-            console.error("Moonshot API Key is missing");
-            return Response.json({ error: 'Moonshot API Key not configured' }, { status: 500 });
+        const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
+        const openaiKey = Deno.env.get("OPENAI_API_KEY");
+        
+        if (!moonshotKey && !openaiKey) {
+            return Response.json({ error: 'No AI API keys configured (Moonshot or OpenAI)' }, { status: 500 });
         }
-        console.log("API Key configured (starts with):", apiKey.substring(0, 10) + "...");
 
         // Fetch User Context for Personalization
         let userContext = "";
@@ -61,10 +61,19 @@ Deno.serve(async (req) => {
             // Continue without context if fetching fails
         }
 
-        const client = new OpenAI({
-            apiKey: apiKey.trim(),
-            baseURL: "https://api.moonshot.cn/v1",
-        });
+        const callLLM = async (provider, key, model, messages) => {
+             const client = new OpenAI({
+                apiKey: key.trim(),
+                baseURL: provider === 'moonshot' ? "https://api.moonshot.cn/v1" : undefined,
+            });
+
+            return await client.chat.completions.create({
+                model: model,
+                messages: messages,
+                temperature: 0.3,
+                response_format: { type: "json_object" }
+            });
+        };
 
         const systemPrompt = `
 You are "SoulSentry" (心栈), an advanced AI schedule hub. 
@@ -127,12 +136,26 @@ User Context: ${userContext}
             { role: "user", content: input }
         ];
 
-        const completion = await client.chat.completions.create({
-            model: "moonshot-v1-8k",
-            messages: messages,
-            temperature: 0.3,
-            response_format: { type: "json_object" }
-        });
+        let completion;
+        let usedProvider = 'moonshot';
+
+        try {
+            if (moonshotKey) {
+                console.log("Attempting Moonshot AI...");
+                completion = await callLLM('moonshot', moonshotKey, "moonshot-v1-8k", messages);
+            } else {
+                throw new Error("No Moonshot Key");
+            }
+        } catch (e) {
+            console.error("Moonshot failed:", e.message);
+            if (openaiKey) {
+                console.log("Falling back to OpenAI...");
+                usedProvider = 'openai';
+                completion = await callLLM('openai', openaiKey, "gpt-4o-mini", messages);
+            } else {
+                throw e; // No fallback available
+            }
+        }
 
         const content = completion.choices[0].message.content;
         if (!content) {
@@ -140,6 +163,7 @@ User Context: ${userContext}
         }
 
         const result = JSON.parse(content);
+        result._meta = { provider: usedProvider }; // Add meta info
         return Response.json(result);
 
     } catch (error) {

@@ -124,14 +124,14 @@ User Context: ${userContext}
                 console.log(`[Moonshot] Preparing request. Key length: ${cleanKey.length}`);
                 console.log(`[Moonshot] Key start/end: ${cleanKey.substring(0, 5)}...${cleanKey.substring(cleanKey.length - 4)}`);
                 
-                const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+                const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                         "Authorization": `Bearer ${cleanKey}`
                     },
                     body: JSON.stringify({
-                        model: "moonshot-v1-8k",
+                        model: "kimi-k2-turbo-preview",
                         messages: [
                             { role: "system", content: systemPrompt },
                             { role: "user", content: input }

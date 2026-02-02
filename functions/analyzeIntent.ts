@@ -1,5 +1,4 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
-// import OpenAI from 'npm:openai@^4.28.0'; // Removed unused import
 
 // Helper to get the current date/time in Shanghai timezone
 const getShanghaiTime = () => {
@@ -33,17 +32,14 @@ Deno.serve(async (req) => {
         }
 
         const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
-        const openaiKey = Deno.env.get("OPENAI_API_KEY");
         
-        if (!moonshotKey && !openaiKey) {
-            return Response.json({ error: 'No AI API keys configured (Moonshot or OpenAI)' }, { status: 500 });
+        if (!moonshotKey) {
+            return Response.json({ error: 'Moonshot API Key not configured' }, { status: 500 });
         }
 
         // Fetch User Context for Personalization
         let userContext = "";
         try {
-            // Fetch recent behaviors and tasks for context
-            // Using a try-catch block for the entity calls to prevent failure if entities don't exist yet
             const [behaviors, recentTasks] = await Promise.all([
                 base44.entities.UserBehavior.list('-created_date', 10).catch(() => []),
                 base44.entities.Task.list('-created_date', 5).catch(() => [])
@@ -58,22 +54,7 @@ Deno.serve(async (req) => {
             `;
         } catch (e) {
             console.warn("Failed to fetch user context", e);
-            // Continue without context if fetching fails
         }
-
-        const callLLM = async (provider, key, model, messages) => {
-             const client = new OpenAI({
-                apiKey: key.trim(),
-                baseURL: provider === 'moonshot' ? "https://api.moonshot.cn/v1" : undefined,
-            });
-
-            return await client.chat.completions.create({
-                model: model,
-                messages: messages,
-                temperature: 0.3,
-                response_format: { type: "json_object" }
-            });
-        };
 
         const systemPrompt = `
 You are "SoulSentry" (心栈), an advanced AI schedule hub. 
@@ -131,39 +112,45 @@ User Context: ${userContext}
 - **Proactive**: Don't just remind; prepare.
 `;
 
-        const messages = [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: input }
-        ];
+        console.log("Calling Moonshot API with key:", moonshotKey.substring(0, 10) + "...");
 
-        let completion;
-        let usedProvider = 'moonshot';
+        const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${moonshotKey.trim()}`
+            },
+            body: JSON.stringify({
+                model: "moonshot-v1-8k",
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: input }
+                ],
+                temperature: 0.3,
+                response_format: { type: "json_object" }
+            })
+        });
 
-        try {
-            if (moonshotKey) {
-                console.log("Attempting Moonshot AI...");
-                completion = await callLLM('moonshot', moonshotKey, "moonshot-v1-8k", messages);
-            } else {
-                throw new Error("No Moonshot Key");
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Moonshot API failed:", response.status, errorText);
+            
+            // Handle specific 401 error
+            if (response.status === 401) {
+                 return Response.json({ error: 'Moonshot API Key is invalid or expired. Please check your secret.' }, { status: 401 });
             }
-        } catch (e) {
-            console.error("Moonshot failed:", e.message);
-            if (openaiKey) {
-                console.log("Falling back to OpenAI...");
-                usedProvider = 'openai';
-                completion = await callLLM('openai', openaiKey, "gpt-4o-mini", messages);
-            } else {
-                throw e; // No fallback available
-            }
+            
+            throw new Error(`Moonshot API failed: ${response.status} - ${errorText}`);
         }
 
-        const content = completion.choices[0].message.content;
+        const data = await response.json();
+        const content = data.choices[0].message.content;
+
         if (!content) {
              throw new Error("Empty response from AI");
         }
 
         const result = JSON.parse(content);
-        result._meta = { provider: usedProvider }; // Add meta info
         return Response.json(result);
 
     } catch (error) {

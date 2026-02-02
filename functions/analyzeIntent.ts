@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
         }
 
         const client = new OpenAI({
-            apiKey: apiKey,
+            apiKey: apiKey.trim(),
             baseURL: "https://api.moonshot.cn/v1",
         });
 
@@ -128,9 +128,9 @@ User Context: ${userContext}
         ];
 
         const completion = await client.chat.completions.create({
-            model: "kimi-k2-turbo-preview",
+            model: "moonshot-v1-8k",
             messages: messages,
-            temperature: 0.6,
+            temperature: 0.3,
             response_format: { type: "json_object" }
         });
 

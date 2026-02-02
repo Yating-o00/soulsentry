@@ -134,8 +134,7 @@ User Context: ${userContext}
                             { role: "system", content: systemPrompt },
                             { role: "user", content: input }
                         ],
-                        temperature: 0.3,
-                        response_format: { type: "json_object" }
+                        temperature: 0.3
                     })
                 });
 
@@ -171,8 +170,7 @@ User Context: ${userContext}
                             { role: "system", content: systemPrompt },
                             { role: "user", content: input }
                         ],
-                        temperature: 0.3,
-                        response_format: { type: "json_object" }
+                        temperature: 0.3
                     })
                 });
 

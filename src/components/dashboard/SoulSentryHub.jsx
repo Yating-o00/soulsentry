@@ -133,12 +133,47 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     }, 800);
 
     try {
-        // Call the backend function instead of the direct integration to avoid rate limits
-        const { data: response } = await base44.functions.invoke('analyzeIntent', { input });
-
-        if (response.error) {
-            throw new Error(response.details || response.error);
-        }
+        const now = new Date();
+        const response = await base44.integrations.Core.InvokeLLM({
+            prompt: `
+            User Input: "${input}"
+            Current Time: ${now.toLocaleString()}
+            
+            Task: Analyze the user's input and generate a structured "SoulSentry" plan for device coordination, timeline, and automation.
+            
+            IMPORTANT: All generated text (titles, descriptions, strategies, content, methods) MUST BE IN SIMPLIFIED CHINESE (简体中文).
+            
+            Return JSON in this EXACT structure:
+            {
+                "devices": {
+                    "phone": { "strategies": [{"time": "string", "method": "string", "content": "string", "priority": "high|medium|low"}] },
+                    "watch": { "strategies": [] },
+                    "glasses": { "strategies": [] },
+                    "car": { "strategies": [] },
+                    "home": { "strategies": [] },
+                    "pc": { "strategies": [] }
+                },
+                "timeline": [
+                    {"time": "HH:MM", "title": "string", "desc": "string", "icon": "string (emoji)", "highlight": boolean}
+                ],
+                "automations": [
+                    {"title": "string", "desc": "string", "status": "active|ready|monitoring|pending", "icon": "string (emoji)"}
+                ]
+            }
+            
+            Generate realistic strategies for each device based on the input context. If a device isn't relevant, provide a neutral strategy or leave empty (but better to provide something smart).
+            For automations, identify tasks that can be automated (booking, navigation, reminders, file prep).
+            Ensure all content is friendly, concise, and in Simplified Chinese.
+            `,
+            response_json_schema: {
+                type: "object",
+                properties: {
+                    devices: { type: "object" },
+                    timeline: { type: "array", items: { type: "object" } },
+                    automations: { type: "array", items: { type: "object" } }
+                }
+            }
+        });
 
         const mergedDevices = { ...defaultData.devices };
         if (response.devices) {

@@ -152,47 +152,10 @@ export default function Welcome({ onComplete }) {
          setIsUploadingImage(false);
       }
 
-      const now = new Date();
-      const response = await base44.integrations.Core.InvokeLLM({
-            prompt: `
-            User Input: "${textToAnalyze}"
-            Current Time: ${now.toLocaleString()}
-            
-            Task: Analyze the user's input and generate a structured "SoulSentry" plan for device coordination, timeline, and automation.
-
-            IMPORTANT: All generated text (titles, descriptions, strategies, content, methods) MUST BE IN SIMPLIFIED CHINESE (简体中文).
-
-            Return JSON in this EXACT structure:
-            {
-                "devices": {
-                    "phone": { "strategies": [{"time": "string", "method": "string", "content": "string", "priority": "high|medium|low"}] },
-                    "watch": { "strategies": [...] },
-                    "glasses": { "strategies": [...] },
-                    "car": { "strategies": [...] },
-                    "home": { "strategies": [...] },
-                    "pc": { "strategies": [...] }
-                },
-                "timeline": [
-                    {"time": "HH:MM", "title": "string", "desc": "string", "icon": "string (emoji)", "highlight": boolean}
-                ],
-                "automations": [
-                    {"title": "string", "desc": "string", "status": "active|ready|monitoring|pending", "icon": "string (emoji)"}
-                ]
-            }
-            
-            Generate realistic strategies for each device based on the input context. If a device isn't relevant, provide a neutral strategy.
-            For automations, identify tasks that can be automated.
-            Ensure all content is friendly, concise, and in Simplified Chinese.
-            `,
-            response_json_schema: {
-                type: "object",
-                properties: {
-                    devices: { type: "object" },
-                    timeline: { type: "array", items: { type: "object" } },
-                    automations: { type: "array", items: { type: "object" } }
-                }
-            }
-        });
+      // Call the custom backend function using Kimi AI
+      const { data: response } = await base44.functions.invoke('analyzeIntent', {
+          input: textToAnalyze
+      });
 
       clearInterval(stepInterval);
       

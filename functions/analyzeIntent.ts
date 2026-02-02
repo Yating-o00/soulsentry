@@ -190,6 +190,44 @@ User Context: ${userContext}
             }
         }
 
+        // Final fallback: Base44 Built-in Integration
+        if (!result) {
+            try {
+                console.log("Falling back to Base44 Built-in AI...");
+                // Construct a combined prompt since InvokeLLM takes a single prompt string
+                const combinedPrompt = `${systemPrompt}\n\nUser Input: ${input}`;
+                
+                const response = await base44.integrations.Core.InvokeLLM({
+                    prompt: combinedPrompt,
+                    response_json_schema: {
+                        type: "object",
+                        properties: {
+                             devices: { 
+                                type: "object",
+                                additionalProperties: true 
+                             },
+                             timeline: { 
+                                type: "array", 
+                                items: { type: "object", additionalProperties: true } 
+                             },
+                             automations: { 
+                                type: "array", 
+                                items: { type: "object", additionalProperties: true } 
+                             }
+                        },
+                        required: ["devices", "timeline", "automations"]
+                    }
+                });
+                
+                if (response) {
+                    result = response;
+                    provider = 'base44-core';
+                }
+            } catch (e) {
+                console.error("Base44 Core error:", e);
+            }
+        }
+
         if (!result) {
             return Response.json({ error: 'All AI providers failed. Please check API keys.' }, { status: 500 });
         }

@@ -27,7 +27,7 @@ export default async function handler(req) {
         const now = new Date();
 
         const completion = await openai.chat.completions.create({
-            model: "kimi-k2-turbo-preview", // Updated to Kimi's model
+            model: "kimi-k2-turbo-preview",
             messages: [
                 {
                     role: "system",

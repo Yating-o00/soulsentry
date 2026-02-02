@@ -164,7 +164,10 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
     } catch (error) {
         console.error(error);
-        toast.error("分析失败，请重试");
+        const errorMsg = error.message?.includes("404") 
+            ? "AI服务未连接，请检查API密钥配置" 
+            : (error.message || "分析失败，请重试");
+        toast.error(errorMsg);
         setIsProcessing(false);
         clearInterval(stepInterval);
     }

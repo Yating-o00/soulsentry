@@ -429,7 +429,6 @@ export default function Dashboard() {
         </div>
 
         <TabsContent value="overview" className="space-y-6">
-          <DailyBriefing />
           {/* Stats Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -489,6 +488,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </motion.div>
+
+      <DailyBriefing />
 
       {/* Main Content: SoulSentry Hub */}
       <motion.div

@@ -32,6 +32,7 @@ import TeamOnboardingProgress from "../components/dashboard/TeamOnboardingProgre
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
@@ -43,6 +44,7 @@ export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
+  const [taskListDialog, setTaskListDialog] = useState({ open: false, title: "", tasks: [] });
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarViewMode, setCalendarViewMode] = useState("month");
   const [showCalendarQuickAdd, setShowCalendarQuickAdd] = useState(false);
@@ -444,7 +446,14 @@ export default function Dashboard() {
             <CardTitle className="text-blue-100 font-medium text-sm">今日待办</CardTitle>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="text-5xl font-bold mb-6">
+            <div 
+              className="text-5xl font-bold mb-6 cursor-pointer hover:opacity-80 transition-opacity w-fit"
+              onClick={() => setTaskListDialog({
+                open: true,
+                title: "今日待办",
+                tasks: todayTasks.filter(t => t.status === 'pending')
+              })}
+            >
               {todayTasks.filter(t => t.status === 'pending').length}
             </div>
             <div className="flex items-center gap-3 text-blue-100 text-sm">
@@ -466,7 +475,14 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-800 mb-1 group-hover:text-red-600 transition-colors">
+            <div 
+              className="text-3xl font-bold text-slate-800 mb-1 group-hover:text-red-600 transition-colors cursor-pointer w-fit"
+              onClick={() => setTaskListDialog({
+                open: true,
+                title: "逾期约定",
+                tasks: overdueTasks
+              })}
+            >
               {overdueTasks.length}
             </div>
             <p className="text-xs text-slate-400">需要尽快处理</p>
@@ -481,7 +497,14 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-800 mb-1 group-hover:text-green-600 transition-colors">
+            <div 
+              className="text-3xl font-bold text-slate-800 mb-1 group-hover:text-green-600 transition-colors cursor-pointer w-fit"
+              onClick={() => setTaskListDialog({
+                open: true,
+                title: "今日已完成",
+                tasks: completedToday
+              })}
+            >
               {completedToday.length}
             </div>
             <p className="text-xs text-slate-400">保持这个节奏！</p>
@@ -631,6 +654,52 @@ export default function Dashboard() {
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)}
       />
+
+      <Dialog open={taskListDialog.open} onOpenChange={(open) => setTaskListDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{taskListDialog.title}</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex-1 mt-2 pr-4 -mr-4">
+            <div className="space-y-3 p-1">
+              {taskListDialog.tasks.length > 0 ? (
+                taskListDialog.tasks.map(task => (
+                  <div 
+                    key={task.id}
+                    className="p-3 bg-white border border-slate-100 rounded-xl hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer group"
+                    onClick={() => {
+                      setTaskListDialog(prev => ({ ...prev, open: false }));
+                      setSelectedTask(task);
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                        task.priority === 'high' ? 'bg-red-500' : 
+                        task.priority === 'medium' ? 'bg-amber-500' : 'bg-green-500'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-slate-800 truncate group-hover:text-[#384877] transition-colors">
+                          {task.title}
+                        </h4>
+                        {task.reminder_time && (
+                          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {format(parseISO(task.reminder_time), "MM-dd HH:mm")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  暂无相关约定
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editingTask} onOpenChange={(isOpen) => {
         if (!isOpen) setEditingTask(null);

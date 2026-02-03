@@ -44,7 +44,7 @@ ${noteSummary}
 2. **Synthesize**: Write a natural, warm, and encouraging briefing. Do not just list items. Weave them into a narrative.
 3. **Format**: Return a valid JSON object strictly:
 {
-  "greeting": "Warm greeting based on time of day",
+  "title": "A short, positive, energetic title for the day (no greeting, just a title)",
   "short_term_narrative": "A paragraph focusing on what needs to be done *today*. Mention specific high priority tasks naturally.",
   "long_term_narrative": "A paragraph connecting recent notes or less urgent tasks to bigger picture goals or state of mind.",
   "mindful_tip": "A one-sentence actionable mindfulness tip related to their workload."
@@ -117,7 +117,7 @@ Warm, calm, supportive, efficient but not robotic. (Language: Simplified Chinese
         if (!result) {
             // Fallback if AI fails completely
             result = {
-                greeting: "你好",
+                title: "开启充满活力的一天",
                 short_term_narrative: "今天有一些待办事项需要处理，请查看任务列表。",
                 long_term_narrative: "别忘了回顾你的笔记，保持长远的目标感。",
                 mindful_tip: "深呼吸，专注于当下。"

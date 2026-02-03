@@ -83,7 +83,7 @@ export default function DailyBriefing() {
                             <TimeIcon className="w-6 h-6" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-slate-800 tracking-tight">{briefing.greeting}</h2>
+                            <h2 className="text-xl font-bold text-slate-800 tracking-tight">{briefing.title || briefing.greeting}</h2>
                             <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1 font-medium">
                                 <Sparkles className="w-3 h-3 text-amber-500" />
                                 AI 每日简报

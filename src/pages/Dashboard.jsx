@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
 import SoulSentryHub from "../components/dashboard/SoulSentryHub";
+import DailyBriefing from "../components/dashboard/DailyBriefing";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -428,6 +429,7 @@ export default function Dashboard() {
         </div>
 
         <TabsContent value="overview" className="space-y-6">
+          <DailyBriefing />
           {/* Stats Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}

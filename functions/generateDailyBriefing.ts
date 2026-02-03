@@ -42,7 +42,7 @@ ${noteSummary}
     - **Short-term Focus (当下):** Urgent tasks, immediate deadlines, quick actions needed today.
     - **Long-term/Strategic (远见):** recurring goals, long-term notes, future aspirations, or low priority but meaningful tasks.
 2. **Synthesize**: Write a natural, warm, and encouraging briefing. Do not just list items. Weave them into a narrative.
-3. **Format**: Return a JSON object strictly:
+3. **Format**: Return a valid JSON object strictly:
 {
   "greeting": "Warm greeting based on time of day",
   "short_term_narrative": "A paragraph focusing on what needs to be done *today*. Mention specific high priority tasks naturally.",

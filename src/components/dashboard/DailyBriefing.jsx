@@ -8,11 +8,28 @@ export default function DailyBriefing() {
     const [briefing, setBriefing] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const fetchBriefing = async () => {
+    const fetchBriefing = async (force = false) => {
+        const today = new Date().toDateString();
+        const cacheKey = `daily_briefing_${today}`;
+
+        if (!force) {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                try {
+                    setBriefing(JSON.parse(cached));
+                    setLoading(false);
+                    return;
+                } catch (e) {
+                    // Cache invalid
+                }
+            }
+        }
+
         setLoading(true);
         try {
             const { data } = await base44.functions.invoke("generateDailyBriefing");
             setBriefing(data);
+            localStorage.setItem(cacheKey, JSON.stringify(data));
         } catch (error) {
             console.error("Failed to fetch briefing", error);
         } finally {
@@ -74,7 +91,7 @@ export default function DailyBriefing() {
                         </div>
                     </div>
                     <button 
-                        onClick={fetchBriefing}
+                        onClick={() => fetchBriefing(true)}
                         className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-[#384877] transition-all duration-300"
                         title="重新生成"
                     >

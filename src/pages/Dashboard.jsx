@@ -66,6 +66,15 @@ export default function Dashboard() {
     initialData: [],
   });
 
+  const { 
+    updateTask, 
+    updateTaskAsync,
+    createTask, 
+    deleteTask, 
+    handleComplete, 
+    handleSubtaskToggle 
+  } = useTaskOperations();
+
   useEffect(() => {
     const hour = new Date().getHours();
     if (hour < 6) setGreeting("凌晨好");
@@ -156,149 +165,20 @@ export default function Dashboard() {
     ? Math.round((todayTasks.filter(t => t.status === 'completed').length / todayTasks.length) * 100) 
     : 0, [todayTasks]);
 
-  // Mutations
-  const updateTaskMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
-      setEditingTask(null);
-      toast.success("约定已更新");
-      
-      if (variables.data.status === 'completed') {
-        logUserBehavior("task_completed", { id: variables.id, ...variables.data });
-      }
-    },
-  });
-
-  const deleteTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
-    onSuccess: (data, id) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("约定已移至垃圾箱");
-      logUserBehavior("task_deleted", { id });
-    },
-  });
-
-  const createTaskMutation = useMutation({
-    mutationFn: (taskData) => base44.entities.Task.create(taskData),
-    onSuccess: (newTask) => {
-      // Optimistically add the new task to the cache immediately
-      queryClient.setQueryData(['tasks'], (oldTasks) => {
-        return oldTasks ? [newTask, ...oldTasks] : [newTask];
-      });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("约定创建成功");
-    },
-  });
-
-  const handleComplete = async (task) => {
-    const newStatus = task.status === "completed" ? "pending" : "completed";
-    const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
-    
-    // 触觉反馈
-    if (navigator.vibrate && newStatus === "completed") {
-      navigator.vibrate(50);
-    }
-    
-    // 乐观更新 - 立即更新UI
-    queryClient.setQueryData(['tasks'], (oldData) => {
-      if (!oldData) return oldData;
-      return oldData.map(t => {
-        if (t.id === task.id) {
-          return { ...t, status: newStatus, completed_at: completedAt };
-        }
-        // 同时更新子任务状态
-        if (t.parent_task_id === task.id) {
-          return { ...t, status: newStatus, completed_at: completedAt };
-        }
-        return t;
-      });
-    });
-
-    // 级联更新子任务
-    if (allTasks && allTasks.length > 0) {
-      allTasks.filter(t => t.parent_task_id === task.id).forEach(subtask => {
-        if (subtask.status !== newStatus) {
-           updateTaskMutation.mutate({
-             id: subtask.id,
-             data: { status: newStatus, completed_at: completedAt }
-           });
-        }
-      });
-    }
-    
-    updateTaskMutation.mutate({
-      id: task.id,
-      data: { 
-        status: newStatus,
-        completed_at: completedAt
-      }
-    });
-
-    if (newStatus === "completed") {
-      try {
-        await base44.entities.TaskCompletion.create({
-          task_id: task.id,
-          status: "completed",
-          completed_at: completedAt
-        });
-      } catch (e) {
-        console.error("Failed to record completion", e);
-      }
-    } else {
-      try {
-        const history = await base44.entities.TaskCompletion.filter({ task_id: task.id }, "-created_date", 1);
-        if (history && history.length > 0) {
-           await base44.entities.TaskCompletion.delete(history[0].id);
-        }
-      } catch (e) {
-        console.error("Failed to remove completion record", e);
-      }
-    }
+  // Mutations and Handlers (Replaced by useTaskOperations)
+  
+  const handleCompleteWrapper = (task) => {
+     if (navigator.vibrate && task.status !== "completed") {
+        navigator.vibrate(50);
+     }
+     handleComplete(task, allTasks);
   };
 
-  const handleSubtaskToggle = async (subtask) => {
-    const newStatus = subtask.status === "completed" ? "pending" : "completed";
-    const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
-    
-    // 触觉反馈
-    if (navigator.vibrate && newStatus === "completed") {
-      navigator.vibrate(30);
-    }
-    
-    // 乐观更新子任务
-    queryClient.setQueryData(['tasks'], (oldData) => {
-      if (!oldData) return oldData;
-      return oldData.map(t => 
-        t.id === subtask.id 
-          ? { ...t, status: newStatus, completed_at: completedAt }
-          : t
-      );
-    });
-    
-    // Update subtask
-    await updateTaskMutation.mutateAsync({
-      id: subtask.id,
-      data: { 
-        status: newStatus,
-        completed_at: completedAt
+  const handleSubtaskToggleWrapper = (subtask) => {
+      if (navigator.vibrate && subtask.status !== "completed") {
+        navigator.vibrate(30);
       }
-    });
-
-    // Update parent progress
-    if (subtask.parent_task_id) {
-      const siblings = allTasks.filter(t => t.parent_task_id === subtask.parent_task_id);
-      const completed = siblings.filter(s => 
-        s.id === subtask.id ? newStatus === "completed" : s.status === "completed"
-      ).length;
-      const progress = siblings.length > 0 ? Math.round((completed / siblings.length) * 100) : 0;
-
-      await updateTaskMutation.mutateAsync({
-        id: subtask.parent_task_id,
-        data: { progress }
-      });
-    }
+      handleSubtaskToggle(subtask, allTasks);
   };
 
   // Calendar navigation handlers

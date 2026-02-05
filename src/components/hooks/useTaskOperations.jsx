@@ -10,6 +10,7 @@ export function useTaskOperations() {
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       
       // 自动同步到 Google Calendar (如果已设置提醒时间)
       // 在后台静默执行，不阻塞用户

@@ -69,12 +69,29 @@ export function useTaskOperations() {
     const optimisticStatus = isRecurring && newStatus === 'completed' ? 'pending' : newStatus;
     queryClient.setQueryData(['tasks'], (oldData) => {
       if (!oldData) return oldData;
-      return oldData.map(t => 
-        t.id === task.id 
-          ? { ...t, status: optimisticStatus, completed_at: completedAt }
-          : t
-      );
+      return oldData.map(t => {
+        if (t.id === task.id) {
+          return { ...t, status: optimisticStatus, completed_at: completedAt };
+        }
+        // 同时更新子任务状态
+        if (t.parent_task_id === task.id) {
+          return { ...t, status: optimisticStatus, completed_at: completedAt };
+        }
+        return t;
+      });
     });
+
+    // 级联更新子任务
+    if (allTasks && allTasks.length > 0) {
+      allTasks.filter(t => t.parent_task_id === task.id).forEach(subtask => {
+        if (subtask.status !== optimisticStatus) {
+           updateTaskMutation.mutate({
+             id: subtask.id,
+             data: { status: optimisticStatus, completed_at: completedAt }
+           });
+        }
+      });
+    }
 
     // Automation: Unblock dependent tasks if this task is completed
     if (newStatus === 'completed' && allTasks.length > 0) {

@@ -204,12 +204,29 @@ export default function Dashboard() {
     // 乐观更新 - 立即更新UI
     queryClient.setQueryData(['tasks'], (oldData) => {
       if (!oldData) return oldData;
-      return oldData.map(t => 
-        t.id === task.id 
-          ? { ...t, status: newStatus, completed_at: completedAt }
-          : t
-      );
+      return oldData.map(t => {
+        if (t.id === task.id) {
+          return { ...t, status: newStatus, completed_at: completedAt };
+        }
+        // 同时更新子任务状态
+        if (t.parent_task_id === task.id) {
+          return { ...t, status: newStatus, completed_at: completedAt };
+        }
+        return t;
+      });
     });
+
+    // 级联更新子任务
+    if (allTasks && allTasks.length > 0) {
+      allTasks.filter(t => t.parent_task_id === task.id).forEach(subtask => {
+        if (subtask.status !== newStatus) {
+           updateTaskMutation.mutate({
+             id: subtask.id,
+             data: { status: newStatus, completed_at: completedAt }
+           });
+        }
+      });
+    }
     
     updateTaskMutation.mutate({
       id: task.id,

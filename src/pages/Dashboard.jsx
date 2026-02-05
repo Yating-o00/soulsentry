@@ -222,7 +222,7 @@ export default function Dashboard() {
       newEndTime = new Date(updatedDate.getTime() + timeDiff);
     }
 
-    updateTaskMutation.mutate({
+    updateTask({
       id: taskId,
       data: {
         reminder_time: updatedDate.toISOString(),
@@ -539,7 +539,7 @@ export default function Dashboard() {
               initialData={{
                 reminder_time: calendarQuickAddDate || new Date(),
               }}
-              onAdd={(taskData) => createTaskMutation.mutate(taskData)}
+              onAdd={(taskData) => createTask(taskData)}
             />
           </DialogContent>
         </Dialog>
@@ -608,9 +608,10 @@ export default function Dashboard() {
           {editingTask && (
             <QuickAddTask 
               initialData={editingTask} 
-              onAdd={(taskData) => {
+              onAdd={async (taskData) => {
                   const { id, ...data } = taskData;
-                  updateTaskMutation.mutate({ id: editingTask.id, data });
+                  await updateTaskAsync({ id: editingTask.id, data });
+                  setEditingTask(null);
               }} 
             />
           )}

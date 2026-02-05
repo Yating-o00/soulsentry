@@ -227,11 +227,9 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                     <Checkbox
                       checked={isCompleted}
                       onCheckedChange={(checked) => {
-                        const status = checked ? "completed" : "pending";
-                        onComplete(status);
+                        onComplete?.();
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      title={isCompleted ? "标记为未完成" : "标记为完成"}
                       className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150"
                     />
                   )}

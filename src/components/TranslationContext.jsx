@@ -13,7 +13,7 @@ const translations = {
     'notifications': '消息通知',
     'feedback': '反馈与联系',
     'trash': '回收站',
-    'soulSentry': '心灵存放站',
+    'soulSentry': '心栈',
     'tagline': '坚定守护，适时轻唤',
     
     // Tasks Page

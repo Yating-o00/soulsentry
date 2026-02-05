@@ -165,21 +165,7 @@ export default function Dashboard() {
     ? Math.round((todayTasks.filter(t => t.status === 'completed').length / todayTasks.length) * 100) 
     : 0, [todayTasks]);
 
-  // Mutations and Handlers (Replaced by useTaskOperations)
-  
-  const handleCompleteWrapper = (task) => {
-     if (navigator.vibrate && task.status !== "completed") {
-        navigator.vibrate(50);
-     }
-     handleComplete(task, allTasks);
-  };
 
-  const handleSubtaskToggleWrapper = (subtask) => {
-      if (navigator.vibrate && subtask.status !== "completed") {
-        navigator.vibrate(30);
-      }
-      handleSubtaskToggle(subtask, allTasks);
-  };
 
   // Calendar navigation handlers
   const handleCalendarPrevious = () => {

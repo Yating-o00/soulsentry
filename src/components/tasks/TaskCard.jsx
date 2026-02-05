@@ -212,12 +212,12 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   whileTap={{ scale: 0.85 }}
                   transition={{ duration: 0.1 }}
                   className="touch-manipulation"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   {selectable ? (
                     <Checkbox
                       checked={selected}
-                      onCheckedChange={(e) => {
-                        e?.stopPropagation?.();
+                      onCheckedChange={(checked) => {
                         onSelect?.(task);
                       }}
                       onClick={(e) => e.stopPropagation()}
@@ -226,8 +226,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   ) : (
                     <Checkbox
                       checked={isCompleted}
-                      onCheckedChange={(e) => {
-                        e?.stopPropagation?.();
+                      onCheckedChange={(checked) => {
                         onComplete();
                       }}
                       onClick={(e) => e.stopPropagation()}
@@ -239,7 +238,10 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2 md:gap-3 mb-2">
-                  <div className="flex items-center gap-1.5 md:gap-2 flex-1 cursor-pointer touch-manipulation" onClick={onClick}>
+                  <div className="flex items-center gap-1.5 md:gap-2 flex-1 cursor-pointer touch-manipulation" onClick={(e) => {
+                    e.stopPropagation();
+                    onClick && onClick(e);
+                  }}>
                   {hasSubtasks && !hideSubtaskList && (
                     <button
                       onClick={(e) => {

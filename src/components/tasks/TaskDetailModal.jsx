@@ -956,11 +956,14 @@ Return complete JSON with all fields translated.`;
                           : "bg-white border-[#e5e9ef] hover:border-[#c8d1e0]"
                       }`}
                     >
-                      <Checkbox
-                        checked={subtask.status === "completed"}
-                        onCheckedChange={() => handleToggleSubtask(subtask)}
-                        className="h-5 w-5"
-                      />
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={subtask.status === "completed"}
+                          onCheckedChange={() => handleToggleSubtask(subtask)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-5 w-5"
+                        />
+                      </div>
                       <span
                         className={`flex-1 text-[15px] ${
                           subtask.status === "completed"

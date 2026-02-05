@@ -69,32 +69,16 @@ export function useTaskOperations() {
     const optimisticStatus = isRecurring && newStatus === 'completed' ? 'pending' : newStatus;
     queryClient.setQueryData(['tasks'], (oldData) => {
       if (!oldData) return oldData;
-      return oldData.map(t => {
-        if (t.id === task.id) {
-          return { ...t, status: optimisticStatus, completed_at: completedAt };
-        }
-        // 同时更新子任务状态
-        if (t.parent_task_id === task.id) {
-          return { ...t, status: optimisticStatus, completed_at: completedAt };
-        }
-        return t;
-      });
+      return oldData.map(t => 
+        t.id === task.id 
+          ? { ...t, status: optimisticStatus, completed_at: completedAt }
+          : t
+      );
     });
-
-    // 级联更新子任务
-    if (allTasks && allTasks.length > 0) {
-      allTasks.filter(t => t.parent_task_id === task.id).forEach(subtask => {
-        if (subtask.status !== optimisticStatus) {
-           updateTaskMutation.mutate({
-             id: subtask.id,
-             data: { status: optimisticStatus, completed_at: completedAt }
-           });
-        }
-      });
-    }
 
     // Automation: Unblock dependent tasks if this task is completed
     if (newStatus === 'completed' && allTasks.length > 0) {
+      // 1. Unblock dependent tasks
       const dependentTasks = allTasks.filter((t) =>
         t.dependencies &&
         t.dependencies.includes(task.id) &&
@@ -114,6 +98,31 @@ export function useTaskOperations() {
           });
           toast.success(`任务 "${depTask.title}" 已解除阻塞`, { icon: "🔓" });
         }
+      }
+
+      // 2. Cascade completion to subtasks (选中父约定的勾选框，约定自动完成)
+      const subtasks = allTasks.filter(t => t.parent_task_id === task.id && t.status !== 'completed');
+      if (subtasks.length > 0) {
+         // Optimistically update subtasks in UI
+         queryClient.setQueryData(['tasks'], (oldData) => {
+            if (!oldData) return oldData;
+            const subtaskIds = new Set(subtasks.map(s => s.id));
+            return oldData.map(t => {
+              if (subtaskIds.has(t.id)) {
+                return { ...t, status: 'completed', completed_at: completedAt };
+              }
+              return t;
+            });
+         });
+
+         // Update subtasks in backend
+         for (const subtask of subtasks) {
+            updateTaskMutation.mutate({
+               id: subtask.id,
+               data: { status: 'completed', completed_at: completedAt }
+            });
+         }
+         toast.success(`已自动完成 ${subtasks.length} 个子约定`);
       }
     }
 

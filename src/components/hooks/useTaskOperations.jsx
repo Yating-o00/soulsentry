@@ -61,9 +61,9 @@ export function useTaskOperations() {
     }
   });
 
-  const handleComplete = async (task, allTasks = []) => {
+  const handleComplete = async (task, allTasks = [], targetStatus = null) => {
     const isRecurring = task.repeat_rule && task.repeat_rule !== 'none';
-    const newStatus = task.status === "completed" ? "pending" : "completed";
+    const newStatus = targetStatus ? targetStatus : (task.status === "completed" ? "pending" : "completed");
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     
     // 乐观更新 - 立即更新UI，无需等待服务器响应

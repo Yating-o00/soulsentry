@@ -197,13 +197,13 @@ export default function Tasks() {
   };
   const getAllSubtasks = (parentId) => tasks.filter((t) => t.parent_task_id === parentId);
 
-  const onCompleteTask = (task) => {
+  const onCompleteTask = (task, targetStatus = null) => {
     // 触觉反馈（支持的设备）
     if (navigator.vibrate && task.status !== "completed") {
       navigator.vibrate(50);
     }
     
-    handleComplete(task, allTasks);
+    handleComplete(task, allTasks, targetStatus);
   };
   
   const onSubtaskToggleWrapper = (subtask) => {
@@ -419,7 +419,7 @@ export default function Tasks() {
                     task={task}
                     subtasks={getAllSubtasks(task.id)}
                     hideSubtaskList={true}
-                    onComplete={() => onCompleteTask(task)}
+                    onComplete={(status) => onCompleteTask(task, status)}
                     onDelete={() => deleteTask(task.id)}
                     onEdit={() => setEditingTask(task)}
                     onUpdate={(data) => updateTask({ id: task.id, data })}
@@ -440,7 +440,7 @@ export default function Tasks() {
                   task={task}
                   subtasks={getAllSubtasks(task.id)}
                   hideSubtaskList={true}
-                  onComplete={() => onCompleteTask(task)}
+                  onComplete={(status) => onCompleteTask(task, status)}
                   onDelete={() => deleteTask(task.id)}
                   onEdit={() => setEditingTask(task)}
                   onUpdate={(data) => updateTask({ id: task.id, data })}

@@ -99,7 +99,7 @@ export default function KanbanView({ tasks, onUpdateTask, onTaskClick, onComplet
                             >
                                 <TaskCard 
                                     task={task}
-                                    onComplete={() => onComplete(task)}
+                                    onComplete={(status) => onComplete(task, status)}
                                     onDelete={() => onDelete(task.id)}
                                     onEdit={() => onEdit(task)}
                                     onClick={() => onTaskClick(task)}

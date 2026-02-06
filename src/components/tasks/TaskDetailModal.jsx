@@ -50,6 +50,7 @@ import TaskDependencySelector from "./TaskDependencySelector";
 import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
+import { useTaskTranslation } from "@/components/hooks/useTaskTranslation";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -61,7 +62,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
   const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
   const [originalContent, setOriginalContent] = useState({ title: "", description: "" });
-  const [isTranslating, setIsTranslating] = useState(false);
+  const { translateTask, isTranslating } = useTaskTranslation();
   const queryClient = useQueryClient();
 
   // Fetch completion history
@@ -386,106 +387,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
 
-  const handleTranslate = async () => {
-    // 防止重复点击
-    if (isTranslating) return;
-    
-    setIsTranslating(true);
-    const toastId = toast.loading("正在准备翻译...");
-    
-    try {
-      if (!task || !task.title) {
-        throw new Error("任务信息不完整");
-      }
-
-      // 优化的语言检测逻辑
-      const allText = (task.title || "") + (task.description || "");
-      if (!allText.trim()) {
-         toast.dismiss(toastId);
-         setIsTranslating(false);
-         return;
-      }
-      
-      const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
-      const nonWhitespace = allText.replace(/\s/g, "").length || 1;
-      // 调整阈值：如果是混合文本，稍微倾向于认为它是中文以便翻译成英文，或者反之。
-      // 对于纯英文，chineseChars 为 0，isChinese 为 false -> 翻译成中文。
-      const isChinese = chineseChars > nonWhitespace * 0.3; 
-      
-      const targetLang = isChinese ? "English" : "Simplified Chinese";
-      const targetLangDisplay = isChinese ? "英文" : "中文";
-      
-      console.log(`Language detection: Chinese chars=${chineseChars}, Total=${nonWhitespace}, isChinese=${isChinese}, Target=${targetLang}`);
-      
-      toast.message(`正在翻译为${targetLangDisplay}...`, { id: toastId });
-      
-      // 准备子任务和笔记数据
-      const subtasksList = subtasks.map(st => ({
-        id: st.id,
-        title: st.title,
-        description: st.description || ""
-      }));
-      
-      const notesList = (task.notes || []).map((note, idx) => ({
-        index: idx,
-        content: note.content
-      }));
-      
-      // 使用后端函数进行翻译，避免前端集成配额限制
-      const { data: res } = await base44.functions.invoke('translateTask', {
-        title: task.title,
-        description: task.description,
-        subtasks: subtasksList,
-        notes: notesList,
-        targetLang
-      });
-
-      if (res && res.title) {
-        // 更新主任务
-        await updateTaskMutation.mutateAsync({
-          id: task.id,
-          data: {
-            title: res.title,
-            description: res.description || "",
-            notes: res.notes && res.notes.length > 0 ? 
-              (task.notes || []).map((note, idx) => {
-                const translated = res.notes.find(n => n.index === idx);
-                return translated ? { ...note, content: translated.content } : note;
-              }) : task.notes
-          }
-        });
-        
-        // 更新子任务
-        if (res.subtasks && res.subtasks.length > 0) {
-          const updatePromises = res.subtasks.map(translatedSt => {
-            if (!translatedSt.id) return null;
-            // 查找原始子任务确保ID存在
-            const originalSubtask = subtasks.find(s => s.id === translatedSt.id);
-            if (!originalSubtask) return null;
-            
-            return updateTaskMutation.mutateAsync({
-              id: translatedSt.id,
-              data: {
-                title: translatedSt.title,
-                description: translatedSt.description || ""
-              }
-            });
-          }).filter(Boolean);
-          
-          await Promise.all(updatePromises);
-        }
-        
-        toast.success(`✅ 已翻译为${targetLangDisplay}`, { id: toastId });
-      } else {
-        console.error("翻译返回数据为空或格式错误", res);
-        toast.error("翻译未返回有效结果", { id: toastId });
-      }
-    } catch (error) {
-      console.error("翻译失败:", error);
-      toast.error(`翻译服务出错: ${error.message || "未知错误"}`, { id: toastId });
-    } finally {
-      setIsTranslating(false);
-    }
+  const handleTranslate = () => {
+    translateTask(task, subtasks);
   };
 
   const handleAIAnalysis = async () => {

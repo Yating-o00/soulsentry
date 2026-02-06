@@ -116,6 +116,7 @@ const triggerHaptic = () => {
 export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false, selectable = false, selected = false, onSelect }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
+  const { translateTask, isTranslating } = useTaskTranslation();
   
   // Fetch latest completion history (only for recurring tasks to avoid excessive API calls)
   const { data: latestCompletion } = useQuery({

@@ -397,12 +397,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
       }
       
       const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
-      const totalChars = allText.length;
-      // 只要包含一定量的中文（对于短文本）或比例超过30%，就认为是中文
-      const isChinese = (totalChars < 20 && chineseChars > 0) || (chineseChars > totalChars * 0.3);
+      // 更加稳健的语言检测：只看非空白字符比例，且提高阈值以避免混合文本被误判
+      const nonWhitespace = allText.replace(/\s/g, "").length || 1;
+      const isChinese = chineseChars > nonWhitespace * 0.4;
       
       const targetLang = isChinese ? "English" : "Simplified Chinese";
       const targetLangDisplay = isChinese ? "英文" : "中文";
+      
+      toast.info(`正在翻译为${targetLangDisplay}...`);
       
       // 准备子任务和笔记数据
       const subtasksList = subtasks.map(st => ({

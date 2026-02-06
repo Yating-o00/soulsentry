@@ -431,90 +431,13 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
         content: note.content
       }));
       
-      const prompt = isChinese ? 
-        `You are a professional translator. Translate the following task information to English.
-        
-IMPORTANT REQUIREMENTS:
-1. Translate ALL content to English, even if it looks like English (correct grammar/spelling if needed).
-2. JSON Keys MUST stay the same, only translate values.
-3. Return ONLY valid JSON.
-
-Input Data:
-Main Task Title: ${task.title}
-Main Task Description: ${task.description || "None"}
-
-Subtasks:
-${JSON.stringify(subtasksList)}
-
-Notes:
-${JSON.stringify(notesList)}
-
-Response Format (JSON):
-{
-  "title": "Translated Title",
-  "description": "Translated Description",
-  "subtasks": [{"id": "...", "title": "...", "description": "..."}],
-  "notes": [{"index": 0, "content": "..."}]
-}` : 
-        `你是一位专业翻译助手。请将以下任务信息翻译为简体中文。
-        
-重要要求：
-1. 必须将所有内容（标题、描述、子任务、笔记）翻译成中文。
-2. 如果原文已经是中文，请优化润色。
-3. 保持 JSON 键名不变，只翻译值。
-4. 仅返回有效的 JSON 格式。
-
-输入数据：
-主任务标题: ${task.title}
-主任务描述: ${task.description || "无"}
-
-子任务列表:
-${JSON.stringify(subtasksList)}
-
-笔记列表:
-${JSON.stringify(notesList)}
-
-返回格式 (JSON):
-{
-  "title": "翻译后的标题",
-  "description": "翻译后的描述",
-  "subtasks": [{"id": "...", "title": "...", "description": "..."}],
-  "notes": [{"index": 0, "content": "..."}]
-}`;
-      
-      const res = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            description: { type: "string" },
-            subtasks: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id: { type: "string" },
-                  title: { type: "string" },
-                  description: { type: "string" }
-                },
-                required: ["id", "title"]
-              }
-            },
-            notes: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  index: { type: "number" },
-                  content: { type: "string" }
-                },
-                required: ["index", "content"]
-              }
-            }
-          },
-          required: ["title", "description"]
-        }
+      // 使用后端函数进行翻译，避免前端集成配额限制
+      const { data: res } = await base44.functions.invoke('translateTask', {
+        title: task.title,
+        description: task.description,
+        subtasks: subtasksList,
+        notes: notesList,
+        targetLang
       });
 
       if (res && res.title) {

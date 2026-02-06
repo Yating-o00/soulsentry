@@ -386,25 +386,33 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
 
-  const handleTranslate = async () => {
+  const handleTranslate = async (e) => {
+    // 阻止冒泡，避免触发其他点击事件
+    if (e && e.stopPropagation) e.stopPropagation();
+    
+    console.log("Translation started");
     setIsTranslating(true);
+    
+    // 显示加载 Toast
+    const toastId = toast.loading("正在分析语言并翻译...");
+    
     try {
       // 优化的语言检测逻辑
       const allText = (task.title || "") + (task.description || "");
       if (!allText.trim()) {
+         toast.error("没有可翻译的内容", { id: toastId });
          setIsTranslating(false);
          return;
       }
       
       const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
-      // 更加稳健的语言检测：只看非空白字符比例，且提高阈值以避免混合文本被误判
       const nonWhitespace = allText.replace(/\s/g, "").length || 1;
       const isChinese = chineseChars > nonWhitespace * 0.4;
       
       const targetLang = isChinese ? "English" : "Simplified Chinese";
       const targetLangDisplay = isChinese ? "英文" : "中文";
       
-      toast.info(`正在翻译为${targetLangDisplay}...`);
+      toast.loading(`正在翻译为${targetLangDisplay}...`, { id: toastId });
       
       // 准备子任务和笔记数据
       const subtasksList = subtasks.map(st => ({
@@ -520,11 +528,13 @@ ${JSON.stringify(notesList)}
           await Promise.all(updatePromises);
         }
         
-        toast.success(`✅ 已翻译为${targetLangDisplay}`);
+        toast.success(`✅ 已翻译为${targetLangDisplay}`, { id: toastId });
+      } else {
+        toast.error("翻译未返回有效结果", { id: toastId });
       }
     } catch (error) {
       console.error("翻译失败:", error);
-      toast.error("翻译服务暂时不可用");
+      toast.error(`翻译服务失败: ${error.message}`, { id: toastId });
     } finally {
       setIsTranslating(false);
     }

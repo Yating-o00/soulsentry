@@ -50,7 +50,7 @@ import TaskDependencySelector from "./TaskDependencySelector";
 import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
-import { useTaskTranslation } from "@/components/hooks/useTaskTranslation";
+import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -62,7 +62,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
   const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
   const [originalContent, setOriginalContent] = useState({ title: "", description: "" });
-  const { translateTask, isTranslating } = useTaskTranslation();
+  const [isTranslating, setIsTranslating] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch completion history
@@ -99,6 +99,21 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     enabled: !!task?.id,
     initialData: [],
   });
+
+  // Calculate target language for button label
+  const targetLangLabel = React.useMemo(() => {
+      const allText = (task.title || "") + (task.description || "");
+      if (!allText.trim()) return "翻译";
+      
+      const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
+      const nonWhitespace = allText.replace(/\s/g, "").length || 1;
+      // Use same threshold as translateTask logic
+      const isChinese = chineseChars > nonWhitespace * 0.3; 
+      
+      return isChinese ? "翻译为英文" : "翻译为中文";
+  }, [task.title, task.description]);
+
+  const { translateTask } = useTaskOperations();
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
@@ -387,8 +402,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
 
-  const handleTranslate = () => {
-    translateTask(task, subtasks);
+  const handleTranslate = async () => {
+    if (isTranslating) return;
+    setIsTranslating(true);
+    try {
+        await translateTask(task, subtasks);
+    } finally {
+        setIsTranslating(false);
+    }
   };
 
   const handleAIAnalysis = async () => {
@@ -480,10 +501,10 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                 size="sm" 
                 onClick={handleTranslate}
                 disabled={isTranslating}
-                className="h-8 text-xs bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 text-blue-700 hover:from-blue-100 hover:to-cyan-100"
+                className="h-8 text-xs bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 text-blue-700 hover:from-blue-100 hover:to-cyan-100 transition-all min-w-[80px]"
              >
                 {isTranslating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Languages className="w-3.5 h-3.5 mr-1" />}
-                翻译
+                {targetLangLabel}
              </Button>
              <Button 
                 variant="outline" 

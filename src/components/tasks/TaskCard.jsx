@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
+import { useTaskOperations } from "@/components/hooks/useTaskOperations";
+import { Languages } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,13 +41,10 @@ import {
   RotateCcw,
   Link as LinkIcon,
   Ban,
-  MoreHorizontal as MoreIcon,
-  Languages,
-  Loader2
+  MoreHorizontal as MoreIcon
   } from "lucide-react";
   import { motion, AnimatePresence } from "framer-motion";
   import AITranslatedText from "@/components/AITranslatedText";
-  import { useTaskTranslation } from "@/components/hooks/useTaskTranslation";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -116,9 +115,10 @@ const triggerHaptic = () => {
 export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate, onClick, onSubtaskToggle, isTrash, onRestore, onDeleteForever, subtasks: propSubtasks, hideSubtaskList = false, onToggleSubtasks, isExpanded = false, selectable = false, selected = false, onSelect }) {
   const [expanded, setExpanded] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
-  const { translateTask, isTranslating } = useTaskTranslation();
   
   // Fetch latest completion history (only for recurring tasks to avoid excessive API calls)
+  const { translateTask } = useTaskOperations();
+
   const { data: latestCompletion } = useQuery({
      queryKey: ['task-completion-latest', task.id],
      queryFn: async () => {
@@ -327,17 +327,6 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                                 <Edit className="mr-2 h-4 w-4" />
                                 编辑约定
                             </DropdownMenuItem>
-                            
-                            <DropdownMenuItem 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    translateTask(task, subtasks);
-                                }}
-                                disabled={isTranslating}
-                            >
-                                {isTranslating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Languages className="mr-2 h-4 w-4" />}
-                                {isTranslating ? "翻译中..." : "翻译约定"}
-                            </DropdownMenuItem>
 
                             <DropdownMenuSub>
                               <DropdownMenuSubTrigger>
@@ -365,6 +354,14 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                             }}>
                                 <Share2 className="mr-2 h-4 w-4" />
                                 分享约定
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation();
+                                translateTask(task, subtasks);
+                            }}>
+                                <Languages className="mr-2 h-4 w-4" />
+                                翻译
                             </DropdownMenuItem>
                             
                             <DropdownMenuSeparator />

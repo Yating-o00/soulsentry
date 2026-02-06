@@ -291,6 +291,89 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
     createTaskAsync: createTaskMutation.mutateAsync,
     deleteTask: deleteTaskMutation.mutate,
     handleComplete,
-    handleSubtaskToggle
+    handleSubtaskToggle,
+    translateTask: async (task, subtasks = []) => {
+        const toastId = toast.loading("正在准备翻译...");
+        try {
+            if (!task || !task.title) {
+              throw new Error("任务信息不完整");
+            }
+  
+            // 优化的语言检测逻辑
+            const allText = (task.title || "") + (task.description || "");
+            if (!allText.trim()) {
+               toast.dismiss(toastId);
+               return;
+            }
+            
+            const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
+            const nonWhitespace = allText.replace(/\s/g, "").length || 1;
+            const isChinese = chineseChars > nonWhitespace * 0.3; 
+            
+            const targetLang = isChinese ? "English" : "Simplified Chinese";
+            const targetLangDisplay = isChinese ? "英文" : "中文";
+            
+            toast.message(`正在翻译为${targetLangDisplay}...`, { id: toastId });
+            
+            const subtasksList = subtasks.map(st => ({
+              id: st.id,
+              title: st.title,
+              description: st.description || ""
+            }));
+            
+            const notesList = (task.notes || []).map((note, idx) => ({
+              index: idx,
+              content: note.content
+            }));
+            
+            const { data: res } = await base44.functions.invoke('translateTask', {
+              title: task.title,
+              description: task.description,
+              subtasks: subtasksList,
+              notes: notesList,
+              targetLang
+            });
+  
+            if (res && res.title) {
+              await updateTaskMutation.mutateAsync({
+                id: task.id,
+                data: {
+                  title: res.title,
+                  description: res.description || "",
+                  notes: res.notes && res.notes.length > 0 ? 
+                    (task.notes || []).map((note, idx) => {
+                      const translated = res.notes.find(n => n.index === idx);
+                      return translated ? { ...note, content: translated.content } : note;
+                    }) : task.notes
+                }
+              });
+              
+              if (res.subtasks && res.subtasks.length > 0) {
+                const updatePromises = res.subtasks.map(translatedSt => {
+                  if (!translatedSt.id) return null;
+                  const originalSubtask = subtasks.find(s => s.id === translatedSt.id);
+                  if (!originalSubtask) return null;
+                  
+                  return updateTaskMutation.mutateAsync({
+                    id: translatedSt.id,
+                    data: {
+                      title: translatedSt.title,
+                      description: translatedSt.description || ""
+                    }
+                  });
+                }).filter(Boolean);
+                
+                await Promise.all(updatePromises);
+              }
+              
+              toast.success(`✅ 已翻译为${targetLangDisplay}`, { id: toastId });
+            } else {
+              toast.error("翻译未返回有效结果", { id: toastId });
+            }
+        } catch (error) {
+            console.error("翻译失败:", error);
+            toast.error(`翻译服务出错: ${error.message || "未知错误"}`, { id: toastId });
+        }
+    }
   };
 }

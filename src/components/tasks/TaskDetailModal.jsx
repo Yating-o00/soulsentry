@@ -386,21 +386,22 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
 
-  const handleTranslate = async (e) => {
-    // 阻止冒泡，避免触发其他点击事件
-    if (e && e.stopPropagation) e.stopPropagation();
+  const handleTranslate = async () => {
+    // 防止重复点击
+    if (isTranslating) return;
     
-    console.log("Translation started");
     setIsTranslating(true);
-    
-    // 显示加载 Toast
-    const toastId = toast.loading("正在分析语言并翻译...");
+    const toastId = toast.loading("正在准备翻译...");
     
     try {
+      if (!task || !task.title) {
+        throw new Error("任务信息不完整");
+      }
+
       // 优化的语言检测逻辑
       const allText = (task.title || "") + (task.description || "");
       if (!allText.trim()) {
-         toast.error("没有可翻译的内容", { id: toastId });
+         toast.dismiss(toastId);
          setIsTranslating(false);
          return;
       }
@@ -412,7 +413,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
       const targetLang = isChinese ? "English" : "Simplified Chinese";
       const targetLangDisplay = isChinese ? "英文" : "中文";
       
-      toast.loading(`正在翻译为${targetLangDisplay}...`, { id: toastId });
+      toast.message(`正在翻译为${targetLangDisplay}...`, { id: toastId });
       
       // 准备子任务和笔记数据
       const subtasksList = subtasks.map(st => ({
@@ -516,6 +517,10 @@ ${JSON.stringify(notesList)}
         if (res.subtasks && res.subtasks.length > 0) {
           const updatePromises = res.subtasks.map(translatedSt => {
             if (!translatedSt.id) return null;
+            // 查找原始子任务确保ID存在
+            const originalSubtask = subtasks.find(s => s.id === translatedSt.id);
+            if (!originalSubtask) return null;
+            
             return updateTaskMutation.mutateAsync({
               id: translatedSt.id,
               data: {
@@ -530,11 +535,12 @@ ${JSON.stringify(notesList)}
         
         toast.success(`✅ 已翻译为${targetLangDisplay}`, { id: toastId });
       } else {
+        console.error("翻译返回数据为空或格式错误", res);
         toast.error("翻译未返回有效结果", { id: toastId });
       }
     } catch (error) {
       console.error("翻译失败:", error);
-      toast.error(`翻译服务失败: ${error.message}`, { id: toastId });
+      toast.error(`翻译服务出错: ${error.message || "未知错误"}`, { id: toastId });
     } finally {
       setIsTranslating(false);
     }

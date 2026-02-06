@@ -389,11 +389,17 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const handleTranslate = async () => {
     setIsTranslating(true);
     try {
-      // 检测主要语言
-      const allText = task.title + (task.description || "");
+      // 优化的语言检测逻辑
+      const allText = (task.title || "") + (task.description || "");
+      if (!allText.trim()) {
+         setIsTranslating(false);
+         return;
+      }
+      
       const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
       const totalChars = allText.length;
-      const isChinese = chineseChars > totalChars * 0.3;
+      // 只要包含一定量的中文（对于短文本）或比例超过30%，就认为是中文
+      const isChinese = (totalChars < 20 && chineseChars > 0) || (chineseChars > totalChars * 0.3);
       
       const targetLang = isChinese ? "English" : "Simplified Chinese";
       const targetLangDisplay = isChinese ? "英文" : "中文";
@@ -411,40 +417,40 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
       }));
       
       const prompt = isChinese ? 
-        `请将以下任务的所有信息完整翻译为英文。要求：
-1. 必须翻译每一个字段，不能遗漏
-2. 翻译要准确、自然、流畅
-3. 保持原意不变
-4. 所有内容统一为英文，不能混杂中文
-
-主任务：
-- 标题: ${task.title}
-- 描述: ${task.description || "无"}
-
-子任务列表（共${subtasksList.length}个）：
-${subtasksList.map(st => `ID: ${st.id}\n  标题: ${st.title}\n  描述: ${st.description || "无"}`).join('\n\n')}
-
-笔记列表（共${notesList.length}个）：
-${notesList.map(n => `序号: ${n.index}\n  内容: ${n.content}`).join('\n\n')}
-
-返回完整的JSON，确保所有字段都已翻译。` : 
-        `Please translate all information of the following task to Simplified Chinese. Requirements:
-1. Must translate every field, no omissions
-2. Translation should be accurate, natural and fluent
-3. Keep the original meaning
-4. All content must be unified in Chinese, no mixed English
+        `Translate the following task information to English.
+Requirements:
+1. Translate ALL fields (title, description, subtasks, notes).
+2. Maintain the original meaning but make it natural.
+3. Output MUST be in English.
 
 Main Task:
-- Title: ${task.title}
-- Description: ${task.description || "None"}
+Title: ${task.title}
+Description: ${task.description || "None"}
 
-Subtasks (Total: ${subtasksList.length}):
-${subtasksList.map(st => `ID: ${st.id}\n  Title: ${st.title}\n  Description: ${st.description || "None"}`).join('\n\n')}
+Subtasks:
+${JSON.stringify(subtasksList)}
 
-Notes (Total: ${notesList.length}):
-${notesList.map(n => `Index: ${n.index}\n  Content: ${n.content}`).join('\n\n')}
+Notes:
+${JSON.stringify(notesList)}
 
-Return complete JSON with all fields translated.`;
+Return JSON.` : 
+        `请将以下任务信息翻译为简体中文。
+要求：
+1. 翻译所有字段（标题、描述、子任务、笔记）。
+2. 保持原意，用词自然。
+3. 输出必须是中文。
+
+主任务：
+标题: ${task.title}
+描述: ${task.description || "无"}
+
+子任务:
+${JSON.stringify(subtasksList)}
+
+笔记:
+${JSON.stringify(notesList)}
+
+返回 JSON。`;
       
       const res = await base44.integrations.Core.InvokeLLM({
         prompt,
@@ -477,17 +483,11 @@ Return complete JSON with all fields translated.`;
               }
             }
           },
-          required: ["title", "description", "subtasks", "notes"]
+          required: ["title", "description"]
         }
       });
 
-      if (res) {
-        // 验证翻译结果
-        if (!res.title || res.title === task.title) {
-          toast.error("翻译失败：标题未翻译");
-          return;
-        }
-        
+      if (res && res.title) {
         // 更新主任务
         await updateTaskMutation.mutateAsync({
           id: task.id,
@@ -505,26 +505,24 @@ Return complete JSON with all fields translated.`;
         // 更新子任务
         if (res.subtasks && res.subtasks.length > 0) {
           const updatePromises = res.subtasks.map(translatedSt => {
-            const originalSt = subtasks.find(st => st.id === translatedSt.id);
-            if (originalSt) {
-              return updateTaskMutation.mutateAsync({
-                id: translatedSt.id,
-                data: {
-                  title: translatedSt.title,
-                  description: translatedSt.description || ""
-                }
-              });
-            }
+            if (!translatedSt.id) return null;
+            return updateTaskMutation.mutateAsync({
+              id: translatedSt.id,
+              data: {
+                title: translatedSt.title,
+                description: translatedSt.description || ""
+              }
+            });
           }).filter(Boolean);
           
           await Promise.all(updatePromises);
         }
         
-        toast.success(`✅ 已完整翻译为${targetLangDisplay}`);
+        toast.success(`✅ 已翻译为${targetLangDisplay}`);
       }
     } catch (error) {
       console.error("翻译失败:", error);
-      toast.error("翻译失败，请重试");
+      toast.error("翻译服务暂时不可用");
     } finally {
       setIsTranslating(false);
     }

@@ -408,10 +408,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
       
       const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
       const nonWhitespace = allText.replace(/\s/g, "").length || 1;
-      const isChinese = chineseChars > nonWhitespace * 0.4;
+      // 调整阈值：如果是混合文本，稍微倾向于认为它是中文以便翻译成英文，或者反之。
+      // 对于纯英文，chineseChars 为 0，isChinese 为 false -> 翻译成中文。
+      const isChinese = chineseChars > nonWhitespace * 0.3; 
       
       const targetLang = isChinese ? "English" : "Simplified Chinese";
       const targetLangDisplay = isChinese ? "英文" : "中文";
+      
+      console.log(`Language detection: Chinese chars=${chineseChars}, Total=${nonWhitespace}, isChinese=${isChinese}, Target=${targetLang}`);
       
       toast.message(`正在翻译为${targetLangDisplay}...`, { id: toastId });
       
@@ -428,15 +432,16 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
       }));
       
       const prompt = isChinese ? 
-        `Translate the following task information to English.
-Requirements:
-1. Translate ALL fields (title, description, subtasks, notes).
-2. Maintain the original meaning but make it natural.
-3. Output MUST be in English.
+        `You are a professional translator. Translate the following task information to English.
+        
+IMPORTANT REQUIREMENTS:
+1. Translate ALL content to English, even if it looks like English (correct grammar/spelling if needed).
+2. JSON Keys MUST stay the same, only translate values.
+3. Return ONLY valid JSON.
 
-Main Task:
-Title: ${task.title}
-Description: ${task.description || "None"}
+Input Data:
+Main Task Title: ${task.title}
+Main Task Description: ${task.description || "None"}
 
 Subtasks:
 ${JSON.stringify(subtasksList)}
@@ -444,24 +449,38 @@ ${JSON.stringify(subtasksList)}
 Notes:
 ${JSON.stringify(notesList)}
 
-Return JSON.` : 
-        `请将以下任务信息翻译为简体中文。
-要求：
-1. 翻译所有字段（标题、描述、子任务、笔记）。
-2. 保持原意，用词自然。
-3. 输出必须是中文。
+Response Format (JSON):
+{
+  "title": "Translated Title",
+  "description": "Translated Description",
+  "subtasks": [{"id": "...", "title": "...", "description": "..."}],
+  "notes": [{"index": 0, "content": "..."}]
+}` : 
+        `你是一位专业翻译助手。请将以下任务信息翻译为简体中文。
+        
+重要要求：
+1. 必须将所有内容（标题、描述、子任务、笔记）翻译成中文。
+2. 如果原文已经是中文，请优化润色。
+3. 保持 JSON 键名不变，只翻译值。
+4. 仅返回有效的 JSON 格式。
 
-主任务：
-标题: ${task.title}
-描述: ${task.description || "无"}
+输入数据：
+主任务标题: ${task.title}
+主任务描述: ${task.description || "无"}
 
-子任务:
+子任务列表:
 ${JSON.stringify(subtasksList)}
 
-笔记:
+笔记列表:
 ${JSON.stringify(notesList)}
 
-返回 JSON。`;
+返回格式 (JSON):
+{
+  "title": "翻译后的标题",
+  "description": "翻译后的描述",
+  "subtasks": [{"id": "...", "title": "...", "description": "..."}],
+  "notes": [{"index": 0, "content": "..."}]
+}`;
       
       const res = await base44.integrations.Core.InvokeLLM({
         prompt,

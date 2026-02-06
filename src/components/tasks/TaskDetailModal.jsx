@@ -102,6 +102,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
   // Calculate target language for button label
   const targetLangLabel = React.useMemo(() => {
+      if (!task) return "翻译";
       const allText = (task.title || "") + (task.description || "");
       if (!allText.trim()) return "翻译";
       
@@ -111,7 +112,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
       const isChinese = chineseChars > nonWhitespace * 0.3; 
       
       return isChinese ? "翻译为英文" : "翻译为中文";
-  }, [task.title, task.description]);
+  }, [task?.title, task?.description]);
 
   const { translateTask } = useTaskOperations();
 

@@ -39,10 +39,13 @@ import {
   RotateCcw,
   Link as LinkIcon,
   Ban,
-  MoreHorizontal as MoreIcon
+  MoreHorizontal as MoreIcon,
+  Languages,
+  Loader2
   } from "lucide-react";
   import { motion, AnimatePresence } from "framer-motion";
   import AITranslatedText from "@/components/AITranslatedText";
+  import { useTaskTranslation } from "@/components/hooks/useTaskTranslation";
 import {
     DropdownMenu,
     DropdownMenuContent,

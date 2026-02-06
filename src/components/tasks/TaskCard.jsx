@@ -327,6 +327,17 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                                 <Edit className="mr-2 h-4 w-4" />
                                 编辑约定
                             </DropdownMenuItem>
+                            
+                            <DropdownMenuItem 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    translateTask(task, subtasks);
+                                }}
+                                disabled={isTranslating}
+                            >
+                                {isTranslating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Languages className="mr-2 h-4 w-4" />}
+                                {isTranslating ? "翻译中..." : "翻译约定"}
+                            </DropdownMenuItem>
 
                             <DropdownMenuSub>
                               <DropdownMenuSubTrigger>

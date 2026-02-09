@@ -24,6 +24,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import CalendarMonthView from "../components/calendar/CalendarMonthView";
 import CalendarWeekView from "../components/calendar/CalendarWeekView";
+import SoulWeekPlanner from "../components/calendar/SoulWeekPlanner";
 import CalendarDayView from "../components/calendar/CalendarDayView";
 import TaskCard from "../components/tasks/TaskCard";
 import UserBehaviorInsights from "../components/insights/UserBehaviorInsights";

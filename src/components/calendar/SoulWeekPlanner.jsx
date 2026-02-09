@@ -55,14 +55,6 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const [stage, setStage] = useState('input'); // input, processing, results
   const [userInput, setUserInput] = useState('');
   const [currentWeekDate, setCurrentWeekDate] = useState(initialDate || new Date());
-  
-  // Sync with prop updates from parent (Dashboard navigation)
-  useEffect(() => {
-    if (initialDate) {
-      setCurrentWeekDate(initialDate);
-    }
-  }, [initialDate]);
-
   const [processingStepIndex, setProcessingStepIndex] = useState(0);
   const [weekData, setWeekData] = useState(null);
   const [selectedDevice, setSelectedDevice] = useState('phone');
@@ -70,6 +62,13 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
+  // Sync internal state with prop changes (e.g. when user navigates in the parent Dashboard)
+  useEffect(() => {
+    if (initialDate) {
+      setCurrentWeekDate(initialDate);
+    }
+  }, [initialDate]);
+
   const resultsRef = useRef(null);
 
   const start = startOfWeek(currentWeekDate, { locale: zhCN, weekStartsOn: 1 });

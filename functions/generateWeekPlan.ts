@@ -101,6 +101,7 @@ Deno.serve(async (req) => {
             "theme": "string (in Chinese)",
             "events": [
                 { 
+                    "date": "YYYY-MM-DD", // CRITICAL: The specific date of this event
                     "day_index": number (0-6), 
                     "title": "string", 
                     "time": "HH:MM", 

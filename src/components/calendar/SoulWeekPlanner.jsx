@@ -34,6 +34,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import QuickAddTask from "../tasks/QuickAddTask";
 import { Plus } from "lucide-react";
+import { useTaskOperations } from "@/components/hooks/useTaskOperations";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import QuickAddTask from "../tasks/QuickAddTask";
+import { Plus } from "lucide-react";
 
 // Device Configurations
 const DEVICE_CONFIGS = {
@@ -122,6 +127,7 @@ const PROCESSING_STEPS = [
 ];
 
 export default function SoulWeekPlanner({ currentDate: initialDate }) {
+  const { createTask } = useTaskOperations();
   const [stage, setStage] = useState('input'); // input, processing, results
   const [userInput, setUserInput] = useState('');
   const [currentWeekDate, setCurrentWeekDate] = useState(initialDate || new Date());
@@ -130,7 +136,6 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const [selectedDevice, setSelectedDevice] = useState('phone');
   const [expandedDays, setExpandedDays] = useState({});
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   
   const resultsRef = useRef(null);
 
@@ -219,18 +224,6 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
         <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-[#6366f1]/10 rounded-full blur-[120px] animate-[breathe_6s_ease-in-out_infinite_3s]"></div>
       </div>
 
-      <Dialog open={isQuickAddOpen} onOpenChange={setIsQuickAddOpen}>
-        <DialogContent className="max-w-2xl">
-           <QuickAddTask 
-              initialData={{ reminder_time: new Date() }}
-              onAdd={() => {
-                 setIsQuickAddOpen(false);
-                 toast.success("任务已快速创建");
-              }}
-           />
-        </DialogContent>
-      </Dialog>
-
       <div className="relative z-10 p-6 md:p-12 max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-100px)]">
         
         {/* Input Section */}
@@ -240,132 +233,133 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="flex-1 flex flex-col justify-center max-w-4xl mx-auto w-full mt-8"
+              className="flex-1 flex flex-col justify-center items-center text-center space-y-8 mt-12"
             >
-              <div className="mb-8 text-left w-full">
-                <h1 className="text-4xl font-bold text-[#384877] mb-2 tracking-tight">本周规划</h1>
-                <p className="text-[#0a0a0f]/50 text-lg font-light">你的点滴都是最重要的事</p>
+              {/* Header */}
+              <div className="space-y-4">
+                <h1 className="text-4xl md:text-5xl font-bold text-[#384877] tracking-tight leading-tight">
+                  全部约定
+                </h1>
+                <p className="text-lg text-slate-500 max-w-xl mx-auto font-light leading-relaxed">
+                  你的点滴都是最重要的事
+                </p>
               </div>
 
-              <div className="w-full bg-white rounded-[24px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-2">
-                <Tabs defaultValue="smart" className="w-full">
-                  <TabsList className="w-full h-14 bg-slate-50/80 rounded-[20px] p-1 grid grid-cols-2 mb-2">
-                    <TabsTrigger 
-                      value="quick" 
-                      className="rounded-[16px] text-base font-medium data-[state=active]:bg-white data-[state=active]:text-[#384877] data-[state=active]:shadow-sm transition-all h-full"
-                    >
-                      快速创建
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="smart" 
-                      className="rounded-[16px] text-base font-medium data-[state=active]:bg-white data-[state=active]:text-[#384877] data-[state=active]:shadow-sm transition-all h-full"
-                    >
-                      智能解析
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <div className="p-4 md:p-8 bg-white rounded-[20px]">
-                    <TabsContent value="quick" className="mt-0">
-                      <div className="grid md:grid-cols-2 gap-6">
-                        {/* Manual Create Card */}
-                        <div 
-                          onClick={() => setIsQuickAddOpen(true)}
-                          className="h-[180px] bg-white border-2 border-dashed border-slate-200 rounded-[24px] flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-[#384877]/30 hover:bg-slate-50/50 transition-all group"
-                        >
-                          <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-600 group-hover:scale-110 transition-transform">
-                            <Plus className="w-6 h-6" />
-                          </div>
-                          <div className="text-center">
-                            <h3 className="text-lg font-bold text-slate-800 mb-1">手动创建</h3>
-                            <p className="text-sm text-slate-400">点击输入详情</p>
-                          </div>
+              {/* Tabs */}
+              <Tabs defaultValue="quick" className="w-full max-w-3xl">
+                <TabsList className="grid w-full grid-cols-2 mb-8 bg-white p-1.5 rounded-2xl h-auto shadow-sm border border-slate-100">
+                  <TabsTrigger value="quick" className="rounded-xl py-3 text-sm font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-[#384877] data-[state=active]:shadow-md transition-all">快速创建</TabsTrigger>
+                  <TabsTrigger value="ai" className="rounded-xl py-3 text-sm font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-[#384877] data-[state=active]:shadow-md transition-all">智能解析</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="quick">
+                  <div className="bg-white/60 backdrop-blur-xl rounded-[32px] p-8 border border-white/60 shadow-lg">
+                    {/* AI Assistant Label */}
+                    <div className="flex items-center gap-2 mb-6 text-slate-500 text-sm font-medium">
+                        <div className="w-5 h-5 rounded-full bg-[#384877] flex items-center justify-center">
+                            <span className="text-white text-[10px] font-bold">AI</span>
                         </div>
+                        <span>AI 助手 · 智能创建约定</span>
+                    </div>
 
-                        {/* Voice Create Card */}
-                        <div 
-                          onClick={() => toast.info("正在启动语音识别...")}
-                          className="h-[180px] bg-[#384877] rounded-[24px] flex items-center p-8 gap-6 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all relative overflow-hidden group"
-                        >
-                          {/* Background Glow */}
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-700"></div>
-                          
-                          <div className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-[20px] flex items-center justify-center border border-white/10 shadow-inner group-hover:scale-105 transition-transform">
-                            <Mic className="w-8 h-8 text-white" />
-                          </div>
-                          <div className="flex-1 z-10">
-                            <h3 className="text-xl font-bold text-white mb-1">语音创建</h3>
-                            <p className="text-white/60 font-light flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full animate-pulse"></span>
-                              AI 识别中
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </TabsContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       {/* Manual Create */}
+                       <Dialog>
+                         <DialogTrigger asChild>
+                           <div className="bg-white rounded-3xl p-8 border-2 border-dashed border-slate-200 flex items-center gap-6 cursor-pointer hover:border-[#384877]/30 hover:bg-slate-50/50 transition-all group h-[140px]">
+                              <div className="w-14 h-14 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform text-[#384877]">
+                                 <Plus className="w-8 h-8" />
+                              </div>
+                              <div className="text-left">
+                                 <h3 className="text-lg font-bold text-slate-800 group-hover:text-[#384877] transition-colors">手动创建</h3>
+                                 <p className="text-slate-400 text-sm">点击输入详情</p>
+                              </div>
+                           </div>
+                         </DialogTrigger>
+                         <DialogContent className="max-w-2xl">
+                            <QuickAddTask 
+                                initialData={{
+                                    reminder_time: new Date(),
+                                }}
+                                onAdd={(taskData) => {
+                                    createTask(taskData);
+                                    toast.success("约定已创建");
+                                }} 
+                            />
+                         </DialogContent>
+                       </Dialog>
 
-                    <TabsContent value="smart" className="mt-0">
-                      <div className="space-y-6">
-                        <div className="flex items-center gap-2 text-[#384877] mb-2">
-                          <div className="p-1.5 bg-[#384877]/10 rounded-lg">
-                            <ImageIcon className="w-4 h-4" />
+                       {/* Voice Create */}
+                       <div className="bg-[#384877] rounded-3xl p-8 flex items-center gap-6 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden h-[140px]" onClick={() => toast.info("语音识别功能开发中")}>
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>
+                          <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform text-white">
+                             <Mic className="w-7 h-7" />
                           </div>
-                          <span className="text-sm font-medium">AI 助手 · 智能创建约定</span>
-                        </div>
-                        
-                        <div className="relative">
+                          <div className="text-left relative z-10">
+                             <h3 className="text-lg font-bold text-white">语音创建</h3>
+                             <p className="text-white/60 text-sm">AI 识别</p>
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="ai">
+                   <div className="w-full relative group">
+                     <div className="absolute -inset-1 bg-gradient-to-r from-[#e8d5b7]/30 to-[#6366f1]/20 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
+                     <div className="relative bg-white/60 backdrop-blur-xl border border-white/60 shadow-lg rounded-3xl p-2">
+                        <div className="bg-white/40 rounded-2xl flex flex-col">
                           <Textarea 
                             value={userInput}
                             onChange={(e) => setUserInput(e.target.value)}
-                            placeholder="描述你的本周计划，例如：&#10;“下周一到周三在深圳出差，周二下午3点拜访客户王总；周四回北京参加行业峰会...”"
-                            className="w-full bg-slate-50 border-none rounded-[20px] text-lg text-[#0a0a0f] placeholder-[#0a0a0f]/30 resize-none p-6 font-light min-h-[160px] focus-visible:ring-2 focus-visible:ring-[#384877]/20 transition-all"
+                            placeholder="下周一到周三在深圳出差，周二下午3点拜访客户王总；周四回北京参加行业峰会..."
+                            className="w-full bg-transparent border-none outline-none text-lg text-[#0a0a0f] placeholder-[#0a0a0f]/30 resize-none px-6 py-5 font-light min-h-[160px] focus-visible:ring-0"
                           />
-                          <div className="absolute bottom-4 right-4 flex gap-2">
+                          <div className="flex items-center justify-between px-4 pb-4">
+                             <div className="flex gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => setShowQuickTemplates(!showQuickTemplates)}
+                                  className="text-xs bg-[#e8d5b7]/20 text-[#0a0a0f]/60 rounded-full hover:bg-[#e8d5b7]/30"
+                                >
+                                  快速模板 <ChevronDown className="w-3 h-3 ml-1" />
+                                </Button>
+                             </div>
                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => setShowQuickTemplates(!showQuickTemplates)}
-                                className="text-xs bg-white text-slate-500 rounded-full hover:bg-slate-100 border border-slate-200"
+                                onClick={handleProcess}
+                                disabled={!userInput.trim()}
+                                className="bg-gradient-to-br from-[#0a0a0f] to-[#1e293b] text-[#f5f5f0] rounded-full px-6 shadow-lg hover:shadow-xl hover:translate-y-[-2px] transition-all duration-300"
                              >
-                               快速模板 <ChevronDown className="w-3 h-3 ml-1" />
+                                规划本周 <ArrowRight className="w-4 h-4 ml-2" />
                              </Button>
                           </div>
                         </div>
-
-                        <div className="flex justify-end">
-                           <Button 
-                              onClick={handleProcess}
-                              disabled={!userInput.trim()}
-                              className="bg-[#384877] hover:bg-[#2c3a60] text-white rounded-full px-8 py-6 text-base font-medium shadow-lg shadow-[#384877]/20 transition-all"
-                           >
-                              开始智能规划 <ArrowRight className="w-5 h-5 ml-2" />
-                           </Button>
-                        </div>
-
-                        {showQuickTemplates && (
-                          <motion.div 
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            className="flex flex-wrap gap-2 pt-2"
-                          >
-                            {QUICK_TEMPLATES.map((tpl, idx) => (
-                              <button 
-                                key={idx}
-                                onClick={() => {
-                                  setUserInput(tpl.text);
-                                  setShowQuickTemplates(false);
-                                }}
-                                className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-full text-sm text-slate-600 hover:bg-[#384877]/5 hover:border-[#384877]/20 hover:text-[#384877] transition-all"
-                              >
-                                {tpl.label}
-                              </button>
-                            ))}
-                          </motion.div>
-                        )}
-                      </div>
-                    </TabsContent>
+                     </div>
                   </div>
-                </Tabs>
-              </div>
+                  
+                  {showQuickTemplates && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex flex-wrap justify-center gap-3 max-w-2xl mt-6"
+                    >
+                      {QUICK_TEMPLATES.map((tpl, idx) => (
+                        <button 
+                          key={idx}
+                          onClick={() => {
+                            setUserInput(tpl.text);
+                            setShowQuickTemplates(false);
+                          }}
+                          className="px-4 py-2 bg-white/40 backdrop-blur-md border border-white/60 rounded-full text-sm text-[#0a0a0f]/60 hover:text-[#0a0a0f] hover:border-[#e8d5b7]/50 transition-all"
+                        >
+                          {tpl.label}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </motion.section>
           )}
 

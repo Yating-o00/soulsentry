@@ -83,11 +83,25 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
     try {
         const { data } = await base44.functions.invoke('generateWeekPlan', {
             input: userInput,
-            startDate: format(start, 'yyyy-MM-dd')
+            startDate: format(start, 'yyyy-MM-dd'),
+            currentDate: format(new Date(), 'yyyy-MM-dd')
         });
 
         if (data) {
             setWeekData(data);
+            
+            // Intelligent Date Alignment
+            if (data.plan_start_date) {
+                const plannedStart = new Date(data.plan_start_date);
+                const currentStartStr = format(start, 'yyyy-MM-dd');
+                
+                // If the planned week is different from the currently viewed week, switch view
+                if (data.plan_start_date !== currentStartStr && !isNaN(plannedStart.getTime())) {
+                    setCurrentWeekDate(plannedStart);
+                    toast.info(`已自动跳转到规划周: ${data.plan_start_date}`, { icon: "📅" });
+                }
+            }
+
             clearInterval(stepInterval);
             setProcessingStepIndex(PROCESSING_STEPS.length - 1);
             
@@ -99,7 +113,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                 if (data.is_demo) {
                     toast.warning("AI服务不可用 (API Key无效)，已显示演示数据", { duration: 5000 });
                 } else {
-                    toast.success("已生成本周全情境规划");
+                    toast.success("已生成全情境规划");
                 }
                 
                 setTimeout(() => {

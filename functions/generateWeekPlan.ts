@@ -9,6 +9,7 @@ const getMockPlan = (startDate, errorDetails) => ({
     theme: "演示周",
     is_demo: true,
     error_details: errorDetails,
+    plan_start_date: startDate,
     events: [
         { day_index: 0, title: "深度工作：代码研发", time: "09:00", type: "work", icon: "💻" },
         { day_index: 1, title: "团队同步会议", time: "14:00", type: "meeting", icon: "👥" },
@@ -58,8 +59,13 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
         }
 
-        const { input, startDate } = body;
-        console.log(`Generating plan for: ${input?.substring(0, 50)}...`);
+        const { input, startDate, currentDate } = body;
+        // Default currentDate to today if not provided, for relative calculations
+        const today = currentDate || new Date().toISOString().split('T')[0];
+        // Default startDate to view's start date
+        const viewStart = startDate || today;
+
+        console.log(`Generating plan for: ${input?.substring(0, 50)}... [Today: ${today}, ViewStart: ${viewStart}]`);
 
         if (!input) {
             return Response.json({ error: 'Input is required' }, { status: 400 });
@@ -69,17 +75,27 @@ Deno.serve(async (req) => {
         
         CRITICAL RULES:
         1. LANGUAGE: Output MUST be in Simplified Chinese (简体中文). Translate any English input to Chinese in the plan.
-        2. DATE ALIGNMENT: 
-           - The week starts on ${startDate || new Date().toISOString().split('T')[0]} (Monday).
-           - day_index 0 = Monday (${startDate})
-           - day_index 1 = Tuesday
-           - ...
-           - day_index 6 = Sunday
-           - You MUST calculate the correct day_index for any specific dates mentioned in the input relative to this start date.
-        3. TIME FORMAT: Use "HH:MM" 24-hour format for times (e.g., "09:00", "14:30").
+        2. DATE CONTEXT:
+           - Today is: ${today}
+           - The user is currently viewing the week starting: ${viewStart} (Monday)
+           
+        3. INTELLIGENT DATE ALIGNMENT (CRITICAL):
+           - Analyze the input for temporal keywords like "this week" (本周), "next week" (下周), "last week" (上周), or specific dates.
+           - Calculate the \`plan_start_date\` (Monday of the target week) based on "Today" and the input.
+           - If no temporal keyword is found, assume the user means the week they are currently viewing (${viewStart}).
+           - Example: If today is 2026-02-09 (Sunday) and user says "next week", target week starts 2026-02-10 (Monday).
+           - Output the calculated \`plan_start_date\` in YYYY-MM-DD format.
+           
+        4. EVENT MAPPING:
+           - Generate events for the calculated target week.
+           - day_index 0 = Monday of \`plan_start_date\`
+           - day_index 6 = Sunday of \`plan_start_date\`
+        
+        5. TIME FORMAT: Use "HH:MM" 24-hour format (e.g., "09:00", "14:30").
         
         JSON Structure required:
         {
+            "plan_start_date": "YYYY-MM-DD (Monday of the planned week)",
             "summary": "string (in Chinese)",
             "theme": "string (in Chinese)",
             "events": [{ "day_index": number (0-6), "title": "string", "time": "HH:MM", "type": "work"|"meeting"|"travel"|"focus"|"rest"|"other", "icon": "emoji" }],
@@ -142,6 +158,7 @@ Deno.serve(async (req) => {
                     response_json_schema: {
                         type: "object",
                         properties: {
+                            plan_start_date: { type: "string" },
                             summary: { type: "string" },
                             theme: { type: "string" },
                             events: { type: "array", items: { type: "object", additionalProperties: true } },
@@ -190,7 +207,7 @@ Deno.serve(async (req) => {
 
         // If we get here, all strategies failed
         console.log("All strategies failed. Falling back to mock.");
-        return Response.json(getMockPlan(startDate, errors.join(" | ")));
+        return Response.json(getMockPlan(viewStart, errors.join(" | ")));
 
     } catch (error) {
         console.error('Critical error:', error);

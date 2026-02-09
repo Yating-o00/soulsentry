@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -11,14 +11,14 @@ import {
   ChevronRight,
   CheckCircle2,
   Calendar as CalendarIcon,
+  Sparkles,
   Smartphone,
   Watch,
   Glasses,
   Car,
-  Home,
-  Laptop,
-  Loader2,
-  Sparkles
+  Home as HomeIcon,
+  Monitor,
+  Zap
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,14 +26,14 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
 
-// Device Icons Mapping
-const DEVICE_ICONS = {
-  phone: { icon: Smartphone, label: '智能手机', color: 'bg-blue-50 text-blue-600' },
-  watch: { icon: Watch, label: '智能手表', color: 'bg-indigo-50 text-indigo-600' },
-  glasses: { icon: Glasses, label: '智能眼镜', color: 'bg-purple-50 text-purple-600' },
-  car: { icon: Car, label: '电动汽车', color: 'bg-emerald-50 text-emerald-600' },
-  home: { icon: Home, label: '智能家居', color: 'bg-orange-50 text-orange-600' },
-  pc: { icon: Laptop, label: '工作站', color: 'bg-pink-50 text-pink-600' }
+// Device Configurations with icons mapping
+const DEVICE_MAP = {
+  phone: { name: '智能手机', icon: Smartphone, role: '主控终端' },
+  watch: { name: '智能手表', icon: Watch, role: '触觉管家' },
+  glasses: { name: '智能眼镜', icon: Glasses, role: 'AR秘书' },
+  car: { name: '电动汽车', icon: Car, role: '移动办公室' },
+  home: { name: '智能家居', icon: HomeIcon, role: '环境调节师' },
+  pc: { name: '工作站', icon: Monitor, role: '深度工作舱' }
 };
 
 const QUICK_TEMPLATES = [
@@ -43,47 +43,70 @@ const QUICK_TEMPLATES = [
   { text: '下周想调整作息，每天早上6点起床跑步，晚上11点前睡觉，工作日专注工作，周末完全放松', label: '🌱 生活调整周' }
 ];
 
+const PROCESSING_STEPS = [
+  { icon: '📅', text: '解析时间跨度与核心意图...' },
+  { icon: '🎯', text: '提取关键事件与场景...' },
+  { icon: '🗺️', text: '规划全设备协同策略...' },
+  { icon: '⚡', text: '生成自动化执行链路...' },
+  { icon: '✨', text: '最终编织周情境网络...' }
+];
+
 export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const [stage, setStage] = useState('input'); // input, processing, results
   const [userInput, setUserInput] = useState('');
   const [currentWeekDate, setCurrentWeekDate] = useState(initialDate || new Date());
+  const [processingStepIndex, setProcessingStepIndex] = useState(0);
   const [weekData, setWeekData] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState('phone');
   const [expandedDays, setExpandedDays] = useState({});
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const resultsRef = useRef(null);
 
   const start = startOfWeek(currentWeekDate, { locale: zhCN, weekStartsOn: 1 });
   const end = endOfWeek(currentWeekDate, { locale: zhCN, weekStartsOn: 1 });
-  const weekRangeLabel = `${format(start, 'yyyy年M月d日')} - ${format(end, 'M月d日')}`;
+  const weekRangeLabel = `${format(start, 'M月d日')} - ${format(end, 'M月d日')}`;
 
   const handleProcess = async () => {
     if (!userInput.trim()) return;
     
     setStage('processing');
     setIsProcessing(true);
+    setProcessingStepIndex(0);
+
+    // Start processing animation loop
+    const stepInterval = setInterval(() => {
+        setProcessingStepIndex(prev => (prev < PROCESSING_STEPS.length - 1 ? prev + 1 : prev));
+    }, 1500);
 
     try {
-      const { data } = await base44.functions.invoke('generateWeekPlan', {
-        input: userInput,
-        startDate: format(start, 'yyyy-MM-dd')
-      });
-      
-      setWeekData(data);
-      setStage('results');
-      toast.success("周计划已生成");
-      
-      // Default expand today
-      const todayIndex = (new Date().getDay() + 6) % 7; // Adjust for Monday start (0-6)
-      setExpandedDays({ [todayIndex]: true });
-      
+        const { data } = await base44.functions.invoke('generateWeekPlan', {
+            input: userInput,
+            startDate: format(start, 'yyyy-MM-dd')
+        });
+
+        if (data) {
+            setWeekData(data);
+            clearInterval(stepInterval);
+            setProcessingStepIndex(PROCESSING_STEPS.length - 1);
+            
+            // Short delay to show completion
+            setTimeout(() => {
+                setStage('results');
+                setIsProcessing(false);
+                toast.success("已生成本周全情境规划");
+                setTimeout(() => {
+                    resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }, 800);
+        }
     } catch (error) {
-      console.error("Planning failed", error);
-      toast.error("生成计划失败，请重试");
-      setStage('input');
-    } finally {
-      setIsProcessing(false);
+        console.error("Planning failed", error);
+        toast.error("规划生成失败，请重试");
+        setStage('input');
+        setIsProcessing(false);
+        clearInterval(stepInterval);
     }
   };
 
@@ -103,10 +126,18 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
 
   const weekDays = getWeekDays();
 
+  // Helper to find events for a specific day index (0-6)
+  const getEventsForDay = (dayIndex) => {
+    if (!weekData || !weekData.events) return [];
+    // Adjust logic if needed: 0 is Monday in our UI, so ensure backend aligns or we map correctly
+    // Our weekDays array starts from Monday (index 0).
+    return weekData.events.filter(e => e.day_index === dayIndex);
+  };
+
   return (
-    <div className="min-h-screen bg-[#f8f9fa] text-slate-900 font-sans p-6 md:p-8">
+    <div className="min-h-screen bg-[#f8f9fa] text-slate-900 font-sans rounded-3xl overflow-hidden relative">
       
-      <div className="max-w-7xl mx-auto flex flex-col space-y-8">
+      <div className="relative z-10 p-6 md:p-8 max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-100px)]">
         
         {/* Input Section */}
         <AnimatePresence mode="wait">
@@ -115,53 +146,54 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="flex-1 flex flex-col justify-center items-center text-center space-y-8 mt-12"
+              className="flex-1 flex flex-col justify-center items-center text-center space-y-8 mt-8"
             >
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white rounded-full border border-slate-200 shadow-sm">
                   <span className="w-2 h-2 bg-[#384877] rounded-full animate-pulse"></span>
-                  <span className="text-xs text-slate-500 font-medium">智能规划助手</span>
+                  <span className="text-xs font-medium text-slate-600">AI Week Planner</span>
                 </div>
-                <h1 className="text-3xl md:text-5xl font-bold text-slate-900 tracking-tight">
-                  已为你安排
+                <h1 className="text-3xl md:text-5xl font-bold text-slate-900 tracking-tight leading-tight">
+                  规划这一周，<br />
+                  <span className="text-[#384877]">从容且坚定</span>
                 </h1>
-                <p className="text-lg text-slate-500 max-w-xl mx-auto leading-relaxed">
-                  基于输入: "{userInput || '告诉我本周的重要安排...'}"
+                <p className="text-base text-slate-500 max-w-lg mx-auto leading-relaxed">
+                  告诉我本周的重要安排，心栈将为你编织全设备协同的执行网络。
                 </p>
               </div>
 
-              <div className="w-full max-w-2xl">
-                 <div className="bg-white rounded-[24px] border border-slate-200 shadow-lg p-2 transition-shadow hover:shadow-xl">
-                    <div className="bg-slate-50 rounded-2xl flex flex-col">
+              <div className="w-full max-w-2xl relative group">
+                 <div className="relative bg-white rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-2 transition-shadow duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
+                    <div className="bg-white rounded-2xl flex flex-col">
                       <Textarea 
                         value={userInput}
                         onChange={(e) => setUserInput(e.target.value)}
-                        placeholder="输入本周计划，例如：下周一到周三在深圳出差，周二下午3点拜访客户..."
-                        className="w-full bg-transparent border-none outline-none text-lg text-slate-900 placeholder:text-slate-400 resize-none px-6 py-5 min-h-[140px] focus-visible:ring-0"
+                        placeholder="例如：下周一到周三在深圳出差，周二下午3点拜访客户；周四回京参加行业峰会..."
+                        className="w-full bg-transparent border-none outline-none text-lg text-slate-800 placeholder:text-slate-400 resize-none px-6 py-5 font-light min-h-[140px] focus-visible:ring-0 leading-relaxed"
                       />
-                      <div className="flex items-center justify-between px-4 pb-4">
+                      <div className="flex items-center justify-between px-4 pb-4 pt-2 border-t border-slate-50">
                          <div className="flex gap-2">
-                            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-600 hover:bg-slate-200/50">
+                            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-[#384877] hover:bg-slate-50">
                               <Mic className="w-5 h-5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-600 hover:bg-slate-200/50">
+                            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-[#384877] hover:bg-slate-50">
                               <ImageIcon className="w-5 h-5" />
                             </Button>
                             <Button 
                               variant="ghost" 
                               size="sm"
                               onClick={() => setShowQuickTemplates(!showQuickTemplates)}
-                              className="text-xs bg-white text-slate-600 border border-slate-200 rounded-full hover:bg-slate-50"
+                              className="text-xs text-slate-500 hover:text-[#384877] hover:bg-slate-50 gap-1"
                             >
-                              快速模板 <ChevronDown className="w-3 h-3 ml-1" />
+                              快速模板 <ChevronDown className="w-3 h-3" />
                             </Button>
                          </div>
                          <Button 
                             onClick={handleProcess}
                             disabled={!userInput.trim() || isProcessing}
-                            className="bg-[#384877] hover:bg-[#2c3a63] text-white rounded-full px-6 shadow-md transition-all duration-300"
+                            className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl px-6 h-10 shadow-lg shadow-[#384877]/20 transition-all duration-300"
                          >
-                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <>开始规划 <ArrowRight className="w-4 h-4 ml-2" /></>}
+                            {isProcessing ? '规划中...' : '生成规划'} <ArrowRight className="w-4 h-4 ml-2" />
                          </Button>
                       </div>
                     </div>
@@ -181,7 +213,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                         setUserInput(tpl.text);
                         setShowQuickTemplates(false);
                       }}
-                      className="px-4 py-2 bg-white border border-slate-200 rounded-full text-sm text-slate-600 hover:text-[#384877] hover:border-[#384877] transition-all shadow-sm"
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-full text-sm text-slate-600 hover:border-[#384877] hover:text-[#384877] transition-all shadow-sm"
                     >
                       {tpl.label}
                     </button>
@@ -196,16 +228,43 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex-1 flex flex-col items-center justify-center space-y-6 mt-20"
+              className="flex-1 flex items-center justify-center"
             >
-               <div className="relative">
-                 <div className="w-16 h-16 rounded-full bg-[#384877]/10 flex items-center justify-center animate-pulse">
-                   <Sparkles className="w-8 h-8 text-[#384877]" />
-                 </div>
-               </div>
-               <div className="text-center space-y-2">
-                 <h3 className="text-xl font-medium text-slate-900">正在生成智能规划...</h3>
-                 <p className="text-slate-500">解析语义 · 匹配设备策略 · 优化时间分布</p>
+               <div className="w-full max-w-xl bg-white rounded-3xl p-8 border border-slate-100 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+                  <div className="flex items-center gap-3 mb-8 text-[#384877]">
+                     <Sparkles className="w-5 h-5 animate-pulse" />
+                     <span className="font-medium text-lg">正在生成周规划...</span>
+                  </div>
+                  <div className="space-y-6 pl-2">
+                     {PROCESSING_STEPS.map((step, idx) => (
+                       <motion.div 
+                         key={idx}
+                         initial={{ opacity: 0, x: -10 }}
+                         animate={{ 
+                           opacity: idx <= processingStepIndex ? 1 : 0.4,
+                           x: idx <= processingStepIndex ? 0 : -10,
+                           scale: idx === processingStepIndex ? 1.02 : 1
+                         }}
+                         className="flex items-center gap-4"
+                       >
+                          <div className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center text-sm border transition-colors duration-500",
+                              idx < processingStepIndex ? "bg-emerald-50 border-emerald-200 text-emerald-600" :
+                              idx === processingStepIndex ? "bg-[#384877]/10 border-[#384877]/30 text-[#384877]" :
+                              "bg-slate-50 border-slate-100 text-slate-300"
+                          )}>
+                             {idx < processingStepIndex ? <CheckCircle2 className="w-4 h-4" /> : 
+                              idx === processingStepIndex ? <div className="w-2 h-2 bg-[#384877] rounded-full animate-ping" /> :
+                              <div className="w-2 h-2 bg-slate-200 rounded-full" />
+                             }
+                          </div>
+                          <span className={cn(
+                              "text-sm font-medium transition-colors duration-300",
+                              idx <= processingStepIndex ? "text-slate-800" : "text-slate-400"
+                          )}>{step.text}</span>
+                       </motion.div>
+                     ))}
+                  </div>
                </div>
             </motion.div>
           )}
@@ -220,146 +279,179 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
             className="w-full space-y-10 pb-20"
           >
              {/* Header */}
-             <div className="flex items-center justify-between">
+             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                   <h3 className="text-2xl font-bold text-slate-900 mb-1">本周概览</h3>
-                   <div className="flex items-center gap-2 text-sm text-slate-500">
-                     <CalendarIcon className="w-4 h-4" />
-                     {weekRangeLabel}
-                     <span className="px-2 py-0.5 bg-slate-100 rounded-full text-xs font-medium text-slate-600">{weekData.theme}</span>
+                   <div className="flex items-center gap-3 mb-1">
+                       <h3 className="text-2xl font-bold text-slate-900">已为你安排</h3>
+                       <span className="px-3 py-1 bg-[#384877]/10 text-[#384877] text-xs font-medium rounded-full">
+                          {weekData.theme || '周计划'}
+                       </span>
                    </div>
+                   <p className="text-sm text-slate-500">基于输入: "{userInput.length > 30 ? userInput.substring(0, 30) + '...' : userInput}"</p>
                 </div>
-                <div className="flex gap-2">
-                   <Button variant="outline" size="icon" className="rounded-full bg-white border-slate-200" onClick={() => setCurrentWeekDate(addDays(currentWeekDate, -7))}>
-                      <ChevronLeft className="w-4 h-4" />
-                   </Button>
-                   <Button variant="outline" size="icon" className="rounded-full bg-white border-slate-200" onClick={() => setCurrentWeekDate(addDays(currentWeekDate, 7))}>
-                      <ChevronRight className="w-4 h-4" />
-                   </Button>
-                   <Button variant="ghost" onClick={resetView} className="ml-2 text-slate-500 hover:text-[#384877]">
+                <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+                        {weekRangeLabel}
+                    </span>
+                   <Button variant="outline" onClick={resetView} className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#384877]">
                       新对话
                    </Button>
                 </div>
              </div>
 
-             {/* Stats Cards - Matching the image style */}
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-[#384877] rounded-[24px] p-6 text-white relative overflow-hidden shadow-lg group hover:-translate-y-1 transition-transform duration-300">
-                   <div className="relative z-10">
-                      <div className="text-sm opacity-80 mb-2 font-medium">专注时长</div>
-                      <div className="text-5xl font-bold mb-4">{weekData.stats?.focus_hours || 0}<span className="text-2xl ml-1 opacity-60">h</span></div>
-                      <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden">
-                         <div className="bg-white h-full rounded-full w-[75%]"></div>
-                      </div>
-                      <div className="mt-2 text-xs opacity-60 text-right">目标达成 75%</div>
-                   </div>
-                   {/* Decorative background elements */}
-                   <div className="absolute right-[-20px] bottom-[-20px] opacity-10 transform rotate-12">
-                      <Laptop className="w-32 h-32" />
-                   </div>
+             {/* Summary & Stats Cards */}
+             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Summary Card - Wide */}
+                <div className="md:col-span-2 bg-[#384877] rounded-[24px] p-6 text-white relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Sparkles className="w-24 h-24" />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2">本周摘要</div>
+                        <p className="text-lg font-medium leading-relaxed opacity-95">
+                            {weekData.summary}
+                        </p>
+                    </div>
                 </div>
 
-                <div className="bg-white rounded-[24px] p-6 border border-slate-200 shadow-sm relative group hover:-translate-y-1 transition-transform duration-300">
-                   <div className="flex justify-between items-start mb-4">
-                      <div className="text-slate-500 font-medium">本周会议</div>
-                      <span className="w-8 h-8 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center text-xs font-bold">!</span>
-                   </div>
-                   <div className="text-5xl font-bold text-slate-900 mb-2">{weekData.stats?.meetings || 0}</div>
-                   <div className="text-sm text-slate-400">需要重点准备</div>
+                {/* Stat Cards */}
+                <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                    <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-2">
+                        <Zap className="w-5 h-5" />
+                    </div>
+                    <div className="text-3xl font-bold text-slate-900 mb-1">{weekData.stats?.focus_hours || 0}h</div>
+                    <div className="text-xs text-slate-400 font-medium">深度专注</div>
                 </div>
 
-                <div className="bg-white rounded-[24px] p-6 border border-slate-200 shadow-sm relative group hover:-translate-y-1 transition-transform duration-300">
-                   <div className="flex justify-between items-start mb-4">
-                      <div className="text-slate-500 font-medium">差旅天数</div>
-                      <span className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                        <CheckCircle2 className="w-4 h-4" />
-                      </span>
-                   </div>
-                   <div className="text-5xl font-bold text-slate-900 mb-2">{weekData.stats?.travel_days || 0}</div>
-                   <div className="text-sm text-slate-400">行程已同步</div>
+                <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                    <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
+                        <CalendarIcon className="w-5 h-5" />
+                    </div>
+                    <div className="text-3xl font-bold text-slate-900 mb-1">{weekData.stats?.meetings || 0}</div>
+                    <div className="text-xs text-slate-400 font-medium">重要会议</div>
                 </div>
              </div>
 
-             {/* Device Matrix - "All Devices Intelligent Synergy" */}
+             {/* Device Strategy Matrix */}
              <section>
                <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-slate-900">全设备智能协同</h3>
-                  <div className="px-3 py-1 bg-white rounded-full border border-slate-200 text-xs text-slate-600 flex items-center gap-2 shadow-sm">
-                     <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                  <div className="px-3 py-1 bg-white rounded-full border border-slate-200 text-xs font-medium text-emerald-600 flex items-center gap-1.5 shadow-sm">
+                     <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
                      云端同步正常
                   </div>
                </div>
                
-               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                  {Object.entries(DEVICE_ICONS).map(([key, config]) => (
-                    <div 
-                      key={key}
-                      className="bg-white rounded-[24px] p-6 flex flex-col items-center justify-center gap-4 border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-all duration-300 hover:shadow-[0_10px_40px_rgba(0,0,0,0.06)] hover:-translate-y-1 group"
-                    >
-                       <div className={cn(
-                         "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-sm transition-colors duration-300",
-                         config.color.split(' ')[0], 
-                         config.color.split(' ')[1]
-                       )}>
-                          <config.icon className="w-7 h-7" />
-                       </div>
-                       <div className="text-center">
-                         <h4 className="font-bold text-slate-900 mb-1">{config.label}</h4>
-                         <p className="text-xs text-slate-400 line-clamp-2 min-h-[2.5em]">
-                           {weekData.device_strategies?.[key] || '待机中'}
-                         </p>
-                       </div>
-                       <div className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-medium rounded-full">
-                          ● 在线
-                       </div>
-                    </div>
-                  ))}
+               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {Object.entries(DEVICE_MAP).map(([key, config]) => {
+                    const DeviceIcon = config.icon;
+                    const strategy = weekData.device_strategies?.[key];
+                    const isSelected = selectedDevice === key;
+
+                    return (
+                        <div 
+                          key={key}
+                          onClick={() => setSelectedDevice(key)}
+                          className={cn(
+                            "bg-white rounded-[24px] p-5 flex flex-col items-center justify-center gap-3 border transition-all duration-300 cursor-pointer relative overflow-hidden",
+                            isSelected 
+                                ? "border-[#384877] ring-1 ring-[#384877]/10 shadow-[0_8px_30px_rgba(56,72,119,0.08)]" 
+                                : "border-slate-100 hover:border-slate-200 hover:shadow-md"
+                          )}
+                        >
+                           <div className={cn(
+                               "w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-sm transition-colors",
+                               isSelected ? "bg-[#384877] text-white" : "bg-slate-50 text-slate-600"
+                           )}>
+                              <DeviceIcon className="w-6 h-6" />
+                           </div>
+                           <div className="text-center">
+                               <h4 className={cn("font-medium text-sm mb-1", isSelected ? "text-[#384877]" : "text-slate-900")}>
+                                   {config.name}
+                               </h4>
+                               <div className="flex items-center justify-center gap-1.5">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                                   <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">在线</span>
+                               </div>
+                           </div>
+                        </div>
+                    );
+                  })}
                </div>
+
+               {/* Device Detail Panel */}
+               <AnimatePresence mode="wait">
+                 <motion.div 
+                   key={selectedDevice}
+                   initial={{ opacity: 0, y: 10 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   exit={{ opacity: 0, y: -10 }}
+                   className="mt-4 bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm"
+                 >
+                    <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full bg-[#384877]/5 flex items-center justify-center text-[#384877]">
+                            <Zap className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-medium text-slate-500 mb-1">本周策略 · {DEVICE_MAP[selectedDevice].name}</h4>
+                            <p className="text-base text-slate-900 font-medium leading-relaxed">
+                                {weekData.device_strategies?.[selectedDevice] || "本周无特殊策略，保持常规辅助模式。"}
+                            </p>
+                        </div>
+                    </div>
+                 </motion.div>
+               </AnimatePresence>
              </section>
 
-             {/* Timeline - List View */}
+             {/* Day-by-Day Timeline */}
              <section>
                 <div className="flex items-center justify-between mb-6">
-                   <h3 className="text-xl font-bold text-slate-900">每日安排</h3>
-                   <Button variant="ghost" size="sm" onClick={() => setExpandedDays({})}>收起全部</Button>
+                   <h3 className="text-xl font-bold text-slate-900">情境感知日程</h3>
                 </div>
                 
-                <div className="space-y-4">
+                <div className="space-y-3">
                    {weekDays.map((day, idx) => {
-                      // Adjust for Monday start (0=Monday in our weekDays array, but day.getDay() returns 0 for Sunday)
-                      // Our backend returns day_index 0 for Monday.
-                      // Let's just match based on array index since weekDays starts on Monday.
-                      const dayEvents = weekData.events.filter(e => e.day_index === idx);
-                      const isExpanded = expandedDays[idx];
+                      const dayEvents = getEventsForDay(idx);
+                      const isExpanded = expandedDays[idx] !== false; // Default expanded?
                       const hasEvents = dayEvents.length > 0;
+                      const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
                       
                       return (
-                         <div key={idx} className="bg-white rounded-[20px] border border-slate-100 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+                         <div 
+                            key={idx} 
+                            className={cn(
+                                "bg-white rounded-2xl overflow-hidden border transition-all duration-300",
+                                isToday ? "border-[#384877]/30 shadow-md ring-1 ring-[#384877]/10" : "border-slate-100 hover:border-slate-200"
+                            )}
+                         >
                             <div 
                               onClick={() => setExpandedDays(prev => ({ ...prev, [idx]: !prev[idx] }))}
                               className={cn(
-                                "p-5 flex items-center justify-between cursor-pointer transition-colors",
-                                isExpanded ? "bg-slate-50/50" : "hover:bg-slate-50"
+                                  "p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors",
+                                  isToday && "bg-[#384877]/5"
                               )}
                             >
                                <div className="flex items-center gap-4">
                                   <div className={cn(
-                                    "w-12 h-12 rounded-2xl flex flex-col items-center justify-center font-bold border",
-                                    hasEvents ? "bg-blue-50 text-[#384877] border-blue-100" : "bg-slate-50 text-slate-400 border-slate-100"
+                                    "w-12 h-12 rounded-xl flex flex-col items-center justify-center border",
+                                    isToday ? "bg-[#384877] border-[#384877] text-white" : "bg-white border-slate-100 text-slate-900"
                                   )}>
-                                     <span className="text-xs uppercase">{format(day, 'EEE', { locale: zhCN })}</span>
-                                     <span className="text-lg leading-none">{format(day, 'd')}</span>
+                                     <span className="text-xs font-medium opacity-80">{format(day, 'EEE', { locale: zhCN })}</span>
+                                     <span className="text-lg font-bold">{format(day, 'd')}</span>
                                   </div>
                                   <div>
-                                     <h4 className={cn("font-bold", hasEvents ? "text-slate-900" : "text-slate-400")}>
-                                       {format(day, 'EEEE', { locale: zhCN })}
-                                     </h4>
-                                     <p className="text-xs text-slate-500 mt-0.5">
-                                       {hasEvents ? `${dayEvents.length} 个事项` : '暂无安排'}
+                                     <div className="flex items-center gap-2">
+                                         <h4 className={cn("font-bold text-base", isToday ? "text-[#384877]" : "text-slate-900")}>
+                                            {format(day, 'EEEE', { locale: zhCN })}
+                                         </h4>
+                                         {isToday && <span className="text-[10px] bg-[#384877] text-white px-2 py-0.5 rounded-full font-medium">Today</span>}
+                                     </div>
+                                     <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                         {hasEvents ? `${dayEvents.length} 个事件` : '暂无特定安排'}
                                      </p>
                                   </div>
                                </div>
-                               <ChevronDown className={cn("w-5 h-5 text-slate-400 transition-transform duration-300", isExpanded && "rotate-180")} />
+                               <ChevronDown className={cn("w-5 h-5 text-slate-300 transition-transform", isExpanded && "rotate-180")} />
                             </div>
                             
                             <AnimatePresence>
@@ -370,31 +462,36 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                                     exit={{ height: 0, opacity: 0 }}
                                     className="overflow-hidden"
                                  >
-                                    <div className="px-5 pb-5 pt-0 space-y-3">
-                                       <div className="h-px bg-slate-100 mb-4" />
-                                       {dayEvents.map((e, i) => (
-                                          <div key={i} className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all">
-                                             <div className="text-2xl w-10 text-center">{e.icon}</div>
-                                             <div className="flex-1 min-w-0">
-                                                <div className="flex justify-between items-center mb-1">
-                                                   <h5 className="font-bold text-slate-900 truncate">{e.title}</h5>
-                                                   <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{e.time}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                   <span className={cn(
-                                                     "w-2 h-2 rounded-full",
-                                                     e.type === 'work' ? "bg-blue-400" :
-                                                     e.type === 'meeting' ? "bg-orange-400" :
-                                                     e.type === 'travel' ? "bg-emerald-400" :
-                                                     e.type === 'focus' ? "bg-purple-400" : "bg-slate-400"
-                                                   )} />
-                                                   <span className="text-xs text-slate-500">
-                                                      {{work: '工作', meeting: '会议', travel: '差旅', focus: '专注', rest: '休息', other: '其他'}[e.type] || '事项'}
-                                                   </span>
-                                                </div>
-                                             </div>
-                                          </div>
-                                       ))}
+                                    <div className="px-4 pb-4 pt-0">
+                                       <div className="pl-[22px] border-l-2 border-slate-100 ml-6 space-y-4 pt-2">
+                                           {dayEvents.map((e, i) => (
+                                              <div key={i} className="relative group">
+                                                 <div className="absolute -left-[29px] top-1.5 w-3.5 h-3.5 bg-white border-2 border-[#384877] rounded-full z-10"></div>
+                                                 <div className="bg-slate-50 hover:bg-[#384877]/5 rounded-xl p-3 transition-colors border border-slate-100">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                       <h5 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                                           <span>{e.icon || '📅'}</span>
+                                                           {e.title}
+                                                       </h5>
+                                                       <span className="text-xs font-mono text-[#384877] bg-[#384877]/10 px-2 py-0.5 rounded-md">
+                                                           {e.time}
+                                                       </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <span className={cn(
+                                                            "text-[10px] px-2 py-0.5 rounded-full border",
+                                                            e.type === 'travel' ? "bg-blue-50 text-blue-600 border-blue-100" :
+                                                            e.type === 'focus' ? "bg-purple-50 text-purple-600 border-purple-100" :
+                                                            e.type === 'meeting' ? "bg-amber-50 text-amber-600 border-amber-100" :
+                                                            "bg-slate-100 text-slate-500 border-slate-200"
+                                                        )}>
+                                                            {{travel: '差旅', meeting: '会议', focus: '专注', work: '工作', rest: '休息', other: '其他'}[e.type] || '事项'}
+                                                        </span>
+                                                    </div>
+                                                 </div>
+                                              </div>
+                                           ))}
+                                       </div>
                                     </div>
                                  </motion.div>
                                )}
@@ -405,40 +502,41 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                 </div>
              </section>
 
-             {/* Automations */}
-             <section>
-                <div className="flex items-center justify-between mb-6">
-                   <h3 className="text-xl font-bold text-slate-900">本周自动化</h3>
-                </div>
+             {/* Automations List */}
+             {weekData.automations && weekData.automations.length > 0 && (
+                 <section>
+                    <div className="flex items-center justify-between mb-6">
+                       <h3 className="text-xl font-bold text-slate-900">自动执行清单</h3>
+                    </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                   {weekData.automations?.map((task, idx) => (
-                      <div key={idx} className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group">
-                         <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                               <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                                 {task.icon}
-                               </div>
-                               <div>
-                                  <h4 className="font-bold text-slate-900 text-sm">{task.title}</h4>
-                                  <div className="flex items-center gap-2 mt-1">
-                                     <span className={cn(
-                                       "w-1.5 h-1.5 rounded-full",
-                                       task.status === 'active' ? "bg-emerald-500 animate-pulse" :
-                                       task.status === 'ready' ? "bg-blue-500" :
-                                       "bg-slate-300"
-                                     )}></span>
-                                     <span className="text-[10px] text-slate-400 uppercase tracking-wider">{task.status}</span>
-                                  </div>
-                               </div>
-                            </div>
-                         </div>
-                         <p className="text-slate-500 text-sm leading-relaxed pl-[52px]">{task.description}</p>
-                      </div>
-                   ))}
-                </div>
-             </section>
-
+                    <div className="grid md:grid-cols-2 gap-4">
+                       {weekData.automations.map((task, idx) => (
+                          <div key={idx} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                             <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-xl">
+                                   {task.icon || '🤖'}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <h4 className="font-bold text-slate-900 text-sm">{task.title}</h4>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={cn(
+                                                "w-1.5 h-1.5 rounded-full",
+                                                task.status === 'active' ? "bg-emerald-500 animate-pulse" : "bg-slate-300"
+                                            )}></span>
+                                            <span className="text-[10px] text-slate-400 uppercase font-medium">
+                                                {task.status === 'active' ? '运行中' : '待就绪'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-500 leading-relaxed">{task.description}</p>
+                                </div>
+                             </div>
+                          </div>
+                       ))}
+                    </div>
+                 </section>
+             )}
           </motion.div>
         )}
       </div>

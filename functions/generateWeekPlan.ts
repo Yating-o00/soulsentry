@@ -93,12 +93,21 @@ Deno.serve(async (req) => {
         
         5. TIME FORMAT: Use "HH:MM" 24-hour format (e.g., "09:00", "14:30").
         
-        JSON Structure required:
+        REQUIRED JSON OUTPUT FORMAT:
+        You MUST return a JSON object with "plan_start_date" as the first field.
         {
-            "plan_start_date": "YYYY-MM-DD (Monday of the planned week)",
+            "plan_start_date": "YYYY-MM-DD",  // CRITICAL: The Monday date of the planned week
             "summary": "string (in Chinese)",
             "theme": "string (in Chinese)",
-            "events": [{ "day_index": number (0-6), "title": "string", "time": "HH:MM", "type": "work"|"meeting"|"travel"|"focus"|"rest"|"other", "icon": "emoji" }],
+            "events": [
+                { 
+                    "day_index": number (0-6), 
+                    "title": "string", 
+                    "time": "HH:MM", 
+                    "type": "work"|"meeting"|"travel"|"focus"|"rest"|"other", 
+                    "icon": "emoji" 
+                }
+            ],
             "device_strategies": { "phone": "string", "watch": "string", ... },
             "automations": [{ "title": "string", "description": "string", "icon": "string", "status": "active"|"pending" }],
             "stats": { "focus_hours": number, "meetings": number, "travel_days": number }

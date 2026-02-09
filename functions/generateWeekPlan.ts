@@ -117,9 +117,11 @@ Deno.serve(async (req) => {
         let usedProvider = null;
         let lastError = null;
 
+        console.log("generateWeekPlan function v2.1 loaded");
         const providers = [];
-        if (openaiKey) providers.push('openai');
+        // Prioritize Moonshot as OpenAI key seems unstable
         if (moonshotKey) providers.push('moonshot');
+        if (openaiKey) providers.push('openai');
 
         if (providers.length === 0) {
             return Response.json({ error: "No AI API keys configured. Please set OPENAI_API_KEY or MOONSHOT_API_KEY." }, { status: 500 });

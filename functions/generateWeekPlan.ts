@@ -117,7 +117,12 @@ Deno.serve(async (req) => {
         let usedProvider = null;
         let lastError = null;
 
-        console.log("generateWeekPlan function v2.1 loaded");
+        console.log("generateWeekPlan function v2.2 loaded");
+        console.log(`Key check - OpenAI: ${!!openaiKey}, Moonshot: ${!!moonshotKey}`);
+        if (openaiKey && moonshotKey && openaiKey === moonshotKey) {
+             console.warn("WARNING: OpenAI and Moonshot keys are identical!");
+        }
+
         const providers = [];
         // Prioritize Moonshot as OpenAI key seems unstable
         if (moonshotKey) providers.push('moonshot');

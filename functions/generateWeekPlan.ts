@@ -1,13 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
 import OpenAI from 'npm:openai@4.28.0';
 
-const openaiKey = Deno.env.get("OPENAI_API_KEY");
-const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
+const openaiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+const moonshotKey = Deno.env.get("MOONSHOT_API_KEY")?.trim();
 
-// Mock data for demo/testing when keys fail
-const getMockPlan = (startDate) => ({
+// Mock data for demo/testing when all methods fail
+const getMockPlan = (startDate, errorDetails) => ({
     summary: "演示计划（API密钥无效或缺失）。重点关注健康与研发。",
     theme: "演示周",
+    is_demo: true,
+    error_details: errorDetails,
     events: [
         { day_index: 0, title: "深度工作：代码研发", time: "09:00", type: "work", icon: "💻" },
         { day_index: 1, title: "团队同步会议", time: "14:00", type: "meeting", icon: "👥" },
@@ -85,8 +87,8 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Input is required' }, { status: 400 });
         }
 
-        // Check if we should use mock data (if explicit request or strictly no keys)
-        const useMock = input.toLowerCase().includes("demo") || (!openaiKey && !moonshotKey);
+        // Check if we should force mock (for debugging)
+        const forceMock = input.toLowerCase().includes("force_demo");
         
         const systemPrompt = `You are an expert personal planner AI. Your goal is to parse user input about their week and generate a structured plan.
         
@@ -111,7 +113,8 @@ Deno.serve(async (req) => {
         let usedProvider = null;
         const errors = [];
 
-        if (!useMock && providers.length > 0) {
+        // 1. Try configured providers (Moonshot / OpenAI)
+        if (!forceMock && providers.length > 0) {
             for (const providerName of providers) {
                 const provider = createAIClient(providerName);
                 if (!provider) continue;
@@ -137,16 +140,68 @@ Deno.serve(async (req) => {
             }
         }
 
-        if (!aiResponse) {
-            if (useMock || errors.length > 0) {
-                console.log("Using fallback/mock plan due to API failure or demo request.");
-                return Response.json(getMockPlan(startDate));
+        // 2. Try Base44 InvokeLLM (Platform Integration) if providers failed
+        if (!forceMock && !aiResponse) {
+            console.log("Attempting generation with Base44 InvokeLLM (Fallback)...");
+            try {
+                const response = await base44.integrations.Core.InvokeLLM({
+                    prompt: `${systemPrompt}\n\nUser Input: ${input}\n\nReturn ONLY the JSON object.`,
+                    response_json_schema: {
+                        type: "object",
+                        properties: {
+                            summary: { type: "string" },
+                            theme: { type: "string" },
+                            events: { 
+                                type: "array", 
+                                items: { 
+                                    type: "object",
+                                    properties: {
+                                        day_index: { type: "number" },
+                                        title: { type: "string" },
+                                        time: { type: "string" },
+                                        type: { type: "string" },
+                                        icon: { type: "string" }
+                                    }
+                                }
+                            },
+                            device_strategies: { type: "object", additionalProperties: { type: "string" } },
+                            automations: { 
+                                type: "array",
+                                items: {
+                                    type: "object",
+                                    properties: {
+                                        title: { type: "string" },
+                                        description: { type: "string" },
+                                        icon: { type: "string" },
+                                        status: { type: "string" }
+                                    }
+                                }
+                            },
+                            stats: { 
+                                type: "object",
+                                properties: {
+                                    focus_hours: { type: "number" },
+                                    meetings: { type: "number" },
+                                    travel_days: { type: "number" }
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // InvokeLLM returns the object directly if json schema is used
+                aiResponse = JSON.stringify(response); 
+                usedProvider = "Base44 InvokeLLM";
+            } catch (err) {
+                console.error("InvokeLLM failed:", err.message);
+                errors.push(`InvokeLLM: ${err.message}`);
             }
-            
+        }
+
+        if (!aiResponse) {
+            console.log("Using fallback/mock plan due to API failure or demo request.");
             const errorDetails = errors.join(' | ');
-            return Response.json({ 
-                error: `AI Processing Failed. Please check your API keys (OPENAI_API_KEY or MOONSHOT_API_KEY). Details: ${errorDetails}` 
-            }, { status: 500 });
+            return Response.json(getMockPlan(startDate, errorDetails));
         }
 
         console.log(`Response received from ${usedProvider}`);
@@ -158,7 +213,7 @@ Deno.serve(async (req) => {
         } catch (e) {
             console.error("Failed to parse AI response:", e);
             // Fallback to mock if parsing fails
-            return Response.json(getMockPlan(startDate));
+            return Response.json(getMockPlan(startDate, "Failed to parse AI response"));
         }
 
         return Response.json(plan);

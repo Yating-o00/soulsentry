@@ -130,6 +130,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const [selectedDevice, setSelectedDevice] = useState('phone');
   const [expandedDays, setExpandedDays] = useState({});
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   
   const resultsRef = useRef(null);
 

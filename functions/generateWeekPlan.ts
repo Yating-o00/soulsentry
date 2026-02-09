@@ -40,7 +40,7 @@ const createAIClient = (provider) => {
         return {
             client: new OpenAI({ 
                 apiKey: moonshotKey, 
-                baseURL: "https://api.moonshot.cn/v1" 
+                baseURL: "https://api.moonshot.ai/v1" 
             }),
             model: "moonshot-v1-8k",
             name: "Moonshot"

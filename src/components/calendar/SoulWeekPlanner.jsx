@@ -55,6 +55,14 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const [stage, setStage] = useState('input'); // input, processing, results
   const [userInput, setUserInput] = useState('');
   const [currentWeekDate, setCurrentWeekDate] = useState(initialDate || new Date());
+  
+  // Sync with prop updates from parent (Dashboard navigation)
+  useEffect(() => {
+    if (initialDate) {
+      setCurrentWeekDate(initialDate);
+    }
+  }, [initialDate]);
+
   const [processingStepIndex, setProcessingStepIndex] = useState(0);
   const [weekData, setWeekData] = useState(null);
   const [selectedDevice, setSelectedDevice] = useState('phone');

@@ -349,109 +349,153 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                 </div>
              </div>
 
-             {/* Summary & Stats Cards */}
-             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {/* Summary Card - Wide */}
-                <div className="md:col-span-2 bg-[#384877] rounded-[24px] p-6 text-white relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Sparkles className="w-24 h-24" />
-                    </div>
-                    <div className="relative z-10">
-                        <div className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2">本周摘要</div>
-                        <p className="text-lg font-medium leading-relaxed opacity-95">
-                            {weekData.summary}
-                        </p>
-                    </div>
-                </div>
+             {/* Logic to check if we are viewing the planned week */}
+             {(() => {
+                const viewingStartStr = format(start, 'yyyy-MM-dd');
+                const isViewingPlan = weekData.plan_start_date === viewingStartStr;
 
-                {/* Stat Cards */}
-                <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-2">
-                        <Zap className="w-5 h-5" />
-                    </div>
-                    <div className="text-3xl font-bold text-slate-900 mb-1">{weekData.stats?.focus_hours || 0}h</div>
-                    <div className="text-xs text-slate-400 font-medium">深度专注</div>
-                </div>
-
-                <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
-                        <CalendarIcon className="w-5 h-5" />
-                    </div>
-                    <div className="text-3xl font-bold text-slate-900 mb-1">{weekData.stats?.meetings || 0}</div>
-                    <div className="text-xs text-slate-400 font-medium">重要会议</div>
-                </div>
-             </div>
-
-             {/* Device Strategy Matrix */}
-             <section>
-               <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-slate-900">全设备智能协同</h3>
-                  <div className="px-3 py-1 bg-white rounded-full border border-slate-200 text-xs font-medium text-emerald-600 flex items-center gap-1.5 shadow-sm">
-                     <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                     云端同步正常
-                  </div>
-               </div>
-               
-               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {Object.entries(DEVICE_MAP).map(([key, config]) => {
-                    const DeviceIcon = config.icon;
-                    const strategy = weekData.device_strategies?.[key];
-                    const isSelected = selectedDevice === key;
-
+                if (!isViewingPlan) {
                     return (
-                        <div 
-                          key={key}
-                          onClick={() => setSelectedDevice(key)}
-                          className={cn(
-                            "bg-white rounded-[24px] p-5 flex flex-col items-center justify-center gap-3 border transition-all duration-300 cursor-pointer relative overflow-hidden",
-                            isSelected 
-                                ? "border-[#384877] ring-1 ring-[#384877]/10 shadow-[0_8px_30px_rgba(56,72,119,0.08)]" 
-                                : "border-slate-100 hover:border-slate-200 hover:shadow-md"
-                          )}
-                        >
-                           <div className={cn(
-                               "w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-sm transition-colors",
-                               isSelected ? "bg-[#384877] text-white" : "bg-slate-50 text-slate-600"
-                           )}>
-                              <DeviceIcon className="w-6 h-6" />
-                           </div>
-                           <div className="text-center">
-                               <h4 className={cn("font-medium text-sm mb-1", isSelected ? "text-[#384877]" : "text-slate-900")}>
-                                   {config.name}
-                               </h4>
-                               <div className="flex items-center justify-center gap-1.5">
-                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-                                   <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">在线</span>
-                               </div>
-                           </div>
+                        <div className="bg-white rounded-[24px] p-8 border border-slate-100 shadow-sm text-center py-16">
+                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+                                <CalendarIcon className="w-8 h-8" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 mb-2">本周暂无AI规划</h3>
+                            <p className="text-slate-500 mb-6 max-w-md mx-auto">
+                                您当前查看的日期（{weekRangeLabel}）与生成的规划日期（{weekData.plan_start_date}）不一致。
+                            </p>
+                            <div className="flex items-center justify-center gap-3">
+                                <Button 
+                                    onClick={() => {
+                                        const [y, m, d] = weekData.plan_start_date.split('-').map(Number);
+                                        setCurrentWeekDate(new Date(y, m - 1, d));
+                                    }}
+                                    className="bg-[#384877] hover:bg-[#2d3a5f] text-white"
+                                >
+                                    跳转到已规划周
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => {
+                                        resetView();
+                                        // currentWeekDate is already set to the viewing week, so just resetting view puts us in input mode for this week
+                                    }}
+                                >
+                                    为本周生成新规划
+                                </Button>
+                            </div>
                         </div>
                     );
-                  })}
-               </div>
+                }
 
-               {/* Device Detail Panel */}
-               <AnimatePresence mode="wait">
-                 <motion.div 
-                   key={selectedDevice}
-                   initial={{ opacity: 0, y: 10 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   exit={{ opacity: 0, y: -10 }}
-                   className="mt-4 bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm"
-                 >
-                    <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-full bg-[#384877]/5 flex items-center justify-center text-[#384877]">
-                            <Zap className="w-5 h-5" />
+                return (
+                    <>
+                        {/* Summary & Stats Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            {/* Summary Card - Wide */}
+                            <div className="md:col-span-2 bg-[#384877] rounded-[24px] p-6 text-white relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                                    <Sparkles className="w-24 h-24" />
+                                </div>
+                                <div className="relative z-10">
+                                    <div className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2">本周摘要</div>
+                                    <p className="text-lg font-medium leading-relaxed opacity-95">
+                                        {weekData.summary}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Stat Cards */}
+                            <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-2">
+                                    <Zap className="w-5 h-5" />
+                                </div>
+                                <div className="text-3xl font-bold text-slate-900 mb-1">{weekData.stats?.focus_hours || 0}h</div>
+                                <div className="text-xs text-slate-400 font-medium">深度专注</div>
+                            </div>
+
+                            <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                                <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
+                                    <CalendarIcon className="w-5 h-5" />
+                                </div>
+                                <div className="text-3xl font-bold text-slate-900 mb-1">{weekData.stats?.meetings || 0}</div>
+                                <div className="text-xs text-slate-400 font-medium">重要会议</div>
+                            </div>
                         </div>
-                        <div>
-                            <h4 className="text-sm font-medium text-slate-500 mb-1">本周策略 · {DEVICE_MAP[selectedDevice].name}</h4>
-                            <p className="text-base text-slate-900 font-medium leading-relaxed">
-                                {weekData.device_strategies?.[selectedDevice] || "本周无特殊策略，保持常规辅助模式。"}
-                            </p>
+
+                        {/* Device Strategy Matrix */}
+                        <section>
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold text-slate-900">全设备智能协同</h3>
+                            <div className="px-3 py-1 bg-white rounded-full border border-slate-200 text-xs font-medium text-emerald-600 flex items-center gap-1.5 shadow-sm">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                                云端同步正常
+                            </div>
                         </div>
-                    </div>
-                 </motion.div>
-               </AnimatePresence>
-             </section>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                            {Object.entries(DEVICE_MAP).map(([key, config]) => {
+                                const DeviceIcon = config.icon;
+                                const strategy = weekData.device_strategies?.[key];
+                                const isSelected = selectedDevice === key;
+
+                                return (
+                                    <div 
+                                    key={key}
+                                    onClick={() => setSelectedDevice(key)}
+                                    className={cn(
+                                        "bg-white rounded-[24px] p-5 flex flex-col items-center justify-center gap-3 border transition-all duration-300 cursor-pointer relative overflow-hidden",
+                                        isSelected 
+                                            ? "border-[#384877] ring-1 ring-[#384877]/10 shadow-[0_8px_30px_rgba(56,72,119,0.08)]" 
+                                            : "border-slate-100 hover:border-slate-200 hover:shadow-md"
+                                    )}
+                                    >
+                                    <div className={cn(
+                                        "w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-sm transition-colors",
+                                        isSelected ? "bg-[#384877] text-white" : "bg-slate-50 text-slate-600"
+                                    )}>
+                                        <DeviceIcon className="w-6 h-6" />
+                                    </div>
+                                    <div className="text-center">
+                                        <h4 className={cn("font-medium text-sm mb-1", isSelected ? "text-[#384877]" : "text-slate-900")}>
+                                            {config.name}
+                                        </h4>
+                                        <div className="flex items-center justify-center gap-1.5">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                                            <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">在线</span>
+                                        </div>
+                                    </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Device Detail Panel */}
+                        <AnimatePresence mode="wait">
+                            <motion.div 
+                            key={selectedDevice}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="mt-4 bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm"
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-[#384877]/5 flex items-center justify-center text-[#384877]">
+                                        <Zap className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-medium text-slate-500 mb-1">本周策略 · {DEVICE_MAP[selectedDevice].name}</h4>
+                                        <p className="text-base text-slate-900 font-medium leading-relaxed">
+                                            {weekData.device_strategies?.[selectedDevice] || "本周无特殊策略，保持常规辅助模式。"}
+                                        </p>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </AnimatePresence>
+                        </section>
+                    </>
+                );
+             })()}
 
              {/* Day-by-Day Timeline */}
              <section>

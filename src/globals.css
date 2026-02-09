@@ -19,6 +19,8 @@
     /* iOS viewport height fix */
     min-height: 100vh;
     min-height: -webkit-fill-available;
+    background-color: #f5f5f0; /* soul-mist */
+    color: #0a0a0f; /* soul-void */
   }
 
   /* Minimum touch target sizes on mobile */
@@ -106,14 +108,9 @@
     background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
-  }
 }
 
-/* SoulSentry Weekly Planner Styles */
+/* SoulSentry Design System */
 @layer components {
   .glass-refined {
     @apply bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_4px_30px_rgba(0,0,0,0.03)];
@@ -149,14 +146,6 @@
 }
 
 @layer utilities {
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-  
   .thinking-dot {
     animation: thinking 1.4s infinite ease-in-out both;
   }
@@ -182,4 +171,35 @@
 @keyframes thinking {
   0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
   40% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fadeUp {
+  0% { opacity: 0; transform: translateY(30px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.animate-breathe {
+  animation: breathe 6s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 8s linear infinite;
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }

@@ -30,6 +30,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import QuickAddTask from "../tasks/QuickAddTask";
+import { Plus } from "lucide-react";
 
 // Device Configurations
 const DEVICE_CONFIGS = {

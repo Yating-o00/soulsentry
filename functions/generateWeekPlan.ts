@@ -66,14 +66,23 @@ Deno.serve(async (req) => {
         }
 
         const systemPrompt = `You are an expert personal planner AI. Your goal is to parse user input about their week and generate a structured plan.
-        Current context:
-        - Start date of the week: ${startDate || new Date().toISOString().split('T')[0]}
+        
+        CRITICAL RULES:
+        1. LANGUAGE: Output MUST be in Simplified Chinese (简体中文). Translate any English input to Chinese in the plan.
+        2. DATE ALIGNMENT: 
+           - The week starts on ${startDate || new Date().toISOString().split('T')[0]} (Monday).
+           - day_index 0 = Monday (${startDate})
+           - day_index 1 = Tuesday
+           - ...
+           - day_index 6 = Sunday
+           - You MUST calculate the correct day_index for any specific dates mentioned in the input relative to this start date.
+        3. TIME FORMAT: Use "HH:MM" 24-hour format for times (e.g., "09:00", "14:30").
         
         JSON Structure required:
         {
-            "summary": "string",
-            "theme": "string",
-            "events": [{ "day_index": number (0-6), "title": "string", "time": "string", "type": "work"|"meeting"|"travel"|"focus"|"rest"|"other", "icon": "emoji" }],
+            "summary": "string (in Chinese)",
+            "theme": "string (in Chinese)",
+            "events": [{ "day_index": number (0-6), "title": "string", "time": "HH:MM", "type": "work"|"meeting"|"travel"|"focus"|"rest"|"other", "icon": "emoji" }],
             "device_strategies": { "phone": "string", "watch": "string", ... },
             "automations": [{ "title": "string", "description": "string", "icon": "string", "status": "active"|"pending" }],
             "stats": { "focus_hours": number, "meetings": number, "travel_days": number }

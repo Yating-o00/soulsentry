@@ -18,6 +18,8 @@ import {
   ChevronRight
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -458,9 +460,21 @@ export default function Dashboard() {
             <ChevronLeft className="w-5 h-5" />
           </Button>
 
-          <h2 className="text-xl font-semibold text-slate-800">
-            {getCalendarDateLabel()}
-          </h2>
+          <Popover>
+            <PopoverTrigger asChild>
+              <h2 className="text-xl font-semibold text-slate-800 cursor-pointer hover:text-[#384877] transition-colors select-none">
+                {getCalendarDateLabel()}
+              </h2>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="center">
+              <Calendar
+                mode="single"
+                selected={currentDate}
+                onSelect={(date) => date && setCurrentDate(date)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
 
           <Button
             onClick={handleCalendarNext}

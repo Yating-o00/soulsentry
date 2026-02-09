@@ -18,7 +18,13 @@ import {
   Zap,
   Leaf,
   BarChart,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Smartphone,
+  Watch,
+  Glasses,
+  Car,
+  Laptop,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

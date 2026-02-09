@@ -6,24 +6,24 @@ const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
 
 // Mock data for demo/testing when keys fail
 const getMockPlan = (startDate) => ({
-    summary: "This is a DEMO plan (API keys are missing or invalid). Focus on health and coding.",
-    theme: "Demo Week",
+    summary: "演示计划（API密钥无效或缺失）。重点关注健康与研发。",
+    theme: "演示周",
     events: [
-        { day_index: 0, title: "Deep Work: Coding", time: "09:00", type: "work", icon: "💻" },
-        { day_index: 1, title: "Team Sync", time: "14:00", type: "meeting", icon: "👥" },
-        { day_index: 2, title: "Gym Session", time: "18:00", type: "focus", icon: "💪" },
-        { day_index: 4, title: "Project Review", time: "10:00", type: "work", icon: "📊" }
+        { day_index: 0, title: "深度工作：代码研发", time: "09:00", type: "work", icon: "💻" },
+        { day_index: 1, title: "团队同步会议", time: "14:00", type: "meeting", icon: "👥" },
+        { day_index: 2, title: "健身房锻炼", time: "18:00", type: "focus", icon: "💪" },
+        { day_index: 4, title: "项目评审", time: "10:00", type: "work", icon: "📊" }
     ],
     device_strategies: {
-        phone: "Focus mode during work hours",
-        watch: "Health tracking enabled",
-        glasses: "Notifications off",
-        car: "Commute playlist",
-        home: "Relaxing ambiance",
-        pc: "Development environment"
+        phone: "工作时间开启专注模式",
+        watch: "启用健康监测",
+        glasses: "通知静音",
+        car: "通勤播放列表",
+        home: "放松氛围灯光",
+        pc: "开发环境配置"
     },
     automations: [
-        { title: "Morning Routine", description: "Turn on lights, play news", icon: "☀️", status: "active" }
+        { title: "晨间唤醒", description: "开启灯光，播放新闻", icon: "☀️", status: "active" }
     ],
     stats: { focus_hours: 20, meetings: 5, travel_days: 0 }
 });

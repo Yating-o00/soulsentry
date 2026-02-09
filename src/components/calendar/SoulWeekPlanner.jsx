@@ -155,16 +155,33 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const getEventsForDay = (dayIndex, dayDate) => {
     if (!weekData || !weekData.events) return [];
     
-    // Priority: Match by exact date string if provided by backend
+    // Strict Date Matching
     if (dayDate) {
         const dateStr = format(dayDate, 'yyyy-MM-dd');
-        // Filter events that have a matching date property
-        const dateMatched = weekData.events.filter(e => e.date === dateStr);
-        if (dateMatched.length > 0) return dateMatched;
+        
+        return weekData.events.filter(e => {
+            // Case 1: Event has a specific date (Priority)
+            if (e.date) {
+                return e.date === dateStr;
+            }
+            
+            // Case 2: Event has no date (Legacy/Fallback)
+            // Only show by day_index if the current week view matches the plan's start date
+            // This prevents "Next Week's Tuesday" event from showing up on "This Week's Tuesday"
+            if (weekData.plan_start_date) {
+                const currentWeekStart = format(start, 'yyyy-MM-dd');
+                if (weekData.plan_start_date === currentWeekStart) {
+                    return e.day_index === dayIndex;
+                }
+                return false; // Plan is for another week, don't show generic events here
+            }
+
+            // Case 3: No date and no plan start date (Fallback, least specific)
+            return e.day_index === dayIndex;
+        });
     }
 
-    // Fallback: Match by day index (0 = Monday)
-    return weekData.events.filter(e => e.day_index === dayIndex);
+    return [];
   };
 
   return (

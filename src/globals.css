@@ -1,3 +1,4 @@
+css
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -13,14 +14,12 @@
   }
   
   body {
-    @apply antialiased;
+    @apply antialiased text-slate-900 bg-[#f8f9fa]; /* Lighter background */
     /* 防止 iOS 滚动弹跳 */
     overscroll-behavior-y: none;
     /* iOS viewport height fix */
     min-height: 100vh;
     min-height: -webkit-fill-available;
-    background-color: #f5f5f0; /* soul-mist */
-    color: #0a0a0f; /* soul-void */
   }
 
   /* Minimum touch target sizes on mobile */
@@ -143,6 +142,43 @@
   .input-glow:focus-within {
     @apply ring-4 ring-[#e8d5b7]/30 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)];
   }
+
+  /* Cards */
+  .card-base {
+    @apply bg-white rounded-3xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] border border-slate-100;
+  }
+  
+  .card-hover {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)];
+  }
+
+  /* Status Badges */
+  .badge-online {
+    @apply bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5;
+  }
+  
+  /* Primary Stats Card (Dark Blue) */
+  .stats-card-primary {
+    @apply bg-[#384877] text-white rounded-3xl p-6 relative overflow-hidden;
+  }
+
+  .stats-card-white {
+    @apply bg-white text-slate-900 rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden;
+  }
+
+  /* Icons containers */
+  .icon-box {
+    @apply w-12 h-12 rounded-2xl flex items-center justify-center text-white text-xl shadow-lg;
+  }
+  
+  .device-card {
+    @apply bg-white rounded-[24px] p-6 flex flex-col items-center justify-center gap-4 border border-slate-50 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-all duration-300 hover:shadow-[0_10px_40px_rgba(0,0,0,0.06)];
+  }
+
+  /* Input Area */
+  .planning-input {
+    @apply w-full bg-transparent border-none outline-none text-lg text-slate-700 placeholder:text-slate-400 resize-none font-light leading-relaxed;
+  }
 }
 
 @layer utilities {
@@ -151,6 +187,11 @@
   }
   .thinking-dot:nth-child(1) { animation-delay: -0.32s; }
   .thinking-dot:nth-child(2) { animation-delay: -0.16s; }
+
+  .bg-gradient-mesh {
+    background-image: radial-gradient(at 0% 0%, rgba(56, 72, 119, 0.03) 0px, transparent 50%),
+                      radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.03) 0px, transparent 50%);
+  }
 }
 
 @keyframes breathe {

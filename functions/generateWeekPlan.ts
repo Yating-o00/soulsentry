@@ -4,9 +4,8 @@ import OpenAI from 'npm:openai@4.28.0';
 const openaiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
 const moonshotKey = Deno.env.get("MOONSHOT_API_KEY")?.trim();
 
-// Mock data for demo/testing when all methods fail
 const getMockPlan = (startDate, errorDetails) => ({
-    summary: "演示计划（API密钥无效或缺失）。重点关注健康与研发。",
+    summary: "演示计划（API调用失败）。请检查API Key或网络。",
     theme: "演示周",
     is_demo: true,
     error_details: errorDetails,
@@ -29,27 +28,6 @@ const getMockPlan = (startDate, errorDetails) => ({
     ],
     stats: { focus_hours: 20, meetings: 5, travel_days: 0 }
 });
-
-const createAIClient = (provider) => {
-    if (provider === 'openai' && openaiKey) {
-        return {
-            client: new OpenAI({ apiKey: openaiKey }),
-            model: "gpt-4o-mini",
-            name: "OpenAI"
-        };
-    }
-    if (provider === 'moonshot' && moonshotKey) {
-        return {
-            client: new OpenAI({ 
-                apiKey: moonshotKey, 
-                baseURL: "https://api.moonshot.ai/v1" 
-            }),
-            model: "moonshot-v1-8k",
-            name: "Moonshot"
-        };
-    }
-    return null;
-};
 
 Deno.serve(async (req) => {
     try {
@@ -87,11 +65,7 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Input is required' }, { status: 400 });
         }
 
-        // Check if we should force mock (for debugging)
-        const forceMock = input.toLowerCase().includes("force_demo");
-        
         const systemPrompt = `You are an expert personal planner AI. Your goal is to parse user input about their week and generate a structured plan.
-        
         Current context:
         - Start date of the week: ${startDate || new Date().toISOString().split('T')[0]}
         
@@ -103,120 +77,111 @@ Deno.serve(async (req) => {
             "device_strategies": { "phone": "string", "watch": "string", ... },
             "automations": [{ "title": "string", "description": "string", "icon": "string", "status": "active"|"pending" }],
             "stats": { "focus_hours": number, "meetings": number, "travel_days": number }
-        }`;
+        }
+        
+        Return ONLY the JSON object. No markdown formatting.`;
 
-        const providers = [];
-        if (moonshotKey) providers.push('moonshot');
-        if (openaiKey) providers.push('openai');
+        // Define strategies
+        const strategies = [];
 
-        let aiResponse = null;
-        let usedProvider = null;
-        const errors = [];
+        // 1. Moonshot Strategy
+        if (moonshotKey) {
+            strategies.push({
+                name: "Moonshot",
+                run: async () => {
+                    const client = new OpenAI({ 
+                        apiKey: moonshotKey, 
+                        baseURL: "https://api.moonshot.ai/v1" 
+                    });
+                    const completion = await client.chat.completions.create({
+                        model: "moonshot-v1-8k",
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: input }
+                        ]
+                    });
+                    return completion.choices[0].message.content;
+                }
+            });
+        }
 
-        // 1. Try configured providers (Moonshot / OpenAI)
-        if (!forceMock && providers.length > 0) {
-            for (const providerName of providers) {
-                const provider = createAIClient(providerName);
-                if (!provider) continue;
-
-                console.log(`Attempting generation with ${provider.name}...`);
-                try {
-                    const completion = await provider.client.chat.completions.create({
-                        model: provider.model,
+        // 2. OpenAI Strategy
+        if (openaiKey) {
+            strategies.push({
+                name: "OpenAI",
+                run: async () => {
+                    const client = new OpenAI({ apiKey: openaiKey });
+                    const completion = await client.chat.completions.create({
+                        model: "gpt-4o-mini",
                         messages: [
                             { role: "system", content: systemPrompt },
                             { role: "user", content: input }
                         ],
-                        response_format: providerName === 'openai' ? { type: "json_object" } : undefined
+                        response_format: { type: "json_object" }
                     });
-
-                    aiResponse = completion.choices[0].message.content;
-                    usedProvider = provider.name;
-                    break;
-                } catch (err) {
-                    console.error(`${provider.name} failed:`, err.message);
-                    errors.push(`${provider.name}: ${err.message}`);
+                    return completion.choices[0].message.content;
                 }
-            }
+            });
         }
 
-        // 2. Try Base44 InvokeLLM (Platform Integration) if providers failed
-        if (!forceMock && !aiResponse) {
-            console.log("Attempting generation with Base44 InvokeLLM (Fallback)...");
-            try {
-                const response = await base44.integrations.Core.InvokeLLM({
-                    prompt: `${systemPrompt}\n\nUser Input: ${input}\n\nReturn ONLY the JSON object.`,
+        // 3. Base44 InvokeLLM Strategy (Fallback)
+        strategies.push({
+            name: "InvokeLLM",
+            run: async () => {
+                const res = await base44.integrations.Core.InvokeLLM({
+                    prompt: `${systemPrompt}\n\nUser Input: ${input}`,
                     response_json_schema: {
                         type: "object",
                         properties: {
                             summary: { type: "string" },
                             theme: { type: "string" },
-                            events: { 
-                                type: "array", 
-                                items: { 
-                                    type: "object",
-                                    properties: {
-                                        day_index: { type: "number" },
-                                        title: { type: "string" },
-                                        time: { type: "string" },
-                                        type: { type: "string" },
-                                        icon: { type: "string" }
-                                    }
-                                }
-                            },
-                            device_strategies: { type: "object", additionalProperties: { type: "string" } },
-                            automations: { 
-                                type: "array",
-                                items: {
-                                    type: "object",
-                                    properties: {
-                                        title: { type: "string" },
-                                        description: { type: "string" },
-                                        icon: { type: "string" },
-                                        status: { type: "string" }
-                                    }
-                                }
-                            },
-                            stats: { 
-                                type: "object",
-                                properties: {
-                                    focus_hours: { type: "number" },
-                                    meetings: { type: "number" },
-                                    travel_days: { type: "number" }
-                                }
-                            }
+                            events: { type: "array", items: { type: "object", additionalProperties: true } },
+                            device_strategies: { type: "object", additionalProperties: true },
+                            automations: { type: "array", items: { type: "object", additionalProperties: true } },
+                            stats: { type: "object", additionalProperties: true }
                         }
                     }
                 });
-                
-                // InvokeLLM returns the object directly if json schema is used
-                aiResponse = JSON.stringify(response); 
-                usedProvider = "Base44 InvokeLLM";
+                return JSON.stringify(res);
+            }
+        });
+
+        // Execute strategies sequentially until one succeeds
+        const errors = [];
+        for (const strategy of strategies) {
+            console.log(`Trying strategy: ${strategy.name}...`);
+            try {
+                const rawResponse = await strategy.run();
+                if (!rawResponse) throw new Error("Empty response");
+
+                // Try to parse
+                let plan;
+                try {
+                    // Clean up markdown code blocks if present
+                    const cleaned = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+                    plan = JSON.parse(cleaned);
+                    
+                    // Basic validation
+                    if (!plan.events || !Array.isArray(plan.events)) {
+                        throw new Error("Invalid structure: missing events array");
+                    }
+                    
+                    console.log(`Success with ${strategy.name}`);
+                    return Response.json(plan); // SUCCESS!
+                } catch (parseError) {
+                    console.error(`${strategy.name} parsing failed:`, parseError.message);
+                    console.log("Raw response:", rawResponse.substring(0, 200) + "...");
+                    throw new Error(`Parsing failed: ${parseError.message}`);
+                }
             } catch (err) {
-                console.error("InvokeLLM failed:", err.message);
-                errors.push(`InvokeLLM: ${err.message}`);
+                console.error(`${strategy.name} execution failed:`, err.message);
+                errors.push(`${strategy.name}: ${err.message}`);
             }
         }
 
-        if (!aiResponse) {
-            console.log("Using fallback/mock plan due to API failure or demo request.");
-            const errorDetails = errors.join(' | ');
-            return Response.json(getMockPlan(startDate, errorDetails));
-        }
-
-        console.log(`Response received from ${usedProvider}`);
-
-        let plan;
-        try {
-            const cleaned = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-            plan = JSON.parse(cleaned);
-        } catch (e) {
-            console.error("Failed to parse AI response:", e);
-            // Fallback to mock if parsing fails
-            return Response.json(getMockPlan(startDate, "Failed to parse AI response"));
-        }
-
-        return Response.json(plan);
+        // If we get here, all strategies failed
+        console.log("All strategies failed. Falling back to mock.");
+        return Response.json(getMockPlan(startDate, errors.join(" | ")));
 
     } catch (error) {
         console.error('Critical error:', error);

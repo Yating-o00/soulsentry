@@ -95,7 +95,13 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
             setTimeout(() => {
                 setStage('results');
                 setIsProcessing(false);
-                toast.success("已生成本周全情境规划");
+                
+                if (data.is_demo) {
+                    toast.warning("AI服务不可用 (API Key无效)，已显示演示数据", { duration: 5000 });
+                } else {
+                    toast.success("已生成本周全情境规划");
+                }
+                
                 setTimeout(() => {
                     resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
                 }, 100);

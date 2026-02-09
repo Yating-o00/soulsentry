@@ -153,7 +153,37 @@ Deno.serve(async (req) => {
         if (!aiResponse) {
             const errorDetails = errors.join(' | ');
             console.error("All providers failed:", errorDetails);
-            return Response.json({ error: `AI Processing Failed: ${errorDetails}` }, { status: 500 });
+            console.warn("Falling back to Demo Plan due to AI failure.");
+            
+            const fallbackPlan = {
+                summary: "⚠️ Demo Plan (AI Unavailable - Check API Keys)",
+                theme: "Offline Mode",
+                is_demo: true,
+                error_details: errorDetails,
+                events: [
+                    { day_index: 0, title: "Deep Work Session", time: "09:00", type: "work", icon: "💻" },
+                    { day_index: 1, title: "Team Sync", time: "10:00", type: "meeting", icon: "👥" },
+                    { day_index: 2, title: "Project Review", time: "14:00", type: "work", icon: "📊" },
+                    { day_index: 3, title: "Focus Time", time: "09:00", type: "focus", icon: "🧠" },
+                    { day_index: 4, title: "Weekly Wrap-up", time: "16:00", type: "meeting", icon: "📅" }
+                ],
+                device_strategies: {
+                    phone: "Do Not Disturb during focus blocks",
+                    watch: "Stand reminders enabled",
+                    pc: "High performance mode",
+                    home: "Ambient lighting for focus"
+                },
+                automations: [
+                    { title: "Turn on Focus Mode", description: "Automatically silence notifications during work blocks", icon: "🔕", status: "active" }
+                ],
+                stats: {
+                    focus_hours: 15,
+                    meetings: 3,
+                    travel_days: 0
+                }
+            };
+            
+            return Response.json(fallbackPlan);
         }
 
         console.log(`Response received from ${usedProvider}`);

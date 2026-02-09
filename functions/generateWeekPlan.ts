@@ -81,9 +81,9 @@ Deno.serve(async (req) => {
            
         3. INTELLIGENT DATE ALIGNMENT (CRITICAL):
            - Analyze the input for temporal keywords like "this week" (本周), "next week" (下周), "last week" (上周), or specific dates.
-           - Calculate the \`plan_start_date\` (Monday of the target week) based on "Today" and the input.
+           - Calculate the \`plan_start_date\` (MUST be the MONDAY of the target week) based on "Today" (${today}) and the input.
            - If no temporal keyword is found, assume the user means the week they are currently viewing (${viewStart}).
-           - Example: If today is 2026-02-09 (Sunday) and user says "next week", target week starts 2026-02-10 (Monday).
+           - Ensure \`plan_start_date\` aligns correctly with the calendar week (Monday start).
            - Output the calculated \`plan_start_date\` in YYYY-MM-DD format.
            
         4. EVENT MAPPING:

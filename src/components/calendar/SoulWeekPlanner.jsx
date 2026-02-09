@@ -92,10 +92,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
             
             // Intelligent Date Alignment
             if (data.plan_start_date) {
-                // Parse manually to ensure local time (avoid UTC timezone shifts)
-                const [py, pm, pd] = data.plan_start_date.split('-').map(Number);
-                const plannedStart = new Date(py, pm - 1, pd);
-                
+                const plannedStart = new Date(data.plan_start_date);
                 const currentStartStr = format(start, 'yyyy-MM-dd');
                 
                 // If the planned week is different from the currently viewed week, switch view
@@ -152,11 +149,21 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const weekDays = getWeekDays();
 
   // Helper to find events for a specific day index (0-6)
-  const getEventsForDay = (dayIndex) => {
+  const getEventsForDay = (dayIndex, dayDate) => {
     if (!weekData || !weekData.events) return [];
-    // Adjust logic if needed: 0 is Monday in our UI, so ensure backend aligns or we map correctly
-    // Our weekDays array starts from Monday (index 0).
-    return weekData.events.filter(e => e.day_index === dayIndex);
+    
+    // Priority 1: Match by specific date string if available (most accurate)
+    const targetDateStr = format(dayDate, 'yyyy-MM-dd');
+    const eventsByDate = weekData.events.filter(e => e.date === targetDateStr);
+    if (eventsByDate.length > 0) return eventsByDate;
+
+    // Priority 2: Fallback to day_index if date is missing
+    // weekDays array starts from Monday (index 0).
+    return weekData.events.filter(e => {
+        // If event has a date but it didn't match above, don't fallback to index (it belongs to another day)
+        if (e.date) return false;
+        return e.day_index === dayIndex;
+    });
   };
 
   return (
@@ -436,7 +443,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                 
                 <div className="space-y-3">
                    {weekDays.map((day, idx) => {
-                      const dayEvents = getEventsForDay(idx);
+                      const dayEvents = getEventsForDay(idx, day);
                       const isExpanded = expandedDays[idx] !== false; // Default expanded?
                       const hasEvents = dayEvents.length > 0;
                       const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');

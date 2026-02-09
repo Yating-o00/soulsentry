@@ -1,30 +1,4 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
-import OpenAI from 'npm:openai@4.28.0';
-
-const openaiKey = Deno.env.get("OPENAI_API_KEY");
-const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
-
-// Helper to create OpenAI client
-const createAIClient = (provider) => {
-    if (provider === 'openai' && openaiKey) {
-        return {
-            client: new OpenAI({ apiKey: openaiKey }),
-            model: "gpt-4o-mini",
-            name: "OpenAI"
-        };
-    }
-    if (provider === 'moonshot' && moonshotKey) {
-        return {
-            client: new OpenAI({ 
-                apiKey: moonshotKey, 
-                baseURL: "https://api.moonshot.cn/v1" 
-            }),
-            model: "moonshot-v1-8k",
-            name: "Moonshot"
-        };
-    }
-    return null;
-};
 
 Deno.serve(async (req) => {
     try {
@@ -62,10 +36,12 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Input is required' }, { status: 400 });
         }
 
-        const systemPrompt = `You are an expert personal planner AI. Your goal is to parse user input about their week and generate a structured plan.
+        const prompt = `You are an expert personal planner AI. Your goal is to parse user input about their week and generate a structured plan.
         
         Current context:
         - Start date of the week: ${startDate || new Date().toISOString().split('T')[0]}
+        
+        User Input: "${input}"
         
         You need to extract/generate:
         1. events: A list of specific events mentioned or implied.
@@ -73,129 +49,83 @@ Deno.serve(async (req) => {
         3. automations: Suggested automated tasks to help achieve the user's goals.
         4. summary: A brief summary of the week's theme.
         5. stats: Estimated counts for focus sessions, travel, etc.
+        `;
 
-        IMPORTANT: Return ONLY valid JSON. No markdown formatting, no code blocks. Just the raw JSON object.
-        
-        JSON Structure:
-        {
-            "summary": "string",
-            "theme": "string",
-            "events": [
-                {
-                    "day_index": number (0-6),
-                    "title": "string",
-                    "time": "string",
-                    "type": "work" | "meeting" | "travel" | "focus" | "rest" | "other",
-                    "icon": "emoji string"
-                }
-            ],
-            "device_strategies": {
-                "phone": "string",
-                "watch": "string",
-                "glasses": "string",
-                "car": "string",
-                "home": "string",
-                "pc": "string"
-            },
-            "automations": [
-                {
-                    "title": "string",
-                    "description": "string",
-                    "icon": "emoji string",
-                    "status": "active" | "pending"
-                }
-            ],
-            "stats": {
-                "focus_hours": number,
-                "meetings": number,
-                "travel_days": number
-            }
-        }`;
-
-        // Strategy: Try OpenAI first, fallback to Moonshot
-        let aiResponse = null;
-        let usedProvider = null;
-        const errors = [];
-
-        const providers = [];
-        // Prioritize Moonshot
-        if (moonshotKey) providers.push('moonshot');
-        if (openaiKey) providers.push('openai');
-
-        if (providers.length === 0) {
-            return Response.json({ error: "No AI API keys configured. Please set OPENAI_API_KEY or MOONSHOT_API_KEY." }, { status: 500 });
-        }
-
-        for (const providerName of providers) {
-            const provider = createAIClient(providerName);
-            if (!provider) continue;
-
-            console.log(`Attempting generation with ${provider.name}...`);
-            try {
-                const completion = await provider.client.chat.completions.create({
-                    model: provider.model,
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: input }
-                    ],
-                    response_format: providerName === 'openai' ? { type: "json_object" } : undefined
-                });
-
-                aiResponse = completion.choices[0].message.content;
-                usedProvider = provider.name;
-                break; // Success!
-            } catch (err) {
-                console.error(`${provider.name} failed:`, err.message);
-                errors.push(`${provider.name}: ${err.message}`);
-            }
-        }
-
-        if (!aiResponse) {
-            const errorDetails = errors.join(' | ');
-            console.error("All providers failed:", errorDetails);
-            console.warn("Falling back to Demo Plan due to AI failure.");
-            
-            const fallbackPlan = {
-                summary: "⚠️ Demo Plan (AI Unavailable - Check API Keys)",
-                theme: "Offline Mode",
-                is_demo: true,
-                error_details: errorDetails,
-                events: [
-                    { day_index: 0, title: "Deep Work Session", time: "09:00", type: "work", icon: "💻" },
-                    { day_index: 1, title: "Team Sync", time: "10:00", type: "meeting", icon: "👥" },
-                    { day_index: 2, title: "Project Review", time: "14:00", type: "work", icon: "📊" },
-                    { day_index: 3, title: "Focus Time", time: "09:00", type: "focus", icon: "🧠" },
-                    { day_index: 4, title: "Weekly Wrap-up", time: "16:00", type: "meeting", icon: "📅" }
-                ],
-                device_strategies: {
-                    phone: "Do Not Disturb during focus blocks",
-                    watch: "Stand reminders enabled",
-                    pc: "High performance mode",
-                    home: "Ambient lighting for focus"
+        const responseSchema = {
+            type: "object",
+            properties: {
+                summary: { type: "string" },
+                theme: { type: "string" },
+                events: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            day_index: { type: "number", description: "0-6, where 0 is Monday" },
+                            title: { type: "string" },
+                            time: { type: "string" },
+                            type: { type: "string", enum: ["work", "meeting", "travel", "focus", "rest", "other"] },
+                            icon: { type: "string", description: "emoji" }
+                        },
+                        required: ["day_index", "title", "time", "type"]
+                    }
                 },
-                automations: [
-                    { title: "Turn on Focus Mode", description: "Automatically silence notifications during work blocks", icon: "🔕", status: "active" }
-                ],
+                device_strategies: {
+                    type: "object",
+                    properties: {
+                        phone: { type: "string" },
+                        watch: { type: "string" },
+                        glasses: { type: "string" },
+                        car: { type: "string" },
+                        home: { type: "string" },
+                        pc: { type: "string" }
+                    }
+                },
+                automations: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            title: { type: "string" },
+                            description: { type: "string" },
+                            icon: { type: "string" },
+                            status: { type: "string", enum: ["active", "pending"] }
+                        }
+                    }
+                },
                 stats: {
-                    focus_hours: 15,
-                    meetings: 3,
-                    travel_days: 0
+                    type: "object",
+                    properties: {
+                        focus_hours: { type: "number" },
+                        meetings: { type: "number" },
+                        travel_days: { type: "number" }
+                    }
                 }
-            };
-            
-            return Response.json(fallbackPlan);
-        }
+            },
+            required: ["summary", "theme", "events", "device_strategies"]
+        };
 
-        console.log(`Response received from ${usedProvider}`);
+        console.log("Calling InvokeLLM...");
+        
+        // Use built-in integration which handles providers/keys
+        const result = await base44.integrations.Core.InvokeLLM({
+            prompt: prompt,
+            response_json_schema: responseSchema
+        });
 
-        let plan;
-        try {
-            const cleaned = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-            plan = JSON.parse(cleaned);
-        } catch (e) {
-            console.error("Failed to parse AI response:", e);
-            console.log("Raw response:", aiResponse);
-            return Response.json({ error: 'Failed to parse AI response' }, { status: 500 });
+        console.log("InvokeLLM success");
+
+        // The result is already a dict if schema is provided
+        let plan = result;
+        
+        // Safety checks
+        if (typeof plan === 'string') {
+            try {
+                plan = JSON.parse(plan);
+            } catch (e) {
+                console.error("Failed to parse string response:", e);
+                throw new Error("Invalid AI response format");
+            }
         }
 
         // Ensure required fields
@@ -206,7 +136,13 @@ Deno.serve(async (req) => {
         return Response.json(plan);
 
     } catch (error) {
-        console.error('Critical error in generateWeekPlan:', error);
-        return Response.json({ error: error.message }, { status: 500 });
+        console.error('Error in generateWeekPlan:', error);
+        
+        // Provide a clearer error message to the client
+        const errorMessage = error.message?.includes("401") 
+            ? "AI Service Authentication Failed. Please check API keys." 
+            : error.message;
+            
+        return Response.json({ error: errorMessage }, { status: 500 });
     }
 });

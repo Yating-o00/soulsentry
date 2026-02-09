@@ -351,104 +351,194 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
             animate={{ opacity: 1 }}
             className="w-full space-y-12 pb-20 mt-8"
           >
-             {/* Header */}
-             <div className="flex items-center justify-between">
-                <div>
-                   <h3 className="text-2xl font-serif font-light text-[#0a0a0f] mb-1">本周概览</h3>
-                   <p className="text-sm text-[#0a0a0f]/50">{weekRangeLabel}</p>
-                </div>
-                <div className="flex gap-2">
-                   <Button variant="ghost" size="icon" className="rounded-full bg-white/40 hover:bg-white/60" onClick={() => setCurrentWeekDate(addDays(currentWeekDate, -7))}>
-                      <ChevronLeft className="w-5 h-5" />
-                   </Button>
-                   <Button variant="ghost" size="icon" className="rounded-full bg-white/40 hover:bg-white/60" onClick={() => setCurrentWeekDate(addDays(currentWeekDate, 7))}>
-                      <ChevronRight className="w-5 h-5" />
-                   </Button>
-                   <Button variant="ghost" onClick={resetView} className="ml-4 text-xs text-[#0a0a0f]/60">
-                      新计划
+             {/* Header: Arranged For You */}
+             <div className="border-b border-slate-200 pb-6 mb-8">
+                <div className="flex items-center justify-between mb-2">
+                   <h3 className="text-3xl font-bold text-[#384877]">已为你安排</h3>
+                   <Button variant="ghost" onClick={resetView} className="text-slate-500 hover:text-slate-700">
+                      新对话
                    </Button>
                 </div>
+                <p className="text-slate-500">基于输入: "{weekData.input}"</p>
              </div>
 
-             {/* Week Grid */}
-             <div className="grid grid-cols-7 gap-3">
-               {weekDays.map((day, idx) => {
-                 const dayEvents = weekData.events.filter(e => e.day === idx);
-                 return (
-                   <motion.div 
-                     key={idx}
-                     initial={{ opacity: 0, y: 20 }}
-                     animate={{ opacity: 1, y: 0 }}
-                     transition={{ delay: idx * 0.05 }}
-                     className="glass-refined rounded-2xl p-4 min-h-[120px] cursor-pointer hover:border-[#e8d5b7]/30 hover:-translate-y-1 transition-all duration-300"
-                   >
-                     <div className="text-center mb-3">
-                        <div className="text-xs text-[#0a0a0f]/40 uppercase tracking-wider mb-1">{format(day, 'EEE', { locale: zhCN })}</div>
-                        <div className="text-2xl font-serif text-[#0a0a0f]">{format(day, 'd')}</div>
-                     </div>
-                     <div className="flex justify-center gap-1 flex-wrap">
-                        {dayEvents.length > 0 ? (
-                          dayEvents.map((e, i) => (
-                             <div key={i} className="w-2 h-2 rounded-full bg-[#e8d5b7] shadow-sm" title={e.title} />
-                          ))
-                        ) : (
-                          <div className="text-[10px] text-[#0a0a0f]/20">无安排</div>
-                        )}
-                     </div>
-                     {dayEvents.length > 0 && (
-                       <div className="mt-3 text-center text-[10px] text-[#0a0a0f]/50">{dayEvents.length} 个事件</div>
-                     )}
-                   </motion.div>
-                 );
-               })}
-             </div>
-
-             {/* Stats */}
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: '事件总数', value: weekData.events.length, color: 'text-[#0a0a0f]' },
-                  { label: '专注日', value: weekData.events.filter(e => e.type === 'focus').length || 2, color: 'text-[#a78bfa]' },
-                  { label: '差旅日', value: weekData.events.filter(e => e.type === 'travel').length, color: 'text-[#6366f1]' },
-                  { label: '自动任务', value: 8, color: 'text-[#10b981]' }
-                ].map((stat, idx) => (
-                  <div key={idx} className="glass-refined rounded-2xl p-4 text-center">
-                     <div className={`text-3xl font-serif mb-1 ${stat.color}`}>{stat.value}</div>
-                     <div className="text-xs text-[#0a0a0f]/50 uppercase tracking-wider">{stat.label}</div>
-                  </div>
-                ))}
-             </div>
-
-             {/* Device Matrix */}
+             {/* Device Synergy Section */}
              <section>
                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-2xl font-serif font-light text-[#0a0a0f] mb-1">全设备协同策略</h3>
-                    <p className="text-sm text-[#0a0a0f]/50">基于周情境的设备分工与接力</p>
-                  </div>
-                  <div className="px-3 py-1 glass-refined rounded-full text-xs text-[#0a0a0f]/60 border border-[#e8d5b7]/20 flex items-center gap-2">
-                     <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full animate-pulse"></span>
-                     跨设备同步正常
+                  <h3 className="text-xl font-bold text-slate-800">全设备智能协同</h3>
+                  <div className="px-4 py-1.5 bg-white border border-slate-200 rounded-full text-xs text-slate-500 flex items-center gap-2 shadow-sm">
+                     <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                     云端同步正常
                   </div>
                </div>
-               
-               <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-                  {Object.entries(DEVICE_CONFIGS).map(([key, config]) => (
-                    <div 
-                      key={key}
-                      onClick={() => setSelectedDevice(key)}
-                      className={cn(
-                        "glass-refined rounded-2xl p-5 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1",
-                        selectedDevice === key && "border-[#e8d5b7] bg-[#e8d5b7]/15 ring-2 ring-[#e8d5b7]/20"
-                      )}
-                    >
-                       <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-[#0a0a0f] to-[#1e293b] rounded-2xl flex items-center justify-center text-[#f5f5f0] shadow-lg text-2xl">
-                          {config.icon}
+
+               <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
+                  {Object.entries(DEVICE_CONFIGS).map(([key, config]) => {
+                    const Icon = config.icon;
+                    const isSelected = selectedDevice === key;
+                    return (
+                      <div 
+                        key={key}
+                        onClick={() => setSelectedDevice(key)}
+                        className={cn(
+                          "bg-white rounded-[24px] p-8 flex flex-col items-center justify-center gap-4 cursor-pointer transition-all duration-300 relative overflow-hidden group",
+                          isSelected 
+                            ? "border-2 border-[#384877] shadow-lg scale-[1.02]" 
+                            : "border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_30px_rgba(0,0,0,0.05)] hover:-translate-y-1"
+                        )}
+                      >
+                         <div className={cn(
+                            "w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl shadow-md transition-transform duration-500 group-hover:scale-110",
+                            config.color
+                         )}>
+                            <Icon className="w-8 h-8" />
+                         </div>
+                         <h4 className="font-bold text-slate-800 text-lg">{config.name}</h4>
+                         <div className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5">
+                             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                             在线
+                         </div>
+                      </div>
+                    );
+                  })}
+               </div>
+
+               {/* Device Details */}
+               <AnimatePresence mode="wait">
+                 <motion.div 
+                   key={selectedDevice}
+                   initial={{ opacity: 0, y: 10 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   exit={{ opacity: 0, y: -10 }}
+                   className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm"
+                 >
+                    <div className="flex justify-between items-start mb-6">
+                       <div>
+                          <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            {DEVICE_CONFIGS[selectedDevice].name} 策略
+                            <span className="text-xs font-normal text-slate-400 px-2 py-0.5 border border-slate-100 rounded-full">
+                               {DEVICE_CONFIGS[selectedDevice].role}
+                            </span>
+                          </h4>
+                          <p className="text-sm text-slate-500 mt-1">本周跨天协同规划详细安排</p>
                        </div>
-                       <h4 className="font-medium text-[#0a0a0f] text-sm mb-1">{config.name}</h4>
-                       <p className="text-[10px] text-[#0a0a0f]/40 uppercase tracking-wider">{config.role}</p>
                     </div>
-                  ))}
-               </div>
+                    <div className="grid md:grid-cols-3 gap-4">
+                       {DEVICE_CONFIGS[selectedDevice].weeklyStrategies.map((strat, idx) => (
+                         <div key={idx} className="flex flex-col gap-3 p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-slate-200 transition-colors">
+                            <div className="flex justify-between items-start">
+                               <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-700 font-bold shadow-sm">
+                                  {strat.day === '每日' ? 'D' : strat.day.charAt(1)}
+                               </div>
+                               <span className={cn(
+                                 "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider",
+                                 strat.priority === 'high' ? "bg-red-50 text-red-600" : 
+                                 strat.priority === 'medium' ? "bg-indigo-50 text-indigo-600" : 
+                                 "bg-slate-100 text-slate-500"
+                               )}>
+                                  {strat.method}
+                               </span>
+                            </div>
+                            <div>
+                               <span className="text-xs font-semibold text-slate-400 block mb-1">{strat.day} · {strat.time}</span>
+                               <p className="text-slate-700 text-sm font-medium leading-relaxed">{strat.content}</p>
+                            </div>
+                         </div>
+                       ))}
+                    </div>
+                 </motion.div>
+               </AnimatePresence>
+             </section>
+
+             {/* Stats Section (New 3-card layout) */}
+             <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 {/* Today's To-Do - Primary Card */}
+                 <div className="bg-[#384877] text-white rounded-3xl p-8 relative overflow-hidden shadow-lg group hover:shadow-xl transition-all">
+                     <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform duration-500">
+                         <Target className="w-32 h-32" />
+                     </div>
+                     <div className="relative z-10">
+                         <h4 className="text-white/80 font-medium mb-4">本周核心任务</h4>
+                         <div className="text-6xl font-bold mb-8">{weekData.events.filter(e => e.type !== 'rest').length}</div>
+                         <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                             <div className="bg-white h-full rounded-full" style={{ width: '0%' }}></div>
+                         </div>
+                         <div className="flex justify-end mt-2 text-sm text-white/60">0% 完成</div>
+                     </div>
+                 </div>
+
+                 {/* Overdue/Pending - White Card */}
+                 <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                     <div className="flex justify-between items-start mb-4">
+                         <h4 className="text-slate-500 font-medium">待确认行程</h4>
+                         <AlertCircle className="w-6 h-6 text-red-500" />
+                     </div>
+                     <div className="text-5xl font-bold text-slate-800 mb-2">3</div>
+                     <p className="text-slate-400 text-sm">需要尽快确认</p>
+                 </div>
+
+                 {/* Completed - White Card */}
+                 <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                      <div className="flex justify-between items-start mb-4">
+                         <h4 className="text-slate-500 font-medium">已自动处理</h4>
+                         <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                     </div>
+                     <div className="text-5xl font-bold text-slate-800 mb-2">8</div>
+                     <p className="text-slate-400 text-sm">保持这个节奏!</p>
+                 </div>
+             </section>
+
+             {/* Timeline (Simplified Style) */}
+             <section>
+                <div className="flex items-center justify-between mb-6">
+                   <h3 className="text-xl font-bold text-slate-800">周日程概览</h3>
+                   <div className="flex gap-2">
+                       <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100" onClick={() => setCurrentWeekDate(addDays(currentWeekDate, -7))}>
+                          <ChevronLeft className="w-5 h-5 text-slate-400" />
+                       </Button>
+                       <span className="text-sm font-medium text-slate-600 flex items-center">{weekRangeLabel}</span>
+                       <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100" onClick={() => setCurrentWeekDate(addDays(currentWeekDate, 7))}>
+                          <ChevronRight className="w-5 h-5 text-slate-400" />
+                       </Button>
+                   </div>
+                </div>
+
+                <div className="space-y-4">
+                   {weekDays.map((day, idx) => {
+                      const dayEvents = weekData.events.filter(e => e.day === idx);
+                      const hasEvents = dayEvents.length > 0;
+
+                      return (
+                         <div key={idx} className="bg-white rounded-2xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow">
+                            <div className="p-4 flex items-center gap-4">
+                               <div className={cn(
+                                 "w-12 h-12 rounded-xl flex flex-col items-center justify-center font-bold text-sm",
+                                 hasEvents ? "bg-[#384877]/5 text-[#384877]" : "bg-slate-50 text-slate-400"
+                               )}>
+                                  <span className="text-[10px] uppercase opacity-60">{format(day, 'EEE', { locale: zhCN })}</span>
+                                  <span className="text-lg">{format(day, 'd')}</span>
+                               </div>
+                               <div className="flex-1 min-h-[48px] flex items-center">
+                                  {hasEvents ? (
+                                     <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+                                        {dayEvents.map((e, i) => (
+                                           <div key={i} className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 min-w-max">
+                                              <span className="text-lg">{e.icon}</span>
+                                              <span className="text-sm font-medium text-slate-700">{e.title}</span>
+                                              <span className="text-xs text-slate-400 border-l border-slate-200 pl-2 ml-1">{e.time}</span>
+                                           </div>
+                                        ))}
+                                     </div>
+                                  ) : (
+                                     <span className="text-sm text-slate-400 italic">暂无安排</span>
+                                  )}
+                               </div>
+                            </div>
+                         </div>
+                      );
+                   })}
+                </div>
+             </section>
 
                {/* Device Details */}
                <AnimatePresence mode="wait">

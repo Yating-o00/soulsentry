@@ -444,7 +444,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                 
                 <div className="space-y-3">
                    {weekDays.map((day, idx) => {
-                      const dayEvents = getEventsForDay(idx);
+                      const dayEvents = getEventsForDay(idx, day);
                       const isExpanded = expandedDays[idx] !== false; // Default expanded?
                       const hasEvents = dayEvents.length > 0;
                       const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');

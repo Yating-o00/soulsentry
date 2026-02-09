@@ -92,7 +92,10 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
             
             // Intelligent Date Alignment
             if (data.plan_start_date) {
-                const plannedStart = new Date(data.plan_start_date);
+                // Parse manually to ensure local time (avoid UTC timezone shifts)
+                const [py, pm, pd] = data.plan_start_date.split('-').map(Number);
+                const plannedStart = new Date(py, pm - 1, pd);
+                
                 const currentStartStr = format(start, 'yyyy-MM-dd');
                 
                 // If the planned week is different from the currently viewed week, switch view

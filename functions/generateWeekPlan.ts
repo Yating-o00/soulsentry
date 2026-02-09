@@ -115,16 +115,10 @@ Deno.serve(async (req) => {
         // Strategy: Try OpenAI first, fallback to Moonshot
         let aiResponse = null;
         let usedProvider = null;
-        let lastError = null;
-
-        console.log("generateWeekPlan function v2.2 loaded");
-        console.log(`Key check - OpenAI: ${!!openaiKey}, Moonshot: ${!!moonshotKey}`);
-        if (openaiKey && moonshotKey && openaiKey === moonshotKey) {
-             console.warn("WARNING: OpenAI and Moonshot keys are identical!");
-        }
+        const errors = [];
 
         const providers = [];
-        // Prioritize Moonshot as OpenAI key seems unstable
+        // Prioritize Moonshot
         if (moonshotKey) providers.push('moonshot');
         if (openaiKey) providers.push('openai');
 
@@ -137,20 +131,13 @@ Deno.serve(async (req) => {
             if (!provider) continue;
 
             console.log(`Attempting generation with ${provider.name}...`);
-            if (provider.name === 'Moonshot') {
-                 console.log(`Using Moonshot Key: ${moonshotKey ? moonshotKey.substring(0, 10) + '...' : 'undefined'}`);
-                 console.log(`Using BaseURL: ${provider.client.baseURL}`);
-            }
             try {
-                // Moonshot might not support json_object response format strictly, so we omit it for better compatibility across providers
-                // and rely on the strong system prompt.
                 const completion = await provider.client.chat.completions.create({
                     model: provider.model,
                     messages: [
                         { role: "system", content: systemPrompt },
                         { role: "user", content: input }
                     ],
-                    // Only use json_object for OpenAI to be safe, Moonshot handles instruction well usually
                     response_format: providerName === 'openai' ? { type: "json_object" } : undefined
                 });
 
@@ -159,20 +146,20 @@ Deno.serve(async (req) => {
                 break; // Success!
             } catch (err) {
                 console.error(`${provider.name} failed:`, err.message);
-                lastError = err;
-                // Continue to next provider
+                errors.push(`${provider.name}: ${err.message}`);
             }
         }
 
         if (!aiResponse) {
-            throw lastError || new Error("All AI providers failed");
+            const errorDetails = errors.join(' | ');
+            console.error("All providers failed:", errorDetails);
+            return Response.json({ error: `AI Processing Failed: ${errorDetails}` }, { status: 500 });
         }
 
         console.log(`Response received from ${usedProvider}`);
 
         let plan;
         try {
-            // Clean markdown just in case
             const cleaned = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
             plan = JSON.parse(cleaned);
         } catch (e) {

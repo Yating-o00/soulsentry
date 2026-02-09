@@ -132,6 +132,10 @@ Deno.serve(async (req) => {
             if (!provider) continue;
 
             console.log(`Attempting generation with ${provider.name}...`);
+            if (provider.name === 'Moonshot') {
+                 console.log(`Using Moonshot Key: ${moonshotKey ? moonshotKey.substring(0, 10) + '...' : 'undefined'}`);
+                 console.log(`Using BaseURL: ${provider.client.baseURL}`);
+            }
             try {
                 // Moonshot might not support json_object response format strictly, so we omit it for better compatibility across providers
                 // and rely on the strong system prompt.

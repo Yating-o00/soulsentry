@@ -102,8 +102,10 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
             }, 800);
         }
     } catch (error) {
-        console.error("Planning failed", error);
-        toast.error("规划生成失败，请重试");
+        console.error("Planning failed details:", error);
+        // Show more detailed error if available
+        const errorMsg = error.response?.data?.error || error.message || "未知错误";
+        toast.error(`规划生成失败: ${errorMsg}`);
         setStage('input');
         setIsProcessing(false);
         clearInterval(stepInterval);

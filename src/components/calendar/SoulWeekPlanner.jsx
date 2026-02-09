@@ -35,10 +35,6 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import QuickAddTask from "../tasks/QuickAddTask";
 import { Plus } from "lucide-react";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import QuickAddTask from "../tasks/QuickAddTask";
-import { Plus } from "lucide-react";
 
 // Device Configurations
 const DEVICE_CONFIGS = {

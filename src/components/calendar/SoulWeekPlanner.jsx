@@ -61,6 +61,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const [expandedDays, setExpandedDays] = useState({});
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [existingPlanId, setExistingPlanId] = useState(null);
   
   // Sync internal state with prop changes (e.g. when user navigates in the parent Dashboard)
   useEffect(() => {
@@ -73,7 +74,79 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
 
   const start = startOfWeek(currentWeekDate, { locale: zhCN, weekStartsOn: 1 });
   const end = endOfWeek(currentWeekDate, { locale: zhCN, weekStartsOn: 1 });
+  const currentWeekStartStr = format(start, 'yyyy-MM-dd');
   const weekRangeLabel = `${format(start, 'M月d日')} - ${format(end, 'M月d日')}`;
+
+  // Load existing plan from DB
+  useEffect(() => {
+    const loadPlan = async () => {
+      try {
+        const plans = await base44.entities.WeeklyPlan.filter({
+          week_start_date: currentWeekStartStr
+        });
+        
+        if (plans && plans.length > 0) {
+          const plan = plans[0];
+          setExistingPlanId(plan.id);
+          // Merge top-level fields into the structure expected by the UI
+          setWeekData({
+            ...plan.plan_json,
+            theme: plan.theme,
+            summary: plan.summary
+          });
+          setUserInput(plan.original_input || '');
+          setStage('results');
+        } else {
+          setExistingPlanId(null);
+          setWeekData(null);
+          setUserInput('');
+          setStage('input');
+        }
+      } catch (error) {
+        console.error("Failed to load plan:", error);
+      }
+    };
+    
+    loadPlan();
+  }, [currentWeekStartStr]);
+
+  const savePlanToDB = async (data, input) => {
+    try {
+      const planData = {
+        week_start_date: data.plan_start_date || currentWeekStartStr,
+        original_input: input,
+        theme: data.theme,
+        summary: data.summary,
+        plan_json: data,
+        is_active: true
+      };
+
+      if (existingPlanId) {
+        await base44.entities.WeeklyPlan.update(existingPlanId, planData);
+        toast.success("规划已更新");
+      } else {
+        const newPlan = await base44.entities.WeeklyPlan.create(planData);
+        setExistingPlanId(newPlan.id);
+        toast.success("规划已保存");
+      }
+    } catch (error) {
+      console.error("Failed to save plan:", error);
+      toast.error("保存规划失败");
+    }
+  };
+
+  const deletePlan = async () => {
+    if (!existingPlanId) return;
+    try {
+      await base44.entities.WeeklyPlan.delete(existingPlanId);
+      setExistingPlanId(null);
+      resetView();
+      toast.success("规划已删除");
+    } catch (error) {
+      console.error("Failed to delete plan:", error);
+      toast.error("删除失败");
+    }
+  };
 
   const handleProcess = async () => {
     if (!userInput.trim()) return;
@@ -124,6 +197,8 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                     toast.warning("AI服务不可用 (API Key无效)，已显示演示数据", { duration: 5000 });
                 } else {
                     toast.success("已生成全情境规划");
+                    // Save to DB automatically on success
+                    savePlanToDB(data, userInput);
                 }
                 
                 setTimeout(() => {
@@ -350,8 +425,19 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                     <span className="text-sm font-medium text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
                         {weekRangeLabel}
                     </span>
-                   <Button variant="outline" onClick={resetView} className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#384877]">
-                      新对话
+                   <Button 
+                     variant="outline" 
+                     onClick={() => {
+                       if (confirm('确定要删除当前规划并开始新的对话吗？')) {
+                         deletePlan();
+                       }
+                     }} 
+                     className="rounded-xl border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600"
+                   >
+                      删除规划
+                   </Button>
+                   <Button variant="outline" onClick={() => setStage('input')} className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#384877]">
+                      编辑输入
                    </Button>
                 </div>
              </div>
@@ -384,8 +470,10 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                                 <Button 
                                     variant="outline" 
                                     onClick={() => {
-                                        resetView();
-                                        // currentWeekDate is already set to the viewing week, so just resetting view puts us in input mode for this week
+                                        setStage('input');
+                                        setUserInput('');
+                                        setWeekData(null);
+                                        setExistingPlanId(null);
                                     }}
                                 >
                                     为本周生成新规划

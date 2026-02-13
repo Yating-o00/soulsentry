@@ -970,7 +970,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
               <Button
                 onClick={handleAddNote}
                 disabled={!newNote.trim() || isAddingNote}
-                className="w-full bg-[#5a647d] hover:bg-[#4a5670] rounded-[10px]"
+                className="w-full bg-slate-700 hover:bg-slate-800 rounded-[10px]"
               >
                 {isAddingNote ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />

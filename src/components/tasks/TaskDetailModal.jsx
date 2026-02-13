@@ -835,8 +835,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                       exit={{ opacity: 0, x: -100 }}
                       className={`flex items-center gap-3 p-3 rounded-[10px] border transition-all ${
                         subtask.status === "completed"
-                          ? "bg-[#ecfdf5] border-[#86efac]"
-                          : "bg-white border-[#e5e9ef] hover:border-[#c8d1e0]"
+                          ? "bg-emerald-50 border-emerald-200"
+                          : "bg-white border-slate-200 hover:border-slate-300"
                       }`}
                     >
                       <div onClick={(e) => e.stopPropagation()}>
@@ -850,8 +850,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                       <span
                         className={`flex-1 text-[15px] ${
                           subtask.status === "completed"
-                            ? "line-through text-[#a1a1aa]"
-                            : "text-[#222222]"
+                            ? "line-through text-slate-400"
+                            : "text-slate-900"
                         }`}
                       >
                         {subtask.title}

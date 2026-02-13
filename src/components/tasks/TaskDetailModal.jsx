@@ -493,7 +493,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     }}>
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-6 border-b shrink-0 bg-white z-10">
-          <DialogTitle className="text-[20px] font-semibold tracking-tight text-[#222222] line-clamp-1 pr-8">
+          <DialogTitle className="text-[20px] font-semibold tracking-tight text-slate-900 line-clamp-1 pr-8">
             {task.title}
           </DialogTitle>
           <div className="flex items-center gap-2 absolute right-12 top-6">

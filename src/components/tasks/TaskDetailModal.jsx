@@ -819,7 +819,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                 <Button
                   onClick={handleAddSubtask}
                   disabled={!newSubtask.trim() || isAddingSubtask}
-                  className="bg-[#5a647d] hover:bg-[#4a5670] rounded-[10px]"
+                  className="bg-slate-700 hover:bg-slate-800 rounded-[10px]"
                 >
                   {isAddingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 </Button>

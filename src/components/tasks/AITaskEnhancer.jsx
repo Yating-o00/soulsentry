@@ -266,7 +266,7 @@ response_json_schema: {
         type="button"
         onClick={handleAnalyze}
         disabled={isAnalyzing || !taskTitle.trim()}
-        className="w-full bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#0ea5e9] hover:to-[#0284c7] text-white rounded-xl h-11 shadow-lg shadow-[#384877]/25"
+        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl h-11 shadow-lg shadow-blue-600/25"
       >
         {isAnalyzing ? (
           <>
@@ -288,40 +288,40 @@ response_json_schema: {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
-            <Card className="border-2 border-[#384877]/30 bg-gradient-to-br from-[#f0f9ff] to-white p-5 space-y-4">
+            <Card className="border-2 border-blue-600/30 bg-gradient-to-br from-blue-50 to-white p-5 space-y-4">
               {/* AI建议标题 */}
               <div className="flex items-center gap-2 mb-3">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#384877] to-[#2a3659] flex items-center justify-center">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
                   <Wand2 className="w-4 h-4 text-white" />
                 </div>
-                <h3 className="text-[16px] font-semibold text-[#222222]">AI智能建议</h3>
+                <h3 className="text-[16px] font-semibold text-slate-900">AI智能建议</h3>
               </div>
 
               {/* 描述建议 - 可编辑 */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                  <Tag className="w-4 h-4 text-[#384877]" />
+                <div className="flex items-center gap-2 text-[14px] text-slate-500 font-medium">
+                  <Tag className="w-4 h-4 text-blue-600" />
                   <span>完善描述</span>
                 </div>
                 <Textarea
                   value={suggestions.description}
                   onChange={(e) => updateSuggestion('description', e.target.value)}
-                  className="bg-white min-h-[80px] text-[14px] border-[#e5e9ef] focus-visible:ring-[#384877]"
+                  className="bg-white min-h-[80px] text-[14px] border-slate-200 focus-visible:ring-blue-600"
                 />
               </div>
 
               {/* 分类和优先级 - 可编辑 */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                    <Tag className="w-4 h-4 text-[#384877]" />
+                  <div className="flex items-center gap-2 text-[14px] text-slate-500 font-medium">
+                    <Tag className="w-4 h-4 text-blue-600" />
                     <span>推荐分类</span>
                   </div>
                   <Select
                     value={suggestions.category}
                     onValueChange={(val) => updateSuggestion('category', val)}
                   >
-                    <SelectTrigger className="bg-white border-[#e5e9ef]">
+                    <SelectTrigger className="bg-white border-slate-200">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -338,15 +338,15 @@ response_json_schema: {
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                    <AlertCircle className="w-4 h-4 text-[#384877]" />
+                  <div className="flex items-center gap-2 text-[14px] text-slate-500 font-medium">
+                    <AlertCircle className="w-4 h-4 text-blue-600" />
                     <span>推荐优先级</span>
                   </div>
                   <Select
                     value={suggestions.priority}
                     onValueChange={(val) => updateSuggestion('priority', val)}
                   >
-                    <SelectTrigger className="bg-white border-[#e5e9ef]">
+                    <SelectTrigger className="bg-white border-slate-200">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -365,22 +365,22 @@ response_json_schema: {
 
               {/* 标签建议 - 可编辑 */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                  <TrendingUp className="w-4 h-4 text-[#384877]" />
+                <div className="flex items-center gap-2 text-[14px] text-slate-500 font-medium">
+                  <TrendingUp className="w-4 h-4 text-blue-600" />
                   <span>推荐标签</span>
                 </div>
-                <div className="bg-white p-3 rounded-lg border border-[#e5e9ef] space-y-3">
+                <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-3">
                   <div className="flex flex-wrap gap-2">
                     {suggestions.tags.map((tag, index) => (
                       <Badge
                         key={index}
                         variant="outline"
-                        className="bg-[#f0f9ff] border-[#384877]/20 text-[#384877] text-[13px] pl-2.5 pr-1.5 py-1 flex items-center gap-1"
+                        className="bg-blue-50 border-blue-600/20 text-blue-600 text-[13px] pl-2.5 pr-1.5 py-1 flex items-center gap-1"
                       >
                         #{tag}
                         <button
                           onClick={() => removeTag(tag)}
-                          className="hover:bg-[#384877]/10 rounded-full p-0.5 transition-colors"
+                          className="hover:bg-blue-600/10 rounded-full p-0.5 transition-colors"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -393,13 +393,13 @@ response_json_schema: {
                       onChange={(e) => setNewTag(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                       placeholder="添加新标签..."
-                      className="h-8 text-sm border-[#e5e9ef]"
+                      className="h-8 text-sm border-slate-200"
                     />
                     <Button
                       size="sm"
                       onClick={addTag}
                       disabled={!newTag.trim()}
-                      className="h-8 bg-[#f0f9ff] text-[#384877] hover:bg-[#e0f2fe] border border-[#384877]/20"
+                      className="h-8 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-600/20"
                     >
                       <Plus className="w-4 h-4" />
                     </Button>
@@ -409,11 +409,11 @@ response_json_schema: {
 
               {suggestions.subtasks && (
                   <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-[14px] text-[#52525b] font-medium">
-                          <ListTodo className="w-4 h-4 text-[#384877]" />
+                      <div className="flex items-center gap-2 text-[14px] text-slate-500 font-medium">
+                          <ListTodo className="w-4 h-4 text-blue-600" />
                           <span>建议子约定</span>
                       </div>
-                      <div className="bg-white p-3 rounded-lg border border-[#e5e9ef] space-y-2">
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
                           {suggestions.subtasks.map((st, idx) => (
                               <div key={idx} className="flex items-center gap-2">
                                   <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
@@ -514,12 +514,12 @@ response_json_schema: {
               </div>
 
               {/* AI分析原因 */}
-              <div className="bg-gradient-to-r from-[#4FC3F7]/10 to-[#1BA1CD]/10 rounded-lg p-3 border border-[#384877]/20">
+              <div className="bg-gradient-to-r from-sky-100 to-cyan-100 rounded-lg p-3 border border-blue-600/20">
                 <div className="flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-[#384877] flex-shrink-0 mt-0.5" />
+                  <Sparkles className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-[13px] font-medium text-[#384877] mb-1">AI分析</p>
-                    <p className="text-[13px] text-[#52525b] leading-relaxed">{suggestions.reasoning}</p>
+                    <p className="text-[13px] font-medium text-blue-600 mb-1">AI分析</p>
+                    <p className="text-[13px] text-slate-600 leading-relaxed">{suggestions.reasoning}</p>
                   </div>
                 </div>
               </div>
@@ -565,7 +565,7 @@ response_json_schema: {
                 <div className="flex gap-2">
                   <Button
                     onClick={handleApplySuggestions}
-                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#2a3659] hover:from-[#0ea5e9] hover:to-[#0284c7] text-white rounded-lg"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg"
                   >
                     <Sparkles className="w-4 h-4 mr-2" />
                     应用建议
@@ -573,7 +573,7 @@ response_json_schema: {
                 <Button
                   onClick={() => setSuggestions(null)}
                   variant="outline"
-                  className="rounded-lg border-[#dce4ed] hover:bg-[#f9fafb]"
+                  className="rounded-lg border-slate-200 hover:bg-slate-50"
                 >
                   关闭
                 </Button>

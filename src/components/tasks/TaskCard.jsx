@@ -70,21 +70,21 @@ const CATEGORY_ICONS = {
 };
 
 const CATEGORY_COLORS = {
-  work: "bg-[#f9fafb] text-[#384877] border-[#dce4ed]",
-  personal: "bg-[#f4f6f8] text-[#384877] border-[#dce4ed]",
-  health: "bg-[#ecfdf5] text-[#10b981] border-[#86efac]",
-  study: "bg-[#fef3c7] text-[#f59e0b] border-[#fcd34d]",
-  family: "bg-[#fce7f3] text-[#ec4899] border-[#f9a8d4]",
-  shopping: "bg-[#fff7ed] text-[#f97316] border-[#fdba74]",
-  finance: "bg-[#fff1f2] text-[#d5495f] border-[#e0919e]",
-  other: "bg-[#f4f6f8] text-[#52525b] border-[#e4e4e7]",
+  work: "bg-slate-50 text-blue-600 border-slate-200",
+  personal: "bg-slate-100 text-blue-600 border-slate-200",
+  health: "bg-emerald-50 text-emerald-600 border-emerald-200",
+  study: "bg-amber-50 text-amber-600 border-amber-200",
+  family: "bg-pink-50 text-pink-600 border-pink-200",
+  shopping: "bg-orange-50 text-orange-600 border-orange-200",
+  finance: "bg-rose-50 text-rose-600 border-rose-200",
+  other: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
 const PRIORITY_COLORS = {
-  low: "text-[#a1a1aa]",
-  medium: "text-[#384877]",
-  high: "text-[#de6d7e]",
-  urgent: "text-[#d5495f]",
+  low: "text-slate-400",
+  medium: "text-blue-600",
+  high: "text-rose-400",
+  urgent: "text-rose-600",
 };
 
 const PRIORITY_LABELS = {
@@ -196,16 +196,16 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
         layout
       >
         <Card
-          className={`group border border-[#e5e9ef] hover:border-[#c8d1e0] hover:shadow-lg transition-all duration-200 bg-white rounded-[16px] ${
+          className={`group border border-slate-200 hover:border-slate-300 hover:shadow-lg transition-all duration-200 bg-white rounded-[16px] ${
             isCompleted
               ? 'opacity-60'
               : isBlocked
-              ? 'border-l-[3px] border-l-[#f43f5e] bg-red-50/30'
+              ? 'border-l-[3px] border-l-rose-500 bg-rose-50/30'
               : isSnoozed
-              ? 'border-l-[3px] border-l-[#fbbf24]'
+              ? 'border-l-[3px] border-l-amber-400'
               : isPast
-              ? 'border-l-[3px] border-l-[#d5495f]'
-              : 'border-l-[3px] border-l-[#384877] hover:translate-y-[-1px]'
+              ? 'border-l-[3px] border-l-rose-600'
+              : 'border-l-[3px] border-l-blue-600 hover:translate-y-[-1px]'
             }`}
             >
           {/* 主约定 */}
@@ -225,7 +225,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                         onSelect?.(task);
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-[#384877] border-[#dce4ed] transition-all duration-150"
+                      className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-blue-600 border-slate-200 transition-all duration-150"
                     />
                   ) : (
                     <Checkbox
@@ -234,7 +234,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                         onComplete?.();
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-[#10b981] border-[#dce4ed] transition-all duration-150"
+                      className="mt-1 h-6 w-6 md:h-5 md:w-5 rounded-[6px] data-[state=checked]:bg-emerald-500 border-slate-200 transition-all duration-150"
                     />
                   )}
                 </motion.div>
@@ -255,14 +255,14 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                       className="hover:bg-[#e5e9ef] rounded-lg p-1.5 md:p-1 transition-colors touch-manipulation min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
                     >
                       {expanded ? (
-                        <ChevronDown className="w-5 h-5 md:w-4 md:h-4 text-[#384877]" />
+                        <ChevronDown className="w-5 h-5 md:w-4 md:h-4 text-blue-600" />
                       ) : (
-                        <ChevronRight className="w-5 h-5 md:w-4 md:h-4 text-[#384877]" />
+                        <ChevronRight className="w-5 h-5 md:w-4 md:h-4 text-blue-600" />
                       )}
                     </button>
                   )}
                   <h3 className={`text-base md:text-[17px] font-semibold tracking-tight leading-relaxed ${
-                      isCompleted ? 'line-through text-[#a1a1aa]' : 'text-[#222222]'
+                      isCompleted ? 'line-through text-slate-400' : 'text-slate-900'
                     }`}>
                       <AITranslatedText text={task.title} />
                     </h3>
@@ -305,7 +305,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                               size="icon"
                               variant="ghost"
                               onClick={(e) => e.stopPropagation()}
-                              className="h-8 w-8 hover:bg-[#e5e9ef] hover:text-[#384877] rounded-lg"
+                              className="h-8 w-8 hover:bg-slate-100 hover:text-blue-600 rounded-lg"
                             >
                               <MoreIcon className="h-4 w-4" />
                             </Button>
@@ -384,7 +384,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                 </div>
 
                 {task.description && (
-                  <p className="text-sm md:text-[15px] text-[#52525b] mb-3 line-clamp-2 cursor-pointer leading-relaxed touch-manipulation" onClick={onClick}>
+                  <p className="text-sm md:text-[15px] text-slate-600 mb-3 line-clamp-2 cursor-pointer leading-relaxed touch-manipulation" onClick={onClick}>
                     <AITranslatedText text={task.description} />
                   </p>
                 )}
@@ -392,8 +392,8 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                 {hasSubtasks && (
                   <div className="mb-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[13px] text-[#a1a1aa]">子约定进度</span>
-                      <span className="text-[13px] font-semibold text-[#384877]">
+                      <span className="text-[13px] text-slate-400">子约定进度</span>
+                      <span className="text-[13px] font-semibold text-blue-600">
                         {completedSubtasks}/{subtasks.length} 已完成 ({progress}%)
                       </span>
                     </div>
@@ -426,7 +426,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
 
                   <Badge
                     variant="outline"
-                    className="rounded-[8px] text-[13px] border-[#dce4ed]"
+                    className="rounded-[8px] text-[13px] border-slate-200"
                   >
                     <Clock className={`w-3 h-3 mr-1 ${PRIORITY_COLORS[task.priority] || ''}`} />
                     {isSnoozed 
@@ -445,8 +445,8 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                   </Badge>
 
                   {getRecurrenceText() && (
-                    <Badge variant="outline" className="rounded-[8px] text-[13px] border-[#dce4ed]">
-                      <Repeat className="w-3 h-3 mr-1 text-[#384877]" />
+                    <Badge variant="outline" className="rounded-[8px] text-[13px] border-slate-200">
+                      <Repeat className="w-3 h-3 mr-1 text-blue-600" />
                       {getRecurrenceText()}
                     </Badge>
                   )}
@@ -492,7 +492,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
 
                   {hasSubtasks && (
                     <Badge 
-                      className={`bg-[#384877] text-white rounded-[8px] text-[13px] ${onToggleSubtasks ? 'cursor-pointer hover:bg-[#2c3b63] transition-colors' : ''}`}
+                      className={`bg-blue-600 text-white rounded-[8px] text-[13px] ${onToggleSubtasks ? 'cursor-pointer hover:bg-blue-700 transition-colors' : ''}`}
                       onClick={(e) => {
                         if (onToggleSubtasks) {
                           e.stopPropagation();
@@ -573,7 +573,7 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="border-t border-[#e5e9ef] bg-[#f9fafb]"
+                className="border-t border-slate-200 bg-slate-50"
               >
                 {subtasks.map((subtask, subIndex) => {
                   const isSubtaskCompleted = subtask.status === "completed";
@@ -590,16 +590,16 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                       animate={{ opacity: 1, x: 0 }}
                       className={`px-5 py-3 ml-9 border-l-2 transition-all ${
                         isSubtaskCompleted
-                          ? 'border-[#86efac] bg-[#ecfdf5]/50'
-                          : 'border-[#dce4ed] hover:bg-white'
+                          ? 'border-emerald-200 bg-emerald-50/50'
+                          : 'border-slate-200 hover:bg-white'
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         {/* 子约定序号标识 */}
                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                           isSubtaskCompleted
-                            ? 'bg-[#10b981] text-white'
-                            : 'bg-[#384877] text-white'
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-blue-600 text-white'
                         }`}>
                           {isSubtaskCompleted ? '✓' : orderNumber}
                         </div>
@@ -626,8 +626,8 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                         <div className="flex-1">
                           <span className={`block text-[15px] font-medium mb-1 ${
                             isSubtaskCompleted
-                              ? 'line-through text-[#a1a1aa]'
-                              : 'text-[#222222]'
+                              ? 'line-through text-slate-400'
+                              : 'text-slate-900'
                           }`}>
                             {cleanTitle}
                           </span>
@@ -645,13 +645,13 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, onUpdate,
                             )}
                             <Badge className={`text-[13px] ${
                               isSubtaskCompleted
-                                ? 'bg-[#10b981] text-white border-[#10b981]'
-                                : 'bg-white text-[#222222] border border-[#dce4ed]'
+                                ? 'bg-emerald-500 text-white border-emerald-500'
+                                : 'bg-white text-slate-900 border border-slate-200'
                             } rounded-[6px]`}>
                               {isSubtaskCompleted ? '✅ 已完成' : '📌 待完成'}
                             </Badge>
                             {isSubtaskCompleted && subtask.completed_at && (
-                              <Badge variant="outline" className="text-[13px] text-[#10b981] border-[#86efac] bg-[#f0fdf4] rounded-[6px]">
+                              <Badge variant="outline" className="text-[13px] text-emerald-600 border-emerald-200 bg-emerald-50 rounded-[6px]">
                                 {format(new Date(subtask.completed_at), "M月d日 完成", { locale: zhCN })}
                               </Badge>
                             )}

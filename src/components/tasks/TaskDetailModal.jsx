@@ -554,9 +554,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                   prose-em:text-slate-700 prose-em:italic
                   prose-code:bg-slate-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:text-slate-800 prose-code:font-mono
                   prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-pre:p-3 prose-pre:rounded-lg prose-pre:overflow-x-auto
-                  prose-blockquote:border-l-4 prose-blockquote:border-[#384877] prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-slate-600
+                  prose-blockquote:border-l-4 prose-blockquote:border-blue-600 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-slate-600
                   prose-hr:border-slate-200 prose-hr:my-4
-                  prose-a:text-[#384877] prose-a:underline prose-a:font-medium hover:prose-a:text-[#2c3659]"
+                  prose-a:text-blue-600 prose-a:underline prose-a:font-medium hover:prose-a:text-blue-800"
               >
                 {task.description}
               </ReactMarkdown>

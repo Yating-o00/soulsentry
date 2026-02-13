@@ -532,8 +532,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
           {totalSubtasks > 0 && (
             <div className="space-y-2">
               <div className="flex justify-between text-[15px]">
-                <span className="text-[#52525b]">完成进度</span>
-                <span className="font-semibold text-[#5a647d]">
+                <span className="text-slate-600">完成进度</span>
+                <span className="font-semibold text-slate-700">
                   {completedSubtasks}/{totalSubtasks} 子约定
                 </span>
               </div>

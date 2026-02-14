@@ -25,6 +25,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import CalendarMonthView from "../components/calendar/CalendarMonthView";
+import SoulMonthPlanner from "../components/calendar/SoulMonthPlanner";
 import CalendarWeekView from "../components/calendar/CalendarWeekView";
 import SoulWeekPlanner from "../components/calendar/SoulWeekPlanner";
 import CalendarDayView from "../components/calendar/CalendarDayView";
@@ -489,14 +490,9 @@ export default function Dashboard() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
           <AnimatePresence mode="wait">
             {calendarViewMode === "month" && (
-              <CalendarMonthView
+              <SoulMonthPlanner
                 key="month"
                 currentDate={currentDate}
-                tasks={activeTasks}
-                notes={allNotes.filter(n => !n.deleted_at)}
-                onDateClick={handleCalendarDateClick}
-                onTaskDrop={handleCalendarTaskDrop}
-                onTaskClick={setSelectedTask}
               />
             )}
             {calendarViewMode === "week" && (

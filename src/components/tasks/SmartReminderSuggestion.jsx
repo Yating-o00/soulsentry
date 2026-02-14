@@ -26,78 +26,16 @@ export default function SmartReminderSuggestion({ task, onApply }) {
       // 获取用户行为数据
       const behaviors = await base44.entities.UserBehavior.list('-created_date', 100);
       
-      // 使用 AI 分析最佳提醒时间
-      const prompt = `你是一个时间管理专家。分析用户的约定完成行为数据，为新约定推荐最佳的提醒时间。
-
-约定信息：
-- 标题：${task.title}
-- 描述：${task.description || '无'}
-- 类别：${task.category}
-- 优先级：${task.priority}
-- 原计划时间：${task.reminder_time ? format(new Date(task.reminder_time), 'yyyy-MM-dd HH:mm', { locale: zhCN }) : '未设置'}
-
-用户历史行为数据（最近100条）：
-${behaviors.length > 0 ? behaviors.map(b => `
-- 事件类型：${b.event_type}
-- 类别：${b.category || '未知'}
-- 时间：${b.hour_of_day}点，星期${b.day_of_week}
-- 响应时间：${b.response_time_seconds ? Math.round(b.response_time_seconds / 60) + '分钟' : '未知'}
-`).join('\n') : '暂无历史数据'}
-
-请分析：
-1. 用户在什么时间段对该类别约定响应最快？
-2. 用户在哪天完成该类别约定效率最高？
-3. 考虑约定优先级，推荐3个最佳提醒时间。**注意：推荐的时间必须晚于当前时间（${new Date().toISOString()}），严禁推荐过去的时间。**
-4. 给出推荐理由
-
-当前时间：${new Date().toISOString()}
-重点：所有返回的文本内容（推荐理由、洞察等）必须使用中文。`;
-
-      const analysis = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            optimal_time_slot: {
-              type: "string",
-              description: "最佳时间段（如：早上9-11点）"
-            },
-            best_day_pattern: {
-              type: "string",
-              description: "最佳日期模式（如：工作日、周末等）"
-            },
-            suggestions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  datetime: {
-                    type: "string",
-                    description: "建议的提醒时间（ISO格式）"
-                  },
-                  reason: {
-                    type: "string",
-                    description: "推荐理由"
-                  },
-                  confidence: {
-                    type: "string",
-                    enum: ["high", "medium", "low"],
-                    description: "推荐置信度"
-                  }
-                }
-              },
-              minItems: 3,
-              maxItems: 3
-            },
-            insights: {
-              type: "array",
-              items: {
-                type: "string"
-              },
-              description: "用户行为洞察"
-            }
-          }
-        }
+      // 使用后端函数调用AI (避免平台额度限制)
+      const { data: analysis } = await base44.functions.invoke('generateSmartReminders', {
+        task: {
+            title: task.title,
+            description: task.description,
+            category: task.category,
+            priority: task.priority,
+            reminder_time: task.reminder_time
+        },
+        behaviors
       });
 
       setSuggestions(analysis);

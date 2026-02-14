@@ -493,6 +493,11 @@ export default function Dashboard() {
               <SoulMonthPlanner
                 key="month"
                 currentDate={currentDate}
+                tasks={activeTasks}
+                notes={allNotes.filter(n => !n.deleted_at)}
+                onDateClick={handleCalendarDateClick}
+                onTaskDrop={handleCalendarTaskDrop}
+                onTaskClick={setSelectedTask}
               />
             )}
             {calendarViewMode === "week" && (

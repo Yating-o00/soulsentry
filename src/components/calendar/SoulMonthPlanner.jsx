@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
+import CalendarMonthView from "./CalendarMonthView";
 
 const QUICK_TEMPLATES = [
   { text: '下个月重点是项目冲刺，前两周完成开发，第三周测试，最后一周发布。希望能保持每天高效率工作，周末适当休息。', label: '🚀 项目冲刺月' },
@@ -34,7 +35,14 @@ const PROCESSING_STEPS = [
   { icon: '✨', text: '生成月度全景蓝图...' }
 ];
 
-export default function SoulMonthPlanner({ currentDate: initialDate }) {
+export default function SoulMonthPlanner({ 
+  currentDate: initialDate,
+  tasks,
+  notes,
+  onDateClick,
+  onTaskDrop,
+  onTaskClick
+}) {
   const [stage, setStage] = useState('input');
   const [userInput, setUserInput] = useState('');
   const [currentMonthDate, setCurrentMonthDate] = useState(initialDate || new Date());
@@ -427,6 +435,23 @@ export default function SoulMonthPlanner({ currentDate: initialDate }) {
                             )}
                         </div>
                     ))}
+                </div>
+             </section>
+
+             {/* Visual Calendar Grid */}
+             <section>
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <CalendarIcon className="w-5 h-5 text-slate-400" /> 任务视图
+                </h3>
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                    <CalendarMonthView 
+                        currentDate={currentMonthDate}
+                        tasks={tasks}
+                        notes={notes}
+                        onDateClick={onDateClick}
+                        onTaskDrop={onTaskDrop}
+                        onTaskClick={onTaskClick}
+                    />
                 </div>
              </section>
           </motion.div>

@@ -22,7 +22,8 @@ export default function MilestoneCard({
   onToggleSubtask, 
   onUpdateStatus,
   onAddSubtask,
-  onUpdate
+  onUpdate,
+  onEdit
 }) {
   const [expanded, setExpanded] = useState(false);
   const totalSubtasks = subtasks.length;

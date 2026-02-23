@@ -156,7 +156,7 @@ export default function SoulMonthPlanner({
         const { data } = await base44.functions.invoke('generateMonthPlan', {
             input: userInput,
             startDate: format(start, 'yyyy-MM-dd'),
-            behaviors: recentBehaviors
+            behaviors: recentBehaviors || []
         });
 
         if (data) {
@@ -208,11 +208,11 @@ export default function SoulMonthPlanner({
                   <span className="text-xs font-medium text-slate-600">AI Month Planner</span>
                 </div>
                 <h1 className="text-3xl md:text-5xl font-bold text-slate-900 tracking-tight leading-tight">
-                  规划 {monthLabel}，<br />
-                  <span className="text-[#384877]">预见未来的自己</span>
+                  智能目标分解 · {monthLabel}<br />
+                  <span className="text-[#384877]">从宏观愿景到落地行动</span>
                 </h1>
                 <p className="text-base text-slate-500 max-w-lg mx-auto leading-relaxed">
-                  告诉我本月的重要目标和期望，心栈将为你生成结构化的月度全景蓝图。
+                  输入您的宏观目标（如“提升效率”），AI 将结合您的行为习惯，自动拆解为可执行的月度规划。
                 </p>
               </div>
 

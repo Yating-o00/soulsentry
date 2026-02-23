@@ -52,6 +52,13 @@ export default function SoulMonthPlanner({
   const [existingPlanId, setExistingPlanId] = useState(null);
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
 
+  // Fetch user behaviors for smart planning
+  const { data: recentBehaviors = [] } = base44.useQuery({
+    queryKey: ['recentBehaviors_planner'],
+    queryFn: () => base44.entities.UserBehavior.list('-created_date', 50),
+    staleTime: 5 * 60 * 1000
+  });
+
   const resultsRef = useRef(null);
 
   const start = startOfMonth(currentMonthDate);

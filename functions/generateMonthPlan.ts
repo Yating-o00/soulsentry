@@ -64,7 +64,7 @@ export default Deno.serve(async (req) => {
         }
 
         const body = await req.json();
-        const { input, startDate } = body;
+        const { input, startDate, behaviors } = body;
 
         const monthStart = new Date(startDate);
         const monthEnd = endOfMonth(monthStart);
@@ -83,40 +83,59 @@ export default Deno.serve(async (req) => {
             baseURL: baseURL
         });
 
+        const behaviorSummary = behaviors && behaviors.length > 0 ? behaviors.map(b => 
+            `- Event: ${b.event_type}, Category: ${b.category || 'General'}, Time: ${b.hour_of_day}h, Day: ${b.day_of_week}, Response: ${b.response_time_seconds}s`
+        ).join('\n') : "No historical behavior data available.";
+
         const prompt = `
-        Role: You are an advanced AI life planner ("Soul Planner").
-        Task: Create a comprehensive Monthly Plan based on the user's input.
+        Role: You are "Soul Planner", an expert AI life coach specializing in Smart Goal Decomposition and Behavioral Science.
         
-        User Input: "${input}"
+        Task: 
+        1. DECOMPOSE the user's macro goal (Input) into a concrete, actionable Monthly Plan.
+        2. DYNAMICALLY ADJUST the plan (timings, intensity, strategies) based on the User's Behavioral Data.
+
+        User Input (Macro Goal): "${input}"
         Month Context: ${format(monthStart, 'yyyy-MM')}
         
-        Please generate a JSON response with the following structure:
+        User Behavioral Data (Recent 50 records):
+        ${behaviorSummary}
+
+        Analysis Instructions:
+        - Analyze the user's peak performance times (based on task completions/creations).
+        - Identify procrastination patterns (delayed responses, snoozes).
+        - If user is active late at night, schedule creative/hard tasks then (or suggest sleep if health goal).
+        - If user struggles with "work" category, break down work tasks into smaller steps.
+        
+        Output Requirement:
+        Generate a JSON response with this EXACT structure:
         {
-            "theme": "A short, inspiring theme for the month (e.g., 'Month of Growth')",
-            "summary": "A concise summary of the month's focus (2-3 sentences)",
+            "theme": "A short, inspiring theme for the month",
+            "summary": "A concise summary explaining how the macro goal is decomposed and adapted to user habits.",
             "stats": {
                 "focus_hours": Number (estimated total focus hours),
                 "milestones_count": Number (number of key goals)
             },
             "weeks_breakdown": [
                 {
-                    "week_label": "Week N (Brief Focus)",
+                    "week_label": "Week N (Phase Name)",
                     "focus": "Main focus for this week",
-                    "key_events": ["Event 1", "Event 2"]
+                    "key_events": ["Actionable Step 1", "Actionable Step 2"]
                 }
             ],
             "key_milestones": [
-                { "title": "Milestone 1", "deadline": "YYYY-MM-DD", "type": "work/personal/health" }
+                { "title": "Milestone Title", "deadline": "YYYY-MM-DD", "type": "work/personal/health" }
             ],
             "strategies": {
-                "work_life_balance": "Strategy for balancing...",
-                "energy_management": "Strategy for managing energy..."
+                "work_life_balance": "Specific strategy based on user's activity patterns...",
+                "energy_management": "Specific advice based on user's peak hours...",
+                "behavioral_adjustment": "Explicit note on how this plan adapts to their habits (e.g., 'Noticed you work late, so heavy tasks are shifted to PM')"
             }
         }
         
-        Ensure the plan is realistic, structured, and actionable.
-        If the user input is vague, infer reasonable goals based on the month context.
-        RETURN ONLY JSON. NO MARKDOWN.
+        Constraint: 
+        - The plan MUST be realistic. 
+        - Milestones MUST be concrete decompositions of the macro goal.
+        - RETURN ONLY JSON. NO MARKDOWN.
         `;
 
         try {

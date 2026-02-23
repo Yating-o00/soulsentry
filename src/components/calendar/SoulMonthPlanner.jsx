@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import CalendarMonthView from "./CalendarMonthView";
 
 const QUICK_TEMPLATES = [
@@ -155,7 +156,7 @@ export default function SoulMonthPlanner({
         const { data } = await base44.functions.invoke('generateMonthPlan', {
             input: userInput,
             startDate: format(start, 'yyyy-MM-dd'),
-            behaviors: recentBehaviors
+            behaviors: recentBehaviors || []
         });
 
         if (data) {

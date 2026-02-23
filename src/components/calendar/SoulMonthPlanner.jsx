@@ -154,7 +154,8 @@ export default function SoulMonthPlanner({
     try {
         const { data } = await base44.functions.invoke('generateMonthPlan', {
             input: userInput,
-            startDate: format(start, 'yyyy-MM-dd')
+            startDate: format(start, 'yyyy-MM-dd'),
+            behaviors: recentBehaviors
         });
 
         if (data) {

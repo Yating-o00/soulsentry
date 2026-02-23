@@ -215,6 +215,7 @@ export default function Tasks() {
                     setSelectedTask(task);
                   }}
                   onUpdate={(data) => updateTaskAsync({ id: task.id, data })}
+                  onEdit={() => setSelectedTask(task)}
                 />
               ))}
             </div>

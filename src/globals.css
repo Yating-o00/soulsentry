@@ -5,6 +5,16 @@ css
 
 /* Mobile-first optimizations */
 @layer base {
+  :root {
+    --primary-soul: #2C3E50;
+    --accent-soul: #E8D5C4;
+    --warm-soul: #F5F1ED;
+    --gentle-soul: #A8B5A0;
+    --milestone-soul: #5B8DB8;
+    --life-soul: #7FB069;
+    --urgent-soul: #E8A598;
+  }
+
   html {
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: 100%;

@@ -1,93 +1,32 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Search, Filter, Trash2, RotateCcw, AlertTriangle, Edit, LayoutList, BarChart3, KanbanSquare, Sparkles, Loader2, Archive, Star, CheckSquare, Share2, X } from "lucide-react";
-import SwipeableItem, { SwipeActions } from "../components/mobile/SwipeableItem";
-import GanttView from "../components/tasks/GanttView";
-import KanbanView from "../components/tasks/KanbanView";
-import AdvancedTaskFilters from "../components/tasks/AdvancedTaskFilters";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sparkles, ChevronDown, Check, CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import TaskCard from "../components/tasks/TaskCard";
-import QuickAddTask from "../components/tasks/QuickAddTask";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useSearchParams } from "react-router-dom";
-import NotificationManager from "../components/notifications/NotificationManager";
-import TaskDetailModal from "../components/tasks/TaskDetailModal";
-import { toast } from "sonner";
-import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
-import MultiTaskShareCard from "../components/tasks/MultiTaskShareCard";
+import NotificationManager from "../components/notifications/NotificationManager";
+import MilestoneCard from "../components/tasks/MilestoneCard";
+import LifeTaskCard from "../components/tasks/LifeTaskCard";
+import UnifiedTaskInput from "../components/tasks/UnifiedTaskInput";
+import ContextReminder from "../components/tasks/ContextReminder";
+import TaskDetailModal from "../components/tasks/TaskDetailModal";
 
+const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
 export default function Tasks() {
   const { t } = useTranslation();
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [advancedFilters, setAdvancedFilters] = useState({ category: 'all', createdBy: 'all', tags: [], dateRange: undefined });
-  
+  const [viewMode, setViewMode] = useState("all"); // 'all', 'milestone', 'life'
+  const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [editingTask, setEditingTask] = useState(null);
-  const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
-  const [viewMode, setViewMode] = useState("list"); // 'list' | 'gantt' | 'kanban'
-  const [isPrioritizing, setIsPrioritizing] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
-  const [showMultiShare, setShowMultiShare] = useState(false);
-  
+
   const {
-    updateTask, 
-    createTask,
     updateTaskAsync,
     createTaskAsync,
-    deleteTask, 
-    handleComplete, 
-    handleSubtaskToggle 
+    handleComplete,
+    handleSubtaskToggle
   } = useTaskOperations();
-
-  const queryClient = useQueryClient();
-
-  const toggleTaskExpansion = (taskId) => {
-    setExpandedTaskIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(taskId)) {
-        next.delete(taskId);
-      } else {
-        next.add(taskId);
-      }
-      return next;
-    });
-  };
-
-  const toggleSelection = (task) => {
-    setSelectedTaskIds(prev => {
-        const next = new Set(prev);
-        if (next.has(task.id)) {
-            next.delete(task.id);
-        } else {
-            next.add(task.id);
-        }
-        return next;
-    });
-  };
-
-  const handleEnterSelectionMode = () => {
-    setIsSelectionMode(true);
-    setSelectedTaskIds(new Set());
-  };
-
-  const handleExitSelectionMode = () => {
-    setIsSelectionMode(false);
-    setSelectedTaskIds(new Set());
-  };
-
-  const getSelectedTasksObjects = () => {
-    return allTasks.filter(t => selectedTaskIds.has(t.id));
-  };
 
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
@@ -95,495 +34,266 @@ export default function Tasks() {
     initialData: []
   });
 
-  // Handle URL param for opening specific task
-  React.useEffect(() => {
-    const taskId = searchParams.get("taskId");
-    if (taskId && allTasks.length > 0) {
-      const task = allTasks.find(t => t.id === taskId);
-      if (task) {
-        setSelectedTask(task);
-        // Optional: clear param after opening
-        // setSearchParams({});
-      } else {
-        // If not in list (maybe deleted or filtered out by server limit?), try fetch individually
-        base44.entities.Task.filter({ id: taskId }).then(res => {
-          if (res && res.length > 0) {
-            setSelectedTask(res[0]);
-          }
-        });
-      }
-    }
-  }, [searchParams, allTasks]);
+  // Filter tasks
+  const { milestoneTasks, lifeTasks, completedTasks } = useMemo(() => {
+    const active = allTasks.filter(t => !t.deleted_at && t.status !== 'completed');
+    const completed = allTasks.filter(t => !t.deleted_at && t.status === 'completed');
 
-  // Include ALL non-deleted tasks for processing
-  const tasks = allTasks.filter((task) => !task.deleted_at);
-  const trashTasks = allTasks.filter((task) => task.deleted_at);
-
-  // Mutations replaced by useTaskOperations hook
-  // createTaskMutation, updateTaskMutation, deleteTaskMutation removed
-
-  const restoreTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: null }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("约定已恢复");
-    }
-  });
-
-  const permanentDeleteTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("约定已永久删除");
-    }
-  });
-
-  const filteredTasks = React.useMemo(() => tasks.filter((task) => {
-    const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-    const titleStr = task.title && typeof task.title === 'string' ? task.title : '';
-    const descStr = task.description && typeof task.description === 'string' ? task.description : '';
-    const searchLower = searchQuery.toLowerCase();
-    const matchesSearch = titleStr.toLowerCase().includes(searchLower) ||
-        descStr.toLowerCase().includes(searchLower);
-
-    // Advanced Filters
-    let matchesAdvanced = true;
-    if (advancedFilters.category && advancedFilters.category !== 'all' && task.category !== advancedFilters.category) matchesAdvanced = false;
-    if (advancedFilters.createdBy !== 'all' && task.created_by !== advancedFilters.createdBy) matchesAdvanced = false;
-    if (advancedFilters.tags && advancedFilters.tags.length > 0) {
-        if (!task.tags || !advancedFilters.tags.every(tag => task.tags.includes(tag))) matchesAdvanced = false;
-    }
-    if (advancedFilters.dateRange && advancedFilters.dateRange.from) {
-        const taskDate = new Date(task.reminder_time);
-        const from = advancedFilters.dateRange.from;
-        const to = advancedFilters.dateRange.to || from;
-        if (taskDate < from || taskDate > to) matchesAdvanced = false;
-    }
-
-    return matchesStatus && matchesSearch && matchesAdvanced;
-  }), [tasks, statusFilter, searchQuery, advancedFilters]);
-
-  // Group tasks logic
-  // Only show top-level tasks in the list
-  const rootTasks = React.useMemo(() => {
-    const roots = filteredTasks.filter((t) => !t.parent_task_id);
-    // Sort: completed tasks at the bottom
-    return roots.sort((a, b) => {
-      const isCompletedA = a.status === 'completed';
-      const isCompletedB = b.status === 'completed';
-      
-      if (isCompletedA && !isCompletedB) return 1;
-      if (!isCompletedA && isCompletedB) return -1;
-      
-      // Secondary sort: reminder_time descending (keep original order)
-      const timeA = new Date(a.reminder_time || 0).getTime();
-      const timeB = new Date(b.reminder_time || 0).getTime();
-      return timeB - timeA;
-    });
-  }, [filteredTasks]);
-  const getSubtasks = (parentId) => {
-    const subs = filteredTasks.filter((t) => t.parent_task_id === parentId);
-    return subs.sort((a, b) => {
-      const isCompletedA = a.status === 'completed';
-      const isCompletedB = b.status === 'completed';
-      
-      if (isCompletedA && !isCompletedB) return 1;
-      if (!isCompletedA && isCompletedB) return -1;
-      
-      const timeA = new Date(a.reminder_time || 0).getTime();
-      const timeB = new Date(b.reminder_time || 0).getTime();
-      return timeB - timeA;
-    });
-  };
-  const getAllSubtasks = (parentId) => tasks.filter((t) => t.parent_task_id === parentId);
-
-  const onCompleteTask = (task, targetStatus = null) => {
-    // 触觉反馈（支持的设备）
-    if (navigator.vibrate && task.status !== "completed") {
-      navigator.vibrate(50);
-    }
+    const roots = active.filter(t => !t.parent_task_id);
     
-    handleComplete(task, allTasks, targetStatus);
+    const milestone = [];
+    const life = [];
+
+    roots.forEach(task => {
+      const isMilestone = MILESTONE_CATEGORIES.includes(task.category) || task.priority === 'urgent' || task.priority === 'high';
+      if (isMilestone) {
+        milestone.push(task);
+      } else {
+        life.push(task);
+      }
+    });
+
+    return {
+      milestoneTasks: milestone,
+      lifeTasks: life,
+      completedTasks: completed
+    };
+  }, [allTasks]);
+
+  const getSubtasks = (parentId) => {
+    return allTasks.filter(t => t.parent_task_id === parentId && !t.deleted_at);
   };
-  
-  const onSubtaskToggleWrapper = (subtask) => {
-    // 触觉反馈
-    if (navigator.vibrate && subtask.status !== "completed") {
-      navigator.vibrate(30);
-    }
+
+  const handleAddTask = async (taskData) => {
+    await createTaskAsync(taskData);
+  };
+
+  const handleToggleSubtask = (subtask) => {
     handleSubtaskToggle(subtask, allTasks);
   };
 
-  const handleUpdateTask = async (taskData) => {
-    const { id, ...data } = taskData;
-    try {
-      await updateTaskAsync({ id: editingTask.id, data });
-      setEditingTask(null);
-      toast.success("约定已更新");
-    } catch (e) {
-      // Error handled in hook or just logged
-    }
+  const handleUpdateStatus = (task, status) => {
+    handleComplete(task, allTasks, status);
   };
 
-  // Smart sort removed - handled by Soul Sentry agent conversation
-
   return (
-    <div className="pb-20 md:pb-8">
+    <div className="min-h-screen bg-[#faf9f7] pb-24 font-sans text-[#2C3E50]">
+      {/* Inject Fonts */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+        .font-serif { font-family: 'Noto Serif SC', serif; }
+        .font-sans { font-family: 'Inter', sans-serif; }
+      `}</style>
+
       <NotificationManager />
-      
-      {/* Sticky Header - Mobile */}
-      <div className="md:hidden sticky top-0 z-40 bg-gradient-to-br from-slate-50 to-white border-b border-slate-200 shadow-sm">
-        <div className="p-3">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
-            {t('allTasks')}
-          </h1>
-          <p className="text-xs text-slate-600">{rootTasks.length} 个约定</p>
-        </div>
 
-        {/* Sticky Tabs - Mobile */}
-        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full px-3 pb-2">
-          <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-xl p-1">
-            <TabsTrigger value="all" className="rounded-lg text-xs px-2 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              {t('all')} ({tasks.length})
-            </TabsTrigger>
-            <TabsTrigger value="pending" className="rounded-lg text-xs px-2 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              {t('pending')} ({tasks.filter((t) => t.status === "pending").length})
-            </TabsTrigger>
-            <TabsTrigger value="completed" className="rounded-lg text-xs px-2 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              {t('completed')} ({tasks.filter((t) => t.status === "completed").length})
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      <div className="p-3 md:p-8 space-y-3 md:space-y-6 max-w-7xl mx-auto">
-        {/* Desktop Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="hidden md:block mb-6">
-
-          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
-            {t('allTasks')}
-          </h1>
-          <p className="text-base text-slate-600">{t('yourMomentsMatter')}</p>
-        </motion.div>
-
-        <div className="mb-4 md:mb-8">
-          <QuickAddTask onAdd={(data) => createTaskAsync(data)} />
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="space-y-3">
-
-          <div className="flex flex-col gap-2 bg-white p-2 md:p-3 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input
-                placeholder={t('searchTasks')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 md:h-10 border-0 bg-slate-50 hover:bg-slate-100 focus:bg-white transition-colors rounded-xl text-sm" />
+      {/* Header / Nav */}
+      <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-stone-200/50">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-stone-700 to-stone-900 flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm">
+              心
             </div>
-
-            <AdvancedTaskFilters 
-              filters={advancedFilters} 
-              onChange={setAdvancedFilters} 
-              onClear={() => setAdvancedFilters({ category: 'all', createdBy: 'all', tags: [], dateRange: undefined })} 
-            />
+            <div>
+              <h1 className="font-serif text-xl font-semibold text-stone-800 tracking-tight">心栈 SoulSentry</h1>
+              <p className="text-xs text-stone-500 tracking-wide">你背后坚定且温柔的支持者</p>
+            </div>
           </div>
-
-          <div className="flex items-center justify-between md:justify-start gap-2">
-            <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
-              <button
-                onClick={() => setViewMode("list")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                title="列表视图">
-                <LayoutList className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("gantt")}
-                className={`p-2 rounded-lg transition-all hidden sm:block ${viewMode === 'gantt' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                title="甘特图视图">
-                <BarChart3 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("kanban")}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-white text-[#384877] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                title="看板视图">
-                <KanbanSquare className="w-4 h-4" />
-              </button>
+          
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-3 text-sm">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                {milestoneTasks.length} 个里程碑
+              </span>
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-xs font-medium">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                {lifeTasks.length} 个生活
+              </span>
             </div>
-            
-            <div className="flex items-center gap-2">
-                 {!isSelectionMode ? (
-                    <button
-                        onClick={handleEnterSelectionMode}
-                        className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all flex items-center gap-1.5 text-xs font-medium"
-                        title="多选分享"
-                    >
-                        <CheckSquare className="w-4 h-4" />
-                        <span className="hidden sm:inline">选择</span>
-                    </button>
-                 ) : (
-                    <button
-                        onClick={handleExitSelectionMode}
-                        className="p-2 rounded-lg bg-slate-200 text-slate-800 hover:bg-slate-300 transition-all flex items-center gap-1.5 text-xs font-medium"
-                    >
-                        <X className="w-4 h-4" />
-                        取消
-                    </button>
-                 )}
-            </div>
-            
-            <span className="text-xs text-slate-500 md:hidden">{rootTasks.length} 个约定</span>
           </div>
         </div>
+      </header>
 
-        {/* Desktop Tabs */}
-        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full hidden md:block">
-          <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-[12px] p-1">
-            <TabsTrigger value="all" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              {t('all')} <span className="ml-0.5">({tasks.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="pending" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#06b6d4] data-[state=active]:to-[#0891b2] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              {t('pending')} <span className="ml-0.5">({tasks.filter((t) => t.status === "pending").length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="completed" className="rounded-[10px] text-xs md:text-sm px-2 py-1.5 md:py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#10b981] data-[state=active]:to-[#059669] data-[state=active]:text-white data-[state=active]:shadow-sm">
-              {t('completed')} <span className="ml-0.5">({tasks.filter((t) => t.status === "completed").length})</span>
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="space-y-3">
-
-        {viewMode === 'gantt' &&
-        <GanttView
-          tasks={filteredTasks}
-          onUpdateTask={({ id, data }) => updateTask({ id, data })}
-          onTaskClick={(task) => setSelectedTask(task)} />
-        }
-
-        {viewMode === 'kanban' &&
-        <KanbanView
-            tasks={filteredTasks}
-            onUpdateTask={({ id, data }) => updateTask({ id, data })}
-            onTaskClick={(task) => setSelectedTask(task)}
-            onComplete={onCompleteTask}
-            onDelete={(id) => deleteTask(id)}
-            onEdit={setEditingTask}
-        />
-        }
-
-        {viewMode === 'list' &&
-        <AnimatePresence mode="popLayout">
-          {rootTasks.map((task) =>
-          <React.Fragment key={task.id}>
-              {/* Mobile: Swipeable wrapper */}
-              <div className="md:hidden">
-                <SwipeableItem
-                  leftActions={[
-                    {
-                      icon: SwipeActions.complete.icon,
-                      label: task.status === 'completed' ? '未完成' : '完成',
-                      color: task.status === 'completed' ? 'text-slate-600' : 'text-green-600',
-                      onAction: () => onCompleteTask(task)
-                    }
-                  ]}
-                  rightActions={[
-                    {
-                      icon: SwipeActions.edit.icon,
-                      label: '编辑',
-                      color: 'text-purple-600',
-                      onAction: () => setEditingTask(task)
-                    },
-                    {
-                      icon: SwipeActions.delete.icon,
-                      label: '删除',
-                      color: 'text-red-600',
-                      onAction: () => deleteTask(task.id)
-                    }
-                  ]}
-                  threshold={80}
-                >
-                  <TaskCard
-                    task={task}
-                    subtasks={getAllSubtasks(task.id)}
-                    hideSubtaskList={true}
-                    onComplete={(status) => onCompleteTask(task, status)}
-                    onDelete={() => deleteTask(task.id)}
-                    onEdit={() => setEditingTask(task)}
-                    onUpdate={(data) => updateTask({ id: task.id, data })}
-                    onClick={() => isSelectionMode ? toggleSelection(task) : setSelectedTask(task)}
-                    onSubtaskToggle={onSubtaskToggleWrapper}
-                    onToggleSubtasks={() => toggleTaskExpansion(task.id)}
-                    isExpanded={expandedTaskIds.has(task.id)}
-                    selectable={isSelectionMode}
-                    selected={selectedTaskIds.has(task.id)}
-                    onSelect={() => toggleSelection(task)}
-                  />
-                </SwipeableItem>
+      <main className="pt-8 px-6 max-w-5xl mx-auto">
+        
+        {/* AI Assistant Section */}
+        <section className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="bg-white/70 backdrop-blur-xl border border-white/50 rounded-[24px] p-6 relative overflow-hidden shadow-sm">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-100/20 via-green-100/10 to-transparent rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+            
+            <div className="flex items-start gap-4 relative z-10">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#E8D5C4] to-[#D4C5B9] shadow-[0_4px_20px_rgba(232,213,196,0.4)] flex items-center justify-center flex-shrink-0 animate-pulse">
+                <Sparkles className="w-7 h-7 text-stone-700" />
               </div>
-
-              {/* Desktop: Regular card */}
-              <div className="hidden md:block">
-                <TaskCard
-                  task={task}
-                  subtasks={getAllSubtasks(task.id)}
-                  hideSubtaskList={true}
-                  onComplete={(status) => onCompleteTask(task, status)}
-                  onDelete={() => deleteTask(task.id)}
-                  onEdit={() => setEditingTask(task)}
-                  onUpdate={(data) => updateTask({ id: task.id, data })}
-                  onClick={() => isSelectionMode ? toggleSelection(task) : setSelectedTask(task)}
-                  onSubtaskToggle={onSubtaskToggleWrapper}
-                  onToggleSubtasks={() => toggleTaskExpansion(task.id)}
-                  isExpanded={expandedTaskIds.has(task.id)}
-                  selectable={isSelectionMode}
-                  selected={selectedTaskIds.has(task.id)}
-                  onSelect={() => toggleSelection(task)}
-                />
-              </div>
-
-              <AnimatePresence>
-                {expandedTaskIds.has(task.id) && getSubtasks(task.id).map((subtask) =>
-              <motion.div
-                key={subtask.id}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="ml-4 md:ml-8 relative pl-3 md:pl-4 border-l-2 border-slate-200/50">
-
-                    {/* Mobile: Swipeable subtask */}
-                    <div className="md:hidden">
-                      <SwipeableItem
-                        leftActions={[
-                          {
-                            icon: SwipeActions.complete.icon,
-                            label: subtask.status === 'completed' ? '未完成' : '完成',
-                            color: subtask.status === 'completed' ? 'text-slate-600' : 'text-green-600',
-                            onAction: () => onSubtaskToggleWrapper(subtask)
-                          }
-                        ]}
-                        rightActions={[
-                          {
-                            icon: SwipeActions.delete.icon,
-                            label: '删除',
-                            color: 'text-red-600',
-                            onAction: () => deleteTask(subtask.id)
-                          }
-                        ]}
-                        threshold={80}
-                      >
-                        <TaskCard
-                          task={subtask}
-                          hideSubtaskList={true}
-                          onComplete={() => onSubtaskToggleWrapper(subtask)}
-                          onDelete={() => deleteTask(subtask.id)}
-                          onEdit={() => setEditingTask(subtask)}
-                          onClick={() => isSelectionMode ? toggleSelection(subtask) : setSelectedTask(subtask)}
-                          onSubtaskToggle={onSubtaskToggleWrapper}
-                          selectable={isSelectionMode}
-                          selected={selectedTaskIds.has(subtask.id)}
-                          onSelect={() => toggleSelection(subtask)}
-                        />
-                      </SwipeableItem>
-                    </div>
-
-                    {/* Desktop: Regular subtask */}
-                    <div className="hidden md:block">
-                      <TaskCard
-                        task={subtask}
-                        hideSubtaskList={true}
-                        onComplete={() => onSubtaskToggleWrapper(subtask)}
-                        onDelete={() => deleteTask(subtask.id)}
-                        onEdit={() => setEditingTask(subtask)}
-                        onClick={() => isSelectionMode ? toggleSelection(subtask) : setSelectedTask(subtask)}
-                        onSubtaskToggle={onSubtaskToggleWrapper}
-                        selectable={isSelectionMode}
-                        selected={selectedTaskIds.has(subtask.id)}
-                        onSelect={() => toggleSelection(subtask)}
-                      />
-                    </div>
-
-                  </motion.div>
-              )}
-              </AnimatePresence>
-            </React.Fragment>
-          )}
-        </AnimatePresence>
-        }
-
-        {filteredTasks.length === 0 &&
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center py-16">
-
-            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-              <Search className="w-12 h-12 text-slate-400" />
-            </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">{t('noTasksFound')}</h3>
-            <p className="text-slate-600">{t('adjustFilters')}</p>
-          </motion.div>
-        }
-      </motion.div>
-
-        <TaskDetailModal
-          task={selectedTask}
-          open={!!selectedTask}
-          onClose={() => setSelectedTask(null)} />
-
-        <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
-          <DialogContent className="max-w-[95vw] md:max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-base md:text-lg">编辑约定</DialogTitle>
-            </DialogHeader>
-            {editingTask &&
-            <QuickAddTask
-              initialData={editingTask}
-              onAdd={handleUpdateTask} />
-
-            }
-          </DialogContent>
-        </Dialog>
-
-        {isSelectionMode && selectedTaskIds.size > 0 && (
-            <motion.div
-                initial={{ y: 100, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 100, opacity: 0 }}
-                className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white rounded-full shadow-xl border border-slate-200 px-6 py-3 flex items-center gap-4 z-50"
-            >
-                <div className="text-sm font-medium text-slate-700">
-                    已选择 {selectedTaskIds.size} 项
+              
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-medium text-stone-500">智能统筹助手</span>
+                  <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                    运行中
+                  </span>
                 </div>
-                <div className="h-4 w-px bg-slate-200" />
-                <button
-                    onClick={() => setShowMultiShare(true)}
-                    className="flex items-center gap-2 text-blue-600 font-medium hover:text-blue-700 transition-colors"
-                >
-                    <Share2 className="w-4 h-4" />
-                    分享选中项
-                </button>
-            </motion.div>
-        )}
+                <p className="text-lg text-stone-800 leading-relaxed">
+                  本周有<span className="text-blue-600 font-medium mx-1">{milestoneTasks.length}个严肃约定</span>和<span className="text-green-600 font-medium mx-1">{lifeTasks.length}个生活提醒</span>。
+                  <span className="hidden md:inline">"产品V1.0规划"进展至75%，生活约定已智能协调至碎片时段，不干扰深度工作。</span>
+                </p>
+                
+                {/* Coordination Bar */}
+                <div className="mt-4 flex items-center gap-3">
+                  <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-400 via-green-400 to-amber-300 rounded-full w-[82%]"></div>
+                  </div>
+                  <span className="text-xs text-stone-500 font-medium">本周和谐度 82%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-        <MultiTaskShareCard
-            tasks={getSelectedTasksObjects()}
-            open={showMultiShare}
-            onClose={() => setShowMultiShare(false)}
-        />
-      </div>
-    </div>);
+        {/* Unified Input */}
+        <section className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
+          <UnifiedTaskInput onAddTask={handleAddTask} />
+          
+          {/* Quick Templates - Static for demo, could be dynamic */}
+          <div className="mt-3 flex flex-wrap gap-2 px-2">
+            <span className="text-xs text-stone-400 py-1">快捷：</span>
+            <button onClick={() => handleAddTask({title: '周五前完成周报', category: 'work', priority: 'high', status: 'pending'})} className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-full text-xs text-stone-600 transition-colors">周五前完成...</button>
+            <button onClick={() => handleAddTask({title: '下周三前提交设计稿', category: 'work', priority: 'high', status: 'pending'})} className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-full text-xs text-stone-600 transition-colors">下周三前提交...</button>
+            <button onClick={() => handleAddTask({title: '下班前记得买菜', category: 'personal', priority: 'medium', status: 'pending'})} className="px-3 py-1.5 bg-green-50 hover:bg-green-100 rounded-full text-xs text-green-700 transition-colors">下班前记得买...</button>
+          </div>
+        </section>
 
+        {/* View Switcher */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="bg-stone-100/50 rounded-full p-1 flex gap-1">
+            <button 
+              onClick={() => setViewMode('all')} 
+              className={cn("px-5 py-2 rounded-full text-sm font-medium transition-all", viewMode === 'all' ? "bg-white shadow-sm text-stone-800" : "text-stone-600 hover:bg-stone-200/50")}
+            >
+              全部
+            </button>
+            <button 
+              onClick={() => setViewMode('milestone')} 
+              className={cn("px-5 py-2 rounded-full text-sm font-medium transition-all", viewMode === 'milestone' ? "bg-white shadow-sm text-stone-800" : "text-stone-600 hover:bg-stone-200/50")}
+            >
+              严肃约定
+            </button>
+            <button 
+              onClick={() => setViewMode('life')} 
+              className={cn("px-5 py-2 rounded-full text-sm font-medium transition-all", viewMode === 'life' ? "bg-white shadow-sm text-stone-800" : "text-stone-600 hover:bg-stone-200/50")}
+            >
+              生活提醒
+            </button>
+          </div>
+          
+          <button 
+            onClick={() => setShowCompleted(!showCompleted)} 
+            className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1 transition-colors"
+          >
+            <span>已完成 {completedTasks.length}</span>
+            <ChevronDown className={cn("w-3 h-3 transition-transform", showCompleted && "rotate-180")} />
+          </button>
+        </div>
+
+        {/* Content Area */}
+        <div className="space-y-8">
+          
+          {/* Milestone Section */}
+          {(viewMode === 'all' || viewMode === 'milestone') && milestoneTasks.length > 0 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {milestoneTasks.map(task => (
+                <MilestoneCard 
+                  key={task.id}
+                  task={task}
+                  subtasks={getSubtasks(task.id)}
+                  onToggleSubtask={handleToggleSubtask}
+                  onUpdateStatus={handleUpdateStatus}
+                  onAddSubtask={() => {
+                    // Quick add subtask logic or open modal
+                    setSelectedTask(task);
+                  }}
+                  onUpdate={(data) => updateTaskAsync({ id: task.id, data })}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Divider */}
+          {viewMode === 'all' && milestoneTasks.length > 0 && lifeTasks.length > 0 && (
+            <div className="h-px bg-gradient-to-r from-transparent via-[#E8E4E0] to-transparent my-8"></div>
+          )}
+
+          {/* Life Section */}
+          {(viewMode === 'all' || viewMode === 'life') && lifeTasks.length > 0 && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-lg font-semibold text-stone-800">生活提醒</h3>
+                    <p className="text-sm text-stone-500">已智能协调至最佳时机，不干扰深度工作</p>
+                  </div>
+                </div>
+                <span className="text-xs text-stone-400">{lifeTasks.length} 个活跃提醒</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {lifeTasks.map(task => (
+                  <LifeTaskCard 
+                    key={task.id}
+                    task={task}
+                    onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                    onEdit={() => setSelectedTask(task)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Completed Section */}
+          {showCompleted && completedTasks.length > 0 && (
+            <div className="mt-8 pt-8 border-t border-stone-200 animate-in fade-in">
+              <h4 className="text-sm font-medium text-stone-500 mb-4 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                已完成约定
+              </h4>
+              <div className="space-y-3 opacity-60">
+                {completedTasks.map(task => (
+                  <div key={task.id} className="flex items-center gap-4 p-4 bg-stone-50 rounded-2xl border border-stone-100">
+                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <Check className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-stone-700 font-medium line-through decoration-stone-300">{task.title}</p>
+                      <p className="text-xs text-stone-400 mt-0.5">
+                         {task.category === 'work' ? '里程碑' : '生活提醒'} · {task.completed_at ? new Date(task.completed_at).toLocaleDateString() : '已完成'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </main>
+
+      {/* Floating Context Reminder */}
+      <ContextReminder 
+        onDismiss={() => {}} 
+        onSnooze={() => {}} 
+      />
+
+      {/* Detail Modal */}
+      <TaskDetailModal
+        task={selectedTask}
+        open={!!selectedTask}
+        onClose={() => setSelectedTask(null)} 
+      />
+    </div>
+  );
 }

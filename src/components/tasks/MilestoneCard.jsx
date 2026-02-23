@@ -42,7 +42,13 @@ export default function MilestoneCard({
       isCompleted && "opacity-80 grayscale-[0.5]"
     )}>
       {/* Header Section */}
-      <div className="bg-gradient-to-br from-[#FAFBFC] to-[#F0F4F8] border-b border-[#E8E4E0] rounded-t-[24px] p-6 md:p-8">
+      <div 
+        onClick={(e) => {
+          if (e.target.closest('button')) return;
+          onEdit && onEdit();
+        }}
+        className="bg-gradient-to-br from-[#FAFBFC] to-[#F0F4F8] border-b border-[#E8E4E0] rounded-t-[24px] p-6 md:p-8 cursor-pointer"
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-5 flex-1">
             {/* Progress Ring */}

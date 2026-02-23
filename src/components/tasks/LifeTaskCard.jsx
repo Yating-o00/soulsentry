@@ -53,8 +53,14 @@ export default function LifeTaskCard({
   };
 
   return (
-    <div className={cn(
-      "life-card p-5 relative overflow-hidden transition-all duration-300 transform",
+    <div 
+      onClick={(e) => {
+        // Prevent edit if clicking buttons
+        if (e.target.closest('button')) return;
+        onEdit && onEdit();
+      }}
+      className={cn(
+      "life-card p-5 relative overflow-hidden transition-all duration-300 transform cursor-pointer",
       completed ? "opacity-60 scale-95 grayscale" : "bg-white hover:-translate-y-1 hover:shadow-lg",
       "rounded-[20px] border-l-4 border-[#7FB069] shadow-[0_2px_12px_rgba(0,0,0,0.03)]"
     )}>

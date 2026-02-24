@@ -62,7 +62,7 @@ export default function LifeTaskCard({
       className={cn(
       "life-card p-5 relative overflow-hidden transition-all duration-300 transform cursor-pointer",
       completed ? "opacity-60 scale-95 grayscale" : "bg-white hover:-translate-y-1 hover:shadow-lg",
-      "rounded-[20px] border-l-4 border-[#7FB069] shadow-[0_2px_12px_rgba(0,0,0,0.03)]"
+      "rounded-3xl border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)]"
     )}>
       {/* Trigger Badge */}
       <div className="flex items-start justify-between mb-4">

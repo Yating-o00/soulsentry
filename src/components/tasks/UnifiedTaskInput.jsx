@@ -12,8 +12,27 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export default function UnifiedTaskInput({ onAddTask }) {
-  const [value, setValue] = useState("");
+export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange }) {
+  const [internalValue, setInternalValue] = useState("");
+  
+  const value = propValue !== undefined ? propValue : internalValue;
+  
+  const handleChange = (e) => {
+    const newValue = e.target.value;
+    if (onChange) {
+      onChange(newValue);
+    } else {
+      setInternalValue(newValue);
+    }
+  };
+  
+  const handleClear = () => {
+    if (onChange) {
+      onChange("");
+    } else {
+      setInternalValue("");
+    }
+  };
   const [mode, setMode] = useState("auto"); // 'auto', 'milestone', 'life'
   const [previewTags, setPreviewTags] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -71,7 +90,7 @@ export default function UnifiedTaskInput({ onAddTask }) {
       status: 'pending'
     });
     
-    setValue("");
+    handleClear();
     setShowPreview(false);
   };
 
@@ -91,7 +110,7 @@ export default function UnifiedTaskInput({ onAddTask }) {
           <input 
             type="text" 
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={handleChange}
             onKeyDown={handleKeyDown}
             placeholder="告诉我你想记住什么，无论是重要目标还是生活小事..."
             className="w-full pl-12 pr-4 py-3.5 rounded-2xl text-slate-700 placeholder-slate-400 focus:outline-none bg-transparent"

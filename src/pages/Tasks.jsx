@@ -130,7 +130,7 @@ export default function Tasks() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
           <div>
             <h1 className="text-4xl font-bold text-slate-900 mb-2 flex items-center gap-3">
-              {greeting}, {user ? user.full_name : '朋友'} <span className="text-3xl">{greetingIcon}</span>
+              你的点滴都是最重要的事
             </h1>
             <p className="text-slate-500 text-lg">
               今天是 {dateStr} {weekday}

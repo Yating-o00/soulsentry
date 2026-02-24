@@ -82,10 +82,10 @@ export default function UnifiedTaskInput({ onAddTask }) {
   };
 
   return (
-    <div className="bg-white rounded-[24px] p-2 shadow-sm border border-stone-100 transition-all focus-within:ring-4 focus-within:ring-[#A8B5A0]/10 focus-within:border-[#A8B5A0]">
+    <div className="bg-white rounded-3xl p-2 shadow-sm border border-slate-100 transition-all focus-within:ring-4 focus-within:ring-slate-100 focus-within:border-slate-200">
       <div className="flex items-center gap-2 p-2">
         <div className="flex-1 relative">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
             <PlusCircle className="w-5 h-5" />
           </div>
           <input 
@@ -94,7 +94,7 @@ export default function UnifiedTaskInput({ onAddTask }) {
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="告诉我你想记住什么，无论是重要目标还是生活小事..."
-            className="w-full pl-12 pr-4 py-3.5 rounded-2xl text-stone-700 placeholder-stone-400 focus:outline-none bg-transparent"
+            className="w-full pl-12 pr-4 py-3.5 rounded-2xl text-slate-700 placeholder-slate-400 focus:outline-none bg-transparent"
           />
         </div>
         <div className="flex items-center gap-1 pr-2">
@@ -102,7 +102,7 @@ export default function UnifiedTaskInput({ onAddTask }) {
             onClick={() => setMode('milestone')} 
             className={cn(
               "px-3 py-2 rounded-xl text-xs font-medium transition-colors border border-transparent flex items-center gap-1",
-              mode === 'milestone' ? "bg-stone-800 text-white" : "text-stone-500 hover:bg-stone-50"
+              mode === 'milestone' ? "bg-[#384877] text-white" : "text-slate-500 hover:bg-slate-50"
             )}
           >
             <ListTodo className="w-3.5 h-3.5" /> 严肃
@@ -111,14 +111,14 @@ export default function UnifiedTaskInput({ onAddTask }) {
             onClick={() => setMode('life')} 
             className={cn(
               "px-3 py-2 rounded-xl text-xs font-medium transition-colors border border-transparent flex items-center gap-1",
-              mode === 'life' ? "bg-stone-800 text-white" : "text-stone-500 hover:bg-stone-50"
+              mode === 'life' ? "bg-[#384877] text-white" : "text-slate-500 hover:bg-slate-50"
             )}
           >
             <Leaf className="w-3.5 h-3.5" /> 生活
           </button>
           <button 
             onClick={handleSubmit} 
-            className="ml-2 px-5 py-2.5 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-700 transition-colors shadow-lg shadow-stone-200"
+            className="ml-2 px-5 py-2.5 bg-[#384877] text-white rounded-xl text-sm font-medium hover:bg-[#2c3a63] transition-colors shadow-lg shadow-blue-900/10"
           >
             记住
           </button>
@@ -128,7 +128,7 @@ export default function UnifiedTaskInput({ onAddTask }) {
       {/* Smart Analysis Preview */}
       {showPreview && (
         <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="mt-2 p-3 bg-stone-50 rounded-xl border border-stone-100 flex items-start gap-3">
+          <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-3">
             <Wand2 className="w-4 h-4 text-stone-400 mt-0.5" />
             <div className="flex-1">
               <p className="text-xs text-stone-500 mb-2 font-medium">AI理解：</p>

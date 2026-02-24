@@ -133,7 +133,7 @@ export default function Tasks() {
 
             </h1>
             <p className="text-slate-500 text-lg">
-              今天是 {dateStr} {weekday}
+              你的点滴都是最重要的事
             </p>
           </div>
 

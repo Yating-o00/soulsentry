@@ -9,7 +9,7 @@ import { useTaskOperations } from "../components/hooks/useTaskOperations";
 import NotificationManager from "../components/notifications/NotificationManager";
 import MilestoneCard from "../components/tasks/MilestoneCard";
 import LifeTaskCard from "../components/tasks/LifeTaskCard";
-import UnifiedTaskInput from "../components/tasks/UnifiedTaskInput";
+import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 
@@ -175,78 +175,17 @@ export default function Tasks() {
           </div>
         </div>
 
-        {/* Stats Cards Section */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          {/* Card 1: Today's Pending - Dark Blue */}
-          <div className="bg-[#384877] text-white rounded-3xl p-6 relative overflow-hidden shadow-lg shadow-blue-900/10 hover:shadow-xl transition-all duration-300 group cursor-default">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl -mr-10 -mt-10"></div>
-            <div className="absolute bottom-0 right-0 opacity-10 transform translate-x-4 translate-y-4">
-               <div className="w-24 h-24 border-4 border-white rounded-xl rotate-12"></div>
-               <div className="w-24 h-24 border-4 border-white rounded-xl -rotate-6 -mt-16 ml-8"></div>
-            </div>
-            
-            <div className="relative z-10 h-full flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <span className="text-white/80 font-medium">今日待办</span>
-              </div>
-              
-              <div className="mt-4">
-                <div className="text-6xl font-bold tracking-tight mb-2">{stats.pending}</div>
-                
-                {/* Progress Bar */}
-                <div className="w-full bg-white/20 h-1.5 rounded-full mt-4 overflow-hidden">
-                   <div 
-                      className="h-full bg-white rounded-full" 
-                      style={{ width: `${Math.min(100, (stats.completedToday / (stats.pending + stats.completedToday || 1)) * 100)}%` }}
-                   ></div>
-                </div>
-                <div className="flex justify-end mt-1">
-                   <span className="text-xs text-white/70">
-                      {Math.round((stats.completedToday / (stats.pending + stats.completedToday || 1)) * 100)}%
-                   </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Overdue - White */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group cursor-default">
-             <div className="flex justify-between items-start mb-6">
-                <span className="text-slate-500 font-medium">逾期约定</span>
-                <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center">
-                   <div className="w-4 h-4 text-red-500 border-2 border-current rounded-full flex items-center justify-center font-bold text-[10px]">!</div>
-                </div>
-             </div>
-             <div className="mt-auto">
-                <div className="text-5xl font-bold text-slate-800 mb-2">{stats.overdue}</div>
-                <p className="text-slate-400 text-sm">需要尽快处理</p>
-             </div>
-          </div>
-
-          {/* Card 3: Completed Today - White */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group cursor-default">
-             <div className="flex justify-between items-start mb-6">
-                <span className="text-slate-500 font-medium">今日已完成</span>
-                <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center">
-                   <CheckCircle2 className="w-5 h-5 text-green-500" />
-                </div>
-             </div>
-             <div className="mt-auto">
-                <div className="text-5xl font-bold text-slate-800 mb-2">{stats.completedToday}</div>
-                <p className="text-slate-400 text-sm">保持这个节奏!</p>
-             </div>
-          </div>
-        </section>
-
-        {/* Unified Input */}
+        {/* Task Creation Panel */}
         <section className="mb-10">
-          <UnifiedTaskInput onAddTask={handleAddTask} />
-          
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button onClick={() => handleAddTask({title: '周五前完成周报', category: 'work', priority: 'high', status: 'pending'})} className="px-4 py-2 bg-white border border-slate-200 hover:border-[#384877] hover:text-[#384877] rounded-full text-xs text-slate-500 transition-all shadow-sm">周五前完成周报</button>
-            <button onClick={() => handleAddTask({title: '下周三前提交设计稿', category: 'work', priority: 'high', status: 'pending'})} className="px-4 py-2 bg-white border border-slate-200 hover:border-[#384877] hover:text-[#384877] rounded-full text-xs text-slate-500 transition-all shadow-sm">下周三前提交设计稿</button>
-            <button onClick={() => handleAddTask({title: '下班前记得买菜', category: 'personal', priority: 'medium', status: 'pending'})} className="px-4 py-2 bg-white border border-slate-200 hover:border-green-600 hover:text-green-600 rounded-full text-xs text-slate-500 transition-all shadow-sm">下班前记得买菜</button>
-          </div>
+          <TaskCreationPanel 
+            onAddTask={handleAddTask} 
+            onOpenManual={() => setSelectedTask({ status: 'pending', priority: 'medium' })}
+            onVoiceTasks={async (tasks) => {
+              for (const task of tasks) {
+                await handleAddTask(task);
+              }
+            }}
+          />
         </section>
 
         {/* Filters & Content Area */}

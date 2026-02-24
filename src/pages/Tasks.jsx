@@ -20,6 +20,7 @@ export default function Tasks() {
   const [viewMode, setViewMode] = useState("all"); // 'all', 'milestone', 'life'
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [user, setUser] = useState(null);
 
   const {
     updateTaskAsync,
@@ -28,6 +29,10 @@ export default function Tasks() {
     handleSubtaskToggle
   } = useTaskOperations();
 
+  React.useEffect(() => {
+    base44.auth.me().then(setUser).catch(() => {});
+  }, []);
+
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-reminder_time'),
@@ -35,7 +40,7 @@ export default function Tasks() {
   });
 
   // Filter tasks
-  const { milestoneTasks, lifeTasks, completedTasks } = useMemo(() => {
+  const { milestoneTasks, lifeTasks, completedTasks, stats } = useMemo(() => {
     const active = allTasks.filter(t => !t.deleted_at && t.status !== 'completed');
     const completed = allTasks.filter(t => !t.deleted_at && t.status === 'completed');
 
@@ -53,10 +58,34 @@ export default function Tasks() {
       }
     });
 
+    // Stats Calculations
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const todayPendingCount = active.length;
+    
+    const overdueCount = active.filter(t => {
+      if (!t.reminder_time) return false;
+      return new Date(t.reminder_time) < now;
+    }).length;
+
+    const completedTodayCount = completed.filter(t => {
+      if (!t.completed_at) return false;
+      const cDate = new Date(t.completed_at);
+      cDate.setHours(0, 0, 0, 0);
+      return cDate.getTime() === today.getTime();
+    }).length;
+
     return {
       milestoneTasks: milestone,
       lifeTasks: life,
-      completedTasks: completed
+      completedTasks: completed,
+      stats: {
+        pending: todayPendingCount,
+        overdue: overdueCount,
+        completedToday: completedTodayCount
+      }
     };
   }, [allTasks]);
 
@@ -76,124 +105,163 @@ export default function Tasks() {
     handleComplete(task, allTasks, status);
   };
 
-  return (
-    <div className="min-h-screen bg-[#faf9f7] pb-24 font-sans text-[#2C3E50]">
-      {/* Inject Fonts */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
-        .font-serif { font-family: 'Noto Serif SC', serif; }
-        .font-sans { font-family: 'Inter', sans-serif; }
-      `}</style>
+  // Get current date info
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const weekday = today.toLocaleDateString('zh-CN', { weekday: 'long' });
+  
+  // Greeting based on hour
+  const hour = today.getHours();
+  let greeting = "你好";
+  let greetingIcon = "☀️";
+  if (hour < 6) { greeting = "凌晨好"; greetingIcon = "🌙"; }
+  else if (hour < 11) { greeting = "早上好"; greetingIcon = "🌅"; }
+  else if (hour < 14) { greeting = "中午好"; greetingIcon = "☀️"; }
+  else if (hour < 18) { greeting = "下午好"; greetingIcon = "🌤️"; }
+  else { greeting = "晚上好"; greetingIcon = "🌙"; }
 
+  return (
+    <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-slate-900">
       <NotificationManager />
 
-      {/* Header / Nav */}
-      <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-stone-200/50">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-stone-700 to-stone-900 flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm">
-              心
-            </div>
-            <div>
-              <h1 className="font-serif text-xl font-semibold text-stone-800 tracking-tight">心栈 SoulSentry</h1>
-              <p className="text-xs text-stone-500 tracking-wide">你背后坚定且温柔的支持者</p>
-            </div>
+      <main className="pt-8 px-6 max-w-7xl mx-auto">
+        
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+          <div>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2 flex items-center gap-3">
+              {greeting}, {user ? user.full_name : '朋友'} <span className="text-3xl">{greetingIcon}</span>
+            </h1>
+            <p className="text-slate-500 text-lg">
+              今天是 {dateStr} {weekday}
+            </p>
           </div>
-          
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-3 text-sm">
-              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                {milestoneTasks.length} 个里程碑
-              </span>
-              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-xs font-medium">
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                {lifeTasks.length} 个生活
-              </span>
-            </div>
+
+          <div className="bg-white p-1 rounded-full shadow-sm border border-slate-200 inline-flex">
+            <button 
+              onClick={() => setViewMode('all')} 
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'all' 
+                  ? "bg-[#384877] text-white shadow-md" 
+                  : "text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>概览</span>
+            </button>
+            <button 
+              onClick={() => setViewMode('milestone')} 
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'milestone' 
+                  ? "bg-[#384877] text-white shadow-md" 
+                  : "text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              <span>里程碑</span>
+            </button>
+            <button 
+              onClick={() => setViewMode('life')} 
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'life' 
+                  ? "bg-[#384877] text-white shadow-md" 
+                  : "text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              <span>生活</span>
+            </button>
           </div>
         </div>
-      </header>
 
-      <main className="pt-8 px-6 max-w-5xl mx-auto">
-        
-        {/* AI Assistant Section */}
-        <section className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="bg-white/70 backdrop-blur-xl border border-white/50 rounded-[24px] p-6 relative overflow-hidden shadow-sm">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-100/20 via-green-100/10 to-transparent rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+        {/* Stats Cards Section */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          {/* Card 1: Today's Pending - Dark Blue */}
+          <div className="bg-[#384877] text-white rounded-3xl p-6 relative overflow-hidden shadow-lg shadow-blue-900/10 hover:shadow-xl transition-all duration-300 group cursor-default">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl -mr-10 -mt-10"></div>
+            <div className="absolute bottom-0 right-0 opacity-10 transform translate-x-4 translate-y-4">
+               <div className="w-24 h-24 border-4 border-white rounded-xl rotate-12"></div>
+               <div className="w-24 h-24 border-4 border-white rounded-xl -rotate-6 -mt-16 ml-8"></div>
+            </div>
             
-            <div className="flex items-start gap-4 relative z-10">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#E8D5C4] to-[#D4C5B9] shadow-[0_4px_20px_rgba(232,213,196,0.4)] flex items-center justify-center flex-shrink-0 animate-pulse">
-                <Sparkles className="w-7 h-7 text-stone-700" />
+            <div className="relative z-10 h-full flex flex-col justify-between">
+              <div className="flex justify-between items-start">
+                <span className="text-white/80 font-medium">今日待办</span>
               </div>
               
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-medium text-stone-500">智能统筹助手</span>
-                  <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                    运行中
-                  </span>
-                </div>
-                <p className="text-lg text-stone-800 leading-relaxed">
-                  本周有<span className="text-blue-600 font-medium mx-1">{milestoneTasks.length}个严肃约定</span>和<span className="text-green-600 font-medium mx-1">{lifeTasks.length}个生活提醒</span>。
-                  <span className="hidden md:inline">"产品V1.0规划"进展至75%，生活约定已智能协调至碎片时段，不干扰深度工作。</span>
-                </p>
+              <div className="mt-4">
+                <div className="text-6xl font-bold tracking-tight mb-2">{stats.pending}</div>
                 
-                {/* Coordination Bar */}
-                <div className="mt-4 flex items-center gap-3">
-                  <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-blue-400 via-green-400 to-amber-300 rounded-full w-[82%]"></div>
-                  </div>
-                  <span className="text-xs text-stone-500 font-medium">本周和谐度 82%</span>
+                {/* Progress Bar */}
+                <div className="w-full bg-white/20 h-1.5 rounded-full mt-4 overflow-hidden">
+                   <div 
+                      className="h-full bg-white rounded-full" 
+                      style={{ width: `${Math.min(100, (stats.completedToday / (stats.pending + stats.completedToday || 1)) * 100)}%` }}
+                   ></div>
+                </div>
+                <div className="flex justify-end mt-1">
+                   <span className="text-xs text-white/70">
+                      {Math.round((stats.completedToday / (stats.pending + stats.completedToday || 1)) * 100)}%
+                   </span>
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Card 2: Overdue - White */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group cursor-default">
+             <div className="flex justify-between items-start mb-6">
+                <span className="text-slate-500 font-medium">逾期约定</span>
+                <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center">
+                   <div className="w-4 h-4 text-red-500 border-2 border-current rounded-full flex items-center justify-center font-bold text-[10px]">!</div>
+                </div>
+             </div>
+             <div className="mt-auto">
+                <div className="text-5xl font-bold text-slate-800 mb-2">{stats.overdue}</div>
+                <p className="text-slate-400 text-sm">需要尽快处理</p>
+             </div>
+          </div>
+
+          {/* Card 3: Completed Today - White */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 group cursor-default">
+             <div className="flex justify-between items-start mb-6">
+                <span className="text-slate-500 font-medium">今日已完成</span>
+                <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center">
+                   <CheckCircle2 className="w-5 h-5 text-green-500" />
+                </div>
+             </div>
+             <div className="mt-auto">
+                <div className="text-5xl font-bold text-slate-800 mb-2">{stats.completedToday}</div>
+                <p className="text-slate-400 text-sm">保持这个节奏!</p>
+             </div>
           </div>
         </section>
 
         {/* Unified Input */}
-        <section className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
+        <section className="mb-10">
           <UnifiedTaskInput onAddTask={handleAddTask} />
           
-          {/* Quick Templates - Static for demo, could be dynamic */}
-          <div className="mt-3 flex flex-wrap gap-2 px-2">
-            <span className="text-xs text-stone-400 py-1">快捷：</span>
-            <button onClick={() => handleAddTask({title: '周五前完成周报', category: 'work', priority: 'high', status: 'pending'})} className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-full text-xs text-stone-600 transition-colors">周五前完成...</button>
-            <button onClick={() => handleAddTask({title: '下周三前提交设计稿', category: 'work', priority: 'high', status: 'pending'})} className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-full text-xs text-stone-600 transition-colors">下周三前提交...</button>
-            <button onClick={() => handleAddTask({title: '下班前记得买菜', category: 'personal', priority: 'medium', status: 'pending'})} className="px-3 py-1.5 bg-green-50 hover:bg-green-100 rounded-full text-xs text-green-700 transition-colors">下班前记得买...</button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button onClick={() => handleAddTask({title: '周五前完成周报', category: 'work', priority: 'high', status: 'pending'})} className="px-4 py-2 bg-white border border-slate-200 hover:border-[#384877] hover:text-[#384877] rounded-full text-xs text-slate-500 transition-all shadow-sm">周五前完成周报</button>
+            <button onClick={() => handleAddTask({title: '下周三前提交设计稿', category: 'work', priority: 'high', status: 'pending'})} className="px-4 py-2 bg-white border border-slate-200 hover:border-[#384877] hover:text-[#384877] rounded-full text-xs text-slate-500 transition-all shadow-sm">下周三前提交设计稿</button>
+            <button onClick={() => handleAddTask({title: '下班前记得买菜', category: 'personal', priority: 'medium', status: 'pending'})} className="px-4 py-2 bg-white border border-slate-200 hover:border-green-600 hover:text-green-600 rounded-full text-xs text-slate-500 transition-all shadow-sm">下班前记得买菜</button>
           </div>
         </section>
 
-        {/* View Switcher */}
+        {/* Filters & Content Area */}
         <div className="flex items-center justify-between mb-6">
-          <div className="bg-stone-100/50 rounded-full p-1 flex gap-1">
-            <button 
-              onClick={() => setViewMode('all')} 
-              className={cn("px-5 py-2 rounded-full text-sm font-medium transition-all", viewMode === 'all' ? "bg-white shadow-sm text-stone-800" : "text-stone-600 hover:bg-stone-200/50")}
-            >
-              全部
-            </button>
-            <button 
-              onClick={() => setViewMode('milestone')} 
-              className={cn("px-5 py-2 rounded-full text-sm font-medium transition-all", viewMode === 'milestone' ? "bg-white shadow-sm text-stone-800" : "text-stone-600 hover:bg-stone-200/50")}
-            >
-              严肃约定
-            </button>
-            <button 
-              onClick={() => setViewMode('life')} 
-              className={cn("px-5 py-2 rounded-full text-sm font-medium transition-all", viewMode === 'life' ? "bg-white shadow-sm text-stone-800" : "text-stone-600 hover:bg-stone-200/50")}
-            >
-              生活提醒
-            </button>
-          </div>
-          
-          <button 
+           <h3 className="text-xl font-bold text-slate-800">
+             {viewMode === 'all' && '全部约定'}
+             {viewMode === 'milestone' && '里程碑'}
+             {viewMode === 'life' && '生活提醒'}
+           </h3>
+           <button 
             onClick={() => setShowCompleted(!showCompleted)} 
-            className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1 transition-colors"
+            className="text-sm font-medium text-slate-500 hover:text-[#384877] flex items-center gap-1 transition-colors"
           >
-            <span>已完成 {completedTasks.length}</span>
-            <ChevronDown className={cn("w-3 h-3 transition-transform", showCompleted && "rotate-180")} />
+            <span>显示已完成 ({completedTasks.length})</span>
+            <ChevronDown className={cn("w-4 h-4 transition-transform", showCompleted && "rotate-180")} />
           </button>
         </div>
 

@@ -6,7 +6,6 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
-import AITranslatedText from "@/components/AITranslatedText";
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
@@ -216,10 +215,10 @@ export default function Welcome({ onComplete }) {
                   <Sparkles className="w-10 h-10 text-white" />
                 </div>
                 <h1 className="text-5xl font-bold bg-gradient-to-r from-[#384877] via-[#3b5aa2] to-purple-600 bg-clip-text text-transparent mb-4">
-                  <AITranslatedText text="灵魂哨兵" />
+                  灵魂哨兵
                 </h1>
                 <p className="text-xl text-slate-500 mb-8 font-light tracking-wide">
-                  <AITranslatedText text="坚定守护，适时轻唤 - 你的心灵存放站" />
+                  坚定守护，适时轻唤 - 你的心灵存放站
                 </p>
               </motion.div>
 

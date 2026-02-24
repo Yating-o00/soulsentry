@@ -107,7 +107,7 @@ export default function TaskCreationPanel({ onAddTask, onOpenManual, onVoiceTask
         <div className="animate-in fade-in slide-in-from-right-2 duration-300">
             <div className="flex items-center gap-2 mb-4">
                
-               <span className="text-xs font-medium text-slate-500">输入你的想法</span>
+               
              </div>
             <UnifiedTaskInput
             onAddTask={handleSmartAddTask}

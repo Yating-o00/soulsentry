@@ -70,7 +70,7 @@ export default function MilestoneCard({
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-2xl font-bold text-[#2C3E50]">{progress}</span>
-                <span className="text-[10px] text-stone-400 uppercase tracking-wider">%</span>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider">%</span>
               </div>
             </div>
             
@@ -94,7 +94,7 @@ export default function MilestoneCard({
                   )}
                 </span>
                 {task.reminder_time && (
-                  <span className="text-xs text-stone-400 flex items-center gap-1">
+                  <span className="text-xs text-slate-400 flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
                     截止 {format(new Date(task.reminder_time), 'M月d日', { locale: zhCN })}
                   </span>
@@ -103,15 +103,15 @@ export default function MilestoneCard({
               
               <h2 className={cn(
                 "font-serif text-2xl font-semibold text-[#2C3E50] mb-2 leading-tight",
-                isCompleted && "line-through text-stone-500"
+                isCompleted && "line-through text-slate-500"
               )}>
                 {task.title}
               </h2>
-              <p className="text-sm text-stone-500 mb-4 leading-relaxed line-clamp-2">
+              <p className="text-sm text-slate-500 mb-4 leading-relaxed line-clamp-2">
                 {task.description || "暂无描述"}
               </p>
               
-              <div className="flex flex-wrap items-center gap-4 text-xs text-stone-500">
+              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
                 <span className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   {completedSubtasks}/{totalSubtasks} 子约定
@@ -134,10 +134,10 @@ export default function MilestoneCard({
                 expanded && "rotate-180 bg-white shadow-sm"
               )}
             >
-              <ChevronDown className="w-5 h-5 text-stone-400" />
+              <ChevronDown className="w-5 h-5 text-slate-400" />
             </button>
             <button className="p-2 hover:bg-white/50 rounded-full transition-colors">
-              <MoreHorizontal className="w-5 h-5 text-stone-400" />
+              <MoreHorizontal className="w-5 h-5 text-slate-400" />
             </button>
           </div>
         </div>
@@ -175,12 +175,12 @@ export default function MilestoneCard({
               <div className="flex-1">
                 <p className={cn(
                   "text-sm font-medium transition-colors",
-                  subtask.status === 'completed' ? "text-stone-500 line-through decoration-stone-300" : "text-stone-700"
+                  subtask.status === 'completed' ? "text-slate-500 line-through decoration-stone-300" : "text-slate-700"
                 )}>
                   {subtask.title}
                 </p>
                 {subtask.status === 'completed' && (
-                  <p className="text-xs text-stone-400 mt-0.5">已完成</p>
+                  <p className="text-xs text-slate-400 mt-0.5">已完成</p>
                 )}
               </div>
               {subtask.status === 'completed' && (
@@ -192,7 +192,7 @@ export default function MilestoneCard({
           ))}
           
           {subtasks.length === 0 && (
-            <div className="text-center py-4 text-stone-400 text-sm">暂无子约定</div>
+            <div className="text-center py-4 text-slate-400 text-sm">暂无子约定</div>
           )}
         </div>
       )}
@@ -204,18 +204,18 @@ export default function MilestoneCard({
             <div className="flex items-center gap-2">
               <button 
                 onClick={onAddSubtask}
-                className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-stone-50 transition-colors"
+                className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-stone-50 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
                 添加子约定
               </button>
-              <button className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-stone-50 transition-colors">
+              <button className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-stone-50 transition-colors">
                 <MessageSquare className="w-3.5 h-3.5" />
                 备注
               </button>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-stone-400">更新于 {format(new Date(task.updated_date || task.created_date), 'HH:mm')}</span>
+              <span className="text-xs text-slate-400">更新于 {format(new Date(task.updated_date || task.created_date), 'HH:mm')}</span>
               <button 
                 onClick={() => onUpdateStatus(task, task.status === 'completed' ? 'in_progress' : 'completed')}
                 className={cn(

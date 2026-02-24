@@ -1,17 +1,66 @@
 import React, { useState } from "react";
-import { Plus, Mic, Sparkles, ChevronLeft, PenLine } from "lucide-react";
+import { Plus, Mic, Sparkles, ChevronLeft, Calendar as CalendarIcon, Clock, Tag, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import UnifiedTaskInput from "./UnifiedTaskInput";
 import VoiceTaskInput from "./VoiceTaskInput";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { zhCN } from "date-fns/locale";
+
+const CATEGORIES = [
+  { value: "work", label: "工作", icon: "💼" },
+  { value: "personal", label: "个人", icon: "👤" },
+  { value: "health", label: "健康", icon: "❤️" },
+  { value: "study", label: "学习", icon: "📚" },
+  { value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦" },
+  { value: "shopping", label: "购物", icon: "🛒" },
+  { value: "finance", label: "财务", icon: "💰" },
+  { value: "other", label: "其他", icon: "📌" },
+];
 
 export default function TaskCreationPanel({ onAddTask, onOpenManual, onVoiceTasks }) {
-  const [activeTab, setActiveTab] = useState("smart"); // 'quick', 'smart'
+  const [activeTab, setActiveTab] = useState("smart");
   const [showVoice, setShowVoice] = useState(false);
   const [smartInputValue, setSmartInputValue] = useState("");
+  
+  // Manual form state
+  const [manualTask, setManualTask] = useState({
+    title: "",
+    priority: "medium",
+    category: "personal",
+    reminder_time: new Date(),
+    time: "09:00"
+  });
 
   const handleSmartAddTask = (task) => {
     onAddTask(task);
-    // Input clearing is handled by UnifiedTaskInput calling onChange("")
+  };
+
+  const handleManualSubmit = () => {
+    if (!manualTask.title.trim()) return;
+    
+    const reminderDate = new Date(manualTask.reminder_time);
+    const [hours, minutes] = manualTask.time.split(':');
+    reminderDate.setHours(parseInt(hours), parseInt(minutes));
+
+    onAddTask({
+      ...manualTask,
+      reminder_time: reminderDate.toISOString(),
+      status: 'pending'
+    });
+
+    // Reset form
+    setManualTask({
+      title: "",
+      priority: "medium",
+      category: "personal",
+      reminder_time: new Date(),
+      time: "09:00"
+    });
   };
 
   return (
@@ -50,41 +99,95 @@ export default function TaskCreationPanel({ onAddTask, onOpenManual, onVoiceTask
 
       <div className="p-6 bg-slate-50/10 min-h-[180px]">
         {activeTab === "quick" && !showVoice &&
-        <div className="animate-in fade-in slide-in-from-left-2 duration-300">
-             <div className="flex items-center gap-2 mb-6">
-               <Sparkles className="w-4 h-4 text-[#384877]" />
-               <span className="text-xs font-medium text-slate-500">AI 助手 · 智能创建约定</span>
-             </div>
+          <div className="animate-in fade-in slide-in-from-left-2 duration-300 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plus className="w-4 h-4 text-[#384877]" />
+                <span className="text-xs font-medium text-slate-500">手动创建约定</span>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowVoice(true)}
+                className="text-[#384877] hover:bg-blue-50"
+              >
+                <Mic className="w-4 h-4 mr-1" /> 切换语音
+              </Button>
+            </div>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Manual Create Card */}
-                <button
-              onClick={onOpenManual}
-              className="group bg-white border-2 border-dashed border-slate-200 rounded-2xl p-6 flex items-center gap-4 hover:border-[#384877]/30 hover:bg-white hover:shadow-lg hover:shadow-blue-900/5 transition-all duration-300 text-left h-28">
+            <div className="space-y-4">
+              <Input
+                placeholder="输入约定标题..."
+                value={manualTask.title}
+                onChange={(e) => setManualTask({ ...manualTask, title: e.target.value })}
+                className="text-lg font-medium border-0 border-b-2 border-slate-200 rounded-none px-0 focus-visible:ring-0 focus-visible:border-[#384877] bg-transparent"
+              />
 
-                   <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center group-hover:scale-110 transition-transform group-active:scale-95">
-                      <Plus className="w-6 h-6 text-slate-400 group-hover:text-[#384877]" />
-                   </div>
-                   <div>
-                      <h3 className="font-bold text-slate-800 text-lg">手动创建</h3>
-                      <p className="text-xs text-slate-400 mt-1">点击输入详情</p>
-                   </div>
-                </button>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal border-slate-200">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {manualTask.reminder_time ? format(manualTask.reminder_time, "M月d日", { locale: zhCN }) : "选择日期"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={manualTask.reminder_time}
+                      onSelect={(date) => date && setManualTask({ ...manualTask, reminder_time: date })}
+                      initialFocus
+                      locale={zhCN}
+                    />
+                  </PopoverContent>
+                </Popover>
 
-                {/* Voice Create Card */}
-                <button
-              onClick={() => setShowVoice(true)}
-              className="group bg-[#384877] rounded-2xl p-6 flex items-center gap-4 hover:bg-[#2c3a63] transition-all duration-300 text-left shadow-lg shadow-blue-900/20 h-28">
+                <Input
+                  type="time"
+                  value={manualTask.time}
+                  onChange={(e) => setManualTask({ ...manualTask, time: e.target.value })}
+                  className="border-slate-200"
+                />
 
-                   <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm group-active:scale-95">
-                      <Mic className="w-6 h-6 text-white" />
-                   </div>
-                   <div>
-                      <h3 className="font-bold text-white text-lg">语音创建</h3>
-                      <p className="text-xs text-white/60 mt-1">AI 识别</p>
-                   </div>
-                </button>
-             </div>
+                <Select value={manualTask.category} onValueChange={(val) => setManualTask({ ...manualTask, category: val })}>
+                  <SelectTrigger className="border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map(cat => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        <span className="flex items-center gap-2">
+                          <span>{cat.icon}</span>
+                          <span>{cat.label}</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={manualTask.priority} onValueChange={(val) => setManualTask({ ...manualTask, priority: val })}>
+                  <SelectTrigger className="border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">低优先级</SelectItem>
+                    <SelectItem value="medium">中优先级</SelectItem>
+                    <SelectItem value="high">高优先级</SelectItem>
+                    <SelectItem value="urgent">紧急</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <Button 
+                  onClick={handleManualSubmit}
+                  className="bg-[#384877] hover:bg-[#2c3a63] text-white px-8"
+                  disabled={!manualTask.title.trim()}
+                >
+                  创建
+                </Button>
+              </div>
+            </div>
           </div>
         }
 

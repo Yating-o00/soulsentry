@@ -38,7 +38,7 @@ export default function MilestoneCard({
 
   return (
     <div className={cn(
-      "bg-white rounded-[24px] border border-[#E8E4E0] shadow-[0_4px_24px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(91,141,184,0.12)] hover:-translate-y-0.5",
+      "bg-white rounded-3xl border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(91,141,184,0.12)] hover:-translate-y-0.5",
       isCompleted && "opacity-80 grayscale-[0.5]"
     )}>
       {/* Header Section */}
@@ -47,7 +47,7 @@ export default function MilestoneCard({
           if (e.target.closest('button')) return;
           onEdit && onEdit();
         }}
-        className="bg-gradient-to-br from-[#FAFBFC] to-[#F0F4F8] border-b border-[#E8E4E0] rounded-t-[24px] p-6 md:p-8 cursor-pointer"
+        className="bg-gradient-to-br from-slate-50/50 to-white border-b border-slate-100 rounded-t-3xl p-6 md:p-8 cursor-pointer"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-5 flex-1">

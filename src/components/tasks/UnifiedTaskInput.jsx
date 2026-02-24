@@ -152,12 +152,15 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
             <div className="flex-1">
               <p className="text-xs text-stone-500 mb-2 font-medium">AI理解：</p>
               <div className="flex flex-wrap gap-2">
-                {previewTags.map((tag, idx) => (
-                  <span key={idx} className={cn("px-2.5 py-1 text-xs rounded-full flex items-center gap-1", tag.color)}>
-                    <tag.icon className="w-3 h-3" />
-                    {tag.text}
-                  </span>
-                ))}
+                {previewTags.map((tag, idx) => {
+                  const Icon = tag.icon;
+                  return (
+                    <span key={idx} className={cn("px-2.5 py-1 text-xs rounded-full flex items-center gap-1", tag.color)}>
+                      <Icon className="w-3 h-3" />
+                      {tag.text}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           </div>

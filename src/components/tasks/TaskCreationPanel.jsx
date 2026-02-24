@@ -19,20 +19,6 @@ export default function TaskCreationPanel({ onAddTask, onOpenManual, onVoiceTask
       {/* Tabs */}
       <div className="flex border-b border-slate-100">
         <button
-          onClick={() => {setActiveTab("quick");setShowVoice(false);}}
-          className={cn(
-            "flex-1 py-4 text-sm font-medium transition-all duration-300 relative",
-            activeTab === "quick" ?
-            "text-slate-900 bg-slate-50/50" :
-            "text-slate-500 hover:text-slate-700 hover:bg-slate-50/30"
-          )}>
-
-          快速创建
-          {activeTab === "quick" &&
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#384877] mx-auto w-12 rounded-full" />
-          }
-        </button>
-        <button
           onClick={() => {setActiveTab("smart");setShowVoice(false);}}
           className={cn(
             "flex-1 py-4 text-sm font-medium transition-all duration-300 relative",
@@ -43,6 +29,20 @@ export default function TaskCreationPanel({ onAddTask, onOpenManual, onVoiceTask
 
           智能解析
           {activeTab === "smart" &&
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#384877] mx-auto w-12 rounded-full" />
+          }
+        </button>
+        <button
+          onClick={() => {setActiveTab("quick");setShowVoice(false);}}
+          className={cn(
+            "flex-1 py-4 text-sm font-medium transition-all duration-300 relative",
+            activeTab === "quick" ?
+            "text-slate-900 bg-slate-50/50" :
+            "text-slate-500 hover:text-slate-700 hover:bg-slate-50/30"
+          )}>
+
+          快速创建
+          {activeTab === "quick" &&
           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#384877] mx-auto w-12 rounded-full" />
           }
         </button>

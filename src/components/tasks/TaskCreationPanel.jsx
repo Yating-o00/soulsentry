@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { OfflineStorage } from "../offline/OfflineManager";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, BookTemplate } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, BookTemplate, CheckSquare, X } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
@@ -81,6 +81,24 @@ export default function TaskCreationPanel({ onAddTask, initialData = null }) {
     queryFn: () => base44.entities.TaskTemplate.list(),
     enabled: isExpanded 
   });
+
+  const addSubtask = () => {
+    setTask(prev => ({
+      ...prev,
+      subtasks: [...(prev.subtasks || []), { title: "", is_completed: false }]
+    }));
+  };
+
+  const updateSubtask = (index, value) => {
+    const newSubtasks = [...(task.subtasks || [])];
+    newSubtasks[index].title = value;
+    setTask(prev => ({ ...prev, subtasks: newSubtasks }));
+  };
+
+  const removeSubtask = (index) => {
+    const newSubtasks = (task.subtasks || []).filter((_, i) => i !== index);
+    setTask(prev => ({ ...prev, subtasks: newSubtasks }));
+  };
 
   const [task, setTask] = useState({
     title: initialData?.title || "",
@@ -331,7 +349,23 @@ Return JSON.`,
       if (onAddTask) {
         await onAddTask(taskToSubmit);
       } else {
-        await base44.entities.Task.create(taskToSubmit);
+        // Create parent task first
+        const { subtasks, ...parentTaskData } = taskToSubmit;
+        const createdTask = await base44.entities.Task.create(parentTaskData);
+        
+        // Create subtasks if any
+        if (subtasks && subtasks.length > 0) {
+           await Promise.all(subtasks.filter(st => st.title.trim()).map(st => 
+             base44.entities.Task.create({
+               title: st.title,
+               parent_task_id: createdTask.id,
+               status: 'pending',
+               priority: createdTask.priority,
+               category: createdTask.category,
+               reminder_time: createdTask.reminder_time
+             })
+           ));
+        }
       }
       
       triggerHaptic('success');
@@ -513,6 +547,32 @@ Return JSON.`,
                   rows={2}
                 />
 
+                <AnimatePresence>
+                  {task.subtasks && task.subtasks.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-2"
+                    >
+                      <div className="text-xs font-medium text-slate-500 ml-1">子约定</div>
+                      {task.subtasks.map((subtask, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                           <Input
+                              value={subtask.title}
+                              onChange={(e) => updateSubtask(index, e.target.value)}
+                              placeholder={`子约定 ${index + 1}`}
+                              className="bg-slate-50 border-slate-200"
+                           />
+                           <Button type="button" variant="ghost" size="icon" onClick={() => removeSubtask(index)} className="text-slate-400 hover:text-red-500 shrink-0">
+                              <X className="h-4 w-4" />
+                           </Button>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Quick Settings */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                   <Popover>
@@ -636,6 +696,10 @@ Return JSON.`,
                   
                   <Button type="button" variant="outline" onClick={() => setShowDependencies(true)} className="border-orange-100 bg-orange-50/50 text-orange-700">
                     <ListTodo className="h-4 w-4 mr-2" /> 依赖
+                  </Button>
+                  
+                  <Button type="button" variant="outline" onClick={addSubtask} className="border-emerald-100 bg-emerald-50/50 text-emerald-700">
+                    <CheckSquare className="h-4 w-4 mr-2" /> 子约定
                   </Button>
                 </div>
 

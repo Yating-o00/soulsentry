@@ -420,7 +420,7 @@ Return JSON.`,
           {!isExpanded ? (
             <Tabs defaultValue="smart" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4 md:mb-6 h-10 md:h-12 bg-slate-100/50 p-1 rounded-xl">
-                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>智能解析</AIText></TabsTrigger>
+                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>新的约定</AIText></TabsTrigger>
                 <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>快速创建</AIText></TabsTrigger>
               </TabsList>
 

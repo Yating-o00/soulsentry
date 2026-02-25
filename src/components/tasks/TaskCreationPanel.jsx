@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { OfflineStorage } from "../offline/OfflineManager";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, BookTemplate, CheckSquare, X } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, BookTemplate, CheckSquare, X, GitMerge } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
@@ -561,15 +561,25 @@ Return JSON.`,
                   rows={2}
                 />
 
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={addSubtask}
+                    className="flex items-center gap-2 text-sm text-slate-500 hover:text-[#384877] transition-colors font-medium py-1 px-1 rounded-md hover:bg-slate-50"
+                  >
+                    <GitMerge className="w-4 h-4" />
+                    <span>添加子约定</span>
+                  </button>
+                </div>
+
                 <AnimatePresence>
                   {task.subtasks && task.subtasks.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="space-y-2"
+                      className="space-y-2 pl-2 border-l-2 border-slate-100 ml-2"
                     >
-                      <div className="text-xs font-medium text-slate-500 ml-1">子约定</div>
                       {task.subtasks.map((subtask, index) => (
                         <div key={index} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-2">
                            <div className="flex items-center gap-2">
@@ -739,10 +749,6 @@ Return JSON.`,
                   
                   <Button type="button" variant="outline" onClick={() => setShowDependencies(true)} className="border-orange-100 bg-orange-50/50 text-orange-700">
                     <ListTodo className="h-4 w-4 mr-2" /> 依赖
-                  </Button>
-                  
-                  <Button type="button" variant="outline" onClick={addSubtask} className="border-emerald-100 bg-emerald-50/50 text-emerald-700">
-                    <CheckSquare className="h-4 w-4 mr-2" /> 子约定
                   </Button>
                 </div>
 

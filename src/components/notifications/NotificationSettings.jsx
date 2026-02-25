@@ -98,13 +98,13 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
                 key={channel.value}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => toggleNotificationChannel(channel.value)}
-                className={`px-5 py-3 rounded-xl border-2 font-semibold text-sm transition-all duration-200 ${
-                  settings.notification_channels?.includes(channel.value)
-                    ? "bg-gradient-to-r from-purple-500 to-blue-600 text-white border-purple-500 shadow-lg shadow-purple-500/30"
-                    : "bg-white text-slate-700 border-slate-200 hover:border-purple-300 hover:bg-slate-50"
-                }`}
-              >
+                onClick={() => toggleNotificationChannel(channel.value)} className="bg-gradient-to-r text-slate-500 px-5 py-3 text-sm font-semibold rounded-xl border-2 transition-all duration-200 from-purple-500 to-blue-600 border-purple-500 shadow-lg shadow-purple-500/30">
+
+
+
+
+
+
 
 
 

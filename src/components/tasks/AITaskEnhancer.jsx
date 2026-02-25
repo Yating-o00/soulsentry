@@ -15,22 +15,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
 const CATEGORIES = [
-  { value: "work", label: "工作", icon: "💼" },
-  { value: "personal", label: "个人", icon: "👤" },
-  { value: "health", label: "健康", icon: "❤️" },
-  { value: "study", label: "学习", icon: "📚" },
-  { value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦" },
-  { value: "shopping", label: "购物", icon: "🛒" },
-  { value: "finance", label: "财务", icon: "💰" },
-  { value: "other", label: "其他", icon: "📌" },
-];
+{ value: "work", label: "工作", icon: "💼" },
+{ value: "personal", label: "个人", icon: "👤" },
+{ value: "health", label: "健康", icon: "❤️" },
+{ value: "study", label: "学习", icon: "📚" },
+{ value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦" },
+{ value: "shopping", label: "购物", icon: "🛒" },
+{ value: "finance", label: "财务", icon: "💰" },
+{ value: "other", label: "其他", icon: "📌" }];
+
 
 const PRIORITIES = [
-  { value: "low", label: "低优先级", color: "bg-slate-100 text-slate-600 border-slate-300" },
-  { value: "medium", label: "中优先级", color: "bg-blue-50 text-blue-600 border-blue-300" },
-  { value: "high", label: "高优先级", color: "bg-orange-50 text-orange-600 border-orange-300" },
-  { value: "urgent", label: "紧急", color: "bg-red-50 text-red-600 border-red-300" },
-];
+{ value: "low", label: "低优先级", color: "bg-slate-100 text-slate-600 border-slate-300" },
+{ value: "medium", label: "中优先级", color: "bg-blue-50 text-blue-600 border-blue-300" },
+{ value: "high", label: "高优先级", color: "bg-orange-50 text-orange-600 border-orange-300" },
+{ value: "urgent", label: "紧急", color: "bg-red-50 text-red-600 border-red-300" }];
+
 
 export default function AITaskEnhancer({ taskTitle, currentDescription, availableTemplates, onApply }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -62,7 +62,7 @@ ${JSON.stringify(suggestions)}
 3. 保持其他未受影响字段不变。
 4. 返回更新后的完整 JSON 对象。
 5. 确保所有文本内容使用简体中文 (Simplified Chinese)。`,
-response_json_schema: {
+        response_json_schema: {
           type: "object",
           properties: {
             description: { type: "string" },
@@ -103,13 +103,13 @@ response_json_schema: {
     setIsAnalyzing(true);
     try {
       const now = new Date().toISOString();
-      
-      const templatesInfo = availableTemplates && availableTemplates.length > 0
-          ? `现有模板列表 (格式: ID: 名称 - 描述):
-${availableTemplates.map(t => `${t.id}: ${t.name} - ${t.description || '无描述'}`).join('\n')}
 
-如果用户的输入明显匹配某个模板的内容或场景，请推荐使用该模板，并返回其 ID。`
-          : "";
+      const templatesInfo = availableTemplates && availableTemplates.length > 0 ?
+      `现有模板列表 (格式: ID: 名称 - 描述):
+${availableTemplates.map((t) => `${t.id}: ${t.name} - ${t.description || '无描述'}`).join('\n')}
+
+如果用户的输入明显匹配某个模板的内容或场景，请推荐使用该模板，并返回其 ID。` :
+      "";
 
       const response = await base44.integrations.Core.InvokeLLM({
         prompt: `你是一个约定管理AI助手。请根据用户输入，提供智能生成和润色建议。
@@ -144,11 +144,11 @@ ${templatesInfo}
 
 注意：所有时间必须为ISO 8601格式 (YYYY-MM-DDTHH:mm:ss.sssZ)。
 重点：所有返回的文本内容（描述、理由、分析等）必须使用简体中文 (Simplified Chinese)。即使输入包含英文，输出也必须完全翻译或重写为中文。`,
-response_json_schema: {
+        response_json_schema: {
           type: "object",
           properties: {
             description: { type: "string" },
-            category: { 
+            category: {
               type: "string",
               enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"]
             },
@@ -161,9 +161,9 @@ response_json_schema: {
               items: { type: "string" }
             },
             subtasks: {
-                type: "array",
-                items: { type: "string" },
-                description: "建议的子约定列表"
+              type: "array",
+              items: { type: "string" },
+              description: "建议的子约定列表"
             },
             reminder_time: { type: "string", format: "date-time" },
             execution_start: { type: "string", format: "date-time" },
@@ -182,20 +182,20 @@ response_json_schema: {
       // 如果推荐了模板，将模板内容合并到建议中
       let finalResponse = response;
       if (response.recommended_template_id && availableTemplates) {
-          const template = availableTemplates.find(t => t.id === response.recommended_template_id);
-          if (template && template.template_data) {
-              const data = template.template_data;
-              finalResponse = {
-                  ...response,
-                  // 优先使用模板的结构化数据，但保留 AI 生成的针对性描述
-                  category: data.category || response.category,
-                  priority: data.priority || response.priority,
-                  subtasks: (data.subtasks && data.subtasks.map(s => typeof s === 'string' ? s : s.title)) || response.subtasks,
-                  reasoning: `(基于模板 "${template.name}") ${response.reasoning}`,
-                  // 可以在这里合并更多字段
-              };
-              toast("已自动匹配约定模板: " + template.name, { icon: "📋" });
-          }
+        const template = availableTemplates.find((t) => t.id === response.recommended_template_id);
+        if (template && template.template_data) {
+          const data = template.template_data;
+          finalResponse = {
+            ...response,
+            // 优先使用模板的结构化数据，但保留 AI 生成的针对性描述
+            category: data.category || response.category,
+            priority: data.priority || response.priority,
+            subtasks: data.subtasks && data.subtasks.map((s) => typeof s === 'string' ? s : s.title) || response.subtasks,
+            reasoning: `(基于模板 "${template.name}") ${response.reasoning}`
+            // 可以在这里合并更多字段
+          };
+          toast("已自动匹配约定模板: " + template.name, { icon: "📋" });
+        }
       }
 
       setSuggestions(finalResponse);
@@ -210,9 +210,9 @@ response_json_schema: {
 
   const handleApplySuggestions = () => {
     if (!suggestions) return;
-    
+
     onApply({
-      description: preserveDescription ? (currentDescription || suggestions.description) : suggestions.description,
+      description: preserveDescription ? currentDescription || suggestions.description : suggestions.description,
       category: suggestions.category,
       priority: suggestions.priority,
       tags: suggestions.tags,
@@ -232,21 +232,21 @@ response_json_schema: {
         priority_reasoning: suggestions.reasoning
       }
     });
-    
+
     toast.success("已应用AI建议");
     setSuggestions(null);
   };
 
   const getCategoryLabel = (value) => {
-    return CATEGORIES.find(c => c.value === value);
+    return CATEGORIES.find((c) => c.value === value);
   };
 
   const getPriorityLabel = (value) => {
-    return PRIORITIES.find(p => p.value === value);
+    return PRIORITIES.find((p) => p.value === value);
   };
 
   const updateSuggestion = (field, value) => {
-    setSuggestions(prev => ({ ...prev, [field]: value }));
+    setSuggestions((prev) => ({ ...prev, [field]: value }));
   };
 
   const addTag = () => {
@@ -257,37 +257,37 @@ response_json_schema: {
   };
 
   const removeTag = (tagToRemove) => {
-    updateSuggestion('tags', suggestions.tags.filter(t => t !== tagToRemove));
+    updateSuggestion('tags', suggestions.tags.filter((t) => t !== tagToRemove));
   };
 
   return (
-    <div className="space-y-4">
+    <div className="text-gray-600 space-y-4">
       <Button
         type="button"
         onClick={handleAnalyze}
         disabled={isAnalyzing || !taskTitle.trim()}
-        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl h-11 shadow-lg shadow-blue-600/25"
-      >
-        {isAnalyzing ? (
-          <>
+        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl h-11 shadow-lg shadow-blue-600/25">
+
+        {isAnalyzing ?
+        <>
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             AI分析中...
-          </>
-        ) : (
-          <>
+          </> :
+
+        <>
             <Sparkles className="w-4 h-4 mr-2" />
             AI智能增强
           </>
-        )}
+        }
       </Button>
 
       <AnimatePresence>
-        {suggestions && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
+        {suggestions &&
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}>
+
             <Card className="border-2 border-blue-600/30 bg-gradient-to-br from-blue-50 to-white p-5 space-y-4">
               {/* AI建议标题 */}
               <div className="flex items-center gap-2 mb-3">
@@ -304,10 +304,10 @@ response_json_schema: {
                   <span>完善描述</span>
                 </div>
                 <Textarea
-                  value={suggestions.description}
-                  onChange={(e) => updateSuggestion('description', e.target.value)}
-                  className="bg-white min-h-[80px] text-[14px] border-slate-200 focus-visible:ring-blue-600"
-                />
+                value={suggestions.description}
+                onChange={(e) => updateSuggestion('description', e.target.value)}
+                className="bg-white min-h-[80px] text-[14px] border-slate-200 focus-visible:ring-blue-600" />
+
               </div>
 
               {/* 分类和优先级 - 可编辑 */}
@@ -318,21 +318,21 @@ response_json_schema: {
                     <span>推荐分类</span>
                   </div>
                   <Select
-                    value={suggestions.category}
-                    onValueChange={(val) => updateSuggestion('category', val)}
-                  >
+                  value={suggestions.category}
+                  onValueChange={(val) => updateSuggestion('category', val)}>
+
                     <SelectTrigger className="bg-white border-slate-200">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CATEGORIES.map(cat => (
-                        <SelectItem key={cat.value} value={cat.value}>
+                      {CATEGORIES.map((cat) =>
+                    <SelectItem key={cat.value} value={cat.value}>
                           <div className="flex items-center gap-2">
                             <span>{cat.icon}</span>
                             <span>{cat.label}</span>
                           </div>
                         </SelectItem>
-                      ))}
+                    )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -343,21 +343,21 @@ response_json_schema: {
                     <span>推荐优先级</span>
                   </div>
                   <Select
-                    value={suggestions.priority}
-                    onValueChange={(val) => updateSuggestion('priority', val)}
-                  >
+                  value={suggestions.priority}
+                  onValueChange={(val) => updateSuggestion('priority', val)}>
+
                     <SelectTrigger className="bg-white border-slate-200">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {PRIORITIES.map(pri => (
-                        <SelectItem key={pri.value} value={pri.value}>
+                      {PRIORITIES.map((pri) =>
+                    <SelectItem key={pri.value} value={pri.value}>
                           <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${(pri.color && typeof pri.color === 'string' && pri.color.includes(' ')) ? pri.color.split(' ')[0] : 'bg-slate-100'}`} />
+                            <div className={`w-2 h-2 rounded-full ${pri.color && typeof pri.color === 'string' && pri.color.includes(' ') ? pri.color.split(' ')[0] : 'bg-slate-100'}`} />
                             <span>{pri.label}</span>
                           </div>
                         </SelectItem>
-                      ))}
+                    )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -371,85 +371,85 @@ response_json_schema: {
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-3">
                   <div className="flex flex-wrap gap-2">
-                    {suggestions.tags.map((tag, index) => (
-                      <Badge
-                        key={index}
-                        variant="outline"
-                        className="bg-blue-50 border-blue-600/20 text-blue-600 text-[13px] pl-2.5 pr-1.5 py-1 flex items-center gap-1"
-                      >
+                    {suggestions.tags.map((tag, index) =>
+                  <Badge
+                    key={index}
+                    variant="outline"
+                    className="bg-blue-50 border-blue-600/20 text-blue-600 text-[13px] pl-2.5 pr-1.5 py-1 flex items-center gap-1">
+
                         #{tag}
                         <button
-                          onClick={() => removeTag(tag)}
-                          className="hover:bg-blue-600/10 rounded-full p-0.5 transition-colors"
-                        >
+                      onClick={() => removeTag(tag)}
+                      className="hover:bg-blue-600/10 rounded-full p-0.5 transition-colors">
+
                           <X className="w-3 h-3" />
                         </button>
                       </Badge>
-                    ))}
+                  )}
                   </div>
                   <div className="flex gap-2">
                     <Input
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                      placeholder="添加新标签..."
-                      className="h-8 text-sm border-slate-200"
-                    />
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                    placeholder="添加新标签..."
+                    className="h-8 text-sm border-slate-200" />
+
                     <Button
-                      size="sm"
-                      onClick={addTag}
-                      disabled={!newTag.trim()}
-                      className="h-8 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-600/20"
-                    >
+                    size="sm"
+                    onClick={addTag}
+                    disabled={!newTag.trim()}
+                    className="h-8 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-600/20">
+
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
               </div>
 
-              {suggestions.subtasks && (
-                  <div className="space-y-2">
+              {suggestions.subtasks &&
+            <div className="space-y-2">
                       <div className="flex items-center gap-2 text-[14px] text-slate-500 font-medium">
                           <ListTodo className="w-4 h-4 text-blue-600" />
                           <span>建议子约定</span>
                       </div>
                       <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                          {suggestions.subtasks.map((st, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
+                          {suggestions.subtasks.map((st, idx) =>
+                <div key={idx} className="flex items-center gap-2">
                                   <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                                   <Input
-                                      value={st}
-                                      onChange={(e) => {
-                                          const newSubtasks = [...suggestions.subtasks];
-                                          newSubtasks[idx] = e.target.value;
-                                          updateSuggestion('subtasks', newSubtasks);
-                                      }}
-                                      className="h-8 text-sm border-0 border-b border-transparent focus-visible:border-blue-500 rounded-none px-0 focus-visible:ring-0 bg-transparent"
-                                      placeholder="输入子约定..."
-                                  />
+                    value={st}
+                    onChange={(e) => {
+                      const newSubtasks = [...suggestions.subtasks];
+                      newSubtasks[idx] = e.target.value;
+                      updateSuggestion('subtasks', newSubtasks);
+                    }}
+                    className="h-8 text-sm border-0 border-b border-transparent focus-visible:border-blue-500 rounded-none px-0 focus-visible:ring-0 bg-transparent"
+                    placeholder="输入子约定..." />
+
                                   <button
-                                      onClick={() => {
-                                          const newSubtasks = suggestions.subtasks.filter((_, i) => i !== idx);
-                                          updateSuggestion('subtasks', newSubtasks);
-                                      }}
-                                      className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-                                  >
+                    onClick={() => {
+                      const newSubtasks = suggestions.subtasks.filter((_, i) => i !== idx);
+                      updateSuggestion('subtasks', newSubtasks);
+                    }}
+                    className="p-1 text-slate-400 hover:text-red-500 transition-colors">
+
                                       <X className="w-3.5 h-3.5" />
                                   </button>
                               </div>
-                          ))}
+                )}
                           <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => updateSuggestion('subtasks', [...suggestions.subtasks, ""])}
-                              className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-7"
-                          >
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateSuggestion('subtasks', [...suggestions.subtasks, ""])}
+                  className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-7">
+
                               <Plus className="w-3.5 h-3.5 mr-1" />
                               添加子约定
                           </Button>
                       </div>
                   </div>
-              )}
+            }
 
               {/* 时间建议与风险分析 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -460,55 +460,55 @@ response_json_schema: {
                           <span className="text-xs font-bold">最佳执行时间</span>
                       </div>
                       <div className="space-y-1 text-xs text-indigo-700">
-                          {suggestions.reminder_time && (
-                              <div className="flex justify-between">
+                          {suggestions.reminder_time &&
+                  <div className="flex justify-between">
                                   <span className="opacity-70">建议提醒:</span>
                                   <span className="font-medium">{format(new Date(suggestions.reminder_time), "MM-dd HH:mm")}</span>
                               </div>
-                          )}
-                          {suggestions.execution_start && (
-                              <div className="flex justify-between">
+                  }
+                          {suggestions.execution_start &&
+                  <div className="flex justify-between">
                                   <span className="opacity-70">建议执行:</span>
                                   <span className="font-medium">
                                       {format(new Date(suggestions.execution_start), "MM-dd HH:mm")}
                                       {suggestions.execution_end && ` - ${format(new Date(suggestions.execution_end), "HH:mm")}`}
                                   </span>
                               </div>
-                          )}
-                          {suggestions.time_reasoning && (
-                              <p className="mt-1 pt-1 border-t border-indigo-200/50 opacity-80 leading-snug">
+                  }
+                          {suggestions.time_reasoning &&
+                  <p className="mt-1 pt-1 border-t border-indigo-200/50 opacity-80 leading-snug">
                                   {suggestions.time_reasoning}
                               </p>
-                          )}
+                  }
                       </div>
                   </div>
 
                   {/* 风险分析 */}
                   <div className={`p-3 rounded-lg border ${
-                      suggestions.risk_level === 'high' || suggestions.risk_level === 'critical' 
-                      ? 'bg-red-50 border-red-100' 
-                      : 'bg-amber-50 border-amber-100'
-                  }`}>
+              suggestions.risk_level === 'high' || suggestions.risk_level === 'critical' ?
+              'bg-red-50 border-red-100' :
+              'bg-amber-50 border-amber-100'}`
+              }>
                       <div className={`flex items-center gap-2 mb-2 ${
-                          suggestions.risk_level === 'high' || suggestions.risk_level === 'critical' 
-                          ? 'text-red-800' 
-                          : 'text-amber-800'
-                      }`}>
+                suggestions.risk_level === 'high' || suggestions.risk_level === 'critical' ?
+                'text-red-800' :
+                'text-amber-800'}`
+                }>
                           <ShieldAlert className="w-4 h-4" />
                           <span className="text-xs font-bold">
                               风险等级: {suggestions.risk_level?.toUpperCase() || 'LOW'}
                           </span>
                       </div>
                       <div className="space-y-1 text-xs">
-                          {suggestions.risks?.length > 0 ? (
-                              <ul className="list-disc list-inside space-y-0.5 opacity-80">
-                                  {suggestions.risks.map((risk, i) => (
-                                      <li key={i}>{risk}</li>
-                                  ))}
-                              </ul>
-                          ) : (
-                              <span className="opacity-60">未检测到显著风险</span>
-                          )}
+                          {suggestions.risks?.length > 0 ?
+                  <ul className="list-disc list-inside space-y-0.5 opacity-80">
+                                  {suggestions.risks.map((risk, i) =>
+                    <li key={i}>{risk}</li>
+                    )}
+                              </ul> :
+
+                  <span className="opacity-60">未检测到显著风险</span>
+                  }
                       </div>
                   </div>
               </div>
@@ -531,19 +531,19 @@ response_json_schema: {
                     对建议不满意？告诉AI如何调整
                  </Label>
                  <div className="flex gap-2">
-                    <Input 
-                        value={refineInstruction}
-                        onChange={(e) => setRefineInstruction(e.target.value)}
-                        placeholder="例如：把优先级调低点、时间改到明天下午、再加个子任务..."
-                        className="h-9 text-sm bg-white"
-                        onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
-                    />
-                    <Button 
-                        size="sm"
-                        onClick={handleRefine}
-                        disabled={isRefining || !refineInstruction.trim()}
-                        className="h-9 bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-200"
-                    >
+                    <Input
+                  value={refineInstruction}
+                  onChange={(e) => setRefineInstruction(e.target.value)}
+                  placeholder="例如：把优先级调低点、时间改到明天下午、再加个子任务..."
+                  className="h-9 text-sm bg-white"
+                  onKeyDown={(e) => e.key === 'Enter' && handleRefine()} />
+
+                    <Button
+                  size="sm"
+                  onClick={handleRefine}
+                  disabled={isRefining || !refineInstruction.trim()}
+                  className="h-9 bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-200">
+
                         {isRefining ? <Loader2 className="w-4 h-4 animate-spin" /> : "调整"}
                     </Button>
                  </div>
@@ -552,11 +552,11 @@ response_json_schema: {
               {/* 操作按钮 */}
               <div className="flex flex-col gap-3 pt-2">
                 <div className="flex items-center space-x-2 px-1">
-                  <Switch 
-                    id="preserve-mode" 
-                    checked={preserveDescription}
-                    onCheckedChange={setPreserveDescription}
-                  />
+                  <Switch
+                  id="preserve-mode"
+                  checked={preserveDescription}
+                  onCheckedChange={setPreserveDescription} />
+
                   <Label htmlFor="preserve-mode" className="text-sm font-medium text-slate-600 cursor-pointer">
                     保留原约定描述 (仅应用属性和其他建议)
                   </Label>
@@ -564,25 +564,25 @@ response_json_schema: {
                 
                 <div className="flex gap-2">
                   <Button
-                    onClick={handleApplySuggestions}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg"
-                  >
+                  onClick={handleApplySuggestions}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg">
+
                     <Sparkles className="w-4 h-4 mr-2" />
                     应用建议
                   </Button>
                 <Button
                   onClick={() => setSuggestions(null)}
                   variant="outline"
-                  className="rounded-lg border-slate-200 hover:bg-slate-50"
-                >
+                  className="rounded-lg border-slate-200 hover:bg-slate-50">
+
                   关闭
                 </Button>
               </div>
             </div>
             </Card>
           </motion.div>
-        )}
+        }
       </AnimatePresence>
-    </div>
-  );
+    </div>);
+
 }

@@ -85,13 +85,19 @@ export default function TaskCreationPanel({ onAddTask, initialData = null }) {
   const addSubtask = () => {
     setTask(prev => ({
       ...prev,
-      subtasks: [...(prev.subtasks || []), { title: "", is_completed: false }]
+      subtasks: [...(prev.subtasks || []), { 
+        title: "", 
+        is_completed: false,
+        priority: prev.priority,
+        category: prev.category,
+        time: prev.time
+      }]
     }));
   };
 
-  const updateSubtask = (index, value) => {
+  const updateSubtask = (index, field, value) => {
     const newSubtasks = [...(task.subtasks || [])];
-    newSubtasks[index].title = value;
+    newSubtasks[index][field] = value;
     setTask(prev => ({ ...prev, subtasks: newSubtasks }));
   };
 
@@ -355,16 +361,24 @@ Return JSON.`,
         
         // Create subtasks if any
         if (subtasks && subtasks.length > 0) {
-           await Promise.all(subtasks.filter(st => st.title.trim()).map(st => 
-             base44.entities.Task.create({
+           await Promise.all(subtasks.filter(st => st.title.trim()).map(st => {
+             let stReminderTime = createdTask.reminder_time;
+             if (st.time) {
+                const parentDate = new Date(createdTask.reminder_time);
+                const [h, m] = st.time.split(':');
+                parentDate.setHours(parseInt(h), parseInt(m), 0);
+                stReminderTime = parentDate.toISOString();
+             }
+
+             return base44.entities.Task.create({
                title: st.title,
                parent_task_id: createdTask.id,
                status: 'pending',
-               priority: createdTask.priority,
-               category: createdTask.category,
-               reminder_time: createdTask.reminder_time
-             })
-           ));
+               priority: st.priority || createdTask.priority,
+               category: st.category || createdTask.category,
+               reminder_time: stReminderTime
+             });
+           }));
         }
       }
       
@@ -557,16 +571,45 @@ Return JSON.`,
                     >
                       <div className="text-xs font-medium text-slate-500 ml-1">子约定</div>
                       {task.subtasks.map((subtask, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                           <Input
-                              value={subtask.title}
-                              onChange={(e) => updateSubtask(index, e.target.value)}
-                              placeholder={`子约定 ${index + 1}`}
-                              className="bg-slate-50 border-slate-200"
-                           />
-                           <Button type="button" variant="ghost" size="icon" onClick={() => removeSubtask(index)} className="text-slate-400 hover:text-red-500 shrink-0">
-                              <X className="h-4 w-4" />
-                           </Button>
+                        <div key={index} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-2">
+                           <div className="flex items-center gap-2">
+                             <Input
+                                value={subtask.title}
+                                onChange={(e) => updateSubtask(index, 'title', e.target.value)}
+                                placeholder={`子约定 ${index + 1}`}
+                                className="bg-white border-slate-200 text-slate-700"
+                             />
+                             <Button type="button" variant="ghost" size="icon" onClick={() => removeSubtask(index)} className="text-slate-400 hover:text-red-500 shrink-0 h-9 w-9">
+                                <X className="h-4 w-4" />
+                             </Button>
+                           </div>
+
+                           <div className="flex items-center gap-2 text-sm">
+                             <Select value={subtask.category} onValueChange={(val) => updateSubtask(index, 'category', val)}>
+                                <SelectTrigger className="h-8 w-[100px] border-slate-200 bg-white text-xs px-2 text-slate-700">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {CATEGORIES.map(cat => <SelectItem key={cat.value} value={cat.value} className="text-xs text-slate-700">{cat.label}</SelectItem>)}
+                                </SelectContent>
+                             </Select>
+
+                             <Select value={subtask.priority} onValueChange={(val) => updateSubtask(index, 'priority', val)}>
+                                <SelectTrigger className="h-8 w-[80px] border-slate-200 bg-white text-xs px-2 text-slate-700">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PRIORITIES.map(pri => <SelectItem key={pri.value} value={pri.value} className="text-xs text-slate-700">{pri.label}</SelectItem>)}
+                                </SelectContent>
+                             </Select>
+
+                             <Input
+                                type="time"
+                                value={subtask.time || task.time}
+                                onChange={(e) => updateSubtask(index, 'time', e.target.value)}
+                                className="h-8 w-auto text-xs font-medium px-2 bg-white text-slate-700"
+                             />
+                           </div>
                         </div>
                       ))}
                     </motion.div>

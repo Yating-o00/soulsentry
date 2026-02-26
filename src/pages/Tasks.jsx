@@ -13,7 +13,6 @@ import LifeTaskCard from "../components/tasks/LifeTaskCard";
 import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
-import TaskShareCard from "../components/tasks/TaskShareCard";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -228,8 +227,8 @@ export default function Tasks() {
               onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
               onDelete={(task) => deleteTask(task.id)}
               onEdit={() => setEditingTask(task)}
-              onShare={(task) => setSharingTask(task)}
-              onView={() => setSelectedTask(task)} />
+              onView={() => setSelectedTask(task)}
+              onShare={() => setSharingTask(task)} />
             )}
             </div>
           }
@@ -323,6 +322,15 @@ export default function Tasks() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Share Task Card */}
+      {sharingTask && (
+        <TaskShareCard
+          task={sharingTask}
+          open={!!sharingTask}
+          onClose={() => setSharingTask(null)}
+        />
+      )}
     </div>);
 
 }

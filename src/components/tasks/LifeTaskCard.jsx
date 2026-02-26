@@ -29,31 +29,41 @@ export default function LifeTaskCard({
         color: 'blue',
         icon: <Briefcase className="w-5 h-5" />,
         emoji: '📝',
-        gradient: 'from-blue-100 to-blue-50'
+        gradient: 'from-blue-100 to-blue-50',
+        borderColor: 'border-l-blue-400',
+        bgGlow: 'bg-blue-50'
       };
       case 'health': return {
         color: 'rose',
         icon: <Heart className="w-5 h-5" />,
         emoji: '🌱',
-        gradient: 'from-rose-100 to-rose-50'
+        gradient: 'from-rose-100 to-rose-50',
+        borderColor: 'border-l-rose-400',
+        bgGlow: 'bg-rose-50'
       };
       case 'family': return {
-        color: 'purple',
+        color: 'amber',
         icon: <Heart className="w-5 h-5" />,
         emoji: '👨‍👩‍👧‍👦',
-        gradient: 'from-purple-100 to-purple-50'
+        gradient: 'from-amber-100 to-amber-50',
+        borderColor: 'border-l-amber-400',
+        bgGlow: 'bg-amber-50'
       };
       case 'shopping': return {
         color: 'purple',
         icon: <ShoppingBag className="w-5 h-5" />,
-        emoji: '📦',
-        gradient: 'from-purple-100 to-purple-50'
+        emoji: '🛒',
+        gradient: 'from-purple-100 to-purple-50',
+        borderColor: 'border-l-purple-400',
+        bgGlow: 'bg-purple-50'
       };
       default: return {
         color: 'green',
         icon: <Check className="w-5 h-5" />,
-        emoji: '📝',
-        gradient: 'from-green-100 to-green-50'
+        emoji: '✨',
+        gradient: 'from-green-100 to-green-50',
+        borderColor: 'border-l-green-400',
+        bgGlow: 'bg-green-50'
       };
     }
   };
@@ -84,16 +94,13 @@ export default function LifeTaskCard({
       }}
       className={cn(
         "task-card group bg-white rounded-2xl p-5 shadow-sm border border-stone-100 relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer",
-        task.category === 'work' ? 'border-l-[3px] border-l-blue-400' : 
-        task.category === 'health' ? 'border-l-[3px] border-l-rose-400' :
-        'border-l-[3px] border-l-green-400',
-        completed && "opacity-60"
+        completed && "opacity-60 grayscale-[0.5]"
       )}
     >
       {/* Background decoration */}
       <div className={cn(
-        "absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -mr-16 -mt-16 opacity-30 pointer-events-none",
-        `bg-${theme.color}-100`
+        "absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -mr-16 -mt-16 opacity-50 pointer-events-none",
+        theme.bgGlow
       )} />
 
       <div className="relative z-10">
@@ -112,23 +119,26 @@ export default function LifeTaskCard({
                <Clock className="w-3 h-3" />}
               {triggerType === 'location' ? '地点触发' : 
                triggerType === 'repeat' ? '习惯' :
-               task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm', { locale: zhCN }) : '稍后'}
+               task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm', { locale: zhCN }) + '前' : '稍后'}
             </span>
             
             {/* Secondary/Category Tag */}
-            <span className={cn(
-              "px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1"
-            )}>
-              {task.category === 'work' ? <Briefcase className="w-3 h-3" /> :
-               task.category === 'health' ? <Heart className="w-3 h-3" /> :
-               <Zap className="w-3 h-3" />}
-              {task.category === 'work' ? '工作' : 
-               task.category === 'health' ? '健康' : 
-               task.category === 'shopping' ? '购物' : '生活'}
-            </span>
+            {task.category !== 'personal' && (
+              <span className={cn(
+                "px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1"
+              )}>
+                {task.category === 'work' ? <Briefcase className="w-3 h-3" /> :
+                 task.category === 'health' ? <Heart className="w-3 h-3" /> :
+                 task.category === 'shopping' ? <ShoppingBag className="w-3 h-3" /> :
+                 <Zap className="w-3 h-3" />}
+                {task.category === 'work' ? '工作' : 
+                 task.category === 'health' ? '健康' : 
+                 task.category === 'shopping' ? '购物' : '生活'}
+              </span>
+            )}
           </div>
           
-          <button className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors">
+          <button className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors opacity-0 group-hover:opacity-100">
             <MoreHorizontal className="w-4 h-4" />
           </button>
         </div>
@@ -138,7 +148,7 @@ export default function LifeTaskCard({
           {/* Icon Box */}
           <div className="flex-shrink-0">
             <div className={cn(
-              "w-12 h-12 rounded-2xl flex items-center justify-center text-2xl bg-gradient-to-br shadow-inner",
+              "w-12 h-12 rounded-2xl flex items-center justify-center text-2xl bg-gradient-to-br shadow-sm",
               theme.gradient
             )}>
               {theme.emoji}
@@ -148,7 +158,7 @@ export default function LifeTaskCard({
           {/* Text Content */}
           <div className="flex-1 min-w-0">
             <h3 className={cn(
-              "font-semibold text-stone-800 mb-1 truncate",
+              "font-semibold text-stone-800 mb-1 truncate text-base",
               completed && "line-through text-stone-400"
             )}>
               {task.title}
@@ -159,21 +169,27 @@ export default function LifeTaskCard({
             
             {/* Context Line */}
             <div className="flex items-center gap-3 text-xs">
-              {(task.location_reminder?.location_name || task.reminder_time) && (
+              {(task.location_reminder?.location_name) && (
                 <span className="flex items-center gap-1 text-stone-400">
-                  {task.location_reminder?.enabled ? <MapPin className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                  {task.location_reminder?.location_name || (task.reminder_time ? format(new Date(task.reminder_time), 'MM-dd HH:mm') : '')}
+                  <MapPin className="w-3 h-3" />
+                  {task.location_reminder.location_name}
                 </span>
               )}
-              {triggerType === 'location' && (
+              
+              {triggerType === 'location' ? (
                 <>
-                  <span className="w-1 h-1 rounded-full bg-stone-300"></span>
-                  <span className="text-green-600 font-medium flex items-center gap-1">
-                    <Zap className="w-3 h-3" />
-                    顺路提醒
-                  </span>
+                   {task.location_reminder?.location_name && <span className="w-1 h-1 rounded-full bg-stone-300"></span>}
+                   <span className="text-green-600 font-medium flex items-center gap-1">
+                     <Zap className="w-3 h-3" />
+                     下班顺路
+                   </span>
                 </>
-              )}
+              ) : task.priority === 'urgent' ? (
+                 <span className="text-red-500 font-medium flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    紧急
+                 </span>
+              ) : null}
             </div>
           </div>
 
@@ -201,16 +217,16 @@ export default function LifeTaskCard({
 
         {/* AI Suggestion / Bottom Status */}
         {!completed && (
-          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+          <div className="mt-4 pt-4 border-t border-stone-100 flex items-center justify-between">
             {triggerType === 'location' ? (
               <div className="flex items-center gap-2 text-xs text-stone-500">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span>将在到达附近时提醒</span>
               </div>
             ) : task.ai_analysis?.suggestions?.[0] ? (
-              <div className="flex items-start gap-2 bg-purple-50 p-2 rounded-lg w-full">
-                <Lightbulb className="w-3.5 h-3.5 text-purple-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-purple-700 truncate">{task.ai_analysis.suggestions[0]}</p>
+              <div className="flex items-center gap-2 text-xs text-purple-600">
+                 <Sparkles className="w-3 h-3" />
+                 <span>{task.ai_analysis.suggestions[0]}</span>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-xs text-stone-400">
@@ -219,7 +235,10 @@ export default function LifeTaskCard({
               </div>
             )}
             
-            <button className="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1 transition-colors">
+            <button 
+              onClick={(e) => { e.stopPropagation(); /* Logic for postpone */ }}
+              className="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1 transition-colors"
+            >
               <Clock className="w-3 h-3" />
               推迟
             </button>

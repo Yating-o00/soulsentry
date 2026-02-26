@@ -8,8 +8,14 @@ import {
   ShoppingBag, 
   Sparkles,
   ListTodo,
-  Leaf
+  Leaf,
+  Clock,
+  MapPin,
+  Users,
+  Tag,
+  Loader2
 } from "lucide-react";
+import { base44 } from "@/api/base44Client";
 import { cn } from "@/lib/utils";
 
 export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange }) {
@@ -37,31 +43,82 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
   const [previewTags, setPreviewTags] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
 
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
   useEffect(() => {
     if (value.length < 2) {
       setShowPreview(false);
       return;
     }
 
-    // Simple analysis logic
-    const tags = [];
-    let detectedType = 'life';
+    const timer = setTimeout(async () => {
+      setIsAnalyzing(true);
+      try {
+        const now = new Date().toISOString();
+        const res = await base44.integrations.Core.InvokeLLM({
+          prompt: `作为一位生活助理，分析用户的输入意图。
+User Input: "${value}"
+Current Time: ${now}
 
-    if (value.includes('周五') || value.includes('完成') || value.includes('提交') || value.includes('规划')) {
-      detectedType = 'milestone';
-      tags.push({ icon: Target, text: '里程碑', color: 'bg-blue-50 text-blue-700' });
-    }
-    
-    if (value.includes('下班')) tags.push({ icon: Sunset, text: '下班触发', color: 'bg-green-50 text-green-700' });
-    if (value.includes('明天')) tags.push({ icon: Sunrise, text: '明天', color: 'bg-amber-50 text-amber-700' });
-    if (value.includes('买')) tags.push({ icon: ShoppingBag, text: '购买', color: 'bg-purple-50 text-purple-700' });
-    
-    if (tags.length === 0) {
-      tags.push({ icon: Sparkles, text: '智能安排', color: 'bg-stone-50 text-stone-600' });
-    }
+请识别：
+1. 意图类型 (work/life/shopping/health/family)
+2. 优先级 (low/medium/high/urgent)
+3. 关键信息提取 (时间/地点/人物)
+4. 建议的标签
 
-    setPreviewTags(tags);
-    setShowPreview(true);
+Return JSON:
+{
+  "type": "string",
+  "priority": "string", 
+  "tags": [{"text": "string", "type": "time|location|person|other"}],
+  "reasoning": "string"
+}`,
+          response_json_schema: {
+             type: "object",
+             properties: {
+               type: { type: "string", enum: ["work", "life", "shopping", "health", "family", "other"] },
+               priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+               tags: { 
+                 type: "array", 
+                 items: { 
+                   type: "object",
+                   properties: {
+                     text: { type: "string" },
+                     type: { type: "string", enum: ["time", "location", "person", "other"] }
+                   }
+                 } 
+               },
+               reasoning: { type: "string" }
+             }
+          }
+        });
+
+        if (res) {
+          const newTags = [];
+          if (res.type === 'work') newTags.push({ icon: Target, text: '工作', color: 'bg-blue-50 text-blue-700' });
+          else if (res.type === 'shopping') newTags.push({ icon: ShoppingBag, text: '购物', color: 'bg-purple-50 text-purple-700' });
+          else newTags.push({ icon: Leaf, text: '生活', color: 'bg-green-50 text-green-700' });
+
+          if (res.tags) {
+            res.tags.forEach(tag => {
+               if (tag.type === 'time') newTags.push({ icon: Clock, text: tag.text, color: 'bg-amber-50 text-amber-700' });
+               else if (tag.type === 'location') newTags.push({ icon: MapPin, text: tag.text, color: 'bg-emerald-50 text-emerald-700' });
+               else if (tag.type === 'person') newTags.push({ icon: Users, text: tag.text, color: 'bg-pink-50 text-pink-700' });
+               else newTags.push({ icon: Tag, text: tag.text, color: 'bg-slate-50 text-slate-600' });
+            });
+          }
+          
+          setPreviewTags(newTags);
+          setShowPreview(true);
+        }
+      } catch (e) {
+        console.error("AI Analysis failed", e);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }, 1000); // Debounce 1s
+
+    return () => clearTimeout(timer);
   }, [value]);
 
   const handleSubmit = () => {
@@ -145,23 +202,31 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
       </div>
       
       {/* Smart Analysis Preview */}
-      {showPreview && (
+      {(showPreview || isAnalyzing) && (
         <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-3">
-            <Wand2 className="w-4 h-4 text-stone-400 mt-0.5" />
+            {isAnalyzing ? (
+              <Loader2 className="w-4 h-4 text-blue-500 animate-spin mt-0.5" />
+            ) : (
+              <Wand2 className="w-4 h-4 text-stone-400 mt-0.5" />
+            )}
             <div className="flex-1">
-              <p className="text-xs text-stone-500 mb-2 font-medium">AI理解：</p>
-              <div className="flex flex-wrap gap-2">
-                {previewTags.map((tag, idx) => {
-                  const Icon = tag.icon;
-                  return (
-                    <span key={idx} className={cn("px-2.5 py-1 text-xs rounded-full flex items-center gap-1", tag.color)}>
-                      <Icon className="w-3 h-3" />
-                      {tag.text}
-                    </span>
-                  );
-                })}
-              </div>
+              <p className="text-xs text-stone-500 mb-2 font-medium">
+                {isAnalyzing ? "AI正在分析情境..." : "AI 情境感知："}
+              </p>
+              {!isAnalyzing && (
+                <div className="flex flex-wrap gap-2">
+                  {previewTags.map((tag, idx) => {
+                    const Icon = tag.icon;
+                    return (
+                      <span key={idx} className={cn("px-2.5 py-1 text-xs rounded-full flex items-center gap-1", tag.color)}>
+                        <Icon className="w-3 h-3" />
+                        {tag.text}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>

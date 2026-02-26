@@ -228,7 +228,8 @@ export default function Tasks() {
               onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
               onDelete={(task) => deleteTask(task.id)}
               onEdit={() => setEditingTask(task)}
-              onView={() => setSelectedTask(task)} />
+              onView={() => setSelectedTask(task)}
+              onShare={() => setSharingTask(task)} />
             )}
             </div>
           }
@@ -306,6 +307,15 @@ export default function Tasks() {
         task={selectedTask}
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)} />
+
+      {/* Share Card Modal */}
+      {sharingTask && (
+        <TaskShareCard
+          task={sharingTask}
+          open={!!sharingTask}
+          onClose={() => setSharingTask(null)}
+        />
+      )}
 
       {/* Edit Task Dialog */}
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>

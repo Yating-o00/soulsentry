@@ -39,6 +39,7 @@ export default function MilestoneCard({
   onUpdateStatus,
   onAddSubtask,
   onEdit,
+  onView,
   onUpdate,
   onDelete
 }) {

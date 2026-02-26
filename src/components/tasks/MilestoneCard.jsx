@@ -87,15 +87,81 @@ export default function MilestoneCard({
             )}
           </div>
           
-          <button 
-            onClick={(e) => {
-               e.stopPropagation();
-               onEdit && onEdit();
-            }}
-            className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors"
-          >
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button 
+                className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 p-1">
+              <DropdownMenuLabel className="text-xs font-medium text-stone-500 px-2 py-1.5">
+                快速操作
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-stone-100 my-1" />
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateStatus(task, isCompleted ? 'in_progress' : 'completed');
+                }}
+                className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4 text-stone-500" />
+                <span>{isCompleted ? '标记未完成' : '标记完成'}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit && onEdit();
+                }}
+                className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer"
+              >
+                <Edit className="w-4 h-4 text-stone-500" />
+                <span>编辑约定</span>
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer">
+                  <Flag className="w-4 h-4 text-stone-500" />
+                  <span>优先级</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => onUpdate(task, { priority: 'urgent' })}>
+                    <span className="w-2 h-2 rounded-full bg-red-500 mr-2" /> 紧急
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onUpdate(task, { priority: 'high' })}>
+                    <span className="w-2 h-2 rounded-full bg-orange-500 mr-2" /> 高
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onUpdate(task, { priority: 'medium' })}>
+                    <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" /> 中
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onUpdate(task, { priority: 'low' })}>
+                    <span className="w-2 h-2 rounded-full bg-slate-400 mr-2" /> 低
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer">
+                <Share2 className="w-4 h-4 text-stone-500" />
+                <span>分享约定</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer">
+                <Languages className="w-4 h-4 text-stone-500" />
+                <span>翻译</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-stone-100 my-1" />
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete && onDelete(task);
+                }}
+                className="flex items-center gap-2 px-2 py-2 text-sm text-red-600 rounded-lg hover:bg-red-50 cursor-pointer focus:bg-red-50 focus:text-red-600"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>移至回收站</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Content Body */}

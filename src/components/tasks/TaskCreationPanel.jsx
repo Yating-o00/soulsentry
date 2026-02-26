@@ -53,7 +53,7 @@ const PRIORITIES = [
   { value: "urgent", label: "紧急", icon: "⚠️", color: "text-[#d5495f]" },
 ];
 
-export default function TaskCreationPanel({ onAddTask, initialData = null }) {
+export default function TaskCreationPanel({ onAddTask, initialData = null, onCancel }) {
   const queryClient = useQueryClient();
   const triggerHaptic = useHapticFeedback();
   const [isExpanded, setIsExpanded] = useState(!!initialData);

@@ -228,6 +228,7 @@ export default function Tasks() {
               onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
               onDelete={(task) => deleteTask(task.id)}
               onEdit={() => setEditingTask(task)}
+              onShare={(task) => setSharingTask(task)}
               onView={() => setSelectedTask(task)} />
             )}
             </div>

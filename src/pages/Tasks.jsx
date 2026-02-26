@@ -222,10 +222,7 @@ export default function Tasks() {
                 setSelectedTask(task);
               }}
               onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
-              onDelete={(task) => {
-                 // You might need a delete handler here if not already present in the hook
-                 // Assuming updateTaskAsync can handle soft delete or there is a delete function
-              }}
+              onDelete={(task) => deleteTask(task.id)}
               onEdit={() => setSelectedTask(task)} />
             )}
             </div>

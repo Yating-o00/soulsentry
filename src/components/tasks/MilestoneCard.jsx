@@ -140,6 +140,16 @@ export default function MilestoneCard({
                 <Edit className="w-4 h-4 text-stone-500" />
                 <span>编辑约定</span>
               </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onView && onView();
+                }}
+                className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-stone-500" />
+                <span>查看详情</span>
+              </DropdownMenuItem>
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer">
                   <Flag className="w-4 h-4 text-stone-500" />

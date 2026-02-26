@@ -249,15 +249,15 @@ export default function Tasks() {
                 <span className="text-xs text-stone-400">{lifeTasks.length} 个活跃提醒</span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-4">
                 {lifeTasks.map((task) =>
-              <LifeTaskCard
-                key={task.id}
-                task={task}
-                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={() => setSelectedTask(task)} />
-
-              )}
+                  <LifeTaskCard
+                    key={task.id}
+                    task={task}
+                    onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                    onEdit={() => setSelectedTask(task)} 
+                  />
+                )}
               </div>
             </div>
           }

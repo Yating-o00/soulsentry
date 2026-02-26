@@ -47,6 +47,7 @@ const PRIORITY_LABELS = {
   urgent: { zh: "紧急", en: "Urgent" },
 };
 
+// Share Card Component
 export default function TaskShareCard({ task, open, onClose }) {
   const cardRef = useRef(null);
   const [generating, setGenerating] = useState(false);

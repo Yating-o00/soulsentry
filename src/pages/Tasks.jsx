@@ -14,9 +14,6 @@ import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import TaskShareCard from "../components/tasks/TaskShareCard";
-import AIContextAssistant from "../components/tasks/AIContextAssistant";
-import SmartTaskInput from "../components/tasks/SmartTaskInput";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -118,51 +115,83 @@ export default function Tasks() {
   const dateStr = today.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
   const weekday = today.toLocaleDateString('zh-CN', { weekday: 'long' });
 
+  // Greeting based on hour
+  const hour = today.getHours();
+  let greeting = "你好";
+  let greetingIcon = "☀️";
+  if (hour < 6) {greeting = "凌晨好";greetingIcon = "🌙";} else
+  if (hour < 11) {greeting = "早上好";greetingIcon = "🌅";} else
+  if (hour < 14) {greeting = "中午好";greetingIcon = "☀️";} else
+  if (hour < 18) {greeting = "下午好";greetingIcon = "🌤️";} else
+  {greeting = "晚上好";greetingIcon = "🌙";}
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#faf9f7] to-[#f5f3f0] pb-24 font-sans text-slate-900">
+    <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-slate-900">
       <NotificationManager />
 
       <main className="pt-8 px-6 max-w-7xl mx-auto">
         
-        {/* AI Context Assistant */}
-        <AIContextAssistant />
-
-        {/* Smart Task Input (Replaces old panel for better UX) */}
-        <SmartTaskInput onTaskCreate={handleAddTask} />
-
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
           <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2 flex items-center gap-3">约定</h1>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2 flex items-center gap-3">约定
+
+            </h1>
             <p className="text-slate-500 text-lg">
               你的点滴都是最重要的事
             </p>
           </div>
 
-          <Tabs defaultValue="all" className="w-auto" onValueChange={setViewMode}>
-            <TabsList className="bg-white p-1 rounded-full shadow-sm border border-slate-200 inline-flex h-auto">
-              <TabsTrigger 
-                value="all" 
-                className="rounded-full px-6 py-2.5 data-[state=active]:bg-[#384877] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-300"
-              >
-                <Sparkles className="w-4 h-4 mr-2" />
-                概览
-              </TabsTrigger>
-              <TabsTrigger 
-                value="milestone" 
-                className="rounded-full px-6 py-2.5 data-[state=active]:bg-[#384877] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-300"
-              >
-                里程碑
-              </TabsTrigger>
-              <TabsTrigger 
-                value="life" 
-                className="rounded-full px-6 py-2.5 data-[state=active]:bg-[#384877] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-300"
-              >
-                生活
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="bg-white p-1 rounded-full shadow-sm border border-slate-200 inline-flex">
+            <button
+              onClick={() => setViewMode('all')}
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'all' ?
+                "bg-[#384877] text-white shadow-md" :
+                "text-slate-600 hover:bg-slate-50"
+              )}>
+
+              <Sparkles className="w-4 h-4" />
+              <span>概览</span>
+            </button>
+            <button
+              onClick={() => setViewMode('milestone')}
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'milestone' ?
+                "bg-[#384877] text-white shadow-md" :
+                "text-slate-600 hover:bg-slate-50"
+              )}>
+
+              <span>里程碑</span>
+            </button>
+            <button
+              onClick={() => setViewMode('life')}
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'life' ?
+                "bg-[#384877] text-white shadow-md" :
+                "text-slate-600 hover:bg-slate-50"
+              )}>
+
+              <span>生活</span>
+            </button>
+          </div>
         </div>
+
+        {/* Task Creation Panel */}
+        <section className="mb-10">
+          <TaskCreationPanel
+            onAddTask={handleAddTask}
+            onOpenManual={() => setSelectedTask({ status: 'pending', priority: 'medium' })}
+            onVoiceTasks={async (tasks) => {
+              for (const task of tasks) {
+                await handleAddTask(task);
+              }
+            }} />
+
+        </section>
 
         {/* Filters & Content Area */}
         <div className="flex items-center justify-between mb-6">
@@ -174,6 +203,7 @@ export default function Tasks() {
            <button
             onClick={() => setShowCompleted(!showCompleted)}
             className="text-sm font-medium text-slate-500 hover:text-[#384877] flex items-center gap-1 transition-colors">
+
             <span>显示已完成 ({completedTasks.length})</span>
             <ChevronDown className={cn("w-4 h-4 transition-transform", showCompleted && "rotate-180")} />
           </button>
@@ -302,6 +332,6 @@ export default function Tasks() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
-  );
+    </div>);
+
 }

@@ -132,40 +132,52 @@ export default function Tasks() {
       <main className="pt-8 px-6 max-w-7xl mx-auto">
         
         {/* Header Section */}
-        <div className="flex items-center justify-between mb-8">
-            <div>
-                <h2 className="serif text-2xl font-semibold text-stone-800">我的约定</h2>
-                <p className="text-sm text-stone-500 mt-1">共 {stats.pending} 个活跃约定，{stats.pending - stats.overdue} 个将在今天触发</p>
-            </div>
-            <div className="flex gap-2">
-                <button 
-                  onClick={() => setViewMode('all')} 
-                  className={cn(
-                    "px-4 py-1.5 rounded-full text-xs font-medium transition-colors",
-                    viewMode === 'all' ? "bg-stone-800 text-white" : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                  )}
-                >
-                  全部
-                </button>
-                <button 
-                  onClick={() => setViewMode('life')} 
-                  className={cn(
-                    "px-4 py-1.5 rounded-full text-xs font-medium transition-colors",
-                    viewMode === 'life' ? "bg-stone-800 text-white" : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                  )}
-                >
-                  生活
-                </button>
-                <button 
-                  onClick={() => setViewMode('milestone')} 
-                  className={cn(
-                    "px-4 py-1.5 rounded-full text-xs font-medium transition-colors",
-                    viewMode === 'milestone' ? "bg-stone-800 text-white" : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                  )}
-                >
-                  工作
-                </button>
-            </div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+          <div>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2 flex items-center gap-3">约定
+
+            </h1>
+            <p className="text-slate-500 text-lg">
+              你的点滴都是最重要的事
+            </p>
+          </div>
+
+          <div className="bg-white p-1 rounded-full shadow-sm border border-slate-200 inline-flex">
+            <button
+              onClick={() => setViewMode('all')}
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'all' ?
+                "bg-[#384877] text-white shadow-md" :
+                "text-slate-600 hover:bg-slate-50"
+              )}>
+
+              <Sparkles className="w-4 h-4" />
+              <span>概览</span>
+            </button>
+            <button
+              onClick={() => setViewMode('milestone')}
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'milestone' ?
+                "bg-[#384877] text-white shadow-md" :
+                "text-slate-600 hover:bg-slate-50"
+              )}>
+
+              <span>里程碑</span>
+            </button>
+            <button
+              onClick={() => setViewMode('life')}
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'life' ?
+                "bg-[#384877] text-white shadow-md" :
+                "text-slate-600 hover:bg-slate-50"
+              )}>
+
+              <span>生活</span>
+            </button>
+          </div>
         </div>
 
         {/* Task Creation Panel */}
@@ -216,9 +228,7 @@ export default function Tasks() {
               onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
               onDelete={(task) => deleteTask(task.id)}
               onEdit={() => setEditingTask(task)}
-              onView={() => setSelectedTask(task)}
-              onShare={() => setSharingTask(task)}
-            />
+              onView={() => setSelectedTask(task)} />
             )}
             </div>
           }
@@ -312,14 +322,6 @@ export default function Tasks() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Share Task Card */}
-      {sharingTask && (
-        <TaskShareCard 
-          task={sharingTask} 
-          open={!!sharingTask} 
-          onClose={() => setSharingTask(null)} 
-        />
-      )}
     </div>);
+
 }

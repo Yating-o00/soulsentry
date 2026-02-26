@@ -564,7 +564,7 @@ ${templatesInfo}
                 
                 <div className="flex gap-2">
                   <Button
-                  onClick={handleApplySuggestions} className="bg-gradient-to-r text-[#4c68a9] px-4 py-2 text-sm font-medium rounded-lg inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-9 flex-1 from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600">
+                  onClick={handleApplySuggestions} className="bg-gradient-to-r text-[#6a83b9] px-4 py-2 text-sm font-medium rounded-lg inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow hover:bg-primary/90 h-9 flex-1 from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600">
 
 
                     <Sparkles className="w-4 h-4 mr-2" />

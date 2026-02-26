@@ -6,6 +6,7 @@ import { Sparkles, ChevronDown, Check, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import NotificationManager from "../components/notifications/NotificationManager";
 import MilestoneCard from "../components/tasks/MilestoneCard";
 import LifeTaskCard from "../components/tasks/LifeTaskCard";

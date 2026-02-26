@@ -107,6 +107,7 @@ export default function TaskCreationPanel({ onAddTask, initialData = null, onCan
   };
 
   const [task, setTask] = useState({
+    id: initialData?.id || null,
     title: initialData?.title || "",
     description: initialData?.description || "",
     reminder_time: initialData?.reminder_time ? new Date(initialData.reminder_time) : new Date(),

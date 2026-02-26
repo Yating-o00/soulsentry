@@ -21,6 +21,7 @@ export default function Tasks() {
   const [viewMode, setViewMode] = useState("all"); // 'all', 'milestone', 'life'
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
   const [user, setUser] = useState(null);
 
   const {

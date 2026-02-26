@@ -27,6 +27,7 @@ export default function MilestoneCard({
   const [expanded, setExpanded] = useState(false);
   const totalSubtasks = subtasks.length;
   const completedSubtasks = subtasks.filter(t => t.status === 'completed').length;
+  const progress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : task.progress || 0;
   const isCompleted = task.status === 'completed';
 
   const getTimeText = () => {
@@ -38,6 +39,16 @@ export default function MilestoneCard({
     if (diffDays < 0) return "已过期";
     if (diffDays === 0) return "今天截止";
     return `${diffDays}天后`;
+  };
+
+  const getCategoryLabel = () => {
+    switch (task.category) {
+      case 'work': return '工作';
+      case 'personal': return '个人';
+      case 'health': return '健康';
+      case 'study': return '学习';
+      default: return '其他';
+    }
   };
 
   return (
@@ -56,12 +67,18 @@ export default function MilestoneCard({
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-lg font-medium flex items-center gap-1">
               <Briefcase className="w-3 h-3" />
-              工作
+              {getCategoryLabel()}
             </span>
             <span className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1">
               <Flag className="w-3 h-3" />
               里程碑
             </span>
+            {task.priority === 'urgent' && (
+              <span className="px-2 py-1 bg-red-50 text-red-600 text-xs rounded-lg font-medium flex items-center gap-1">
+                <Flag className="w-3 h-3" />
+                紧急
+              </span>
+            )}
             {task.attachments?.length > 0 && (
               <span className="px-2 py-1 bg-purple-50 text-purple-600 text-xs rounded-lg font-medium flex items-center gap-1">
                 <Paperclip className="w-3 h-3" />
@@ -83,11 +100,34 @@ export default function MilestoneCard({
 
         {/* Content Body */}
         <div className="flex gap-4" onClick={() => setExpanded(!expanded)}>
-          {/* Icon */}
-          <div className="flex-shrink-0">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center text-2xl shadow-inner text-blue-600">
-               <FileText className="w-6 h-6" />
-            </div>
+          {/* Icon with Progress Ring if needed */}
+          <div className="flex-shrink-0 relative">
+             {totalSubtasks > 0 ? (
+               <div className="relative w-14 h-14 flex items-center justify-center -ml-1 -mt-1">
+                  <svg className="w-14 h-14 -rotate-90 absolute">
+                    <circle cx="28" cy="28" r="26" fill="none" stroke="#F1F5F9" strokeWidth="3" />
+                    <circle 
+                      cx="28" 
+                      cy="28" 
+                      r="26" 
+                      fill="none" 
+                      stroke={isCompleted ? "#10B981" : "#3B82F6"} 
+                      strokeWidth="3" 
+                      strokeDasharray={163.3}
+                      strokeDashoffset={163.3 - (progress / 100) * 163.3}
+                      strokeLinecap="round"
+                      className="transition-all duration-500"
+                    />
+                  </svg>
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 z-10">
+                    <span className="text-xs font-bold">{progress}%</span>
+                  </div>
+               </div>
+             ) : (
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center text-2xl shadow-inner text-blue-600">
+                  <FileText className="w-6 h-6" />
+                </div>
+             )}
           </div>
 
           {/* Text */}

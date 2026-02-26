@@ -26,7 +26,8 @@ export default function Tasks() {
     updateTaskAsync,
     createTaskAsync,
     handleComplete,
-    handleSubtaskToggle
+    handleSubtaskToggle,
+    deleteTask
   } = useTaskOperations();
 
   React.useEffect(() => {

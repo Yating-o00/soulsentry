@@ -113,7 +113,7 @@ export default function LifeTaskCard({
       context.checkColor = 'hover:border-green-500 hover:bg-green-50';
       context.iconBg = 'bg-gradient-to-br from-purple-100 to-purple-50 text-purple-700';
 
-      context.tags.push({ text: '待取件', icon: Package, color: 'bg-purple-100 text-purple-700' });
+      context.tags.push({ text: '待取件', icon: Package, color: 'bg-stone-100 text-stone-600' });
       context.tags.push({ text: '即将超时', icon: AlertCircle, color: 'bg-amber-100 text-amber-700' });
     }
 
@@ -132,6 +132,7 @@ export default function LifeTaskCard({
   const getRelativeTime = () => {
     if (task.title.includes('书')) return "下次经过";
     if (task.title.includes('药')) return "3天后";
+    if (task.title.includes('快递')) return "剩2天";
     
     if (!task.reminder_time) return "待定";
     const date = new Date(task.reminder_time);
@@ -264,9 +265,9 @@ export default function LifeTaskCard({
               </button>
               <span className={cn(
                   "text-xs",
-                  task.priority === 'urgent' || task.title.includes('快递') ? "text-amber-600 font-medium" : "text-stone-400"
+                  (task.priority === 'urgent' || task.title.includes('快递')) ? "text-amber-600 font-medium" : "text-stone-400"
                 )}>
-                  {task.priority === 'urgent' && !completed ? "剩2天" : getRelativeTime()}
+                  {completed ? "已完成" : getRelativeTime()}
               </span>
           </div>
         </div>

@@ -769,7 +769,7 @@ Return JSON.`,
                     {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Plus className="mr-2" />}
                     {initialData ? "保存修改" : "创建约定"}
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => setIsExpanded(false)} className="rounded-xl h-12 px-6">
+                  <Button type="button" variant="outline" onClick={() => onCancel ? onCancel() : setIsExpanded(false)} className="rounded-xl h-12 px-6">
                     取消
                   </Button>
                 </div>

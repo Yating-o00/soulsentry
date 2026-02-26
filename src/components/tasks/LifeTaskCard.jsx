@@ -3,11 +3,11 @@ import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { 
   Check, Clock, MapPin, Repeat, MoreHorizontal, 
-  ShoppingBag, Zap, Calendar, Navigation, 
-  Briefcase, Heart, Package, Sun, Flag, Lightbulb,
-  AlertCircle
+  ShoppingBag, Zap, Navigation, 
+  Briefcase, Heart
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export default function LifeTaskCard({ 
   task, 
@@ -22,45 +22,53 @@ export default function LifeTaskCard({
     onComplete(task, !completed);
   };
 
-  // Determine theme based on category
   const getTheme = () => {
     switch(task.category) {
       case 'work': return {
         color: 'blue',
         icon: <Briefcase className="w-5 h-5" />,
         emoji: '📝',
-        gradient: 'from-blue-100 to-blue-50'
+        gradient: 'from-blue-100 to-blue-50',
+        bg: 'bg-blue-50',
+        text: 'text-blue-700'
       };
       case 'health': return {
         color: 'rose',
         icon: <Heart className="w-5 h-5" />,
         emoji: '🌱',
-        gradient: 'from-rose-100 to-rose-50'
+        gradient: 'from-rose-100 to-rose-50',
+        bg: 'bg-rose-50',
+        text: 'text-rose-700'
       };
       case 'family': return {
         color: 'purple',
         icon: <Heart className="w-5 h-5" />,
         emoji: '👨‍👩‍👧‍👦',
-        gradient: 'from-purple-100 to-purple-50'
+        gradient: 'from-purple-100 to-purple-50',
+        bg: 'bg-purple-50',
+        text: 'text-purple-700'
       };
       case 'shopping': return {
         color: 'purple',
         icon: <ShoppingBag className="w-5 h-5" />,
         emoji: '📦',
-        gradient: 'from-purple-100 to-purple-50'
+        gradient: 'from-purple-100 to-purple-50',
+        bg: 'bg-purple-50',
+        text: 'text-purple-700'
       };
       default: return {
         color: 'green',
         icon: <Check className="w-5 h-5" />,
         emoji: '📝',
-        gradient: 'from-green-100 to-green-50'
+        gradient: 'from-green-100 to-green-50',
+        bg: 'bg-stone-50',
+        text: 'text-stone-700'
       };
     }
   };
 
   const theme = getTheme();
   
-  // Helper to get relative time text
   const getTimeText = () => {
     if (!task.reminder_time) return "今天";
     const date = new Date(task.reminder_time);
@@ -76,6 +84,10 @@ export default function LifeTaskCard({
 
   const triggerType = task.location_reminder?.enabled ? 'location' : (task.repeat_rule !== 'none' ? 'repeat' : 'time');
 
+  const categoryLabel = task.category === 'work' ? '工作' : 
+                       task.category === 'health' ? '健康' : 
+                       task.category === 'shopping' ? '购物' : '生活';
+
   return (
     <div 
       onClick={(e) => {
@@ -90,42 +102,31 @@ export default function LifeTaskCard({
         completed && "opacity-60"
       )}
     >
-      {/* Background decoration */}
       <div className={cn(
         "absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -mr-16 -mt-16 opacity-30 pointer-events-none",
         `bg-${theme.color}-100`
       )} />
 
       <div className="relative z-10">
-        {/* Header Tags */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
-            {/* Primary Trigger Tag */}
-            <span className={cn(
-              "px-2 py-1 text-xs rounded-lg font-medium flex items-center gap-1",
-              triggerType === 'location' ? "bg-green-100 text-green-700" :
-              triggerType === 'repeat' ? "bg-blue-100 text-blue-700" :
-              "bg-amber-100 text-amber-700"
-            )}>
-              {triggerType === 'location' ? <Navigation className="w-3 h-3" /> : 
-               triggerType === 'repeat' ? <Repeat className="w-3 h-3" /> :
-               <Clock className="w-3 h-3" />}
-              {triggerType === 'location' ? '地点触发' : 
-               triggerType === 'repeat' ? '习惯' :
-               task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm', { locale: zhCN }) : '稍后'}
-            </span>
+            {task.location_reminder?.enabled && (
+             <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-lg font-medium flex items-center gap-1">
+               <MapPin className="w-3 h-3" />
+               地点触发
+             </span>
+            )}
+            {task.reminder_time && (
+             <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-lg font-medium flex items-center gap-1">
+               <Clock className="w-3 h-3" />
+               {format(new Date(task.reminder_time), 'HH:mm')}提醒
+             </span>
+            )}
             
-            {/* Secondary/Category Tag */}
-            <span className={cn(
-              "px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1"
-            )}>
-              {task.category === 'work' ? <Briefcase className="w-3 h-3" /> :
-               task.category === 'health' ? <Heart className="w-3 h-3" /> :
-               <Zap className="w-3 h-3" />}
-              {task.category === 'work' ? '工作' : 
-               task.category === 'health' ? '健康' : 
-               task.category === 'shopping' ? '购物' : '生活'}
-            </span>
+            <Badge variant="secondary" className={cn("rounded-lg font-medium", theme.bg, theme.text)}>
+              {theme.icon}
+              <span className="ml-1">{categoryLabel}</span>
+            </Badge>
           </div>
           
           <button className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors">
@@ -133,9 +134,7 @@ export default function LifeTaskCard({
           </button>
         </div>
 
-        {/* Main Content */}
         <div className="flex gap-4">
-          {/* Icon Box */}
           <div className="flex-shrink-0">
             <div className={cn(
               "w-12 h-12 rounded-2xl flex items-center justify-center text-2xl bg-gradient-to-br shadow-inner",
@@ -145,7 +144,6 @@ export default function LifeTaskCard({
             </div>
           </div>
 
-          {/* Text Content */}
           <div className="flex-1 min-w-0">
             <h3 className={cn(
               "font-semibold text-stone-800 mb-1 truncate",
@@ -157,7 +155,6 @@ export default function LifeTaskCard({
               {task.description || "暂无描述"}
             </p>
             
-            {/* Context Line */}
             <div className="flex items-center gap-3 text-xs">
               {(task.location_reminder?.location_name || task.reminder_time) && (
                 <span className="flex items-center gap-1 text-stone-400">
@@ -177,7 +174,6 @@ export default function LifeTaskCard({
             </div>
           </div>
 
-          {/* Right Action: Check & Time */}
           <div className="flex flex-col items-end gap-2">
             <button 
               onClick={handleComplete}
@@ -199,7 +195,6 @@ export default function LifeTaskCard({
           </div>
         </div>
 
-        {/* AI Suggestion / Bottom Status */}
         {!completed && (
           <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
             {triggerType === 'location' ? (
@@ -209,7 +204,7 @@ export default function LifeTaskCard({
               </div>
             ) : task.ai_analysis?.suggestions?.[0] ? (
               <div className="flex items-start gap-2 bg-purple-50 p-2 rounded-lg w-full">
-                <Lightbulb className="w-3.5 h-3.5 text-purple-600 mt-0.5 flex-shrink-0" />
+                <Navigation className="w-3.5 h-3.5 text-purple-600 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-purple-700 truncate">{task.ai_analysis.suggestions[0]}</p>
               </div>
             ) : (

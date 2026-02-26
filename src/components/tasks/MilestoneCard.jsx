@@ -41,7 +41,8 @@ export default function MilestoneCard({
   onEdit,
   onView,
   onUpdate,
-  onDelete
+  onDelete,
+  onShare
 }) {
   const [expanded, setExpanded] = useState(false);
   const totalSubtasks = subtasks.length;

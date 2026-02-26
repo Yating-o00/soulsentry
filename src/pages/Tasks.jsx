@@ -305,6 +305,21 @@ export default function Tasks() {
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)} />
 
+      {/* Edit Task Dialog */}
+      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-transparent border-0 shadow-none">
+          {editingTask && (
+            <TaskCreationPanel 
+              initialData={editingTask}
+              onAddTask={async (data) => {
+                await updateTaskAsync({ id: editingTask.id, data });
+                setEditingTask(null);
+              }}
+              onCancel={() => setEditingTask(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>);
 
 }

@@ -12,8 +12,24 @@ import {
   Plus,
   Briefcase,
   Flag,
-  FileText
+  FileText,
+  Trash2,
+  Edit,
+  Share2,
+  Languages,
+  CheckCircle2
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export default function MilestoneCard({ 

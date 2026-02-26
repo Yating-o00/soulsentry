@@ -13,6 +13,7 @@ import LifeTaskCard from "../components/tasks/LifeTaskCard";
 import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import TaskShareCard from "../components/tasks/TaskShareCard";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -22,6 +23,7 @@ export default function Tasks() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
+  const [sharingTask, setSharingTask] = useState(null);
   const [user, setUser] = useState(null);
 
   const {

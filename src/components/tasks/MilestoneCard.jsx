@@ -41,7 +41,8 @@ export default function MilestoneCard({
   onEdit,
   onView,
   onUpdate,
-  onDelete
+  onDelete,
+  onShare
 }) {
   const [expanded, setExpanded] = useState(false);
   const totalSubtasks = subtasks.length;
@@ -170,7 +171,13 @@ export default function MilestoneCard({
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
-              <DropdownMenuItem className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer">
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShare && onShare();
+                }}
+                className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer"
+              >
                 <Share2 className="w-4 h-4 text-stone-500" />
                 <span>分享约定</span>
               </DropdownMenuItem>

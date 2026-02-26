@@ -38,7 +38,9 @@ export default function MilestoneCard({
   onToggleSubtask, 
   onUpdateStatus,
   onAddSubtask,
-  onEdit
+  onEdit,
+  onUpdate,
+  onDelete
 }) {
   const [expanded, setExpanded] = useState(false);
   const totalSubtasks = subtasks.length;
@@ -143,16 +145,16 @@ export default function MilestoneCard({
                   <span>优先级</span>
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  <DropdownMenuItem onClick={() => onUpdate(task, { priority: 'urgent' })}>
+                  <DropdownMenuItem onClick={() => onUpdate && onUpdate({ priority: 'urgent' })}>
                     <span className="w-2 h-2 rounded-full bg-red-500 mr-2" /> 紧急
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onUpdate(task, { priority: 'high' })}>
+                  <DropdownMenuItem onClick={() => onUpdate && onUpdate({ priority: 'high' })}>
                     <span className="w-2 h-2 rounded-full bg-orange-500 mr-2" /> 高
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onUpdate(task, { priority: 'medium' })}>
+                  <DropdownMenuItem onClick={() => onUpdate && onUpdate({ priority: 'medium' })}>
                     <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" /> 中
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onUpdate(task, { priority: 'low' })}>
+                  <DropdownMenuItem onClick={() => onUpdate && onUpdate({ priority: 'low' })}>
                     <span className="w-2 h-2 rounded-full bg-slate-400 mr-2" /> 低
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>

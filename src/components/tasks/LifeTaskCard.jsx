@@ -44,7 +44,7 @@ export default function LifeTaskCard({
       const isMorning = hour < 10;
       context.theme = 'rose';
       context.primaryIcon = <Sprout className="w-5 h-5" />;
-      context.primaryEmoji: '🌱'; // Or keep emoji if user input, here we default to icon logic or emoji
+      context.primaryEmoji = '🌱'; // Or keep emoji if user input, here we default to icon logic or emoji
       context.gradient = 'from-rose-100 to-rose-50';
       context.textColor = 'text-rose-700';
       context.bgColor = 'bg-rose-50';

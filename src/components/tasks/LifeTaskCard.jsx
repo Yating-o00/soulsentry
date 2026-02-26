@@ -2,15 +2,10 @@ import React, { useState } from "react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { 
-  Check, 
-  Clock, 
-  MapPin, 
-  Repeat, 
-  AlertCircle, 
-  MoreHorizontal, 
-  ShoppingBag, 
-  Zap, 
-  Calendar 
+  Check, Clock, MapPin, Repeat, MoreHorizontal, 
+  ShoppingBag, Zap, Calendar, Navigation, 
+  Briefcase, Heart, Package, Sun, Flag, Lightbulb,
+  AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,120 +16,215 @@ export default function LifeTaskCard({
 }) {
   const [completed, setCompleted] = useState(task.status === 'completed');
 
-  const handleComplete = () => {
+  const handleComplete = (e) => {
+    e.stopPropagation();
     setCompleted(!completed);
     onComplete(task, !completed);
   };
 
-  const getTriggerIcon = () => {
-    if (task.location_reminder?.enabled) return <MapPin className="w-3 h-3" />;
-    if (task.repeat_rule !== 'none') return <Repeat className="w-3 h-3" />;
-    return <Clock className="w-3 h-3" />;
-  };
-
-  const getTriggerText = () => {
-    if (task.location_reminder?.enabled) return "地点触发";
-    if (task.repeat_rule !== 'none') return "每日习惯";
-    return "时间触发";
-  };
-
-  const getTriggerColor = () => {
-    if (task.location_reminder?.enabled) return "text-green-700 bg-green-50 border-green-200";
-    if (task.priority === 'urgent') return "text-rose-700 bg-rose-50 border-rose-200";
-    return "text-amber-700 bg-amber-50 border-amber-200";
-  };
-
-  const getCategoryIcon = () => {
-    switch (task.category) {
-      case 'shopping': return <ShoppingBag className="w-6 h-6" />;
-      case 'health': return <Zap className="w-6 h-6" />;
-      default: return <Calendar className="w-6 h-6" />;
+  // Determine theme based on category
+  const getTheme = () => {
+    switch(task.category) {
+      case 'work': return {
+        color: 'blue',
+        icon: <Briefcase className="w-5 h-5" />,
+        emoji: '📝',
+        gradient: 'from-blue-100 to-blue-50'
+      };
+      case 'health': return {
+        color: 'rose',
+        icon: <Heart className="w-5 h-5" />,
+        emoji: '🌱',
+        gradient: 'from-rose-100 to-rose-50'
+      };
+      case 'family': return {
+        color: 'purple',
+        icon: <Heart className="w-5 h-5" />,
+        emoji: '👨‍👩‍👧‍👦',
+        gradient: 'from-purple-100 to-purple-50'
+      };
+      case 'shopping': return {
+        color: 'purple',
+        icon: <ShoppingBag className="w-5 h-5" />,
+        emoji: '📦',
+        gradient: 'from-purple-100 to-purple-50'
+      };
+      default: return {
+        color: 'green',
+        icon: <Check className="w-5 h-5" />,
+        emoji: '📝',
+        gradient: 'from-green-100 to-green-50'
+      };
     }
   };
+
+  const theme = getTheme();
+  
+  // Helper to get relative time text
+  const getTimeText = () => {
+    if (!task.reminder_time) return "今天";
+    const date = new Date(task.reminder_time);
+    const now = new Date();
+    const diffDays = Math.floor((date - now) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return "已过期";
+    if (diffDays === 0) return "今天";
+    if (diffDays === 1) return "明天";
+    if (diffDays === 2) return "后天";
+    return `${diffDays}天后`;
+  };
+
+  const triggerType = task.location_reminder?.enabled ? 'location' : (task.repeat_rule !== 'none' ? 'repeat' : 'time');
 
   return (
     <div 
       onClick={(e) => {
-        // Prevent edit if clicking buttons
         if (e.target.closest('button')) return;
         onEdit && onEdit();
       }}
       className={cn(
-      "life-card p-5 relative overflow-hidden transition-all duration-300 transform cursor-pointer",
-      completed ? "opacity-60 scale-95 grayscale" : "bg-white hover:-translate-y-1 hover:shadow-lg",
-      "rounded-3xl border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)]"
-    )}>
-      {/* Trigger Badge */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className={cn(
-            "text-[11px] px-2.5 py-1 rounded-full font-medium flex items-center gap-1 border",
-            getTriggerColor()
-          )}>
-            {getTriggerIcon()}
-            {getTriggerText()}
-          </span>
-          {task.reminder_time && (
-            <span className="text-xs text-stone-400">
-              {format(new Date(task.reminder_time), 'HH:mm', { locale: zhCN })}
+        "task-card group bg-white rounded-2xl p-5 shadow-sm border border-stone-100 relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer",
+        task.category === 'work' ? 'border-l-[3px] border-l-blue-400' : 
+        task.category === 'health' ? 'border-l-[3px] border-l-rose-400' :
+        'border-l-[3px] border-l-green-400',
+        completed && "opacity-60"
+      )}
+    >
+      {/* Background decoration */}
+      <div className={cn(
+        "absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -mr-16 -mt-16 opacity-30 pointer-events-none",
+        `bg-${theme.color}-100`
+      )} />
+
+      <div className="relative z-10">
+        {/* Header Tags */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {/* Primary Trigger Tag */}
+            <span className={cn(
+              "px-2 py-1 text-xs rounded-lg font-medium flex items-center gap-1",
+              triggerType === 'location' ? "bg-green-100 text-green-700" :
+              triggerType === 'repeat' ? "bg-blue-100 text-blue-700" :
+              "bg-amber-100 text-amber-700"
+            )}>
+              {triggerType === 'location' ? <Navigation className="w-3 h-3" /> : 
+               triggerType === 'repeat' ? <Repeat className="w-3 h-3" /> :
+               <Clock className="w-3 h-3" />}
+              {triggerType === 'location' ? '地点触发' : 
+               triggerType === 'repeat' ? '习惯' :
+               task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm', { locale: zhCN }) : '稍后'}
             </span>
-          )}
-        </div>
-        <button className="p-1.5 hover:bg-stone-50 rounded-lg text-stone-400 transition-colors">
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="flex gap-4">
-        <div className="w-12 h-12 rounded-2xl bg-[#E8D5C4]/20 flex items-center justify-center text-[#7FB069] flex-shrink-0">
-          {getCategoryIcon()}
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          <h4 className={cn(
-            "font-semibold text-[#2C3E50] mb-1 truncate",
-            completed && "line-through text-stone-400"
-          )}>
-            {task.title}
-          </h4>
-          <p className="text-sm text-stone-500 mb-3 line-clamp-2">
-            {task.description || "暂无描述"}
-          </p>
+            
+            {/* Secondary/Category Tag */}
+            <span className={cn(
+              "px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1"
+            )}>
+              {task.category === 'work' ? <Briefcase className="w-3 h-3" /> :
+               task.category === 'health' ? <Heart className="w-3 h-3" /> :
+               <Zap className="w-3 h-3" />}
+              {task.category === 'work' ? '工作' : 
+               task.category === 'health' ? '健康' : 
+               task.category === 'shopping' ? '购物' : '生活'}
+            </span>
+          </div>
           
-          {task.location_reminder?.location_name && (
-            <div className="flex items-center gap-2 text-xs text-stone-400 mb-3">
-              <MapPin className="w-3 h-3" />
-              <span>{task.location_reminder.location_name}</span>
+          <button className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors">
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex gap-4">
+          {/* Icon Box */}
+          <div className="flex-shrink-0">
+            <div className={cn(
+              "w-12 h-12 rounded-2xl flex items-center justify-center text-2xl bg-gradient-to-br shadow-inner",
+              theme.gradient
+            )}>
+              {theme.emoji}
             </div>
-          )}
-          
-          {/* AI Hint */}
-          {!completed && (
-             <div className="bg-gradient-to-br from-[#A8B5A0]/10 to-transparent border-l-[3px] border-[#A8B5A0] px-3 py-2 rounded-r-lg flex items-start gap-2 mt-2">
-               <AlertCircle className="w-3.5 h-3.5 text-[#7FB069] mt-0.5 flex-shrink-0" />
-               <p className="text-xs text-[#5B8DB8] leading-relaxed">
-                 AI已协调：利用碎片时间，不干扰深度工作
-               </p>
-             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      <div className="mt-4 pt-4 border-t border-stone-100 flex items-center justify-between">
-        <span className="text-xs text-stone-400">
-          {task.reminder_time ? format(new Date(task.reminder_time), 'EEE', { locale: zhCN }) : '今天'}
-        </span>
-        <button 
-          onClick={handleComplete}
-          className={cn(
-            "w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all duration-300",
-            completed 
-              ? "bg-[#A8B5A0] border-[#A8B5A0] text-white" 
-              : "border-[#E8E4E0] hover:border-[#7FB069] hover:bg-[#7FB069]/10 text-stone-300 hover:text-[#7FB069]"
-          )}
-        >
-          <Check className="w-5 h-5" />
-        </button>
+          {/* Text Content */}
+          <div className="flex-1 min-w-0">
+            <h3 className={cn(
+              "font-semibold text-stone-800 mb-1 truncate",
+              completed && "line-through text-stone-400"
+            )}>
+              {task.title}
+            </h3>
+            <p className="text-sm text-stone-500 mb-2 line-clamp-1">
+              {task.description || "暂无描述"}
+            </p>
+            
+            {/* Context Line */}
+            <div className="flex items-center gap-3 text-xs">
+              {(task.location_reminder?.location_name || task.reminder_time) && (
+                <span className="flex items-center gap-1 text-stone-400">
+                  {task.location_reminder?.enabled ? <MapPin className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                  {task.location_reminder?.location_name || (task.reminder_time ? format(new Date(task.reminder_time), 'MM-dd HH:mm') : '')}
+                </span>
+              )}
+              {triggerType === 'location' && (
+                <>
+                  <span className="w-1 h-1 rounded-full bg-stone-300"></span>
+                  <span className="text-green-600 font-medium flex items-center gap-1">
+                    <Zap className="w-3 h-3" />
+                    顺路提醒
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Right Action: Check & Time */}
+          <div className="flex flex-col items-end gap-2">
+            <button 
+              onClick={handleComplete}
+              className={cn(
+                "w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all group",
+                completed 
+                  ? "border-green-500 bg-green-50 text-green-600" 
+                  : "border-stone-200 hover:border-green-500 hover:bg-green-50 text-stone-300 hover:text-green-600"
+              )}
+            >
+              <Check className="w-5 h-5" />
+            </button>
+            <span className={cn(
+              "text-xs font-medium",
+              completed ? "text-stone-400" : "text-stone-400"
+            )}>
+              {getTimeText()}
+            </span>
+          </div>
+        </div>
+
+        {/* AI Suggestion / Bottom Status */}
+        {!completed && (
+          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+            {triggerType === 'location' ? (
+              <div className="flex items-center gap-2 text-xs text-stone-500">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span>将在到达附近时提醒</span>
+              </div>
+            ) : task.ai_analysis?.suggestions?.[0] ? (
+              <div className="flex items-start gap-2 bg-purple-50 p-2 rounded-lg w-full">
+                <Lightbulb className="w-3.5 h-3.5 text-purple-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-purple-700 truncate">{task.ai_analysis.suggestions[0]}</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-stone-400">
+                <Clock className="w-3 h-3" />
+                <span>{task.reminder_time ? '按时提醒' : '待定时间'}</span>
+              </div>
+            )}
+            
+            <button className="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1 transition-colors">
+              <Clock className="w-3 h-3" />
+              推迟
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

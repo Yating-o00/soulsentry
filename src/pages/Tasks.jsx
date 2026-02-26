@@ -13,7 +13,6 @@ import LifeTaskCard from "../components/tasks/LifeTaskCard";
 import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
-import TaskShareCard from "../components/tasks/TaskShareCard";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -23,7 +22,6 @@ export default function Tasks() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
-  const [sharingTask, setSharingTask] = useState(null);
   const [user, setUser] = useState(null);
 
   const {
@@ -228,8 +226,7 @@ export default function Tasks() {
               onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
               onDelete={(task) => deleteTask(task.id)}
               onEdit={() => setEditingTask(task)}
-              onView={() => setSelectedTask(task)}
-              onShare={() => setSharingTask(task)} />
+              onView={() => setSelectedTask(task)} />
             )}
             </div>
           }
@@ -307,15 +304,6 @@ export default function Tasks() {
         task={selectedTask}
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)} />
-
-      {/* Share Card Modal */}
-      {sharingTask && (
-        <TaskShareCard
-          task={sharingTask}
-          open={!!sharingTask}
-          onClose={() => setSharingTask(null)}
-        />
-      )}
 
       {/* Edit Task Dialog */}
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>

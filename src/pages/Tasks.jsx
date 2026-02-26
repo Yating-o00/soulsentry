@@ -218,12 +218,14 @@ export default function Tasks() {
               onToggleSubtask={handleToggleSubtask}
               onUpdateStatus={handleUpdateStatus}
               onAddSubtask={() => {
-                // Quick add subtask logic or open modal
                 setSelectedTask(task);
               }}
-              onUpdate={(data) => updateTaskAsync({ id: task.id, data })}
+              onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
+              onDelete={(task) => {
+                 // You might need a delete handler here if not already present in the hook
+                 // Assuming updateTaskAsync can handle soft delete or there is a delete function
+              }}
               onEdit={() => setSelectedTask(task)} />
-
             )}
             </div>
           }

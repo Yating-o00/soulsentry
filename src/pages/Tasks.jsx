@@ -307,7 +307,7 @@ export default function Tasks() {
 
       {/* Edit Task Dialog */}
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
-        <DialogContent className="max-w-3xl p-0 max-h-[90vh] overflow-y-auto bg-transparent border-0 shadow-none no-scrollbar">
+        <DialogContent className="max-w-3xl p-0 max-h-[90vh] overflow-y-auto bg-transparent border-0 shadow-none scrollbar-hide">
           {editingTask && (
             <TaskCreationPanel 
               initialData={editingTask}

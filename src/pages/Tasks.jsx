@@ -23,6 +23,7 @@ export default function Tasks() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
+  const [sharingTask, setSharingTask] = useState(null);
   const [user, setUser] = useState(null);
 
   const {

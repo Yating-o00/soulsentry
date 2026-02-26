@@ -265,8 +265,8 @@ ${templatesInfo}
       <Button
         type="button"
         onClick={handleAnalyze}
-        disabled={isAnalyzing || !taskTitle.trim()}
-        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl h-11 shadow-lg shadow-blue-600/25">
+        disabled={isAnalyzing || !taskTitle.trim()} className="bg-gradient-to-r text-gray-400 px-4 py-2 text-sm font-medium rounded-xl inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-primary/90 w-full from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 h-11 shadow-lg shadow-blue-600/25">
+
 
         {isAnalyzing ?
         <>

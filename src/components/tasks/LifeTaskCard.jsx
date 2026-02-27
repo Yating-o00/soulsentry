@@ -14,7 +14,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import TaskContextInfo from "./TaskContextInfo";
 
 export default function LifeTaskCard({ 
   task, 
@@ -196,18 +195,18 @@ export default function LifeTaskCard({
             
             {/* Context Line */}
             <div className="flex items-center gap-3 text-xs">
-              {task.reminder_time && (
+              {(task.location_reminder?.location_name || task.reminder_time) && (
                 <span className="flex items-center gap-1 text-stone-400">
-                  <Clock className="w-3 h-3" />
-                  {format(new Date(task.reminder_time), 'MM-dd HH:mm')}
+                  {task.location_reminder?.enabled ? <MapPin className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                  {task.location_reminder?.location_name || (task.reminder_time ? format(new Date(task.reminder_time), 'MM-dd HH:mm') : '')}
                 </span>
               )}
-              {task.repeat_rule !== 'none' && (
+              {triggerType === 'location' && (
                 <>
                   <span className="w-1 h-1 rounded-full bg-stone-300"></span>
-                  <span className="text-rose-600 font-medium flex items-center gap-1">
-                    <Heart className="w-3 h-3" />
-                    已坚持 {Math.floor(Math.random() * 20) + 1} 天
+                  <span className="text-green-600 font-medium flex items-center gap-1">
+                    <Zap className="w-3 h-3" />
+                    顺路提醒
                   </span>
                 </>
               )}
@@ -236,8 +235,32 @@ export default function LifeTaskCard({
           </div>
         </div>
 
-        {/* Context-Aware Status & AI Suggestions */}
-        <TaskContextInfo task={task} />
+        {/* AI Suggestion / Bottom Status */}
+        {!completed && (
+          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+            {triggerType === 'location' ? (
+              <div className="flex items-center gap-2 text-xs text-stone-500">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span>将在到达附近时提醒</span>
+              </div>
+            ) : task.ai_analysis?.suggestions?.[0] ? (
+              <div className="flex items-start gap-2 bg-purple-50 p-2 rounded-lg w-full">
+                <Lightbulb className="w-3.5 h-3.5 text-purple-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-purple-700 truncate">{task.ai_analysis.suggestions[0]}</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-stone-400">
+                <Clock className="w-3 h-3" />
+                <span>{task.reminder_time ? '按时提醒' : '待定时间'}</span>
+              </div>
+            )}
+            
+            <button className="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1 transition-colors">
+              <Clock className="w-3 h-3" />
+              推迟
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

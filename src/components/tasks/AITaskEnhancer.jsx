@@ -211,12 +211,26 @@ ${templatesInfo}
   const handleApplySuggestions = () => {
     if (!suggestions) return;
 
+    // Convert subtasks to objects if they are strings
+    const formattedSubtasks = (suggestions.subtasks || []).map(item => {
+      if (typeof item === 'string') {
+        return {
+          title: item,
+          is_completed: false,
+          priority: suggestions.priority,
+          category: suggestions.category,
+          time: suggestions.reminder_time ? format(new Date(suggestions.reminder_time), "HH:mm") : undefined
+        };
+      }
+      return item;
+    });
+
     onApply({
       description: preserveDescription ? currentDescription || suggestions.description : suggestions.description,
       category: suggestions.category,
       priority: suggestions.priority,
       tags: suggestions.tags,
-      subtasks: suggestions.subtasks || [],
+      subtasks: formattedSubtasks,
       // New fields
       reminder_time: suggestions.reminder_time,
       optimal_reminder_time: suggestions.reminder_time,

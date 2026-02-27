@@ -520,7 +520,16 @@ Return JSON.`,
                   currentDescription={task.description}
                   availableTemplates={templates}
                   onApply={(aiSuggestions) => {
-                    setTask(prev => ({ ...prev, ...aiSuggestions }));
+                    const { subtasks: newSubtasks, tags: newTags, ...otherSuggestions } = aiSuggestions;
+                    setTask(prev => ({
+                        ...prev,
+                        ...otherSuggestions,
+                        subtasks: [
+                            ...(prev.subtasks || []),
+                            ...(newSubtasks || [])
+                        ],
+                        tags: [...new Set([...(prev.tags || []), ...(newTags || [])])]
+                    }));
                     toast.success("已应用AI建议");
                   }}
                 />

@@ -214,12 +214,23 @@ ${templatesInfo}
     // Convert subtasks to objects if they are strings
     const formattedSubtasks = (suggestions.subtasks || []).map(item => {
       if (typeof item === 'string') {
+        let timeStr = undefined;
+        if (suggestions.reminder_time) {
+            try {
+                const date = new Date(suggestions.reminder_time);
+                if (!isNaN(date.getTime())) {
+                    timeStr = format(date, "HH:mm");
+                }
+            } catch (e) {
+                console.warn("Invalid reminder_time for subtask time", e);
+            }
+        }
         return {
           title: item,
           is_completed: false,
           priority: suggestions.priority,
           category: suggestions.category,
-          time: suggestions.reminder_time ? format(new Date(suggestions.reminder_time), "HH:mm") : undefined
+          time: timeStr
         };
       }
       return item;

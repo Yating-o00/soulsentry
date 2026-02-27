@@ -31,10 +31,10 @@ export default function TaskCard({ task, onComplete, onEdit }) {
     switch (category) {
       case "work":
         return {
-          border: "border-l-blue-400",
-          iconBg: "bg-blue-100",
-          iconColor: "text-blue-600",
-          lightBg: "bg-blue-50",
+          border: "border-l-[#384877]",
+          iconBg: "bg-[#384877]/10",
+          iconColor: "text-[#384877]",
+          lightBg: "bg-[#384877]/5",
           icon: "📝"
         };
       case "love":
@@ -149,7 +149,7 @@ export default function TaskCard({ task, onComplete, onEdit }) {
         <div className="flex-shrink-0">
           <div className={cn(
             "w-12 h-12 rounded-2xl flex items-center justify-center text-2xl bg-gradient-to-br",
-            task.category === 'work' ? "from-blue-100 to-blue-50" :
+            task.category === 'work' ? "from-[#384877]/20 to-[#384877]/5" :
             task.category === 'health' ? "from-emerald-100 to-emerald-50" :
             task.category === 'love' ? "from-rose-100 to-rose-50" :
             task.category === 'shopping' ? "from-purple-100 to-purple-50" :

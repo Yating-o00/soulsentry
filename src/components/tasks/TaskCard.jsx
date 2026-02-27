@@ -13,9 +13,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import AITaskAssistant from "./AITaskAssistant";
 
 export default function TaskCard({ task, onComplete, onEdit }) {
   const [isCompleted, setIsCompleted] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   const handleComplete = (e) => {
     e.stopPropagation();
@@ -238,13 +240,18 @@ export default function TaskCard({ task, onComplete, onEdit }) {
         </div>
       )}
 
-      {/* Fallback for specific smart suggestions styling from user request */}
-      {task.id === 'demo-package' && (
-         <div className="mt-4 p-3 bg-purple-50 rounded-xl flex items-start gap-2">
-            <div className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0">💡</div>
-            <p className="text-xs text-purple-700">检测到今晚你会经过驿站，建议在 18:30 左右提醒你取件</p>
-        </div>
-      )}
+      {/* AI Assistant Section */}
+      <div className="mt-4 pt-3 border-t border-slate-100">
+        <AITaskAssistant 
+          task={task} 
+          onApplySuggestion={(type, data) => {
+            // Handle applying AI suggestions
+            if (type === 'priority' && onEdit) {
+              onEdit({ ...task, priority: data });
+            }
+          }}
+        />
+      </div>
     </div>
   );
 }

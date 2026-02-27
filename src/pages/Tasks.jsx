@@ -200,13 +200,6 @@ export default function Tasks() {
              {viewMode === 'milestone' && '里程碑'}
              {viewMode === 'life' && '生活提醒'}
            </h3>
-           <button
-            onClick={() => setShowCompleted(!showCompleted)}
-            className="text-sm font-medium text-slate-500 hover:text-[#384877] flex items-center gap-1 transition-colors">
-
-            <span>显示已完成 ({completedTasks.length})</span>
-            <ChevronDown className={cn("w-4 h-4 transition-transform", showCompleted && "rotate-180")} />
-          </button>
         </div>
 
         {/* Content Area */}
@@ -269,30 +262,36 @@ export default function Tasks() {
             </div>
           }
 
-          {/* Completed Section */}
-          {showCompleted && completedTasks.length > 0 &&
-          <div className="mt-8 pt-8 border-t border-stone-200 animate-in fade-in">
-              <h4 className="text-sm font-medium text-stone-500 mb-4 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                已完成约定
-              </h4>
-              <div className="space-y-3 opacity-60">
-                {completedTasks.map((task) =>
-              <div key={task.id} className="flex items-center gap-4 p-4 bg-stone-50 rounded-2xl border border-stone-100">
-                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                      <Check className="w-5 h-5 text-green-600" />
+          {/* Completed Toggle Button - at bottom */}
+          <div className="mt-8 pt-8 border-t border-stone-200">
+            <button
+              onClick={() => setShowCompleted(!showCompleted)}
+              className="text-sm font-medium text-slate-500 hover:text-[#384877] flex items-center gap-1 transition-colors mb-4">
+              <ChevronDown className={cn("w-4 h-4 transition-transform", showCompleted && "rotate-180")} />
+              <span>已完成约定 ({completedTasks.length})</span>
+            </button>
+
+            {/* Completed Section */}
+            {showCompleted && completedTasks.length > 0 && (
+              <div className="animate-in fade-in">
+                <div className="space-y-3 opacity-60">
+                  {completedTasks.map((task) =>
+                    <div key={task.id} className="flex items-center gap-4 p-4 bg-stone-50 rounded-2xl border border-stone-100">
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-stone-700 font-medium line-through decoration-stone-300">{task.title}</p>
+                        <p className="text-xs text-stone-400 mt-0.5">
+                          {task.category === 'work' ? '里程碑' : '生活提醒'} · {task.completed_at ? new Date(task.completed_at).toLocaleDateString() : '已完成'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-stone-700 font-medium line-through decoration-stone-300">{task.title}</p>
-                      <p className="text-xs text-stone-400 mt-0.5">
-                         {task.category === 'work' ? '里程碑' : '生活提醒'} · {task.completed_at ? new Date(task.completed_at).toLocaleDateString() : '已完成'}
-                      </p>
-                    </div>
-                  </div>
-              )}
+                  )}
+                </div>
               </div>
-            </div>
-          }
+            )}
+          </div>
 
         </div>
       </main>

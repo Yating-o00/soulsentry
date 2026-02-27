@@ -5,23 +5,21 @@ import {
   Check, Clock, MapPin, Repeat, MoreHorizontal, 
   ShoppingBag, Zap, Calendar, Navigation, 
   Briefcase, Heart, Package, Sun, Flag, Lightbulb,
-  AlertCircle,
-  Share2, Edit, Trash2
+  AlertCircle, Share2, Edit, Trash2
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 export default function LifeTaskCard({ 
   task, 
   onComplete, 
   onEdit,
-  onShare,
-  onDelete
+  onShare
 }) {
   const [completed, setCompleted] = useState(task.status === 'completed');
 
@@ -139,22 +137,33 @@ export default function LifeTaskCard({
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors">
+              <button 
+                className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare && onShare(task); }}>
-                <Share2 className="w-4 h-4 mr-2" />
-                分享约定
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShare && onShare();
+                }}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>分享约定</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>
-                <Edit className="w-4 h-4 mr-2" />
-                编辑
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete && onDelete(task); }} className="text-red-600 focus:text-red-600">
-                <Trash2 className="w-4 h-4 mr-2" />
-                删除
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit && onEdit();
+                }}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Edit className="w-4 h-4" />
+                <span>编辑</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

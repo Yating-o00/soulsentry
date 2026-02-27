@@ -13,7 +13,7 @@ import LifeTaskCard from "../components/tasks/LifeTaskCard";
 import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
-import TaskShareCard from "@/components/tasks/TaskShareCard";
+import TaskShareCard from "../components/tasks/TaskShareCard";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -261,9 +261,8 @@ export default function Tasks() {
                     key={task.id}
                     task={task}
                     onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                    onEdit={() => setSelectedTask(task)} 
-                    onShare={(task) => setSharingTask(task)}
-                    onDelete={(task) => deleteTask(task.id)}
+                    onEdit={() => setSelectedTask(task)}
+                    onShare={() => setSharingTask(task)}
                   />
                 )}
               </div>

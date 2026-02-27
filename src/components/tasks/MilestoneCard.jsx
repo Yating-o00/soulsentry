@@ -31,6 +31,7 @@ import {
   DropdownMenuSubContent
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import TaskContextInfo from "./TaskContextInfo";
 
 export default function MilestoneCard({ 
   task, 
@@ -282,6 +283,9 @@ export default function MilestoneCard({
             </span>
           </div>
         </div>
+
+        {/* Context-Aware Info & AI Suggestions */}
+        <TaskContextInfo task={task} />
       </div>
 
       {/* Expanded Subtasks Area */}

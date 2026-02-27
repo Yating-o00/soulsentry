@@ -262,6 +262,8 @@ export default function Tasks() {
                     task={task}
                     onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
                     onEdit={() => setSelectedTask(task)} 
+                    onShare={(task) => setSharingTask(task)}
+                    onDelete={(task) => deleteTask(task.id)}
                   />
                 )}
               </div>

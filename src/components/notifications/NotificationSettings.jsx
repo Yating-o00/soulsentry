@@ -101,7 +101,7 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
                 onClick={() => toggleNotificationChannel(channel.value)}
                 className={`px-5 py-3 text-sm font-semibold rounded-xl border-2 transition-all duration-200 ${
                   settings.notification_channels?.includes(channel.value)
-                    ? "bg-gradient-to-r from-purple-500 to-blue-600 border-purple-500 text-slate-200 shadow-lg shadow-purple-500/30"
+                    ? "bg-gradient-to-r from-purple-500 to-blue-600 border-purple-500 text-black shadow-lg shadow-purple-500/30"
                     : "bg-white text-slate-500 border-slate-200 hover:border-purple-300"
                 }`}>
 

@@ -162,7 +162,14 @@ ${templatesInfo}
             },
             subtasks: {
               type: "array",
-              items: { type: "string" },
+              items: { 
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
+                },
+                required: ["title"]
+              },
               description: "建议的子约定列表"
             },
             reminder_time: { type: "string", format: "date-time" },
@@ -213,18 +220,19 @@ ${templatesInfo}
 
     // Convert subtasks to objects if they are strings
     const formattedSubtasks = (suggestions.subtasks || []).map(item => {
+      let timeStr = undefined;
+      if (suggestions.reminder_time) {
+          try {
+              const date = new Date(suggestions.reminder_time);
+              if (!isNaN(date.getTime())) {
+                  timeStr = format(date, "HH:mm");
+              }
+          } catch (e) {
+              console.warn("Invalid reminder_time for subtask time", e);
+          }
+      }
+
       if (typeof item === 'string') {
-        let timeStr = undefined;
-        if (suggestions.reminder_time) {
-            try {
-                const date = new Date(suggestions.reminder_time);
-                if (!isNaN(date.getTime())) {
-                    timeStr = format(date, "HH:mm");
-                }
-            } catch (e) {
-                console.warn("Invalid reminder_time for subtask time", e);
-            }
-        }
         return {
           title: item,
           is_completed: false,
@@ -233,7 +241,15 @@ ${templatesInfo}
           time: timeStr
         };
       }
-      return item;
+      
+      // Ensure object has all required fields
+      return {
+        title: item.title || "新子约定",
+        is_completed: false,
+        priority: item.priority || suggestions.priority,
+        category: item.category || suggestions.category,
+        time: item.time || timeStr
+      };
     });
 
     onApply({
@@ -441,16 +457,20 @@ ${templatesInfo}
                       <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
                           {suggestions.subtasks.map((st, idx) =>
                 <div key={idx} className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
-                                  <Input
-                    value={st}
-                    onChange={(e) => {
-                      const newSubtasks = [...suggestions.subtasks];
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                                <Input
+                  value={typeof st === 'string' ? st : st.title}
+                  onChange={(e) => {
+                    const newSubtasks = [...suggestions.subtasks];
+                    if (typeof newSubtasks[idx] === 'string') {
                       newSubtasks[idx] = e.target.value;
-                      updateSuggestion('subtasks', newSubtasks);
-                    }}
-                    className="h-8 text-sm border-0 border-b border-transparent focus-visible:border-blue-500 rounded-none px-0 focus-visible:ring-0 bg-transparent"
-                    placeholder="输入子约定..." />
+                    } else {
+                      newSubtasks[idx] = { ...newSubtasks[idx], title: e.target.value };
+                    }
+                    updateSuggestion('subtasks', newSubtasks);
+                  }}
+                  className="h-8 text-sm border-0 border-b border-transparent focus-visible:border-blue-500 rounded-none px-0 focus-visible:ring-0 bg-transparent"
+                  placeholder="输入子约定..." />
 
                                   <button
                     onClick={() => {

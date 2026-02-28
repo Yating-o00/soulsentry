@@ -220,22 +220,35 @@ ${templatesInfo}
 
     // Convert subtasks to objects if they are strings
     const formattedSubtasks = (suggestions.subtasks || []).map(item => {
-      // For subtasks, we want them to inherit from the parent unless explicitly specified.
-      // So we don't set priority/category/time here if they are just following the parent.
-      
+      let timeStr = undefined;
+      if (suggestions.reminder_time) {
+          try {
+              const date = new Date(suggestions.reminder_time);
+              if (!isNaN(date.getTime())) {
+                  timeStr = format(date, "HH:mm");
+              }
+          } catch (e) {
+              console.warn("Invalid reminder_time for subtask time", e);
+          }
+      }
+
       if (typeof item === 'string') {
         return {
           title: item,
-          is_completed: false
+          is_completed: false,
+          priority: suggestions.priority,
+          category: suggestions.category,
+          time: timeStr
         };
       }
       
+      // Ensure object has all required fields
       return {
         title: item.title || "新子约定",
         is_completed: false,
-        priority: item.priority,
-        category: item.category,
-        time: item.time
+        priority: item.priority || suggestions.priority,
+        category: item.category || suggestions.category,
+        time: item.time || timeStr
       };
     });
 

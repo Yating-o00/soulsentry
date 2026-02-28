@@ -626,7 +626,7 @@ Return JSON.`,
                            </div>
 
                            <div className="flex items-center gap-2 text-sm">
-                             <Select value={subtask.category || task.category} onValueChange={(val) => updateSubtask(index, 'category', val)}>
+                             <Select value={subtask.category} onValueChange={(val) => updateSubtask(index, 'category', val)}>
                                 <SelectTrigger className="h-8 w-[100px] border-slate-200 bg-white text-xs px-2 text-slate-700">
                                   <SelectValue />
                                 </SelectTrigger>
@@ -635,7 +635,7 @@ Return JSON.`,
                                 </SelectContent>
                              </Select>
 
-                             <Select value={subtask.priority || task.priority} onValueChange={(val) => updateSubtask(index, 'priority', val)}>
+                             <Select value={subtask.priority} onValueChange={(val) => updateSubtask(index, 'priority', val)}>
                                 <SelectTrigger className="h-8 w-[80px] border-slate-200 bg-white text-xs px-2 text-slate-700">
                                   <SelectValue />
                                 </SelectTrigger>

@@ -471,8 +471,30 @@ ${templatesInfo}
                     }
                     updateSuggestion('subtasks', newSubtasks);
                   }}
-                  className="h-8 text-sm border-0 border-b border-transparent focus-visible:border-blue-500 rounded-none px-0 focus-visible:ring-0 bg-transparent"
+                  className="h-8 text-sm border-0 border-b border-transparent focus-visible:border-blue-500 rounded-none px-0 focus-visible:ring-0 bg-transparent flex-1"
                   placeholder="输入子约定..." />
+
+                  {typeof st !== 'string' && (
+                    <div className="flex items-center gap-1">
+                      {st.time && (
+                        <Badge variant="outline" className="text-[10px] px-1 h-5 text-slate-500 border-slate-200">
+                          {st.time}
+                        </Badge>
+                      )}
+                      {st.category && (
+                        <Badge variant="outline" className="text-[10px] px-1 h-5 text-blue-600 border-blue-200 bg-blue-50">
+                          {CATEGORIES.find(c => c.value === st.category)?.label || st.category}
+                        </Badge>
+                      )}
+                      {st.priority && (
+                        <Badge variant="outline" className={`text-[10px] px-1 h-5 border-slate-200 ${
+                          st.priority === 'high' || st.priority === 'urgent' ? 'text-red-500 bg-red-50' : 'text-slate-500'
+                        }`}>
+                          {PRIORITIES.find(p => p.value === st.priority)?.label || st.priority}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
 
                                   <button
                     onClick={() => {

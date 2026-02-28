@@ -521,9 +521,30 @@ Return JSON.`,
                   availableTemplates={templates}
                   onApply={(aiSuggestions) => {
                     const { subtasks: newSubtasks, tags: newTags, ...otherSuggestions } = aiSuggestions;
+                    
+                    const processedSuggestions = { ...otherSuggestions };
+                    
+                    // Ensure dates are Date objects and sync time strings
+                    if (processedSuggestions.reminder_time) {
+                        const dateObj = new Date(processedSuggestions.reminder_time);
+                        if (!isNaN(dateObj.getTime())) {
+                            processedSuggestions.reminder_time = dateObj;
+                            processedSuggestions.time = format(dateObj, "HH:mm");
+                        }
+                    }
+                    
+                    if (processedSuggestions.end_time) {
+                        const endDateObj = new Date(processedSuggestions.end_time);
+                        if (!isNaN(endDateObj.getTime())) {
+                            processedSuggestions.end_time = endDateObj;
+                            processedSuggestions.end_time_str = format(endDateObj, "HH:mm");
+                            processedSuggestions.has_end_time = true;
+                        }
+                    }
+
                     setTask(prev => ({
                         ...prev,
-                        ...otherSuggestions,
+                        ...processedSuggestions,
                         subtasks: [
                             ...(prev.subtasks || []),
                             ...(newSubtasks || [])

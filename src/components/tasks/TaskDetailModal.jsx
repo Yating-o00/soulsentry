@@ -312,13 +312,31 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     // Create subtasks
     if (enhancements.subtasks && enhancements.subtasks.length > 0) {
       for (const st of enhancements.subtasks) {
+        // Handle both string and object formats from AITaskEnhancer
+        const title = typeof st === 'object' ? (st.title || "新子约定") : String(st || "新子约定");
+        const priority = (typeof st === 'object' && st.priority) ? st.priority : enhancements.priority;
+        const category = (typeof st === 'object' && st.category) ? st.category : enhancements.category;
+        
+        // Calculate reminder time if specific time is provided
+        let reminderTime = task.reminder_time;
+        if (typeof st === 'object' && st.time && task.reminder_time) {
+            try {
+                const date = new Date(task.reminder_time);
+                const [h, m] = st.time.split(':');
+                date.setHours(parseInt(h), parseInt(m), 0);
+                reminderTime = date.toISOString();
+            } catch (e) {
+                console.error("Error setting subtask time", e);
+            }
+        }
+
         await createSubtaskMutation.mutateAsync({
-          title: String(st || "新子约定"),
+          title,
           parent_task_id: task.id,
-          reminder_time: task.reminder_time,
+          reminder_time: reminderTime,
           end_time: task.end_time,
-          category: enhancements.category,
-          priority: enhancements.priority,
+          category,
+          priority,
           status: "pending",
         });
       }

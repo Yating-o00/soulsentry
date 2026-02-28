@@ -547,7 +547,13 @@ Return JSON.`,
                         ...processedSuggestions,
                         subtasks: [
                             ...(prev.subtasks || []),
-                            ...(newSubtasks || [])
+                            ...(newSubtasks || []).map(st => ({
+                                ...st,
+                                // Ensure defaults if AI returns null/undefined
+                                priority: st.priority || processedSuggestions.priority || prev.priority,
+                                category: st.category || processedSuggestions.category || prev.category,
+                                time: st.time || processedSuggestions.time || prev.time
+                            }))
                         ],
                         tags: [...new Set([...(prev.tags || []), ...(newTags || [])])]
                     }));

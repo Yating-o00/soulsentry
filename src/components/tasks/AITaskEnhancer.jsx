@@ -166,7 +166,9 @@ ${templatesInfo}
                 type: "object",
                 properties: {
                   title: { type: "string" },
-                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
+                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                  time: { type: "string", description: "建议执行时间，格式 HH:mm" }
                 },
                 required: ["title"]
               },

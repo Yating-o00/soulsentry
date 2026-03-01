@@ -135,8 +135,20 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
     <div className="bg-white rounded-3xl p-2 shadow-sm border border-slate-100 transition-all focus-within:ring-4 focus-within:ring-slate-100 focus-within:border-slate-200">
       <div className="flex items-center gap-2 p-2">
         <div className="flex-1 relative">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-            <PlusCircle className="w-5 h-5" />
+          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+            <button
+              type="button"
+              onClick={handleVoiceInput}
+              className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200",
+                isListening
+                  ? "bg-red-100 text-red-500 animate-pulse shadow-sm shadow-red-200"
+                  : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              )}
+              title={isListening ? "点击停止" : "语音输入"}
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
           </div>
           <input 
             type="text" 

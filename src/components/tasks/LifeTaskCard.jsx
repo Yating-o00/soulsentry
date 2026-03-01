@@ -19,7 +19,10 @@ export default function LifeTaskCard({
   task, 
   onComplete, 
   onEdit,
-  onShare
+  onShare,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelection
 }) {
   const [completed, setCompleted] = useState(task.status === 'completed');
 
@@ -87,16 +90,32 @@ export default function LifeTaskCard({
     <div 
       onClick={(e) => {
         if (e.target.closest('button')) return;
-        onEdit && onEdit();
+        if (isSelectionMode) {
+          e.stopPropagation();
+          onToggleSelection && onToggleSelection();
+        } else {
+          onEdit && onEdit();
+        }
       }}
       className={cn(
         "task-card group bg-white rounded-2xl p-5 shadow-sm border border-stone-100 relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer",
         task.category === 'work' ? 'border-l-[3px] border-l-blue-400' : 
         task.category === 'health' ? 'border-l-[3px] border-l-rose-400' :
         'border-l-[3px] border-l-green-400',
-        completed && "opacity-60"
+        completed && "opacity-60",
+        isSelected && "ring-2 ring-blue-500 bg-blue-50/30"
       )}
     >
+      {isSelectionMode && (
+        <div className="absolute top-4 right-4 z-20">
+           <div className={cn(
+             "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+             isSelected ? "bg-blue-500 border-blue-500" : "bg-white border-slate-300"
+           )}>
+             {isSelected && <Check className="w-4 h-4 text-white" />}
+           </div>
+        </div>
+      )}
       {/* Background decoration */}
       <div className={cn(
         "absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -mr-16 -mt-16 opacity-30 pointer-events-none",

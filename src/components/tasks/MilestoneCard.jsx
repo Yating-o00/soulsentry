@@ -42,7 +42,10 @@ export default function MilestoneCard({
   onView,
   onUpdate,
   onDelete,
-  onShare
+  onShare,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelection
 }) {
   const [expanded, setExpanded] = useState(false);
   const totalSubtasks = subtasks.length;
@@ -72,11 +75,31 @@ export default function MilestoneCard({
   };
 
   return (
-    <div className={cn(
+    <div 
+      onClick={(e) => {
+        if (isSelectionMode) {
+          e.stopPropagation();
+          onToggleSelection && onToggleSelection();
+        } else {
+          setExpanded(!expanded);
+        }
+      }}
+      className={cn(
       "task-card group bg-white rounded-2xl shadow-sm border border-stone-100 relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer",
       "border-l-[3px] border-l-blue-400",
-      isCompleted && "opacity-60"
+      isCompleted && "opacity-60",
+      isSelected && "ring-2 ring-blue-500 bg-blue-50/30"
     )}>
+      {isSelectionMode && (
+        <div className="absolute top-4 right-4 z-20">
+           <div className={cn(
+             "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+             isSelected ? "bg-blue-500 border-blue-500" : "bg-white border-slate-300"
+           )}>
+             {isSelected && <Check className="w-4 h-4 text-white" />}
+           </div>
+        </div>
+      )}
       {/* Background decoration */}
       <div className="absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -mr-16 -mt-16 opacity-30 pointer-events-none bg-blue-100" />
 

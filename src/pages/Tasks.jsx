@@ -131,13 +131,17 @@ export default function Tasks() {
 
   const handleBulkDelete = async () => {
     if (selectedTaskIds.length === 0) return;
+    // Simple confirm
     if (!window.confirm(`确定要删除选中的 ${selectedTaskIds.length} 个约定吗？`)) return;
     
-    for (const id of selectedTaskIds) {
-      await deleteTask(id);
+    try {
+        // Use parallel promises for faster deletion
+        await Promise.all(selectedTaskIds.map(id => deleteTask(id)));
+        setSelectedTaskIds([]);
+        setIsSelectionMode(false);
+    } catch (e) {
+        console.error("Bulk delete failed", e);
     }
-    setSelectedTaskIds([]);
-    setIsSelectionMode(false);
   };
 
   // Get current date info

@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { OfflineStorage } from "../offline/OfflineManager";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, BookTemplate, CheckSquare, X, GitMerge } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, BookTemplate, CheckSquare, X, GitMerge, ImagePlus, FileText, ScanText } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";

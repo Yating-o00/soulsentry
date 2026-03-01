@@ -617,45 +617,44 @@ Return JSON.`,
                   currentDescription={task.description}
                   availableTemplates={templates}
                   onApply={(aiSuggestions) => {
-                    const { subtasks: newSubtasks, tags: newTags, ...otherSuggestions } = aiSuggestions;
+                    const { subtasks: newSubtasks, tags: newTags, reminder_time, end_time, description, category, priority, ai_analysis } = aiSuggestions;
                     
-                    const processedSuggestions = { ...otherSuggestions };
+                    const updates = { description, category, priority, ai_analysis };
                     
-                    // Ensure dates are Date objects and sync time strings
-                    if (processedSuggestions.reminder_time) {
-                        const dateObj = new Date(processedSuggestions.reminder_time);
+                    if (reminder_time) {
+                        const dateObj = new Date(reminder_time);
                         if (!isNaN(dateObj.getTime())) {
-                            processedSuggestions.reminder_time = dateObj;
-                            processedSuggestions.time = format(dateObj, "HH:mm");
+                            updates.reminder_time = dateObj;
+                            updates.time = format(dateObj, "HH:mm");
                         }
                     }
                     
-                    if (processedSuggestions.end_time) {
-                        const endDateObj = new Date(processedSuggestions.end_time);
+                    if (end_time) {
+                        const endDateObj = new Date(end_time);
                         if (!isNaN(endDateObj.getTime())) {
-                            processedSuggestions.end_time = endDateObj;
-                            processedSuggestions.end_time_str = format(endDateObj, "HH:mm");
-                            processedSuggestions.has_end_time = true;
+                            updates.end_time = endDateObj;
+                            updates.end_time_str = format(endDateObj, "HH:mm");
+                            updates.has_end_time = true;
                         }
                     }
 
                     const aiSubtasks = (newSubtasks || []).map(st => ({
-                        title: st.title || "",
+                        title: typeof st === 'string' ? st : (st.title || ""),
                         is_completed: false,
-                        priority: st.priority || processedSuggestions.priority || "medium",
-                        category: st.category || processedSuggestions.category || "personal",
-                        time: st.time || processedSuggestions.time || "09:00"
-                    }));
+                        priority: (typeof st === 'object' && st.priority) || priority || "medium",
+                        category: (typeof st === 'object' && st.category) || category || "personal",
+                        time: (typeof st === 'object' && st.time) || updates.time || "09:00"
+                    })).filter(st => st.title.trim());
 
-                    setTask(prev => ({
-                        ...prev,
-                        ...processedSuggestions,
-                        subtasks: [
-                            ...(prev.subtasks || []).filter(st => st.title.trim()),
+                    setTask(prev => {
+                        const merged = { ...prev, ...updates };
+                        merged.subtasks = [
+                            ...(prev.subtasks || []).filter(st => st.title && st.title.trim()),
                             ...aiSubtasks
-                        ],
-                        tags: [...new Set([...(prev.tags || []), ...(newTags || [])])]
-                    }));
+                        ];
+                        merged.tags = [...new Set([...(prev.tags || []), ...(newTags || [])])];
+                        return merged;
+                    });
                   }}
                 />
 

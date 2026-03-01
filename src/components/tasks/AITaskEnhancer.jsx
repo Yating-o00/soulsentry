@@ -436,7 +436,7 @@ ${templatesInfo}
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-3">
                   <div className="flex flex-wrap gap-2">
-                    {suggestions.tags.map((tag, index) =>
+                    {(suggestions.tags || []).map((tag, index) =>
                   <Badge
                     key={index}
                     variant="outline"

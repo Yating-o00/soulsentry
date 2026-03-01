@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 
 export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange }) {
   const [internalValue, setInternalValue] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
   
   const value = propValue !== undefined ? propValue : internalValue;
   
@@ -34,6 +36,34 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
       setInternalValue("");
     }
   };
+
+  const handleVoiceInput = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      const newValue = value ? value + transcript : transcript;
+      if (onChange) onChange(newValue);
+      else setInternalValue(newValue);
+    };
+    recognition.start();
+  };
+
   const [mode, setMode] = useState("auto"); // 'auto', 'milestone', 'life'
   const [previewTags, setPreviewTags] = useState([]);
   const [showPreview, setShowPreview] = useState(false);

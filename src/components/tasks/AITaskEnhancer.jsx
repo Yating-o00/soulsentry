@@ -69,7 +69,19 @@ ${JSON.stringify(suggestions)}
             category: { type: "string" },
             priority: { type: "string" },
             tags: { type: "array", items: { type: "string" } },
-            subtasks: { type: "array", items: { type: "string" } },
+            subtasks: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                  time: { type: "string", description: "建议执行时间，格式 HH:mm" }
+                },
+                required: ["title"]
+              }
+            },
             reminder_time: { type: "string" },
             execution_start: { type: "string" },
             execution_end: { type: "string" },
@@ -199,7 +211,7 @@ ${templatesInfo}
             // 优先使用模板的结构化数据，但保留 AI 生成的针对性描述
             category: data.category || response.category,
             priority: data.priority || response.priority,
-            subtasks: data.subtasks && data.subtasks.map((s) => typeof s === 'string' ? s : s.title) || response.subtasks,
+            subtasks: data.subtasks && data.subtasks.map((s) => typeof s === 'string' ? { title: s, priority: response.priority, category: response.category } : s) || response.subtasks,
             reasoning: `(基于模板 "${template.name}") ${response.reasoning}`
             // 可以在这里合并更多字段
           };
@@ -250,7 +262,7 @@ ${templatesInfo}
         is_completed: false,
         priority: item.priority || suggestions.priority,
         category: item.category || suggestions.category,
-        time: item.time || timeStr
+        time: item.time || timeStr || "09:00"
       };
     });
 

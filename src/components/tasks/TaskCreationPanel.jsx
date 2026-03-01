@@ -328,7 +328,16 @@ Return JSON.`,
           reminder_time: reminderDate,
           time: format(reminderDate, "HH:mm"),
           priority: result.priority || "medium",
-          category: result.category || "personal"
+          category: result.category || "personal",
+          subtasks: [
+            ...(prev.subtasks || []),
+            ...(result.subtasks || []).map(st => ({
+              ...st,
+              priority: st.priority || result.priority || "medium",
+              category: st.category || result.category || "personal",
+              time: st.time || format(reminderDate, "HH:mm")
+            }))
+          ]
         }));
         setIsExpanded(true);
         setShowOCRDialog(false);

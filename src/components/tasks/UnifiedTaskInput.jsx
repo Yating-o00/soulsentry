@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
-  PlusCircle, 
   Wand2, 
   Target, 
   Sunset, 
@@ -8,7 +7,9 @@ import {
   ShoppingBag, 
   Sparkles,
   ListTodo,
-  Leaf
+  Leaf,
+  Mic,
+  MicOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 

@@ -300,7 +300,20 @@ Return JSON.`,
             reminder_time: { type: "string", description: "ISO格式时间，如无则返回明天9点" },
             priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
             category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
-            extracted_text: { type: "string", description: "从文件中提取的原始文字" }
+            extracted_text: { type: "string", description: "从文件中提取的原始文字" },
+            subtasks: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                  time: { type: "string", description: "建议执行时间，格式 HH:mm" }
+                },
+                required: ["title"]
+              }
+            }
           },
           required: ["title"]
         }

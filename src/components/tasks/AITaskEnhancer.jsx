@@ -472,14 +472,14 @@ ${templatesInfo}
                 </div>
               </div>
 
-              {suggestions.subtasks &&
+              {(suggestions.subtasks && suggestions.subtasks.length > 0) &&
             <div className="space-y-2">
                       <div className="flex items-center gap-2 text-[14px] text-slate-500 font-medium">
                           <ListTodo className="w-4 h-4 text-blue-600" />
                           <span>建议子约定</span>
                       </div>
                       <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                          {suggestions.subtasks.map((st, idx) =>
+                          {(suggestions.subtasks || []).map((st, idx) =>
                 <div key={idx} className="flex items-center gap-2">
                                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                                 <Input

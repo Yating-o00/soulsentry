@@ -6,6 +6,7 @@ import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanba
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
+import AdvancedTaskFilters from "../components/tasks/AdvancedTaskFilters";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import NotificationManager from "../components/notifications/NotificationManager";
 import MilestoneCard from "../components/tasks/MilestoneCard";
@@ -31,6 +32,13 @@ export default function Tasks() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  const [filters, setFilters] = useState({ 
+    category: 'all', 
+    priority: 'all', 
+    dateRange: undefined, 
+    createdBy: 'all', 
+    tags: [] 
+  });
 
   const {
     updateTaskAsync,
@@ -54,10 +62,38 @@ export default function Tasks() {
   const { milestoneTasks, lifeTasks, completedTasks, stats } = useMemo(() => {
     // Apply search filter
     const searchLower = searchQuery.toLowerCase();
-    const filteredTasks = allTasks.filter(t => 
+    let filteredTasks = allTasks.filter(t => 
       !t.deleted_at && 
       (t.title?.toLowerCase().includes(searchLower) || t.description?.toLowerCase().includes(searchLower))
     );
+
+    // Apply Advanced Filters
+    if (filters.category && filters.category !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.category === filters.category);
+    }
+    if (filters.priority && filters.priority !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.priority === filters.priority);
+    }
+    if (filters.dateRange?.from) {
+      const from = new Date(filters.dateRange.from);
+      from.setHours(0, 0, 0, 0);
+      const to = filters.dateRange.to ? new Date(filters.dateRange.to) : new Date(from);
+      to.setHours(23, 59, 59, 999);
+      
+      filteredTasks = filteredTasks.filter(t => {
+        if (!t.reminder_time) return false;
+        const taskDate = new Date(t.reminder_time);
+        return taskDate >= from && taskDate <= to;
+      });
+    }
+    if (filters.createdBy && filters.createdBy !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.created_by === filters.createdBy);
+    }
+    if (filters.tags && filters.tags.length > 0) {
+      filteredTasks = filteredTasks.filter(t => 
+        t.tags && filters.tags.every(tag => t.tags.includes(tag))
+      );
+    }
 
     const active = filteredTasks.filter((t) => t.status !== 'completed');
     const completed = filteredTasks.filter((t) => t.status === 'completed');
@@ -295,9 +331,23 @@ export default function Tasks() {
               </button>
 
               {/* Filter Button */}
-              <button className="flex items-center justify-center w-9 h-9 text-slate-500 rounded-xl hover:bg-slate-50 transition-all" title="筛选">
-                 <Filter className="w-4 h-4" />
-              </button>
+              <AdvancedTaskFilters 
+                filters={filters} 
+                onChange={setFilters} 
+                onClear={() => setFilters({ category: 'all', priority: 'all', dateRange: undefined, createdBy: 'all', tags: [] })}
+              >
+                <button 
+                  className={cn(
+                    "flex items-center justify-center w-9 h-9 rounded-xl transition-all",
+                    Object.values(filters).some(v => v !== 'all' && v !== undefined && (!Array.isArray(v) || v.length > 0))
+                      ? "bg-blue-50 text-blue-600" 
+                      : "text-slate-500 hover:bg-slate-50"
+                  )} 
+                  title="筛选"
+                >
+                   <Filter className="w-4 h-4" />
+                </button>
+              </AdvancedTaskFilters>
            </div>
         </div>
 

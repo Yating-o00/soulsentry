@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 
-export default function AdvancedTaskFilters({ filters, onChange, onClear }) {
+export default function AdvancedTaskFilters({ filters, onChange, onClear, children }) {
     const { data: users = [] } = useQuery({
         queryKey: ['users'],
         queryFn: () => base44.entities.User.list(),
@@ -67,18 +67,40 @@ export default function AdvancedTaskFilters({ filters, onChange, onClear }) {
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="outline" className={`h-10 border-slate-200 bg-white shadow-sm hover:bg-slate-50 ${activeFilterCount > 0 ? 'text-indigo-600 border-indigo-200 bg-indigo-50' : 'text-slate-600'}`}>
-                    <Filter className="w-4 h-4 mr-2" />
-                    筛选
-                    {activeFilterCount > 0 && (
-                        <Badge className="ml-2 h-5 w-5 p-0 flex items-center justify-center bg-indigo-600 text-white rounded-full text-[10px]">
-                            {activeFilterCount}
-                        </Badge>
-                    )}
-                </Button>
+                {children ? children : (
+                    <Button variant="outline" className={`h-10 border-slate-200 bg-white shadow-sm hover:bg-slate-50 ${activeFilterCount > 0 ? 'text-indigo-600 border-indigo-200 bg-indigo-50' : 'text-slate-600'}`}>
+                        <Filter className="w-4 h-4 mr-2" />
+                        筛选
+                        {activeFilterCount > 0 && (
+                            <Badge className="ml-2 h-5 w-5 p-0 flex items-center justify-center bg-indigo-600 text-white rounded-full text-[10px]">
+                                {activeFilterCount}
+                            </Badge>
+                        )}
+                    </Button>
+                )}
             </PopoverTrigger>
             <PopoverContent className="w-80 p-4" align="end">
                 <div className="space-y-4">
+                {/* Priority Filter */}
+                <div className="space-y-2">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                        <Filter className="w-3.5 h-3.5" />
+                        优先级
+                    </label>
+                    <Select value={filters.priority || "all"} onValueChange={(val) => onChange({ ...filters, priority: val })}>
+                        <SelectTrigger className="h-9">
+                            <SelectValue placeholder="选择优先级" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">全部</SelectItem>
+                            <SelectItem value="urgent">紧急</SelectItem>
+                            <SelectItem value="high">高</SelectItem>
+                            <SelectItem value="medium">中</SelectItem>
+                            <SelectItem value="low">低</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
                 {/* Category Filter */}
                 <div className="space-y-2">
                     <label className="text-xs font-medium text-slate-500 flex items-center gap-1">

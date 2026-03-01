@@ -69,19 +69,7 @@ ${JSON.stringify(suggestions)}
             category: { type: "string" },
             priority: { type: "string" },
             tags: { type: "array", items: { type: "string" } },
-            subtasks: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
-                  time: { type: "string", description: "建议执行时间，格式 HH:mm" }
-                },
-                required: ["title"]
-              }
-            },
+            subtasks: { type: "array", items: { type: "string" } },
             reminder_time: { type: "string" },
             execution_start: { type: "string" },
             execution_end: { type: "string" },
@@ -95,13 +83,7 @@ ${JSON.stringify(suggestions)}
         }
       });
 
-      setSuggestions({
-        ...response,
-        tags: response.tags || [],
-        subtasks: response.subtasks || [],
-        risks: response.risks || [],
-        dependencies: response.dependencies || [],
-      });
+      setSuggestions(response);
       setRefineInstruction("");
       toast.success("已根据您的指令调整建议");
     } catch (error) {
@@ -217,7 +199,7 @@ ${templatesInfo}
             // 优先使用模板的结构化数据，但保留 AI 生成的针对性描述
             category: data.category || response.category,
             priority: data.priority || response.priority,
-            subtasks: data.subtasks && data.subtasks.map((s) => typeof s === 'string' ? { title: s, priority: response.priority, category: response.category } : s) || response.subtasks,
+            subtasks: data.subtasks && data.subtasks.map((s) => typeof s === 'string' ? s : s.title) || response.subtasks,
             reasoning: `(基于模板 "${template.name}") ${response.reasoning}`
             // 可以在这里合并更多字段
           };
@@ -225,13 +207,7 @@ ${templatesInfo}
         }
       }
 
-      setSuggestions({
-        ...finalResponse,
-        tags: finalResponse.tags || [],
-        subtasks: finalResponse.subtasks || [],
-        risks: finalResponse.risks || [],
-        dependencies: finalResponse.dependencies || [],
-      });
+      setSuggestions(finalResponse);
       toast.success("✨ AI分析完成！");
     } catch (error) {
       console.error("AI分析失败:", error);
@@ -274,7 +250,7 @@ ${templatesInfo}
         is_completed: false,
         priority: item.priority || suggestions.priority,
         category: item.category || suggestions.category,
-        time: item.time || timeStr || "09:00"
+        time: item.time || timeStr
       };
     });
 
@@ -284,6 +260,7 @@ ${templatesInfo}
       priority: suggestions.priority,
       tags: suggestions.tags,
       subtasks: formattedSubtasks,
+      // New fields
       reminder_time: suggestions.reminder_time,
       optimal_reminder_time: suggestions.reminder_time,
       end_time: suggestions.execution_end,
@@ -299,6 +276,7 @@ ${templatesInfo}
       }
     });
 
+    toast.success("已应用AI建议");
     setSuggestions(null);
   };
 
@@ -532,7 +510,7 @@ ${templatesInfo}
                           <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => updateSuggestion('subtasks', [...suggestions.subtasks, { title: "", priority: suggestions.priority, category: suggestions.category, time: "09:00" }])}
+                  onClick={() => updateSuggestion('subtasks', [...suggestions.subtasks, ""])}
                   className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-7">
 
                               <Plus className="w-3.5 h-3.5 mr-1" />

@@ -617,44 +617,44 @@ Return JSON.`,
                   currentDescription={task.description}
                   availableTemplates={templates}
                   onApply={(aiSuggestions) => {
-                    const { subtasks: newSubtasks, tags: newTags, reminder_time, end_time, description, category, priority, ai_analysis } = aiSuggestions;
+                    const { subtasks: newSubtasks, tags: newTags, ...otherSuggestions } = aiSuggestions;
                     
-                    const updates = { description, category, priority, ai_analysis };
+                    const processedSuggestions = { ...otherSuggestions };
                     
-                    if (reminder_time) {
-                        const dateObj = new Date(reminder_time);
+                    // Ensure dates are Date objects and sync time strings
+                    if (processedSuggestions.reminder_time) {
+                        const dateObj = new Date(processedSuggestions.reminder_time);
                         if (!isNaN(dateObj.getTime())) {
-                            updates.reminder_time = dateObj;
-                            updates.time = format(dateObj, "HH:mm");
+                            processedSuggestions.reminder_time = dateObj;
+                            processedSuggestions.time = format(dateObj, "HH:mm");
                         }
                     }
                     
-                    if (end_time) {
-                        const endDateObj = new Date(end_time);
+                    if (processedSuggestions.end_time) {
+                        const endDateObj = new Date(processedSuggestions.end_time);
                         if (!isNaN(endDateObj.getTime())) {
-                            updates.end_time = endDateObj;
-                            updates.end_time_str = format(endDateObj, "HH:mm");
-                            updates.has_end_time = true;
+                            processedSuggestions.end_time = endDateObj;
+                            processedSuggestions.end_time_str = format(endDateObj, "HH:mm");
+                            processedSuggestions.has_end_time = true;
                         }
                     }
 
-                    const aiSubtasks = (newSubtasks || []).map(st => ({
-                        title: typeof st === 'string' ? st : (st.title || ""),
-                        is_completed: false,
-                        priority: (typeof st === 'object' && st.priority) || priority || "medium",
-                        category: (typeof st === 'object' && st.category) || category || "personal",
-                        time: (typeof st === 'object' && st.time) || updates.time || "09:00"
-                    })).filter(st => st.title.trim());
-
-                    setTask(prev => {
-                        const merged = { ...prev, ...updates };
-                        merged.subtasks = [
-                            ...(prev.subtasks || []).filter(st => st.title && st.title.trim()),
-                            ...aiSubtasks
-                        ];
-                        merged.tags = [...new Set([...(prev.tags || []), ...(newTags || [])])];
-                        return merged;
-                    });
+                    setTask(prev => ({
+                        ...prev,
+                        ...processedSuggestions,
+                        subtasks: [
+                            ...(prev.subtasks || []),
+                            ...(newSubtasks || []).map(st => ({
+                                ...st,
+                                // Ensure defaults if AI returns null/undefined
+                                priority: st.priority || processedSuggestions.priority || prev.priority,
+                                category: st.category || processedSuggestions.category || prev.category,
+                                time: st.time || processedSuggestions.time || prev.time
+                            }))
+                        ],
+                        tags: [...new Set([...(prev.tags || []), ...(newTags || [])])]
+                    }));
+                    toast.success("已应用AI建议");
                   }}
                 />
 

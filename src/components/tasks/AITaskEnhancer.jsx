@@ -522,7 +522,7 @@ ${templatesInfo}
                           <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => updateSuggestion('subtasks', [...suggestions.subtasks, ""])}
+                  onClick={() => updateSuggestion('subtasks', [...suggestions.subtasks, { title: "", priority: suggestions.priority, category: suggestions.category, time: "09:00" }])}
                   className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-7">
 
                               <Plus className="w-3.5 h-3.5 mr-1" />

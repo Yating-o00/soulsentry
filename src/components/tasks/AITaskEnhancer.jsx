@@ -219,7 +219,13 @@ ${templatesInfo}
         }
       }
 
-      setSuggestions(finalResponse);
+      setSuggestions({
+        ...finalResponse,
+        tags: finalResponse.tags || [],
+        subtasks: finalResponse.subtasks || [],
+        risks: finalResponse.risks || [],
+        dependencies: finalResponse.dependencies || [],
+      });
       toast.success("✨ AI分析完成！");
     } catch (error) {
       console.error("AI分析失败:", error);

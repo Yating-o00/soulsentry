@@ -432,67 +432,78 @@ export default function LifeTaskCard({
             {/* 3. AI Smart Status Bar (Bottom) */}
             {!completed && (
                 <div className={cn(
-                    "mt-2 rounded-xl p-3 flex items-start gap-3 transition-colors",
-                    task.category === 'work' ? "bg-indigo-50/60 border border-indigo-100" :
-                    task.ai_analysis?.suggestions?.length > 0 ? "bg-purple-50/80 border border-purple-100" : 
+                    "mt-3 rounded-xl p-3 flex items-center gap-3 transition-colors relative group/statusbar",
                     task.location_reminder?.enabled ? "bg-green-50/80 border border-green-100" :
-                    "bg-stone-50/80 border border-stone-100"
+                    (task.ai_analysis?.status_summary || task.ai_analysis?.suggestions?.length > 0) ? 
+                        (task.category === 'work' ? "bg-indigo-50/60 border border-indigo-100" : "bg-purple-50/60 border border-purple-100") :
+                    "bg-stone-50/60 border border-stone-100"
                 )}>
-                    {task.category === 'work' && task.ai_analysis ? (
-                        <>
-                            <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                <Sparkles className="w-3 h-3 text-indigo-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs text-indigo-800 leading-relaxed">
-                                    {task.ai_analysis.status_summary || task.ai_analysis.suggestions?.[0] || "AI正在分析此工作任务..."}
-                                </p>
-                            </div>
-                        </>
-                    ) : task.location_reminder?.enabled ? (
-                        <>
-                            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 animate-pulse">
-                                <Navigation className="w-4 h-4 text-green-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-green-800">智能地理围栏已激活</p>
-                                <p className="text-[10px] text-green-600 truncate">将在你离开当前位置或到达目的地附近时提醒</p>
-                            </div>
-                        </>
-                    ) : task.ai_analysis?.suggestions?.[0] ? (
-                        <>
-                             <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-                                <Sparkles className="w-4 h-4 text-purple-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-purple-800">AI 智能建议</p>
-                                <p className="text-[10px] text-purple-600 truncate">{task.ai_analysis.suggestions[0]}</p>
-                            </div>
-                        </>
-                    ) : (
-                         <>
-                            <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0">
-                                <Lightbulb className="w-4 h-4 text-stone-500" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium text-stone-700">智能助手守护中</p>
-                                <p className="text-[10px] text-stone-500 truncate">根据你的习惯，建议在 {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '稍后'} 处理</p>
-                            </div>
-                         </>
-                    )}
-                    
-                    {/* Inline Actions - Only show for non-work or simple reminders to reduce clutter on work cards */}
-                    {task.category !== 'work' && (
-                        <div className="flex items-center gap-2 pl-2 border-l border-stone-200/50 self-center">
-                            <button 
-                                className="text-[10px] font-medium text-stone-500 hover:text-stone-800 px-2 py-1 rounded-md hover:bg-stone-200/50 transition-colors whitespace-nowrap"
-                                onClick={(e) => { e.stopPropagation(); /* onSnooze */ }}
-                            >
-                                <Clock className="w-3 h-3 inline mr-1" />
-                                推迟
-                            </button>
-                        </div>
-                    )}
+                    {/* Icon & Content Logic */}
+                    {(() => {
+                        if (task.location_reminder?.enabled) {
+                            return (
+                                <>
+                                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 animate-pulse">
+                                        <Navigation className="w-4 h-4 text-green-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-bold text-green-800">智能地理围栏已激活</p>
+                                        <p className="text-[10px] text-green-600 truncate">将在你离开当前位置或到达目的地附近时提醒</p>
+                                    </div>
+                                </>
+                            );
+                        }
+                        
+                        // Check for AI Analysis
+                        const aiContent = task.ai_analysis?.status_summary || task.ai_analysis?.suggestions?.[0];
+                        if (aiContent) {
+                            const isWork = task.category === 'work';
+                            return (
+                                <>
+                                    <div className={cn(
+                                        "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+                                        isWork ? "bg-indigo-100" : "bg-purple-100"
+                                    )}>
+                                        <Sparkles className={cn("w-4 h-4", isWork ? "text-indigo-600" : "text-purple-600")} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className={cn("text-xs font-bold", isWork ? "text-indigo-800" : "text-purple-800")}>
+                                            {task.ai_analysis?.status_summary ? "AI 智能分析" : "AI 智能建议"}
+                                        </p>
+                                        <p className={cn("text-[10px] truncate", isWork ? "text-indigo-600" : "text-purple-600")}>
+                                            {aiContent}
+                                        </p>
+                                    </div>
+                                </>
+                            );
+                        }
+
+                        // Default
+                        return (
+                            <>
+                                <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0">
+                                    <Lightbulb className="w-4 h-4 text-stone-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-stone-700">智能助手守护中</p>
+                                    <p className="text-[10px] text-stone-500 truncate">
+                                        根据你的习惯，建议在 {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '稍后'} 处理
+                                    </p>
+                                </div>
+                            </>
+                        );
+                    })()}
+
+                    {/* Right Action - Divider & Snooze */}
+                    <div className="flex items-center pl-3 border-l border-black/5 h-full self-stretch">
+                        <button 
+                            className="flex items-center gap-1 text-[10px] font-medium text-stone-500 hover:text-stone-800 px-2 py-1 rounded-md hover:bg-stone-200/50 transition-colors whitespace-nowrap"
+                            onClick={(e) => { e.stopPropagation(); /* onSnooze */ }}
+                        >
+                            <Clock className="w-3 h-3" />
+                            推迟
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

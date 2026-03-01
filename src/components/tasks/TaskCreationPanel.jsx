@@ -411,71 +411,6 @@ Return JSON.`,
     setIsProcessing(false);
   };
 
-  // Handler for AI suggestions applied from AITaskEnhancer
-  const handleAIApply = (aiSuggestions) => {
-    // 1. 明确解构 aiSuggestions 中的 subtasks 和 tags，以及其他相关字段
-    const {
-      subtasks: newAiSubtasks,
-      tags: newAiTags,
-      reminder_time,
-      end_time,
-      description,
-      category,
-      priority,
-      ai_analysis,
-    } = aiSuggestions;
-
-    // 2. 在 updates 对象中单独处理 reminder_time 和 end_time
-    const updates = { description, category, priority };
-
-    let parsedReminderTimeStr = null;
-    if (reminder_time) {
-      const dateObj = new Date(reminder_time);
-      if (!isNaN(dateObj.getTime())) {
-        updates.reminder_time = dateObj;
-        parsedReminderTimeStr = format(dateObj, "HH:mm");
-        updates.time = parsedReminderTimeStr;
-      }
-    }
-
-    if (end_time) {
-      const endDateObj = new Date(end_time);
-      if (!isNaN(endDateObj.getTime())) {
-        updates.end_time = endDateObj;
-        updates.end_time_str = format(endDateObj, "HH:mm");
-        updates.has_end_time = true;
-      }
-    }
-
-    if (ai_analysis) {
-      updates.ai_analysis = ai_analysis;
-    }
-
-    // 3. 在构建 aiSubtasks 数组时，使用正确解析后的时间字符串
-    const aiSubtasks = (newAiSubtasks || [])
-      .map(st => ({
-        title: typeof st === 'string' ? st : (st.title || ""),
-        is_completed: false,
-        priority: (typeof st === 'object' && st.priority) || priority || "medium",
-        category: (typeof st === 'object' && st.category) || category || "personal",
-        time: (typeof st === 'object' && st.time) || parsedReminderTimeStr || "09:00"
-      }))
-      .filter(st => st.title.trim());
-
-    // 4. 在 setTask 调用中，首先应用其他更新，然后显式地合并并设置 subtasks 和 tags 数组
-    setTask(prev => {
-      const existingValidSubtasks = (prev.subtasks || []).filter(st => st.title && st.title.trim());
-      const mergedTags = Array.from(new Set([...(prev.tags || []), ...(newAiTags || [])]));
-
-      return {
-        ...prev,
-        ...updates,
-        subtasks: [...existingValidSubtasks, ...aiSubtasks],
-        tags: mergedTags,
-      };
-    });
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -681,7 +616,46 @@ Return JSON.`,
                   taskTitle={task.title}
                   currentDescription={task.description}
                   availableTemplates={templates}
-                  onApply={handleAIApply}
+                  onApply={(aiSuggestions) => {
+                    const { subtasks: newSubtasks, tags: newTags, reminder_time, end_time, description, category, priority, ai_analysis } = aiSuggestions;
+                    
+                    const updates = { description, category, priority, ai_analysis };
+                    
+                    if (reminder_time) {
+                        const dateObj = new Date(reminder_time);
+                        if (!isNaN(dateObj.getTime())) {
+                            updates.reminder_time = dateObj;
+                            updates.time = format(dateObj, "HH:mm");
+                        }
+                    }
+                    
+                    if (end_time) {
+                        const endDateObj = new Date(end_time);
+                        if (!isNaN(endDateObj.getTime())) {
+                            updates.end_time = endDateObj;
+                            updates.end_time_str = format(endDateObj, "HH:mm");
+                            updates.has_end_time = true;
+                        }
+                    }
+
+                    const aiSubtasks = (newSubtasks || []).map(st => ({
+                        title: typeof st === 'string' ? st : (st.title || ""),
+                        is_completed: false,
+                        priority: (typeof st === 'object' && st.priority) || priority || "medium",
+                        category: (typeof st === 'object' && st.category) || category || "personal",
+                        time: (typeof st === 'object' && st.time) || updates.time || "09:00"
+                    })).filter(st => st.title.trim());
+
+                    setTask(prev => {
+                        const merged = { ...prev, ...updates };
+                        merged.subtasks = [
+                            ...(prev.subtasks || []).filter(st => st.title && st.title.trim()),
+                            ...aiSubtasks
+                        ];
+                        merged.tags = [...new Set([...(prev.tags || []), ...(newTags || [])])];
+                        return merged;
+                    });
+                  }}
                 />
 
                 <AnimatePresence>

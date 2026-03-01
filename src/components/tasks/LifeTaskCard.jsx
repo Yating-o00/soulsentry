@@ -156,26 +156,31 @@ export default function LifeTaskCard({
 
   // 3. Get Time/Status Text
   const getTimeStatus = () => {
-    if (completed) return { text: '已完成', color: 'text-green-600' };
+    if (completed) return { text: '已完成', color: 'text-stone-400 font-medium' };
     
-    if (task.end_time) {
-        const end = new Date(task.end_time);
-        const now = new Date();
-        const diffDays = Math.floor((end - now) / (1000 * 60 * 60 * 24));
-        
-        if (diffDays < 0) return { text: '已过期', color: 'text-red-500' };
-        if (diffDays === 0) return { text: '今天截止', color: 'text-amber-600' };
-        return { text: `剩${diffDays}天`, color: 'text-amber-600' };
-    }
-    
-    if (task.reminder_time) {
-        const date = new Date(task.reminder_time);
-        if (isToday(date)) return { text: '今天', color: 'text-blue-600' };
-        if (isTomorrow(date)) return { text: '明天', color: 'text-blue-500' };
-        return { text: format(date, 'MM-dd'), color: 'text-slate-400' };
-    }
+    // Determine the target date (deadline or reminder)
+    const targetDateStr = task.end_time || task.reminder_time;
+    if (!targetDateStr) return { text: '', color: 'text-stone-300' };
 
-    return { text: '待定', color: 'text-slate-400' };
+    const targetDate = new Date(targetDateStr);
+    
+    if (isToday(targetDate)) return { text: '今天', color: 'text-green-600 font-bold' };
+    if (isTomorrow(targetDate)) return { text: '明天', color: 'text-stone-500 font-medium' };
+    
+    const now = new Date();
+    // Reset hours to compare dates only
+    const target = new Date(targetDate);
+    target.setHours(0,0,0,0);
+    const current = new Date();
+    current.setHours(0,0,0,0);
+    
+    const diffTime = target - current;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return { text: '已过期', color: 'text-red-500 font-bold' };
+    if (diffDays <= 3) return { text: `剩${diffDays}天`, color: 'text-amber-500 font-bold' };
+    
+    return { text: format(targetDate, 'MM-dd'), color: 'text-stone-400' };
   };
 
   const badges = getContextBadges();
@@ -344,20 +349,23 @@ export default function LifeTaskCard({
                 </div>
 
                 {/* Completion Check & Time */}
-                <div className="flex flex-col items-end gap-2 pl-2">
+                <div className="flex flex-col items-center justify-start gap-1 min-w-[3.5rem]">
                     <button 
                         onClick={handleComplete}
                         className={cn(
-                            "w-12 h-12 rounded-full border-[3px] flex items-center justify-center transition-all duration-300 group shadow-sm",
+                            "w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300 group relative",
                             completed 
-                                ? "border-green-500 bg-green-50 text-green-600 scale-100" 
-                                : "border-stone-100 bg-white hover:border-green-400 hover:bg-green-50/50 text-stone-300 hover:text-green-500 hover:scale-105"
+                                ? "border-stone-200 bg-stone-50 text-stone-400" 
+                                : "border-stone-200 bg-white hover:border-green-500 hover:bg-green-50/30 text-stone-300 hover:text-green-600"
                         )}
                     >
-                        <Check className={cn("w-6 h-6 transition-transform duration-300", completed ? "scale-100" : "scale-90")} />
+                         <Check className={cn(
+                             "w-5 h-5 transition-all duration-300", 
+                             completed ? "opacity-100 scale-100" : "opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100"
+                         )} />
                     </button>
                     <span className={cn(
-                        "text-xs font-bold whitespace-nowrap",
+                        "text-[10px] whitespace-nowrap text-center",
                         timeStatus.color
                     )}>
                         {timeStatus.text}

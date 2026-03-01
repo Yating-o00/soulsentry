@@ -539,22 +539,27 @@ Return JSON.`,
                     </div>
                   </button>
 
-                  {browserSupported && (
-                    <button
-                      onClick={startVoiceInput}
-                      className="flex-1 group relative rounded-2xl md:rounded-[20px] bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-900/20 px-4 py-5 md:py-6"
-                    >
-                      <div className="relative flex-shrink-0">
-                        <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm border border-white/10">
-                          <Mic className="w-6 h-6 md:w-7 md:h-7 text-white" />
-                        </div>
+                  <button
+                    onClick={() => ocrInputRef.current?.click()}
+                    className="flex-1 group relative rounded-2xl md:rounded-[20px] bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-900/20 px-4 py-5 md:py-6"
+                  >
+                    <div className="relative flex-shrink-0">
+                      <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm border border-white/10">
+                        <ScanText className="w-6 h-6 md:w-7 md:h-7 text-white" />
                       </div>
-                      <div className="text-left flex-1">
-                        <div className="font-bold text-base md:text-lg whitespace-nowrap"><AIText>语音创建</AIText></div>
-                        <div className="text-xs md:text-sm text-blue-100/80 font-medium whitespace-nowrap"><AIText>AI 识别</AIText></div>
-                      </div>
-                    </button>
-                  )}
+                    </div>
+                    <div className="text-left flex-1">
+                      <div className="font-bold text-base md:text-lg whitespace-nowrap">图文识别</div>
+                      <div className="text-xs md:text-sm text-blue-100/80 font-medium whitespace-nowrap">上传图片/文档 AI解析</div>
+                    </div>
+                  </button>
+                  <input
+                    ref={ocrInputRef}
+                    type="file"
+                    accept="image/*,.pdf,.doc,.docx,.txt"
+                    className="hidden"
+                    onChange={handleOCRFileSelect}
+                  />
                 </div>
               </TabsContent>
             </Tabs>

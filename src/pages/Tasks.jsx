@@ -228,47 +228,50 @@ export default function Tasks() {
         </section>
 
         {/* Toolbar: Search, View, Selection */}
-        <div className="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-slate-200/60 mb-8 flex flex-col md:flex-row items-center justify-between gap-3 sticky top-4 z-20">
            {/* Search */}
-           <div className="relative w-full md:max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+           <div className="relative w-full md:max-w-md group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
                 placeholder="搜索约定..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-slate-400"
+                className="w-full pl-9 pr-4 py-2 bg-transparent border-none rounded-xl text-sm focus:ring-0 transition-all placeholder:text-slate-400"
               />
            </div>
 
            {/* Controls */}
-           <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+           <div className="flex items-center gap-2 w-full md:w-auto justify-end md:border-l md:border-slate-100 md:pl-3">
               {/* View Modes */}
-              <div className="flex items-center bg-slate-50 p-1 rounded-lg border border-slate-100 mr-2">
+              <div className="flex items-center bg-slate-100/50 p-1 rounded-xl mr-1">
                  <button 
                     onClick={() => setLayoutMode('list')}
                     className={cn(
-                       "p-1.5 rounded-md transition-all",
-                       layoutMode === 'list' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600"
+                       "p-1.5 rounded-lg transition-all",
+                       layoutMode === 'list' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-200/50"
                     )}
+                    title="列表视图"
                  >
                     <List className="w-4 h-4" />
                  </button>
                  <button 
                     onClick={() => setLayoutMode('kanban')}
                     className={cn(
-                       "p-1.5 rounded-md transition-all",
-                       layoutMode === 'kanban' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600"
+                       "p-1.5 rounded-lg transition-all",
+                       layoutMode === 'kanban' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-200/50"
                     )}
+                    title="看板视图"
                  >
                     <Kanban className="w-4 h-4" />
                  </button>
                  <button 
                     onClick={() => setLayoutMode('gantt')}
                     className={cn(
-                       "p-1.5 rounded-md transition-all",
-                       layoutMode === 'gantt' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600"
+                       "p-1.5 rounded-lg transition-all",
+                       layoutMode === 'gantt' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-200/50"
                     )}
+                    title="甘特图"
                  >
                     <BarChart className="w-4 h-4" />
                  </button>
@@ -281,20 +284,19 @@ export default function Tasks() {
                     setSelectedTaskIds([]);
                  }}
                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border",
+                    "flex items-center justify-center w-9 h-9 rounded-xl transition-all border",
                     isSelectionMode 
                        ? "bg-blue-50 text-blue-600 border-blue-200" 
-                       : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                       : "bg-transparent text-slate-500 border-transparent hover:bg-slate-50"
                  )}
+                 title={isSelectionMode ? "取消选择" : "多选模式"}
               >
                  {isSelectionMode ? <X className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
-                 <span>{isSelectionMode ? "取消" : "选择"}</span>
               </button>
 
               {/* Filter Button */}
-              <button className="flex items-center gap-1.5 px-3 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all">
+              <button className="flex items-center justify-center w-9 h-9 text-slate-500 rounded-xl hover:bg-slate-50 transition-all" title="筛选">
                  <Filter className="w-4 h-4" />
-                 <span>筛选</span>
               </button>
            </div>
         </div>

@@ -639,22 +639,23 @@ Return JSON.`,
                         }
                     }
 
+                    const aiSubtasks = (newSubtasks || []).map(st => ({
+                        title: st.title || "",
+                        is_completed: false,
+                        priority: st.priority || processedSuggestions.priority || "medium",
+                        category: st.category || processedSuggestions.category || "personal",
+                        time: st.time || processedSuggestions.time || "09:00"
+                    }));
+
                     setTask(prev => ({
                         ...prev,
                         ...processedSuggestions,
                         subtasks: [
-                            ...(prev.subtasks || []),
-                            ...(newSubtasks || []).map(st => ({
-                                ...st,
-                                // Ensure defaults if AI returns null/undefined
-                                priority: st.priority || processedSuggestions.priority || prev.priority,
-                                category: st.category || processedSuggestions.category || prev.category,
-                                time: st.time || processedSuggestions.time || prev.time
-                            }))
+                            ...(prev.subtasks || []).filter(st => st.title.trim()),
+                            ...aiSubtasks
                         ],
                         tags: [...new Set([...(prev.tags || []), ...(newTags || [])])]
                     }));
-                    toast.success("已应用AI建议");
                   }}
                 />
 

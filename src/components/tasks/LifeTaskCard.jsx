@@ -304,48 +304,104 @@ export default function LifeTaskCard({
                         {task.title}
                     </h3>
                     
-                    <p className="text-sm text-stone-500 mb-3 line-clamp-2 leading-relaxed">
+                    <p className={cn(
+                        "text-sm text-stone-500 mb-3 leading-relaxed",
+                        task.category === 'work' ? "line-clamp-4" : "line-clamp-2"
+                    )}>
                         {task.description || "暂无描述"}
                     </p>
 
-                    {/* Detailed Context Info Line */}
-                    <div className="flex flex-wrap items-center gap-4 text-xs">
-                         {/* Location or Time Detail */}
-                         <span className="flex items-center gap-1.5 text-stone-500 bg-stone-50 px-2 py-0.5 rounded-md">
-                            {task.location_reminder?.enabled ? (
-                                <>
-                                    <MapPin className="w-3.5 h-3.5 text-stone-400" />
-                                    {task.location_reminder.location_name || "指定地点"}
-                                </>
-                            ) : (
-                                <>
-                                    <Clock className="w-3.5 h-3.5 text-stone-400" />
-                                    {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '全天'}
-                                </>
-                            )}
-                         </span>
-                         
-                         {/* Route/Distance or Streak Info */}
-                         {task.location_reminder?.enabled ? (
-                             <span className="flex items-center gap-1.5 text-green-600 font-medium">
-                                 <Navigation className="w-3.5 h-3.5" />
-                                 回家顺路
-                             </span>
-                         ) : task.repeat_rule !== 'none' ? (
-                             <span className="flex items-center gap-1.5 text-rose-500 font-medium">
-                                 <Heart className="w-3.5 h-3.5" />
-                                 已坚持 {Math.floor(Math.random() * 20) + 1} 天
-                             </span>
-                         ) : null}
+                    {/* Work Task Expanded Metadata */}
+                    {task.category === 'work' && (
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {/* Date Range */}
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-50 text-stone-600 text-xs border border-stone-100">
+                                <Clock className="w-3 h-3 text-stone-400" />
+                                {task.reminder_time ? format(new Date(task.reminder_time), 'MM月dd日 HH:mm') : '待定'}
+                                {task.end_time && ` - ${format(new Date(task.end_time), 'MM月dd日 HH:mm')}`}
+                            </span>
 
-                         {/* Duration/Estimate */}
-                         {task.estimated_duration && (
-                             <span className="flex items-center gap-1.5 text-stone-400">
-                                 <Timer className="w-3.5 h-3.5" />
-                                 预计{task.estimated_duration}分钟
+                            {/* Recurrence */}
+                            {task.repeat_rule !== 'none' && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-xs border border-blue-100">
+                                    <Repeat className="w-3 h-3" />
+                                    {task.repeat_rule === 'daily' ? '每天' : 
+                                     task.repeat_rule === 'weekly' ? '每周' : 
+                                     task.repeat_rule === 'monthly' ? '每月' : '循环'}
+                                </span>
+                            )}
+
+                            {/* Priority */}
+                            <span className={cn(
+                                "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border",
+                                task.priority === 'high' || task.priority === 'urgent' 
+                                    ? "bg-red-50 text-red-600 border-red-100" 
+                                    : "bg-stone-50 text-stone-600 border-stone-100"
+                            )}>
+                                <Flag className="w-3 h-3" />
+                                {task.priority === 'urgent' ? '紧急' : 
+                                 task.priority === 'high' ? '高' : 
+                                 task.priority === 'low' ? '低' : '中'}
+                            </span>
+
+                            {/* AI Suggestion Badge */}
+                            {task.ai_analysis?.suggested_priority === 'urgent' && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-600 text-white text-xs border border-purple-600 shadow-sm shadow-purple-200">
+                                    <Sparkles className="w-3 h-3" />
+                                    建议: 紧急
+                                </span>
+                            )}
+
+                             {/* Advance Reminder */}
+                             {task.advance_reminders?.length > 0 && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-50 text-cyan-600 text-xs border border-cyan-100">
+                                    <AlertCircle className="w-3 h-3" />
+                                    提前{task.advance_reminders.length}次
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Detailed Context Info Line (Non-Work Tasks or Supplemental) */}
+                    {task.category !== 'work' && (
+                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                             {/* Location or Time Detail */}
+                             <span className="flex items-center gap-1.5 text-stone-500 bg-stone-50 px-2 py-0.5 rounded-md">
+                                {task.location_reminder?.enabled ? (
+                                    <>
+                                        <MapPin className="w-3.5 h-3.5 text-stone-400" />
+                                        {task.location_reminder.location_name || "指定地点"}
+                                    </>
+                                ) : (
+                                    <>
+                                        <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                        {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '全天'}
+                                    </>
+                                )}
                              </span>
-                         )}
-                    </div>
+                             
+                             {/* Route/Distance or Streak Info */}
+                             {task.location_reminder?.enabled ? (
+                                 <span className="flex items-center gap-1.5 text-green-600 font-medium">
+                                     <Navigation className="w-3.5 h-3.5" />
+                                     回家顺路
+                                 </span>
+                             ) : task.repeat_rule !== 'none' ? (
+                                 <span className="flex items-center gap-1.5 text-rose-500 font-medium">
+                                     <Heart className="w-3.5 h-3.5" />
+                                     已坚持 {Math.floor(Math.random() * 20) + 1} 天
+                                 </span>
+                             ) : null}
+
+                             {/* Duration/Estimate */}
+                             {task.estimated_duration && (
+                                 <span className="flex items-center gap-1.5 text-stone-400">
+                                     <Timer className="w-3.5 h-3.5" />
+                                     预计{task.estimated_duration}分钟
+                                 </span>
+                             )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Completion Check & Time */}
@@ -376,12 +432,24 @@ export default function LifeTaskCard({
             {/* 3. AI Smart Status Bar (Bottom) */}
             {!completed && (
                 <div className={cn(
-                    "mt-2 rounded-xl p-3 flex items-center gap-3 transition-colors",
+                    "mt-2 rounded-xl p-3 flex items-start gap-3 transition-colors",
+                    task.category === 'work' ? "bg-indigo-50/60 border border-indigo-100" :
                     task.ai_analysis?.suggestions?.length > 0 ? "bg-purple-50/80 border border-purple-100" : 
                     task.location_reminder?.enabled ? "bg-green-50/80 border border-green-100" :
                     "bg-stone-50/80 border border-stone-100"
                 )}>
-                    {task.location_reminder?.enabled ? (
+                    {task.category === 'work' && task.ai_analysis ? (
+                        <>
+                            <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <Sparkles className="w-3 h-3 text-indigo-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs text-indigo-800 leading-relaxed">
+                                    {task.ai_analysis.status_summary || task.ai_analysis.suggestions?.[0] || "AI正在分析此工作任务..."}
+                                </p>
+                            </div>
+                        </>
+                    ) : task.location_reminder?.enabled ? (
                         <>
                             <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 animate-pulse">
                                 <Navigation className="w-4 h-4 text-green-600" />
@@ -413,16 +481,18 @@ export default function LifeTaskCard({
                          </>
                     )}
                     
-                    {/* Inline Actions */}
-                    <div className="flex items-center gap-2 pl-2 border-l border-stone-200/50">
-                        <button 
-                            className="text-[10px] font-medium text-stone-500 hover:text-stone-800 px-2 py-1 rounded-md hover:bg-stone-200/50 transition-colors whitespace-nowrap"
-                            onClick={(e) => { e.stopPropagation(); /* onSnooze */ }}
-                        >
-                            <Clock className="w-3 h-3 inline mr-1" />
-                            推迟
-                        </button>
-                    </div>
+                    {/* Inline Actions - Only show for non-work or simple reminders to reduce clutter on work cards */}
+                    {task.category !== 'work' && (
+                        <div className="flex items-center gap-2 pl-2 border-l border-stone-200/50 self-center">
+                            <button 
+                                className="text-[10px] font-medium text-stone-500 hover:text-stone-800 px-2 py-1 rounded-md hover:bg-stone-200/50 transition-colors whitespace-nowrap"
+                                onClick={(e) => { e.stopPropagation(); /* onSnooze */ }}
+                            >
+                                <Clock className="w-3 h-3 inline mr-1" />
+                                推迟
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

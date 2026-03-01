@@ -913,6 +913,42 @@ Return JSON.`,
            </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showOCRDialog} onOpenChange={(open) => { setShowOCRDialog(open); if (!open) { setOcrFile(null); setOcrPreview(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ScanText className="w-5 h-5 text-[#384877]" /> AI 图文识别</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            {ocrPreview ? (
+              <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-h-60 flex items-center justify-center">
+                <img src={ocrPreview} alt="预览" className="max-h-60 object-contain" />
+              </div>
+            ) : ocrFile ? (
+              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <FileText className="w-8 h-8 text-[#384877] flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-slate-700 truncate">{ocrFile.name}</p>
+                  <p className="text-xs text-slate-400">{(ocrFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+              </div>
+            ) : null}
+
+            <p className="text-sm text-slate-500 text-center">AI 将识别文件中的文字，自动提取约定信息并填充表单</p>
+
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => ocrInputRef.current?.click()}>
+                <ImagePlus className="w-4 h-4 mr-2" /> 重新选择
+              </Button>
+              <Button
+                className="flex-1 bg-[#384877] hover:bg-[#2c3b63]"
+                onClick={handleOCRProcess}
+                disabled={isOCRProcessing || !ocrFile}
+              >
+                {isOCRProcessing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 识别中...</> : <><ScanText className="w-4 h-4 mr-2" /> 开始识别</>}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

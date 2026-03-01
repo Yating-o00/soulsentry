@@ -268,6 +268,71 @@ Return JSON.`,
     }
   };
 
+  const handleOCRFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setOcrFile(file);
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setOcrPreview(ev.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      setOcrPreview(null);
+    }
+    setShowOCRDialog(true);
+  };
+
+  const handleOCRProcess = async () => {
+    if (!ocrFile) return;
+    setIsOCRProcessing(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file: ocrFile });
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `请识别图片或文档中的文字内容，提取其中的约定、任务、时间、地点等关键信息，并生成结构化任务数据。
+当前时间: ${new Date().toISOString()}
+请从文件内容中提取任务信息并返回JSON。如果有多个任务，返回最主要的一个。`,
+        file_urls: [file_url],
+        response_json_schema: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "任务标题" },
+            description: { type: "string", description: "详细描述" },
+            reminder_time: { type: "string", description: "ISO格式时间，如无则返回明天9点" },
+            priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+            extracted_text: { type: "string", description: "从文件中提取的原始文字" }
+          },
+          required: ["title"]
+        }
+      });
+
+      if (result?.title) {
+        const reminderDate = result.reminder_time ? new Date(result.reminder_time) : (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0); return d; })();
+        setTask(prev => ({
+          ...prev,
+          title: result.title,
+          description: result.description || (result.extracted_text ? `原文:\n${result.extracted_text}` : ""),
+          reminder_time: reminderDate,
+          time: format(reminderDate, "HH:mm"),
+          priority: result.priority || "medium",
+          category: result.category || "personal"
+        }));
+        setIsExpanded(true);
+        setShowOCRDialog(false);
+        setOcrFile(null);
+        setOcrPreview(null);
+        toast.success("✨ AI已识别并填充约定信息");
+      } else {
+        toast.error("未能识别到有效内容");
+      }
+    } catch (err) {
+      console.error("OCR failed:", err);
+      toast.error("识别失败，请重试");
+    } finally {
+      setIsOCRProcessing(false);
+    }
+  };
+
   const parseSmartInput = async (inputText) => {
     setIsProcessing(true);
     try {

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
-import { Sparkles, ChevronDown, Check, CheckCircle2 } from "lucide-react";
+import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -20,11 +20,17 @@ const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 export default function Tasks() {
   const { t } = useTranslation();
   const [viewMode, setViewMode] = useState("all"); // 'all', 'milestone', 'life'
+  const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [sharingTask, setSharingTask] = useState(null);
   const [user, setUser] = useState(null);
+  
+  // Search & Selection State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
 
   const {
     updateTaskAsync,
@@ -46,8 +52,15 @@ export default function Tasks() {
 
   // Filter tasks
   const { milestoneTasks, lifeTasks, completedTasks, stats } = useMemo(() => {
-    const active = allTasks.filter((t) => !t.deleted_at && t.status !== 'completed');
-    const completed = allTasks.filter((t) => !t.deleted_at && t.status === 'completed');
+    // Apply search filter
+    const searchLower = searchQuery.toLowerCase();
+    const filteredTasks = allTasks.filter(t => 
+      !t.deleted_at && 
+      (t.title?.toLowerCase().includes(searchLower) || t.description?.toLowerCase().includes(searchLower))
+    );
+
+    const active = filteredTasks.filter((t) => t.status !== 'completed');
+    const completed = filteredTasks.filter((t) => t.status === 'completed');
 
     const roots = active.filter((t) => !t.parent_task_id);
 
@@ -108,6 +121,23 @@ export default function Tasks() {
 
   const handleUpdateStatus = (task, status) => {
     handleComplete(task, allTasks, status);
+  };
+
+  const toggleSelection = (taskId) => {
+    setSelectedTaskIds(prev => 
+      prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTaskIds.length === 0) return;
+    if (!window.confirm(`确定要删除选中的 ${selectedTaskIds.length} 个约定吗？`)) return;
+    
+    for (const id of selectedTaskIds) {
+      await deleteTask(id);
+    }
+    setSelectedTaskIds([]);
+    setIsSelectionMode(false);
   };
 
   // Get current date info
@@ -193,13 +223,76 @@ export default function Tasks() {
 
         </section>
 
-        {/* Filters & Content Area */}
-        <div className="flex items-center justify-between mb-6">
-           <h3 className="text-xl font-bold text-slate-800">
-             {viewMode === 'all' && '全部约定'}
-             {viewMode === 'milestone' && '里程碑'}
-             {viewMode === 'life' && '生活提醒'}
-           </h3>
+        {/* Toolbar: Search, View, Selection */}
+        <div className="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
+           {/* Search */}
+           <div className="relative w-full md:max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="搜索约定..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-slate-400"
+              />
+           </div>
+
+           {/* Controls */}
+           <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+              {/* View Modes */}
+              <div className="flex items-center bg-slate-50 p-1 rounded-lg border border-slate-100 mr-2">
+                 <button 
+                    onClick={() => setLayoutMode('list')}
+                    className={cn(
+                       "p-1.5 rounded-md transition-all",
+                       layoutMode === 'list' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600"
+                    )}
+                 >
+                    <List className="w-4 h-4" />
+                 </button>
+                 <button 
+                    onClick={() => setLayoutMode('kanban')}
+                    className={cn(
+                       "p-1.5 rounded-md transition-all",
+                       layoutMode === 'kanban' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600"
+                    )}
+                 >
+                    <Kanban className="w-4 h-4" />
+                 </button>
+                 <button 
+                    onClick={() => setLayoutMode('gantt')}
+                    className={cn(
+                       "p-1.5 rounded-md transition-all",
+                       layoutMode === 'gantt' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600"
+                    )}
+                 >
+                    <BarChart className="w-4 h-4" />
+                 </button>
+              </div>
+
+              {/* Selection Toggle */}
+              <button 
+                 onClick={() => {
+                    setIsSelectionMode(!isSelectionMode);
+                    setSelectedTaskIds([]);
+                 }}
+                 className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border",
+                    isSelectionMode 
+                       ? "bg-blue-50 text-blue-600 border-blue-200" 
+                       : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                 )}
+              >
+                 {isSelectionMode ? <X className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+                 <span>{isSelectionMode ? "取消" : "选择"}</span>
+              </button>
+
+              {/* Filter Button */}
+              <button className="flex items-center gap-1.5 px-3 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all">
+                 <Filter className="w-4 h-4" />
+                 <span>筛选</span>
+              </button>
+           </div>
         </div>
 
         {/* Content Area */}
@@ -213,6 +306,9 @@ export default function Tasks() {
               key={task.id}
               task={task}
               subtasks={getSubtasks(task.id)}
+              isSelectionMode={isSelectionMode}
+              isSelected={selectedTaskIds.includes(task.id)}
+              onToggleSelection={() => toggleSelection(task.id)}
               onToggleSubtask={handleToggleSubtask}
               onUpdateStatus={handleUpdateStatus}
               onAddSubtask={() => {
@@ -253,6 +349,9 @@ export default function Tasks() {
                   <LifeTaskCard
                     key={task.id}
                     task={task}
+                    isSelectionMode={isSelectionMode}
+                    isSelected={selectedTaskIds.includes(task.id)}
+                    onToggleSelection={() => toggleSelection(task.id)}
                     onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
                     onEdit={() => setSelectedTask(task)}
                     onShare={() => setSharingTask(task)}
@@ -332,6 +431,29 @@ export default function Tasks() {
           onClose={() => setSharingTask(null)} 
         />
       )}
+
+      {/* Bulk Selection Action Bar */}
+      <AnimatePresence>
+        {isSelectionMode && selectedTaskIds.length > 0 && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 flex items-center gap-4 px-6"
+          >
+             <span className="text-sm font-medium text-slate-700">{selectedTaskIds.length} 个已选择</span>
+             <div className="h-4 w-px bg-slate-200"></div>
+             <button 
+               onClick={handleBulkDelete}
+               className="flex items-center gap-1.5 text-sm text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
+             >
+                <Trash2 className="w-4 h-4" />
+                <span>删除</span>
+             </button>
+             {/* Add more bulk actions here if needed */}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>);
 
 }

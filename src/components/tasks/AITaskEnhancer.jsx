@@ -95,7 +95,13 @@ ${JSON.stringify(suggestions)}
         }
       });
 
-      setSuggestions(response);
+      setSuggestions({
+        ...response,
+        tags: response.tags || [],
+        subtasks: response.subtasks || [],
+        risks: response.risks || [],
+        dependencies: response.dependencies || [],
+      });
       setRefineInstruction("");
       toast.success("已根据您的指令调整建议");
     } catch (error) {

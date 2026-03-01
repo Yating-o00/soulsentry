@@ -272,7 +272,6 @@ ${templatesInfo}
       priority: suggestions.priority,
       tags: suggestions.tags,
       subtasks: formattedSubtasks,
-      // New fields
       reminder_time: suggestions.reminder_time,
       optimal_reminder_time: suggestions.reminder_time,
       end_time: suggestions.execution_end,
@@ -288,7 +287,6 @@ ${templatesInfo}
       }
     });
 
-    toast.success("已应用AI建议");
     setSuggestions(null);
   };
 

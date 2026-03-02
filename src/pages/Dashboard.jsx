@@ -402,6 +402,15 @@ export default function Dashboard() {
 
       <DailyBriefing />
 
+      {/* Smart Daily Planner */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        <SmartDailyPlanner />
+      </motion.div>
+
       {/* Main Content: SoulSentry Hub */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

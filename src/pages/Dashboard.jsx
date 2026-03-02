@@ -43,6 +43,7 @@ import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
 import SoulSentryHub from "../components/dashboard/SoulSentryHub";
 import DailyBriefing from "../components/dashboard/DailyBriefing";
+import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");

@@ -3,7 +3,23 @@ import { base44 } from "@/api/base44Client";
 import { format, parseISO } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Plus, ArrowRight, Loader2, Trash2, Edit2, Clock, Zap, CheckCircle2, Target, Coffee, Moon } from "lucide-react";
+import {
+  Sparkles,
+  Plus,
+  ArrowRight,
+  Loader2,
+  Trash2,
+  Edit2,
+  Clock,
+  Zap,
+  CheckCircle2,
+  Target,
+  Coffee,
+  Moon,
+  Mic,
+  Image as ImageIcon,
+  Send,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -204,37 +220,56 @@ export default function SmartDailyPlanner() {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-6 py-4 bg-slate-50/60 border-b border-slate-100">
-              <Textarea
-                value={userInput}
-                onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }} // 文本框输入时保存到本地草稿
-                placeholder={planData
-                  ? "告诉我要追加什么内容，AI会智能融入现有规划..."
-                  : "告诉我今天的安排，AI将为你生成完整规划..."}
-                className="bg-white border-slate-200 rounded-2xl resize-none text-sm min-h-[90px] focus-visible:ring-[#384877]/20 focus-visible:border-[#384877]"
-                rows={3}
-                autoFocus
-              />
-              <div className="flex items-center gap-2 mt-3">
-                <Button
-                  onClick={handleGenerate}
-                  disabled={!userInput.trim() || isProcessing}
-                  className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-9 px-4 text-sm"
-                >
-                  {isProcessing ? (
-                    <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />生成中...</>
-                  ) : (
-                    <><Sparkles className="w-3.5 h-3.5 mr-2" />{planData ? "智能更新" : "生成规划"}</>
-                  )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowInput(false)}
-                  className="text-slate-400 h-9 rounded-xl"
-                >
-                  取消
-                </Button>
+            <div className="px-6 py-8 bg-gradient-to-b from-slate-50/60 to-transparent border-b border-slate-100">
+              <div className="max-w-3xl mx-auto">
+                <div className="mb-4">
+                  <h2 className="text-3xl md:text-5xl font-extrabold text-[#384877] tracking-tight">告诉我，任何事情</h2>
+                  <p className="mt-2 text-slate-500">像与朋友倾诉般自然。我会倾听、理解，在所有设备上为你悄然安排妥当。</p>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+                  <Textarea
+                    value={userInput}
+                    onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }}
+                    placeholder={planData ? "明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料..." : "明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料..."}
+                    className="bg-white border-slate-200 rounded-2xl resize-none text-[15px] min-h-[120px] focus-visible:ring-[#384877]/20 focus-visible:border-[#384877]"
+                    rows={5}
+                    autoFocus
+                  />
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <button type="button" className="h-9 w-9 rounded-full hover:bg-slate-100 flex items-center justify-center" title="语音输入（占位）">
+                        <Mic className="w-4 h-4" />
+                      </button>
+                      <button type="button" className="h-9 w-9 rounded-full hover:bg-slate-100 flex items-center justify-center" title="添加图片（占位）">
+                        <ImageIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={handleGenerate}
+                        disabled={!userInput.trim() || isProcessing}
+                        className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-full h-10 px-5 text-sm"
+                      >
+                        {isProcessing ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />发送中...</>
+                        ) : (
+                          <><Send className="w-4 h-4 mr-2" />发送</>
+                        )}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setShowInput(false)} className="text-slate-400 h-9 rounded-xl">取消</Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {['今晚8点给妈妈打电话','下周二完成Q4报告','明早7点飞深圳'].map((s) => (
+                    <button key={s} type="button" onClick={() => setUserInput(s)} className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-xs hover:bg-slate-200">
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>

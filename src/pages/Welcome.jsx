@@ -157,10 +157,15 @@ export default function Welcome({ onComplete }) {
           input: textToAnalyze
       });
 
+      // Also extract & create tasks from the input
+      extractAndCreateTasks(textToAnalyze).then(tasks => {
+        if (tasks.length > 0) {
+          toast.success(`已自动添加 ${tasks.length} 个约定到列表`);
+        }
+      }).catch(e => console.error("Task extraction failed", e));
+
       clearInterval(stepInterval);
       
-      // Navigate to Dashboard with results
-      // Adding a small delay to let user see the final step if needed, or just go immediately
       setTimeout(() => {
           if (onComplete) onComplete();
           navigate(createPageUrl("Dashboard"), { state: { soulSentryData: response } });

@@ -467,23 +467,26 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                    </div>
                    <p className="text-sm text-slate-500">基于输入: "{userInput.length > 30 ? userInput.substring(0, 30) + '...' : userInput}"</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-sm font-medium text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
                         {weekRangeLabel}
                     </span>
+                   <Button
+                     size="sm"
+                     className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl"
+                     onClick={() => setShowAppendInput(v => !v)}
+                   >
+                     <Plus className="w-3.5 h-3.5 mr-1" /> 追加内容
+                   </Button>
                    <Button 
                      variant="outline" 
-                     onClick={() => {
-                       if (confirm('确定要删除当前规划并开始新的对话吗？')) {
-                         deletePlan();
-                       }
-                     }} 
+                     onClick={() => { if (confirm('确定要删除当前规划并开始新的对话吗？')) { deletePlan(); } }} 
                      className="rounded-xl border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600"
                    >
                       删除规划
                    </Button>
                    <Button variant="outline" onClick={() => setStage('input')} className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#384877]">
-                      编辑输入
+                      重新规划
                    </Button>
                 </div>
              </div>

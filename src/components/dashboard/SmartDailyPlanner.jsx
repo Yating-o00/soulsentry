@@ -95,6 +95,11 @@ export default function SmartDailyPlanner() {
     loadTodayPlan();
   }, [todayStr, draftKey]); // draftKey 加入依赖，以确保其变化时重新加载
 
+  // 当规划数据变化时重置本地执行清单勾选状态（必须在任何 early return 之前）
+  useEffect(() => {
+    setExecuted({});
+  }, [existingPlanId, planData?.theme, planData?.summary]);
+
   const handleGenerate = async () => {
     if (!userInput.trim()) return;
     setIsProcessing(true);
@@ -170,9 +175,6 @@ export default function SmartDailyPlanner() {
       </div>
     );
   }
-
-  // 当规划数据变化时重置本地执行清单勾选状态
-  useEffect(() => { setExecuted({}); }, [existingPlanId, planData?.theme, planData?.summary]);
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">

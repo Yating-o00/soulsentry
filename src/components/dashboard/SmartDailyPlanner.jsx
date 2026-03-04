@@ -175,7 +175,18 @@ export default function SmartDailyPlanner() {
             <Target className="w-4.5 h-4.5 text-white" />
           </div>
           <div>
-            <h3 className="font-bold text-slate-800 text-base">今日智能规划</h3>
+            <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+              今日智能规划
+              {planData?.original_input && (
+                <Badge
+                  variant="outline"
+                  className="hidden md:inline-flex max-w-[240px] truncate text-[11px] font-normal"
+                  title={planData.original_input}
+                >
+                  基于输入：{planData.original_input}
+                </Badge>
+              )}
+            </h3>
             <p className="text-xs text-slate-400">{format(new Date(), "M月d日 EEEE", { locale: zhCN })}</p>
           </div>
         </div>

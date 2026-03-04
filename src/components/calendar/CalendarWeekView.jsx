@@ -120,18 +120,13 @@ export default function CalendarWeekView({
   const processIntent = async () => {
     if (!inputValue.trim()) return;
     setIsProcessing(true);
-    setShowInput(false); // Hide input to show loading/results directly or show loading state
     
     try {
-        // Simulate AI processing delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // In a real implementation, we would call an AI function here to parse the input
-        // and create tasks. For now, we'll just show a success message.
-        // await base44.integrations.Core.InvokeLLM(...)
-        
-        toast.success("已生成本周全情境规划，跨6设备协同");
+        const weekStartStr = format(startOfDisplayWeek, "yyyy-MM-dd");
+        const tasks = await extractAndCreateTasks(inputValue, weekStartStr);
+        toast.success(tasks.length > 0 ? `已生成本周规划，并添加 ${tasks.length} 个约定` : "已生成本周规划");
         setInputValue("");
+        setShowInput(false);
     } catch (e) {
         toast.error("规划生成失败");
     } finally {

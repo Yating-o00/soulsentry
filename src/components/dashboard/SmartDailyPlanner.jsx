@@ -38,7 +38,8 @@ const SLOT_ICONS = {
 };
 
 export default function SmartDailyPlanner() {
-  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const todayStr = format(new Date(), "yyyy-MM-dd"); 
+  const draftKey = smart_daily_draft_${todayStr};
   const [planData, setPlanData] = useState(null);
   const [existingPlanId, setExistingPlanId] = useState(null);
   const [userInput, setUserInput] = useState("");

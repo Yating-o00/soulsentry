@@ -242,24 +242,24 @@ export default function SmartDailyPlanner() {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-6 py-8 bg-gradient-to-b from-slate-50/60 to-transparent border-b border-slate-100">
+            <div className="px-6 py-10 bg-gradient-to-b from-[#f1f5ff] via-white to-white rounded-3xl border border-slate-100/70 shadow-[0_10px_40px_rgba(56,72,119,0.06)]">
               <div className="max-w-3xl mx-auto">
                 <div className="mb-4">
-                  <h2 className="text-3xl md:text-5xl font-extrabold text-[#384877] tracking-tight">告诉我，任何事情</h2>
-                  <p className="mt-2 text-slate-500">像与朋友倾诉般自然。我会倾听、理解，在所有设备上为你悄然安排妥当。</p>
+                  <h2 className="text-4xl md:text-5xl font-extrabold text-[#384877] tracking-tight leading-tight">告诉我，任何事情</h2>
+                  <p className="mt-3 text-slate-600">像与朋友倾诉般自然。我会倾听、理解，在所有设备上为你悄然安排妥当。</p>
                 </div>
 
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+                <div className="bg-white rounded-[20px] border border-slate-200/70 p-4 md:p-5 shadow-[0_8px_30px_rgba(56,72,119,0.06)]">
                   <Textarea
                     value={userInput}
                     onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }}
                     placeholder={planData ? "明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料..." : "明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料..."}
-                    className="bg-white border-slate-200 rounded-2xl resize-none text-[15px] min-h-[120px] focus-visible:ring-[#384877]/20 focus-visible:border-[#384877]"
+                    className="bg-white border-slate-200 rounded-2xl resize-none text-[15px] min-h-[140px] px-4 py-3 placeholder:text-slate-400 focus-visible:ring-[#384877]/20 focus-visible:border-[#384877]"
                     rows={5}
                     autoFocus
                   />
 
-                  <div className="mt-3 flex items-center justify-between">
+                  <div className="mt-4 flex items-end justify-between">
                     <div className="flex items-center gap-2 text-slate-500">
                       <button type="button" className="h-9 w-9 rounded-full hover:bg-slate-100 flex items-center justify-center" title="语音输入（占位）">
                         <Mic className="w-4 h-4" />
@@ -272,7 +272,7 @@ export default function SmartDailyPlanner() {
                       <Button
                         onClick={handleGenerate}
                         disabled={!userInput.trim() || isProcessing}
-                        className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-full h-10 px-5 text-sm"
+                        className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-full h-11 px-6 text-sm shadow-md shadow-[#384877]/20"
                       >
                         {isProcessing ? (
                           <><Loader2 className="w-4 h-4 mr-2 animate-spin" />发送中...</>
@@ -280,14 +280,14 @@ export default function SmartDailyPlanner() {
                           <><Send className="w-4 h-4 mr-2" />发送</>
                         )}
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setShowInput(false)} className="text-slate-400 h-9 rounded-xl">取消</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setShowInput(false)} className="text-slate-500 hover:text-slate-700 h-9 rounded-xl">取消</Button>
                     </div>
                   </div>
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   {['今晚8点给妈妈打电话','下周二完成Q4报告','明早7点飞深圳'].map((s) => (
-                    <button key={s} type="button" onClick={() => setUserInput(s)} className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-xs hover:bg-slate-200">
+                    <button key={s} type="button" onClick={() => setUserInput(s)} className="px-3 py-1.5 rounded-full bg-white text-slate-600 text-xs border border-slate-200/80 shadow-sm hover:bg-slate-50">
                       {s}
                     </button>
                   ))}

@@ -212,7 +212,7 @@ export default function SmartDailyPlanner() {
         </div>
       </div>
 
-      {/* Input Area */}
+      {/* Hero-style Input Area (图2模式) */}
       <AnimatePresence>
         {showInput && (
           <motion.div

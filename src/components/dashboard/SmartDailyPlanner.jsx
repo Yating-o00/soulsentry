@@ -19,10 +19,15 @@ import {
   Mic,
   Image as ImageIcon,
   Send,
+  Smartphone,
+  Watch,
+  Monitor,
+  Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { cn } from "@/lib/utils";
@@ -62,6 +67,7 @@ export default function SmartDailyPlanner() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showInput, setShowInput] = useState(false);
+  const [executed, setExecuted] = useState({});
 
   // Load today's plan from DB on mount
   useEffect(() => {
@@ -165,6 +171,9 @@ export default function SmartDailyPlanner() {
       </div>
     );
   }
+
+  // 当规划数据变化时重置本地执行清单勾选状态
+  useEffect(() => { setExecuted({}); }, [existingPlanId, planData?.theme, planData?.summary]);
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -328,6 +337,69 @@ export default function SmartDailyPlanner() {
               )}
             </div>
           )}
+
+          {/* 已为你安排 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 全设备智能协同 */}
+            <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50">
+              <p className="text-xs font-bold text-slate-500 mb-2">已为你安排 · 全设备智能协同</p>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-[#384877]/10 text-[#384877] flex items-center justify-center"><Smartphone className="w-4 h-4" /></div>
+                  <div className="text-sm text-slate-600">
+                    手机：日程与提醒已同步（{(planData.key_tasks?.length||0)+(planData.focus_blocks?.length||0)} 项）
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-[#384877]/10 text-[#384877] flex items-center justify-center"><Watch className="w-4 h-4" /></div>
+                  <div className="text-sm text-slate-600">手表：短提醒与站立提示已安排</div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-[#384877]/10 text-[#384877] flex items-center justify-center"><Monitor className="w-4 h-4" /></div>
+                  <div className="text-sm text-slate-600">电脑：{planData.focus_blocks?.length||0} 段专注时段已设置免打扰</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 情境感知时间线 */}
+            <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50">
+              <p className="text-xs font-bold text-slate-500 mb-2">已为你安排 · 情境感知时间线</p>
+              <div className="space-y-2">
+                {(planData.focus_blocks||[])
+                  .slice()
+                  .sort((a,b)=> (a.time||'').localeCompare(b.time||''))
+                  .slice(0,5)
+                  .map((b, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <span className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-600 font-mono text-xs">{b.time}</span>
+                      <span className="text-slate-700 truncate">{b.title}</span>
+                    </div>
+                  ))}
+                {(planData.focus_blocks?.length||0) === 0 && (
+                  <div className="text-xs text-slate-400">等待你的输入生成时间线…</div>
+                )}
+              </div>
+            </div>
+
+            {/* 自动执行清单 */}
+            <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50">
+              <p className="text-xs font-bold text-slate-500 mb-2">已为你安排 · 自动执行清单</p>
+              <div className="space-y-2">
+                {(planData.key_tasks||[]).slice(0,6).map((t, idx) => (
+                  <label key={idx} className="flex items-start gap-2 text-sm text-slate-700">
+                    <Checkbox checked={!!executed[idx]} onCheckedChange={(v)=> setExecuted(prev=>({...prev,[idx]: !!v}))} className="mt-0.5" />
+                    <span className="flex-1">
+                      {t.title}
+                      {t.estimated_minutes ? <span className="text-xs text-slate-400 ml-1">· {t.estimated_minutes}min</span> : null}
+                    </span>
+                  </label>
+                ))}
+                {(planData.key_tasks?.length||0) === 0 && (
+                  <div className="text-xs text-slate-400">无关键任务，发送输入后将自动生成清单</div>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Focus Blocks */}
           {planData.focus_blocks && planData.focus_blocks.length > 0 && (

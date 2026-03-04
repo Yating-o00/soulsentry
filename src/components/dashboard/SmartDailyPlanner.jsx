@@ -38,8 +38,8 @@ const SLOT_ICONS = {
 };
 
 export default function SmartDailyPlanner() {
-  const todayStr = format(new Date(), "yyyy-MM-dd"); 
-  const draftKey = smart_daily_draft_${todayStr};
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const draftKey = `smart_daily_draft_${todayStr}`; // 修复后的草稿键定义
   const [planData, setPlanData] = useState(null);
   const [existingPlanId, setExistingPlanId] = useState(null);
   const [userInput, setUserInput] = useState("");
@@ -55,8 +55,14 @@ export default function SmartDailyPlanner() {
         if (plans && plans.length > 0) {
           const plan = plans[0];
           setExistingPlanId(plan.id);
-          setPlanData({ ...plan.plan_json, theme: plan.theme, summary: plan.summary });
-          setUserInput(plan.original_input || "");
+          setPlanData({ ...plan.plan_json, theme: plan.theme, summary: plan.summary, original_input: plan.original_input });
+          const draft = localStorage.getItem(draftKey);
+          setUserInput(draft ?? (plan.original_input || ""));
+          setShowInput(false); // 加载到已有计划时，隐藏输入框
+        } else {
+          const draft = localStorage.getItem(draftKey);
+          setUserInput(draft || "");
+          setShowInput(true); // 没有计划时，显示输入框以便创建
         }
       } catch (err) {
         console.error("Failed to load daily plan", err);
@@ -65,12 +71,16 @@ export default function SmartDailyPlanner() {
       }
     };
     loadTodayPlan();
-  }, [todayStr]);
+  }, [todayStr, draftKey]); // draftKey 加入依赖，以确保其变化时重新加载
 
   const handleGenerate = async () => {
     if (!userInput.trim()) return;
     setIsProcessing(true);
     try {
+      // 累积 original_input
+      const prevOriginal = planData?.original_input || "";
+      const originalInputToSave = existingPlanId ? [prevOriginal, userInput].filter(Boolean).join("\n") : userInput;
+
       const { data } = await base44.functions.invoke("generateDailyPlan", {
         input: userInput,
         planDate: todayStr,
@@ -78,7 +88,8 @@ export default function SmartDailyPlanner() {
       });
 
       if (data) {
-        setPlanData(data);
+        // 更新 planData，包含累积的 original_input
+        setPlanData({ ...data, original_input: originalInputToSave });
 
         // Extract & create tasks from the user input
         extractAndCreateTasks(userInput, todayStr).then(tasks => {
@@ -89,7 +100,7 @@ export default function SmartDailyPlanner() {
 
         const planRecord = {
           plan_date: todayStr,
-          original_input: userInput,
+          original_input: originalInputToSave, // 保存累积后的 original_input
           theme: data.theme,
           summary: data.summary,
           plan_json: data,
@@ -104,6 +115,7 @@ export default function SmartDailyPlanner() {
           setExistingPlanId(newPlan.id);
           toast.success("今日规划已生成");
         }
+        localStorage.removeItem(draftKey); // 生成或更新成功后清除草稿
         setShowInput(false);
       }
     } catch (err) {
@@ -121,6 +133,7 @@ export default function SmartDailyPlanner() {
       setExistingPlanId(null);
       setPlanData(null);
       setUserInput("");
+      localStorage.removeItem(draftKey); // 删除计划时清除草稿
       toast.success("今日规划已清除");
     } catch (err) {
       toast.error("删除失败");
@@ -194,7 +207,7 @@ export default function SmartDailyPlanner() {
             <div className="px-6 py-4 bg-slate-50/60 border-b border-slate-100">
               <Textarea
                 value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
+                onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }} // 文本框输入时保存到本地草稿
                 placeholder={planData
                   ? "告诉我要追加什么内容，AI会智能融入现有规划..."
                   : "告诉我今天的安排，AI将为你生成完整规划..."}

@@ -388,7 +388,10 @@ export default function SoulMonthPlanner({
                    </div>
                    <p className="text-sm text-slate-500">{monthLabel} · {monthData.summary}</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                   <Button size="sm" className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl" onClick={() => setShowAppendInput(v => !v)}>
+                     <Plus className="w-3.5 h-3.5 mr-1" /> 追加内容
+                   </Button>
                    <Button variant="outline" onClick={() => { if(confirm('确定删除?')) deletePlan() }} className="text-red-600 hover:bg-red-50 border-slate-200">
                       删除
                    </Button>

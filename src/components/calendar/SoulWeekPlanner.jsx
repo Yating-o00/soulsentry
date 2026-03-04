@@ -62,7 +62,10 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [existingPlanId, setExistingPlanId] = useState(null);
-  
+  const [appendInput, setAppendInput] = useState('');
+  const [isAppending, setIsAppending] = useState(false);
+  const [showAppendInput, setShowAppendInput] = useState(false);
+
   // Sync internal state with prop changes (e.g. when user navigates in the parent Dashboard)
   useEffect(() => {
     if (initialDate) {

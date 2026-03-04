@@ -53,6 +53,9 @@ export default function SoulMonthPlanner({
   const [isProcessing, setIsProcessing] = useState(false);
   const [existingPlanId, setExistingPlanId] = useState(null);
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
+  const [appendInput, setAppendInput] = useState('');
+  const [isAppending, setIsAppending] = useState(false);
+  const [showAppendInput, setShowAppendInput] = useState(false);
 
   // Fetch user behaviors for smart planning
   const { data: recentBehaviors = [] } = useQuery({

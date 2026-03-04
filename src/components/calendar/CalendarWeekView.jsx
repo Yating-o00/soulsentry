@@ -9,6 +9,7 @@ import {
   Sparkles, RotateCcw
 } from "lucide-react";
 import { toast } from "sonner";
+import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { base44 } from "@/api/base44Client";
 
 const deviceConfigs = {

@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
+import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");

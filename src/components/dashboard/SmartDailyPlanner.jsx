@@ -79,6 +79,13 @@ export default function SmartDailyPlanner() {
       if (data) {
         setPlanData(data);
 
+        // Extract & create tasks from the user input
+        extractAndCreateTasks(userInput, todayStr).then(tasks => {
+          if (tasks.length > 0) {
+            toast.success(`已自动添加 ${tasks.length} 个约定到列表`);
+          }
+        }).catch(e => console.error("Task extraction failed", e));
+
         const planRecord = {
           plan_date: todayStr,
           original_input: userInput,

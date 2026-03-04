@@ -12,7 +12,9 @@ import {
   Zap,
   Target,
   Flag,
-  Lightbulb
+  Lightbulb,
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

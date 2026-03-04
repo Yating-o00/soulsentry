@@ -18,7 +18,9 @@ import {
   Car,
   Home as HomeIcon,
   Monitor,
-  Zap
+  Zap,
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

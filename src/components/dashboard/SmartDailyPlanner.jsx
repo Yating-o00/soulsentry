@@ -78,8 +78,8 @@ export default function SmartDailyPlanner() {
         } else {
           const draft = localStorage.getItem(draftKey);
           setUserInput(draft || "");
-          // 无计划时采用图2模式：先显示空状态卡片，点击按钮后打开输入区
-          setShowInput(false);
+          // 无计划时直接展示图2模式的英雄输入区
+          setShowInput(true);
         }
       } catch (err) {
         console.error("Failed to load daily plan", err);

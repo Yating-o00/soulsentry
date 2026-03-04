@@ -201,6 +201,40 @@ export default function SoulMonthPlanner({
     setMonthData(null);
   };
 
+  const handleAppend = async () => {
+    if (!appendInput.trim() || !monthData) return;
+    setIsAppending(true);
+    try {
+      const { data } = await base44.functions.invoke('generateMonthPlan', {
+        input: `现有规划摘要: ${monthData.summary}\n\n新增内容: ${appendInput}`,
+        startDate: format(start, 'yyyy-MM-dd'),
+        behaviors: recentBehaviors || [],
+        existingPlan: monthData
+      });
+      if (data) {
+        const merged = {
+          ...monthData,
+          ...data,
+          key_milestones: [
+            ...(monthData.key_milestones || []),
+            ...(data.key_milestones || []).filter(newM =>
+              !(monthData.key_milestones || []).some(m => m.title === newM.title)
+            )
+          ]
+        };
+        setMonthData(merged);
+        savePlanToDB(merged, userInput + '\n' + appendInput);
+        setAppendInput('');
+        setShowAppendInput(false);
+        toast.success('已将新内容智能融入本月规划');
+      }
+    } catch (e) {
+      toast.error('更新失败，请重试');
+    } finally {
+      setIsAppending(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] text-slate-900 font-sans rounded-3xl overflow-hidden relative">
       <div className="relative z-10 p-6 md:p-8 max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-100px)]">

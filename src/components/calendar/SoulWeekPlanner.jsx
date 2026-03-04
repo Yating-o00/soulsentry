@@ -226,6 +226,47 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
     setWeekData(null);
   };
 
+  const handleAppend = async () => {
+    if (!appendInput.trim() || !weekData) return;
+    setIsAppending(true);
+    try {
+      const { data } = await base44.functions.invoke('generateWeekPlan', {
+        input: `现有规划摘要: ${weekData.summary}\n\n新增内容: ${appendInput}`,
+        startDate: weekData.plan_start_date || currentWeekStartStr,
+        currentDate: format(new Date(), 'yyyy-MM-dd'),
+        existingPlan: weekData
+      });
+      if (data) {
+        // Merge: keep existing events and add new ones, merge strategies
+        const merged = {
+          ...weekData,
+          ...data,
+          events: [
+            ...(weekData.events || []),
+            ...(data.events || []).filter(newE =>
+              !(weekData.events || []).some(e => e.title === newE.title && e.date === newE.date)
+            )
+          ],
+          automations: [
+            ...(weekData.automations || []),
+            ...(data.automations || []).filter(newA =>
+              !(weekData.automations || []).some(a => a.title === newA.title)
+            )
+          ]
+        };
+        setWeekData(merged);
+        savePlanToDB(merged, userInput + '\n' + appendInput);
+        setAppendInput('');
+        setShowAppendInput(false);
+        toast.success('已将新内容智能融入本周规划');
+      }
+    } catch (e) {
+      toast.error('更新失败，请重试');
+    } finally {
+      setIsAppending(false);
+    }
+  };
+
   const getWeekDays = () => {
     const days = [];
     for (let i = 0; i < 7; i++) {

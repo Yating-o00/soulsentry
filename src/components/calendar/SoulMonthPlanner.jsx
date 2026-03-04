@@ -164,6 +164,13 @@ export default function SoulMonthPlanner({
             setMonthData(data);
             clearInterval(stepInterval);
             setProcessingStepIndex(PROCESSING_STEPS.length - 1);
+
+            // Extract & create tasks from user input
+            extractAndCreateTasks(userInput, format(start, 'yyyy-MM-dd')).then(tasks => {
+              if (tasks.length > 0) {
+                toast.success(`已自动添加 ${tasks.length} 个约定到列表`);
+              }
+            }).catch(e => console.error("Task extraction failed", e));
             
             setTimeout(() => {
                 setStage('results');

@@ -132,9 +132,9 @@ export default function CalendarDayView({
   const isCurrentDay = isToday(currentDate);
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-200px)] bg-slate-50/50 rounded-3xl border border-slate-200 shadow-sm overflow-visible">
+    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-200px)] bg-slate-50/60 rounded-[28px] border border-slate-100 shadow-sm overflow-visible">
       {/* Sidebar: Context & Overview */}
-      <div className="w-full lg:w-80 bg-white border-r border-slate-100 flex flex-col lg:sticky lg:top-0 lg:h-[calc(100vh-200px)] overflow-auto">
+      <div className="w-full lg:w-80 bg-white border-r border-slate-100 flex flex-col overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/30">
             <div className="flex items-baseline gap-3 mb-1">
                 <h2 className="text-4xl font-bold text-slate-900 tracking-tight">
@@ -220,15 +220,19 @@ export default function CalendarDayView({
       {/* Main Timeline */}
       <div className="flex-1 flex flex-col bg-white relative overflow-auto">
         <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-b from-white to-transparent z-10" />
-
-        <div className="p-4 pt-5">
+        <div className="p-4 md:p-6 border-b border-slate-100/70 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
           {loadingDayPlan ? (
             <div className="max-w-4xl mx-auto"><ProcessingSteps /></div>
           ) : dayPlan ? (
-            <div className="max-w-4xl mx-auto mb-4 md:mb-6 space-y-4">
+            <div className="max-w-4xl mx-auto space-y-4">
               <DeviceGridImageMode />
+              <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
+              <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
+              <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
             </div>
-          ) : null}
+          ) : (
+            <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500 max-w-4xl mx-auto">暂无当日AI规划，可在右侧“当日智能输入”中描述你的安排，我会为你生成情境时间线与设备协同。</div>
+          )}
         </div>
         
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -268,8 +272,8 @@ export default function CalendarDayView({
                                                 onDateClick(clickDate);
                                             }}
                                             className={cn(
-                                                "flex-1 min-h-[80px] rounded-2xl border transition-all duration-200 relative",
-                                                snapshot.isDraggingOver ? "bg-blue-50 border-blue-300 border-dashed" : "border-slate-200/50 hover:border-slate-300/60 hover:shadow-sm",
+                                                "flex-1 min-h-[88px] rounded-2xl border transition-all duration-200 relative",
+                                                snapshot.isDraggingOver ? "bg-blue-50 border-blue-300 border-dashed" : "border-slate-100 hover:border-slate-200 hover:shadow-sm",
                                                 isCurrentHour ? "bg-blue-50/10 border-blue-100" : "bg-white",
                                                 // Grid lines
                                                 "before:absolute before:left-0 before:right-0 before:top-4 before:h-px before:bg-slate-50 before:-z-10"
@@ -299,7 +303,7 @@ export default function CalendarDayView({
                                                                         onTaskClick(task);
                                                                     }}
                                                                     className={cn(
-                                                                        "group/card relative rounded-lg border shadow-sm transition-all overflow-hidden",
+                                                                        "group/card relative rounded-2xl border shadow-sm transition-all overflow-hidden",
                                                                         CATEGORY_STYLES[task.category] || CATEGORY_STYLES.other,
                                                                         snapshot.isDragging ? "shadow-xl rotate-1 scale-105 z-50 bg-white ring-2 ring-blue-500 border-transparent" : "hover:shadow-md",
                                                                         task.status === 'completed' && "opacity-60 grayscale bg-slate-50 border-slate-200"

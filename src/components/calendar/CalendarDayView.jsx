@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday, startOfWeek, addDays, parseISO, isSameDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, Target, Calendar as CalendarIcon, Zap, CheckCircle2, ArrowRight } from "lucide-react";
+import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, Target, Calendar as CalendarIcon, Zap, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 // // // import { ScrollArea } from "@/components/ui/scroll-area";
@@ -40,7 +40,8 @@ export default function CalendarDayView({
   onDateClick, 
   onTaskDrop,
   onTaskClick,
-  onCreateSubtask
+  onCreateSubtask,
+  onNavigateToDate
 }) {
   const [expandedTasks, setExpandedTasks] = useState(new Set());
   
@@ -70,7 +71,6 @@ export default function CalendarDayView({
   const [aiInput, setAiInput] = useState("");
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [resolvedDateHint, setResolvedDateHint] = useState(null);
 
   const DEFAULT_STEPS = [
     { key: 'time_extraction', text: '提取时间实体…' },
@@ -81,26 +81,24 @@ export default function CalendarDayView({
   ];
 
   const handleAnalyze = async () => {
-  if (!aiInput.trim() || isAnalyzing) return;
-  setIsAnalyzing(true);
-  try {
-    // Pass existing analysis as context so AI merges instead of replacing
-    const existingPlan = analysis ? {
-      timeline: analysis.timeline || [],
-      devices: analysis.devices || [],
-      automations: analysis.automations || [],
-    } : null;
-    const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
-    setAnalysis(data);
-    // If the resolved date differs from current view, offer navigation
-    if (data.resolved_date && data.resolved_date !== dayStr) {
-      setResolvedDateHint(data.resolved_date);
-    } else {
-      setResolvedDateHint(null);
+    if (!aiInput.trim() || isAnalyzing) return;
+    setIsAnalyzing(true);
+    try {
+      // Pass existing analysis as context so AI merges instead of replacing
+      const existingPlan = analysis ? {
+        timeline: analysis.timeline || [],
+        devices: analysis.devices || [],
+        automations: analysis.automations || [],
+      } : null;
+      const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
+      setAnalysis(data);
+      // If AI resolved a different date from the current day view, auto-navigate
+      if (data.resolved_date && data.resolved_date !== dayStr && onNavigateToDate) {
+        onNavigateToDate(new Date(data.resolved_date + 'T00:00:00'));
+      }
+    } finally {
+      setIsAnalyzing(false);
     }
-  } finally {
-    setIsAnalyzing(false);
-  }
   };
 
   const quickFill = (text) => setAiInput(text);
@@ -343,6 +341,29 @@ export default function CalendarDayView({
             )}
 
             {analysis && <div ref={resultsRef} />}
+
+            {/* AI 解析日期提示：当识别到的日期与当前日视图不同时显示 */}
+            {analysis?.resolved_date && analysis.resolved_date !== dayStr && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm text-amber-800">
+                  <CalendarIcon className="w-4 h-4 shrink-0" />
+                  <span>
+                    AI 识别该内容属于 <strong>{analysis.resolved_date}</strong>，
+                    {onNavigateToDate ? '已自动跳转到对应日期' : '请切换到对应日期查看'}
+                  </span>
+                </div>
+                {onNavigateToDate && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
+                    onClick={() => onNavigateToDate(new Date(analysis.resolved_date + 'T00:00:00'))}
+                  >
+                    前往 {analysis.resolved_date}
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* 设备策略一对一映射 */}
             {analysis?.devices?.length > 0 && (

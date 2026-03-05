@@ -525,6 +525,7 @@ export default function Dashboard() {
                 onDateClick={handleCalendarDateClick}
                 onTaskDrop={handleCalendarTaskDrop}
                 onTaskClick={setSelectedTask}
+                onNavigateToDate={setCurrentDate}
               />
             )}
           </AnimatePresence>

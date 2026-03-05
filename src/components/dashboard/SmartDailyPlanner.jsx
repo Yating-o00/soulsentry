@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, addDays } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -21,7 +21,9 @@ import {
   Send,
   Smartphone,
   Watch,
-  Monitor
+  Monitor,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,7 +61,8 @@ const SLOT_ICONS = {
 
 export default function SmartDailyPlanner() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
-  const draftKey = `smart_daily_draft_${todayStr}`; // 修复后的草稿键定义
+  const [selectedDateStr, setSelectedDateStr] = useState(todayStr);
+  const draftKey = `smart_daily_draft_${selectedDateStr}`; // 每日独立草稿键
   const [planData, setPlanData] = useState(null);
   const [existingPlanId, setExistingPlanId] = useState(null);
   const [userInput, setUserInput] = useState("");
@@ -72,7 +75,7 @@ export default function SmartDailyPlanner() {
   useEffect(() => {
     const loadTodayPlan = async () => {
       try {
-        const plans = await base44.entities.DailyPlan.filter({ plan_date: todayStr });
+        const plans = await base44.entities.DailyPlan.filter({ plan_date: selectedDateStr });
         if (plans && plans.length > 0) {
           const plan = plans[0];
           setExistingPlanId(plan.id);
@@ -93,7 +96,7 @@ export default function SmartDailyPlanner() {
       }
     };
     loadTodayPlan();
-  }, [todayStr, draftKey]); // draftKey 加入依赖，以确保其变化时重新加载
+  }, [selectedDateStr, draftKey]); // 根据所选日期与草稿键重新加载
 
   // 当规划数据变化时重置本地执行清单勾选状态（必须在任何 early return 之前）
   useEffect(() => {
@@ -110,7 +113,7 @@ export default function SmartDailyPlanner() {
 
       const { data } = await base44.functions.invoke("generateDailyPlan", {
         input: userInput,
-        planDate: todayStr,
+        planDate: selectedDateStr,
         existingPlan: planData || null,
       });
 
@@ -119,14 +122,14 @@ export default function SmartDailyPlanner() {
         setPlanData({ ...data, original_input: originalInputToSave });
 
         // Extract & create tasks from the user input
-        extractAndCreateTasks(userInput, todayStr).then(tasks => {
+        extractAndCreateTasks(userInput, selectedDateStr).then(tasks => {
           if (tasks.length > 0) {
             toast.success(`已自动添加 ${tasks.length} 个约定到列表`);
           }
         }).catch(e => console.error("Task extraction failed", e));
 
         const planRecord = {
-          plan_date: todayStr,
+          plan_date: selectedDateStr,
           original_input: originalInputToSave, // 保存累积后的 original_input
           theme: data.theme,
           summary: data.summary,
@@ -197,10 +200,34 @@ export default function SmartDailyPlanner() {
                 </Badge>
               )}
             </h3>
-            <p className="text-xs text-slate-400">{format(new Date(), "M月d日 EEEE", { locale: zhCN })}</p>
+            <p className="text-xs text-slate-400">{format(parseISO(selectedDateStr), "M月d日 EEEE", { locale: zhCN })}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* 日期切换 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-xl text-slate-500 hover:text-[#384877]"
+            onClick={() => setSelectedDateStr(format(addDays(parseISO(selectedDateStr), -1), "yyyy-MM-dd"))}
+            title="前一天"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <div className="px-2 py-1 rounded-lg bg-slate-50 text-slate-600 text-xs border border-slate-200/70 min-w-[108px] text-center">
+            {format(parseISO(selectedDateStr), "M月d日 EEEE", { locale: zhCN })}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-xl text-slate-500 hover:text-[#384877]"
+            onClick={() => setSelectedDateStr(format(addDays(parseISO(selectedDateStr), 1), "yyyy-MM-dd"))}
+            title="后一天"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+
+          {/* 计划操作 */}
           {planData && (
             <>
               <Button
@@ -208,6 +235,7 @@ export default function SmartDailyPlanner() {
                 size="icon"
                 className="h-8 w-8 rounded-xl text-slate-400 hover:text-[#384877]"
                 onClick={() => setShowInput(true)}
+                title="追加内容"
               >
                 <Edit2 className="w-4 h-4" />
               </Button>
@@ -216,6 +244,7 @@ export default function SmartDailyPlanner() {
                 size="icon"
                 className="h-8 w-8 rounded-xl text-slate-400 hover:text-red-500"
                 onClick={handleDelete}
+                title="删除当日规划"
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
@@ -227,7 +256,7 @@ export default function SmartDailyPlanner() {
               className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-3 text-xs"
               onClick={() => setShowInput(true)}
             >
-              <Plus className="w-3.5 h-3.5 mr-1" /> 创建今日规划
+              <Plus className="w-3.5 h-3.5 mr-1" /> 创建当日规划
             </Button>
           )}
         </div>

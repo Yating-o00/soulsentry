@@ -532,7 +532,7 @@ export default function CalendarDayView({
                                             ref={provided.innerRef}
                                             {...provided.droppableProps}
                                             onClick={() => {
-                                                const clickDate = new Date(currentDate);
+                                                const clickDate = new Date(safeCurrentDate);
                                                 clickDate.setHours(hour, 0, 0, 0);
                                                 onDateClick(clickDate);
                                             }}

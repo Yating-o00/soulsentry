@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { shouldTaskAppearAtDateTime } from "@/components/utils/recurrenceHelper";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import ProcessingSteps from "../dashboard/planner/ProcessingSteps";
 import DeviceGridImageMode from "../dashboard/planner/DeviceGridImageMode.jsx";
 import DeviceStrategy from "../dashboard/planner/DeviceStrategy";
@@ -63,6 +63,9 @@ export default function CalendarDayView({
   });
   const dayPlan = useMemo(() => (dayPlans && dayPlans.length > 0 ? dayPlans[0] : null), [dayPlans]);
 
+  const queryClient = useQueryClient();
+  const saveAttemptedRef = useRef(null);
+
   // AI intent analysis state
   const [aiInput, setAiInput] = useState("");
   const [analysis, setAnalysis] = useState(null);
@@ -96,6 +99,47 @@ export default function CalendarDayView({
       resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [analysis]);
+
+  // 若未输入新内容且当日无计划，则自动保存当日任务快照
+  useEffect(() => {
+    if (loadingDayPlan) return;
+    if (isAnalyzing) return;
+    if (aiInput && aiInput.trim().length > 0) return;
+    if (dayPlan) return; // 已存在当日计划
+    if (!tasks || tasks.length === 0) return;
+
+    const todaysTasks = tasks.filter(t => t.reminder_time && isSameDay(new Date(t.reminder_time), currentDate) && !t.parent_task_id);
+    if (todaysTasks.length === 0) return;
+
+    if (saveAttemptedRef.current === dayStr) return; // 避免重复
+    saveAttemptedRef.current = dayStr;
+
+    const plan_json = {
+      key_tasks: todaysTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || '',
+        reminder_time: t.reminder_time,
+        end_time: t.end_time || null,
+        priority: t.priority || 'medium',
+        category: t.category || 'other',
+        status: t.status || 'pending'
+      })),
+      focus_blocks: []
+    };
+
+    base44.entities.DailyPlan.create({
+      plan_date: dayStr,
+      original_input: '',
+      theme: '',
+      summary: '',
+      plan_json
+    }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
+    }).catch((e) => {
+      console.error('Auto-save daily plan failed', e);
+    });
+  }, [aiInput, isAnalyzing, dayPlan, tasks, currentDate, dayStr, loadingDayPlan]);
 
   const weeklyContext = useMemo(() => {
     if (!weeklyPlans || weeklyPlans.length === 0) return null;
@@ -316,7 +360,7 @@ export default function CalendarDayView({
                     <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
                   </div>
                 ) : (
-                  <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，可在上方输入你的安排，我会为你生成情境时间线与设备协同。</div>
+                  <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，系统会先为你保存当日任务快照；也可在上方输入你的安排生成协同方案。</div>
                 )}
               </>
             )}

@@ -32,6 +32,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { cn } from "@/lib/utils";
+import ProcessingSteps from "./planner/ProcessingSteps";
+import DeviceGrid from "./planner/DeviceGrid";
+import DeviceStrategy from "./planner/DeviceStrategy";
+import ContextTimeline from "./planner/ContextTimeline";
+import AutoExecCards from "./planner/AutoExecCards";
 
 const TYPE_STYLES = {
   focus: "bg-blue-50 text-blue-700 border-blue-200",
@@ -332,6 +337,10 @@ export default function SmartDailyPlanner() {
                   </div>
                 </div>
 
+                {isProcessing && (
+                  <div className="mt-4"><ProcessingSteps /></div>
+                )}
+
                 <div className="mt-6 flex flex-wrap gap-3 md:gap-4">
                   {['今晚8点给妈妈打电话','下周二完成Q4报告','明早7点飞深圳'].map((s) => (
                     <button key={s} type="button" onClick={() => setUserInput(s)} className="px-4 py-2 rounded-full bg-white/90 text-slate-600 text-sm border border-[#dfe3f5] shadow-sm hover:bg-white">
@@ -386,8 +395,9 @@ export default function SmartDailyPlanner() {
             </div>
           )}
 
-          {/* 已为你安排 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 已为你安排（增强版） */}
+          <div className="space-y-6">
+            <DeviceGrid originalInput={planData?.original_input || userInput} />
             {/* 全设备智能协同 */}
             <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50">
               <p className="text-xs font-bold text-slate-500 mb-2">已为你安排 · 全设备智能协同</p>

@@ -257,6 +257,19 @@ export default function SmartDailyPlanner() {
                     className="bg-white border-slate-200 rounded-2xl resize-none text-[15px] min-h-[140px] px-4 py-3 placeholder:text-slate-400 focus-visible:ring-[#384877]/20 focus-visible:border-[#384877]"
                     rows={5}
                     autoFocus
+                    onKeyDown={(e) => {
+                      const composing = e.nativeEvent && e.nativeEvent.isComposing;
+                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        if (userInput.trim() && !isProcessing && !composing) handleGenerate();
+                        return;
+                      }
+                      if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                        if (composing) return; // 中文输入法组合键时不提交
+                        e.preventDefault();
+                        if (userInput.trim() && !isProcessing) handleGenerate();
+                      }
+                    }}
                   />
 
                   <div className="mt-4 flex items-end justify-between">

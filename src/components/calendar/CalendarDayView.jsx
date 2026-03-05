@@ -105,13 +105,72 @@ export default function CalendarDayView({
       };
     }
     const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
-    setAnalysis(data);
-    setAiInput("");
-    if (data.resolved_date && data.resolved_date !== dayStr) {
-      setResolvedDateHint(data.resolved_date);
-    } else {
+    
+    // Determine the target date for this plan
+    const targetDate = data.resolved_date || dayStr;
+    
+    if (targetDate === dayStr) {
+      // Input belongs to the current viewing date — show results inline and persist
+      setAnalysis(data);
       setResolvedDateHint(null);
+      
+      // Auto-save / update DailyPlan for the current date
+      const planRecord = {
+        plan_date: dayStr,
+        original_input: aiInput,
+        theme: data.parsed?.intents?.[0] || '',
+        summary: '',
+        plan_json: {
+          key_tasks: (data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: a.status === 'active' ? 'pending' : 'pending', priority: 'medium', category: 'other' })),
+          focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === dayStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' })),
+        },
+        is_active: true,
+      };
+      if (dayPlan) {
+        // Merge: keep existing key_tasks + focus_blocks, append new ones
+        const existingTasks = dayPlan.plan_json?.key_tasks || [];
+        const existingBlocks = dayPlan.plan_json?.focus_blocks || [];
+        planRecord.plan_json.key_tasks = [...existingTasks, ...planRecord.plan_json.key_tasks];
+        planRecord.plan_json.focus_blocks = [...existingBlocks, ...planRecord.plan_json.focus_blocks];
+        planRecord.original_input = [dayPlan.original_input, aiInput].filter(Boolean).join('\n');
+        await base44.entities.DailyPlan.update(dayPlan.id, planRecord);
+      } else {
+        await base44.entities.DailyPlan.create(planRecord);
+      }
+      queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
+    } else {
+      // Input belongs to a different date — save plan to that date and show navigation hint
+      setAnalysis(data);
+      setResolvedDateHint(targetDate);
+      
+      // Persist to the target date's DailyPlan
+      const targetPlanRecord = {
+        plan_date: targetDate,
+        original_input: aiInput,
+        theme: data.parsed?.intents?.[0] || '',
+        summary: '',
+        plan_json: {
+          key_tasks: (data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' })),
+          focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === targetDate).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' })),
+        },
+        is_active: true,
+      };
+      // Check if target date already has a plan
+      const targetPlans = await base44.entities.DailyPlan.filter({ plan_date: targetDate });
+      if (targetPlans && targetPlans.length > 0) {
+        const tp = targetPlans[0];
+        const existingTasks = tp.plan_json?.key_tasks || [];
+        const existingBlocks = tp.plan_json?.focus_blocks || [];
+        targetPlanRecord.plan_json.key_tasks = [...existingTasks, ...targetPlanRecord.plan_json.key_tasks];
+        targetPlanRecord.plan_json.focus_blocks = [...existingBlocks, ...targetPlanRecord.plan_json.focus_blocks];
+        targetPlanRecord.original_input = [tp.original_input, aiInput].filter(Boolean).join('\n');
+        await base44.entities.DailyPlan.update(tp.id, targetPlanRecord);
+      } else {
+        await base44.entities.DailyPlan.create(targetPlanRecord);
+      }
+      queryClient.invalidateQueries({ queryKey: ['dailyPlan', targetDate] });
     }
+    setAiInput("");
   } finally {
     setIsAnalyzing(false);
   }

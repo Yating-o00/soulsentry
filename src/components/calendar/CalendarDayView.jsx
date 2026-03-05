@@ -132,7 +132,7 @@ export default function CalendarDayView({
   const isCurrentDay = isToday(currentDate);
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-200px)] bg-slate-50/50 rounded-3xl overflow-hidden border border-slate-200 shadow-sm">
+    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-200px)] bg-slate-50/50 rounded-3xl border border-slate-200 shadow-sm overflow-visible">
       {/* Sidebar: Context & Overview */}
       <div className="w-full lg:w-80 bg-white border-r border-slate-100 flex flex-col overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/30">
@@ -212,11 +212,27 @@ export default function CalendarDayView({
                     </div>
                 )}
             </div>
-        </ScrollArea>
+
+            {/* Daily Plan Extensions */}
+            <div className="mt-4 space-y-4">
+              {loadingDayPlan ? (
+                <div className="max-w-4xl mx-auto"><ProcessingSteps /></div>
+              ) : dayPlan ? (
+                <div className="max-w-4xl mx-auto space-y-4">
+                  <DeviceGrid originalInput={dayPlan.original_input} />
+                  <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
+                  <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
+                  <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
+                </div>
+              ) : (
+                <div className="rounded-xl p-4 bg-slate-50 border border-slate-200 text-sm text-slate-500 max-w-4xl mx-auto">暂无当日AI规划，可在日历右侧“当日智能输入”中描述你的安排，我会为你生成情境时间线与设备协同。</div>
+              )}
+            </div>
+            </ScrollArea>
       </div>
 
       {/* Main Timeline */}
-      <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
+      <div className="flex-1 flex flex-col bg-white relative overflow-auto">
         <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-b from-white to-transparent z-10" />
         
         <DragDropContext onDragEnd={handleDragEnd}>

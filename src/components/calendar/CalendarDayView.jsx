@@ -46,7 +46,9 @@ export default function CalendarDayView({
   const [expandedTasks, setExpandedTasks] = useState(new Set());
   
   // Fetch Weekly Plan Context
-  const weekStart = startOfWeek(currentDate, { locale: zhCN, weekStartsOn: 1 });
+  // Ensure currentDate is always a Date object (may receive a string from navigation)
+  const safeCurrentDate = currentDate instanceof Date ? currentDate : new Date(currentDate);
+  const weekStart = startOfWeek(safeCurrentDate, { locale: zhCN, weekStartsOn: 1 });
   const weekStartStr = format(weekStart, 'yyyy-MM-dd');
   
   const { data: weeklyPlans } = useQuery({

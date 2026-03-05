@@ -84,7 +84,21 @@ export default function CalendarDayView({
     setIsAnalyzing(true);
     setAnalysis(null);
     try {
-      const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr });
+      const analyzePromise = base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr });
+      const persistPromise = dayPlan
+        ? base44.entities.DailyPlan.update(dayPlan.id, { original_input: aiInput })
+        : base44.entities.DailyPlan.create({
+            plan_date: dayStr,
+            original_input: aiInput,
+            theme: '',
+            summary: '',
+            plan_json: { key_tasks: [], focus_blocks: [] }
+          });
+
+      const [{ data }] = await Promise.all([
+        analyzePromise,
+        persistPromise.then(() => queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] }))
+      ]);
       setAnalysis(data);
     } finally {
       setIsAnalyzing(false);
@@ -358,7 +372,7 @@ export default function CalendarDayView({
                     <DeviceGridImageMode />
                     <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
                     <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
-                    <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
+                    <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} userText={aiInput} />
                   </div>
                 ) : (
                   <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，已为你保存当日任务快照；也可在上方输入你的安排生成协同方案。</div>

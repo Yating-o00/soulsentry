@@ -79,7 +79,7 @@ export default function SmartDailyPlanner() {
           setPlanData({ ...plan.plan_json, theme: plan.theme, summary: plan.summary, original_input: plan.original_input });
           const draft = localStorage.getItem(draftKey);
           setUserInput(draft ?? (plan.original_input || ""));
-          setShowInput(false); // 加载到已有计划时，隐藏输入框
+          setShowInput(true); // 加载到已有计划时，默认展示输入框（可手动收起）
         } else {
           const draft = localStorage.getItem(draftKey);
           setUserInput(draft || "");

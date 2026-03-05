@@ -68,6 +68,14 @@ export default function CalendarDayView({
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const DEFAULT_STEPS = [
+    { key: 'time_extraction', text: '提取时间实体…' },
+    { key: 'intent', text: '识别意图与优先级…' },
+    { key: 'spatial', text: '空间/路径计算…' },
+    { key: 'device', text: '设备协同分发策略…' },
+    { key: 'automation', text: '生成自动化任务…' },
+  ];
+
   const handleAnalyze = async () => {
     if (!aiInput.trim() || isAnalyzing) return;
     setIsAnalyzing(true);
@@ -259,9 +267,12 @@ export default function CalendarDayView({
               </div>
             </div>
 
-            {/* 解析步骤（到达结果后逐条显现） */}
-            {analysis?.steps?.length > 0 && (
-              <AnalysisSteps steps={analysis.steps} running={true} />
+            {/* 解析步骤：分析中逐条显现，完成后展示结果版 */}
+            {isAnalyzing && (
+              <AnalysisSteps steps={DEFAULT_STEPS} running={true} />
+            )}
+            {!isAnalyzing && analysis?.steps?.length > 0 && (
+              <AnalysisSteps steps={analysis.steps} running={false} />
             )}
 
             {/* 设备策略一对一映射 */}

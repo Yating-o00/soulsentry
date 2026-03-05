@@ -12,7 +12,7 @@ import { shouldTaskAppearAtDateTime } from "@/components/utils/recurrenceHelper"
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import ProcessingSteps from "../dashboard/planner/ProcessingSteps";
-import DeviceGridImageMode from "../dashboard/planner/DeviceGridImageMode";
+import DeviceGridImageMode from "../dashboard/planner/DeviceGridImageMode.jsx";
 import DeviceStrategy from "../dashboard/planner/DeviceStrategy";
 import ContextTimeline from "../dashboard/planner/ContextTimeline";
 import AutoExecCards from "../dashboard/planner/AutoExecCards";

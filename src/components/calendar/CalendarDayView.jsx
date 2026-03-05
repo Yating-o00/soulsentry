@@ -11,6 +11,11 @@ import { cn } from "@/lib/utils";
 import { shouldTaskAppearAtDateTime } from "@/components/utils/recurrenceHelper";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
+import ProcessingSteps from "../dashboard/planner/ProcessingSteps";
+import DeviceGrid from "../dashboard/planner/DeviceGrid";
+import DeviceStrategy from "../dashboard/planner/DeviceStrategy";
+import ContextTimeline from "../dashboard/planner/ContextTimeline";
+import AutoExecCards from "../dashboard/planner/AutoExecCards";
 
 const CATEGORY_STYLES = {
   work: "bg-blue-50 text-blue-700 border-l-4 border-l-blue-500",
@@ -45,6 +50,15 @@ export default function CalendarDayView({
     queryFn: () => base44.entities.WeeklyPlan.filter({ week_start_date: weekStartStr }),
     staleTime: 5 * 60 * 1000
   });
+
+  // Daily plan for current date
+  const dayStr = format(currentDate, 'yyyy-MM-dd');
+  const { data: dayPlans, isLoading: loadingDayPlan } = useQuery({
+    queryKey: ['dailyPlan', dayStr],
+    queryFn: () => base44.entities.DailyPlan.filter({ plan_date: dayStr }),
+    staleTime: 5 * 60 * 1000
+  });
+  const dayPlan = useMemo(() => (dayPlans && dayPlans.length > 0 ? dayPlans[0] : null), [dayPlans]);
 
   const weeklyContext = useMemo(() => {
     if (!weeklyPlans || weeklyPlans.length === 0) return null;
@@ -369,6 +383,21 @@ export default function CalendarDayView({
                 </div>
             </ScrollArea>
         </DragDropContext>
+
+        <div className="border-t border-slate-100 p-4 space-y-4 bg-white">
+          {loadingDayPlan ? (
+            <div className="max-w-4xl mx-auto"><ProcessingSteps /></div>
+          ) : dayPlan ? (
+            <div className="max-w-4xl mx-auto space-y-4">
+              <DeviceGrid originalInput={dayPlan.original_input} />
+              <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
+              <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
+              <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
+            </div>
+          ) : (
+            <div className="rounded-xl p-4 bg-slate-50 border border-slate-200 text-sm text-slate-500 max-w-4xl mx-auto">暂无当日AI规划，可在日历右侧“当日智能输入”中描述你的安排，我会为你生成情境时间线与设备协同。</div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -65,6 +65,7 @@ export default function CalendarDayView({
 
   const queryClient = useQueryClient();
   const saveAttemptedRef = useRef(null);
+  const lastSavedRef = useRef({ day: '', text: '' });
 
   // AI intent analysis state
   const [aiInput, setAiInput] = useState("");
@@ -154,6 +155,33 @@ export default function CalendarDayView({
       console.error('Auto-save daily plan failed', e);
     });
   }, [aiInput, isAnalyzing, dayPlan, tasks, currentDate, dayStr, loadingDayPlan]);
+
+  // 输入内容自动保存（去抖）到当日 DailyPlan.original_input
+  useEffect(() => {
+    if (isAnalyzing) return;
+    if (!aiInput || !aiInput.trim()) return;
+
+    const handler = setTimeout(() => {
+      if (lastSavedRef.current.day === dayStr && lastSavedRef.current.text === aiInput) return;
+
+      const op = dayPlan
+        ? base44.entities.DailyPlan.update(dayPlan.id, { original_input: aiInput })
+        : base44.entities.DailyPlan.create({
+            plan_date: dayStr,
+            original_input: aiInput,
+            theme: '',
+            summary: '',
+            plan_json: { key_tasks: [], focus_blocks: [] }
+          });
+
+      op.then(() => {
+        lastSavedRef.current = { day: dayStr, text: aiInput };
+        queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
+      }).catch((e) => console.error('Autosave input failed', e));
+    }, 800);
+
+    return () => clearTimeout(handler);
+  }, [aiInput, dayPlan, dayStr, isAnalyzing]);
 
   const weeklyContext = useMemo(() => {
     if (!weeklyPlans || weeklyPlans.length === 0) return null;
@@ -372,7 +400,7 @@ export default function CalendarDayView({
                     <DeviceGridImageMode />
                     <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
                     <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
-                    <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} userText={aiInput} />
+                    <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
                   </div>
                 ) : (
                   <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，已为你保存当日任务快照；也可在上方输入你的安排生成协同方案。</div>

@@ -1,213 +1,117 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
-
-// Helper to get the current date/time in Shanghai timezone
-const getShanghaiTime = () => {
-    return new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-};
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 Deno.serve(async (req) => {
-    try {
-        if (req.method === 'OPTIONS') {
-            return new Response(null, {
-                headers: {
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'POST',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-                }
-            });
-        }
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
-        
-        if (!user) {
-            return Response.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    const body = await req.json().catch(() => ({}));
+    const input = body?.input || '';
+    const contextDate = body?.date || new Date().toISOString().slice(0, 10);
 
-        const body = await req.json();
-        const input = body.input;
-
-        if (!input) {
-            return Response.json({ error: 'Input is required' }, { status: 400 });
-        }
-
-        const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
-        const openaiKey = Deno.env.get("OPENAI_API_KEY");
-        
-        if (!moonshotKey && !openaiKey) {
-            return Response.json({ error: 'No AI API keys configured' }, { status: 500 });
-        }
-
-        // Fetch User Context for Personalization
-        let userContext = "";
-        try {
-            const [behaviors, recentTasks] = await Promise.all([
-                base44.entities.UserBehavior.list('-created_date', 10).catch(() => []),
-                base44.entities.Task.list('-created_date', 5).catch(() => [])
-            ]);
-
-            const behaviorSummary = behaviors.map(b => `${b.event_type} (${b.category})`).join(', ');
-            const taskSummary = recentTasks.map(t => `${t.title} (${t.priority}, ${t.category})`).join(', ');
-            
-            userContext = `
-            Recent Behaviors: ${behaviorSummary}
-            Recent Tasks: ${taskSummary}
-            `;
-        } catch (e) {
-            console.warn("Failed to fetch user context", e);
-        }
-
-        const systemPrompt = `
-You are "SoulSentry" (心栈), an advanced AI schedule hub. 
-Your goal is to analyze the user's input and generate a structured plan for device coordination, context-aware timeline, and automated execution.
-
-**1. Entity Recognition & Context Understanding:**
-- **Entities**: Identify Time (when), Location (where), People (who), Event (what).
-- **Implicit Context**: Infer underlying needs. (e.g., "Meeting with Boss" -> High priority, prepare files, dress code).
-- **User History**: Use the provided recent behaviors to tailor suggestions.
-
-**2. Multi-Device Synergy:**
-Analyze the scenario and distribute tasks intelligently:
-- **Meeting**: Phone (notify), PC (files), Car (nav), Watch (reminders).
-- **Travel**: Phone (ticket), Watch (gate), Home (security).
-- **Deep Work**: PC (focus), Phone (DND), Home (ambiance).
-
-**3. Output Requirement:**
-Return a valid JSON object strictly following this structure:
-
-{
-  "devices": {
-    "phone": { "name": "智能手机", "strategies": [{"time": "string", "method": "string", "content": "string", "priority": "high|medium|low"}] },
-    "watch": { "name": "智能手表", "strategies": [] },
-    "glasses": { "name": "智能眼镜", "strategies": [] },
-    "car": { "name": "电动汽车", "strategies": [] },
-    "home": { "name": "智能家居", "strategies": [] },
-    "pc": { "name": "工作站", "strategies": [] }
-  },
-  "timeline": [
-    {
-      "time": "HH:MM", 
-      "title": "string", 
-      "desc": "string", 
-      "icon": "string (single emoji)", 
-      "highlight": boolean
+    if (!input.trim()) {
+      return Response.json({ error: 'Missing input' }, { status: 400 });
     }
-  ],
-  "automations": [
-    {
-      "title": "string", 
-      "desc": "string", 
-      "status": "active|ready|monitoring|pending", 
-      "icon": "string (single emoji)"
-    }
-  ]
-}
 
-**Input Analysis:**
-Current Time: ${getShanghaiTime()}
-User Input: "${input}"
-User Context: ${userContext}
-
-**Generation Guidelines:**
-- **Tone**: Warm, empathetic, efficient (Simplified Chinese).
-- **Proactive**: Don't just remind; prepare.
-`;
-
-        let result = null;
-        let provider = null;
-        const errors = [];
-
-        // Try Moonshot first
-        if (moonshotKey) {
-            try {
-                const cleanKey = moonshotKey.trim().replace(/[\r\n\s]/g, '');
-                console.log(`[Moonshot] Preparing request. Key length: ${cleanKey.length}`);
-                console.log(`[Moonshot] Key start/end: ${cleanKey.substring(0, 5)}...${cleanKey.substring(cleanKey.length - 4)}`);
-                
-                const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${cleanKey}`
-                    },
-                    body: JSON.stringify({
-                        model: "kimi-k2-turbo-preview",
-                        messages: [
-                            { role: "system", content: systemPrompt },
-                            { role: "user", content: input }
-                        ],
-                        temperature: 0.3
-                    })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log("[Moonshot] Success. Tokens used:", data.usage);
-                    const content = data.choices[0].message.content;
-                    if (content) {
-                        // Handle potential markdown code blocks
-                        const jsonStr = content.replace(/^```json\n|\n```$/g, '').trim();
-                        result = JSON.parse(jsonStr);
-                        provider = 'moonshot';
-                    }
-                } else {
-                    const errText = await response.text();
-                    console.error(`[Moonshot] API Error: Status ${response.status}`);
-                    errors.push(`Moonshot: ${response.status}`);
+    const schema = {
+      type: 'object',
+      properties: {
+        steps: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', enum: ['time_extraction','intent','spatial','device','automation'] },
+              text: { type: 'string' },
+              icon: { type: 'string' }
+            },
+            required: ['key','text']
+          }
+        },
+        timeline: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              time: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              type: { type: 'string', enum: ['meeting','focus','personal','rest'] }
+            },
+            required: ['time','title']
+          }
+        },
+        devices: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', enum: ['phone','watch','glasses','car','home','pc'] },
+              name: { type: 'string' },
+              strategies: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    time: { type: 'string' },
+                    method: { type: 'string' },
+                    content: { type: 'string' },
+                    priority: { type: 'string', enum: ['low','medium','high'] }
+                  },
+                  required: ['time','method','content']
                 }
-            } catch (e) {
-                console.error("Moonshot execution error:", e);
-                errors.push(`Moonshot Error: ${e.message}`);
-            }
+              }
+            },
+            required: ['id','name','strategies']
+          }
+        },
+        automations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              desc: { type: 'string' },
+              status: { type: 'string', enum: ['active','ready','monitoring','pending'] },
+              device_id: { type: 'string' }
+            },
+            required: ['title','desc','status']
+          }
+        },
+        parsed: {
+          type: 'object',
+          properties: {
+            times: { type: 'array', items: { type: 'string' } },
+            intents: { type: 'array', items: { type: 'string' } },
+            locations: { type: 'array', items: { type: 'string' } },
+            distance_km: { type: 'number' }
+          }
         }
+      },
+      required: ['steps','timeline','devices','automations']
+    };
 
-        // Fallback to OpenAI if Moonshot failed
-        if (!result && openaiKey) {
-            try {
-                console.log("Falling back to OpenAI...");
-                const response = await fetch("https://api.openai.com/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${openaiKey.trim()}`
-                    },
-                    body: JSON.stringify({
-                        model: "gpt-4o-mini",
-                        messages: [
-                            { role: "system", content: systemPrompt },
-                            { role: "user", content: input }
-                        ],
-                        temperature: 0.3
-                    })
-                });
+    const prompt = `你是一个日程智能分析器。请严格以JSON返回，符合提供的JSON Schema。\n\n用户输入（中文）：${input}\n参考日期（YYYY-MM-DD）：${contextDate}\n\n输出要求：\n1. steps：用中文逐步解释分析过程（时间提取→意图识别→空间计算→设备协同→自动化生成），每步一句，简短。\n2. timeline：生成当天与此输入相关的关键情境时间线（按时间升序），time格式24小时HH:mm。\n3. devices：针对 phone, watch, glasses, car, home, pc 给出与本次输入强相关的一对一策略，策略描述简短，强调执行动作。若某设备不适用，可省略该设备。\n4. automations：生成3-5条自动化委托，status从 active/ready/monitoring/pending 中选择。\n5. parsed：给出提取到的时间/意图/地点等摘要。`;
 
-                if (response.ok) {
-                    const data = await response.json();
-                    const content = data.choices[0].message.content;
-                    if (content) {
-                        result = JSON.parse(content);
-                        provider = 'openai';
-                    }
-                } else {
-                    const err = await response.text();
-                    console.error("OpenAI API failed:", response.status, err);
-                    errors.push(`OpenAI: ${response.status}`);
-                }
-            } catch (e) {
-                console.error("OpenAI error:", e);
-                errors.push(`OpenAI Error: ${e.message}`);
-            }
-        }
+    const ai = await base44.integrations.Core.InvokeLLM({
+      prompt,
+      add_context_from_internet: false,
+      response_json_schema: schema
+    });
 
-        if (!result) {
-            return Response.json({ error: `AI 服务连接失败: ${errors.join(', ')}。请检查 API Key 是否正确或过期。` }, { status: 500 });
-        }
+    // Ensure devices only includes known ids and add defaults when empty
+    const knownIds = new Set(['phone','watch','glasses','car','home','pc']);
+    const devices = (ai.devices || []).filter(d => knownIds.has(d.id));
 
-        result._meta = { provider };
-        return Response.json(result);
-
-    } catch (error) {
-        console.error("Function error:", error);
-        return Response.json({ error: error.message }, { status: 500 });
-    }
+    return Response.json({
+      steps: ai.steps || [],
+      timeline: ai.timeline || [],
+      devices,
+      automations: ai.automations || [],
+      parsed: ai.parsed || {},
+    });
+  } catch (err) {
+    return Response.json({ error: err?.message || 'Internal error' }, { status: 500 });
+  }
 });

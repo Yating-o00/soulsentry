@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday, startOfWeek, addDays, parseISO, isSameDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, Target, Calendar as CalendarIcon, Zap, CheckCircle2, Loader2, Send } from "lucide-react";
+import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, Target, Calendar as CalendarIcon, Zap, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 // // // import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,6 +16,9 @@ import DeviceGridImageMode from "../dashboard/planner/DeviceGridImageMode.jsx";
 import DeviceStrategy from "../dashboard/planner/DeviceStrategy";
 import ContextTimeline from "../dashboard/planner/ContextTimeline";
 import AutoExecCards from "../dashboard/planner/AutoExecCards";
+import AnalysisSteps from "../dashboard/planner/AnalysisSteps";
+import DeviceStrategyMap from "../dashboard/planner/DeviceStrategyMap";
+import { Textarea } from "@/components/ui/textarea";
 
 const CATEGORY_STYLES = {
   work: "bg-blue-50 text-blue-700 border-l-4 border-l-blue-500",
@@ -59,6 +62,23 @@ export default function CalendarDayView({
     staleTime: 5 * 60 * 1000
   });
   const dayPlan = useMemo(() => (dayPlans && dayPlans.length > 0 ? dayPlans[0] : null), [dayPlans]);
+
+  // AI intent analysis state
+  const [aiInput, setAiInput] = useState("");
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const handleAnalyze = async () => {
+    if (!aiInput.trim() || isAnalyzing) return;
+    setIsAnalyzing(true);
+    setAnalysis(null);
+    try {
+      const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr });
+      setAnalysis(data);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const weeklyContext = useMemo(() => {
     if (!weeklyPlans || weeklyPlans.length === 0) return null;

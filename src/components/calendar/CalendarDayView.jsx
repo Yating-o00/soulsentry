@@ -58,7 +58,7 @@ export default function CalendarDayView({
   });
 
   // Daily plan for current date
-  const dayStr = format(currentDate, 'yyyy-MM-dd');
+  const dayStr = format(safeCurrentDate, 'yyyy-MM-dd');
   const { data: dayPlans, isLoading: loadingDayPlan } = useQuery({
     queryKey: ['dailyPlan', dayStr],
     queryFn: () => base44.entities.DailyPlan.filter({ plan_date: dayStr }),
@@ -134,7 +134,7 @@ export default function CalendarDayView({
     if (dayPlan) return; // 已存在当日AI规划
     if (!tasks || tasks.length === 0) return;
 
-    const todaysTasks = tasks.filter(t => t.reminder_time && isSameDay(new Date(t.reminder_time), currentDate) && !t.parent_task_id);
+    const todaysTasks = tasks.filter(t => t.reminder_time && isSameDay(new Date(t.reminder_time), safeCurrentDate) && !t.parent_task_id);
     if (todaysTasks.length === 0) return;
 
     if (saveAttemptedRef.current === dayStr) return; // 避免重复保存
@@ -165,14 +165,14 @@ export default function CalendarDayView({
     }).catch((e) => {
       console.error('Auto-save daily plan failed', e);
     });
-  }, [aiInput, isAnalyzing, dayPlan, tasks, currentDate, dayStr, loadingDayPlan]);
+  }, [aiInput, isAnalyzing, dayPlan, tasks, safeCurrentDate, dayStr, loadingDayPlan]);
 
   const weeklyContext = useMemo(() => {
     if (!weeklyPlans || weeklyPlans.length === 0) return null;
     const plan = weeklyPlans[0];
     
     // Find today's specific plan from events
-    const currentDayStr = format(currentDate, 'yyyy-MM-dd');
+    const currentDayStr = format(safeCurrentDate, 'yyyy-MM-dd');
     const dayIndex = [0, 1, 2, 3, 4, 5, 6].find(i => 
         format(addDays(weekStart, i), 'yyyy-MM-dd') === currentDayStr
     );
@@ -188,12 +188,12 @@ export default function CalendarDayView({
         dayEvents,
         stats: plan.plan_json?.stats
     };
-  }, [weeklyPlans, currentDate, weekStart]);
+  }, [weeklyPlans, safeCurrentDate, weekStart]);
 
   const getItemsForHour = (hour) => {
     return tasks.filter(task => {
       if (!task.reminder_time || task.parent_task_id) return false;
-      return shouldTaskAppearAtDateTime(task, currentDate, hour);
+      return shouldTaskAppearAtDateTime(task, safeCurrentDate, hour);
     });
   };
 
@@ -226,17 +226,17 @@ export default function CalendarDayView({
     
     if (dropId.startsWith('hour_')) {
         const hour = parseInt(dropId.split('_')[1]);
-        const destinationDate = new Date(currentDate);
+        const destinationDate = new Date(safeCurrentDate);
         destinationDate.setHours(hour, 0, 0, 0);
         onTaskDrop(taskId, destinationDate);
     }
   };
 
   const dayNotes = notes.filter(note => 
-    isSameDay(new Date(note.created_date), currentDate)
+    isSameDay(new Date(note.created_date), safeCurrentDate)
   );
   
-  const isCurrentDay = isToday(currentDate);
+  const isCurrentDay = isToday(safeCurrentDate);
 
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-200px)] bg-slate-50/60 rounded-[28px] border border-slate-100 shadow-sm overflow-visible">
@@ -245,10 +245,10 @@ export default function CalendarDayView({
         <div className="p-6 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/30">
             <div className="flex items-baseline gap-3 mb-1">
                 <h2 className="text-4xl font-bold text-slate-900 tracking-tight">
-                    {format(currentDate, "d")}
+                    {format(safeCurrentDate, "d")}
                 </h2>
                 <span className="text-lg font-medium text-slate-500">
-                    {format(currentDate, "EEEE", { locale: zhCN })}
+                    {format(safeCurrentDate, "EEEE", { locale: zhCN })}
                 </span>
                 {isCurrentDay && (
                     <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm shadow-blue-200">
@@ -257,7 +257,7 @@ export default function CalendarDayView({
                 )}
             </div>
             <p className="text-sm text-slate-400 font-medium">
-                {format(currentDate, "yyyy年M月", { locale: zhCN })}
+                {format(safeCurrentDate, "yyyy年M月", { locale: zhCN })}
             </p>
         </div>
 
@@ -334,7 +334,7 @@ export default function CalendarDayView({
               <Textarea
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
-                placeholder={`当前查看：${format(currentDate, "M月d日 EEEE", { locale: zhCN })}｜输入安排，AI 会自动识别日期…`}
+                placeholder={`当前查看：${format(safeCurrentDate, "M月d日 EEEE", { locale: zhCN })}｜输入安排，AI 会自动识别日期…`}
                 className="min-h-[84px]"
                 onKeyDown={(e) => {
                   const composing = e.nativeEvent && e.nativeEvent.isComposing;
@@ -447,8 +447,8 @@ export default function CalendarDayView({
                     {HOURS.map((hour) => {
                         const hourTasks = getItemsForHour(hour);
                         const dropId = `hour_${hour}`;
-                        const isPastHour = isToday(currentDate) && hour < new Date().getHours();
-                        const isCurrentHour = isToday(currentDate) && hour === new Date().getHours();
+                        const isPastHour = isToday(safeCurrentDate) && hour < new Date().getHours();
+                        const isCurrentHour = isToday(safeCurrentDate) && hour === new Date().getHours();
 
                         return (
                             <div key={hour} className="flex gap-4 group mb-2">

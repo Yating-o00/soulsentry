@@ -314,7 +314,22 @@ export default function CalendarView() {
           transition={{ delay: 0.1 }}
           className={viewMode === 'day' ? 'lg:col-span-3' : 'lg:col-span-2'}
         >
-          {viewMode === "month" ? (
+          {viewMode === "day" ? (
+            <CalendarDayView
+              currentDate={selectedDate}
+              tasks={allTasks}
+              notes={notes}
+              onDateClick={handleDateClick}
+              onTaskDrop={handleTaskDropOnDay}
+              onTaskClick={(task) => setSelectedTask(task)}
+              onCreateSubtask={() => {}}
+              onNavigateToDate={(dateStr) => {
+                const d = new Date(dateStr + 'T00:00:00');
+                setSelectedDate(d);
+                setCurrentDate(d);
+              }}
+            />
+          ) : viewMode === "month" ? (
             <Card className="p-6 border-0 shadow-xl bg-white">
               <BigCalendar
                 mode="single"

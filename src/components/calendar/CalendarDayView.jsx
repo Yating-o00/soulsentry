@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday, startOfWeek, addDays, parseISO, isSameDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -87,6 +87,15 @@ export default function CalendarDayView({
       setIsAnalyzing(false);
     }
   };
+
+  const quickFill = (text) => setAiInput(text);
+
+  const resultsRef = useRef(null);
+  useEffect(() => {
+    if (analysis && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [analysis]);
 
   const weeklyContext = useMemo(() => {
     if (!weeklyPlans || weeklyPlans.length === 0) return null;
@@ -262,7 +271,12 @@ export default function CalendarDayView({
                   if (!composing && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnalyze(); }
                 }}
               />
-              <div className="flex justify-end mt-2">
+              <div className="flex justify-between items-center mt-2 flex-wrap gap-2">
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => quickFill('今晚8点给妈妈打电话，聊聊最近身体情况')} className="px-3 py-1.5 rounded-full text-xs bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100">📞 给妈妈打电话</button>
+                  <button type="button" onClick={() => quickFill('下周二前完成Q4报告，每天下午提醒我进度')} className="px-3 py-1.5 rounded-full text-xs bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100">📊 季度报告DDL</button>
+                  <button type="button" onClick={() => quickFill('明天早上7点飞深圳，提前一晚提醒收拾行李')} className="px-3 py-1.5 rounded-full text-xs bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100">✈️ 明早航班</button>
+                </div>
                 <Button onClick={handleAnalyze} disabled={isAnalyzing || !aiInput.trim()} className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-9 px-4 text-sm">{isAnalyzing ? '分析中…' : '发送'}</Button>
               </div>
             </div>
@@ -274,6 +288,8 @@ export default function CalendarDayView({
             {!isAnalyzing && analysis?.steps?.length > 0 && (
               <AnalysisSteps steps={analysis.steps} running={false} />
             )}
+
+            {analysis && <div ref={resultsRef} />}
 
             {/* 设备策略一对一映射 */}
             {analysis?.devices?.length > 0 && (

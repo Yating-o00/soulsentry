@@ -401,12 +401,9 @@ export default function SmartDailyPlanner() {
             <DeviceStrategy title="智能手机 策略" tasks={planData?.key_tasks || []} />
             <ContextTimeline blocks={planData?.focus_blocks || []} />
             <AutoExecCards tasks={planData?.key_tasks || []} />
-
-
-            </div>
           </div>
 
-          {/* Focus Blocks */}
+           {/* Focus Blocks */}
           {planData.focus_blocks && planData.focus_blocks.length > 0 && (
             <div>
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">⏰ 时间规划</h4>

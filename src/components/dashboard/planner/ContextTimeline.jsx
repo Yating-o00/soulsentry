@@ -39,7 +39,13 @@ const formatTime = (raw) => {
 };
 
 export default function ContextTimeline({ blocks = [] }) {
-  const list = (blocks || []).slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const list = (blocks || []).slice().sort((a, b) => {
+    // Sort by date first, then by time
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    if (dateA !== dateB) return dateA.localeCompare(dateB);
+    return (a.time || '').localeCompare(b.time || '');
+  });
 
   if (list.length === 0) return null;
 
@@ -70,7 +76,12 @@ export default function ContextTimeline({ blocks = [] }) {
 
                 {/* Content */}
                 <div className="flex-1 pb-1">
-                  <div className="flex items-center gap-2.5 mb-1">
+                  <div className="flex items-center gap-2.5 mb-1 flex-wrap">
+                    {b.date && (
+                      <span className="text-[10px] font-medium text-white bg-[#384877]/80 px-1.5 py-0.5 rounded-md">
+                        {b.date}
+                      </span>
+                    )}
                     {time && (
                       <span className="text-sm font-mono font-semibold text-[#384877]">
                         {time}

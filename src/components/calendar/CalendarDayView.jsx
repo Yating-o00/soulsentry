@@ -318,7 +318,7 @@ export default function CalendarDayView({
               <Textarea
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
-                placeholder="例如：明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料…（回车发送）"
+                placeholder={`当前查看：${format(currentDate, "M月d日 EEEE", { locale: zhCN })}｜输入安排，AI 自动识别日期（支持今天、明天等）…`}
                 className="min-h-[84px]"
                 onKeyDown={(e) => {
                   const composing = e.nativeEvent && e.nativeEvent.isComposing;
@@ -372,7 +372,7 @@ export default function CalendarDayView({
 
             {/* 情境时间线 */}
             {analysis?.timeline?.length > 0 && (
-              <ContextTimeline blocks={analysis.timeline.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
+              <ContextTimeline blocks={analysis.timeline.map(t => ({ time: t.time, date: t.date, title: t.title, description: t.description, type: t.type || 'focus' }))} />
             )}
 
             {/* 自动化清单（根据用户输入可生成占位操作；若无则不显示）*/}

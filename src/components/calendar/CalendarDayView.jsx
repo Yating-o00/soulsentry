@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday, startOfWeek, addDays, parseISO, isSameDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, Target, Calendar as CalendarIcon, Zap, CheckCircle2 } from "lucide-react";
+import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, Target, Calendar as CalendarIcon, Zap, CheckCircle2, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 // // // import { ScrollArea } from "@/components/ui/scroll-area";
@@ -71,6 +71,7 @@ export default function CalendarDayView({
   const [aiInput, setAiInput] = useState("");
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [resolvedDateHint, setResolvedDateHint] = useState(null);
 
   const DEFAULT_STEPS = [
     { key: 'time_extraction', text: '提取时间实体…' },
@@ -81,24 +82,26 @@ export default function CalendarDayView({
   ];
 
   const handleAnalyze = async () => {
-    if (!aiInput.trim() || isAnalyzing) return;
-    setIsAnalyzing(true);
-    try {
-      // Pass existing analysis as context so AI merges instead of replacing
-      const existingPlan = analysis ? {
-        timeline: analysis.timeline || [],
-        devices: analysis.devices || [],
-        automations: analysis.automations || [],
-      } : null;
-      const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
-      setAnalysis(data);
-      // If AI resolved a different date from the current day view, auto-navigate
-      if (data.resolved_date && data.resolved_date !== dayStr && onNavigateToDate) {
-        onNavigateToDate(new Date(data.resolved_date + 'T00:00:00'));
-      }
-    } finally {
-      setIsAnalyzing(false);
+  if (!aiInput.trim() || isAnalyzing) return;
+  setIsAnalyzing(true);
+  try {
+    // Pass existing analysis as context so AI merges instead of replacing
+    const existingPlan = analysis ? {
+      timeline: analysis.timeline || [],
+      devices: analysis.devices || [],
+      automations: analysis.automations || [],
+    } : null;
+    const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
+    setAnalysis(data);
+    // If the resolved date differs from current view, offer navigation
+    if (data.resolved_date && data.resolved_date !== dayStr) {
+      setResolvedDateHint(data.resolved_date);
+    } else {
+      setResolvedDateHint(null);
     }
+  } finally {
+    setIsAnalyzing(false);
+  }
   };
 
   const quickFill = (text) => setAiInput(text);
@@ -318,7 +321,7 @@ export default function CalendarDayView({
               <Textarea
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
-                placeholder={`当前查看：${format(currentDate, "M月d日 EEEE", { locale: zhCN })}｜输入安排，AI 自动识别日期（支持今天、明天等）…`}
+                placeholder={`当前查看：${format(currentDate, "M月d日 EEEE", { locale: zhCN })}｜输入安排，AI 会自动识别日期…`}
                 className="min-h-[84px]"
                 onKeyDown={(e) => {
                   const composing = e.nativeEvent && e.nativeEvent.isComposing;
@@ -335,35 +338,37 @@ export default function CalendarDayView({
               </div>
             </div>
 
+            {/* 日期跳转提示：当AI识别出的日期与当前视图不同 */}
+            {resolvedDateHint && resolvedDateHint !== dayStr && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800"
+              >
+                <CalendarIcon className="w-4 h-4 shrink-0" />
+                <span className="text-sm flex-1">
+                  AI 识别到该安排属于 <strong>{resolvedDateHint}</strong>，与当前查看日期（{dayStr}）不同
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-300 text-amber-700 hover:bg-amber-100 rounded-xl h-8 text-xs gap-1.5 shrink-0"
+                  onClick={() => {
+                    if (onNavigateToDate) onNavigateToDate(resolvedDateHint);
+                    setResolvedDateHint(null);
+                  }}
+                >
+                  跳转查看 <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </motion.div>
+            )}
+
             {/* 解析步骤：仅分析中展示，完成后自动折叠隐藏 */}
             {isAnalyzing && (
               <AnalysisSteps steps={DEFAULT_STEPS} running={true} />
             )}
 
             {analysis && <div ref={resultsRef} />}
-
-            {/* AI 解析日期提示：当识别到的日期与当前日视图不同时显示 */}
-            {analysis?.resolved_date && analysis.resolved_date !== dayStr && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm text-amber-800">
-                  <CalendarIcon className="w-4 h-4 shrink-0" />
-                  <span>
-                    AI 识别该内容属于 <strong>{analysis.resolved_date}</strong>，
-                    {onNavigateToDate ? '已自动跳转到对应日期' : '请切换到对应日期查看'}
-                  </span>
-                </div>
-                {onNavigateToDate && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0 text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
-                    onClick={() => onNavigateToDate(new Date(analysis.resolved_date + 'T00:00:00'))}
-                  >
-                    前往 {analysis.resolved_date}
-                  </Button>
-                )}
-              </div>
-            )}
 
             {/* 设备策略一对一映射 */}
             {analysis?.devices?.length > 0 && (
@@ -372,7 +377,7 @@ export default function CalendarDayView({
 
             {/* 情境时间线 */}
             {analysis?.timeline?.length > 0 && (
-              <ContextTimeline blocks={analysis.timeline.map(t => ({ time: t.time, date: t.date, title: t.title, description: t.description, type: t.type || 'focus' }))} />
+              <ContextTimeline blocks={analysis.timeline.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
             )}
 
             {/* 自动化清单（根据用户输入可生成占位操作；若无则不显示）*/}

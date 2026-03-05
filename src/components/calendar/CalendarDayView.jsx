@@ -65,7 +65,6 @@ export default function CalendarDayView({
 
   const queryClient = useQueryClient();
   const saveAttemptedRef = useRef(null);
-  const lastSavedRef = useRef({ day: '', text: '' });
 
   // AI intent analysis state
   const [aiInput, setAiInput] = useState("");
@@ -79,6 +78,26 @@ export default function CalendarDayView({
     { key: 'device', text: '设备协同分发策略…' },
     { key: 'automation', text: '生成自动化任务…' },
   ];
+
+  // 将当前输入持久化到当日 DailyPlan
+  const persistInput = async (textOverride) => {
+    const content = (textOverride ?? aiInput).trim();
+    if (isAnalyzing) return;
+    if (!content && !dayPlan) return; // 空内容且不存在当日计划时不创建
+
+    if (dayPlan) {
+      await base44.entities.DailyPlan.update(dayPlan.id, { original_input: content });
+    } else {
+      await base44.entities.DailyPlan.create({
+        plan_date: dayStr,
+        original_input: content,
+        theme: '',
+        summary: '',
+        plan_json: { key_tasks: [], focus_blocks: [] }
+      });
+    }
+    queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
+  };
 
   const handleAnalyze = async () => {
     if (!aiInput.trim() || isAnalyzing) return;
@@ -156,32 +175,16 @@ export default function CalendarDayView({
     });
   }, [aiInput, isAnalyzing, dayPlan, tasks, currentDate, dayStr, loadingDayPlan]);
 
-  // 输入内容自动保存（去抖）到当日 DailyPlan.original_input
+  // 加载已保存的当日输入（切换日期或首次进入时）
   useEffect(() => {
     if (isAnalyzing) return;
-    if (!aiInput || !aiInput.trim()) return;
-
-    const handler = setTimeout(() => {
-      if (lastSavedRef.current.day === dayStr && lastSavedRef.current.text === aiInput) return;
-
-      const op = dayPlan
-        ? base44.entities.DailyPlan.update(dayPlan.id, { original_input: aiInput })
-        : base44.entities.DailyPlan.create({
-            plan_date: dayStr,
-            original_input: aiInput,
-            theme: '',
-            summary: '',
-            plan_json: { key_tasks: [], focus_blocks: [] }
-          });
-
-      op.then(() => {
-        lastSavedRef.current = { day: dayStr, text: aiInput };
-        queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
-      }).catch((e) => console.error('Autosave input failed', e));
-    }, 800);
-
-    return () => clearTimeout(handler);
-  }, [aiInput, dayPlan, dayStr, isAnalyzing]);
+    if (dayPlan?.original_input && !(aiInput && aiInput.trim().length > 0)) {
+      setAiInput(dayPlan.original_input);
+    }
+    if (!dayPlan && !(aiInput && aiInput.trim().length > 0)) {
+      setAiInput("");
+    }
+  }, [dayStr, dayPlan?.original_input, isAnalyzing]);
 
   const weeklyContext = useMemo(() => {
     if (!weeklyPlans || weeklyPlans.length === 0) return null;
@@ -352,6 +355,7 @@ export default function CalendarDayView({
                 onChange={(e) => setAiInput(e.target.value)}
                 placeholder="例如：明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料…（回车发送）"
                 className="min-h-[84px]"
+                onBlur={() => persistInput()}
                 onKeyDown={(e) => {
                   const composing = e.nativeEvent && e.nativeEvent.isComposing;
                   if (!composing && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnalyze(); }
@@ -400,7 +404,7 @@ export default function CalendarDayView({
                     <DeviceGridImageMode />
                     <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
                     <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
-                    <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
+                    <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} userText={aiInput} />
                   </div>
                 ) : (
                   <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，已为你保存当日任务快照；也可在上方输入你的安排生成协同方案。</div>

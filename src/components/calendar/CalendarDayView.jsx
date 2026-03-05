@@ -236,7 +236,7 @@ export default function CalendarDayView({
         <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-b from-white to-transparent z-10" />
         
         <DragDropContext onDragEnd={handleDragEnd}>
-            <ScrollArea className="flex-1">
+            <div className="flex-1 overflow-auto">
                 <div className="p-4 pb-20 max-w-4xl mx-auto">
                     {HOURS.map((hour) => {
                         const hourTasks = getItemsForHour(hour);

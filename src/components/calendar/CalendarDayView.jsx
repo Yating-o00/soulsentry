@@ -375,10 +375,32 @@ export default function CalendarDayView({
               <DeviceStrategyMap devices={analysis.devices} />
             )}
 
-            {/* 情境时间线 */}
-            {analysis?.timeline?.length > 0 && (
-              <ContextTimeline blocks={analysis.timeline.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
-            )}
+            {/* 情境时间线：仅展示属于当前日期的条目 */}
+            {analysis?.timeline?.length > 0 && (() => {
+              const dayBlocks = analysis.timeline.filter(t => !t.date || t.date === dayStr);
+              const otherBlocks = analysis.timeline.filter(t => t.date && t.date !== dayStr);
+              return (
+                <>
+                  {dayBlocks.length > 0 && (
+                    <ContextTimeline blocks={dayBlocks.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
+                  )}
+                  {otherBlocks.length > 0 && (
+                    <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+                      <p className="text-xs text-slate-500 mb-2">以下安排属于其他日期：</p>
+                      <div className="space-y-1.5">
+                        {otherBlocks.map((t, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm text-slate-600">
+                            <span className="font-mono text-xs text-[#384877] font-semibold bg-[#384877]/5 px-1.5 py-0.5 rounded">{t.date}</span>
+                            <span className="font-mono text-xs">{t.time}</span>
+                            <span>{t.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             {/* 自动化清单（根据用户输入可生成占位操作；若无则不显示）*/}
             <AutoExecCards

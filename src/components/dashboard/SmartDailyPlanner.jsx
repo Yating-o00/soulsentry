@@ -285,6 +285,8 @@ export default function SmartDailyPlanner() {
                       <Button
                         onClick={handleGenerate}
                         disabled={!userInput.trim() || isProcessing}
+                        title="⌘/Ctrl + Enter 发送"
+                        aria-label="发送"
                         className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-full h-11 px-6 text-sm shadow-md shadow-[#384877]/20"
                       >
                         {isProcessing ? (

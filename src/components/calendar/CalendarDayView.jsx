@@ -342,10 +342,11 @@ export default function CalendarDayView({
               <ContextTimeline blocks={analysis.timeline.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
             )}
 
-            {/* 自动化清单 */}
-            {analysis?.automations?.length > 0 && (
-              <AutoExecCards tasks={analysis.automations.map(a => ({ title: a.title, description: a.desc, status: a.status }))} />
-            )}
+            {/* 自动化清单（根据用户输入可生成占位操作；若无则不显示）*/}
+            <AutoExecCards
+              tasks={(analysis?.automations || []).map(a => ({ title: a.title, desc: a.desc, status: a.status }))}
+              userText={aiInput}
+            />
 
             {/* 若暂无分析结果，显示当日规划扩展 */}
             {!analysis && (

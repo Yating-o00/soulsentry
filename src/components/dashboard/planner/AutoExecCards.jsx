@@ -1,16 +1,38 @@
 import React from "react";
 
-export default function AutoExecCards({ tasks = [] }) {
-  const items = tasks.slice(0,4);
-  const fill = Array.from({ length: Math.max(0, 4 - items.length) }).map((_,i) => ({
-    title: `占位操作 ${i+1}`,
-    status: i === 0 ? 'ACTIVE' : i === 1 ? 'READY' : 'PENDING',
-    desc: '根据你的规划自动执行',
-  }));
-  const merged = [
-    ...items.map((t,i) => ({ title: t.title, status: i===0?'ACTIVE':i===1?'MONITORING':'READY', desc: t.estimated_minutes ? `${t.estimated_minutes}分钟预留` : '自动执行项' })),
-    ...fill
-  ];
+export default function AutoExecCards({ tasks = [], userText = "" }) {
+  const text = (userText || "").trim();
+
+  const derivePlaceholders = (t) => {
+    if (!t) return [];
+    const res = [];
+    const push = (title, status = 'READY', desc = '根据你的规划自动执行') => {
+      if (!res.find(x => x.title === title)) res.push({ title, status, desc });
+    };
+
+    if (/[Qq][1-4]|报告|季度|周报|月报/.test(t)) push('报告完成提醒', 'MONITORING', '自动执行项');
+    if (/进度|检查|检视|复盘/.test(t)) {
+      if (/晚|夜|晚上|晚间/.test(t)) push('晚间检查进度', 'READY', '自动执行项');
+      push('每日进度提醒', 'ACTIVE', '自动执行项');
+    }
+    if (/电话|来电|联系|通话/.test(t)) push('通话提醒', 'READY', '自动执行项');
+    if (/航班|飞|出发|机场|登机/.test(t)) push('行程出发提醒', 'ACTIVE', '自动执行项');
+    if (/会议|见面|面谈|准备/.test(t)) push('会议前准备清单', 'READY', '自动执行项');
+
+    return res.slice(0, 4);
+  };
+
+  const fromInput = derivePlaceholders(text);
+
+  const items = (tasks || []).map((t, i) => ({
+    title: t.title,
+    status: t.status || (i === 0 ? 'ACTIVE' : i === 1 ? 'MONITORING' : 'READY'),
+    desc: t.desc || t.description || (t.estimated_minutes ? `${t.estimated_minutes}分钟预留` : '自动执行项')
+  })).slice(0, 4);
+
+  const merged = [...items, ...fromInput].slice(0, 4);
+
+  if (merged.length === 0) return null;
 
   const badgeColor = (s) => s==='ACTIVE' ? 'text-emerald-600' : s==='READY' ? 'text-indigo-600' : s==='MONITORING' ? 'text-amber-600' : 'text-slate-600';
 

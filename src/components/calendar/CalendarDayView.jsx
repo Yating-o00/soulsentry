@@ -12,7 +12,7 @@ import { shouldTaskAppearAtDateTime } from "@/components/utils/recurrenceHelper"
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import ProcessingSteps from "../dashboard/planner/ProcessingSteps";
-import DeviceGrid from "../dashboard/planner/DeviceGrid";
+import DeviceGridImageMode from "../dashboard/planner/DeviceGridImageMode";
 import DeviceStrategy from "../dashboard/planner/DeviceStrategy";
 import ContextTimeline from "../dashboard/planner/ContextTimeline";
 import AutoExecCards from "../dashboard/planner/AutoExecCards";
@@ -219,7 +219,7 @@ export default function CalendarDayView({
                 <div className="max-w-4xl mx-auto"><ProcessingSteps /></div>
               ) : dayPlan ? (
                 <div className="max-w-4xl mx-auto space-y-4">
-                  <DeviceGrid originalInput={dayPlan.original_input} />
+                  <DeviceGridImageMode />
                   <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
                   <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
                   <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
@@ -405,7 +405,7 @@ export default function CalendarDayView({
             <div className="max-w-4xl mx-auto"><ProcessingSteps /></div>
           ) : dayPlan ? (
             <div className="max-w-4xl mx-auto space-y-4">
-              <DeviceGrid originalInput={dayPlan.original_input} />
+              <DeviceGridImageMode />
               <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
               <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
               <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />

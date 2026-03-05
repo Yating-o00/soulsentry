@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday, startOfWeek, addDays, parseISO, isSameDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, Target, Calendar as CalendarIcon, Zap, CheckCircle2 } from "lucide-react";
+import { StickyNote, Clock, Plus, ChevronDown, ChevronRight, Target, Calendar as CalendarIcon, Zap, CheckCircle2, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 // // // import { ScrollArea } from "@/components/ui/scroll-area";
@@ -70,6 +70,7 @@ export default function CalendarDayView({
   const [aiInput, setAiInput] = useState("");
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [resolvedDateHint, setResolvedDateHint] = useState(null);
 
   const DEFAULT_STEPS = [
     { key: 'time_extraction', text: '提取时间实体…' },
@@ -80,20 +81,26 @@ export default function CalendarDayView({
   ];
 
   const handleAnalyze = async () => {
-    if (!aiInput.trim() || isAnalyzing) return;
-    setIsAnalyzing(true);
-    try {
-      // Pass existing analysis as context so AI merges instead of replacing
-      const existingPlan = analysis ? {
-        timeline: analysis.timeline || [],
-        devices: analysis.devices || [],
-        automations: analysis.automations || [],
-      } : null;
-      const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
-      setAnalysis(data);
-    } finally {
-      setIsAnalyzing(false);
+  if (!aiInput.trim() || isAnalyzing) return;
+  setIsAnalyzing(true);
+  try {
+    // Pass existing analysis as context so AI merges instead of replacing
+    const existingPlan = analysis ? {
+      timeline: analysis.timeline || [],
+      devices: analysis.devices || [],
+      automations: analysis.automations || [],
+    } : null;
+    const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
+    setAnalysis(data);
+    // If the resolved date differs from current view, offer navigation
+    if (data.resolved_date && data.resolved_date !== dayStr) {
+      setResolvedDateHint(data.resolved_date);
+    } else {
+      setResolvedDateHint(null);
     }
+  } finally {
+    setIsAnalyzing(false);
+  }
   };
 
   const quickFill = (text) => setAiInput(text);

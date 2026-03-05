@@ -100,18 +100,18 @@ export default function CalendarDayView({
     }
   }, [analysis]);
 
-  // 若未输入新内容且当日无计划，则自动保存当日任务快照
+  // 未输入新内容前：自动保存当日任务计划（仅在无当日计划时触发一次）
   useEffect(() => {
     if (loadingDayPlan) return;
     if (isAnalyzing) return;
-    if (aiInput && aiInput.trim().length > 0) return;
-    if (dayPlan) return; // 已存在当日计划
+    if (aiInput && aiInput.trim().length > 0) return; // 用户已有新输入，不做自动保存
+    if (dayPlan) return; // 已存在当日AI规划
     if (!tasks || tasks.length === 0) return;
 
     const todaysTasks = tasks.filter(t => t.reminder_time && isSameDay(new Date(t.reminder_time), currentDate) && !t.parent_task_id);
     if (todaysTasks.length === 0) return;
 
-    if (saveAttemptedRef.current === dayStr) return; // 避免重复
+    if (saveAttemptedRef.current === dayStr) return; // 避免重复保存
     saveAttemptedRef.current = dayStr;
 
     const plan_json = {
@@ -360,7 +360,7 @@ export default function CalendarDayView({
                     <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
                   </div>
                 ) : (
-                  <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，系统会先为你保存当日任务快照；也可在上方输入你的安排生成协同方案。</div>
+                  <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，已为你保存当日任务快照；也可在上方输入你的安排生成协同方案。</div>
                 )}
               </>
             )}

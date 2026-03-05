@@ -82,9 +82,14 @@ export default function CalendarDayView({
   const handleAnalyze = async () => {
     if (!aiInput.trim() || isAnalyzing) return;
     setIsAnalyzing(true);
-    setAnalysis(null);
     try {
-      const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr });
+      // Pass existing analysis as context so AI merges instead of replacing
+      const existingPlan = analysis ? {
+        timeline: analysis.timeline || [],
+        devices: analysis.devices || [],
+        automations: analysis.automations || [],
+      } : null;
+      const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
       setAnalysis(data);
     } finally {
       setIsAnalyzing(false);

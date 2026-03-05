@@ -190,6 +190,31 @@ export default function CalendarView() {
     setSelectedDate(today);
   };
 
+  // 日视图：自然语言生成当日安排（存储为任务）
+  const processDayIntent = async () => {
+    if (!dayInputValue.trim()) return;
+    setDayProcessing(true);
+    try {
+      const dayStr = format(selectedDate, 'yyyy-MM-dd');
+      const newTasks = await extractAndCreateTasks(dayInputValue, dayStr);
+      toast.success(newTasks.length > 0 ? `已为当日添加 ${newTasks.length} 个约定` : '已生成当日安排');
+      setDayInputValue('');
+      setShowDayInput(false);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    } catch (e) {
+      toast.error('当日安排生成失败');
+    } finally {
+      setDayProcessing(false);
+    }
+  };
+
+  // 日视图：拖拽更新时间即刻存储
+  const handleTaskDropOnDay = async (taskId, destinationDate) => {
+    await base44.entities.Task.update(taskId, { reminder_time: destinationDate.toISOString() });
+    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    toast.success('已更新安排时间');
+  };
+
   // 周视图日期范围
   const weekDays = viewMode === "week" 
     ? eachDayOfInterval({
@@ -241,6 +266,7 @@ export default function CalendarView() {
               <TabsList className="bg-white shadow-md rounded-[12px] h-9 p-1">
                 <TabsTrigger value="month" className="rounded-[8px] text-xs px-3 py-1 data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">月</TabsTrigger>
                 <TabsTrigger value="week" className="rounded-[8px] text-xs px-3 py-1 data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">周</TabsTrigger>
+                <TabsTrigger value="day" className="rounded-[8px] text-xs px-3 py-1 data-[state=active]:bg-[#5a647d] data-[state=active]:text-white">日</TabsTrigger>
               </TabsList>
             </Tabs>
           <Button onClick={handleToday} variant="outline" size="sm" className="shadow-sm h-9">
@@ -286,7 +312,7 @@ export default function CalendarView() {
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.1 }}
-          className="lg:col-span-2"
+          className={viewMode === 'day' ? 'lg:col-span-3' : 'lg:col-span-2'}
         >
           {viewMode === "month" ? (
             <Card className="p-6 border-0 shadow-xl bg-white">
@@ -442,12 +468,13 @@ export default function CalendarView() {
           )}
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-          className="space-y-4"
-        >
+        {viewMode !== 'day' && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="space-y-4"
+          >
           <Card className="p-6 border-0 shadow-xl bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] text-white">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">
@@ -552,6 +579,7 @@ export default function CalendarView() {
             </div>
           </div>
         </motion.div>
+        )}
       </div>
 
       {/* 快速添加约定对话框 */}

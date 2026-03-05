@@ -152,7 +152,8 @@ export default function SmartDailyPlanner() {
       }
     } catch (err) {
       console.error("Daily plan generation failed", err);
-      toast.error("规划生成失败，请重试");
+      const msg = err?.response?.data?.error || err?.message || '规划生成失败，请重试';
+      toast.error(msg);
     } finally {
       setIsProcessing(false);
     }

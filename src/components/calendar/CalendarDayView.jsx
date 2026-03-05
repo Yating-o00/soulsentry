@@ -154,7 +154,7 @@ export default function CalendarDayView({
             </p>
         </div>
 
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-auto">
             <div className="p-5 space-y-6">
                 {/* Weekly Context Card */}
                 {weeklyContext ? (

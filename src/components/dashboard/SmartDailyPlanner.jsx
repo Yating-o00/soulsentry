@@ -86,6 +86,8 @@ export default function SmartDailyPlanner() {
         } else {
           const draft = localStorage.getItem(draftKey);
           setUserInput(draft || "");
+          setExistingPlanId(null);
+          setPlanData(null);
           // 无计划时直接展示图2模式的英雄输入区
           setShowInput(true);
         }

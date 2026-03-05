@@ -281,12 +281,9 @@ export default function CalendarDayView({
               </div>
             </div>
 
-            {/* 解析步骤：分析中逐条显现，完成后展示结果版 */}
+            {/* 解析步骤：仅分析中展示，完成后自动折叠隐藏 */}
             {isAnalyzing && (
               <AnalysisSteps steps={DEFAULT_STEPS} running={true} />
-            )}
-            {!isAnalyzing && analysis?.steps?.length > 0 && (
-              <AnalysisSteps steps={analysis.steps} running={false} />
             )}
 
             {analysis && <div ref={resultsRef} />}

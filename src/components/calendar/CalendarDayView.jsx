@@ -241,18 +241,62 @@ export default function CalendarDayView({
       <div className="flex-1 flex flex-col bg-white relative overflow-auto">
         <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-b from-white to-transparent z-10" />
         <div className="p-4 md:p-6 border-b border-slate-100/70 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
-          {loadingDayPlan ? (
-            <div className="max-w-4xl mx-auto"><ProcessingSteps /></div>
-          ) : dayPlan ? (
-            <div className="max-w-4xl mx-auto space-y-4">
-              <DeviceGridImageMode />
-              <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
-              <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
-              <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
+          <div className="max-w-4xl mx-auto space-y-4">
+            {/* AI 输入区 */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <Textarea
+                value={aiInput}
+                onChange={(e) => setAiInput(e.target.value)}
+                placeholder="例如：明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料…（回车发送）"
+                className="min-h-[84px]"
+                onKeyDown={(e) => {
+                  const composing = e.nativeEvent && e.nativeEvent.isComposing;
+                  if (!composing && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnalyze(); }
+                }}
+              />
+              <div className="flex justify-end mt-2">
+                <Button onClick={handleAnalyze} disabled={isAnalyzing || !aiInput.trim()} className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-9 px-4 text-sm">{isAnalyzing ? '分析中…' : '发送'}</Button>
+              </div>
             </div>
-          ) : (
-            <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500 max-w-4xl mx-auto">暂无当日AI规划，可在右侧“当日智能输入”中描述你的安排，我会为你生成情境时间线与设备协同。</div>
-          )}
+
+            {/* 解析步骤（到达结果后逐条显现） */}
+            {analysis?.steps?.length > 0 && (
+              <AnalysisSteps steps={analysis.steps} running={true} />
+            )}
+
+            {/* 设备策略一对一映射 */}
+            {analysis?.devices?.length > 0 && (
+              <DeviceStrategyMap devices={analysis.devices} />
+            )}
+
+            {/* 情境时间线 */}
+            {analysis?.timeline?.length > 0 && (
+              <ContextTimeline blocks={analysis.timeline.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
+            )}
+
+            {/* 自动化清单 */}
+            {analysis?.automations?.length > 0 && (
+              <AutoExecCards tasks={analysis.automations.map(a => ({ title: a.title, description: a.desc, status: a.status }))} />
+            )}
+
+            {/* 若暂无分析结果，显示当日规划扩展 */}
+            {!analysis && (
+              <>
+                {loadingDayPlan ? (
+                  <div><ProcessingSteps /></div>
+                ) : dayPlan ? (
+                  <div className="space-y-4">
+                    <DeviceGridImageMode />
+                    <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
+                    <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
+                    <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
+                  </div>
+                ) : (
+                  <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，可在上方输入你的安排，我会为你生成情境时间线与设备协同。</div>
+                )}
+              </>
+            )}
+          </div>
         </div>
         
         <DragDropContext onDragEnd={handleDragEnd}>

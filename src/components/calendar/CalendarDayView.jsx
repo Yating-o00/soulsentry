@@ -228,7 +228,7 @@ export default function CalendarDayView({
                 <div className="rounded-xl p-4 bg-slate-50 border border-slate-200 text-sm text-slate-500 max-w-4xl mx-auto">暂无当日AI规划，可在日历右侧“当日智能输入”中描述你的安排，我会为你生成情境时间线与设备协同。</div>
               )}
             </div>
-            </ScrollArea>
+            </div>
       </div>
 
       {/* Main Timeline */}

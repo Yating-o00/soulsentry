@@ -85,15 +85,26 @@ export default function CalendarDayView({
   if (!aiInput.trim() || isAnalyzing) return;
   setIsAnalyzing(true);
   try {
-    // Pass existing analysis as context so AI merges instead of replacing
-    const existingPlan = analysis ? {
-      timeline: analysis.timeline || [],
-      devices: analysis.devices || [],
-      automations: analysis.automations || [],
-    } : null;
+    // Build existing plan context: prefer current analysis state, fallback to saved dayPlan
+    let existingPlan = null;
+    if (analysis) {
+      existingPlan = {
+        timeline: analysis.timeline || [],
+        devices: analysis.devices || [],
+        automations: analysis.automations || [],
+      };
+    } else if (dayPlan?.plan_json) {
+      // First AI input of the session — use saved daily plan as context
+      const dp = dayPlan.plan_json;
+      existingPlan = {
+        timeline: (dp.focus_blocks || []).map(b => ({ time: b.time, title: b.title, description: b.description, type: b.type || 'focus', date: dayStr })),
+        devices: [],
+        automations: (dp.key_tasks || []).map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'active' : 'ready' })),
+      };
+    }
     const { data } = await base44.functions.invoke('analyzeIntent', { input: aiInput, date: dayStr, existingPlan });
     setAnalysis(data);
-    // If the resolved date differs from current view, offer navigation
+    setAiInput("");
     if (data.resolved_date && data.resolved_date !== dayStr) {
       setResolvedDateHint(data.resolved_date);
     } else {

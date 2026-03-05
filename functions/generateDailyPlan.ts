@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-// Robust daily plan generator with provider fallback (OpenAI -> Moonshot)
+// Daily plan generator — uses Base44 Core LLM first (no external keys),
+// then falls back to OpenAI/Moonshot if available.
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -12,20 +13,80 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Missing required fields: input, planDate' }, { status: 400 });
     }
 
+    const jsonSchema = {
+      type: 'object',
+      properties: {
+        theme: { type: 'string' },
+        summary: { type: 'string' },
+        focus_blocks: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              time: { type: 'string' },
+              duration_minutes: { type: 'number' },
+              title: { type: 'string' },
+              type: { type: 'string', enum: ['focus', 'meeting', 'personal', 'rest'] },
+              description: { type: 'string' }
+            }
+          }
+        },
+        key_tasks: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              priority: { type: 'string', enum: ['high', 'medium', 'low'] },
+              estimated_minutes: { type: 'number' },
+              time_slot: { type: 'string', enum: ['morning', 'afternoon', 'evening'] }
+            }
+          }
+        },
+        evening_review: { type: 'string' },
+        stats: {
+          type: 'object',
+          properties: {
+            focus_hours: { type: 'number' },
+            tasks_count: { type: 'number' },
+            energy_level: { type: 'string', enum: ['high', 'medium', 'low'] }
+          }
+        }
+      },
+      required: ['theme', 'summary', 'focus_blocks', 'key_tasks', 'evening_review', 'stats']
+    };
+
+    const baseSystem = existingPlan
+      ? `你是一个智能日程助手。用户已有当日规划，现在想追加新内容。请将新内容智能融入现有规划中，避免时间冲突，保持合理节奏。\n现有规划: ${JSON.stringify(existingPlan)}\n当前日期: ${planDate}`
+      : `你是一个智能日程助手。请根据用户输入，为 ${planDate} 生成一份详细的日规划。`;
+
+    // 1) Try Core.InvokeLLM (managed provider, no secrets needed)
+    try {
+      const data = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt: `${baseSystem}\n用户输入: ${input}\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`,
+        response_json_schema: jsonSchema,
+        add_context_from_internet: false
+      });
+
+      // Core returns parsed object when response_json_schema is provided
+      const filled = data || {};
+      if (!filled.theme) throw new Error('Empty plan from Core');
+      // Fill defaults
+      filled.focus_blocks = Array.isArray(filled.focus_blocks) ? filled.focus_blocks : [];
+      filled.key_tasks = Array.isArray(filled.key_tasks) ? filled.key_tasks : [];
+      filled.stats = filled.stats || { focus_hours: 0, tasks_count: filled.key_tasks.length, energy_level: 'medium' };
+      return Response.json({ ...filled, plan_date: planDate });
+    } catch (e) {
+      console.error('[Core.InvokeLLM failed]', e?.message || e);
+      // continue to provider fallback
+    }
+
+    // 2) Fallback to external providers if configured
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
     const moonshotKey = Deno.env.get('MOONSHOT_API_KEY');
 
-    if (!openaiKey && !moonshotKey) {
-      return Response.json({ error: 'No AI provider keys configured' }, { status: 500 });
-    }
-
-    const systemPrompt = existingPlan
-      ? `你是一个智能日程助手。用户已有当日规划，现在想追加新内容。请将新内容智能融入现有规划中，避免时间冲突，保持合理节奏。\n现有规划: ${JSON.stringify(existingPlan)}\n当前日期: ${planDate}\n请严格返回JSON对象，字段包括: theme, summary, focus_blocks, key_tasks, evening_review, stats。`
-      : `你是一个智能日程助手。请根据用户输入，为 ${planDate} 生成一份详细的日规划。\n严格输出JSON对象，包含: \n- theme: 今日主题 (string)\n- summary: 今日摘要 (string)\n- focus_blocks: 数组 [{time: "HH:mm", duration_minutes: number, title: string, type: "focus"|"meeting"|"personal"|"rest", description: string}]\n- key_tasks: 数组 [{title: string, priority: "high"|"medium"|"low", estimated_minutes: number, time_slot: "morning"|"afternoon"|"evening"}]\n- evening_review: string\n- stats: {focus_hours: number, tasks_count: number, energy_level: "high"|"medium"|"low"}`;
-
     async function callOpenAI() {
-      const apiUrl = 'https://api.openai.com/v1/chat/completions';
-      const res = await fetch(apiUrl, {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -34,7 +95,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: `${baseSystem}\n严格输出 JSON 对象，字段与 schema 一致。` },
             { role: 'user', content: input },
           ],
           response_format: { type: 'json_object' },
@@ -48,8 +109,7 @@ Deno.serve(async (req) => {
     }
 
     async function callMoonshot() {
-      const apiUrl = 'https://api.moonshot.cn/v1/chat/completions';
-      const res = await fetch(apiUrl, {
+      const res = await fetch('https://api.moonshot.cn/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,10 +118,9 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           model: 'moonshot-v1-8k',
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: `${baseSystem}\n严格输出 JSON 对象，字段与 schema 一致。` },
             { role: 'user', content: input },
           ],
-          // Moonshot 不支持 json_schema，这里用提示词约束
           temperature: 0.7,
         }),
       });
@@ -71,54 +130,45 @@ Deno.serve(async (req) => {
       return json.choices?.[0]?.message?.content || '';
     }
 
-    async function generate() {
-      const providers = [];
-      // 优先 OpenAI，其次 Moonshot
-      if (openaiKey) providers.push(callOpenAI);
-      if (moonshotKey) providers.push(callMoonshot);
+    const providers = [];
+    if (openaiKey) providers.push(callOpenAI);
+    if (moonshotKey) providers.push(callMoonshot);
 
-      let content = '';
-      let lastErr = null;
-      for (const fn of providers) {
-        try {
-          content = await fn();
-          if (content) break;
-        } catch (e) {
-          console.error('[AI Provider Error]', e?.message || e);
-          lastErr = e;
-        }
-      }
-
-      if (!content) throw lastErr || new Error('AI returned empty response');
-
-      // 解析 JSON：先直接 parse，失败则提取花括号片段
-      let planData;
-      try {
-        planData = JSON.parse(content);
-      } catch (_) {
-        const start = content.indexOf('{');
-        const end = content.lastIndexOf('}');
-        if (start !== -1 && end !== -1 && end > start) {
-          const slice = content.slice(start, end + 1);
-          planData = JSON.parse(slice);
-        } else {
-          throw new Error('Failed to parse AI JSON content');
-        }
-      }
-
-      // 兜底字段
-      planData.focus_blocks = Array.isArray(planData.focus_blocks) ? planData.focus_blocks : [];
-      planData.key_tasks = Array.isArray(planData.key_tasks) ? planData.key_tasks : [];
-      planData.stats = planData.stats || {};
-      if (typeof planData.stats.tasks_count !== 'number') {
-        planData.stats.tasks_count = planData.key_tasks.length;
-      }
-
-      return { ...planData, plan_date: planDate };
+    if (providers.length === 0) {
+      return Response.json({ error: 'AI providers unavailable' }, { status: 500 });
     }
 
-    const data = await generate();
-    return Response.json(data);
+    let content = '';
+    let lastErr = null;
+    for (const fn of providers) {
+      try {
+        content = await fn();
+        if (content) break;
+      } catch (err) {
+        console.error('[AI Provider Error]', err?.message || err);
+        lastErr = err;
+      }
+    }
+    if (!content) throw lastErr || new Error('AI returned empty response');
+
+    // Parse JSON content
+    let planData;
+    try {
+      planData = JSON.parse(content);
+    } catch (_) {
+      const s = content.indexOf('{');
+      const eIdx = content.lastIndexOf('}');
+      if (s !== -1 && eIdx !== -1 && eIdx > s) {
+        planData = JSON.parse(content.slice(s, eIdx + 1));
+      } else {
+        throw new Error('Failed to parse AI JSON content');
+      }
+    }
+    planData.focus_blocks = Array.isArray(planData.focus_blocks) ? planData.focus_blocks : [];
+    planData.key_tasks = Array.isArray(planData.key_tasks) ? planData.key_tasks : [];
+    planData.stats = planData.stats || { focus_hours: 0, tasks_count: planData.key_tasks.length, energy_level: 'medium' };
+
+    return Response.json({ ...planData, plan_date: planDate });
   } catch (error) {
     console.error('[generateDailyPlan] Failed:', error?.message || error);
     return Response.json({ error: error?.message || 'Internal Server Error' }, { status: 500 });

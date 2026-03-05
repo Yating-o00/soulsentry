@@ -28,6 +28,8 @@ import TaskCard from "../tasks/TaskCard";
 import NoteCard from "../notes/NoteCard";
 import TaskDetailModal from "../tasks/TaskDetailModal";
 import QuickAddTask from "../tasks/QuickAddTask";
+import CalendarDayView from "../calendar/CalendarDayView";
+import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +47,9 @@ export default function CalendarView() {
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [showDayInput, setShowDayInput] = useState(false);
+  const [dayInputValue, setDayInputValue] = useState("");
+  const [dayProcessing, setDayProcessing] = useState(false);
   
   const queryClient = useQueryClient();
 

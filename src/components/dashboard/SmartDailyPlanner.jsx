@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { format, parseISO, addDays } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -23,46 +23,26 @@ import {
   Watch,
   Monitor,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Calendar as CalendarIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { cn } from "@/lib/utils";
-import ProcessingSteps from "./planner/ProcessingSteps";
-import DeviceGrid from "./planner/DeviceGrid";
-import DeviceStrategy from "./planner/DeviceStrategy";
+import AnalysisSteps from "./planner/AnalysisSteps";
+import DeviceStrategyMap from "./planner/DeviceStrategyMap";
 import ContextTimeline from "./planner/ContextTimeline";
 import AutoExecCards from "./planner/AutoExecCards";
 
-const TYPE_STYLES = {
-  focus: "bg-blue-50 text-blue-700 border-blue-200",
-  meeting: "bg-amber-50 text-amber-700 border-amber-200",
-  personal: "bg-purple-50 text-purple-700 border-purple-200",
-  rest: "bg-green-50 text-green-700 border-green-200",
-};
-
-const TYPE_LABELS = {
-  focus: "专注",
-  meeting: "会议",
-  personal: "个人",
-  rest: "休息",
-};
-
-const PRIORITY_DOT = {
-  high: "bg-red-500",
-  medium: "bg-amber-400",
-  low: "bg-slate-300",
-};
-
-const SLOT_ICONS = {
-  morning: <Coffee className="w-3.5 h-3.5" />,
-  afternoon: <Zap className="w-3.5 h-3.5" />,
-  evening: <Moon className="w-3.5 h-3.5" />,
-};
+const DEFAULT_STEPS = [
+  { key: 'time_extraction', text: '提取时间实体…' },
+  { key: 'intent', text: '识别意图与优先级…' },
+  { key: 'spatial', text: '空间/路径计算…' },
+  { key: 'device', text: '设备协同分发策略…' },
+  { key: 'automation', text: '生成自动化任务…' },
+];
 
 export default function SmartDailyPlanner() {
   const todayStr = format(new Date(), "yyyy-MM-dd");

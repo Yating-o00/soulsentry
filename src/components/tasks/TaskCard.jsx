@@ -85,7 +85,7 @@ export default function TaskCard({ task, onComplete, onEdit }) {
   return (
     <div 
       className={cn(
-        "bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-md hover:-translate-y-0.5",
+        "bg-white rounded-xl md:rounded-2xl p-3.5 md:p-5 shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98]",
         "border-l-[3px]", 
         style.border,
         isCompleted && "opacity-0 scale-95"
@@ -146,11 +146,11 @@ export default function TaskCard({ task, onComplete, onEdit }) {
       </div>
 
       {/* Main Content */}
-      <div className="flex gap-4 relative z-10">
+      <div className="flex gap-3 md:gap-4 relative z-10">
         {/* Icon Box */}
         <div className="flex-shrink-0">
           <div className={cn(
-            "w-12 h-12 rounded-2xl flex items-center justify-center text-2xl bg-gradient-to-br",
+            "w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center text-xl md:text-2xl bg-gradient-to-br",
             task.category === 'work' ? "from-[#384877]/20 to-[#384877]/5" :
             task.category === 'health' ? "from-emerald-100 to-emerald-50" :
             task.category === 'love' ? "from-rose-100 to-rose-50" :
@@ -163,7 +163,7 @@ export default function TaskCard({ task, onComplete, onEdit }) {
 
         {/* Text Info */}
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-slate-800 mb-1 truncate text-base">{task.title}</h3>
+          <h3 className="font-semibold text-slate-800 mb-0.5 md:mb-1 truncate text-sm md:text-base">{task.title}</h3>
           {task.description && (
             <p className="text-sm text-slate-500 mb-2 line-clamp-1">{task.description}</p>
           )}
@@ -205,12 +205,12 @@ export default function TaskCard({ task, onComplete, onEdit }) {
         </div>
 
         {/* Check Button */}
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-col items-end gap-1.5 md:gap-2">
           <button 
             onClick={handleComplete}
-            className="w-10 h-10 rounded-full border-2 border-slate-200 flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-all group"
+            className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-slate-200 flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-all group active:scale-90 touch-manipulation no-min-size shrink-0"
           >
-            <Check className="w-5 h-5 text-slate-300 group-hover:text-green-600" />
+            <Check className="w-4 h-4 md:w-5 md:h-5 text-slate-300 group-hover:text-green-600" />
           </button>
           
           <span className={cn(

@@ -373,11 +373,6 @@ export default function SmartDailyPlanner() {
 
       {/* Results from AI analysis */}
       <div ref={resultsRef} className="px-6 pb-6 space-y-5">
-        {/* Device Strategy Map (from analysis) */}
-        {analysis?.devices?.length > 0 && (
-          <DeviceStrategyMap devices={analysis.devices} />
-        )}
-
         {/* Context Timeline (from analysis) - only current date entries */}
         {analysis?.timeline?.length > 0 && (() => {
           const dayBlocks = analysis.timeline.filter(t => !t.date || t.date === selectedDateStr);
@@ -392,6 +387,11 @@ export default function SmartDailyPlanner() {
             tasks={analysis.automations.map(a => ({ title: a.title, desc: a.desc, status: a.status }))}
             userText={userInput}
           />
+        )}
+
+        {/* Device Strategy Map (from analysis) - at the bottom */}
+        {analysis?.devices?.length > 0 && (
+          <DeviceStrategyMap devices={analysis.devices} />
         )}
 
         {/* Fallback: show saved dayPlan data when no fresh analysis */}

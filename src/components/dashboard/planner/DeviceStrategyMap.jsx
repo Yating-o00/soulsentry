@@ -1,21 +1,21 @@
 import React, { useState } from "react";
-import { Smartphone, Watch, Glasses, Car, Home, Monitor, Cloud } from "lucide-react";
+import { Smartphone, Watch, Glasses, Car, Home, Monitor, Cloud, Zap, ChevronRight, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
 const DEVICE_META = {
-  phone:   { icon: Smartphone, name: "智能手机", role: "主控终端",  gradient: "from-[#1e293b] to-[#384877]" },
-  watch:   { icon: Watch,      name: "智能手表", role: "触觉提醒",  gradient: "from-[#334155] to-[#475569]" },
-  glasses: { icon: Glasses,    name: "智能眼镜", role: "AR视觉",   gradient: "from-[#6366f1]/80 to-[#7c3aed]" },
-  car:     { icon: Car,        name: "电动汽车", role: "车载系统",  gradient: "from-emerald-600 to-teal-700" },
-  home:    { icon: Home,       name: "智能家居", role: "语音中枢",  gradient: "from-amber-500 to-orange-600" },
-  pc:      { icon: Monitor,    name: "工作站",   role: "深度工作",  gradient: "from-rose-500 to-pink-600" },
+  phone:   { icon: Smartphone, name: "智能手机", role: "主控终端",  gradient: "from-[#1e293b] to-[#384877]", accent: "#384877", bg: "bg-[#384877]/5" },
+  watch:   { icon: Watch,      name: "智能手表", role: "触觉提醒",  gradient: "from-[#334155] to-[#475569]", accent: "#475569", bg: "bg-slate-500/5" },
+  glasses: { icon: Glasses,    name: "智能眼镜", role: "AR视觉",   gradient: "from-[#6366f1]/80 to-[#7c3aed]", accent: "#6366f1", bg: "bg-indigo-500/5" },
+  car:     { icon: Car,        name: "电动汽车", role: "车载系统",  gradient: "from-emerald-600 to-teal-700", accent: "#059669", bg: "bg-emerald-500/5" },
+  home:    { icon: Home,       name: "智能家居", role: "语音中枢",  gradient: "from-amber-500 to-orange-600", accent: "#d97706", bg: "bg-amber-500/5" },
+  pc:      { icon: Monitor,    name: "工作站",   role: "深度工作",  gradient: "from-rose-500 to-pink-600", accent: "#e11d48", bg: "bg-rose-500/5" },
 };
 
-const METHOD_STYLES = {
-  high:   "bg-rose-50 text-rose-500 border border-rose-100",
-  medium: "bg-slate-50 text-slate-500 border border-slate-100",
-  low:    "bg-emerald-50 text-emerald-600 border border-emerald-100",
+const PRIORITY_CONFIG = {
+  high:   { label: "高优先", dot: "bg-rose-500", badge: "bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/20", glow: "shadow-rose-500/10" },
+  medium: { label: "中优先", dot: "bg-amber-500", badge: "bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/20", glow: "shadow-amber-500/10" },
+  low:    { label: "低优先", dot: "bg-slate-400", badge: "bg-slate-400/10 text-slate-500 ring-1 ring-slate-400/20", glow: "shadow-slate-400/10" },
 };
 
 function formatTime(raw) {

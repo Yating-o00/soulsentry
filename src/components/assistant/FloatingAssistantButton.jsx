@@ -108,9 +108,9 @@ export default function FloatingAssistantButton() {
           {/* 小助按钮 - 缩小版 */}
           <motion.button
             onClick={() => setIsOpen(!isOpen)}
-            className="h-14 w-14 md:h-12 md:w-12 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] hover:from-[#4a5670] hover:to-[#152e50] shadow-lg hover:shadow-xl transition-all relative group touch-manipulation"
+            className="h-12 w-12 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] hover:from-[#4a5670] hover:to-[#152e50] shadow-lg hover:shadow-xl transition-all relative group touch-manipulation no-min-size"
             whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileTap={{ scale: 0.9 }}
           >
             <div className="h-full w-full flex items-center justify-center">
               <Bot className="w-5 h-5 text-white" />

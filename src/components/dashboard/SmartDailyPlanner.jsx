@@ -259,7 +259,7 @@ export default function SmartDailyPlanner() {
           </Button>
 
           {/* 计划操作 */}
-          {(dayPlan || analysis) && (
+          {planData && (
             <>
               <Button
                 variant="ghost"
@@ -281,7 +281,7 @@ export default function SmartDailyPlanner() {
               </Button>
             </>
           )}
-          {!dayPlan && !analysis && !showInput && (
+          {!planData && !showInput && (
             <Button
               size="sm"
               className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-3 text-xs"
@@ -366,16 +366,14 @@ export default function SmartDailyPlanner() {
         )}
       </AnimatePresence>
 
-      {/* Results - AI analysis (same as CalendarDayView) */}
-      {analysis && <div ref={resultsRef} />}
-
-      <div className="px-6 py-4 space-y-5">
-        {/* Device Strategy Map from AI analysis */}
+      {/* Results from AI analysis */}
+      <div ref={resultsRef} className="px-6 pb-6 space-y-5">
+        {/* Device Strategy Map (from analysis) */}
         {analysis?.devices?.length > 0 && (
           <DeviceStrategyMap devices={analysis.devices} />
         )}
 
-        {/* Context Timeline from AI analysis */}
+        {/* Context Timeline (from analysis) - only current date entries */}
         {analysis?.timeline?.length > 0 && (() => {
           const dayBlocks = analysis.timeline.filter(t => !t.date || t.date === selectedDateStr);
           return dayBlocks.length > 0 ? (
@@ -383,7 +381,7 @@ export default function SmartDailyPlanner() {
           ) : null;
         })()}
 
-        {/* Automation Cards from AI analysis */}
+        {/* Auto Exec Cards (from analysis) */}
         {analysis?.automations?.length > 0 && (
           <AutoExecCards
             tasks={analysis.automations.map(a => ({ title: a.title, desc: a.desc, status: a.status }))}
@@ -391,39 +389,46 @@ export default function SmartDailyPlanner() {
           />
         )}
 
-        {/* Saved DailyPlan display (when no fresh analysis) */}
+        {/* Fallback: show saved dayPlan data when no fresh analysis */}
         {!analysis && dayPlan && (
-          <>
-            <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
-            <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
-          </>
+          <div className="space-y-5">
+            {/* Saved timeline */}
+            {dayPlan.plan_json?.focus_blocks?.length > 0 && (
+              <ContextTimeline blocks={dayPlan.plan_json.focus_blocks} />
+            )}
+
+            {/* Saved tasks */}
+            {dayPlan.plan_json?.key_tasks?.length > 0 && (
+              <AutoExecCards tasks={dayPlan.plan_json.key_tasks.map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'active' : 'ready' }))} />
+            )}
+
+            {/* Append CTA */}
+            {!showInput && (
+              <button
+                onClick={() => setShowInput(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 text-xs text-slate-400 hover:text-[#384877] border border-dashed border-slate-200 rounded-xl hover:border-[#384877]/30 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> 追加新内容到规划
+              </button>
+            )}
+          </div>
         )}
 
-        {/* No plan and no analysis - empty state */}
+        {/* Empty state */}
         {!analysis && !dayPlan && !showInput && (
-          <div className="py-8 text-center">
+          <div className="p-8 text-center">
             <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
               <Target className="w-7 h-7 text-slate-300" />
             </div>
-            <p className="text-slate-400 text-sm mb-4">还没有今日规划，告诉 AI 你今天的安排</p>
+            <p className="text-slate-400 text-sm mb-4">还没有当日规划，输入你的安排开始</p>
             <Button
               size="sm"
               className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl"
               onClick={() => setShowInput(true)}
             >
-              <Sparkles className="w-3.5 h-3.5 mr-2" /> 开始规划今天
+              <Sparkles className="w-3.5 h-3.5 mr-2" /> 开始规划
             </Button>
           </div>
-        )}
-
-        {/* Append CTA */}
-        {(analysis || dayPlan) && !showInput && (
-          <button
-            onClick={() => setShowInput(true)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 text-xs text-slate-400 hover:text-[#384877] border border-dashed border-slate-200 rounded-xl hover:border-[#384877]/30 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> 追加新内容到规划
-          </button>
         )}
       </div>
     </div>

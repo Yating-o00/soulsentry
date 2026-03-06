@@ -139,8 +139,8 @@ export default function CalendarDayView({
       }
       queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
     } else {
-      // Input belongs to a different date — save plan to that date and show navigation hint
-      setAnalysis(data);
+      // Input belongs to a different date — don't show analysis inline, only show navigation hint
+      setAnalysis(null);
       setResolvedDateHint(targetDate);
       
       // Persist to the target date's DailyPlan

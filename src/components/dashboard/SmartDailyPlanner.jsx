@@ -366,136 +366,71 @@ export default function SmartDailyPlanner() {
         )}
       </AnimatePresence>
 
-      {/* Plan Display */}
-      {planData ? (
-        <div className="p-6 space-y-5">
-          {/* Theme & Summary */}
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="font-semibold text-slate-800 text-base">{planData.theme || "今日规划"}</span>
-                {planData.stats?.energy_level && (
-                  <Badge variant="outline" className={cn(
-                    "text-[10px] h-5 px-2 border",
-                    planData.stats.energy_level === 'high' ? "bg-green-50 text-green-700 border-green-200" :
-                    planData.stats.energy_level === 'medium' ? "bg-amber-50 text-amber-700 border-amber-200" :
-                    "bg-slate-50 text-slate-600 border-slate-200"
-                  )}>
-                    {planData.stats.energy_level === 'high' ? '💪 高能量' : planData.stats.energy_level === 'medium' ? '⚡ 正常' : '🌙 轻松'}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-slate-500 leading-relaxed">{planData.summary}</p>
-            </div>
+      {/* Results from AI analysis */}
+      <div ref={resultsRef} className="px-6 pb-6 space-y-5">
+        {/* Device Strategy Map (from analysis) */}
+        {analysis?.devices?.length > 0 && (
+          <DeviceStrategyMap devices={analysis.devices} />
+        )}
+
+        {/* Context Timeline (from analysis) - only current date entries */}
+        {analysis?.timeline?.length > 0 && (() => {
+          const dayBlocks = analysis.timeline.filter(t => !t.date || t.date === selectedDateStr);
+          return dayBlocks.length > 0 ? (
+            <ContextTimeline blocks={dayBlocks.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
+          ) : null;
+        })()}
+
+        {/* Auto Exec Cards (from analysis) */}
+        {analysis?.automations?.length > 0 && (
+          <AutoExecCards
+            tasks={analysis.automations.map(a => ({ title: a.title, desc: a.desc, status: a.status }))}
+            userText={userInput}
+          />
+        )}
+
+        {/* Fallback: show saved dayPlan data when no fresh analysis */}
+        {!analysis && dayPlan && (
+          <div className="space-y-5">
+            {/* Saved timeline */}
+            {dayPlan.plan_json?.focus_blocks?.length > 0 && (
+              <ContextTimeline blocks={dayPlan.plan_json.focus_blocks} />
+            )}
+
+            {/* Saved tasks */}
+            {dayPlan.plan_json?.key_tasks?.length > 0 && (
+              <AutoExecCards tasks={dayPlan.plan_json.key_tasks.map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'active' : 'ready' }))} />
+            )}
+
+            {/* Append CTA */}
+            {!showInput && (
+              <button
+                onClick={() => setShowInput(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 text-xs text-slate-400 hover:text-[#384877] border border-dashed border-slate-200 rounded-xl hover:border-[#384877]/30 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> 追加新内容到规划
+              </button>
+            )}
           </div>
+        )}
 
-          {/* Stats Row */}
-          {planData.stats && (
-            <div className="flex items-center gap-4 text-xs text-slate-500">
-              {planData.stats.focus_hours > 0 && (
-                <div className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-blue-500" />
-                  <span>{planData.stats.focus_hours}h 专注</span>
-                </div>
-              )}
-              {planData.stats.tasks_count > 0 && (
-                <div className="flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>{planData.stats.tasks_count} 项任务</span>
-                </div>
-              )}
+        {/* Empty state */}
+        {!analysis && !dayPlan && !showInput && (
+          <div className="p-8 text-center">
+            <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <Target className="w-7 h-7 text-slate-300" />
             </div>
-          )}
-
-          {/* 已为你安排（增强版） */}
-          <div className="space-y-6">
-            <DeviceGrid originalInput={planData?.original_input || userInput} />
-            <DeviceStrategy title="智能手机 策略" tasks={planData?.key_tasks || []} />
-            <ContextTimeline blocks={planData?.focus_blocks || []} />
-            <AutoExecCards tasks={planData?.key_tasks || []} />
-          </div>
-
-           {/* Focus Blocks */}
-          {planData.focus_blocks && planData.focus_blocks.length > 0 && (
-            <div>
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">⏰ 时间规划</h4>
-              <div className="space-y-2">
-                {planData.focus_blocks.map((block, idx) => (
-                  <div key={idx} className={cn(
-                    "flex items-center gap-3 p-3 rounded-xl border text-sm",
-                    TYPE_STYLES[block.type] || TYPE_STYLES.focus
-                  )}>
-                    <span className="font-mono text-xs font-bold shrink-0 opacity-70">{block.time}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{block.title}</div>
-                      {block.description && (
-                        <div className="text-xs opacity-70 mt-0.5 truncate">{block.description}</div>
-                      )}
-                    </div>
-                    <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5 shrink-0 border", TYPE_STYLES[block.type])}>
-                      {TYPE_LABELS[block.type] || block.type}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Key Tasks */}
-          {planData.key_tasks && planData.key_tasks.length > 0 && (
-            <div>
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">✅ 关键任务</h4>
-              <div className="grid grid-cols-1 gap-2">
-                {planData.key_tasks.map((task, idx) => (
-                  <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className={cn("w-2 h-2 rounded-full shrink-0", PRIORITY_DOT[task.priority] || "bg-slate-300")} />
-                    <span className="text-sm text-slate-700 flex-1 font-medium">{task.title}</span>
-                    <div className="flex items-center gap-2 text-xs text-slate-400 shrink-0">
-                      {SLOT_ICONS[task.time_slot]}
-                      {task.estimated_minutes && <span>{task.estimated_minutes}min</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Evening Review */}
-          {planData.evening_review && (
-            <div className="flex items-start gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/80">
-              <Moon className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-bold text-indigo-600 mb-0.5 uppercase tracking-wide">晚间复盘</p>
-                <p className="text-xs text-indigo-700/80 leading-relaxed">{planData.evening_review}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Append CTA */}
-          {!showInput && (
-            <button
+            <p className="text-slate-400 text-sm mb-4">还没有当日规划，输入你的安排开始</p>
+            <Button
+              size="sm"
+              className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl"
               onClick={() => setShowInput(true)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs text-slate-400 hover:text-[#384877] border border-dashed border-slate-200 rounded-xl hover:border-[#384877]/30 transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" /> 追加新内容到今日规划
-            </button>
-          )}
-        </div>
-      ) : !showInput ? (
-        <div className="p-8 text-center">
-          <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-            <Target className="w-7 h-7 text-slate-300" />
+              <Sparkles className="w-3.5 h-3.5 mr-2" /> 开始规划
+            </Button>
           </div>
-          <p className="text-slate-400 text-sm mb-4">还没有今日规划，告诉 AI 你今天的安排</p>
-          <Button
-            size="sm"
-            className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl"
-            onClick={() => setShowInput(true)}
-          >
-            <Sparkles className="w-3.5 h-3.5 mr-2" /> 开始规划今天
-          </Button>
-        </div>
-      ) : null}
+        )}
+      </div>
     </div>
   );
 }

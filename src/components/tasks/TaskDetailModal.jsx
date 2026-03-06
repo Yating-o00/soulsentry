@@ -140,6 +140,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     mutationFn: (data) => base44.entities.Task.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
       setNewSubtask("");
     },
   });
@@ -148,6 +149,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     mutationFn: (id) => base44.entities.Task.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 

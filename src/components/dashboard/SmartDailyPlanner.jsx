@@ -47,98 +47,140 @@ const DEFAULT_STEPS = [
 export default function SmartDailyPlanner() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [selectedDateStr, setSelectedDateStr] = useState(todayStr);
-  const draftKey = `smart_daily_draft_${selectedDateStr}`; // 每日独立草稿键
-  const [planData, setPlanData] = useState(null);
+  const draftKey = `smart_daily_draft_${selectedDateStr}`;
+  const [dayPlan, setDayPlan] = useState(null);
   const [existingPlanId, setExistingPlanId] = useState(null);
   const [userInput, setUserInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showInput, setShowInput] = useState(false);
-  const [executed, setExecuted] = useState({});
+  // AI analysis result (same structure as CalendarDayView)
+  const [analysis, setAnalysis] = useState(null);
+  const [resolvedDateHint, setResolvedDateHint] = useState(null);
+  const resultsRef = useRef(null);
 
-  // Load today's plan from DB on mount
+  // Load daily plan from DB
   useEffect(() => {
-    const loadTodayPlan = async () => {
+    const loadPlan = async () => {
+      setIsLoading(true);
       try {
         const plans = await base44.entities.DailyPlan.filter({ plan_date: selectedDateStr });
         if (plans && plans.length > 0) {
           const plan = plans[0];
           setExistingPlanId(plan.id);
-          setPlanData({ ...plan.plan_json, theme: plan.theme, summary: plan.summary, original_input: plan.original_input });
+          setDayPlan(plan);
           const draft = localStorage.getItem(draftKey);
-          setUserInput(draft ?? (plan.original_input || ""));
-          setShowInput(true); // 加载到已有计划时，默认展示输入框（可手动收起）
+          setUserInput(draft ?? "");
+          setShowInput(false);
         } else {
           const draft = localStorage.getItem(draftKey);
           setUserInput(draft || "");
           setExistingPlanId(null);
-          setPlanData(null);
-          // 无计划时直接展示图2模式的英雄输入区
+          setDayPlan(null);
           setShowInput(true);
         }
+        setAnalysis(null);
+        setResolvedDateHint(null);
       } catch (err) {
         console.error("Failed to load daily plan", err);
       } finally {
         setIsLoading(false);
       }
     };
-    loadTodayPlan();
-  }, [selectedDateStr, draftKey]); // 根据所选日期与草稿键重新加载
+    loadPlan();
+  }, [selectedDateStr, draftKey]);
 
-  // 当规划数据变化时重置本地执行清单勾选状态（必须在任何 early return 之前）
+  // Scroll to results
   useEffect(() => {
-    setExecuted({});
-  }, [existingPlanId, planData?.theme, planData?.summary]);
+    if (analysis && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [analysis]);
 
-  const handleGenerate = async () => {
-    if (!userInput.trim()) return;
+  // Use analyzeIntent (same as CalendarDayView)
+  const handleAnalyze = async () => {
+    if (!userInput.trim() || isProcessing) return;
     setIsProcessing(true);
     try {
-      // 累积 original_input
-      const prevOriginal = planData?.original_input || "";
-      const originalInputToSave = existingPlanId ? [prevOriginal, userInput].filter(Boolean).join("\n") : userInput;
+      // Build existing plan context
+      let existingPlan = null;
+      if (analysis) {
+        existingPlan = {
+          timeline: analysis.timeline || [],
+          devices: analysis.devices || [],
+          automations: analysis.automations || [],
+        };
+      } else if (dayPlan?.plan_json) {
+        const dp = dayPlan.plan_json;
+        existingPlan = {
+          timeline: (dp.focus_blocks || []).map(b => ({ time: b.time, title: b.title, description: b.description, type: b.type || 'focus', date: selectedDateStr })),
+          devices: [],
+          automations: (dp.key_tasks || []).map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'active' : 'ready' })),
+        };
+      }
 
-      const { data } = await base44.functions.invoke("generateDailyPlan", {
-        input: userInput,
-        planDate: selectedDateStr,
-        existingPlan: planData || null,
-      });
+      const { data } = await base44.functions.invoke('analyzeIntent', { input: userInput, date: selectedDateStr, existingPlan });
+      const targetDate = data.resolved_date || selectedDateStr;
 
-      if (data) {
-        // 更新 planData，包含累积的 original_input
-        setPlanData({ ...data, original_input: originalInputToSave });
+      if (targetDate === selectedDateStr) {
+        setAnalysis(data);
+        setResolvedDateHint(null);
 
-        // Extract & create tasks from the user input
-        extractAndCreateTasks(userInput, selectedDateStr).then(tasks => {
-          if (tasks.length > 0) {
-            toast.success(`已自动添加 ${tasks.length} 个约定到列表`);
-          }
-        }).catch(e => console.error("Task extraction failed", e));
-
+        // Save to DailyPlan
         const planRecord = {
           plan_date: selectedDateStr,
-          original_input: originalInputToSave, // 保存累积后的 original_input
-          theme: data.theme,
-          summary: data.summary,
-          plan_json: data,
+          original_input: [dayPlan?.original_input, userInput].filter(Boolean).join('\n'),
+          theme: data.parsed?.intents?.[0] || '',
+          summary: '',
+          plan_json: {
+            key_tasks: [...(dayPlan?.plan_json?.key_tasks || []), ...(data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' }))],
+            focus_blocks: [...(dayPlan?.plan_json?.focus_blocks || []), ...(data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' }))],
+          },
           is_active: true,
         };
 
         if (existingPlanId) {
           await base44.entities.DailyPlan.update(existingPlanId, planRecord);
-          toast.success("今日规划已智能更新");
         } else {
           const newPlan = await base44.entities.DailyPlan.create(planRecord);
           setExistingPlanId(newPlan.id);
-          toast.success("今日规划已生成");
+          setDayPlan(newPlan);
         }
-        localStorage.removeItem(draftKey); // 生成或更新成功后清除草稿
-        setShowInput(false);
+        toast.success("规划已生成");
+      } else {
+        setAnalysis(null);
+        setResolvedDateHint(targetDate);
+
+        // Persist to target date's DailyPlan
+        const targetPlanRecord = {
+          plan_date: targetDate,
+          original_input: userInput,
+          theme: data.parsed?.intents?.[0] || '',
+          summary: '',
+          plan_json: {
+            key_tasks: (data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' })),
+            focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === targetDate).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' })),
+          },
+          is_active: true,
+        };
+        const targetPlans = await base44.entities.DailyPlan.filter({ plan_date: targetDate });
+        if (targetPlans && targetPlans.length > 0) {
+          const tp = targetPlans[0];
+          targetPlanRecord.plan_json.key_tasks = [...(tp.plan_json?.key_tasks || []), ...targetPlanRecord.plan_json.key_tasks];
+          targetPlanRecord.plan_json.focus_blocks = [...(tp.plan_json?.focus_blocks || []), ...targetPlanRecord.plan_json.focus_blocks];
+          targetPlanRecord.original_input = [tp.original_input, userInput].filter(Boolean).join('\n');
+          await base44.entities.DailyPlan.update(tp.id, targetPlanRecord);
+        } else {
+          await base44.entities.DailyPlan.create(targetPlanRecord);
+        }
+        toast.success(`已保存到 ${targetDate} 的规划`);
       }
+      localStorage.removeItem(draftKey);
+      setUserInput("");
+      setShowInput(false);
     } catch (err) {
-      console.error("Daily plan generation failed", err);
-      const msg = err?.response?.data?.error || err?.message || '规划生成失败，请重试';
-      toast.error(msg);
+      console.error("Analysis failed", err);
+      toast.error(err?.response?.data?.error || err?.message || '分析失败，请重试');
     } finally {
       setIsProcessing(false);
     }
@@ -149,10 +191,11 @@ export default function SmartDailyPlanner() {
     try {
       await base44.entities.DailyPlan.delete(existingPlanId);
       setExistingPlanId(null);
-      setPlanData(null);
+      setDayPlan(null);
+      setAnalysis(null);
       setUserInput("");
-      localStorage.removeItem(draftKey); // 删除计划时清除草稿
-      toast.success("今日规划已清除");
+      localStorage.removeItem(draftKey);
+      toast.success("规划已清除");
     } catch (err) {
       toast.error("删除失败");
     }

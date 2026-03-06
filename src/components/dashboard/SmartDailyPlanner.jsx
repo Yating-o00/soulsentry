@@ -13,6 +13,7 @@ import {
   Target,
   Mic,
   Type,
+  Send,
   ChevronLeft,
   ChevronRight,
   Calendar as CalendarIcon

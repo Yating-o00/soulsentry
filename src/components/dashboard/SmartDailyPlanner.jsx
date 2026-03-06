@@ -293,7 +293,7 @@ export default function SmartDailyPlanner() {
         </div>
       </div>
 
-      {/* Hero-style Input Area (图2模式) */}
+      {/* Input Area */}
       <AnimatePresence>
         {showInput && (
           <motion.div
@@ -302,76 +302,65 @@ export default function SmartDailyPlanner() {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-6 md:px-8 py-10 bg-gradient-to-b from-[#eef2ff] via-[#f7f8ff] to-white rounded-[28px] border border-slate-100 shadow-[0_12px_40px_rgba(140,147,201,0.18)]">
-              <div className="max-w-3xl mx-auto">
-                <div className="mb-4">
-                  <h2 className="text-4xl md:text-5xl font-extrabold text-[#384877] tracking-tight leading-tight">告诉我，任何事情</h2>
-                  <p className="mt-3 text-slate-600">像与朋友倾诉般自然。我会倾听、理解，在所有设备上为你悄然安排妥当。</p>
-                </div>
-
-                <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-6 shadow-[0_10px_30px_rgba(140,147,201,0.12)]">
-                  <Textarea
-                    value={userInput}
-                    onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }}
-                    placeholder={planData ? "明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料..." : "明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料..."}
-                    className="bg-white border-slate-200 rounded-2xl resize-none text-[15px] min-h-[140px] px-4 py-3 placeholder:text-slate-400 focus-visible:ring-[#384877]/20 focus-visible:border-[#384877]"
-                    rows={5}
-                    autoFocus
-                    onKeyDown={(e) => {
-                      const composing = e.nativeEvent && e.nativeEvent.isComposing;
-                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                        e.preventDefault();
-                        if (userInput.trim() && !isProcessing && !composing) handleGenerate();
-                        return;
-                      }
-                      if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                        if (composing) return; // 中文输入法组合键时不提交
-                        e.preventDefault();
-                        if (userInput.trim() && !isProcessing) handleGenerate();
-                      }
-                    }}
-                  />
-
-                  <div className="mt-4 flex items-end justify-between">
-                    <div className="flex items-center gap-2 text-slate-500">
-                      <button type="button" className="h-9 w-9 rounded-full text-[#7c84cf] hover:bg-[#eef2ff] flex items-center justify-center" title="语音输入（占位）">
-                        <Mic className="w-4 h-4" />
-                      </button>
-                      <button type="button" className="h-9 w-9 rounded-full text-[#7c84cf] hover:bg-[#eef2ff] flex items-center justify-center" title="添加图片（占位）">
-                        <ImageIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        onClick={handleGenerate}
-                        disabled={!userInput.trim() || isProcessing}
-                        title="⌘/Ctrl + Enter 发送"
-                        aria-label="发送"
-                        className="bg-[#A0A6E8] hover:bg-[#8F96E0] text-white rounded-full h-12 px-7 text-sm md:text-base shadow-[0_6px_18px_rgba(160,166,232,0.6)]"
-                      >
-                        {isProcessing ? (
-                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />发送中...</>
-                        ) : (
-                          <><Send className="w-4 h-4 mr-2" />发送</>
-                        )}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setShowInput(false)} className="text-slate-500 hover:text-slate-700 h-9 rounded-xl">取消</Button>
-                    </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                <Textarea
+                  value={userInput}
+                  onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }}
+                  placeholder={`当前查看：${format(parseISO(selectedDateStr), "M月d日 EEEE", { locale: zhCN })}｜输入安排，AI 会自动识别日期…`}
+                  className="min-h-[84px]"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    const composing = e.nativeEvent && e.nativeEvent.isComposing;
+                    if (!composing && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnalyze(); }
+                  }}
+                />
+                <div className="flex justify-between items-center mt-2 flex-wrap gap-2">
+                  <div className="flex gap-2">
+                    {['📞 给妈妈打电话','📊 季度报告DDL','✈️ 明早航班'].map((s, i) => {
+                      const texts = ['今晚8点给妈妈打电话，聊聊最近身体情况','下周二前完成Q4报告，每天下午提醒我进度','明天早上7点飞深圳，提前一晚提醒收拾行李'];
+                      return (
+                        <button key={i} type="button" onClick={() => setUserInput(texts[i])} className="px-3 py-1.5 rounded-full text-xs bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100">
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button onClick={handleAnalyze} disabled={isProcessing || !userInput.trim()} className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-9 px-4 text-sm">
+                      {isProcessing ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />分析中…</> : '发送'}
+                    </Button>
+                    {dayPlan && <Button variant="ghost" size="sm" onClick={() => setShowInput(false)} className="text-slate-500 h-8 rounded-xl text-xs">取消</Button>}
                   </div>
                 </div>
-
-                {isProcessing && (
-                  <div className="mt-4"><ProcessingSteps /></div>
-                )}
-
-                <div className="mt-6 flex flex-wrap gap-3 md:gap-4">
-                  {['今晚8点给妈妈打电话','下周二完成Q4报告','明早7点飞深圳'].map((s) => (
-                    <button key={s} type="button" onClick={() => setUserInput(s)} className="px-4 py-2 rounded-full bg-white/90 text-slate-600 text-sm border border-[#dfe3f5] shadow-sm hover:bg-white">
-                      {s}
-                    </button>
-                  ))}
-                </div>
               </div>
+
+              {/* Date navigation hint */}
+              {resolvedDateHint && resolvedDateHint !== selectedDateStr && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800"
+                >
+                  <CalendarIcon className="w-4 h-4 shrink-0" />
+                  <span className="text-sm flex-1">
+                    AI 识别到该安排属于 <strong>{resolvedDateHint}</strong>，已自动保存
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-300 text-amber-700 hover:bg-amber-100 rounded-xl h-8 text-xs gap-1.5 shrink-0"
+                    onClick={() => {
+                      setSelectedDateStr(resolvedDateHint);
+                      setResolvedDateHint(null);
+                    }}
+                  >
+                    跳转查看 <ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </motion.div>
+              )}
+
+              {isProcessing && <AnalysisSteps steps={DEFAULT_STEPS} running={true} />}
             </div>
           </motion.div>
         )}

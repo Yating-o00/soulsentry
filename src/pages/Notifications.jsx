@@ -3,7 +3,7 @@ import NotificationList from "../components/notifications/NotificationList";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings } from "lucide-react";
+import { Settings, BellRing } from "lucide-react";
 
 export default function NotificationsPage() {
   return (
@@ -14,12 +14,20 @@ export default function NotificationsPage() {
             <h1 className="text-2xl font-bold text-slate-900">消息通知</h1>
             <p className="text-slate-500">查看所有的系统通知和提醒</p>
           </div>
-          <Button variant="outline" asChild>
-            <Link to={createPageUrl("NotificationSettings")}>
-              <Settings className="w-4 h-4 mr-2" />
-              通知设置
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link to={createPageUrl("ReminderSettings")}>
+                <BellRing className="w-4 h-4 mr-2" />
+                提醒设置
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to={createPageUrl("NotificationSettings")}>
+                <Settings className="w-4 h-4 mr-2" />
+                通知规则
+              </Link>
+            </Button>
+          </div>
         </div>
         
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">

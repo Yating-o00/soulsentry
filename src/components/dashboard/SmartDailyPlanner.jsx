@@ -299,94 +299,120 @@ export default function SmartDailyPlanner() {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-6 py-5 space-y-4">
-              {/* Input mode tabs */}
-              <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-                <button
-                  type="button"
-                  onClick={() => setInputMode("text")}
-                  className={cn(
-                    "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all",
-                    inputMode === "text"
-                      ? "bg-white text-slate-800 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
+            <div className="px-5 md:px-6 py-5 space-y-3">
+              {/* Unified input card */}
+              <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/40 shadow-sm overflow-hidden">
+                {/* Mode tabs inside card top */}
+                <div className="flex items-center border-b border-slate-100 px-1 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setInputMode("text")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-all border-b-2 -mb-px",
+                      inputMode === "text"
+                        ? "border-[#384877] text-[#384877]"
+                        : "border-transparent text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    <Type className="w-3.5 h-3.5" /> 文本
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInputMode("voice")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-all border-b-2 -mb-px",
+                      inputMode === "voice"
+                        ? "border-[#384877] text-[#384877]"
+                        : "border-transparent text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    <Mic className="w-3.5 h-3.5" /> 语音
+                  </button>
+                  <div className="flex-1" />
+                  {dayPlan && (
+                    <button
+                      type="button"
+                      onClick={() => setShowInput(false)}
+                      className="text-[11px] text-slate-400 hover:text-slate-600 px-3 py-2 transition-colors"
+                    >
+                      取消
+                    </button>
                   )}
-                >
-                  <Type className="w-3.5 h-3.5" /> 文本输入
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputMode("voice")}
-                  className={cn(
-                    "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all",
-                    inputMode === "voice"
-                      ? "bg-white text-slate-800 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  <Mic className="w-3.5 h-3.5" /> 语音输入
-                </button>
-              </div>
+                </div>
 
-              {/* Text input */}
-              {inputMode === "text" && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                  <Textarea
-                    value={userInput}
-                    onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }}
-                    placeholder={`当前查看：${format(parseISO(selectedDateStr), "M月d日 EEEE", { locale: zhCN })}｜输入安排，AI 会自动识别日期…`}
-                    className="min-h-[84px]"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      const composing = e.nativeEvent && e.nativeEvent.isComposing;
-                      if (!composing && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnalyze(); }
-                    }}
-                  />
-                  <div className="flex justify-between items-center mt-2 flex-wrap gap-2">
-                    <div className="flex gap-2 flex-wrap">
-                      {['📞 给妈妈打电话','📊 季度报告DDL','✈️ 明早航班'].map((s, i) => {
-                        const texts = ['今晚8点给妈妈打电话，聊聊最近身体情况','下周二前完成Q4报告，每天下午提醒我进度','明天早上7点飞深圳，提前一晚提醒收拾行李'];
-                        return (
-                          <button key={i} type="button" onClick={() => setUserInput(texts[i])} className="px-3 py-1.5 rounded-full text-xs bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100">
-                            {s}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button onClick={handleAnalyze} disabled={isProcessing || !userInput.trim()} className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-9 px-4 text-sm">
-                        {isProcessing ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />分析中…</> : '发送'}
+                {/* Text input body */}
+                {inputMode === "text" && (
+                  <div className="p-3">
+                    <Textarea
+                      value={userInput}
+                      onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }}
+                      placeholder={`输入安排，AI 会自动识别日期和意图…`}
+                      className="min-h-[76px] border-none shadow-none focus-visible:ring-0 resize-none bg-transparent text-sm placeholder:text-slate-350"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        const composing = e.nativeEvent && e.nativeEvent.isComposing;
+                        if (!composing && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnalyze(); }
+                      }}
+                    />
+                    {/* Bottom bar */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100/80 mt-1">
+                      <div className="flex gap-1.5 flex-wrap overflow-hidden">
+                        {['📞 打电话','📊 报告DDL','✈️ 航班'].map((s, i) => {
+                          const texts = ['今晚8点给妈妈打电话，聊聊最近身体情况','下周二前完成Q4报告，每天下午提醒我进度','明天早上7点飞深圳，提前一晚提醒收拾行李'];
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setUserInput(texts[i])}
+                              className="px-2.5 py-1 rounded-lg text-[11px] bg-slate-50 border border-slate-150 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors whitespace-nowrap"
+                            >
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        onClick={handleAnalyze}
+                        disabled={isProcessing || !userInput.trim()}
+                        className={cn(
+                          "rounded-xl h-8 px-5 text-xs font-medium shadow-sm transition-all shrink-0",
+                          userInput.trim()
+                            ? "bg-[#384877] hover:bg-[#2d3a5f] text-white shadow-[#384877]/20"
+                            : "bg-slate-100 text-slate-400 shadow-none"
+                        )}
+                      >
+                        {isProcessing ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />分析中</> : <><Sparkles className="w-3 h-3 mr-1" />发送</>}
                       </Button>
-                      {dayPlan && <Button variant="ghost" size="sm" onClick={() => setShowInput(false)} className="text-slate-500 h-8 rounded-xl text-xs">取消</Button>}
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Voice input */}
-              {inputMode === "voice" && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                  <VoiceInput
-                    disabled={isProcessing}
-                    onResult={(text) => {
-                      setUserInput((prev) => prev ? prev + "\n" + text : text);
-                      setInputMode("text");
-                    }}
-                  />
-                  {userInput && (
-                    <div className="mt-4 pt-4 border-t border-slate-100">
-                      <p className="text-xs text-slate-400 mb-1.5">已识别内容：</p>
-                      <p className="text-sm text-slate-700 leading-relaxed">{userInput}</p>
-                      <div className="flex items-center gap-2 mt-3">
-                        <Button onClick={handleAnalyze} disabled={isProcessing || !userInput.trim()} className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-9 px-4 text-sm">
-                          {isProcessing ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />分析中…</> : '发送分析'}
+                {/* Voice input body */}
+                {inputMode === "voice" && (
+                  <div className="p-5">
+                    <VoiceInput
+                      disabled={isProcessing}
+                      onResult={(text) => {
+                        setUserInput((prev) => prev ? prev + "\n" + text : text);
+                        setInputMode("text");
+                      }}
+                    />
+                    {userInput && (
+                      <div className="mt-4 pt-3 border-t border-slate-100">
+                        <p className="text-[11px] text-slate-400 mb-1">已识别内容</p>
+                        <p className="text-sm text-slate-700 leading-relaxed">{userInput}</p>
+                        <Button
+                          onClick={handleAnalyze}
+                          disabled={isProcessing || !userInput.trim()}
+                          className="mt-3 bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-5 text-xs shadow-sm shadow-[#384877]/20"
+                        >
+                          {isProcessing ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />分析中</> : <><Sparkles className="w-3 h-3 mr-1" />发送分析</>}
                         </Button>
-                        {dayPlan && <Button variant="ghost" size="sm" onClick={() => setShowInput(false)} className="text-slate-500 h-8 rounded-xl text-xs">取消</Button>}
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Date navigation hint */}
               {resolvedDateHint && resolvedDateHint !== selectedDateStr && (

@@ -71,8 +71,8 @@ export default function MobileNavigation() {
   return (
     <>
       {/* 底部导航栏 */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 safe-area-inset-bottom shadow-2xl">
-        <div className="flex items-center justify-around h-16 px-1">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200/60 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="flex items-center justify-around h-[60px] px-1">
           {navItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = item.path && location.pathname === item.path;
@@ -82,13 +82,13 @@ export default function MobileNavigation() {
                 <button
                   key={index}
                   onClick={item.action}
-                  className="relative -mt-8 touch-manipulation"
+                  className="relative -mt-6 touch-manipulation no-min-size"
                 >
                   <motion.div
-                    whileTap={{ scale: 0.9 }}
-                    className="h-16 w-16 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 shadow-xl flex items-center justify-center active:shadow-2xl transition-shadow"
+                    whileTap={{ scale: 0.88 }}
+                    className="h-14 w-14 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] shadow-lg shadow-[#384877]/30 flex items-center justify-center active:shadow-xl transition-shadow"
                   >
-                    <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
+                    <Plus className="w-6 h-6 text-white" strokeWidth={2.5} />
                   </motion.div>
                 </button>
               );
@@ -99,24 +99,30 @@ export default function MobileNavigation() {
                 <Link
                   key={index}
                   to={item.path}
-                  className="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[56px] relative touch-manipulation"
+                  className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-h-[52px] relative touch-manipulation no-min-size"
                 >
-                  <Icon 
-                    className={`w-6 h-6 transition-all ${
-                      isActive ? 'text-[#384877] scale-110' : 'text-slate-400'
-                    }`} 
-                  />
-                  <span 
-                    className={`text-[11px] font-medium transition-colors leading-tight ${
-                      isActive ? 'text-[#384877] font-semibold' : 'text-slate-500'
-                    }`}
+                  <motion.div
+                    whileTap={{ scale: 0.85 }}
+                    className="flex flex-col items-center"
                   >
-                    {item.label}
-                  </span>
+                    <Icon 
+                      className={`w-[22px] h-[22px] transition-all duration-200 ${
+                        isActive ? 'text-[#384877]' : 'text-slate-400'
+                      }`} 
+                    />
+                    <span 
+                      className={`text-[10px] mt-0.5 font-medium transition-colors leading-tight ${
+                        isActive ? 'text-[#384877] font-semibold' : 'text-slate-400'
+                      }`}
+                    >
+                      {item.label}
+                    </span>
+                  </motion.div>
                   {isActive && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-[#384877]"
+                      className="absolute -top-[1px] left-1/2 -translate-x-1/2 w-6 h-[3px] rounded-full bg-[#384877]"
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     />
                   )}
                 </Link>
@@ -140,25 +146,27 @@ export default function MobileNavigation() {
               className="md:hidden fixed inset-0 z-50 bg-black/50"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.8, y: 100 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.8, y: 100 }}
-              className="md:hidden fixed bottom-20 inset-x-4 z-50"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              transition={{ type: "spring", stiffness: 400, damping: 28 }}
+              className="md:hidden fixed bottom-[76px] inset-x-4 z-50"
+              style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
             >
-              <div className="bg-white rounded-2xl shadow-2xl p-4 space-y-3">
+              <div className="bg-white rounded-2xl shadow-2xl p-3 space-y-2 border border-slate-100">
                 {quickActions.map((action, index) => {
                   const Icon = action.icon;
                   return (
                     <motion.button
                       key={index}
-                      initial={{ opacity: 0, x: -20 }}
+                      initial={{ opacity: 0, x: -16 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
+                      transition={{ delay: index * 0.08 }}
                       onClick={action.action}
-                      className={`w-full flex items-center gap-3 p-4 rounded-xl bg-gradient-to-r ${action.color} text-white shadow-lg active:scale-95 transition-transform`}
+                      className={`w-full flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r ${action.color} text-white shadow-md active:scale-[0.97] transition-transform touch-manipulation`}
                     >
-                      <Icon className="w-6 h-6" />
-                      <span className="font-semibold text-lg">{action.label}</span>
+                      <Icon className="w-5 h-5" />
+                      <span className="font-semibold text-base">{action.label}</span>
                     </motion.button>
                   );
                 })}

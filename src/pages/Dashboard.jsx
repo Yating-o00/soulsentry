@@ -318,24 +318,24 @@ export default function Dashboard() {
           </TabsList>
         </div>
 
-        <TabsContent value="overview" className="space-y-4 md:space-y-6">
-          {/* Stats Cards - Horizontal scroll on mobile */}
+        <TabsContent value="overview" className="space-y-6">
+          {/* Stats Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="flex md:grid md:grid-cols-3 gap-3 md:gap-4 overflow-x-auto pb-2 md:pb-0 -mx-3 px-3 md:mx-0 md:px-0 snap-x snap-mandatory scrollbar-hide"
+        className="grid grid-cols-3 gap-2 md:gap-4"
       >
-        <Card className="bg-[#384877] border-none shadow-xl text-white relative overflow-hidden group min-w-[70vw] md:min-w-0 snap-start">
-          <div className="absolute top-2 right-2 p-4 opacity-[0.1] group-hover:opacity-[0.15] transition-opacity">
-            <ListTodo className="w-20 md:w-28 h-20 md:h-28 transform rotate-12 text-white" />
+        <Card className="bg-[#384877] border-none shadow-xl text-white relative overflow-hidden group">
+          <div className="absolute top-1 right-1 md:top-2 md:right-2 p-2 md:p-4 opacity-[0.1] group-hover:opacity-[0.15] transition-opacity">
+            <ListTodo className="w-16 h-16 md:w-28 md:h-28 transform rotate-12 text-white" />
           </div>
-          <CardHeader className="pb-1 md:pb-2 relative z-10 p-4 md:p-6">
+          <CardHeader className="pb-1 md:pb-2 relative z-10 p-3 md:p-6">
             <CardTitle className="text-blue-100 font-medium text-xs md:text-sm">今日待办</CardTitle>
           </CardHeader>
-          <CardContent className="relative z-10 p-4 md:p-6 pt-0 md:pt-0">
+          <CardContent className="relative z-10 p-3 pt-0 md:p-6 md:pt-0">
             <div 
-              className="text-4xl md:text-5xl font-bold mb-4 md:mb-6 cursor-pointer hover:opacity-80 transition-opacity w-fit active:scale-95"
+              className="text-3xl md:text-5xl font-bold mb-3 md:mb-6 cursor-pointer hover:opacity-80 transition-opacity w-fit active:scale-95"
               onClick={() => setTaskListDialog({
                 open: true,
                 title: "今日待办",
@@ -344,10 +344,10 @@ export default function Dashboard() {
             >
               {todayTasks.filter(t => t.status === 'pending').length}
             </div>
-            <div className="flex items-center gap-3 text-blue-100 text-sm">
+            <div className="flex items-center gap-2 md:gap-3 text-blue-100 text-xs md:text-sm">
               <Progress 
                 value={completionRate} 
-                className="h-2 bg-[#2a3659] flex-1" 
+                className="h-1.5 md:h-2 bg-[#2a3659] flex-1" 
                 indicatorClassName="bg-[#5a7bd6]" 
               />
               <span className="font-medium">{completionRate}%</span>
@@ -355,16 +355,16 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group min-w-[42vw] md:min-w-0 snap-start">
-          <CardHeader className="pb-1 md:pb-2 p-4 md:p-6">
+        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-6">
             <CardTitle className="text-slate-500 font-medium text-xs md:text-sm flex items-center justify-between">
-              逾期约定
-              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="truncate">逾期约定</span>
+              <AlertCircle className="w-3.5 h-3.5 md:w-4 md:h-4 text-red-500 shrink-0" />
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
             <div 
-              className="text-2xl md:text-3xl font-bold text-slate-800 mb-1 group-hover:text-red-600 transition-colors cursor-pointer w-fit active:scale-95"
+              className="text-2xl md:text-3xl font-bold text-slate-800 mb-0.5 md:mb-1 group-hover:text-red-600 transition-colors cursor-pointer w-fit active:scale-95"
               onClick={() => setTaskListDialog({
                 open: true,
                 title: "逾期约定",
@@ -373,20 +373,20 @@ export default function Dashboard() {
             >
               {overdueTasks.length}
             </div>
-            <p className="text-[11px] md:text-xs text-slate-400">需要尽快处理</p>
+            <p className="text-[10px] md:text-xs text-slate-400 truncate">需要尽快处理</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group min-w-[42vw] md:min-w-0 snap-start">
-          <CardHeader className="pb-1 md:pb-2 p-4 md:p-6">
+        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-6">
             <CardTitle className="text-slate-500 font-medium text-xs md:text-sm flex items-center justify-between">
-              今日已完成
-              <CheckCircle2 className="w-4 h-4 text-green-500" />
+              <span className="truncate">今日已完成</span>
+              <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-green-500 shrink-0" />
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
             <div 
-              className="text-2xl md:text-3xl font-bold text-slate-800 mb-1 group-hover:text-green-600 transition-colors cursor-pointer w-fit active:scale-95"
+              className="text-2xl md:text-3xl font-bold text-slate-800 mb-0.5 md:mb-1 group-hover:text-green-600 transition-colors cursor-pointer w-fit active:scale-95"
               onClick={() => setTaskListDialog({
                 open: true,
                 title: "今日已完成",
@@ -395,7 +395,7 @@ export default function Dashboard() {
             >
               {completedToday.length}
             </div>
-            <p className="text-[11px] md:text-xs text-slate-400">保持这个节奏！</p>
+            <p className="text-[10px] md:text-xs text-slate-400 truncate">保持这个节奏！</p>
           </CardContent>
         </Card>
       </motion.div>
@@ -422,14 +422,13 @@ export default function Dashboard() {
       </motion.div>
       </TabsContent>
 
-      <TabsContent value="calendar" className="space-y-3 md:space-y-6">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 md:gap-3 flex-1 overflow-hidden">
+      <TabsContent value="calendar" className="space-y-4 md:space-y-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide">
             <Button
               onClick={() => setCurrentDate(new Date())}
               variant="outline"
-              size="sm"
-              className="rounded-xl shrink-0 h-9"
+              className="rounded-xl shrink-0 h-9 md:h-10 text-sm"
             >
               今天
             </Button>
@@ -447,13 +446,13 @@ export default function Dashboard() {
                     onClick={() => setCalendarViewMode(mode.value)}
                     variant={calendarViewMode === mode.value ? "default" : "ghost"}
                     size="sm"
-                    className={`rounded-lg h-8 px-2.5 md:px-3 text-xs md:text-sm ${
+                    className={`rounded-lg h-8 md:h-9 px-2.5 md:px-3 text-xs md:text-sm ${
                       calendarViewMode === mode.value
                         ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white"
                         : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5 mr-1 md:mr-1.5" />
+                    <Icon className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1" />
                     {mode.label}
                   </Button>
                 );
@@ -474,7 +473,7 @@ export default function Dashboard() {
 
           <Popover>
             <PopoverTrigger asChild>
-              <h2 className="text-base md:text-xl font-semibold text-slate-800 cursor-pointer hover:text-[#384877] transition-colors select-none text-center truncate px-2">
+              <h2 className="text-base md:text-xl font-semibold text-slate-800 cursor-pointer hover:text-[#384877] transition-colors select-none truncate px-2">
                 {getCalendarDateLabel()}
               </h2>
             </PopoverTrigger>
@@ -562,9 +561,9 @@ export default function Dashboard() {
       />
 
       <Dialog open={taskListDialog.open} onOpenChange={(open) => setTaskListDialog(prev => ({ ...prev, open }))}>
-        <DialogContent className="max-w-md max-h-[85vh] md:max-h-[80vh] flex flex-col mx-2 md:mx-auto rounded-2xl">
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-lg">{taskListDialog.title}</DialogTitle>
+            <DialogTitle>{taskListDialog.title}</DialogTitle>
           </DialogHeader>
           <ScrollArea className="flex-1 mt-2 pr-4 -mr-4">
             <div className="space-y-3 p-1">

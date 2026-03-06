@@ -9,6 +9,7 @@ import { useOfflineManager } from "./components/offline/OfflineManager";
 import WelcomeGuard from "@/components/WelcomeGuard";
 import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
+import NotificationManager from "./components/notifications/NotificationManager";
 import { base44 } from "@/api/base44Client";
 import {
   Sidebar,
@@ -326,6 +327,7 @@ function LayoutContent({ children }) {
         <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
         <PWAInstallPrompt />
         <PWAUpdateNotification />
+        <NotificationManager />
 
         {/* 离线状态提示 */}
         {!isOnline && (

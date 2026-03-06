@@ -287,32 +287,32 @@ export default function Dashboard() {
   // I will just return success then.
   
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen">
+    <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto min-h-screen">
       <NotificationManager />
       
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
           <motion.div 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <h1 className="text-3xl font-bold text-slate-900 mb-1 flex items-center gap-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-0.5 flex items-center gap-2">
               {greeting}，{user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")} 
-              <Sun className="w-6 h-6 text-amber-500 fill-amber-500 animate-pulse" />
+              <Sun className="w-5 h-5 md:w-6 md:h-6 text-amber-500 fill-amber-500 animate-pulse" />
             </h1>
-            <p className="text-slate-500">
+            <p className="text-slate-500 text-sm md:text-base">
               今天是 {format(new Date(), "yyyy年MM月dd日 EEEE", { locale: zhCN })}
             </p>
           </motion.div>
 
-          <TabsList className="bg-white shadow-md rounded-[12px] p-1 h-auto">
-            <TabsTrigger value="overview" className="rounded-[10px] px-6 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white">
-              <ListTodo className="w-4 h-4 mr-2" />
+          <TabsList className="bg-white shadow-md rounded-[12px] p-1 h-auto w-full md:w-auto">
+            <TabsTrigger value="overview" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white text-sm">
+              <ListTodo className="w-4 h-4 mr-1.5" />
               概览
             </TabsTrigger>
-            <TabsTrigger value="calendar" className="rounded-[10px] px-6 py-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white">
-              <CalendarIcon className="w-4 h-4 mr-2" />
+            <TabsTrigger value="calendar" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white text-sm">
+              <CalendarIcon className="w-4 h-4 mr-1.5" />
               日历
             </TabsTrigger>
           </TabsList>

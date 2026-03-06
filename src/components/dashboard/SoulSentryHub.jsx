@@ -182,10 +182,10 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
   };
 
   return (
-    <div className="soul-sentry-root w-full mx-auto relative overflow-hidden bg-white rounded-3xl min-h-[500px] md:min-h-[800px] border border-slate-100 shadow-sm">
+    <div className="soul-sentry-root w-full mx-auto relative overflow-hidden bg-white rounded-2xl md:rounded-3xl min-h-[500px] md:min-h-[800px] border border-slate-100 shadow-sm">
         {/* Background Effects */}
-        <div className="absolute top-0 left-1/4 w-64 md:w-96 h-64 md:h-96 bg-[#384877]/5 rounded-full blur-[100px] animate-breathe pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 w-64 md:w-96 h-64 md:h-96 bg-[#3b5aa2]/5 rounded-full blur-[100px] animate-breathe pointer-events-none" style={{ animationDelay: '3s' }} />
+        <div className="absolute top-0 left-1/4 w-64 md:w-96 h-64 md:h-96 bg-[#384877]/5 rounded-full blur-[80px] md:blur-[100px] animate-breathe pointer-events-none" />
+        <div className="absolute bottom-0 right-1/4 w-64 md:w-96 h-64 md:h-96 bg-[#3b5aa2]/5 rounded-full blur-[80px] md:blur-[100px] animate-breathe pointer-events-none" style={{ animationDelay: '3s' }} />
 
         <div className="relative z-10 p-4 md:p-12 flex flex-col items-center">
             
@@ -195,40 +195,40 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                 animate={{ opacity: showResults ? 0 : 1, height: showResults ? 0 : 'auto' }}
             >
                 <div className="text-center mb-6 md:mb-10 space-y-3 md:space-y-4">
-                    <h1 className="text-3xl md:text-5xl font-bold text-[#384877] tracking-tight">
+                    <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-[#384877] tracking-tight">
                         告诉我，<br />
                         <span className="text-[#3b5aa2]">任何事情</span>
                     </h1>
-                    <p className="text-slate-500 text-sm md:text-base">
-                        像与朋友倾诉般自然。我会倾听、理解，<br className="hidden md:block" /><span className="md:hidden"> </span>在所有设备上为你悄然安排妥当。
+                    <p className="text-slate-500 text-sm md:text-base leading-relaxed">
+                        像与朋友倾诉般自然。我会倾听、理解，<br className="hidden md:block" /><span className="md:hidden">，</span>在所有设备上为你悄然安排妥当。
                     </p>
                 </div>
 
-                <div className="w-full relative group rounded-3xl transition-all duration-500">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-[#384877]/10 to-[#3b5aa2]/10 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
-                    <div className="relative bg-white rounded-3xl p-2 border border-slate-200 shadow-sm">
-                        <div className="bg-slate-50/50 rounded-2xl flex flex-col">
+                <div className="w-full relative group rounded-2xl md:rounded-3xl transition-all duration-500">
+                    <div className="absolute -inset-1 bg-gradient-to-r from-[#384877]/10 to-[#3b5aa2]/10 rounded-2xl md:rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
+                    <div className="relative bg-white rounded-2xl md:rounded-3xl p-1.5 md:p-2 border border-slate-200 shadow-sm">
+                        <div className="bg-slate-50/50 rounded-xl md:rounded-2xl flex flex-col">
                             <textarea
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onInput={autoResize}
-                                placeholder="明天下午三点和林总在望京SOHO见面，帮我提前准备好项目资料..."
-                                className="w-full bg-transparent border-none outline-none text-lg text-slate-800 placeholder-slate-400 resize-none px-6 py-5 leading-relaxed scrollbar-hide min-h-[100px]"
+                                placeholder="明天下午三点和林总在望京SOHO见面..."
+                                className="w-full bg-transparent border-none outline-none text-base md:text-lg text-slate-800 placeholder-slate-400 resize-none px-4 py-4 md:px-6 md:py-5 leading-relaxed scrollbar-hide min-h-[80px] md:min-h-[100px]"
                                 disabled={isProcessing}
                             />
-                            <div className="flex items-center justify-between px-4 pb-4">
-                                <div className="flex gap-2">
-                                    <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-[#384877] transition-colors">
+                            <div className="flex items-center justify-between px-3 pb-3 md:px-4 md:pb-4">
+                                <div className="flex gap-1 md:gap-2">
+                                    <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-[#384877] transition-colors touch-manipulation">
                                         <Mic className="w-5 h-5" />
                                     </button>
-                                    <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-[#384877] transition-colors">
+                                    <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-[#384877] transition-colors touch-manipulation">
                                         <ImageIcon className="w-5 h-5" />
                                     </button>
                                 </div>
                                 <button 
                                     onClick={processIntent}
                                     disabled={isProcessing || !input.trim()}
-                                    className="px-6 py-2 rounded-full text-sm font-medium flex items-center gap-2 shadow-md disabled:opacity-50 bg-[#384877] text-white hover:bg-[#3b5aa2] transition-colors"
+                                    className="px-4 md:px-6 py-2 rounded-full text-sm font-medium flex items-center gap-1.5 md:gap-2 shadow-md disabled:opacity-50 bg-[#384877] text-white hover:bg-[#3b5aa2] transition-colors active:scale-95 touch-manipulation"
                                 >
                                     {isProcessing ? '分析中...' : '发送'}
                                     {!isProcessing && <Send className="w-4 h-4" />}
@@ -243,7 +243,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                         <button 
                             key={text}
                             onClick={() => handleQuickFill(text)}
-                            className="px-3 md:px-4 py-2 bg-white rounded-full text-xs md:text-sm text-slate-600 hover:text-[#384877] border border-slate-200 hover:border-[#384877]/30 transition-all shadow-sm active:scale-95"
+                            className="px-3 md:px-4 py-1.5 md:py-2 bg-white rounded-full text-xs md:text-sm text-slate-600 hover:text-[#384877] border border-slate-200 hover:border-[#384877]/30 transition-all shadow-sm active:scale-95 touch-manipulation"
                         >
                             {text}
                         </button>
@@ -313,10 +313,10 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
                     {/* Device Matrix */}
                     <section className="animate-fade-up">
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-xl font-bold text-slate-800">全设备智能协同</h3>
-                            <span className="px-3 py-1 bg-white rounded-full text-xs text-slate-500 border border-slate-200 shadow-sm">
-                                <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full inline-block mr-1.5 animate-pulse" />
+                        <div className="flex items-center justify-between mb-4 md:mb-6">
+                            <h3 className="text-lg md:text-xl font-bold text-slate-800">全设备智能协同</h3>
+                            <span className="px-2 md:px-3 py-1 bg-white rounded-full text-[10px] md:text-xs text-slate-500 border border-slate-200 shadow-sm">
+                                <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full inline-block mr-1 md:mr-1.5 animate-pulse" />
                                 云端同步正常
                             </span>
                         </div>
@@ -379,8 +379,8 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
                     {/* Timeline */}
                     <section className="animate-fade-up" style={{ animationDelay: '0.2s' }}>
-                        <h3 className="text-xl font-bold text-slate-800 mb-6">情境感知时间线</h3>
-                        <div className="bg-white rounded-3xl p-8 relative border border-slate-100 shadow-sm">
+                        <h3 className="text-lg md:text-xl font-bold text-slate-800 mb-4 md:mb-6">情境感知时间线</h3>
+                        <div className="bg-white rounded-2xl md:rounded-3xl p-4 md:p-8 relative border border-slate-100 shadow-sm">
                             {data.timeline.map((event, idx) => (
                                 <div key={idx} className="timeline-item relative pl-12 pb-8 last:pb-0 group cursor-pointer">
                                     <div className="timeline-line bg-slate-100"></div>
@@ -402,15 +402,15 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
                     {/* Automations */}
                     <section className="animate-fade-up" style={{ animationDelay: '0.3s' }}>
-                        <div className="flex items-center gap-3 mb-6">
-                            <h3 className="text-xl font-bold text-slate-800">自动执行清单</h3>
+                        <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
+                            <h3 className="text-lg md:text-xl font-bold text-slate-800">自动执行清单</h3>
                             <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full border border-slate-200">
                                 {data.automations.length} 项待执行
                             </span>
                         </div>
-                        <div className="grid md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                             {data.automations.map((task, idx) => (
-                                <div key={idx} className="bg-white rounded-2xl p-5 border border-slate-100 hover:border-[#384877]/30 hover:shadow-md transition-all group">
+                                <div key={idx} className="bg-white rounded-xl md:rounded-2xl p-4 md:p-5 border border-slate-100 hover:border-[#384877]/30 hover:shadow-md transition-all group">
                                     <div className="flex items-start justify-between mb-3">
                                         <div className="flex items-center gap-3">
                                             <span className="text-2xl">{task.icon}</span>

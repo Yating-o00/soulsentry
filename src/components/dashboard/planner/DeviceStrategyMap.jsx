@@ -104,67 +104,93 @@ export default function DeviceStrategyMap({ devices = [] }) {
         {activeDevice && activeDevice.strategies?.length > 0 && (
           <motion.div
             key={active}
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
-            className="glass-refined rounded-2xl p-6"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+            className="rounded-3xl overflow-hidden border border-slate-100 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
           >
-            {/* Panel title */}
-            <div className="flex justify-between items-start mb-5">
-              <div>
-                <h4 className="text-lg font-bold text-[#0a0a0f]">
-                  {activeDevice.name || activeMeta.name} 策略
-                </h4>
-                <p className="text-sm text-[#0a0a0f]/50 mt-0.5">基于场景的智能分发</p>
+            {/* Panel Header - with device accent color */}
+            <div className={cn("px-6 py-5 flex items-center justify-between", activeMeta.bg)}>
+              <div className="flex items-center gap-3.5">
+                <div className={cn(
+                  "w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-md",
+                  activeMeta.gradient
+                )}>
+                  {(() => { const Icon = activeMeta.icon; return <Icon className="w-5 h-5" />; })()}
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-[#0a0a0f] leading-tight">
+                    {activeDevice.name || activeMeta.name}
+                  </h4>
+                  <p className="text-xs text-[#0a0a0f]/45 mt-0.5">{activeMeta.role} · {activeDevice.strategies.length} 条策略</p>
+                </div>
               </div>
-              <button className="px-3 py-1.5 text-xs border border-[#0a0a0f]/10 rounded-full hover:bg-[#0a0a0f]/5 transition-colors text-[#0a0a0f]/60">
-                编辑优先级
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 rounded-full">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-[10px] text-emerald-600 font-medium">已就绪</span>
+                </span>
+              </div>
             </div>
 
-            {/* Strategy items - card style with left colored border */}
-            <div className="space-y-3">
-              {activeDevice.strategies.map((s, i) => {
-                const time = formatTime(s.time);
-                const methodStyle = METHOD_STYLES[s.priority] || METHOD_STYLES.medium;
-                // Left border color based on priority
-                const leftBorder = s.priority === 'high'
-                  ? "border-l-rose-400"
-                  : s.priority === 'medium'
-                    ? "border-l-blue-300"
-                    : "border-l-slate-200";
+            {/* Strategy Timeline */}
+            <div className="px-6 py-4">
+              <div className="relative">
+                {/* Vertical timeline line */}
+                <div className="absolute left-[19px] top-6 bottom-6 w-px bg-gradient-to-b from-slate-200 via-slate-200 to-transparent" />
 
-                return (
-                  <div
-                    key={i}
-                    className={cn(
-                      "flex items-start gap-4 p-4 bg-white/50 rounded-xl border border-white/70 hover:bg-white/70 transition-colors",
-                      "border-l-[3px]",
-                      leftBorder
-                    )}
-                  >
-                    {/* Number circle */}
-                    <div className="w-8 h-8 bg-[#e8d5b7]/20 rounded-full flex items-center justify-center text-[#0a0a0f]/60 text-sm font-medium flex-shrink-0">
-                      {i + 1}
-                    </div>
+                <div className="space-y-1">
+                  {activeDevice.strategies.map((s, i) => {
+                    const time = formatTime(s.time);
+                    const priorityCfg = PRIORITY_CONFIG[s.priority] || PRIORITY_CONFIG.medium;
+                    const isLast = i === activeDevice.strategies.length - 1;
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <span className="font-semibold text-[#0a0a0f] text-[15px] leading-snug">{time}</span>
-                      <p className="text-[#0a0a0f]/55 text-sm leading-relaxed mt-0.5">{s.content}</p>
-                    </div>
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.08, duration: 0.3 }}
+                        className="group relative pl-12 py-3.5 rounded-2xl hover:bg-slate-50/80 transition-colors cursor-default"
+                      >
+                        {/* Timeline dot */}
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10">
+                          <div className={cn(
+                            "w-3.5 h-3.5 rounded-full border-[2.5px] border-white ring-1 transition-all duration-300",
+                            s.priority === 'high' ? "bg-rose-500 ring-rose-200" :
+                            s.priority === 'medium' ? "bg-amber-500 ring-amber-200" :
+                            "bg-slate-400 ring-slate-200"
+                          )} />
+                        </div>
 
-                    {/* Method badge */}
-                    <span className={cn(
-                      "px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap shrink-0",
-                      methodStyle
-                    )}>
-                      {s.method}
-                    </span>
-                  </div>
-                );
-              })}
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            {/* Time label as scene-style tag */}
+                            <div className="flex items-center gap-2.5 mb-1.5">
+                              <span className="text-[13px] font-bold text-[#0a0a0f] tracking-tight">{time}</span>
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider",
+                                priorityCfg.badge
+                              )}>
+                                {priorityCfg.label}
+                              </span>
+                            </div>
+                            {/* Content */}
+                            <p className="text-sm text-[#0a0a0f]/60 leading-relaxed">{s.content}</p>
+                          </div>
+
+                          {/* Method badge - pill style */}
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0a0a0f]/[0.03] rounded-xl border border-[#0a0a0f]/[0.06] shrink-0 mt-0.5 group-hover:bg-[#0a0a0f]/[0.06] transition-colors">
+                            <Zap className="w-3 h-3 text-[#0a0a0f]/40" />
+                            <span className="text-xs font-medium text-[#0a0a0f]/60">{s.method}</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -172,8 +198,12 @@ export default function DeviceStrategyMap({ devices = [] }) {
 
       {/* Empty */}
       {activeDevice && (!activeDevice.strategies || activeDevice.strategies.length === 0) && (
-        <div className="glass-refined rounded-2xl p-8 text-center">
+        <div className="rounded-3xl border border-slate-100 bg-white p-10 text-center shadow-[0_2px_20px_rgba(0,0,0,0.03)]">
+          <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-slate-50 flex items-center justify-center">
+            <Shield className="w-5 h-5 text-slate-300" />
+          </div>
           <p className="text-sm text-[#0a0a0f]/40">该设备暂无策略分配</p>
+          <p className="text-xs text-[#0a0a0f]/25 mt-1">输入新安排后将自动分发</p>
         </div>
       )}
     </section>

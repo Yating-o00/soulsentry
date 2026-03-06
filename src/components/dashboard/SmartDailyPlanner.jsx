@@ -382,7 +382,7 @@ export default function SmartDailyPlanner() {
                             : "bg-slate-100 text-slate-400 shadow-none"
                         )}
                       >
-                        {isProcessing ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />分析中</> : <><Sparkles className="w-3 h-3 mr-1" />发送</>}
+                        {isProcessing ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />分析中</> : <><Send className="w-3 h-3 mr-1" />发送</>}
                       </Button>
                     </div>
                   </div>

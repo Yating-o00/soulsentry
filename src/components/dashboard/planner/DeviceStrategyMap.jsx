@@ -1,21 +1,21 @@
 import React, { useState } from "react";
-import { Smartphone, Watch, Glasses, Car, Home, Monitor, Clock, ChevronRight, Zap } from "lucide-react";
+import { Smartphone, Watch, Glasses, Car, Home, Monitor, Cloud, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
-const DEVICE_CONFIG = {
-  phone: { icon: Smartphone, gradient: "from-blue-500 to-indigo-600", bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-100", shadow: "shadow-blue-500/20" },
-  watch: { icon: Watch, gradient: "from-violet-500 to-purple-600", bg: "bg-violet-50", text: "text-violet-600", border: "border-violet-100", shadow: "shadow-violet-500/20" },
-  glasses: { icon: Glasses, gradient: "from-cyan-500 to-teal-600", bg: "bg-cyan-50", text: "text-cyan-600", border: "border-cyan-100", shadow: "shadow-cyan-500/20" },
-  car: { icon: Car, gradient: "from-amber-500 to-orange-600", bg: "bg-amber-50", text: "text-amber-600", border: "border-amber-100", shadow: "shadow-amber-500/20" },
-  home: { icon: Home, gradient: "from-emerald-500 to-green-600", bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-100", shadow: "shadow-emerald-500/20" },
-  pc: { icon: Monitor, gradient: "from-slate-500 to-slate-700", bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-200", shadow: "shadow-slate-500/20" },
+const DEVICE_META = {
+  phone:   { icon: Smartphone, name: "智能手机", role: "主控终端",  gradient: "from-[#1e293b] to-[#384877]" },
+  watch:   { icon: Watch,      name: "智能手表", role: "触觉提醒",  gradient: "from-[#334155] to-[#475569]" },
+  glasses: { icon: Glasses,    name: "智能眼镜", role: "AR视觉",   gradient: "from-[#6366f1]/80 to-[#7c3aed]" },
+  car:     { icon: Car,        name: "电动汽车", role: "车载系统",  gradient: "from-emerald-600 to-teal-700" },
+  home:    { icon: Home,       name: "智能家居", role: "语音中枢",  gradient: "from-amber-500 to-orange-600" },
+  pc:      { icon: Monitor,    name: "工作站",   role: "深度工作",  gradient: "from-rose-500 to-pink-600" },
 };
 
-const PRIORITY_CONFIG = {
-  high: { dot: "bg-rose-500", label: "紧急", bg: "bg-rose-50 text-rose-700 border-rose-200" },
-  medium: { dot: "bg-amber-400", label: "中等", bg: "bg-amber-50 text-amber-700 border-amber-200" },
-  low: { dot: "bg-emerald-400", label: "普通", bg: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+const PRIORITY_STYLES = {
+  high:   "bg-rose-50 text-rose-600 border-rose-200",
+  medium: "bg-slate-100 text-slate-500 border-slate-200",
+  low:    "bg-emerald-50 text-emerald-600 border-emerald-200",
 };
 
 function formatTime(raw) {
@@ -30,109 +30,132 @@ export default function DeviceStrategyMap({ devices = [] }) {
   if (!devices || devices.length === 0) return null;
 
   const activeDevice = devices.find((d) => d.id === active);
-  const cfg = DEVICE_CONFIG[active] || DEVICE_CONFIG.phone;
+  const activeMeta = DEVICE_META[active] || DEVICE_META.phone;
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
+    <section className="space-y-6">
       {/* Header */}
-      <div className="px-5 pt-5 pb-3 flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#5b6fbf] flex items-center justify-center shadow-md shadow-[#384877]/15">
-          <Zap className="w-4 h-4 text-white" />
-        </div>
+      <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-bold text-slate-800">全设备智能协同</h4>
-          <p className="text-[11px] text-slate-400">基于情境的一对一分发策略</p>
+          <h3 className="text-xl font-serif font-semibold text-[#0a0a0f] mb-1">全设备智能协同</h3>
+          <p className="text-sm text-[#0a0a0f]/50">基于情境的分发策略</p>
         </div>
+        <span className="px-3 py-1.5 bg-white/60 backdrop-blur border border-[#e8d5b7]/20 rounded-full text-xs text-[#0a0a0f]/60 flex items-center gap-1.5 shadow-sm">
+          <Cloud className="w-3.5 h-3.5 text-emerald-500" />
+          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+          云端同步正常
+        </span>
       </div>
 
-      {/* Device Selector - Horizontal scroll pills */}
-      <div className="px-5 pb-4">
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-          {devices.map((d) => {
-            const dc = DEVICE_CONFIG[d.id] || DEVICE_CONFIG.phone;
-            const Icon = dc.icon;
-            const selected = active === d.id;
-            const count = d.strategies?.length || 0;
+      {/* Device Grid - 6 cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {devices.map((d) => {
+          const meta = DEVICE_META[d.id] || DEVICE_META.phone;
+          const Icon = meta.icon;
+          const selected = active === d.id;
+          const hasStrategies = d.strategies && d.strategies.length > 0;
 
-            return (
-              <button
-                key={d.id}
-                onClick={() => setActive(d.id)}
-                className={cn(
-                  "flex items-center gap-2 px-3.5 py-2 rounded-xl border transition-all duration-200 whitespace-nowrap shrink-0",
-                  selected
-                    ? `bg-gradient-to-r ${dc.gradient} text-white border-transparent shadow-lg ${dc.shadow}`
-                    : "bg-slate-50 border-slate-150 text-slate-600 hover:bg-slate-100 hover:border-slate-200"
-                )}
+          return (
+            <button
+              key={d.id}
+              onClick={() => setActive(d.id)}
+              className={cn(
+                "relative rounded-2xl p-5 text-center cursor-pointer border-2 transition-all duration-300",
+                "bg-white/40 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.03)]",
+                "hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]",
+                selected
+                  ? "border-[#e8d5b7] bg-[#e8d5b7]/10 shadow-[0_0_0_3px_rgba(232,213,183,0.2),0_8px_24px_-8px_rgba(0,0,0,0.08)]"
+                  : "border-transparent hover:border-[#e8d5b7]/30"
+              )}
+            >
+              <div className={cn(
+                "w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center shadow-lg text-white",
+                `bg-gradient-to-br ${meta.gradient}`
+              )}>
+                <Icon className="w-6 h-6" />
+              </div>
+              <h4 className="font-medium text-[#0a0a0f] text-sm mb-0.5">{d.name || meta.name}</h4>
+              <p className="text-[10px] text-[#0a0a0f]/40 uppercase tracking-wider mb-2">{meta.role}</p>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                style={{ background: hasStrategies ? 'rgba(16,185,129,0.1)' : 'rgba(10,10,15,0.05)' }}
               >
-                <Icon className={cn("w-4 h-4", selected ? "text-white/90" : dc.text)} />
-                <span className="text-[13px] font-medium">{d.name || d.id}</span>
+                <div className={cn(
+                  "w-1.5 h-1.5 rounded-full",
+                  hasStrategies ? "bg-emerald-500 animate-pulse" : "bg-[#0a0a0f]/30"
+                )} />
                 <span className={cn(
-                  "text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-md",
-                  selected ? "bg-white/20 text-white" : "bg-white text-slate-500"
+                  "text-[10px] font-medium",
+                  hasStrategies ? "text-emerald-600" : "text-[#0a0a0f]/50"
                 )}>
-                  {count}
+                  {hasStrategies ? "在线" : "待机"}
                 </span>
-              </button>
-            );
-          })}
-        </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Strategy List */}
+      {/* Device Detail Panel */}
       <AnimatePresence mode="wait">
         {activeDevice && activeDevice.strategies?.length > 0 && (
           <motion.div
             key={active}
-            initial={{ opacity: 0, y: 4 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="px-5 pb-5"
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white/40 backdrop-blur-sm rounded-2xl p-6 border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
           >
-            <div className="space-y-2">
+            {/* Panel Header */}
+            <div className="flex justify-between items-start mb-5">
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center shadow-md text-white",
+                  `bg-gradient-to-br ${activeMeta.gradient}`
+                )}>
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-sm text-[#0a0a0f]/50">本日策略 · {activeDevice.name || activeMeta.name}</div>
+                  <h4 className="font-serif text-lg font-semibold text-[#0a0a0f]">{activeDevice.name || activeMeta.name} 策略</h4>
+                </div>
+              </div>
+              <button className="px-3 py-1.5 text-xs border border-[#0a0a0f]/10 rounded-full hover:bg-[#0a0a0f]/5 transition-colors text-[#0a0a0f]/60">
+                编辑优先级
+              </button>
+            </div>
+
+            {/* Strategy Items */}
+            <div className="space-y-3">
               {activeDevice.strategies.map((s, i) => {
-                const pri = PRIORITY_CONFIG[s.priority] || PRIORITY_CONFIG.medium;
                 const time = formatTime(s.time);
+                const priStyle = PRIORITY_STYLES[s.priority] || PRIORITY_STYLES.medium;
 
                 return (
                   <div
                     key={i}
-                    className={cn(
-                      "group flex items-start gap-3 p-3 rounded-xl border transition-all",
-                      "bg-white hover:bg-slate-50/60",
-                      cfg.border
-                    )}
+                    className="flex items-start gap-4 p-4 bg-white/60 rounded-xl border border-white/80 hover:bg-white/80 transition-colors"
                   >
-                    {/* Time pill */}
-                    <div className={cn(
-                      "flex flex-col items-center min-w-[48px] py-1.5 px-2 rounded-lg",
-                      cfg.bg
-                    )}>
-                      <Clock className={cn("w-3 h-3 mb-0.5 opacity-60", cfg.text)} />
-                      <span className={cn("text-[11px] font-mono font-bold leading-tight", cfg.text)}>
-                        {time}
-                      </span>
+                    {/* Index circle */}
+                    <div className="w-9 h-9 bg-[#e8d5b7]/20 rounded-full flex items-center justify-center text-[#0a0a0f]/60 text-sm font-serif flex-shrink-0">
+                      {i + 1}
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-[13px] font-semibold text-slate-800">{s.method}</span>
-                        {s.priority && (
-                          <span className={cn(
-                            "inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border",
-                            pri.bg
-                          )}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", pri.dot)} />
-                            {pri.label}
-                          </span>
-                        )}
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className="font-semibold text-[#0a0a0f] text-[15px]">{time}</span>
                       </div>
-                      <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{s.content}</p>
+                      <p className="text-[#0a0a0f]/60 text-sm leading-relaxed">{s.content}</p>
                     </div>
 
-                    <ChevronRight className="w-4 h-4 text-slate-200 shrink-0 mt-1 group-hover:text-slate-400 transition-colors" />
+                    {/* Method badge */}
+                    <span className={cn(
+                      "px-2.5 py-1 rounded-full text-[11px] font-medium border whitespace-nowrap shrink-0",
+                      priStyle
+                    )}>
+                      {s.method}
+                    </span>
                   </div>
                 );
               })}
@@ -141,12 +164,10 @@ export default function DeviceStrategyMap({ devices = [] }) {
         )}
       </AnimatePresence>
 
-      {/* Empty */}
+      {/* Empty state */}
       {activeDevice && (!activeDevice.strategies || activeDevice.strategies.length === 0) && (
-        <div className="px-5 pb-5">
-          <div className="rounded-xl bg-slate-50 border border-dashed border-slate-200 p-5 text-center">
-            <p className="text-xs text-slate-400">该设备暂无策略分配</p>
-          </div>
+        <div className="bg-white/40 backdrop-blur-sm rounded-2xl p-8 border border-white/60 text-center">
+          <p className="text-sm text-[#0a0a0f]/40">该设备暂无策略分配</p>
         </div>
       )}
     </section>

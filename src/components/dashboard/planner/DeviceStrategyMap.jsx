@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Smartphone, Watch, Glasses, Car, Home, Monitor, Cloud, Zap } from "lucide-react";
+import { Smartphone, Watch, Glasses, Car, Home, Monitor, Cloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -12,10 +12,10 @@ const DEVICE_META = {
   pc:      { icon: Monitor,    name: "工作站",   role: "深度工作",  gradient: "from-rose-500 to-pink-600" },
 };
 
-const PRIORITY_STYLES = {
-  high:   "bg-rose-50 text-rose-600 border-rose-200",
-  medium: "bg-slate-100 text-slate-500 border-slate-200",
-  low:    "bg-emerald-50 text-emerald-600 border-emerald-200",
+const METHOD_STYLES = {
+  high:   "bg-rose-50 text-rose-500 border border-rose-100",
+  medium: "bg-slate-50 text-slate-500 border border-slate-100",
+  low:    "bg-emerald-50 text-emerald-600 border border-emerald-100",
 };
 
 function formatTime(raw) {
@@ -37,18 +37,18 @@ export default function DeviceStrategyMap({ devices = [] }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-xl font-serif font-semibold text-[#0a0a0f] mb-1">全设备智能协同</h3>
+          <h3 className="text-xl font-bold text-[#0a0a0f] mb-0.5">全设备智能协同</h3>
           <p className="text-sm text-[#0a0a0f]/50">基于情境的分发策略</p>
         </div>
-        <span className="px-3 py-1.5 bg-white/60 backdrop-blur border border-[#e8d5b7]/20 rounded-full text-xs text-[#0a0a0f]/60 flex items-center gap-1.5 shadow-sm">
+        <span className="px-3 py-1.5 glass-refined rounded-full text-xs text-[#0a0a0f]/60 flex items-center gap-1.5 border border-[#e8d5b7]/20">
           <Cloud className="w-3.5 h-3.5 text-emerald-500" />
           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
           云端同步正常
         </span>
       </div>
 
-      {/* Device Grid - 6 cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Device Grid - 2x3 on mobile, 3 cols md, 6 cols lg */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {devices.map((d) => {
           const meta = DEVICE_META[d.id] || DEVICE_META.phone;
           const Icon = meta.icon;
@@ -60,25 +60,29 @@ export default function DeviceStrategyMap({ devices = [] }) {
               key={d.id}
               onClick={() => setActive(d.id)}
               className={cn(
-                "relative rounded-2xl p-5 text-center cursor-pointer border-2 transition-all duration-300",
-                "bg-white/40 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.03)]",
-                "hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]",
+                "glass-refined rounded-2xl p-5 text-center cursor-pointer border-2 transition-all duration-500",
+                "hover:-translate-y-1 hover:shadow-[0_12px_30px_-10px_rgba(10,10,15,0.1)]",
                 selected
-                  ? "border-[#e8d5b7] bg-[#e8d5b7]/10 shadow-[0_0_0_3px_rgba(232,213,183,0.2),0_8px_24px_-8px_rgba(0,0,0,0.08)]"
-                  : "border-transparent hover:border-[#e8d5b7]/30"
+                  ? "device-active"
+                  : "border-transparent"
               )}
             >
+              {/* Icon - selected: dark gradient, unselected: light gray circle */}
               <div className={cn(
-                "w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center shadow-lg text-white",
-                `bg-gradient-to-br ${meta.gradient}`
+                "w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500",
+                selected
+                  ? `bg-gradient-to-br ${meta.gradient} text-white`
+                  : "bg-slate-100 text-slate-500"
               )}>
                 <Icon className="w-6 h-6" />
               </div>
               <h4 className="font-medium text-[#0a0a0f] text-sm mb-0.5">{d.name || meta.name}</h4>
-              <p className="text-[10px] text-[#0a0a0f]/40 uppercase tracking-wider mb-2">{meta.role}</p>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-                style={{ background: hasStrategies ? 'rgba(16,185,129,0.1)' : 'rgba(10,10,15,0.05)' }}
-              >
+              <p className="text-[10px] text-[#0a0a0f]/40 uppercase tracking-wider mb-3">{meta.role}</p>
+              {/* Online status */}
+              <div className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full",
+                hasStrategies ? "bg-emerald-500/10" : "bg-[#0a0a0f]/5"
+              )}>
                 <div className={cn(
                   "w-1.5 h-1.5 rounded-full",
                   hasStrategies ? "bg-emerald-500 animate-pulse" : "bg-[#0a0a0f]/30"
@@ -104,55 +108,57 @@ export default function DeviceStrategyMap({ devices = [] }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}
-            className="bg-white/40 backdrop-blur-sm rounded-2xl p-6 border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
+            className="glass-refined rounded-2xl p-6"
           >
-            {/* Panel Header */}
+            {/* Panel title */}
             <div className="flex justify-between items-start mb-5">
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center shadow-md text-white",
-                  `bg-gradient-to-br ${activeMeta.gradient}`
-                )}>
-                  <Zap className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-sm text-[#0a0a0f]/50">本日策略 · {activeDevice.name || activeMeta.name}</div>
-                  <h4 className="font-serif text-lg font-semibold text-[#0a0a0f]">{activeDevice.name || activeMeta.name} 策略</h4>
-                </div>
+              <div>
+                <h4 className="text-lg font-bold text-[#0a0a0f]">
+                  {activeDevice.name || activeMeta.name} 策略
+                </h4>
+                <p className="text-sm text-[#0a0a0f]/50 mt-0.5">基于场景的智能分发</p>
               </div>
               <button className="px-3 py-1.5 text-xs border border-[#0a0a0f]/10 rounded-full hover:bg-[#0a0a0f]/5 transition-colors text-[#0a0a0f]/60">
                 编辑优先级
               </button>
             </div>
 
-            {/* Strategy Items */}
+            {/* Strategy items - card style with left colored border */}
             <div className="space-y-3">
               {activeDevice.strategies.map((s, i) => {
                 const time = formatTime(s.time);
-                const priStyle = PRIORITY_STYLES[s.priority] || PRIORITY_STYLES.medium;
+                const methodStyle = METHOD_STYLES[s.priority] || METHOD_STYLES.medium;
+                // Left border color based on priority
+                const leftBorder = s.priority === 'high'
+                  ? "border-l-rose-400"
+                  : s.priority === 'medium'
+                    ? "border-l-blue-300"
+                    : "border-l-slate-200";
 
                 return (
                   <div
                     key={i}
-                    className="flex items-start gap-4 p-4 bg-white/60 rounded-xl border border-white/80 hover:bg-white/80 transition-colors"
+                    className={cn(
+                      "flex items-start gap-4 p-4 bg-white/50 rounded-xl border border-white/70 hover:bg-white/70 transition-colors",
+                      "border-l-[3px]",
+                      leftBorder
+                    )}
                   >
-                    {/* Index circle */}
-                    <div className="w-9 h-9 bg-[#e8d5b7]/20 rounded-full flex items-center justify-center text-[#0a0a0f]/60 text-sm font-serif flex-shrink-0">
+                    {/* Number circle */}
+                    <div className="w-8 h-8 bg-[#e8d5b7]/20 rounded-full flex items-center justify-center text-[#0a0a0f]/60 text-sm font-medium flex-shrink-0">
                       {i + 1}
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2 mb-1">
-                        <span className="font-semibold text-[#0a0a0f] text-[15px]">{time}</span>
-                      </div>
-                      <p className="text-[#0a0a0f]/60 text-sm leading-relaxed">{s.content}</p>
+                      <span className="font-semibold text-[#0a0a0f] text-[15px] leading-snug">{time}</span>
+                      <p className="text-[#0a0a0f]/55 text-sm leading-relaxed mt-0.5">{s.content}</p>
                     </div>
 
                     {/* Method badge */}
                     <span className={cn(
-                      "px-2.5 py-1 rounded-full text-[11px] font-medium border whitespace-nowrap shrink-0",
-                      priStyle
+                      "px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap shrink-0",
+                      methodStyle
                     )}>
                       {s.method}
                     </span>
@@ -164,9 +170,9 @@ export default function DeviceStrategyMap({ devices = [] }) {
         )}
       </AnimatePresence>
 
-      {/* Empty state */}
+      {/* Empty */}
       {activeDevice && (!activeDevice.strategies || activeDevice.strategies.length === 0) && (
-        <div className="bg-white/40 backdrop-blur-sm rounded-2xl p-8 border border-white/60 text-center">
+        <div className="glass-refined rounded-2xl p-8 text-center">
           <p className="text-sm text-[#0a0a0f]/40">该设备暂无策略分配</p>
         </div>
       )}

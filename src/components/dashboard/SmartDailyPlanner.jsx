@@ -10,28 +10,19 @@ import {
   Loader2,
   Trash2,
   Edit2,
-  Clock,
-  Zap,
-  CheckCircle2,
   Target,
-  Coffee,
-  Moon,
   Mic,
-  Image as ImageIcon,
-  Send,
-  Smartphone,
-  Watch,
-  Monitor,
+  Type,
   ChevronLeft,
   ChevronRight,
   Calendar as CalendarIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import AnalysisSteps from "./planner/AnalysisSteps";
+import VoiceInput from "./planner/VoiceInput";
 import DeviceStrategyMap from "./planner/DeviceStrategyMap";
 import ContextTimeline from "./planner/ContextTimeline";
 import AutoExecCards from "./planner/AutoExecCards";

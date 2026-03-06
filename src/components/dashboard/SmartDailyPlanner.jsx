@@ -213,82 +213,87 @@ export default function SmartDailyPlanner() {
   return (
     <div className="bg-white rounded-[28px] border border-slate-100/80 shadow-[0_8px_28px_rgba(140,147,201,0.12)] overflow-hidden">
       {/* Header */}
-      <div className="px-6 pt-5 pb-4 flex items-center justify-between border-b border-slate-50">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md shadow-[#384877]/20">
-            <Target className="w-4.5 h-4.5 text-white" />
+      <div className="px-5 md:px-6 pt-5 pb-4 border-b border-slate-100/60">
+        {/* Top row: Title + Actions */}
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#5b6dae] flex items-center justify-center shadow-lg shadow-[#384877]/25 shrink-0">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-slate-900 text-[15px] leading-tight">智能日程规划</h3>
+              <p className="text-xs text-slate-400 mt-0.5">AI 自动识别时间与意图</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
-              今日智能规划
-              {dayPlan?.original_input && (
-                <Badge
-                  variant="outline"
-                  className="hidden md:inline-flex max-w-[240px] truncate text-[11px] font-normal"
-                  title={dayPlan.original_input}
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1 shrink-0">
+            {dayPlan && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-xl text-slate-400 hover:text-[#384877] hover:bg-[#384877]/5"
+                  onClick={() => setShowInput(true)}
+                  title="追加内容"
                 >
-                  基于输入：{dayPlan.original_input}
-                </Badge>
-              )}
-            </h3>
-            <p className="text-xs text-slate-400">{format(parseISO(selectedDateStr), "M月d日 EEEE", { locale: zhCN })}</p>
+                  <Edit2 className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50"
+                  onClick={handleDelete}
+                  title="删除当日规划"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </>
+            )}
+            {!dayPlan && !showInput && (
+              <Button
+                size="sm"
+                className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-3.5 text-xs shadow-sm shadow-[#384877]/20"
+                onClick={() => setShowInput(true)}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" /> 新建规划
+              </Button>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {/* 日期切换 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-xl text-slate-500 hover:text-[#384877]"
-            onClick={() => setSelectedDateStr(format(addDays(parseISO(selectedDateStr), -1), "yyyy-MM-dd"))}
-            title="前一天"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <div className="px-2 py-1 rounded-lg bg-slate-50 text-slate-600 text-xs border border-slate-200/70 min-w-[108px] text-center">
-            {format(parseISO(selectedDateStr), "M月d日 EEEE", { locale: zhCN })}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-xl text-slate-500 hover:text-[#384877]"
-            onClick={() => setSelectedDateStr(format(addDays(parseISO(selectedDateStr), 1), "yyyy-MM-dd"))}
-            title="后一天"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </Button>
 
-          {/* 计划操作 */}
-          {dayPlan && (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-xl text-slate-400 hover:text-[#384877]"
-                onClick={() => setShowInput(true)}
-                title="追加内容"
-              >
-                <Edit2 className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-xl text-slate-400 hover:text-red-500"
-                onClick={handleDelete}
-                title="删除当日规划"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </>
-          )}
-          {!dayPlan && !showInput && (
-            <Button
-              size="sm"
-              className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-3 text-xs"
-              onClick={() => setShowInput(true)}
+        {/* Bottom row: Date nav + input badge */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date switcher */}
+          <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200/60 overflow-hidden">
+            <button
+              onClick={() => setSelectedDateStr(format(addDays(parseISO(selectedDateStr), -1), "yyyy-MM-dd"))}
+              className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-[#384877] hover:bg-slate-100 transition-colors"
             >
-              <Plus className="w-3.5 h-3.5 mr-1" /> 创建当日规划
-            </Button>
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="px-3 py-1.5 text-xs font-medium text-slate-700 min-w-[100px] text-center border-x border-slate-200/60 select-none">
+              {format(parseISO(selectedDateStr), "M月d日 EEE", { locale: zhCN })}
+              {selectedDateStr === todayStr && (
+                <span className="ml-1.5 text-[10px] text-white bg-[#384877] px-1.5 py-0.5 rounded-md font-bold">今</span>
+              )}
+            </div>
+            <button
+              onClick={() => setSelectedDateStr(format(addDays(parseISO(selectedDateStr), 1), "yyyy-MM-dd"))}
+              className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-[#384877] hover:bg-slate-100 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Input source badge */}
+          {dayPlan?.original_input && (
+            <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-[#384877]/5 border border-[#384877]/10 rounded-xl max-w-[280px]" title={dayPlan.original_input}>
+              <Target className="w-3 h-3 text-[#384877]/60 shrink-0" />
+              <span className="text-[11px] text-[#384877]/70 truncate leading-tight">
+                {dayPlan.original_input}
+              </span>
+            </div>
           )}
         </div>
       </div>

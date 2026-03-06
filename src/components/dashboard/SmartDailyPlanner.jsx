@@ -48,6 +48,7 @@ export default function SmartDailyPlanner() {
   // AI analysis result (same structure as CalendarDayView)
   const [analysis, setAnalysis] = useState(null);
   const [resolvedDateHint, setResolvedDateHint] = useState(null);
+  const [inputMode, setInputMode] = useState("text"); // "text" | "voice"
   const resultsRef = useRef(null);
 
   // Load daily plan from DB

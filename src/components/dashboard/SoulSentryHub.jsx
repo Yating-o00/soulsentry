@@ -182,25 +182,25 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
   };
 
   return (
-    <div className="soul-sentry-root w-full mx-auto relative overflow-hidden bg-white rounded-3xl min-h-[800px] border border-slate-100 shadow-sm">
+    <div className="soul-sentry-root w-full mx-auto relative overflow-hidden bg-white rounded-3xl min-h-[500px] md:min-h-[800px] border border-slate-100 shadow-sm">
         {/* Background Effects */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#384877]/5 rounded-full blur-[100px] animate-breathe pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#3b5aa2]/5 rounded-full blur-[100px] animate-breathe pointer-events-none" style={{ animationDelay: '3s' }} />
+        <div className="absolute top-0 left-1/4 w-64 md:w-96 h-64 md:h-96 bg-[#384877]/5 rounded-full blur-[100px] animate-breathe pointer-events-none" />
+        <div className="absolute bottom-0 right-1/4 w-64 md:w-96 h-64 md:h-96 bg-[#3b5aa2]/5 rounded-full blur-[100px] animate-breathe pointer-events-none" style={{ animationDelay: '3s' }} />
 
-        <div className="relative z-10 p-6 md:p-12 flex flex-col items-center">
+        <div className="relative z-10 p-4 md:p-12 flex flex-col items-center">
             
             {/* Input Section */}
             <motion.div 
                 className={`w-full max-w-3xl transition-all duration-700 ${showResults ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'}`}
                 animate={{ opacity: showResults ? 0 : 1, height: showResults ? 0 : 'auto' }}
             >
-                <div className="text-center mb-10 space-y-4">
-                    <h1 className="text-4xl md:text-5xl font-bold text-[#384877] tracking-tight">
+                <div className="text-center mb-6 md:mb-10 space-y-3 md:space-y-4">
+                    <h1 className="text-3xl md:text-5xl font-bold text-[#384877] tracking-tight">
                         告诉我，<br />
                         <span className="text-[#3b5aa2]">任何事情</span>
                     </h1>
-                    <p className="text-slate-500">
-                        像与朋友倾诉般自然。我会倾听、理解，<br />在所有设备上为你悄然安排妥当。
+                    <p className="text-slate-500 text-sm md:text-base">
+                        像与朋友倾诉般自然。我会倾听、理解，<br className="hidden md:block" /><span className="md:hidden"> </span>在所有设备上为你悄然安排妥当。
                     </p>
                 </div>
 
@@ -238,12 +238,12 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                     </div>
                 </div>
 
-                <div className="flex flex-wrap justify-center gap-3 mt-8">
+                <div className="flex flex-wrap justify-center gap-2 md:gap-3 mt-5 md:mt-8 px-2">
                     {['今晚8点给妈妈打电话', '下周二完成Q4报告', '明早7点飞深圳'].map(text => (
                         <button 
                             key={text}
                             onClick={() => handleQuickFill(text)}
-                            className="px-4 py-2 bg-white rounded-full text-sm text-slate-600 hover:text-[#384877] border border-slate-200 hover:border-[#384877]/30 transition-all shadow-sm"
+                            className="px-3 md:px-4 py-2 bg-white rounded-full text-xs md:text-sm text-slate-600 hover:text-[#384877] border border-slate-200 hover:border-[#384877]/30 transition-all shadow-sm active:scale-95"
                         >
                             {text}
                         </button>
@@ -321,7 +321,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                             </span>
                         </div>
                         
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                        <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-4 mb-4 md:mb-6">
                             {Object.entries(data.devices).map(([key, device]) => (
                                 <DeviceCard 
                                     key={key} 

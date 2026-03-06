@@ -509,12 +509,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     <Dialog open={open} onOpenChange={(isOpen) => {
       if (!isOpen) onClose();
     }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-        <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-6 border-b shrink-0 bg-white z-10">
-          <DialogTitle className="text-[20px] font-semibold tracking-tight text-slate-900 line-clamp-1 pr-8">
+      <DialogContent className="max-w-3xl max-h-[92vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden mx-1 md:mx-auto rounded-2xl md:rounded-lg">
+        <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-4 md:p-6 border-b shrink-0 bg-white z-10">
+          <DialogTitle className="text-base md:text-[20px] font-semibold tracking-tight text-slate-900 line-clamp-1 pr-20 md:pr-8">
             {task.title}
           </DialogTitle>
-          <div className="flex items-center gap-2 absolute right-12 top-6">
+          <div className="flex items-center gap-1.5 md:gap-2 absolute right-10 md:right-12 top-4 md:top-6">
              <Button 
                 variant="outline" 
                 size="sm" 
@@ -538,7 +538,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
           <AITaskEnhancer 
             taskTitle={task.title} 
             currentDescription={task.description} 
@@ -582,28 +582,28 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
           )}
 
           <Tabs defaultValue="subtasks" className="w-full">
-            <TabsList className="flex w-full overflow-x-auto justify-start gap-2 p-1 bg-slate-100/80 rounded-xl h-auto scrollbar-hide">
-              <TabsTrigger value="subtasks" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+            <TabsList className="flex w-full overflow-x-auto justify-start gap-1 md:gap-2 p-1 bg-slate-100/80 rounded-xl h-auto scrollbar-hide -mx-1 px-1">
+              <TabsTrigger value="subtasks" className="flex-shrink-0 px-2.5 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 子约定 ({totalSubtasks})
               </TabsTrigger>
-              <TabsTrigger value="dependencies" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="dependencies" className="flex-shrink-0 px-2.5 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 依赖 ({task.dependencies?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="attachments" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="attachments" className="flex-shrink-0 px-2.5 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 附件 ({task.attachments?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="notes" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="notes" className="flex-shrink-0 px-2.5 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 笔记 ({task.notes?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="comments" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="comments" className="flex-shrink-0 px-2.5 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 评论
               </TabsTrigger>
-              <TabsTrigger value="reminders" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-blue-500" />
+              <TabsTrigger value="reminders" className="flex-shrink-0 px-2.5 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1">
+                <Clock className="w-3 h-3 md:w-3.5 md:h-3.5 text-blue-500" />
                 提醒
               </TabsTrigger>
-              <TabsTrigger value="history" className="flex-shrink-0 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1.5">
-                <History className="w-3.5 h-3.5 text-slate-500" />
+              <TabsTrigger value="history" className="flex-shrink-0 px-2.5 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1">
+                <History className="w-3 h-3 md:w-3.5 md:h-3.5 text-slate-500" />
                 历史
               </TabsTrigger>
             </TabsList>

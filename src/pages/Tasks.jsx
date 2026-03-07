@@ -405,9 +405,11 @@ export default function Tasks() {
                   <LifeTaskCard
                     key={task.id}
                     task={task}
+                    subtasks={getSubtasks(task.id)}
                     isSelectionMode={isSelectionMode}
                     isSelected={selectedTaskIds.includes(task.id)}
                     onToggleSelection={() => toggleSelection(task.id)}
+                    onToggleSubtask={handleToggleSubtask}
                     onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
                     onEdit={() => setSelectedTask(task)}
                     onShare={() => setSharingTask(task)}

@@ -57,12 +57,12 @@ import Notes from './pages/Notes';
 import NotificationSettings from './pages/NotificationSettings';
 import Notifications from './pages/Notifications';
 import Pricing from './pages/Pricing';
+import ReminderSettings from './pages/ReminderSettings';
 import Tasks from './pages/Tasks';
 import Teams from './pages/Teams';
 import Templates from './pages/Templates';
 import Trash from './pages/Trash';
 import Welcome from './pages/Welcome';
-import ReminderSettings from './pages/ReminderSettings';
 import __Layout from './Layout.jsx';
 
 
@@ -77,12 +77,12 @@ export const PAGES = {
     "NotificationSettings": NotificationSettings,
     "Notifications": Notifications,
     "Pricing": Pricing,
+    "ReminderSettings": ReminderSettings,
     "Tasks": Tasks,
     "Teams": Teams,
     "Templates": Templates,
     "Trash": Trash,
     "Welcome": Welcome,
-    "ReminderSettings": ReminderSettings,
 }
 
 export const pagesConfig = {

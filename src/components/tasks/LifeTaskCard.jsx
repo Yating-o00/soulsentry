@@ -197,6 +197,8 @@ export default function LifeTaskCard({
         if (isSelectionMode) {
           e.stopPropagation();
           onToggleSelection && onToggleSelection();
+        } else if (subtasks.length > 0) {
+          setExpanded(!expanded);
         } else {
           onEdit && onEdit();
         }

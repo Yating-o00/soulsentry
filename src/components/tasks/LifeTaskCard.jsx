@@ -8,7 +8,7 @@ import {
   Droplets, Leaf, Flower, Coffee, Utensils,
   Car, Store, Home, AlertCircle, Timer,
   Sparkles, Lightbulb, CheckCircle2, Flag,
-  Share2, Edit, Trash2, Calendar
+  Share2, Edit, Trash2, Calendar, ChevronDown
 } from "lucide-react";
 import {
   DropdownMenu,

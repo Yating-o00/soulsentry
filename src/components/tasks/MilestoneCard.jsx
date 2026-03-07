@@ -311,7 +311,7 @@ export default function MilestoneCard({
       {(expanded || subtasks.length > 0 && !isCompleted) &&
       <div className={cn(
         "bg-stone-50/50 border-t border-stone-100 transition-all duration-300 ease-in-out overflow-hidden",
-        expanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+        expanded ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
       )}>
           <div className="p-4 space-y-2">
             {subtasks.map((subtask) =>

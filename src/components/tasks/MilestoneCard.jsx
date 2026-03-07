@@ -224,7 +224,7 @@ export default function MilestoneCard({
         </div>
 
         {/* Content Body */}
-        <div className="flex gap-4" onClick={() => setExpanded(!expanded)}>
+        <div className="flex gap-4">
           {/* Icon with Progress Ring if needed */}
           <div className="flex-shrink-0 relative">
              {totalSubtasks > 0 ?

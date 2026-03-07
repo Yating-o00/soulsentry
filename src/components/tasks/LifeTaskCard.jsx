@@ -511,6 +511,64 @@ export default function LifeTaskCard({
                     </div>
                 </div>
             )}
+
+            {/* Subtasks Section */}
+            {subtasks.length > 0 && (
+              <div className={cn(
+                "border-t border-stone-100 transition-all duration-300 ease-in-out overflow-hidden mt-3",
+                expanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0 mt-0 border-t-0"
+              )}>
+                <div className="pt-3 space-y-2">
+                  {subtasks.map((subtask) => (
+                    <div
+                      key={subtask.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleSubtask && onToggleSubtask(subtask);
+                      }}
+                      className={cn(
+                        "flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all bg-stone-50 border border-stone-100 hover:border-stone-300",
+                        subtask.status === 'completed' && "opacity-60"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border",
+                        subtask.status === 'completed'
+                          ? "bg-green-500 border-green-500 text-white"
+                          : "border-stone-300 bg-white"
+                      )}>
+                        {subtask.status === 'completed' && <Check className="w-3 h-3" />}
+                      </div>
+                      <span className={cn(
+                        "text-sm flex-1",
+                        subtask.status === 'completed' ? "text-stone-400 line-through" : "text-stone-700"
+                      )}>
+                        {subtask.title}
+                      </span>
+                    </div>
+                  ))}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit && onEdit();
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                  >
+                    查看详情
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Expand hint */}
+            {!expanded && subtasks.length > 0 && (
+              <div className="flex justify-center pt-2">
+                <div className="flex items-center gap-1 text-xs text-stone-400">
+                  <span>{subtasks.filter(s => s.status === 'completed').length}/{subtasks.length} 子任务</span>
+                  <ChevronDown className="w-3 h-3" />
+                </div>
+              </div>
+            )}
         </div>
     </div>
   );

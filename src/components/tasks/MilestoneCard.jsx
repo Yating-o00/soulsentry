@@ -313,7 +313,7 @@ export default function MilestoneCard({
         "bg-stone-50/50 border-t border-stone-100 transition-all duration-300 ease-in-out overflow-hidden",
         expanded ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
       )}>
-          <div className="p-4 space-y-2">
+          <div className="p-4 space-y-2 max-h-[600px] overflow-y-auto">
             {subtasks.map((subtask) =>
           <div
             key={subtask.id}

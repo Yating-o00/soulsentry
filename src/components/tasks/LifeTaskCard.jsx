@@ -20,14 +20,17 @@ import { cn } from "@/lib/utils";
 
 export default function LifeTaskCard({ 
   task, 
+  subtasks = [],
   onComplete, 
   onEdit,
   onShare,
+  onToggleSubtask,
   isSelectionMode = false,
   isSelected = false,
   onToggleSelection
 }) {
   const [completed, setCompleted] = useState(task.status === 'completed');
+  const [expanded, setExpanded] = useState(false);
 
   const handleComplete = (e) => {
     e.stopPropagation();

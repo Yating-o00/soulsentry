@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 import OpenAI from 'npm:openai@4.28.0';
 
 const openaiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
@@ -119,8 +119,31 @@ Deno.serve(async (req) => {
         
         Return ONLY the JSON object. No markdown formatting.`;
 
-        // Define strategies
+        // Define strategies - InvokeLLM first, then Moonshot, OpenAI, and Base44 fallback
         const strategies = [];
+
+        // 0. InvokeLLM Strategy (uses platform credits, no external keys)
+        strategies.push({
+            name: "InvokeLLM-Primary",
+            run: async () => {
+                const res = await base44.integrations.Core.InvokeLLM({
+                    prompt: `${systemPrompt}\n\nUser Input: ${input}`,
+                    response_json_schema: {
+                        type: "object",
+                        properties: {
+                            plan_start_date: { type: "string" },
+                            summary: { type: "string" },
+                            theme: { type: "string" },
+                            events: { type: "array", items: { type: "object", additionalProperties: true } },
+                            device_strategies: { type: "object", additionalProperties: true },
+                            automations: { type: "array", items: { type: "object", additionalProperties: true } },
+                            stats: { type: "object", additionalProperties: true }
+                        }
+                    }
+                });
+                return JSON.stringify(res);
+            }
+        });
 
         // 1. Moonshot Strategy
         if (moonshotKey) {

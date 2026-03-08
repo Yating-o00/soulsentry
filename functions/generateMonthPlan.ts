@@ -1,6 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 import { format, startOfMonth, endOfMonth, eachWeekOfInterval } from 'npm:date-fns@3.6.0';
-import OpenAI from 'npm:openai';
 
 const MOCK_PLAN = {
     theme: "演示月度：全面突破",
@@ -69,19 +68,7 @@ export default Deno.serve(async (req) => {
         const monthStart = new Date(startDate);
         const monthEnd = endOfMonth(monthStart);
 
-        // Try using OpenAI/Moonshot directly to avoid platform limits
-        const apiKey = Deno.env.get("MOONSHOT_API_KEY") || Deno.env.get("OPENAI_API_KEY");
-        const baseURL = Deno.env.get("MOONSHOT_API_KEY") ? "https://api.moonshot.cn/v1" : undefined;
-
-        if (!apiKey) {
-            console.warn("No API Key found, returning mock data");
-            return Response.json({ ...MOCK_PLAN, plan_start_date: startDate }, { headers: { 'Access-Control-Allow-Origin': '*' } });
-        }
-
-        const openai = new OpenAI({
-            apiKey: apiKey,
-            baseURL: baseURL
-        });
+        // Try InvokeLLM first, then fallback to direct API calls
 
         const behaviorSummary = behaviors && behaviors.length > 0 ? behaviors.map(b => 
             `- Event: ${b.event_type}, Category: ${b.category || 'General'}, Time: ${b.hour_of_day}h, Day: ${b.day_of_week}, Response: ${b.response_time_seconds}s`
@@ -138,40 +125,66 @@ export default Deno.serve(async (req) => {
         - RETURN ONLY JSON. NO MARKDOWN.
         `;
 
+        // 1) Try InvokeLLM
         try {
-            const completion = await openai.chat.completions.create({
-                messages: [
-                    { role: "system", content: "You are a helpful assistant that outputs JSON." },
-                    { role: "user", content: prompt }
-                ],
-                model: Deno.env.get("MOONSHOT_API_KEY") ? "moonshot-v1-8k" : "gpt-4o-mini",
-                response_format: { type: "json_object" }
-            });
-
-            const content = completion.choices[0].message.content;
-            let planData;
-            try {
-                planData = JSON.parse(content);
-            } catch (e) {
-                // Fallback if not pure JSON
-                const jsonMatch = content.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    planData = JSON.parse(jsonMatch[0]);
-                } else {
-                    throw new Error("Failed to parse JSON");
+            const schema = {
+                type: "object",
+                properties: {
+                    theme: { type: "string" },
+                    summary: { type: "string" },
+                    stats: { type: "object", properties: { focus_hours: { type: "number" }, milestones_count: { type: "number" } } },
+                    weeks_breakdown: { type: "array", items: { type: "object", additionalProperties: true } },
+                    key_milestones: { type: "array", items: { type: "object", additionalProperties: true } },
+                    strategies: { type: "object", additionalProperties: true }
                 }
-            }
-
-            return Response.json({
-                ...planData,
-                plan_start_date: startDate
-            }, {
-                headers: { 'Access-Control-Allow-Origin': '*' }
+            };
+            const planData = await base44.integrations.Core.InvokeLLM({
+                prompt: `You are a helpful assistant that outputs JSON.\n${prompt}`,
+                response_json_schema: schema
             });
+            if (planData && planData.theme) {
+                return Response.json({ ...planData, plan_start_date: startDate }, { headers: { 'Access-Control-Allow-Origin': '*' } });
+            }
+        } catch (e) {
+            console.log('[generateMonthPlan] InvokeLLM failed:', e?.message);
+        }
+
+        // 2) Fallback to Moonshot/OpenAI direct
+        const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
+        const openaiKey = Deno.env.get("OPENAI_API_KEY");
+        const apiKey = moonshotKey || openaiKey;
+
+        if (!apiKey) {
+            return Response.json({ ...MOCK_PLAN, plan_start_date: startDate }, { headers: { 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        try {
+            const baseURL = moonshotKey ? "https://api.moonshot.cn/v1" : "https://api.openai.com/v1";
+            const model = moonshotKey ? "moonshot-v1-8k" : "gpt-4o-mini";
+
+            const res = await fetch(`${baseURL}/chat/completions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: "system", content: "You are a helpful assistant that outputs JSON." },
+                        { role: "user", content: prompt }
+                    ],
+                    temperature: 0.7
+                })
+            });
+
+            if (!res.ok) throw new Error(`API error: ${res.status}`);
+            const data = await res.json();
+            const content = data.choices?.[0]?.message?.content || '';
+            const cleaned = content.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+            const planData = JSON.parse(cleaned);
+
+            return Response.json({ ...planData, plan_start_date: startDate }, { headers: { 'Access-Control-Allow-Origin': '*' } });
 
         } catch (apiError) {
             console.error("API Call Failed:", apiError);
-            // Fallback to mock data on API failure
             return Response.json({ ...MOCK_PLAN, plan_start_date: startDate, is_demo: true, error: apiError.message }, { headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 

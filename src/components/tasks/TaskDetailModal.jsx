@@ -51,6 +51,7 @@ import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
+import { invokeAI } from "@/components/utils/aiHelper";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -163,7 +164,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
     setIsGeneratingSubtasks(true);
     try {
-      const res = await base44.integrations.Core.InvokeLLM({
+      const res = await invokeAI({
         prompt: `根据以下约定信息，生成3-5个合理的子约定步骤。
 
 约定标题：${task.title}
@@ -454,7 +455,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
             ${subtaskStatus}
           `;
 
-          const res = await base44.integrations.Core.InvokeLLM({
+          const res = await invokeAI({
               prompt: `基于提供的上下文和附件（图片/视频），分析此约定的状态、风险和依赖关系。
               
               Context:

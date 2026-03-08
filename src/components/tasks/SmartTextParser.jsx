@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { invokeAI } from "@/components/utils/aiHelper";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ export default function SmartTextParser({ onTasksGenerated, className = "" }) {
 - Timezone: Asia/Shanghai (UTC+8)
 `;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await invokeAI({
         prompt: `你是一个约定拆解专家。请从以下文本中提取或生成约定信息，并识别大约定与子约定的层级关系。
 ${contextInfo}
 
@@ -196,7 +197,7 @@ ${text}
 
     setIsBatchRefining(true);
     try {
-        const response = await base44.integrations.Core.InvokeLLM({
+        const response = await invokeAI({
             prompt: `你是一个约定整理专家。用户希望批量调整已解析的任务列表。
 
 当前任务列表 (JSON):
@@ -360,7 +361,7 @@ ${JSON.stringify(parsedTasks.map(t => ({ title: t.title, description: t.descript
 
     setRefiningState({ taskIndex, subIndex: subtaskIndex });
     try {
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await invokeAI({
         prompt: `请分析并完善以下子约定。
         
 当前子约定内容：${subtask.title}

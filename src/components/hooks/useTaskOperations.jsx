@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
+import { invokeAI } from "@/components/utils/aiHelper";
 
 export function useTaskOperations() {
   const queryClient = useQueryClient();
@@ -197,7 +198,7 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
 
 要求: 简洁、积极、实用`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await invokeAI({
         prompt,
         response_json_schema: {
           type: "object",

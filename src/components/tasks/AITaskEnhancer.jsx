@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { invokeAI } from "@/components/utils/aiHelper";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +47,7 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, availabl
     setIsRefining(true);
     try {
       const now = new Date().toISOString();
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await invokeAI({
         prompt: `你是一个智能助手，帮助用户微调约定建议。
         
 当前建议数据 (JSON):
@@ -111,7 +112,7 @@ ${availableTemplates.map((t) => `${t.id}: ${t.name} - ${t.description || '无描
 如果用户的输入明显匹配某个模板的内容或场景，请推荐使用该模板，并返回其 ID。` :
       "";
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await invokeAI({
         prompt: `你是一个约定管理AI助手。请根据用户输入，提供智能生成和润色建议。
 
 用户约定标题：${taskTitle}

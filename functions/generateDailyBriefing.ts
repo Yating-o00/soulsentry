@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 // Helper to get the current date/time in Shanghai timezone
 const getShanghaiTime = () => {
@@ -54,12 +54,36 @@ ${noteSummary}
 Warm, calm, supportive, efficient but not robotic. (Language: Simplified Chinese)
 `;
 
-        const apiKey = Deno.env.get("MOONSHOT_API_KEY");
-        const openaiKey = Deno.env.get("OPENAI_API_KEY");
-        
         let result = null;
 
-        // Try Moonshot (International)
+        // 0) Try InvokeLLM first (uses platform credits)
+        try {
+            const schema = {
+                type: "object",
+                properties: {
+                    title: { type: "string" },
+                    short_term_narrative: { type: "string" },
+                    long_term_narrative: { type: "string" },
+                    mindful_tip: { type: "string" }
+                },
+                required: ["title", "short_term_narrative", "long_term_narrative", "mindful_tip"]
+            };
+            result = await base44.integrations.Core.InvokeLLM({
+                prompt: systemPrompt + "\n\nGenerate my daily briefing.",
+                response_json_schema: schema
+            });
+            if (result && result.title) {
+                return Response.json(result);
+            }
+            result = null;
+        } catch (e) {
+            console.log('[generateDailyBriefing] InvokeLLM failed:', e?.message);
+        }
+
+        const apiKey = Deno.env.get("MOONSHOT_API_KEY");
+        const openaiKey = Deno.env.get("OPENAI_API_KEY");
+
+        // 1) Try Moonshot
         if (apiKey) {
             try {
                 const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {

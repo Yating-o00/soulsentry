@@ -1,8 +1,6 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.3';
-import OpenAI from 'npm:openai';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 export default Deno.serve(async (req) => {
-    // Handle CORS
     if (req.method === 'OPTIONS') {
         return new Response(null, {
             headers: {
@@ -23,18 +21,6 @@ export default Deno.serve(async (req) => {
 
         const body = await req.json();
         const { task, behaviors } = body;
-
-        const apiKey = Deno.env.get("MOONSHOT_API_KEY") || Deno.env.get("OPENAI_API_KEY");
-        const baseURL = Deno.env.get("MOONSHOT_API_KEY") ? "https://api.moonshot.cn/v1" : undefined;
-
-        if (!apiKey) {
-            return Response.json({ error: "No AI API Key configured" }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
-        }
-
-        const openai = new OpenAI({
-            apiKey: apiKey,
-            baseURL: baseURL
-        });
 
         const prompt = `你是一个时间管理专家。分析用户的约定完成行为数据，为新约定推荐最佳的提醒时间。
 
@@ -73,25 +59,57 @@ ${behaviors.length > 0 ? behaviors.map(b => `
 }
 `;
 
-        const completion = await openai.chat.completions.create({
-            messages: [
-                { role: "system", content: "You are a helpful assistant that outputs JSON." },
-                { role: "user", content: prompt }
-            ],
-            model: Deno.env.get("MOONSHOT_API_KEY") ? "moonshot-v1-8k" : "gpt-4o-mini",
-            response_format: { type: "json_object" }
-        });
+        const schema = {
+            type: "object",
+            properties: {
+                optimal_time_slot: { type: "string" },
+                best_day_pattern: { type: "string" },
+                suggestions: { type: "array", items: { type: "object", properties: { datetime: { type: "string" }, reason: { type: "string" }, confidence: { type: "string" } } } },
+                insights: { type: "array", items: { type: "string" } }
+            },
+            required: ["optimal_time_slot", "suggestions"]
+        };
 
-        const content = completion.choices[0].message.content;
-        let result;
+        // 1) Try InvokeLLM
         try {
-            result = JSON.parse(content);
+            const result = await base44.integrations.Core.InvokeLLM({
+                prompt,
+                response_json_schema: schema
+            });
+            return Response.json(result, { headers: { 'Access-Control-Allow-Origin': '*' } });
         } catch (e) {
-            const match = content.match(/\{[\s\S]*\}/);
-            if (match) result = JSON.parse(match[0]);
-            else throw new Error("Invalid JSON response");
+            console.log('[generateSmartReminders] InvokeLLM failed:', e?.message);
         }
 
+        // 2) Fallback to Moonshot/OpenAI
+        const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
+        const openaiKey = Deno.env.get("OPENAI_API_KEY");
+        const apiKey = moonshotKey || openaiKey;
+        const baseURL = moonshotKey ? "https://api.moonshot.cn/v1" : "https://api.openai.com/v1";
+        const model = moonshotKey ? "moonshot-v1-8k" : "gpt-4o-mini";
+
+        if (!apiKey) {
+            return Response.json({ error: "AI service unavailable" }, { status: 503, headers: { 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        const res = await fetch(`${baseURL}/chat/completions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
+            body: JSON.stringify({
+                model,
+                messages: [
+                    { role: "system", content: "You are a helpful assistant that outputs JSON." },
+                    { role: "user", content: prompt }
+                ],
+                temperature: 0.7
+            })
+        });
+
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
+        const content = data.choices?.[0]?.message?.content || '';
+        const cleaned = content.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+        const result = JSON.parse(cleaned);
         return Response.json(result, { headers: { 'Access-Control-Allow-Origin': '*' } });
 
     } catch (error) {

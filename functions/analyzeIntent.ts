@@ -184,11 +184,39 @@ resolved_date 规则：有明确日期指示词→计算对应日期；否则→
 5. automations：${existingPlan ? '保留已有自动化条目，追加1-2条新条目。' : '生成2-4条自动化委托，'}每条必须对应用户输入中的具体需求或合理推演。status从 active/ready/monitoring/pending 中选择。
 6. parsed：提取到的时间/意图/地点/人物等摘要。`;
 
-    const ai = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      add_context_from_internet: false,
-      response_json_schema: schema
-    });
+    let ai;
+    try {
+      ai = await base44.integrations.Core.InvokeLLM({
+        prompt,
+        add_context_from_internet: false,
+        response_json_schema: schema
+      });
+    } catch (llmError) {
+      console.log('[analyzeIntent] InvokeLLM failed, falling back to Kimi:', llmError?.message);
+      const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
+      if (!moonshotKey) throw llmError;
+
+      const kimiRes = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${moonshotKey.trim()}`
+        },
+        body: JSON.stringify({
+          model: "moonshot-v1-8k",
+          messages: [
+            { role: "system", content: `You MUST respond with ONLY a valid JSON object matching this schema:\n${JSON.stringify(schema)}` },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.7
+        })
+      });
+      if (!kimiRes.ok) throw new Error(`Kimi error: ${kimiRes.status}`);
+      const kimiData = await kimiRes.json();
+      const content = kimiData.choices?.[0]?.message?.content || '';
+      const cleaned = content.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+      ai = JSON.parse(cleaned);
+    }
 
     // Ensure devices only includes known ids and add defaults when empty
     const knownIds = new Set(['phone','watch','glasses','car','home','pc']);

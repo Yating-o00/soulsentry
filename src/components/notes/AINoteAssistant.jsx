@@ -13,6 +13,7 @@ import {
   BrainCircuit
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { invokeAI } from "@/components/utils/aiHelper";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -36,7 +37,7 @@ export default function AINoteAssistant({ noteContent, onTagsGenerated, onSummar
 
     setIsAnalyzing(true);
     try {
-      const res = await base44.integrations.Core.InvokeLLM({
+      const res = await invokeAI({
         prompt: `请深度分析以下便签内容，并返回结构化数据。
         
         便签内容：

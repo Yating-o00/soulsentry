@@ -292,6 +292,18 @@ function LayoutContent({ children }) {
         /* Ensure text visibility on colored backgrounds */
         .bg-amber-50 { background-color: rgb(55 48 28) !important; }
         .text-amber-600 { color: rgb(253 224 71) !important; }
+
+        /* Stone color overrides for dark mode (used in task/milestone cards) */
+        .text-stone-900 { color: rgb(241 245 249) !important; }
+        .text-stone-800 { color: rgb(226 232 240) !important; }
+        .text-stone-700 { color: rgb(203 213 225) !important; }
+        .text-stone-600 { color: rgb(178 190 205) !important; }
+        .text-stone-500 { color: rgb(148 163 184) !important; }
+        .text-stone-400 { color: rgb(130 145 165) !important; }
+        .bg-stone-50 { background-color: rgb(15 23 42) !important; }
+        .bg-stone-100 { background-color: rgb(30 41 59) !important; }
+        .border-stone-100 { border-color: rgb(51 65 85) !important; }
+        .border-stone-200 { border-color: rgb(51 65 85) !important; }
       ` : ''}
 
       /* Override Blue/Purple classes to use our new Primary Tech Blue */

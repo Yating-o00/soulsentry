@@ -159,10 +159,10 @@ export default function Pricing() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
            {CREDIT_PACKS.map((pack, index) => {
              const packColors = [
-               { iconBg: "from-sky-100 to-cyan-100", icon: "text-sky-600", btn: "from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600", ring: "ring-sky-400", badge: "bg-sky-100 text-sky-700" },
+               { iconBg: "from-blue-100 to-indigo-100", icon: "text-blue-600", btn: "from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600", ring: "ring-blue-400", badge: "bg-blue-100 text-blue-700" },
+               { iconBg: "from-indigo-100 to-violet-100", icon: "text-indigo-600", btn: "from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600", ring: "ring-indigo-400", badge: "bg-indigo-100 text-indigo-700" },
+               { iconBg: "from-slate-100 to-blue-100", icon: "text-slate-600", btn: "from-slate-500 to-blue-500 hover:from-slate-600 hover:to-blue-600", ring: "ring-slate-400", badge: "bg-slate-100 text-slate-700" },
                { iconBg: "from-violet-100 to-purple-100", icon: "text-violet-600", btn: "from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600", ring: "ring-violet-400", badge: "bg-violet-100 text-violet-700" },
-               { iconBg: "from-emerald-100 to-teal-100", icon: "text-emerald-600", btn: "from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600", ring: "ring-emerald-400", badge: "bg-emerald-100 text-emerald-700" },
-               { iconBg: "from-rose-100 to-pink-100", icon: "text-rose-600", btn: "from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600", ring: "ring-rose-400", badge: "bg-rose-100 text-rose-700" },
              ];
              const c = packColors[index % packColors.length];
              return (
@@ -216,14 +216,14 @@ export default function Pricing() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {Object.entries(AI_FEATURES).map(([key, feature], index) => (
                 <div key={key} className="flex items-center gap-3 p-4 border-b border-r border-slate-100 last:border-0">
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                    <Coins className="w-4 h-4 text-amber-600" />
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                   <Coins className="w-4 h-4 text-indigo-500" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800">{feature.name}</p>
                     <p className="text-xs text-slate-500 truncate">{feature.description}</p>
                   </div>
-                  <Badge variant="outline" className="text-amber-700 border-amber-200 bg-amber-50 text-xs flex-shrink-0">
+                  <Badge variant="outline" className="text-indigo-700 border-indigo-200 bg-indigo-50 text-xs flex-shrink-0">
                     {feature.cost} 点
                   </Badge>
                 </div>

@@ -1,0 +1,37 @@
+{
+  "name": "AICreditTransaction",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "purchase",
+        "consume",
+        "gift",
+        "refund",
+        "subscription_bonus"
+      ],
+      "description": "\u4ea4\u6613\u7c7b\u578b"
+    },
+    "amount": {
+      "type": "number",
+      "description": "\u70b9\u6570\u53d8\u52a8\u91cf\uff08\u6b63\u6570\u4e3a\u589e\u52a0\uff0c\u8d1f\u6570\u4e3a\u6d88\u8017\uff09"
+    },
+    "balance_after": {
+      "type": "number",
+      "description": "\u4ea4\u6613\u540e\u4f59\u989d"
+    },
+    "feature": {
+      "type": "string",
+      "description": "\u6d88\u8017\u529f\u80fd\u540d\u79f0\uff08\u5982 smart_priority, note_summary \u7b49\uff09"
+    },
+    "description": {
+      "type": "string",
+      "description": "\u4ea4\u6613\u63cf\u8ff0"
+    }
+  },
+  "required": [
+    "type",
+    "amount"
+  ]
+}

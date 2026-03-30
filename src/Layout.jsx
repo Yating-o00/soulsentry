@@ -28,6 +28,7 @@ import {
 import { Trash2, MessageSquarePlus, Search } from "lucide-react";
 import FeedbackDialog from "@/components/feedback/FeedbackDialog";
 import GlobalSearch from "@/components/search/GlobalSearch";
+import CreditsBadge from "@/components/credits/CreditsBadge";
 
 const getNavigationItems = (t) => [
   {
@@ -99,7 +100,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
       </SidebarHeader>
 
       <SidebarContent className="p-3">
-        <div className="px-2 mb-4">
+        <div className="px-2 mb-3">
           <button 
             onClick={() => {
               setSearchOpen(true);
@@ -115,6 +116,9 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
               </kbd>
             </div>
           </button>
+        </div>
+        <div className="px-2 mb-3">
+          <CreditsBadge />
         </div>
         <SidebarGroup>
           <SidebarGroupContent>

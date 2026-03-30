@@ -1,0 +1,85 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "avatar_url": {
+      "type": "string",
+      "description": "\u7528\u6237\u5934\u50cfURL"
+    },
+    "assistant_name": {
+      "type": "string",
+      "default": "\u5c0f\u96c5",
+      "description": "AI\u52a9\u624b\u6635\u79f0"
+    },
+    "theme_preferences": {
+      "type": "object",
+      "description": "\u7528\u6237\u4e3b\u9898\u504f\u597d\u8bbe\u7f6e",
+      "properties": {
+        "primary_color": {
+          "type": "string",
+          "default": "#384877",
+          "description": "\u4e3b\u9898\u4e3b\u8272\u8c03"
+        },
+        "font_size": {
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "default": "medium",
+          "description": "\u5b57\u4f53\u5927\u5c0f"
+        },
+        "dark_mode": {
+          "type": "boolean",
+          "default": false,
+          "description": "\u6df1\u8272\u6a21\u5f0f"
+        }
+      }
+    },
+    "has_seen_welcome": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u5df2\u770b\u8fc7\u6b22\u8fce\u9875"
+    },
+    "notification_preferences": {
+      "type": "object",
+      "description": "\u901a\u77e5\u504f\u597d\u8bbe\u7f6e",
+      "properties": {
+        "email_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "browser_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "in_app_enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "ai_credits": {
+      "type": "number",
+      "default": 200,
+      "description": "AI\u70b9\u6570\u4f59\u989d\uff08\u65b0\u7528\u6237\u8d60\u9001200\u70b9\uff09"
+    },
+    "subscription_plan": {
+      "type": "string",
+      "enum": [
+        "free",
+        "pro",
+        "team"
+      ],
+      "default": "free",
+      "description": "\u8ba2\u9605\u8ba1\u5212"
+    },
+    "subscription_expires": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u8ba2\u9605\u5230\u671f\u65f6\u95f4"
+    }
+  },
+  "required": []
+}

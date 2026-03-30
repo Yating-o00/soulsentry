@@ -1,225 +1,250 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Sparkles, Zap, Crown } from "lucide-react";
+import { Check, Sparkles, Zap, Crown, Coins, History, Package } from "lucide-react";
+import { SUBSCRIPTION_PLANS, CREDIT_PACKS, AI_FEATURES } from "@/components/credits/creditConfig";
+import { useAICredits } from "@/components/credits/useAICredits";
+import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
+import { toast } from "sonner";
 
-const PLANS = [
-  {
-    id: "free",
-    name: "免费版",
-    price: "¥0",
-    period: "永久免费",
-    icon: Sparkles,
-    color: "from-slate-500 to-slate-600",
-    features: [
-      "50 个约定管理",
-      "30 个心签记录",
-      "基础提醒功能",
-      "7 天数据历史",
-      "单设备同步"
-    ],
-    cta: "当前计划",
-    disabled: true
-  },
-  {
-    id: "pro",
-    name: "专业版",
-    price: "¥19",
-    period: "每月",
-    icon: Zap,
-    color: "from-[#384877] to-[#3b5aa2]",
-    badge: "推荐",
-    features: [
-      "无限约定和心签",
-      "AI 智能分析",
-      "高级提醒策略",
-      "无限数据历史",
-      "多设备同步",
-      "团队协作（5人）",
-      "优先客服支持"
-    ],
-    cta: "立即升级",
-    highlighted: true
-  },
-  {
-    id: "team",
-    name: "团队版",
-    price: "¥99",
-    period: "每月",
-    icon: Crown,
-    color: "from-purple-500 to-purple-600",
-    features: [
-      "专业版全部功能",
-      "无限团队成员",
-      "高级数据分析",
-      "自定义工作流",
-      "API 访问权限",
-      "专属客户经理",
-      "SLA 服务保障"
-    ],
-    cta: "联系销售"
-  }
-];
+const PLAN_META = {
+  free: { icon: Sparkles, color: "from-slate-500 to-slate-600" },
+  pro: { icon: Zap, color: "from-[#384877] to-[#3b5aa2]", badge: "推荐" },
+  team: { icon: Crown, color: "from-purple-500 to-purple-600" },
+};
 
 export default function Pricing() {
+  const { credits, plan, addCredits, refreshCredits, loading } = useAICredits();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [purchasing, setPurchasing] = useState(null);
+
+  const handleBuyCredits = async (pack) => {
+    setPurchasing(pack.id);
+    // 模拟支付流程（实际需要接入Stripe等支付系统）
+    await new Promise(r => setTimeout(r, 1000));
+    await addCredits(pack.credits, "purchase", `购买「${pack.name}」${pack.credits} 点`);
+    await refreshCredits();
+    setPurchasing(null);
+    toast.success(`成功购买 ${pack.credits} AI 点数！`);
+  };
+
+  const handleSubscribe = (planKey) => {
+    if (planKey === "team") {
+      toast.info("团队版请联系销售团队定制方案");
+      return;
+    }
+    if (planKey === plan) return;
+    // 模拟订阅（实际需要接入支付系统）
+    toast.info("订阅功能即将上线，敬请期待！");
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6 md:p-12">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 md:p-8">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
-        >
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <Badge className="mb-4 bg-gradient-to-r from-amber-400 to-amber-500 text-white border-0 text-sm px-4 py-1.5">
-            🚀 内测功能 · 即将推出
+            🚀 智能增强 · AI驱动
           </Badge>
-          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-            选择适合你的计划
-          </h1>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            从个人到团队，灵活的定价方案助你高效管理
-          </p>
+          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">选择适合你的计划</h1>
+          <p className="text-base text-slate-600 max-w-2xl mx-auto">订阅解锁高级功能，按需购买AI点数驱动智能服务</p>
         </motion.div>
 
-        {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-8 mb-12">
-          {PLANS.map((plan, index) => {
-            const Icon = plan.icon;
-            return (
-              <motion.div
-                key={plan.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Card className={`relative overflow-hidden h-full ${
-                  plan.highlighted 
-                    ? 'ring-2 ring-[#384877] shadow-2xl scale-105' 
-                    : 'shadow-lg hover:shadow-xl'
-                } transition-all duration-300`}>
-                  {plan.badge && (
-                    <div className="absolute top-4 right-4">
-                      <Badge className="bg-gradient-to-r from-amber-400 to-amber-500 text-white border-0">
-                        {plan.badge}
+        {/* 当前余额卡片 */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          <Card className="mb-8 border-0 shadow-lg bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 overflow-hidden">
+            <div className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg">
+                  <Coins className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-amber-700 font-medium">我的 AI 点数</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-slate-900">
+                      {loading ? "..." : credits ?? 0}
+                    </span>
+                    <span className="text-slate-500 text-sm">点可用</span>
+                    {plan !== "free" && (
+                      <Badge className="bg-[#384877] text-white text-[10px] border-0 ml-1">
+                        {SUBSCRIPTION_PLANS[plan]?.name}
                       </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)} className="text-amber-700 border-amber-300 hover:bg-amber-100">
+                <History className="w-4 h-4 mr-1" />
+                消费明细
+              </Button>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* 订阅计划 */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
+          <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-[#384877]" />
+            订阅计划
+          </h2>
+          <div className="grid md:grid-cols-3 gap-6 mb-10">
+            {Object.entries(SUBSCRIPTION_PLANS).map(([key, planConfig], index) => {
+              const meta = PLAN_META[key];
+              const Icon = meta.icon;
+              const isCurrent = plan === key;
+              const isHighlighted = key === "pro";
+              return (
+                <motion.div key={key} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + index * 0.08 }}>
+                  <Card className={`relative overflow-hidden h-full ${
+                    isHighlighted ? "ring-2 ring-[#384877] shadow-xl" : "shadow-md hover:shadow-lg"
+                  } transition-all duration-300`}>
+                    {meta.badge && (
+                      <div className="absolute top-3 right-3">
+                        <Badge className="bg-gradient-to-r from-amber-400 to-amber-500 text-white border-0 text-xs">{meta.badge}</Badge>
+                      </div>
+                    )}
+                    <div className="p-6">
+                      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${meta.color} flex items-center justify-center mb-3 shadow-lg`}>
+                        <Icon className="w-6 h-6 text-white" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900 mb-1">{planConfig.name}</h3>
+                      <div className="mb-4">
+                        <span className="text-3xl font-bold text-slate-900">¥{planConfig.monthlyPrice}</span>
+                        <span className="text-slate-500 text-sm"> /月</span>
+                      </div>
+                      {planConfig.monthlyBonus > 0 && (
+                        <div className="mb-4 flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg">
+                          <Coins className="w-4 h-4" />
+                          每月赠送 {planConfig.monthlyBonus} AI 点数
+                        </div>
+                      )}
+                      <ul className="space-y-2.5 mb-6">
+                        {planConfig.features.map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <div className={`rounded-full p-0.5 bg-gradient-to-br ${meta.color} mt-0.5 flex-shrink-0`}>
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                            <span className="text-slate-700">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <Button
+                        className={`w-full h-10 font-semibold ${
+                          isCurrent ? "bg-slate-100 text-slate-500 cursor-default" :
+                          isHighlighted ? `bg-gradient-to-r ${meta.color} text-white hover:opacity-90` :
+                          key === "team" ? "bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-300" :
+                          "bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-300"
+                        }`}
+                        disabled={isCurrent}
+                        onClick={() => handleSubscribe(key)}
+                      >
+                        {isCurrent ? "当前计划" : key === "team" ? "联系销售" : "立即升级"}
+                      </Button>
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        {/* AI 点数包 */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}>
+          <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <Package className="w-5 h-5 text-amber-600" />
+            AI 点数包
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+            {CREDIT_PACKS.map((pack, index) => (
+              <motion.div key={pack.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.06 }}>
+                <Card className={`relative overflow-hidden hover:shadow-lg transition-all duration-300 ${
+                  pack.tag === "最划算" ? "ring-2 ring-amber-400" : ""
+                }`}>
+                  {pack.tag && (
+                    <div className="absolute top-2 right-2">
+                      <Badge className={`border-0 text-[10px] ${
+                        pack.tag === "最划算" ? "bg-gradient-to-r from-amber-400 to-orange-500 text-white" :
+                        pack.tag === "超值" ? "bg-purple-100 text-purple-700" :
+                        "bg-blue-100 text-blue-700"
+                      }`}>{pack.tag}</Badge>
                     </div>
                   )}
-
-                  <div className="p-8">
-                    {/* Icon */}
-                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${plan.color} flex items-center justify-center mb-4 shadow-lg`}>
-                      <Icon className="w-7 h-7 text-white" />
+                  <div className="p-5 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center mx-auto mb-3">
+                      <Coins className="w-6 h-6 text-amber-600" />
                     </div>
-
-                    {/* Plan Name */}
-                    <h3 className="text-2xl font-bold text-slate-900 mb-2">
-                      {plan.name}
-                    </h3>
-
-                    {/* Price */}
-                    <div className="mb-6">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-5xl font-bold text-slate-900">
-                          {plan.price}
-                        </span>
-                        <span className="text-slate-500">
-                          {plan.period}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Features */}
-                    <ul className="space-y-3 mb-8">
-                      {plan.features.map((feature, idx) => (
-                        <li key={idx} className="flex items-start gap-3">
-                          <div className={`rounded-full p-0.5 bg-gradient-to-br ${plan.color} mt-0.5 flex-shrink-0`}>
-                            <Check className="w-4 h-4 text-white" />
-                          </div>
-                          <span className="text-slate-700">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    {/* CTA Button */}
+                    <h4 className="font-bold text-slate-900 mb-1">{pack.name}</h4>
+                    <p className="text-2xl font-bold text-slate-900 mb-0.5">{pack.credits.toLocaleString()}</p>
+                    <p className="text-xs text-slate-500 mb-3">AI 点数</p>
+                    {pack.savings && (
+                      <p className="text-xs text-green-600 font-medium mb-2">节省 {pack.savings}</p>
+                    )}
                     <Button
-                      className={`w-full h-12 text-base font-semibold ${
-                        plan.highlighted
-                          ? `bg-gradient-to-r ${plan.color} text-white hover:opacity-90`
-                          : plan.disabled
-                          ? 'bg-slate-100 text-slate-500'
-                          : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-300'
-                      }`}
-                      disabled={plan.disabled}
+                      className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white h-9 text-sm"
+                      onClick={() => handleBuyCredits(pack)}
+                      disabled={purchasing === pack.id}
                     >
-                      {plan.cta}
+                      {purchasing === pack.id ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                      ) : (
+                        pack.priceDisplay
+                      )}
                     </Button>
                   </div>
                 </Card>
               </motion.div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        </motion.div>
 
-        {/* FAQ Section */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="max-w-3xl mx-auto"
-        >
-          <h2 className="text-2xl font-bold text-slate-900 mb-6 text-center">
-            常见问题
+        {/* AI功能消耗参考 */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
+          <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-[#384877]" />
+            AI 功能点数消耗参考
           </h2>
-          <div className="space-y-4">
-            <Card className="p-6">
-              <h3 className="font-semibold text-slate-900 mb-2">
-                可以随时取消订阅吗？
-              </h3>
-              <p className="text-slate-600">
-                是的，您可以随时在账户设置中取消订阅，取消后将在当前计费周期结束时生效。
-              </p>
+          <Card className="border-0 shadow-md overflow-hidden">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {Object.entries(AI_FEATURES).map(([key, feature], index) => (
+                <div key={key} className="flex items-center gap-3 p-4 border-b border-r border-slate-100 last:border-0">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <Coins className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800">{feature.name}</p>
+                    <p className="text-xs text-slate-500 truncate">{feature.description}</p>
+                  </div>
+                  <Badge variant="outline" className="text-amber-700 border-amber-200 bg-amber-50 text-xs flex-shrink-0">
+                    {feature.cost} 点
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* FAQ */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="max-w-3xl mx-auto mt-10">
+          <h2 className="text-xl font-bold text-slate-900 mb-4 text-center">常见问题</h2>
+          <div className="space-y-3">
+            <Card className="p-5">
+              <h3 className="font-semibold text-slate-900 mb-1 text-sm">AI 点数有有效期吗？</h3>
+              <p className="text-slate-600 text-sm">购买的AI点数永久有效，不会过期。订阅赠送的点数也不会随订阅到期而失效。</p>
             </Card>
-            
-            <Card className="p-6">
-              <h3 className="font-semibold text-slate-900 mb-2">
-                支持哪些支付方式？
-              </h3>
-              <p className="text-slate-600">
-                我们支持微信支付、支付宝和信用卡支付，所有支付均通过安全加密通道处理。
-              </p>
+            <Card className="p-5">
+              <h3 className="font-semibold text-slate-900 mb-1 text-sm">免费版可以使用AI功能吗？</h3>
+              <p className="text-slate-600 text-sm">可以！新用户赠送200AI点数，您可以体验所有AI功能。用完后可以直接购买点数包，无需订阅。</p>
             </Card>
-            
-            <Card className="p-6">
-              <h3 className="font-semibold text-slate-900 mb-2">
-                升级后数据会保留吗？
-              </h3>
-              <p className="text-slate-600">
-                当然！升级后您的所有数据都会完整保留，并且立即解锁新功能。
-              </p>
+            <Card className="p-5">
+              <h3 className="font-semibold text-slate-900 mb-1 text-sm">订阅Pro和直接买点数有什么区别？</h3>
+              <p className="text-slate-600 text-sm">Pro订阅除了每月赠送500点数外，还解锁无限任务/笔记、高级提醒策略、团队协作等非AI功能。如果您只需AI服务，可以只买点数包。</p>
             </Card>
           </div>
         </motion.div>
 
-        {/* Contact Section */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="text-center mt-12 p-8 bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl"
-        >
-          <h3 className="text-xl font-semibold text-slate-900 mb-2">
-            需要定制方案？
-          </h3>
-          <p className="text-slate-600 mb-4">
-            联系我们的销售团队，为您的企业量身定制专属解决方案
-          </p>
-          <Button className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white">
-            联系销售团队
-          </Button>
-        </motion.div>
+        <CreditHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
       </div>
     </div>
   );

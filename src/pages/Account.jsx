@@ -7,9 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { SUBSCRIPTION_PLANS } from "@/components/credits/creditConfig";
+import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
 
 export default function Account() {
   const [user, setUser] = useState(null);
@@ -20,6 +24,7 @@ export default function Account() {
     assistant_name: "小雅",
     avatar_url: "",
   });
+  const [historyOpen, setHistoryOpen] = useState(false);
 
 
   useEffect(() => {
@@ -342,6 +347,65 @@ export default function Account() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* AI 点数与订阅 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50">
+            <CardTitle className="flex items-center gap-2">
+              <Coins className="w-5 h-5 text-amber-600" />
+              AI 点数与订阅
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <p className="text-sm text-slate-500 mb-1">当前余额</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold text-slate-900">
+                    {user?.ai_credits ?? 200}
+                  </span>
+                  <span className="text-slate-500">AI 点数</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className={`${
+                  (user?.subscription_plan || "free") === "free" 
+                    ? "bg-slate-100 text-slate-600" 
+                    : "bg-[#384877] text-white"
+                } border-0`}>
+                  {SUBSCRIPTION_PLANS[user?.subscription_plan || "free"]?.name || "免费版"}
+                </Badge>
+              </div>
+            </div>
+            <Separator className="my-4" />
+            <div className="flex flex-wrap gap-3">
+              <Link to={createPageUrl("Pricing")}>
+                <Button size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600">
+                  <Coins className="w-4 h-4 mr-1" />
+                  购买点数
+                </Button>
+              </Link>
+              <Button size="sm" variant="outline" onClick={() => setHistoryOpen(true)} className="text-amber-700 border-amber-200 hover:bg-amber-50">
+                <History className="w-4 h-4 mr-1" />
+                消费明细
+              </Button>
+              <Link to={createPageUrl("Pricing")}>
+                <Button size="sm" variant="outline" className="text-[#384877] border-[#384877]/20 hover:bg-[#384877]/5">
+                  管理订阅
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <CreditHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
 
       {/* 账户操作 */}
       <motion.div

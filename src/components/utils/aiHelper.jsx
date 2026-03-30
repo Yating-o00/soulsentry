@@ -1,15 +1,44 @@
 import { base44 } from "@/api/base44Client";
+import { AI_FEATURES } from "@/components/credits/creditConfig";
 
 /**
- * Unified AI call helper.
- * First tries Base44 InvokeLLM (uses platform credits), 
- * if credits exhausted, automatically falls back to Kimi API via backend function.
+ * Unified AI call helper with credit check.
  * 
  * @param {object} params - { prompt, response_json_schema?, file_urls?, add_context_from_internet?, model? }
+ * @param {string} [featureKey] - AI功能键名，用于扣除点数。如果不传则不扣点数（向下兼容）。
  * @returns {Promise<any>} - AI response (parsed JSON if schema provided, string otherwise)
  */
-export async function invokeAI(params) {
-  // 1) Try InvokeLLM directly first (faster, no backend function overhead)
+export async function invokeAI(params, featureKey) {
+  // 1) 如果指定了功能键，先检查并扣除点数
+  if (featureKey && AI_FEATURES[featureKey]) {
+    const user = await base44.auth.me();
+    const currentCredits = user.ai_credits ?? 0;
+    const cost = AI_FEATURES[featureKey].cost;
+
+    if (currentCredits < cost) {
+      const err = new Error(`AI点数不足：需要 ${cost} 点，当前余额 ${currentCredits} 点`);
+      err.code = "INSUFFICIENT_CREDITS";
+      err.cost = cost;
+      err.balance = currentCredits;
+      err.featureName = AI_FEATURES[featureKey].name;
+      throw err;
+    }
+
+    // 预扣点数
+    const newBalance = currentCredits - cost;
+    await base44.auth.updateMe({ ai_credits: newBalance });
+
+    // 记录交易
+    await base44.entities.AICreditTransaction.create({
+      type: "consume",
+      amount: -cost,
+      balance_after: newBalance,
+      feature: featureKey,
+      description: `使用「${AI_FEATURES[featureKey].name}」消耗 ${cost} 点`
+    });
+  }
+
+  // 2) 调用 AI 服务
   try {
     const result = await base44.integrations.Core.InvokeLLM(params);
     return result;
@@ -17,21 +46,25 @@ export async function invokeAI(params) {
     console.warn('[invokeAI] InvokeLLM failed, falling back to Kimi backend:', e?.message || e);
   }
 
-  // 2) Fallback to backend callAI function (uses Kimi API)
-  const response = await base44.functions.invoke('callAI', {
-    prompt: params.prompt,
-    response_json_schema: params.response_json_schema,
-    file_urls: params.file_urls,
-    add_context_from_internet: params.add_context_from_internet,
-    model: params.model
-  });
+  // 3) Fallback to backend callAI function (uses Kimi API)
+  try {
+    const response = await base44.functions.invoke('callAI', {
+      prompt: params.prompt,
+      response_json_schema: params.response_json_schema,
+      file_urls: params.file_urls,
+      add_context_from_internet: params.add_context_from_internet,
+      model: params.model
+    });
 
-  if (response?.data?.data !== undefined) {
-    return response.data.data;
-  }
+    if (response?.data?.data !== undefined) {
+      return response.data.data;
+    }
 
-  if (response?.data?.error) {
-    throw new Error(response.data.error);
+    if (response?.data?.error) {
+      throw new Error(response.data.error);
+    }
+  } catch (backendErr) {
+    console.warn('[invokeAI] Backend callAI also failed:', backendErr?.message || backendErr);
   }
 
   throw new Error('AI service unavailable');

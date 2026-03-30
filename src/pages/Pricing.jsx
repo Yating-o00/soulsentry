@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Check, Sparkles, Zap, Crown, Coins, History, Package } from "lucide-rea
 import { SUBSCRIPTION_PLANS, CREDIT_PACKS, AI_FEATURES } from "@/components/credits/creditConfig";
 import { useAICredits } from "@/components/credits/useAICredits";
 import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
+import PaymentMethodDialog from "@/components/credits/PaymentMethodDialog";
 import { toast } from "sonner";
 
 const PLAN_META = {
@@ -18,16 +19,27 @@ const PLAN_META = {
 export default function Pricing() {
   const { credits, plan, addCredits, refreshCredits, loading } = useAICredits();
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [purchasing, setPurchasing] = useState(null);
+  const [paymentPack, setPaymentPack] = useState(null);
 
-  const handleBuyCredits = async (pack) => {
-    setPurchasing(pack.id);
-    // 模拟支付流程（实际需要接入Stripe等支付系统）
-    await new Promise(r => setTimeout(r, 1000));
-    await addCredits(pack.credits, "purchase", `购买「${pack.name}」${pack.credits} 点`);
-    await refreshCredits();
-    setPurchasing(null);
-    toast.success(`成功购买 ${pack.credits} AI 点数！`);
+  // Handle Stripe payment callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get("payment");
+    const creditsParam = params.get("credits");
+    if (paymentStatus === "success" && creditsParam) {
+      toast.success(`支付成功！${creditsParam} AI 点数将很快到账`);
+      // Clear URL params
+      window.history.replaceState({}, "", window.location.pathname);
+      // Refresh credits after a short delay to allow webhook processing
+      setTimeout(() => refreshCredits(), 2000);
+    } else if (paymentStatus === "cancelled") {
+      toast.info("支付已取消");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [refreshCredits]);
+
+  const handleBuyCredits = (pack) => {
+    setPaymentPack(pack);
   };
 
   const handleSubscribe = (planKey) => {
@@ -190,13 +202,8 @@ export default function Pricing() {
                    <Button
                      className={`w-full bg-gradient-to-r ${c.btn} text-white h-9 text-sm`}
                      onClick={() => handleBuyCredits(pack)}
-                     disabled={purchasing === pack.id}
                    >
-                     {purchasing === pack.id ? (
-                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                     ) : (
-                       pack.priceDisplay
-                     )}
+                     {pack.priceDisplay}
                    </Button>
                  </div>
                </Card>
@@ -252,6 +259,12 @@ export default function Pricing() {
         </motion.div>
 
         <CreditHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+        <PaymentMethodDialog
+          open={!!paymentPack}
+          onOpenChange={(open) => { if (!open) setPaymentPack(null); }}
+          pack={paymentPack}
+          onPaymentSuccess={() => { setPaymentPack(null); refreshCredits(); }}
+        />
       </div>
     </div>
   );

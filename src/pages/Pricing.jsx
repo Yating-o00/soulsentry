@@ -153,27 +153,27 @@ export default function Pricing() {
         {/* AI 点数包 */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}>
           <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <Package className="w-5 h-5 text-amber-600" />
+            <Package className="w-5 h-5 text-[#384877]" />
             AI 点数包
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
             {CREDIT_PACKS.map((pack, index) => (
               <motion.div key={pack.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.06 }}>
                 <Card className={`relative overflow-hidden hover:shadow-lg transition-all duration-300 ${
-                  pack.tag === "最划算" ? "ring-2 ring-amber-400" : ""
+                  pack.tag === "最划算" ? "ring-2 ring-[#384877]" : ""
                 }`}>
                   {pack.tag && (
                     <div className="absolute top-2 right-2">
                       <Badge className={`border-0 text-[10px] ${
-                        pack.tag === "最划算" ? "bg-gradient-to-r from-amber-400 to-orange-500 text-white" :
-                        pack.tag === "超值" ? "bg-purple-100 text-purple-700" :
-                        "bg-blue-100 text-blue-700"
+                        pack.tag === "最划算" ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white" :
+                        pack.tag === "超值" ? "bg-indigo-100 text-indigo-700" :
+                        "bg-slate-100 text-slate-700"
                       }`}>{pack.tag}</Badge>
                     </div>
                   )}
                   <div className="p-5 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center mx-auto mb-3">
-                      <Coins className="w-6 h-6 text-amber-600" />
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-100 to-blue-100 flex items-center justify-center mx-auto mb-3">
+                      <Coins className="w-6 h-6 text-[#384877]" />
                     </div>
                     <h4 className="font-bold text-slate-900 mb-1">{pack.name}</h4>
                     <p className="text-2xl font-bold text-slate-900 mb-0.5">{pack.credits.toLocaleString()}</p>
@@ -182,7 +182,7 @@ export default function Pricing() {
                       <p className="text-xs text-green-600 font-medium mb-2">节省 {pack.savings}</p>
                     )}
                     <Button
-                      className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white h-9 text-sm"
+                      className="w-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2d3a63] hover:to-[#324d8e] text-white h-9 text-sm"
                       onClick={() => handleBuyCredits(pack)}
                       disabled={purchasing === pack.id}
                     >

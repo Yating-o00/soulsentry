@@ -10,9 +10,9 @@ import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
 import { toast } from "sonner";
 
 const PLAN_META = {
-  free: { icon: Sparkles, color: "from-slate-500 to-slate-600" },
-  pro: { icon: Zap, color: "from-[#384877] to-[#3b5aa2]", badge: "推荐" },
-  team: { icon: Crown, color: "from-purple-500 to-purple-600" },
+  free: { icon: Sparkles, bg: "from-slate-100 to-slate-200", iconColor: "text-slate-600", checkBg: "bg-slate-500" },
+  pro: { icon: Zap, bg: "from-[#384877]/10 to-[#3b5aa2]/15", iconColor: "text-[#384877]", checkBg: "bg-[#384877]", badge: "推荐", btnGradient: "from-[#384877] to-[#3b5aa2]" },
+  team: { icon: Crown, bg: "from-purple-100 to-purple-200", iconColor: "text-purple-600", checkBg: "bg-purple-500" },
 };
 
 export default function Pricing() {
@@ -106,8 +106,8 @@ export default function Pricing() {
                       </div>
                     )}
                     <div className="p-6">
-                      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${meta.color} flex items-center justify-center mb-3 shadow-lg`}>
-                        <Icon className="w-6 h-6 text-white" />
+                      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${meta.bg} flex items-center justify-center mb-3`}>
+                        <Icon className={`w-6 h-6 ${meta.iconColor}`} />
                       </div>
                       <h3 className="text-xl font-bold text-slate-900 mb-1">{planConfig.name}</h3>
                       <div className="mb-4">
@@ -123,7 +123,7 @@ export default function Pricing() {
                       <ul className="space-y-2.5 mb-6">
                         {planConfig.features.map((f, i) => (
                           <li key={i} className="flex items-start gap-2 text-sm">
-                            <div className={`rounded-full p-0.5 bg-gradient-to-br ${meta.color} mt-0.5 flex-shrink-0`}>
+                            <div className={`rounded-full p-0.5 ${meta.checkBg} mt-0.5 flex-shrink-0`}>
                               <Check className="w-3 h-3 text-white" />
                             </div>
                             <span className="text-slate-700">{f}</span>
@@ -133,7 +133,7 @@ export default function Pricing() {
                       <Button
                         className={`w-full h-10 font-semibold ${
                           isCurrent ? "bg-slate-100 text-slate-500 cursor-default" :
-                          isHighlighted ? `bg-gradient-to-r ${meta.color} text-white hover:opacity-90` :
+                          isHighlighted ? `bg-gradient-to-r ${meta.btnGradient} text-white hover:opacity-90` :
                           key === "team" ? "bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-300" :
                           "bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-300"
                         }`}

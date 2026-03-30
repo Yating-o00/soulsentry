@@ -157,45 +157,52 @@ export default function Pricing() {
             AI 点数包
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-            {CREDIT_PACKS.map((pack, index) => (
-              <motion.div key={pack.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.06 }}>
-                <Card className={`relative overflow-hidden hover:shadow-lg transition-all duration-300 ${
-                  pack.tag === "最划算" ? "ring-2 ring-[#384877]" : ""
-                }`}>
-                  {pack.tag && (
-                    <div className="absolute top-2 right-2">
-                      <Badge className={`border-0 text-[10px] ${
-                        pack.tag === "最划算" ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white" :
-                        pack.tag === "超值" ? "bg-indigo-100 text-indigo-700" :
-                        "bg-slate-100 text-slate-700"
-                      }`}>{pack.tag}</Badge>
-                    </div>
-                  )}
-                  <div className="p-5 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-100 to-blue-100 flex items-center justify-center mx-auto mb-3">
-                      <Coins className="w-6 h-6 text-[#384877]" />
-                    </div>
-                    <h4 className="font-bold text-slate-900 mb-1">{pack.name}</h4>
-                    <p className="text-2xl font-bold text-slate-900 mb-0.5">{pack.credits.toLocaleString()}</p>
-                    <p className="text-xs text-slate-500 mb-3">AI 点数</p>
-                    {pack.savings && (
-                      <p className="text-xs text-green-600 font-medium mb-2">节省 {pack.savings}</p>
-                    )}
-                    <Button
-                      className="w-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2d3a63] hover:to-[#324d8e] text-white h-9 text-sm"
-                      onClick={() => handleBuyCredits(pack)}
-                      disabled={purchasing === pack.id}
-                    >
-                      {purchasing === pack.id ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                      ) : (
-                        pack.priceDisplay
-                      )}
-                    </Button>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+           {CREDIT_PACKS.map((pack, index) => {
+             const packColors = [
+               { iconBg: "from-sky-100 to-cyan-100", icon: "text-sky-600", btn: "from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600", ring: "ring-sky-400", badge: "bg-sky-100 text-sky-700" },
+               { iconBg: "from-violet-100 to-purple-100", icon: "text-violet-600", btn: "from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600", ring: "ring-violet-400", badge: "bg-violet-100 text-violet-700" },
+               { iconBg: "from-emerald-100 to-teal-100", icon: "text-emerald-600", btn: "from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600", ring: "ring-emerald-400", badge: "bg-emerald-100 text-emerald-700" },
+               { iconBg: "from-rose-100 to-pink-100", icon: "text-rose-600", btn: "from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600", ring: "ring-rose-400", badge: "bg-rose-100 text-rose-700" },
+             ];
+             const c = packColors[index % packColors.length];
+             return (
+             <motion.div key={pack.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.06 }}>
+               <Card className={`relative overflow-hidden hover:shadow-lg transition-all duration-300 ${
+                 pack.tag === "最划算" ? `ring-2 ${c.ring}` : ""
+               }`}>
+                 {pack.tag && (
+                   <div className="absolute top-2 right-2">
+                     <Badge className={`border-0 text-[10px] ${
+                       pack.tag === "最划算" ? `bg-gradient-to-r ${c.btn} text-white` : c.badge
+                     }`}>{pack.tag}</Badge>
+                   </div>
+                 )}
+                 <div className="p-5 text-center">
+                   <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${c.iconBg} flex items-center justify-center mx-auto mb-3`}>
+                     <Coins className={`w-6 h-6 ${c.icon}`} />
+                   </div>
+                   <h4 className="font-bold text-slate-900 mb-1">{pack.name}</h4>
+                   <p className="text-2xl font-bold text-slate-900 mb-0.5">{pack.credits.toLocaleString()}</p>
+                   <p className="text-xs text-slate-500 mb-3">AI 点数</p>
+                   {pack.savings && (
+                     <p className="text-xs text-emerald-600 font-medium mb-2">节省 {pack.savings}</p>
+                   )}
+                   <Button
+                     className={`w-full bg-gradient-to-r ${c.btn} text-white h-9 text-sm`}
+                     onClick={() => handleBuyCredits(pack)}
+                     disabled={purchasing === pack.id}
+                   >
+                     {purchasing === pack.id ? (
+                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                     ) : (
+                       pack.priceDisplay
+                     )}
+                   </Button>
+                 </div>
+               </Card>
+             </motion.div>
+             );
+           })}
           </div>
         </motion.div>
 

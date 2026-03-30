@@ -2,6 +2,12 @@
 module.exports = {
     darkMode: ["class"],
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
+    safelist: [
+      "from-sky-100", "to-cyan-100", "text-sky-600", "from-sky-500", "to-cyan-500", "hover:from-sky-600", "hover:to-cyan-600", "ring-sky-400", "bg-sky-100", "text-sky-700",
+      "from-violet-100", "to-purple-100", "text-violet-600", "from-violet-500", "to-purple-500", "hover:from-violet-600", "hover:to-purple-600", "ring-violet-400", "bg-violet-100", "text-violet-700",
+      "from-emerald-100", "to-teal-100", "text-emerald-600", "from-emerald-500", "to-teal-500", "hover:from-emerald-600", "hover:to-teal-600", "ring-emerald-400", "bg-emerald-100", "text-emerald-700",
+      "from-rose-100", "to-pink-100", "text-rose-600", "from-rose-500", "to-pink-500", "hover:from-rose-600", "hover:to-pink-600", "ring-rose-400", "bg-rose-100", "text-rose-700",
+    ],
   theme: {
   	extend: {
   		borderRadius: {

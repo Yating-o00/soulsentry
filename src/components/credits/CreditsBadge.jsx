@@ -22,7 +22,7 @@ export default function CreditsBadge({ compact = false }) {
 
   if (compact) {
     return (
-      <Link to={createPageUrl("Pricing")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors text-amber-700 text-xs font-medium no-min-size">
+      <Link to={createPageUrl("Pricing")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-[#384877] text-xs font-medium no-min-size">
         <Coins className="w-3.5 h-3.5" />
         <span>{credits}</span>
       </Link>
@@ -33,17 +33,17 @@ export default function CreditsBadge({ compact = false }) {
     <Link to={createPageUrl("Pricing")} className="block no-min-size">
       <div className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
         isLow 
-          ? "bg-red-50 hover:bg-red-100 border border-red-200" 
-          : "bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-200"
+          ? "bg-rose-50 hover:bg-rose-100 border border-rose-200" 
+          : "bg-gradient-to-r from-slate-50 to-blue-50 hover:from-slate-100 hover:to-blue-100 border border-slate-200"
       }`}>
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-          isLow ? "bg-red-100" : "bg-amber-100"
+          isLow ? "bg-rose-100" : "bg-[#384877]/10"
         }`}>
-          <Coins className={`w-5 h-5 ${isLow ? "text-red-600" : "text-amber-600"}`} />
+          <Coins className={`w-5 h-5 ${isLow ? "text-rose-600" : "text-[#384877]"}`} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`text-sm font-bold ${isLow ? "text-red-700" : "text-amber-800"}`}>
+            <span className={`text-sm font-bold ${isLow ? "text-rose-700" : "text-slate-800"}`}>
               {credits} 点
             </span>
             {planLabel && (
@@ -52,11 +52,11 @@ export default function CreditsBadge({ compact = false }) {
               </span>
             )}
           </div>
-          <p className={`text-[11px] ${isLow ? "text-red-500" : "text-amber-600"}`}>
+          <p className={`text-[11px] ${isLow ? "text-rose-500" : "text-slate-500"}`}>
             {isLow ? "余额不足，点击充值" : "AI 点数余额"}
           </p>
         </div>
-        <TrendingUp className={`w-4 h-4 ${isLow ? "text-red-400" : "text-amber-400"}`} />
+        <TrendingUp className={`w-4 h-4 ${isLow ? "text-rose-400" : "text-slate-400"}`} />
       </div>
     </Link>
   );

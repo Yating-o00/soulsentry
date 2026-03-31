@@ -74,6 +74,19 @@ Deno.serve(async (req) => {
       return jr({ error: 'Missing WeChat Pay config' }, 500);
     }
 
+    // Diagnostic mode
+    if (body.packId === '__diagnose__') {
+      return jr({
+        appid_prefix: APPID.substring(0, 6) + '***',
+        appid_len: APPID.length,
+        mchid_prefix: MCHID.substring(0, 4) + '***',
+        mchid_len: MCHID.length,
+        serial_prefix: SERIAL_NO.substring(0, 8) + '***',
+        pk_starts: PRIVATE_KEY.substring(0, 30),
+        pk_len: PRIVATE_KEY.length
+      });
+    }
+
     var outTradeNo = 'SS' + Date.now() + Math.random().toString(36).substring(2, 8).toUpperCase();
     var totalFen = Math.round(price * 100);
     var timestamp = Math.floor(Date.now() / 1000).toString();

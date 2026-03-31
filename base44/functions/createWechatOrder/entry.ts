@@ -1,36 +1,50 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
-// test log to verify function loads
-console.log('[WechatOrder] Module loaded');
+
+function jr(data, status) {
+  return new Response(JSON.stringify(data), {
+    status: status || 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
 
 async function importPrivateKey(pemKey) {
-  var pemBody = pemKey
-    .replace(/-----[A-Z ]+-----/g, '')
-    .replace(/\\n/g, '')
-    .replace(/\r/g, '')
-    .replace(/\n/g, '')
-    .replace(/ /g, '');
-
-  var cleaned = pemBody.replace(/[^A-Za-z0-9+/=]/g, '');
-  var binary = atob(cleaned);
+  console.log('[WX] pk raw first 60:', pemKey.substring(0, 60));
+  console.log('[WX] pk raw last 60:', pemKey.substring(pemKey.length - 60));
+  
+  // Handle escaped newlines from env var
+  var normalized = pemKey.replace(/\\n/g, '\n');
+  
+  // Extract base64 content between PEM headers
+  var match = normalized.match(/-----BEGIN[^-]*-----([^-]+)-----END[^-]*-----/);
+  var b64;
+  if (match) {
+    b64 = match[1].replace(/[\r\n\s]/g, '');
+    console.log('[WX] extracted b64 from PEM headers, length:', b64.length);
+  } else {
+    // No PEM headers, treat entire string as base64
+    b64 = pemKey.replace(/-----[A-Z ]+-----/g, '').replace(/\\n/g, '').replace(/[\r\n\s]/g, '');
+    console.log('[WX] no PEM headers found, raw b64 length:', b64.length);
+  }
+  
+  var binary = atob(b64);
   var bytes = new Uint8Array(binary.length);
   for (var i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-
+  console.log('[WX] decoded bytes length:', bytes.length);
+  
   return await crypto.subtle.importKey(
-    'pkcs8',
-    bytes.buffer,
+    'pkcs8', bytes.buffer,
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign']
+    false, ['sign']
   );
 }
 
 async function signMessage(privateKeyPem, message) {
   var key = await importPrivateKey(privateKeyPem);
   var encoded = new TextEncoder().encode(message);
-  var signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, encoded);
-  var arr = new Uint8Array(signature);
+  var sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, encoded);
+  var arr = new Uint8Array(sig);
   var str = '';
   for (var i = 0; i < arr.length; i++) {
     str += String.fromCharCode(arr[i]);
@@ -49,95 +63,75 @@ function generateNonceStr() {
   return result;
 }
 
-Deno.serve(async function(req) {
+Deno.serve(async (req) => {
   try {
-    console.log('[WechatOrder] Request received');
+    console.log('[WX] step 1');
     var base44 = createClientFromRequest(req);
-    console.log('[WechatOrder] base44 client created');
     var user = await base44.auth.me();
-    console.log('[WechatOrder] user:', user ? user.email : 'null');
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-    }
+    if (!user) return jr({ error: 'Unauthorized' }, 401);
+    console.log('[WX] step 2 user ok');
 
-    var body = await req.json();
-    var packId = body.packId;
-    var packName = body.packName;
-    var credits = body.credits;
-    var price = body.price;
+    var body;
+    try { body = await req.json(); } catch (_e) { body = {}; }
+    console.log('[WX] step 3 body ok');
 
-    if (!packId || !credits || !price) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-    }
+    var packId = body.packId || '';
+    var packName = body.packName || '';
+    var credits = body.credits || 0;
+    var price = body.price || 0;
+    if (!packId || !credits || !price) return jr({ error: 'Missing fields' }, 400);
+    console.log('[WX] step 4 fields ok');
 
-    var APPID = Deno.env.get("WECHAT_APPID");
-    var MCHID = Deno.env.get("WECHAT_MCHID");
-    var PRIVATE_KEY = Deno.env.get("WECHAT_PRIVATE_KEY");
-    var SERIAL_NO = Deno.env.get("WECHAT_SERIAL_NO");
+    var APPID = Deno.env.get("WECHAT_APPID") || '';
+    var MCHID = Deno.env.get("WECHAT_MCHID") || '';
+    var PRIVATE_KEY = Deno.env.get("WECHAT_PRIVATE_KEY") || '';
+    var SERIAL_NO = Deno.env.get("WECHAT_SERIAL_NO") || '';
+    console.log('[WX] step 5 env ok, pk length:', PRIVATE_KEY.length);
 
     if (!APPID || !MCHID || !PRIVATE_KEY || !SERIAL_NO) {
-      return new Response(JSON.stringify({ error: 'Missing wechat config' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      return jr({ error: 'Missing env vars' }, 500);
     }
 
     var outTradeNo = 'SS' + Date.now() + Math.random().toString(36).substring(2, 8).toUpperCase();
     var totalFen = Math.round(price * 100);
-
-    var reqUrl = new URL(req.url);
-    var notifyUrl = reqUrl.origin + '/handleWechatWebhook';
-
     var timestamp = Math.floor(Date.now() / 1000).toString();
     var nonceStr = generateNonceStr();
     var apiPath = '/v3/pay/transactions/native';
+    console.log('[WX] step 6 vars ready');
 
     var orderBody = {
       appid: APPID,
       mchid: MCHID,
       description: 'SoulSentry AI - ' + (packName || packId),
       out_trade_no: outTradeNo,
-      notify_url: notifyUrl,
+      notify_url: 'https://example.com/webhook',
       amount: { total: totalFen, currency: 'CNY' },
-      attach: JSON.stringify({ user_email: user.email, user_id: user.id, pack_id: packId, credits: credits })
+      attach: JSON.stringify({ user_email: user.email, pack_id: packId, credits: credits })
     };
-
     var bodyStr = JSON.stringify(orderBody);
     var signStr = 'POST\n' + apiPath + '\n' + timestamp + '\n' + nonceStr + '\n' + bodyStr + '\n';
-    var signature = await signMessage(PRIVATE_KEY, signStr);
-    var authorization = 'WECHATPAY2-SHA256-RSA2048 mchid="' + MCHID + '",nonce_str="' + nonceStr + '",signature="' + signature + '",timestamp="' + timestamp + '",serial_no="' + SERIAL_NO + '"';
+    console.log('[WX] step 7 pre-sign');
 
-    var wxResponse = await fetch('https://api.mch.weixin.qq.com' + apiPath, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': authorization
-      },
-      body: bodyStr
-    });
-
-    var wxData = await wxResponse.json();
-
-    if (!wxResponse.ok) {
-      return new Response(JSON.stringify({ error: wxData.message || 'WeChat API error', code: wxData.code }), { status: wxResponse.status, headers: { 'Content-Type': 'application/json' } });
+    var signature;
+    try {
+      signature = await signMessage(PRIVATE_KEY, signStr);
+    } catch (signErr) {
+      var errInfo = {
+        message: signErr ? signErr.message : 'no message',
+        name: signErr ? signErr.name : 'no name',
+        str: String(signErr),
+        type: typeof signErr,
+        keys: signErr ? Object.keys(signErr) : [],
+        stack: signErr ? signErr.stack : 'no stack',
+        pkFirst50: PRIVATE_KEY.substring(0, 50),
+        pkLast50: PRIVATE_KEY.substring(PRIVATE_KEY.length - 50)
+      };
+      return jr({ error: 'Sign failed', detail: errInfo }, 500);
     }
 
-    await base44.asServiceRole.entities.AICreditTransaction.create({
-      type: 'purchase',
-      amount: 0,
-      balance_after: user.ai_credits || 200,
-      description: 'WeChat order - ' + packName + ' (' + credits + ' credits) #' + outTradeNo,
-      feature: 'wechat_pending_' + outTradeNo,
-      created_by: user.email
-    });
-
-    return new Response(JSON.stringify({
-      success: true,
-      order_no: outTradeNo,
-      code_url: wxData.code_url,
-      pack: { id: packId, name: packName, credits: credits, price: price }
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-
-  } catch (err) {
-    console.error('[WechatOrder] Caught error:', err);
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return jr({ msg: 'signed ok', sigLen: signature.length });
+  } catch (e) {
+    console.error('[WX] err', e);
+    return jr({ error: String(e) }, 500);
   }
 });

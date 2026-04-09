@@ -2,35 +2,29 @@ import React, { useState, useRef, useCallback } from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { RefreshCw, Loader2 } from 'lucide-react';
 
-interface PullToRefreshProps {
-  children: React.ReactNode;
-  onRefresh: () => Promise<void>;
-  threshold?: number;
-}
-
 export default function PullToRefresh({
   children,
   onRefresh,
   threshold = 80
-}: PullToRefreshProps) {
+}) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const y = useMotionValue(0);
   const startY = useRef(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef(null);
 
   const opacity = useTransform(y, [0, threshold], [0, 1]);
   const rotation = useTransform(y, [0, threshold], [0, 360]);
   const scale = useTransform(y, [0, threshold], [0.5, 1]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = (e) => {
     if (containerRef.current?.scrollTop === 0) {
       startY.current = e.touches[0].clientY;
       setIsPulling(true);
     }
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = (e) => {
     if (!isPulling || isRefreshing) return;
 
     const currentY = e.touches[0].clientY;

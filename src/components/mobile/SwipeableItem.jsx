@@ -11,6 +11,8 @@ export default function SwipeableItem({
   const [isDragging, setIsDragging] = useState(false);
   const x = useMotionValue(0);
   const containerRef = useRef(null);
+  const leftOpacity = useTransform(x, [0, threshold], [0, 1]);
+  const rightOpacity = useTransform(x, [-threshold, 0], [1, 0]);
 
   const backgroundColor = useTransform(
     x,
@@ -43,7 +45,7 @@ export default function SwipeableItem({
         <motion.div
           className="absolute inset-y-0 left-0 flex items-center pl-4"
           style={{
-            opacity: useTransform(x, [0, threshold], [0, 1])
+            opacity: leftOpacity
           }}
         >
           {leftActions.map((action, index) => {
@@ -66,7 +68,7 @@ export default function SwipeableItem({
         <motion.div
           className="absolute inset-y-0 right-0 flex items-center pr-4"
           style={{
-            opacity: useTransform(x, [-threshold, 0], [1, 0])
+            opacity: rightOpacity
           }}
         >
           {rightActions.map((action, index) => {

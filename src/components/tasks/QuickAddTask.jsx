@@ -353,9 +353,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
 
       if (response.tasks && response.tasks.length > 0) {
         setShowVoiceDialog(false);
-        setShowSmartTextDialog(false);
         setTranscript("");
-        setSmartText("");
         setIsProcessing(false);
         
         if (response.tasks.length > 1 || response.tasks.some(t => t.subtasks?.length > 0)) {
@@ -383,14 +381,12 @@ ${task.description ? `描述: "${task.description}"` : ''}
       } else {
         toast.error("未能识别约定信息");
         setShowVoiceDialog(false);
-        setShowSmartTextDialog(false);
       }
     } catch (error) {
       console.error("AI解析失败:", error);
       const errorMsg = error?.message || error?.toString() || "未知错误";
       toast.error(`解析失败: ${errorMsg}`);
       setShowVoiceDialog(false);
-      setShowSmartTextDialog(false);
     }
     setIsProcessing(false);
   };
@@ -1198,8 +1194,11 @@ ${task.description ? `描述: "${task.description}"` : ''}
 
                   {templates && templates.length > 0 && (
                       <Select onValueChange={(val) => {
-                          const t = templates.find(t => t.id === val);
-                          loadTemplate(t);
+                          const tmpl = templates.find(t => t.id === val);
+                          if (tmpl && tmpl.template_data) {
+                            setTask(prev => ({ ...prev, ...tmpl.template_data }));
+                            toast.success("已加载模板: " + tmpl.name);
+                          }
                       }}>
                           <SelectTrigger className="w-auto border-dashed border-purple-200 bg-purple-50/50 hover:bg-purple-50 text-purple-700 rounded-[10px] mr-2">
                               <div className="flex items-center gap-2">
@@ -1245,25 +1244,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                     )}
                   </Button>
 
-                  {/* 模板选择 */}
-                  {templates && templates.length > 0 && (
-                      <Select onValueChange={(val) => {
-                          const t = templates.find(t => t.id === val);
-                          loadTemplate(t);
-                      }}>
-                          <SelectTrigger className="w-auto border-dashed border-purple-200 bg-purple-50/50 hover:bg-purple-50 text-purple-700 rounded-[10px]">
-                              <div className="flex items-center gap-2">
-                                  <BookTemplate className="h-4 w-4" />
-                                  <span className="font-medium">从模板加载</span>
-                              </div>
-                          </SelectTrigger>
-                          <SelectContent>
-                              {templates.map(t => (
-                                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                              ))}
-                          </SelectContent>
-                      </Select>
-                  )}
+                  {/* 第二个模板选择已移除，避免重复 */}
                 </div>
 
                 {/* 高级设置 */}

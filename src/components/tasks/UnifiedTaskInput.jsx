@@ -118,7 +118,8 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
       title: value,
       category,
       priority,
-      status: 'pending'
+      status: 'pending',
+      reminder_time: new Date().toISOString()
     });
     
     handleClear();

@@ -401,10 +401,11 @@ ${task.description ? `描述: "${task.description}"` : ''}
       for (const taskData of parsedTasks) {
         const hasSubtasks = taskData.subtasks && taskData.subtasks.length > 0;
         
+        const now = new Date().toISOString();
         const mainTaskData = {
           title: String(taskData.title || "未命名约定"),
           description: taskData.description || "",
-          reminder_time: taskData.reminder_time,
+          reminder_time: taskData.reminder_time || now,
           end_time: taskData.end_time,
           priority: taskData.priority || "medium",
           category: taskData.category || "personal",
@@ -435,7 +436,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
             const subtaskData = {
               title: `${subtask.order || i + 1}. ${subtaskTitle}`,
               description: subtask.description || "",
-              reminder_time: subtask.reminder_time || taskData.reminder_time,
+              reminder_time: subtask.reminder_time || taskData.reminder_time || now,
               end_time: subtask.end_time || taskData.end_time,
               priority: subtask.priority || taskData.priority || "medium",
               category: taskData.category,

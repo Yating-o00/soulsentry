@@ -28,20 +28,18 @@ export function useAICreditGate() {
     const feature = AI_FEATURES[featureKey];
     if (!feature) {
       console.warn("Unknown AI feature:", featureKey);
-      return true; // allow if feature not configured
+      return true;
     }
 
-    // If credits are still loading, refresh and wait
-    if (creditsLoading) {
-      await refreshCredits();
-    }
+    // Always refresh from server to get accurate balance
+    const freshData = await refreshCredits();
+    const freshBalance = freshData?.credits ?? 0;
 
-    const check = checkCredits(featureKey);
-    if (!check.canUse) {
+    if (freshBalance < feature.cost) {
       setInsufficientProps({
-        cost: check.cost,
-        balance: check.balance,
-        featureName: check.featureName,
+        cost: feature.cost,
+        balance: freshBalance,
+        featureName: feature.name,
       });
       setShowInsufficientDialog(true);
       return false;
@@ -59,7 +57,7 @@ export function useAICreditGate() {
     }
 
     return true;
-  }, [checkCredits, consumeCredits]);
+  }, [consumeCredits, refreshCredits]);
 
   const dismissDialog = useCallback(() => {
     setShowInsufficientDialog(false);

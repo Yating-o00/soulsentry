@@ -51,8 +51,12 @@ export function useAICredits() {
       return { success: false, newBalance: credits || 0, error: "未知的AI功能" };
     }
 
-    const currentCredits = credits ?? 0;
+    // Re-read from server to avoid stale state / race conditions
+    const user = await base44.auth.me();
+    const currentCredits = user.ai_credits ?? 0;
+
     if (currentCredits < feature.cost) {
+      setCredits(currentCredits);
       return { success: false, newBalance: currentCredits, error: `点数不足，需要 ${feature.cost} 点，当前余额 ${currentCredits} 点` };
     }
 
@@ -72,7 +76,7 @@ export function useAICredits() {
     });
 
     return { success: true, newBalance };
-  }, [credits]);
+  }, []);
 
   /**
    * 增加点数（购买或赠送）

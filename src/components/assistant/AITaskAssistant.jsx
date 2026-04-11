@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
    import { base44 } from "@/api/base44Client";
    import { useQuery, useQueryClient } from "@tanstack/react-query";
+   import { useAICreditGate } from "@/components/credits/useAICreditGate";
+   import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
    import { Button } from "@/components/ui/button";
    import { Card } from "@/components/ui/card";
    import { Input } from "@/components/ui/input";
@@ -33,6 +35,7 @@ import React, { useState, useEffect, useRef } from "react";
    import { zhCN } from "date-fns/locale";
    
    export default function AITaskAssistant({ isOpen, onClose }) {
+     const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
      const [conversationId, setConversationId] = useState(null);
      const [messages, setMessages] = useState([]);
      const [inputText, setInputText] = useState("");
@@ -276,6 +279,9 @@ import React, { useState, useEffect, useRef } from "react";
             return;
        }
        if (!text.trim()) return;
+
+       const allowed = await gate("general_ai", "AI对话");
+       if (!allowed) return;
 
        // 立即显示用户消息，提供即时反馈
        const userMsg = { role: "user", content: text };
@@ -565,6 +571,11 @@ import React, { useState, useEffect, useRef } from "react";
              </form>
            </div>
          </Card>
+        <InsufficientCreditsDialog
+          open={showInsufficientDialog}
+          onOpenChange={dismissDialog}
+          {...insufficientProps}
+        />
        </motion.div>
      );
    }

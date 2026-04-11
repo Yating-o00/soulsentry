@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { useQuery } from "@tanstack/react-query";
 import CalendarMonthView from "./CalendarMonthView";
 
@@ -58,6 +60,7 @@ export default function SoulMonthPlanner({
   const [appendInput, setAppendInput] = useState('');
   const [isAppending, setIsAppending] = useState(false);
   const [showAppendInput, setShowAppendInput] = useState(false);
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
   // Fetch user behaviors for smart planning
   const { data: recentBehaviors = [] } = useQuery({
@@ -150,6 +153,9 @@ export default function SoulMonthPlanner({
   const handleProcess = async () => {
     if (!userInput.trim()) return;
     
+    const allowed = await gate("monthly_plan", "月计划生成");
+    if (!allowed) return;
+
     setStage('processing');
     setIsProcessing(true);
     setProcessingStepIndex(0);
@@ -205,6 +211,10 @@ export default function SoulMonthPlanner({
 
   const handleAppend = async () => {
     if (!appendInput.trim() || !monthData) return;
+
+    const allowed = await gate("general_ai", "追加月计划内容");
+    if (!allowed) return;
+
     setIsAppending(true);
     try {
       const { data } = await base44.functions.invoke('generateMonthPlan', {
@@ -238,6 +248,7 @@ export default function SoulMonthPlanner({
   };
 
   return (
+    <>
     <div className="min-h-screen bg-[#f8f9fa] text-slate-900 font-sans rounded-3xl overflow-hidden relative">
       <div className="relative z-10 p-6 md:p-8 max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-100px)]">
         
@@ -535,5 +546,11 @@ export default function SoulMonthPlanner({
         )}
       </div>
     </div>
+    <InsufficientCreditsDialog
+      open={showInsufficientDialog}
+      onOpenChange={dismissDialog}
+      {...insufficientProps}
+    />
+    </>
   );
 }

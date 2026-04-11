@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { invokeAI } from "@/components/utils/aiHelper";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,9 +42,13 @@ export default function AITaskEnhancer({ taskTitle, currentDescription, availabl
   const [preserveDescription, setPreserveDescription] = useState(false);
   const [refineInstruction, setRefineInstruction] = useState("");
   const [isRefining, setIsRefining] = useState(false);
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
   const handleRefine = async () => {
     if (!refineInstruction.trim() || !suggestions) return;
+
+    const allowed = await gate("general_ai", "AI建议微调");
+    if (!allowed) return;
 
     setIsRefining(true);
     try {
@@ -100,6 +106,9 @@ ${JSON.stringify(suggestions)}
       toast.error("请先输入约定标题");
       return;
     }
+
+    const allowed = await gate("task_breakdown", "任务智能分解");
+    if (!allowed) return;
 
     setIsAnalyzing(true);
     try {
@@ -305,6 +314,7 @@ ${templatesInfo}
   };
 
   return (
+    <>
     <div className="space-y-4">
       <Button
         type="button"
@@ -653,6 +663,12 @@ ${templatesInfo}
           </motion.div>
         }
       </AnimatePresence>
-    </div>);
-
+    </div>
+    <InsufficientCreditsDialog
+      open={showInsufficientDialog}
+      onOpenChange={dismissDialog}
+      {...insufficientProps}
+    />
+    </>
+  );
 }

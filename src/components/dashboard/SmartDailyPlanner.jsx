@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { format, parseISO, addDays } from "date-fns";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -51,6 +53,7 @@ export default function SmartDailyPlanner() {
   const [resolvedDateHint, setResolvedDateHint] = useState(null);
   const [inputMode, setInputMode] = useState("text"); // "text" | "voice"
   const resultsRef = useRef(null);
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
   // Load daily plan from DB
   useEffect(() => {
@@ -93,6 +96,10 @@ export default function SmartDailyPlanner() {
   // Use analyzeIntent (same as CalendarDayView)
   const handleAnalyze = async () => {
     if (!userInput.trim() || isProcessing) return;
+
+    const allowed = await gate("schedule_optimize", "智能日程规划");
+    if (!allowed) return;
+
     setIsProcessing(true);
     try {
       // Build existing plan context
@@ -204,6 +211,7 @@ export default function SmartDailyPlanner() {
   }
 
   return (
+    <>
     <div className="bg-white rounded-[28px] border border-slate-100/80 shadow-[0_8px_28px_rgba(140,147,201,0.12)] overflow-hidden">
       {/* Header */}
       <div className="px-5 md:px-6 pt-5 pb-4 border-b border-slate-100/60">
@@ -512,5 +520,11 @@ export default function SmartDailyPlanner() {
         )}
       </div>
     </div>
+    <InsufficientCreditsDialog
+      open={showInsufficientDialog}
+      onOpenChange={dismissDialog}
+      {...insufficientProps}
+    />
+    </>
   );
 }

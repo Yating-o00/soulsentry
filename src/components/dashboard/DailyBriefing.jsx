@@ -3,10 +3,13 @@ import { base44 } from "@/api/base44Client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Sun, Compass, Coffee, RefreshCw, Moon, CloudSun } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 
 export default function DailyBriefing() {
     const [briefing, setBriefing] = useState(null);
     const [loading, setLoading] = useState(true);
+    const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
     const fetchBriefing = async (force = false) => {
         const today = new Date().toDateString();
@@ -23,6 +26,12 @@ export default function DailyBriefing() {
                     // Cache invalid
                 }
             }
+        }
+
+        const allowed = await gate("daily_briefing", "每日智能简报");
+        if (!allowed) {
+            setLoading(false);
+            return;
         }
 
         setLoading(true);
@@ -68,6 +77,7 @@ export default function DailyBriefing() {
     if (!briefing) return null;
 
     return (
+        <>
         <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -137,5 +147,11 @@ export default function DailyBriefing() {
                 )}
             </div>
         </motion.div>
+        <InsufficientCreditsDialog
+            open={showInsufficientDialog}
+            onOpenChange={dismissDialog}
+            {...insufficientProps}
+        />
+        </>
     );
 }

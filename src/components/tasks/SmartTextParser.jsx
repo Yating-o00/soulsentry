@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { useQuery } from "@tanstack/react-query";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +27,7 @@ export default function SmartTextParser({ onTasksGenerated, className = "" }) {
   const [batchRefineInstruction, setBatchRefineInstruction] = useState("");
   const [isBatchRefining, setIsBatchRefining] = useState(false);
   const [openDatePopover, setOpenDatePopover] = useState(null); // { taskIndex, subIndex: null | number }
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
   const handleDateSelect = (date, currentIso, callback) => {
     if (!date) return;
@@ -48,6 +51,9 @@ export default function SmartTextParser({ onTasksGenerated, className = "" }) {
       toast.error("请输入要解析的文本");
       return;
     }
+
+    const allowed = await gate("task_breakdown", "智能文本解析");
+    if (!allowed) return;
 
     setParsing(true);
     try {
@@ -194,6 +200,9 @@ ${text}
 
   const handleBatchRefine = async () => {
     if (!batchRefineInstruction.trim() || parsedTasks.length === 0) return;
+
+    const allowed = await gate("general_ai", "批量调整约定");
+    if (!allowed) return;
 
     setIsBatchRefining(true);
     try {
@@ -359,6 +368,9 @@ ${JSON.stringify(parsedTasks.map(t => ({ title: t.title, description: t.descript
       return;
     }
 
+    const allowed = await gate("general_ai", "智能完善子约定");
+    if (!allowed) return;
+
     setRefiningState({ taskIndex, subIndex: subtaskIndex });
     try {
       const response = await invokeAI({
@@ -430,6 +442,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
   };
 
   return (
+    <>
     <Card className={`border border-[#e5e9ef] shadow-md hover:shadow-lg transition-all bg-white rounded-[16px] ${className}`}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
@@ -816,5 +829,11 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
         </div>
       </CardContent>
     </Card>
+    <InsufficientCreditsDialog
+      open={showInsufficientDialog}
+      onOpenChange={dismissDialog}
+      {...insufficientProps}
+    />
+    </>
   );
 }

@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { 
   Sparkles, 
   Loader2, 
@@ -28,12 +30,16 @@ export default function AINoteAssistant({ noteContent, onTagsGenerated, onSummar
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [activeTab, setActiveTab] = useState("entities"); // entities, summary, tasks
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
   const handleFullAnalysis = async () => {
     if (!noteContent || noteContent.trim().length < 5) {
       toast.error("内容太少，无法分析");
       return;
     }
+
+    const allowed = await gate("note_summary", "笔记智能摘要");
+    if (!allowed) return;
 
     setIsAnalyzing(true);
     try {
@@ -133,6 +139,7 @@ export default function AINoteAssistant({ noteContent, onTagsGenerated, onSummar
   };
 
   return (
+    <>
     <div className="mt-2">
       {!analysisResult ? (
         <Button
@@ -294,5 +301,11 @@ export default function AINoteAssistant({ noteContent, onTagsGenerated, onSummar
         </div>
       )}
     </div>
+    <InsufficientCreditsDialog
+      open={showInsufficientDialog}
+      onOpenChange={dismissDialog}
+      {...insufficientProps}
+    />
+    </>
   );
 }

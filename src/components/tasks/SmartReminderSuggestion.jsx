@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Sparkles, Clock, Loader2, TrendingUp, Brain } from "lucide-react";
@@ -13,12 +15,14 @@ export default function SmartReminderSuggestion({ task, onApply }) {
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
-  React.useEffect(() => {
-    analyzeBehavior();
-  }, []);
+  // User clicks to analyze - no auto-analyze on mount (requires credit check)
 
   const analyzeBehavior = async () => {
+    const allowed = await gate("schedule_optimize", "日程智能优化");
+    if (!allowed) return;
+
     setAnalyzing(true);
     setLoading(true);
 
@@ -81,6 +85,7 @@ export default function SmartReminderSuggestion({ task, onApply }) {
   };
 
   return (
+    <>
     <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4">
       <div className="flex items-start gap-3 mb-3">
         <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0">
@@ -228,5 +233,11 @@ export default function SmartReminderSuggestion({ task, onApply }) {
         )}
       </AnimatePresence>
     </Card>
+    <InsufficientCreditsDialog
+      open={showInsufficientDialog}
+      onOpenChange={dismissDialog}
+      {...insufficientProps}
+    />
+    </>
   );
 }

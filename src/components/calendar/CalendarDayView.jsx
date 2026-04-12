@@ -297,90 +297,6 @@ export default function CalendarDayView({
 
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-200px)] bg-slate-50/60 rounded-[28px] border border-slate-100 shadow-sm overflow-visible">
-      {/* Sidebar: Context & Overview */}
-      <div className="w-full lg:w-80 bg-white border-r border-slate-100 flex flex-col overflow-hidden">
-        <div className="p-6 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/30">
-            <div className="flex items-baseline gap-3 mb-1">
-                <h2 className="text-4xl font-bold text-slate-900 tracking-tight">
-                    {format(safeCurrentDate, "d")}
-                </h2>
-                <span className="text-lg font-medium text-slate-500">
-                    {format(safeCurrentDate, "EEEE", { locale: zhCN })}
-                </span>
-                {isCurrentDay && (
-                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm shadow-blue-200">
-                        Today
-                    </span>
-                )}
-            </div>
-            <p className="text-sm text-slate-400 font-medium">
-                {format(safeCurrentDate, "yyyy年M月", { locale: zhCN })}
-            </p>
-        </div>
-
-        <div className="flex-1 overflow-auto">
-            <div className="p-5 space-y-6">
-                {/* Weekly Context Card */}
-                {weeklyContext ? (
-                    <div className="bg-[#384877] rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-[#384877]/20">
-                        <div className="absolute top-0 right-0 p-3 opacity-10">
-                            <Target className="w-20 h-20" />
-                        </div>
-                        <div className="relative z-10">
-                            <div className="text-blue-200 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1">
-                                <Zap className="w-3 h-3" /> 周主题
-                            </div>
-                            <h3 className="text-lg font-bold leading-tight mb-3">
-                                {weeklyContext.theme}
-                            </h3>
-                            
-                            {weeklyContext.dayEvents.length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-white/10 space-y-2">
-                                    <div className="text-blue-200 text-xs font-medium">今日 AI 规划:</div>
-                                    {weeklyContext.dayEvents.map((e, idx) => (
-                                        <div key={idx} className="flex items-start gap-2 text-sm text-white/90">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
-                                            <span className="leading-relaxed">{e.title}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 text-center">
-                        <p className="text-slate-400 text-sm">本周暂无 AI 规划</p>
-                        <Button variant="link" className="text-[#384877] text-xs h-auto p-0 mt-1">
-                            去生成规划 &rarr;
-                        </Button>
-                    </div>
-                )}
-
-                {/* Day Notes */}
-                {dayNotes.length > 0 && (
-                    <div>
-                        <div className="flex items-center gap-2 mb-3 px-1">
-                            <StickyNote className="w-4 h-4 text-slate-400" />
-                            <h3 className="text-sm font-bold text-slate-700">今日心签</h3>
-                            <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded-md ml-auto">
-                                {dayNotes.length}
-                            </span>
-                        </div>
-                        <div className="space-y-2">
-                            {dayNotes.slice(0, 3).map(note => (
-                                <div key={note.id} className="p-3 rounded-xl bg-amber-50/50 border border-amber-100 text-amber-900/80 text-xs leading-relaxed line-clamp-3 hover:bg-amber-50 transition-colors">
-                                    <div dangerouslySetInnerHTML={{ __html: note.content }} />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-
-
-            </div>
-      </div>
-
       {/* Main Timeline */}
       <div className="flex-1 flex flex-col bg-white relative overflow-auto">
         <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-b from-white to-transparent z-10" />
@@ -632,6 +548,96 @@ export default function CalendarDayView({
         </DragDropContext>
 
 
+      </div>
+
+      {/* Right Sidebar: Context & Notes */}
+      <div className="w-full lg:w-72 bg-white border-l border-slate-100 flex flex-col overflow-hidden">
+        <div className="p-5 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/30">
+            <div className="flex items-baseline gap-3 mb-1">
+                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
+                    {format(safeCurrentDate, "d")}
+                </h2>
+                <span className="text-base font-medium text-slate-500">
+                    {format(safeCurrentDate, "EEEE", { locale: zhCN })}
+                </span>
+                {isCurrentDay && (
+                    <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm shadow-blue-200">
+                        Today
+                    </span>
+                )}
+            </div>
+            <p className="text-xs text-slate-400 font-medium">
+                {format(safeCurrentDate, "yyyy年M月", { locale: zhCN })}
+            </p>
+        </div>
+
+        <div className="flex-1 overflow-auto">
+            <div className="p-4 space-y-5">
+                {/* Weekly Context Card */}
+                {weeklyContext ? (
+                    <div className="bg-[#384877] rounded-2xl p-4 text-white relative overflow-hidden shadow-md shadow-[#384877]/15">
+                        <div className="absolute top-0 right-0 p-2 opacity-10">
+                            <Target className="w-14 h-14" />
+                        </div>
+                        <div className="relative z-10">
+                            <div className="text-blue-200 text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                <Zap className="w-3 h-3" /> 周主题
+                            </div>
+                            <h3 className="text-sm font-bold leading-tight mb-2">
+                                {weeklyContext.theme}
+                            </h3>
+                            
+                            {weeklyContext.dayEvents.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
+                                    <div className="text-blue-200 text-[10px] font-medium">今日 AI 规划:</div>
+                                    {weeklyContext.dayEvents.slice(0, 3).map((e, idx) => (
+                                        <div key={idx} className="flex items-start gap-1.5 text-xs text-white/90">
+                                            <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                                            <span className="leading-relaxed line-clamp-2">{e.title}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 text-center">
+                        <p className="text-slate-400 text-xs">本周暂无 AI 规划</p>
+                        <Button variant="link" className="text-[#384877] text-xs h-auto p-0 mt-1">
+                            去生成规划 &rarr;
+                        </Button>
+                    </div>
+                )}
+
+                {/* Day Notes */}
+                <div>
+                    <div className="flex items-center gap-2 mb-2.5 px-0.5">
+                        <StickyNote className="w-3.5 h-3.5 text-amber-500" />
+                        <h3 className="text-xs font-bold text-slate-600">今日心签</h3>
+                        <span className="bg-amber-50 text-amber-600 text-[10px] px-1.5 py-0.5 rounded-md ml-auto font-medium">
+                            {dayNotes.length}
+                        </span>
+                    </div>
+                    {dayNotes.length > 0 ? (
+                        <div className="space-y-2">
+                            {dayNotes.slice(0, 4).map(note => (
+                                <div key={note.id} className="p-2.5 rounded-xl bg-amber-50/40 border border-amber-100/80 text-amber-900/70 text-xs leading-relaxed line-clamp-3 hover:bg-amber-50/70 transition-colors cursor-pointer">
+                                    <div dangerouslySetInnerHTML={{ __html: note.content }} />
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="p-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 text-center">
+                            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center mx-auto mb-2">
+                                <StickyNote className="w-4.5 h-4.5 text-amber-300" />
+                            </div>
+                            <p className="text-xs text-slate-400">今日暂无心签</p>
+                            <p className="text-[10px] text-slate-300 mt-0.5">在心签页随时记录灵感</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
       </div>
     </div>
   );

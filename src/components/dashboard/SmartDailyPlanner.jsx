@@ -29,6 +29,7 @@ import VoiceInput from "./planner/VoiceInput";
 import DeviceStrategyMap from "./planner/DeviceStrategyMap";
 import ContextTimeline from "./planner/ContextTimeline";
 import AutoExecCards from "./planner/AutoExecCards";
+import KanbanBoard from "./planner/KanbanBoard";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 import { detectTimeConflicts } from "@/components/planner/detectConflicts";
@@ -58,6 +59,7 @@ export default function SmartDailyPlanner() {
   const [inputMode, setInputMode] = useState("text"); // "text" | "voice"
   const [conflictData, setConflictData] = useState(null); // { conflicts, allBlocks }
   const [syncStatus, setSyncStatus] = useState(null); // null | 'syncing' | 'done'
+  const [viewMode, setViewMode] = useState("timeline"); // "timeline" | "kanban"
   const resultsRef = useRef(null);
   const lastSubmittedRef = useRef(""); // 防止重复提交同一内容
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
@@ -254,6 +256,36 @@ export default function SmartDailyPlanner() {
     }
   };
 
+  // Kanban drag status change handler
+  const handleKanbanStatusChange = async (source, sourceIndex, newStatus) => {
+    const planJson = { ...(dayPlan?.plan_json || {}) };
+    if (source === "block") {
+      const blocks = [...(planJson.focus_blocks || [])];
+      if (blocks[sourceIndex]) {
+        blocks[sourceIndex] = { ...blocks[sourceIndex], status: newStatus };
+        planJson.focus_blocks = blocks;
+      }
+    } else {
+      const tasks = [...(planJson.key_tasks || [])];
+      if (tasks[sourceIndex]) {
+        tasks[sourceIndex] = { ...tasks[sourceIndex], status: newStatus };
+        planJson.key_tasks = tasks;
+      }
+    }
+    setDayPlan(prev => prev ? { ...prev, plan_json: planJson } : prev);
+    if (analysis) {
+      setAnalysis(prev => ({
+        ...prev,
+        timeline: planJson.focus_blocks || prev.timeline,
+        automations: (planJson.key_tasks || []).map(t => ({ title: t.title, desc: t.description || '', status: t.status || 'pending' })),
+      }));
+    }
+    if (existingPlanId) {
+      await base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson });
+      toast.success("状态已更新");
+    }
+  };
+
   const handleDelete = async () => {
     if (!existingPlanId) return;
     try {
@@ -295,8 +327,28 @@ export default function SmartDailyPlanner() {
             </div>
           </div>
 
-          {/* Action buttons */}
+          {/* View toggle + Action buttons */}
           <div className="flex items-center gap-1 shrink-0">
+            {dayPlan && (
+              <div className="flex items-center bg-slate-100 rounded-lg p-0.5 mr-1">
+                <button
+                  onClick={() => setViewMode("timeline")}
+                  className={cn("px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                    viewMode === "timeline" ? "bg-white text-[#384877] shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  时间线
+                </button>
+                <button
+                  onClick={() => setViewMode("kanban")}
+                  className={cn("px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                    viewMode === "kanban" ? "bg-white text-[#384877] shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  看板
+                </button>
+              </div>
+            )}
             {dayPlan && (
               <>
                 <Button
@@ -548,7 +600,7 @@ export default function SmartDailyPlanner() {
       {/* Results from AI analysis */}
       <div ref={resultsRef} className="px-6 pb-6 space-y-5">
         {/* Context Timeline (from analysis) - only current date entries */}
-        {analysis?.timeline?.length > 0 && (() => {
+        {analysis?.timeline?.length > 0 && viewMode === "timeline" && (() => {
           const dayBlocks = analysis.timeline.filter(t => !t.date || t.date === selectedDateStr);
           return dayBlocks.length > 0 ? (
             <ContextTimeline blocks={dayBlocks.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
@@ -556,29 +608,45 @@ export default function SmartDailyPlanner() {
         })()}
 
         {/* Auto Exec Cards (from analysis) */}
-        {analysis?.automations?.length > 0 && (
+        {analysis?.automations?.length > 0 && viewMode === "timeline" && (
           <AutoExecCards
             tasks={analysis.automations.map(a => ({ title: a.title, desc: a.desc, status: a.status }))}
             userText={userInput}
           />
         )}
 
+        {/* Kanban view for analysis results */}
+        {analysis && viewMode === "kanban" && (
+          <KanbanBoard
+            focusBlocks={(analysis.timeline || []).filter(t => !t.date || t.date === selectedDateStr)}
+            keyTasks={analysis.automations || []}
+            onStatusChange={handleKanbanStatusChange}
+          />
+        )}
+
         {/* Device Strategy Map (from analysis) - at the bottom */}
-        {analysis?.devices?.length > 0 && (
+        {analysis?.devices?.length > 0 && viewMode === "timeline" && (
           <DeviceStrategyMap devices={analysis.devices} />
         )}
 
         {/* Fallback: show saved dayPlan data when no fresh analysis */}
         {!analysis && dayPlan && (
           <div className="space-y-5">
-            {/* Saved timeline */}
-            {dayPlan.plan_json?.focus_blocks?.length > 0 && (
-              <ContextTimeline blocks={dayPlan.plan_json.focus_blocks} />
-            )}
-
-            {/* Saved tasks */}
-            {dayPlan.plan_json?.key_tasks?.length > 0 && (
-              <AutoExecCards tasks={dayPlan.plan_json.key_tasks.map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'active' : 'ready' }))} />
+            {viewMode === "kanban" ? (
+              <KanbanBoard
+                focusBlocks={dayPlan.plan_json?.focus_blocks || []}
+                keyTasks={dayPlan.plan_json?.key_tasks || []}
+                onStatusChange={handleKanbanStatusChange}
+              />
+            ) : (
+              <>
+                {dayPlan.plan_json?.focus_blocks?.length > 0 && (
+                  <ContextTimeline blocks={dayPlan.plan_json.focus_blocks} />
+                )}
+                {dayPlan.plan_json?.key_tasks?.length > 0 && (
+                  <AutoExecCards tasks={dayPlan.plan_json.key_tasks.map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'active' : 'ready' }))} />
+                )}
+              </>
             )}
 
             {/* Append CTA */}

@@ -103,55 +103,69 @@ export default function LifeTaskCard({
 
   // 2. Get Dynamic Icon & Theme
   const getTaskVisuals = () => {
-    const title = task.title?.toLowerCase() || '';
+    const title = task.title || '';
     const cat = task.category;
     
-    let icon = <Check className="w-6 h-6" />;
+    let icon = <Zap className="w-6 h-6" />;
     let bgGradient = "from-slate-100 to-slate-50";
     let iconColor = "text-slate-600";
     let emoji = null;
 
     // Keyword matching for specific icons
-    if (title.includes('油') || title.includes('超市') || title.includes('买')) {
-        icon = <ShoppingBag className="w-6 h-6" />;
-        bgGradient = "from-green-100 to-green-50";
-        iconColor = "text-green-600";
-        emoji = title.includes('油') ? '🛢️' : '🛒';
-    } else if (title.includes('花') || title.includes('植物') || title.includes('水')) {
-        icon = <Flower className="w-6 h-6" />;
-        bgGradient = "from-rose-100 to-rose-50";
-        iconColor = "text-rose-600";
-        emoji = '🌱';
-    } else if (title.includes('快递') || title.includes('包裹')) {
-        icon = <Package className="w-6 h-6" />;
-        bgGradient = "from-purple-100 to-purple-50";
-        iconColor = "text-purple-600";
-        emoji = '📦';
-    } else if (title.includes('药') || title.includes('医院')) {
-        icon = <Heart className="w-6 h-6" />;
-        bgGradient = "from-red-100 to-red-50";
-        iconColor = "text-red-600";
-        emoji = '💊';
-    } else if (title.includes('咖啡') || title.includes('茶')) {
-        icon = <Coffee className="w-6 h-6" />;
-        bgGradient = "from-amber-100 to-amber-50";
-        iconColor = "text-amber-600";
-        emoji = '☕';
-    } else if (title.includes('车') || title.includes('加油')) {
-        icon = <Car className="w-6 h-6" />;
-        bgGradient = "from-blue-100 to-blue-50";
-        iconColor = "text-blue-600";
-        emoji = '🚗';
+    if (/会议|开会|约见|见面/.test(title)) {
+        emoji = '🤝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+    } else if (/书|阅读|读|看书|图书/.test(title)) {
+        emoji = '📚'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+    } else if (/带|寄|快递|邮件|包裹|取件/.test(title)) {
+        emoji = '📦'; bgGradient = "from-purple-100 to-purple-50"; iconColor = "text-purple-600";
+    } else if (/油|超市|买|购物|商场/.test(title)) {
+        emoji = '🛒'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
+    } else if (/花|植物|浇/.test(title)) {
+        emoji = '🌸'; bgGradient = "from-rose-100 to-rose-50"; iconColor = "text-rose-600";
+    } else if (/药|医院|体检|吃药/.test(title)) {
+        emoji = '💊'; bgGradient = "from-red-100 to-red-50"; iconColor = "text-red-600";
+    } else if (/咖啡|茶|喝水/.test(title)) {
+        emoji = '☕'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+    } else if (/车|加油|驾/.test(title)) {
+        emoji = '🚗'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+    } else if (/跑步|运动|健身|锻炼|瑜伽/.test(title)) {
+        emoji = '🏃'; bgGradient = "from-emerald-100 to-emerald-50"; iconColor = "text-emerald-600";
+    } else if (/做饭|烹饪|煮|下厨|菜/.test(title)) {
+        emoji = '🍳'; bgGradient = "from-orange-100 to-orange-50"; iconColor = "text-orange-600";
+    } else if (/打扫|清洁|卫生|洗|整理/.test(title)) {
+        emoji = '🧹'; bgGradient = "from-teal-100 to-teal-50"; iconColor = "text-teal-600";
+    } else if (/旅行|出行|出发|机票|酒店|飞/.test(title)) {
+        emoji = '✈️'; bgGradient = "from-sky-100 to-sky-50"; iconColor = "text-sky-600";
+    } else if (/电影|看剧|追剧|视频/.test(title)) {
+        emoji = '🎬'; bgGradient = "from-violet-100 to-violet-50"; iconColor = "text-violet-600";
+    } else if (/音乐|听歌|弹琴|唱/.test(title)) {
+        emoji = '🎵'; bgGradient = "from-pink-100 to-pink-50"; iconColor = "text-pink-600";
+    } else if (/睡|休息|午休|早起/.test(title)) {
+        emoji = '😴'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+    } else if (/电话|打电话|联系|沟通|打给/.test(title)) {
+        emoji = '📞'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
+    } else if (/写|笔记|日记|作业/.test(title)) {
+        emoji = '✍️'; bgGradient = "from-slate-100 to-slate-50"; iconColor = "text-slate-600";
+    } else if (/遛狗|宠物|猫|狗/.test(title)) {
+        emoji = '🐾'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+    } else if (/报告|文档|PPT|方案|项目/.test(title)) {
+        emoji = '📝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+    } else if (/提醒|备忘/.test(title)) {
+        emoji = '🔔'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
     } else if (cat === 'work') {
-        icon = <Briefcase className="w-6 h-6" />;
-        bgGradient = "from-blue-100 to-blue-50";
-        iconColor = "text-blue-600";
-        emoji = '📝';
+        emoji = '📝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
     } else if (cat === 'study') {
-         icon = <Briefcase className="w-6 h-6" />; // Use generic for study if no specific icon
-         bgGradient = "from-indigo-100 to-indigo-50";
-         iconColor = "text-indigo-600";
-         emoji = '📚';
+        emoji = '📖'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+    } else if (cat === 'health') {
+        emoji = '🌱'; bgGradient = "from-emerald-100 to-emerald-50"; iconColor = "text-emerald-600";
+    } else if (cat === 'family') {
+        emoji = '👨‍👩‍👧'; bgGradient = "from-rose-100 to-rose-50"; iconColor = "text-rose-600";
+    } else if (cat === 'shopping') {
+        emoji = '🛍️'; bgGradient = "from-purple-100 to-purple-50"; iconColor = "text-purple-600";
+    } else if (cat === 'finance') {
+        emoji = '💰'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+    } else {
+        emoji = '⚡'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
     }
 
     return { icon, bgGradient, iconColor, emoji };

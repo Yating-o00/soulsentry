@@ -359,19 +359,22 @@ export default function CalendarDayView({
                 {/* Day Notes */}
                 {dayNotes.length > 0 && (
                     <div>
-                        <div className="flex items-center gap-2 mb-3 px-1">
+                        <div className="flex items-center gap-2 mb-2 px-1">
                             <StickyNote className="w-4 h-4 text-slate-400" />
                             <h3 className="text-sm font-bold text-slate-700">今日心签</h3>
                             <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded-md ml-auto">
                                 {dayNotes.length}
                             </span>
                         </div>
-                        <div className="space-y-2">
-                            {dayNotes.slice(0, 3).map(note => (
-                                <div key={note.id} className="p-3 rounded-xl bg-amber-50/50 border border-amber-100 text-amber-900/80 text-xs leading-relaxed line-clamp-3 hover:bg-amber-50 transition-colors">
-                                    <div dangerouslySetInnerHTML={{ __html: note.content }} />
-                                </div>
-                            ))}
+                        <div className="space-y-1.5">
+                            {dayNotes.slice(0, 3).map(note => {
+                                const plainText = (note.plain_text || note.content || '').replace(/<[^>]*>/g, '').trim();
+                                return (
+                                    <div key={note.id} className="px-3 py-2 rounded-lg bg-amber-50/50 border border-amber-100/80 text-amber-800/80 text-xs leading-snug line-clamp-2 hover:bg-amber-50 transition-colors">
+                                        {plainText.slice(0, 80)}{plainText.length > 80 ? '…' : ''}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -503,7 +506,7 @@ export default function CalendarDayView({
                                                 onDateClick(clickDate);
                                             }}
                                             className={cn(
-                                                "flex-1 min-h-[88px] rounded-2xl border transition-all duration-200 relative",
+                                                "flex-1 min-h-[52px] rounded-xl border transition-all duration-200 relative",
                                                 snapshot.isDraggingOver ? "bg-blue-50 border-blue-300 border-dashed" : "border-slate-100 hover:border-slate-200 hover:shadow-sm",
                                                 isCurrentHour ? "bg-blue-50/10 border-blue-100" : "bg-white",
                                                 // Grid lines
@@ -612,11 +615,11 @@ export default function CalendarDayView({
                                                 {/* Empty State / Add Hint */}
                                                 {hourTasks.length === 0 && (
                                                     <div className={cn(
-                                                        "h-full min-h-[60px] flex items-center justify-center text-xs text-slate-300 font-medium transition-opacity",
+                                                        "h-full min-h-[28px] flex items-center justify-center text-xs text-slate-300 font-medium transition-opacity",
                                                         snapshot.isDraggingOver ? "opacity-0" : "opacity-0 hover:opacity-100"
                                                     )}>
-                                                        <Plus className="w-4 h-4 mr-1" />
-                                                        添加安排
+                                                        <Plus className="w-3.5 h-3.5 mr-1" />
+                                                        添加
                                                     </div>
                                                 )}
                                                 {provided.placeholder}

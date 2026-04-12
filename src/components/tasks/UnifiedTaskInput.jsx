@@ -236,9 +236,8 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
               <Wand2 className="w-4 h-4 text-stone-400 mt-0.5" />
             )}
             <div className="flex-1">
-              <p className="text-xs text-stone-500 mb-2 font-medium flex items-center gap-1.5">
-                {isAiAnalyzing ? 'Kimi 分析中…' : 'AI理解：'}
-                <span className="text-[10px] text-slate-300 font-normal">powered by Kimi</span>
+              <p className="text-xs text-stone-500 mb-2 font-medium">
+                {isAiAnalyzing ? 'AI 分析中…' : 'AI理解：'}
               </p>
               {!isAiAnalyzing && (
               <div className="flex flex-wrap gap-2">

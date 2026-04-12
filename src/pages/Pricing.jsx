@@ -181,7 +181,7 @@ export default function Pricing() {
              <motion.div key={pack.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.06 }}>
                <Card className={`relative overflow-hidden hover:shadow-lg transition-all duration-300 ${
                  pack.tag === "最划算" ? `ring-2 ${c.ring}` : ""
-               } ${index === 0 ? "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200" : ""}`}>
+               }`}>
                  {pack.tag && (
                    <div className="absolute top-2 right-2">
                      <Badge className={`border-0 text-[10px] ${

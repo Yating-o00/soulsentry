@@ -200,7 +200,7 @@ export default function Pricing() {
                      <p className="text-xs text-emerald-600 font-medium mb-2">节省 {pack.savings}</p>
                    )}
                    <Button
-                     className={`w-full bg-gradient-to-r ${c.btn} text-white h-9 text-sm`}
+                     className={`w-full bg-gradient-to-r ${c.btn} text-white h-9 text-sm font-semibold shadow-md border-0`}
                      onClick={() => handleBuyCredits(pack)}
                    >
                      {pack.priceDisplay}

@@ -356,22 +356,31 @@ export default function CalendarDayView({
                     </div>
                 )}
 
-                {/* Day Notes */}
+                {/* Day Notes - compact */}
                 {dayNotes.length > 0 && (
                     <div>
-                        <div className="flex items-center gap-2 mb-3 px-1">
-                            <StickyNote className="w-4 h-4 text-slate-400" />
-                            <h3 className="text-sm font-bold text-slate-700">今日心签</h3>
-                            <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded-md ml-auto">
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                            <StickyNote className="w-3.5 h-3.5 text-amber-400" />
+                            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">心签</h3>
+                            <span className="bg-amber-50 text-amber-600 text-[10px] font-medium px-1.5 py-0.5 rounded-md ml-auto">
                                 {dayNotes.length}
                             </span>
                         </div>
-                        <div className="space-y-2">
-                            {dayNotes.slice(0, 3).map(note => (
-                                <div key={note.id} className="p-3 rounded-xl bg-amber-50/50 border border-amber-100 text-amber-900/80 text-xs leading-relaxed line-clamp-3 hover:bg-amber-50 transition-colors">
-                                    <div dangerouslySetInnerHTML={{ __html: note.content }} />
-                                </div>
-                            ))}
+                        <div className="space-y-1.5">
+                            {dayNotes.slice(0, 3).map(note => {
+                                const plainText = (note.plain_text || note.content || '').replace(/<[^>]*>/g, '').trim();
+                                return (
+                                    <div key={note.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-amber-50/40 border border-amber-100/60 hover:bg-amber-50/70 transition-colors group">
+                                        <div className="w-1 h-1 rounded-full bg-amber-400 shrink-0" />
+                                        <span className="text-[11px] text-amber-800/70 truncate flex-1 leading-snug">
+                                            {plainText.length > 50 ? plainText.slice(0, 50) + '…' : plainText || '(空心签)'}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                            {dayNotes.length > 3 && (
+                                <p className="text-[10px] text-slate-400 text-center pt-0.5">还有 {dayNotes.length - 3} 条</p>
+                            )}
                         </div>
                     </div>
                 )}

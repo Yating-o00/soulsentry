@@ -1,0 +1,469 @@
+{
+  "name": "Task",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "\u4efb\u52a1\u6807\u9898"
+    },
+    "description": {
+      "type": "string",
+      "description": "\u4efb\u52a1\u8be6\u7ec6\u63cf\u8ff0"
+    },
+    "reminder_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u63d0\u9192\u65f6\u95f4/\u5f00\u59cb\u65f6\u95f4"
+    },
+    "end_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u7ed3\u675f\u65f6\u95f4"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "urgent"
+      ],
+      "default": "medium",
+      "description": "\u4f18\u5148\u7ea7"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "work",
+        "personal",
+        "health",
+        "study",
+        "family",
+        "shopping",
+        "finance",
+        "other"
+      ],
+      "default": "personal",
+      "description": "\u4efb\u52a1\u7c7b\u522b"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "snoozed",
+        "blocked"
+      ],
+      "default": "pending",
+      "description": "\u4efb\u52a1\u72b6\u6001"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u4f9d\u8d56\u7684\u524d\u7f6e\u4efb\u52a1ID\u5217\u8868",
+      "default": []
+    },
+    "repeat_rule": {
+      "type": "string",
+      "enum": [
+        "none",
+        "daily",
+        "weekly",
+        "monthly",
+        "custom"
+      ],
+      "default": "none",
+      "description": "\u91cd\u590d\u89c4\u5219"
+    },
+    "custom_recurrence": {
+      "type": "object",
+      "description": "\u81ea\u5b9a\u4e49\u91cd\u590d\u89c4\u5219",
+      "properties": {
+        "frequency": {
+          "type": "string",
+          "enum": [
+            "daily",
+            "weekly",
+            "monthly"
+          ]
+        },
+        "interval": {
+          "type": "number",
+          "description": "\u95f4\u9694\uff08\u5982\u6bcf2\u5468\uff09"
+        },
+        "days_of_week": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "\u661f\u671f\u51e0(0-6\uff0c0\u662f\u5468\u65e5\uff09"
+        },
+        "days_of_month": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "\u6bcf\u6708\u7684\u54ea\u51e0\u5929"
+        },
+        "end_date": {
+          "type": "string",
+          "format": "date",
+          "description": "\u91cd\u590d\u7ed3\u675f\u65e5\u671f"
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u4efb\u52a1\u6807\u7b7e"
+    },
+    "is_all_day": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u5168\u5929\u4efb\u52a1"
+    },
+    "reminder_sent": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u5df2\u53d1\u9001\u63d0\u9192"
+    },
+    "notification_sound": {
+      "type": "string",
+      "enum": [
+        "default",
+        "gentle",
+        "urgent",
+        "chime",
+        "bells",
+        "none"
+      ],
+      "default": "default",
+      "description": "\u63d0\u9192\u97f3\u6548"
+    },
+    "advance_reminders": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "\u63d0\u524d\u63d0\u9192\u65f6\u95f4\uff08\u5206\u949f\uff09",
+      "default": []
+    },
+    "reminder_strategy": {
+      "type": "object",
+      "description": "\u9ad8\u7ea7\u63d0\u9192\u7b56\u7565",
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "offset_minutes": {
+                "type": "number"
+              },
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "urgent",
+                  "summary",
+                  "encouraging"
+                ]
+              },
+              "custom_message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "dynamic_adjustment": {
+          "type": "boolean",
+          "default": false,
+          "description": "\u662f\u5426\u5141\u8bb8AI\u52a8\u6001\u8c03\u6574\u63d0\u9192"
+        }
+      }
+    },
+    "snooze_until": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u63a8\u8fdf\u5230\u6307\u5b9a\u65f6\u95f4"
+    },
+    "snooze_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u63a8\u8fdf\u6b21\u6570"
+    },
+    "persistent_reminder": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u6301\u7eed\u63d0\u9192\u76f4\u5230\u5b8c\u6210"
+    },
+    "notification_interval": {
+      "type": "number",
+      "default": 15,
+      "description": "\u6301\u7eed\u63d0\u9192\u95f4\u9694\uff08\u5206\u949f\uff09"
+    },
+    "notification_channels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "in_app",
+          "email",
+          "browser"
+        ]
+      },
+      "default": [
+        "in_app",
+        "browser"
+      ],
+      "description": "\u901a\u77e5\u6e20\u9053"
+    },
+    "email_reminder": {
+      "type": "object",
+      "description": "\u90ae\u4ef6\u63d0\u9192\u8bbe\u7f6e",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "recipient_email": {
+          "type": "string",
+          "description": "\u63a5\u6536\u90ae\u4ef6\u5730\u5740\uff08\u9ed8\u8ba4\u7528\u6237\u90ae\u7bb1\uff09"
+        },
+        "send_times": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": "\u6307\u5b9a\u53d1\u9001\u90ae\u4ef6\u7684\u65f6\u95f4\u70b9"
+        },
+        "advance_hours": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "\u63d0\u524d\u591a\u5c11\u5c0f\u65f6\u53d1\u9001\u90ae\u4ef6",
+          "default": []
+        }
+      }
+    },
+    "location_reminder": {
+      "type": "object",
+      "description": "\u57fa\u4e8e\u5730\u7406\u4f4d\u7f6e\u7684\u63d0\u9192",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "latitude": {
+          "type": "number",
+          "description": "\u7eac\u5ea6"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "\u7ecf\u5ea6"
+        },
+        "radius": {
+          "type": "number",
+          "default": 500,
+          "description": "\u89e6\u53d1\u534a\u5f84\uff08\u7c73\uff09"
+        },
+        "location_name": {
+          "type": "string",
+          "description": "\u4f4d\u7f6e\u540d\u79f0"
+        },
+        "trigger_on": {
+          "type": "string",
+          "enum": [
+            "enter",
+            "exit",
+            "both"
+          ],
+          "default": "enter",
+          "description": "\u8fdb\u5165/\u79bb\u5f00/\u4e24\u8005\u65f6\u89e6\u53d1"
+        }
+      }
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u5b8c\u6210\u65f6\u95f4"
+    },
+    "optimal_reminder_time": {
+      "type": "string",
+      "description": "AI\u5efa\u8bae\u7684\u6700\u4f73\u63d0\u9192\u65f6\u95f4"
+    },
+    "ai_analysis": {
+      "type": "object",
+      "description": "AI\u4efb\u52a1\u5206\u6790",
+      "properties": {
+        "status_summary": {
+          "type": "string",
+          "description": "\u6574\u4f53\u72b6\u6001\u6458\u8981"
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "\u6f5c\u5728\u98ce\u9669"
+        },
+        "key_dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "\u5173\u952e\u4f9d\u8d56"
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "\u6539\u8fdb\u5efa\u8bae"
+        },
+        "suggested_priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "urgent"
+          ],
+          "description": "AI\u5efa\u8bae\u4f18\u5148\u7ea7"
+        },
+        "priority_reasoning": {
+          "type": "string",
+          "description": "\u4f18\u5148\u7ea7\u5efa\u8bae\u7406\u7531"
+        },
+        "recommended_execution_start": {
+          "type": "string",
+          "format": "date-time",
+          "description": "AI\u5efa\u8bae\u7684\u6700\u4f73\u6267\u884c\u5f00\u59cb\u65f6\u95f4"
+        },
+        "recommended_execution_end": {
+          "type": "string",
+          "format": "date-time",
+          "description": "AI\u5efa\u8bae\u7684\u6700\u4f73\u6267\u884c\u7ed3\u675f\u65f6\u95f4"
+        },
+        "time_reasoning": {
+          "type": "string",
+          "description": "\u65f6\u95f4\u5efa\u8bae\u7406\u7531"
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "description": "\u6574\u4f53\u98ce\u9669\u7b49\u7ea7"
+        }
+      }
+    },
+    "parent_task_id": {
+      "type": "string",
+      "description": "\u7236\u4efb\u52a1ID\uff08\u7528\u4e8e\u5b50\u4efb\u52a1\uff09"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_url": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "file_size": {
+            "type": "number"
+          },
+          "file_type": {
+            "type": "string"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "description": "\u9644\u4ef6\u5217\u8868"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "description": "\u7b14\u8bb0\u5217\u8868"
+    },
+    "progress": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 0,
+      "description": "\u4efb\u52a1\u5b8c\u6210\u8fdb\u5ea6"
+    },
+    "assigned_to": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u5206\u914d\u7ed9\u7684\u7528\u6237ID\u5217\u8868",
+      "default": []
+    },
+    "is_shared": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u4e3a\u5171\u4eab\u4efb\u52a1"
+    },
+    "team_visibility": {
+      "type": "string",
+      "enum": [
+        "private",
+        "team",
+        "public"
+      ],
+      "default": "private",
+      "description": "\u56e2\u961f\u53ef\u89c1\u6027"
+    },
+    "deleted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u8f6f\u5220\u9664\u65f6\u95f4"
+    },
+    "google_calendar_event_id": {
+      "type": "string",
+      "description": "\u5173\u8054\u7684Google Calendar\u4e8b\u4ef6ID"
+    },
+    "gcal_sync_enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u542f\u7528Google Calendar\u540c\u6b65"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}

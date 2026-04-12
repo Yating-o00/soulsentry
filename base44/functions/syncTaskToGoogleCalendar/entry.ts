@@ -1,115 +1,125 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-
     if (!user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { task_id } = await req.json();
+    const { task_id, action } = await req.json();
 
     if (!task_id) {
-      return Response.json({ error: 'Task ID is required' }, { status: 400 });
+      return Response.json({ error: 'task_id is required' }, { status: 400 });
     }
 
-    // 获取任务详情
     const task = await base44.entities.Task.get(task_id);
     if (!task) {
       return Response.json({ error: 'Task not found' }, { status: 404 });
     }
 
-    // 获取 Google Calendar Access Token
-    const accessToken = await base44.asServiceRole.connectors.getAccessToken("googlecalendar");
+    const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
+    const authHeader = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
 
-    // 计算开始和结束时间
-    // 默认使用任务的提醒时间作为开始时间，如果未设置则使用当前时间 + 1小时
+    // Handle delete action
+    if (action === 'delete' && task.google_calendar_event_id) {
+      const delRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${task.google_calendar_event_id}`,
+        { method: 'DELETE', headers: authHeader }
+      );
+      if (delRes.ok || delRes.status === 404 || delRes.status === 410) {
+        await base44.asServiceRole.entities.Task.update(task.id, { 
+          google_calendar_event_id: null, 
+          gcal_sync_enabled: false 
+        });
+        return Response.json({ success: true, message: 'Event deleted from Google Calendar' });
+      }
+      const errText = await delRes.text();
+      throw new Error(`Failed to delete event: ${errText}`);
+    }
+
+    // Build event payload
     const startTime = task.reminder_time ? new Date(task.reminder_time) : new Date(Date.now() + 3600000);
-    // 默认持续1小时，除非有结束时间
     const endTime = task.end_time ? new Date(task.end_time) : new Date(startTime.getTime() + 3600000);
+
+    const categoryLabels = {
+      work: '📝 工作', personal: '⚡ 生活', health: '🌱 健康',
+      study: '📖 学习', family: '👨‍👩‍👧 家庭', shopping: '🛒 购物',
+      finance: '💰 财务', other: '⚡ 其他'
+    };
+
+    const priorityLabels = { low: '低', medium: '中', high: '高', urgent: '紧急' };
+
+    const descParts = [];
+    if (task.description) descParts.push(task.description);
+    descParts.push(`\n--- SoulSentry ---`);
+    descParts.push(`分类: ${categoryLabels[task.category] || task.category}`);
+    descParts.push(`优先级: ${priorityLabels[task.priority] || task.priority}`);
+    if (task.tags?.length) descParts.push(`标签: ${task.tags.join(', ')}`);
+    descParts.push(`状态: ${task.status}`);
 
     const event = {
       summary: task.title,
-      description: task.description || '',
-      start: {
-        dateTime: startTime.toISOString(),
-        timeZone: 'UTC' // 建议使用 UTC 或用户时区
-      },
-      end: {
-        dateTime: endTime.toISOString(),
-        timeZone: 'UTC'
-      },
+      description: descParts.join('\n'),
+      start: task.is_all_day
+        ? { date: startTime.toISOString().split('T')[0] }
+        : { dateTime: startTime.toISOString(), timeZone: 'Asia/Shanghai' },
+      end: task.is_all_day
+        ? { date: endTime.toISOString().split('T')[0] }
+        : { dateTime: endTime.toISOString(), timeZone: 'Asia/Shanghai' },
       reminders: {
         useDefault: false,
         overrides: [
-          { method: 'email', minutes: 60 }, // 提前1小时发送邮件
           { method: 'popup', minutes: 10 },
+          { method: 'email', minutes: 30 },
         ],
       },
+      colorId: task.priority === 'urgent' ? '11' : task.priority === 'high' ? '6' : task.category === 'work' ? '9' : '2',
     };
 
     let calendarEvent;
-    
-    // 如果已有关联事件ID，尝试更新
-    if (task.google_calendar_event_id) {
-      try {
-        const updateRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${task.google_calendar_event_id}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(event),
-        });
 
-        if (updateRes.ok) {
-          calendarEvent = await updateRes.json();
-        } else if (updateRes.status === 404 || updateRes.status === 410) {
-          // 事件不存在或已删除，将创建新事件
-          console.log("Existing event not found, creating new one");
-        } else {
-          const errorText = await updateRes.text();
-          throw new Error(`Failed to update Google Calendar event: ${errorText}`);
-        }
-      } catch (e) {
-        console.warn("Update failed, trying to create new event", e);
+    // Try update first if event exists
+    if (task.google_calendar_event_id) {
+      const updateRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${task.google_calendar_event_id}`,
+        { method: 'PUT', headers: authHeader, body: JSON.stringify(event) }
+      );
+      if (updateRes.ok) {
+        calendarEvent = await updateRes.json();
+      } else if (updateRes.status !== 404 && updateRes.status !== 410) {
+        const errText = await updateRes.text();
+        console.warn('Update failed:', errText);
       }
     }
 
-    // 如果未更新成功（包括没有ID或更新失败/事件不存在），则创建新事件
+    // Create new event if needed
     if (!calendarEvent) {
-      const createRes = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(event),
-      });
-
+      const createRes = await fetch(
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+        { method: 'POST', headers: authHeader, body: JSON.stringify(event) }
+      );
       if (!createRes.ok) {
-        const errorText = await createRes.text();
-        throw new Error(`Failed to create Google Calendar event: ${errorText}`);
+        const errText = await createRes.text();
+        throw new Error(`Failed to create event: ${errText}`);
       }
-
       calendarEvent = await createRes.json();
     }
 
-    // 更新任务的 google_calendar_event_id
+    // Update task with event ID
+    const updateData = { gcal_sync_enabled: true };
     if (calendarEvent.id !== task.google_calendar_event_id) {
-      await base44.entities.Task.update(task.id, {
-        google_calendar_event_id: calendarEvent.id
-      });
+      updateData.google_calendar_event_id = calendarEvent.id;
     }
+    await base44.asServiceRole.entities.Task.update(task.id, updateData);
 
-    return Response.json({ 
-      success: true, 
-      message: 'Synced to Google Calendar', 
-      eventLink: calendarEvent.htmlLink 
+    return Response.json({
+      success: true,
+      message: task.google_calendar_event_id ? 'Event updated' : 'Event created',
+      eventId: calendarEvent.id,
+      eventLink: calendarEvent.htmlLink,
     });
-
   } catch (error) {
     console.error('Google Calendar Sync Error:', error);
     return Response.json({ error: error.message }, { status: 500 });

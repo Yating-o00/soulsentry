@@ -37,16 +37,17 @@ export default function TaskCard({ task, onComplete, onEdit }) {
           iconBg: "bg-[#384877]/10",
           iconColor: "text-[#384877]",
           lightBg: "bg-[#384877]/5",
-          icon: "📝"
+          icon: "📝",
+          label: "工作"
         };
-      case "love":
       case "family":
         return {
           border: "border-l-rose-400",
           iconBg: "bg-rose-100",
           iconColor: "text-rose-600",
           lightBg: "bg-rose-50",
-          icon: "❤️"
+          icon: "👨‍👩‍👧",
+          label: "家庭"
         };
       case "health":
         return {
@@ -54,7 +55,17 @@ export default function TaskCard({ task, onComplete, onEdit }) {
           iconBg: "bg-emerald-100",
           iconColor: "text-emerald-600",
           lightBg: "bg-emerald-50",
-          icon: "🌱"
+          icon: "🌱",
+          label: "健康"
+        };
+      case "study":
+        return {
+          border: "border-l-indigo-400",
+          iconBg: "bg-indigo-100",
+          iconColor: "text-indigo-600",
+          lightBg: "bg-indigo-50",
+          icon: "📖",
+          label: "学习"
         };
       case "shopping":
         return {
@@ -62,18 +73,52 @@ export default function TaskCard({ task, onComplete, onEdit }) {
           iconBg: "bg-purple-100",
           iconColor: "text-purple-600",
           lightBg: "bg-purple-50",
-          icon: "📦"
+          icon: "🛒",
+          label: "购物"
         };
-      default: // life/personal
+      case "finance":
+        return {
+          border: "border-l-amber-400",
+          iconBg: "bg-amber-100",
+          iconColor: "text-amber-600",
+          lightBg: "bg-amber-50",
+          icon: "💰",
+          label: "财务"
+        };
+      default: // personal/other
         return {
           border: "border-l-green-400",
           iconBg: "bg-green-100",
           iconColor: "text-green-600",
           lightBg: "bg-green-50",
-          icon: "☕"
+          icon: getSmartLifeIcon(task),
+          label: "生活"
         };
     }
   };
+
+  // Smart icon selection for personal/life tasks based on title keywords
+  function getSmartLifeIcon(t) {
+    const title = (t?.title || '').toLowerCase();
+    if (/书|阅读|读|看书|图书/.test(title)) return '📚';
+    if (/跑步|运动|健身|锻炼|瑜伽/.test(title)) return '🏃';
+    if (/做饭|烹饪|煮|下厨|菜/.test(title)) return '🍳';
+    if (/购物|买|超市|商场/.test(title)) return '🛍️';
+    if (/打扫|清洁|卫生|洗|整理/.test(title)) return '🧹';
+    if (/会议|开会|约见|见面/.test(title)) return '🤝';
+    if (/旅行|出行|出发|机票|酒店/.test(title)) return '✈️';
+    if (/电影|看剧|追剧|视频/.test(title)) return '🎬';
+    if (/音乐|听歌|弹琴|唱/.test(title)) return '🎵';
+    if (/睡|休息|午休|早起/.test(title)) return '😴';
+    if (/喝水|水|咖啡|茶/.test(title)) return '☕';
+    if (/药|吃药|医|体检/.test(title)) return '💊';
+    if (/寄|快递|邮件|包裹|带/.test(title)) return '📦';
+    if (/电话|打电话|联系|沟通/.test(title)) return '📞';
+    if (/写|笔记|日记/.test(title)) return '✍️';
+    if (/遛狗|宠物|猫|狗/.test(title)) return '🐾';
+    if (/浇花|植物|花/.test(title)) return '🌸';
+    return '⚡';
+  }
 
   const style = getCategoryStyle(task.category);
   
@@ -112,15 +157,8 @@ export default function TaskCard({ task, onComplete, onEdit }) {
             </span>
           ) : (
             <span className={cn("px-2 py-1 text-xs rounded-lg font-medium flex items-center gap-1", style.iconBg, style.iconColor)}>
-              <Briefcase className="w-3 h-3" />
-              {task.category === 'work' ? '工作' : '生活'}
-            </span>
-          )}
-
-          {task.priority === 'urgent' && (
-            <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-lg font-medium flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              紧急
+              <Zap className="w-3 h-3" />
+              {style.label}
             </span>
           )}
           

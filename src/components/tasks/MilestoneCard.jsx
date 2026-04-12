@@ -65,10 +65,38 @@ export default function MilestoneCard({
   const getCategoryLabel = () => {
     switch (task.category) {
       case 'work': return '工作';
-      case 'personal': return '个人';
+      case 'personal': return '生活';
       case 'health': return '健康';
       case 'study': return '学习';
-      default: return '其他';
+      case 'family': return '家庭';
+      case 'shopping': return '购物';
+      case 'finance': return '财务';
+      default: return '生活';
+    }
+  };
+
+  const getCategoryIcon = () => {
+    const title = (task.title || '').toLowerCase();
+    switch (task.category) {
+      case 'work': return '📝';
+      case 'health': return '🌱';
+      case 'study': return '📖';
+      case 'family': return '👨\u200d👩\u200d👧';
+      case 'shopping': return '🛒';
+      case 'finance': return '💰';
+      default: // personal/other - smart icon based on title
+        if (/书|阅读|读|看书/.test(title)) return '📚';
+        if (/跑步|运动|健身/.test(title)) return '🏃';
+        if (/做饭|烹饪|煮/.test(title)) return '🍳';
+        if (/打扫|清洁|洗|整理/.test(title)) return '🧹';
+        if (/旅行|出行|机票/.test(title)) return '✈️';
+        if (/电影|看剧/.test(title)) return '🎬';
+        if (/睡|休息|午休/.test(title)) return '😴';
+        if (/寄|快递|带/.test(title)) return '📦';
+        if (/药|吃药|医/.test(title)) return '💊';
+        if (/喝水|咖啡|茶/.test(title)) return '☕';
+        if (/浇花|植物/.test(title)) return '🌸';
+        return '⚡';
     }
   };
 
@@ -231,8 +259,8 @@ export default function MilestoneCard({
                 </div>
               </div>
             ) : (
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center text-2xl shadow-inner text-blue-600">
-                <FileText className="w-6 h-6" />
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center text-2xl shadow-inner">
+                {getCategoryIcon()}
               </div>
             )}
           </div>

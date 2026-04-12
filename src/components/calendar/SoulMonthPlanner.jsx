@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -62,6 +63,7 @@ export default function SoulMonthPlanner({
   const [isAppending, setIsAppending] = useState(false);
   const [showAppendInput, setShowAppendInput] = useState(false);
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
+  const queryClient = useQueryClient();
 
   // Fetch user behaviors for smart planning
   const { data: recentBehaviors = [] } = useQuery({
@@ -82,36 +84,32 @@ export default function SoulMonthPlanner({
     }
   }, [initialDate]);
 
+  // Load existing plan with react-query caching
+  const { data: monthPlans } = useQuery({
+    queryKey: ['monthlyPlan', currentMonthStartStr],
+    queryFn: () => base44.entities.MonthlyPlan.filter({ month_start_date: currentMonthStartStr }),
+    staleTime: 2 * 60 * 1000,
+  });
+
   useEffect(() => {
-    const loadPlan = async () => {
-      try {
-        const plans = await base44.entities.MonthlyPlan.filter({
-          month_start_date: currentMonthStartStr
-        });
-        
-        if (plans && plans.length > 0) {
-          const plan = plans[0];
-          setExistingPlanId(plan.id);
-          setMonthData({
-            ...plan.plan_json,
-            theme: plan.theme,
-            summary: plan.summary
-          });
-          setUserInput(plan.original_input || '');
-          setStage('results');
-        } else {
-          setExistingPlanId(null);
-          setMonthData(null);
-          setUserInput('');
-          setStage('input');
-        }
-      } catch (error) {
-        console.error("Failed to load plan:", error);
-      }
-    };
-    
-    loadPlan();
-  }, [currentMonthStartStr]);
+    if (monthPlans === undefined) return;
+    if (monthPlans && monthPlans.length > 0) {
+      const plan = monthPlans[0];
+      setExistingPlanId(plan.id);
+      setMonthData({
+        ...plan.plan_json,
+        theme: plan.theme,
+        summary: plan.summary
+      });
+      setUserInput(plan.original_input || '');
+      setStage('results');
+    } else {
+      setExistingPlanId(null);
+      setMonthData(null);
+      setUserInput('');
+      setStage('input');
+    }
+  }, [monthPlans]);
 
   const savePlanToDB = async (data, input) => {
     try {
@@ -132,6 +130,7 @@ export default function SoulMonthPlanner({
         setExistingPlanId(newPlan.id);
         toast.success("月度规划已保存");
       }
+      queryClient.invalidateQueries({ queryKey: ['monthlyPlan'] });
     } catch (error) {
       console.error("Failed to save plan:", error);
       toast.error("保存规划失败");
@@ -144,6 +143,7 @@ export default function SoulMonthPlanner({
       await base44.entities.MonthlyPlan.delete(existingPlanId);
       setExistingPlanId(null);
       resetView();
+      queryClient.invalidateQueries({ queryKey: ['monthlyPlan'] });
       toast.success("规划已删除");
     } catch (error) {
       console.error("Failed to delete plan:", error);

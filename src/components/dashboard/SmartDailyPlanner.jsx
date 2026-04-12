@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { format, parseISO, addDays } from "date-fns";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAICreditGate } from "@/components/credits/useAICreditGate";
 import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { zhCN } from "date-fns/locale";
@@ -47,11 +48,9 @@ export default function SmartDailyPlanner() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [selectedDateStr, setSelectedDateStr] = useState(todayStr);
   const draftKey = `smart_daily_draft_${selectedDateStr}`;
-  const [dayPlan, setDayPlan] = useState(null);
-  const [existingPlanId, setExistingPlanId] = useState(null);
+  const queryClient = useQueryClient();
   const [userInput, setUserInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [showInput, setShowInput] = useState(false);
   // AI analysis result (same structure as CalendarDayView)
   const [analysis, setAnalysis] = useState(null);
@@ -64,36 +63,31 @@ export default function SmartDailyPlanner() {
   const lastSubmittedRef = useRef(""); // 防止重复提交同一内容
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
-  // Load daily plan from DB
+  // Load daily plan from DB using react-query for caching
+  const { data: planQueryData, isLoading } = useQuery({
+    queryKey: ['dailyPlan', selectedDateStr],
+    queryFn: () => base44.entities.DailyPlan.filter({ plan_date: selectedDateStr }),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const dayPlan = planQueryData?.[0] || null;
+  const existingPlanId = dayPlan?.id || null;
+
+  // Sync UI state when plan data changes
   useEffect(() => {
-    const loadPlan = async () => {
-      setIsLoading(true);
-      try {
-        const plans = await base44.entities.DailyPlan.filter({ plan_date: selectedDateStr });
-        if (plans && plans.length > 0) {
-          const plan = plans[0];
-          setExistingPlanId(plan.id);
-          setDayPlan(plan);
-          const draft = localStorage.getItem(draftKey);
-          setUserInput(draft ?? "");
-          setShowInput(false);
-        } else {
-          const draft = localStorage.getItem(draftKey);
-          setUserInput(draft || "");
-          setExistingPlanId(null);
-          setDayPlan(null);
-          setShowInput(true);
-        }
-        setAnalysis(null);
-        setResolvedDateHint(null);
-      } catch (err) {
-        console.error("Failed to load daily plan", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadPlan();
-  }, [selectedDateStr, draftKey]);
+    if (isLoading) return;
+    if (dayPlan) {
+      const draft = localStorage.getItem(draftKey);
+      setUserInput(draft ?? "");
+      setShowInput(false);
+    } else {
+      const draft = localStorage.getItem(draftKey);
+      setUserInput(draft || "");
+      setShowInput(true);
+    }
+    setAnalysis(null);
+    setResolvedDateHint(null);
+  }, [dayPlan?.id, isLoading, selectedDateStr]);
 
   // Scroll to results
   useEffect(() => {
@@ -167,10 +161,9 @@ export default function SmartDailyPlanner() {
         if (existingPlanId) {
           await base44.entities.DailyPlan.update(existingPlanId, planRecord);
         } else {
-          const newPlan = await base44.entities.DailyPlan.create(planRecord);
-          setExistingPlanId(newPlan.id);
-          setDayPlan(newPlan);
+          await base44.entities.DailyPlan.create(planRecord);
         }
+        queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
         toast.success("日程规划已生成", { icon: "📋" });
 
         // 冲突检测
@@ -220,6 +213,7 @@ export default function SmartDailyPlanner() {
         } else {
           await base44.entities.DailyPlan.create(targetPlanRecord);
         }
+        queryClient.invalidateQueries({ queryKey: ['dailyPlan', targetDate] });
         toast.success(`已保存到 ${targetDate} 的规划`, { icon: '📋' });
 
         // 冲突检测
@@ -256,6 +250,15 @@ export default function SmartDailyPlanner() {
     }
   };
 
+  // Helper to update dayPlan in cache optimistically
+  const updateDayPlanCache = useCallback((updater) => {
+    queryClient.setQueryData(['dailyPlan', selectedDateStr], (old) => {
+      if (!old || !old[0]) return old;
+      const updated = updater(old[0]);
+      return [updated];
+    });
+  }, [queryClient, selectedDateStr]);
+
   // Kanban drag status change handler
   const handleKanbanStatusChange = async (source, sourceIndex, newStatus) => {
     const planJson = { ...(dayPlan?.plan_json || {}) };
@@ -272,7 +275,7 @@ export default function SmartDailyPlanner() {
         planJson.key_tasks = tasks;
       }
     }
-    setDayPlan(prev => prev ? { ...prev, plan_json: planJson } : prev);
+    updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
     if (analysis) {
       setAnalysis(prev => ({
         ...prev,
@@ -290,8 +293,7 @@ export default function SmartDailyPlanner() {
     if (!existingPlanId) return;
     try {
       await base44.entities.DailyPlan.delete(existingPlanId);
-      setExistingPlanId(null);
-      setDayPlan(null);
+      queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
       setAnalysis(null);
       setUserInput("");
       localStorage.removeItem(draftKey);
@@ -702,7 +704,7 @@ export default function SmartDailyPlanner() {
         const updatedPlanJson = { ...(dayPlan?.plan_json || {}), focus_blocks: updatedBlocks };
         if (existingPlanId) {
           base44.entities.DailyPlan.update(existingPlanId, { plan_json: updatedPlanJson }).then(() => {
-            setDayPlan(prev => prev ? { ...prev, plan_json: updatedPlanJson } : prev);
+            updateDayPlanCache(prev => ({ ...prev, plan_json: updatedPlanJson }));
             if (analysis) {
               setAnalysis(prev => ({ ...prev, timeline: updatedBlocks }));
             }

@@ -498,7 +498,7 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {calendarViewMode === "month" && (
               <SoulMonthPlanner
                 key="month"

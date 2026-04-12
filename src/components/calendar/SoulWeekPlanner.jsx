@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -87,38 +88,34 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
   const currentWeekStartStr = format(start, 'yyyy-MM-dd');
   const weekRangeLabel = `${format(start, 'M月d日')} - ${format(end, 'M月d日')}`;
 
-  // Load existing plan from DB
+  const queryClient = useQueryClient();
+
+  // Load existing plan from DB with react-query caching
+  const { data: weekPlans } = useQuery({
+    queryKey: ['weeklyPlan', currentWeekStartStr],
+    queryFn: () => base44.entities.WeeklyPlan.filter({ week_start_date: currentWeekStartStr }),
+    staleTime: 2 * 60 * 1000,
+  });
+
   useEffect(() => {
-    const loadPlan = async () => {
-      try {
-        const plans = await base44.entities.WeeklyPlan.filter({
-          week_start_date: currentWeekStartStr
-        });
-        
-        if (plans && plans.length > 0) {
-          const plan = plans[0];
-          setExistingPlanId(plan.id);
-          // Merge top-level fields into the structure expected by the UI
-          setWeekData({
-            ...plan.plan_json,
-            theme: plan.theme,
-            summary: plan.summary
-          });
-          setUserInput(plan.original_input || '');
-          setStage('results');
-        } else {
-          setExistingPlanId(null);
-          setWeekData(null);
-          setUserInput('');
-          setStage('input');
-        }
-      } catch (error) {
-        console.error("Failed to load plan:", error);
-      }
-    };
-    
-    loadPlan();
-  }, [currentWeekStartStr]);
+    if (weekPlans === undefined) return; // still loading
+    if (weekPlans && weekPlans.length > 0) {
+      const plan = weekPlans[0];
+      setExistingPlanId(plan.id);
+      setWeekData({
+        ...plan.plan_json,
+        theme: plan.theme,
+        summary: plan.summary
+      });
+      setUserInput(plan.original_input || '');
+      setStage('results');
+    } else {
+      setExistingPlanId(null);
+      setWeekData(null);
+      setUserInput('');
+      setStage('input');
+    }
+  }, [weekPlans]);
 
   const savePlanToDB = async (data, input) => {
     try {
@@ -139,6 +136,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
         setExistingPlanId(newPlan.id);
         toast.success("规划已保存");
       }
+      queryClient.invalidateQueries({ queryKey: ['weeklyPlan'] });
     } catch (error) {
       console.error("Failed to save plan:", error);
       toast.error("保存规划失败");
@@ -151,6 +149,7 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
       await base44.entities.WeeklyPlan.delete(existingPlanId);
       setExistingPlanId(null);
       resetView();
+      queryClient.invalidateQueries({ queryKey: ['weeklyPlan'] });
       toast.success("规划已删除");
     } catch (error) {
       console.error("Failed to delete plan:", error);

@@ -57,7 +57,9 @@ export default function SmartDailyPlanner() {
   const [resolvedDateHint, setResolvedDateHint] = useState(null);
   const [inputMode, setInputMode] = useState("text"); // "text" | "voice"
   const [conflictData, setConflictData] = useState(null); // { conflicts, allBlocks }
+  const [syncStatus, setSyncStatus] = useState(null); // null | 'syncing' | 'done'
   const resultsRef = useRef(null);
+  const lastSubmittedRef = useRef(""); // 防止重复提交同一内容
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
   // Load daily plan from DB
@@ -100,12 +102,28 @@ export default function SmartDailyPlanner() {
 
   // Use analyzeIntent (same as CalendarDayView)
   const handleAnalyze = async () => {
-    if (!userInput.trim() || isProcessing) return;
+    const trimmed = userInput.trim();
+    if (!trimmed || isProcessing) return;
+
+    // 防止重复提交同一内容
+    if (lastSubmittedRef.current === trimmed) {
+      toast.info("该内容已提交，请输入新的安排");
+      return;
+    }
 
     const allowed = await gate("schedule_optimize", "智能日程规划");
     if (!allowed) return;
 
+    // 立即反馈：捕获输入、清空、收起输入框
+    const capturedInput = trimmed;
+    lastSubmittedRef.current = capturedInput;
+    setUserInput("");
+    localStorage.removeItem(draftKey);
+    setShowInput(false);
     setIsProcessing(true);
+    setSyncStatus(null);
+    toast.success("已收到，正在为你规划日程…", { icon: "✨" });
+
     try {
       // Build existing plan context
       let existingPlan = null;
@@ -124,7 +142,7 @@ export default function SmartDailyPlanner() {
         };
       }
 
-      const { data } = await base44.functions.invoke('analyzeIntent', { input: userInput, date: selectedDateStr, existingPlan });
+      const { data } = await base44.functions.invoke('analyzeIntent', { input: capturedInput, date: selectedDateStr, existingPlan });
       const targetDate = data.resolved_date || selectedDateStr;
 
       if (targetDate === selectedDateStr) {
@@ -134,7 +152,7 @@ export default function SmartDailyPlanner() {
         // Save to DailyPlan
         const planRecord = {
           plan_date: selectedDateStr,
-          original_input: [dayPlan?.original_input, userInput].filter(Boolean).join('\n'),
+          original_input: [dayPlan?.original_input, capturedInput].filter(Boolean).join('\n'),
           theme: data.parsed?.intents?.[0] || '',
           summary: '',
           plan_json: {
@@ -151,7 +169,7 @@ export default function SmartDailyPlanner() {
           setExistingPlanId(newPlan.id);
           setDayPlan(newPlan);
         }
-        toast.success("规划已生成");
+        toast.success("日程规划已生成", { icon: "📋" });
 
         // 冲突检测
         const mergedBlocks = planRecord.plan_json.focus_blocks || [];
@@ -160,13 +178,20 @@ export default function SmartDailyPlanner() {
           setConflictData({ conflicts, allBlocks: mergedBlocks });
         }
 
-        // 同步到约定和心签
-        extractAndCreateTasks(userInput, selectedDateStr).then(tasks => {
-          if (tasks.length > 0) toast.success(`已同步 ${tasks.length} 个约定`);
-        }).catch(e => console.error("Task sync failed", e));
-        syncPlanToNote(userInput, "daily_plan", { date: selectedDateStr }).then(note => {
-          if (note) toast.success("已同步到心签");
-        }).catch(e => console.error("Note sync failed", e));
+        // 后台静默同步到约定和心签
+        setSyncStatus('syncing');
+        Promise.allSettled([
+          extractAndCreateTasks(capturedInput, selectedDateStr),
+          syncPlanToNote(capturedInput, "daily_plan", { date: selectedDateStr })
+        ]).then(results => {
+          const taskResult = results[0];
+          const noteResult = results[1];
+          const parts = [];
+          if (taskResult.status === 'fulfilled' && taskResult.value?.length > 0) parts.push(`${taskResult.value.length} 个约定`);
+          if (noteResult.status === 'fulfilled' && noteResult.value) parts.push('心签');
+          if (parts.length > 0) toast.success(`已同步到${parts.join(' + ')}`, { icon: '🔄' });
+          setSyncStatus('done');
+        });
       } else {
         setAnalysis(null);
         setResolvedDateHint(targetDate);
@@ -174,7 +199,7 @@ export default function SmartDailyPlanner() {
         // Persist to target date's DailyPlan
         const targetPlanRecord = {
           plan_date: targetDate,
-          original_input: userInput,
+          original_input: capturedInput,
           theme: data.parsed?.intents?.[0] || '',
           summary: '',
           plan_json: {
@@ -188,12 +213,12 @@ export default function SmartDailyPlanner() {
           const tp = targetPlans[0];
           targetPlanRecord.plan_json.key_tasks = [...(tp.plan_json?.key_tasks || []), ...targetPlanRecord.plan_json.key_tasks];
           targetPlanRecord.plan_json.focus_blocks = [...(tp.plan_json?.focus_blocks || []), ...targetPlanRecord.plan_json.focus_blocks];
-          targetPlanRecord.original_input = [tp.original_input, userInput].filter(Boolean).join('\n');
+          targetPlanRecord.original_input = [tp.original_input, capturedInput].filter(Boolean).join('\n');
           await base44.entities.DailyPlan.update(tp.id, targetPlanRecord);
         } else {
           await base44.entities.DailyPlan.create(targetPlanRecord);
         }
-        toast.success(`已保存到 ${targetDate} 的规划`);
+        toast.success(`已保存到 ${targetDate} 的规划`, { icon: '📋' });
 
         // 冲突检测
         const targetBlocks = targetPlanRecord.plan_json.focus_blocks || [];
@@ -202,20 +227,28 @@ export default function SmartDailyPlanner() {
           setConflictData({ conflicts: targetConflicts, allBlocks: targetBlocks });
         }
 
-        // 同步到约定和心签
-        extractAndCreateTasks(userInput, targetDate).then(tasks => {
-          if (tasks.length > 0) toast.success(`已同步 ${tasks.length} 个约定`);
-        }).catch(e => console.error("Task sync failed", e));
-        syncPlanToNote(userInput, "daily_plan", { date: targetDate }).then(note => {
-          if (note) toast.success("已同步到心签");
-        }).catch(e => console.error("Note sync failed", e));
+        // 后台静默同步到约定和心签
+        setSyncStatus('syncing');
+        Promise.allSettled([
+          extractAndCreateTasks(capturedInput, targetDate),
+          syncPlanToNote(capturedInput, "daily_plan", { date: targetDate })
+        ]).then(results => {
+          const taskResult = results[0];
+          const noteResult = results[1];
+          const parts = [];
+          if (taskResult.status === 'fulfilled' && taskResult.value?.length > 0) parts.push(`${taskResult.value.length} 个约定`);
+          if (noteResult.status === 'fulfilled' && noteResult.value) parts.push('心签');
+          if (parts.length > 0) toast.success(`已同步到${parts.join(' + ')}`, { icon: '🔄' });
+          setSyncStatus('done');
+        });
       }
-      localStorage.removeItem(draftKey);
-      setUserInput("");
-      setShowInput(false);
     } catch (err) {
       console.error("Analysis failed", err);
       toast.error(err?.response?.data?.error || err?.message || '分析失败，请重试');
+      // 恢复输入让用户可以重试
+      setUserInput(capturedInput);
+      setShowInput(true);
+      lastSubmittedRef.current = ""; // 允许重新提交
     } finally {
       setIsProcessing(false);
     }
@@ -488,6 +521,29 @@ export default function SmartDailyPlanner() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Processing indicator when input is collapsed */}
+      {isProcessing && !showInput && (
+        <div className="px-5 md:px-6 py-4">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#384877]/5 border border-[#384877]/10">
+            <Loader2 className="w-4 h-4 text-[#384877] animate-spin shrink-0" />
+            <span className="text-sm text-[#384877] font-medium">AI 正在分析并生成日程规划…</span>
+          </div>
+          <div className="mt-3">
+            <AnalysisSteps steps={DEFAULT_STEPS} running={true} />
+          </div>
+        </div>
+      )}
+
+      {/* Sync status indicator */}
+      {syncStatus === 'syncing' && (
+        <div className="px-5 md:px-6 pb-2">
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>正在同步到约定和心签…</span>
+          </div>
+        </div>
+      )}
 
       {/* Results from AI analysis */}
       <div ref={resultsRef} className="px-6 pb-6 space-y-5">

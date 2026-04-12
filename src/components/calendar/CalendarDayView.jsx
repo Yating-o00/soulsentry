@@ -11,14 +11,12 @@ import { cn } from "@/lib/utils";
 import { shouldTaskAppearAtDateTime } from "@/components/utils/recurrenceHelper";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import ProcessingSteps from "../dashboard/planner/ProcessingSteps";
-import DeviceGridImageMode from "../dashboard/planner/DeviceGridImageMode.jsx";
-import DeviceStrategy from "../dashboard/planner/DeviceStrategy";
 import ContextTimeline from "../dashboard/planner/ContextTimeline";
 import AutoExecCards from "../dashboard/planner/AutoExecCards";
 import AnalysisSteps from "../dashboard/planner/AnalysisSteps";
 import DeviceStrategyMap from "../dashboard/planner/DeviceStrategyMap";
 import { Textarea } from "@/components/ui/textarea";
+import DayPlanSummary from "./DayPlanSummary";
 
 const CATEGORY_STYLES = {
   work: "bg-blue-50 text-blue-700 border-l-4 border-l-blue-500",
@@ -461,22 +459,9 @@ export default function CalendarDayView({
               userText={aiInput}
             />
 
-            {/* 若暂无分析结果，显示当日规划扩展 */}
+            {/* 若暂无分析结果，显示当日规划摘要 */}
             {!analysis && (
-              <>
-                {loadingDayPlan ? (
-                  <div><ProcessingSteps /></div>
-                ) : dayPlan ? (
-                  <div className="space-y-4">
-                    <DeviceGridImageMode />
-                    <DeviceStrategy title="智能手机 策略" tasks={dayPlan.plan_json?.key_tasks || []} />
-                    <ContextTimeline blocks={dayPlan.plan_json?.focus_blocks || []} />
-                    <AutoExecCards tasks={dayPlan.plan_json?.key_tasks || []} />
-                  </div>
-                ) : (
-                  <div className="rounded-2xl p-4 bg-slate-50 border border-slate-100 text-sm text-slate-500">暂无当日AI规划，已为你保存当日任务快照；也可在上方输入你的安排生成协同方案。</div>
-                )}
-              </>
+              <DayPlanSummary dayPlan={dayPlan} isLoading={loadingDayPlan} />
             )}
           </div>
         </div>

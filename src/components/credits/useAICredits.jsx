@@ -45,15 +45,14 @@ export function useAICredits() {
    * @param {string} [description] - 可选的描述
    * @returns {Promise<{ success: boolean, newBalance: number, error?: string }>}
    */
-  const consumeCredits = useCallback(async (featureKey, description) => {
+  const consumeCredits = useCallback(async (featureKey, description, knownBalance) => {
     const feature = AI_FEATURES[featureKey];
     if (!feature) {
       return { success: false, newBalance: credits || 0, error: "未知的AI功能" };
     }
 
-    // Re-read from server to avoid stale state / race conditions
-    const user = await base44.auth.me();
-    const currentCredits = user.ai_credits ?? 0;
+    // Use knownBalance if provided (already fetched by gate), otherwise use local state
+    const currentCredits = knownBalance ?? credits ?? 0;
 
     if (currentCredits < feature.cost) {
       setCredits(currentCredits);
@@ -76,7 +75,7 @@ export function useAICredits() {
     });
 
     return { success: true, newBalance };
-  }, []);
+  }, [credits]);
 
   /**
    * 增加点数（购买或赠送）

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useAICredits } from "./useAICredits";
 import { AI_FEATURES } from "./creditConfig";
 
@@ -17,7 +17,6 @@ import { AI_FEATURES } from "./creditConfig";
  */
 export function useAICreditGate() {
   const { checkCredits, consumeCredits, refreshCredits, loading: creditsLoading } = useAICredits();
-  const lastRefreshRef = useRef({ time: 0, balance: null });
   const [showInsufficientDialog, setShowInsufficientDialog] = useState(false);
   const [insufficientProps, setInsufficientProps] = useState({ cost: 0, balance: 0, featureName: "" });
 
@@ -32,16 +31,9 @@ export function useAICreditGate() {
       return true;
     }
 
-    // Only refresh from server if last refresh was > 3 seconds ago to avoid rate limits
-    const now = Date.now();
-    let freshBalance;
-    if (now - lastRefreshRef.current.time > 3000 || lastRefreshRef.current.balance === null) {
-      const freshData = await refreshCredits();
-      freshBalance = freshData?.credits ?? 0;
-      lastRefreshRef.current = { time: now, balance: freshBalance };
-    } else {
-      freshBalance = lastRefreshRef.current.balance;
-    }
+    // Refresh credits (uses shared user cache, so no extra me() calls)
+    const freshData = await refreshCredits();
+    const freshBalance = freshData?.credits ?? 0;
 
     if (freshBalance < feature.cost) {
       setInsufficientProps({
@@ -65,8 +57,6 @@ export function useAICreditGate() {
       return false;
     }
 
-    // Update cached balance after consumption
-    lastRefreshRef.current = { time: Date.now(), balance: result.newBalance };
     return true;
   }, [consumeCredits, refreshCredits]);
 

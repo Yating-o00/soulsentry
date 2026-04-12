@@ -11,6 +11,7 @@ import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
 import { base44 } from "@/api/base44Client";
+import { getCachedUser } from "@/lib/userCache";
 import {
   Sidebar,
   SidebarContent,
@@ -213,7 +214,7 @@ function LayoutContent({ children }) {
 
   React.useEffect(function() {
     var fetchTheme = function() {
-        base44.auth.me().then(function(user) {
+        getCachedUser().then(function(user) {
             if (user && user.theme_preferences) {
                 setTheme({
                     primary: user.theme_preferences.primary_color || "#384877",

@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { AI_FEATURES } from "./creditConfig";
+import { getCachedUser, updateCachedUser } from "@/lib/userCache";
 
 export function useAICredits() {
   const [credits, setCredits] = useState(null);
   const [plan, setPlan] = useState("free");
   const [loading, setLoading] = useState(true);
 
-  const loadCredits = useCallback(async () => {
-    const user = await base44.auth.me();
+  const loadCredits = useCallback(async (forceRefresh = false) => {
+    const user = await getCachedUser(forceRefresh);
     const currentCredits = user.ai_credits ?? 200;
     const currentPlan = user.subscription_plan || "free";
     setCredits(currentCredits);
@@ -63,6 +64,7 @@ export function useAICredits() {
 
     // 更新用户点数
     await base44.auth.updateMe({ ai_credits: newBalance });
+    updateCachedUser({ ai_credits: newBalance });
     setCredits(newBalance);
 
     // 记录交易

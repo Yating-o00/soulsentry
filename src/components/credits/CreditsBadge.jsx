@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { getCachedUser } from "@/lib/userCache";
 import { Coins, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -9,7 +10,7 @@ export default function CreditsBadge({ compact = false }) {
   const [plan, setPlan] = useState("free");
 
   useEffect(() => {
-    base44.auth.me().then(user => {
+    getCachedUser().then(user => {
       setCredits(user.ai_credits ?? 200);
       setPlan(user.subscription_plan || "free");
     }).catch(() => {});

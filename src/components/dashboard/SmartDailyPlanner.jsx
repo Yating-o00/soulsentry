@@ -31,6 +31,8 @@ import ContextTimeline from "./planner/ContextTimeline";
 import AutoExecCards from "./planner/AutoExecCards";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
+import { detectTimeConflicts } from "@/components/planner/detectConflicts";
+import ConflictDialog from "@/components/planner/ConflictDialog";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -54,6 +56,7 @@ export default function SmartDailyPlanner() {
   const [analysis, setAnalysis] = useState(null);
   const [resolvedDateHint, setResolvedDateHint] = useState(null);
   const [inputMode, setInputMode] = useState("text"); // "text" | "voice"
+  const [conflictData, setConflictData] = useState(null); // { conflicts, allBlocks }
   const resultsRef = useRef(null);
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
 
@@ -150,6 +153,13 @@ export default function SmartDailyPlanner() {
         }
         toast.success("规划已生成");
 
+        // 冲突检测
+        const mergedBlocks = planRecord.plan_json.focus_blocks || [];
+        const conflicts = detectTimeConflicts(mergedBlocks);
+        if (conflicts.length > 0) {
+          setConflictData({ conflicts, allBlocks: mergedBlocks });
+        }
+
         // 同步到约定和心签
         extractAndCreateTasks(userInput, selectedDateStr).then(tasks => {
           if (tasks.length > 0) toast.success(`已同步 ${tasks.length} 个约定`);
@@ -184,6 +194,13 @@ export default function SmartDailyPlanner() {
           await base44.entities.DailyPlan.create(targetPlanRecord);
         }
         toast.success(`已保存到 ${targetDate} 的规划`);
+
+        // 冲突检测
+        const targetBlocks = targetPlanRecord.plan_json.focus_blocks || [];
+        const targetConflicts = detectTimeConflicts(targetBlocks);
+        if (targetConflicts.length > 0) {
+          setConflictData({ conflicts: targetConflicts, allBlocks: targetBlocks });
+        }
 
         // 同步到约定和心签
         extractAndCreateTasks(userInput, targetDate).then(tasks => {
@@ -538,6 +555,41 @@ export default function SmartDailyPlanner() {
         )}
       </div>
     </div>
+    <ConflictDialog
+      open={!!conflictData}
+      onClose={() => setConflictData(null)}
+      conflicts={conflictData?.conflicts || []}
+      dateStr={selectedDateStr}
+      allBlocks={conflictData?.allBlocks || []}
+      onApplyResolution={(conflictIdx, suggestion) => {
+        // Apply the resolution: update focus_blocks with new times
+        const conflict = conflictData.conflicts[conflictIdx];
+        if (!conflict) return;
+        const updatedBlocks = [...(dayPlan?.plan_json?.focus_blocks || analysis?.timeline || [])];
+        if (suggestion.new_time_a) {
+          const blockA = updatedBlocks.find(b => b.title === conflict.blockA.title);
+          if (blockA) blockA.time = suggestion.new_time_a;
+        }
+        if (suggestion.new_time_b) {
+          const blockB = updatedBlocks.find(b => b.title === conflict.blockB.title);
+          if (blockB) blockB.time = suggestion.new_time_b;
+        }
+        // Persist updated plan
+        const updatedPlanJson = { ...(dayPlan?.plan_json || {}), focus_blocks: updatedBlocks };
+        if (existingPlanId) {
+          base44.entities.DailyPlan.update(existingPlanId, { plan_json: updatedPlanJson }).then(() => {
+            setDayPlan(prev => prev ? { ...prev, plan_json: updatedPlanJson } : prev);
+            if (analysis) {
+              setAnalysis(prev => ({ ...prev, timeline: updatedBlocks }));
+            }
+            toast.success("已应用调配方案");
+          }).catch(e => console.error("Failed to apply resolution", e));
+        }
+        // Sync conflict resolution to note
+        const conflictNoteContent = `⚠️ 冲突处理: 「${conflict.blockA.title}」与「${conflict.blockB.title}」时间重叠 → ${suggestion.strategy_label}: ${suggestion.description}`;
+        syncPlanToNote(conflictNoteContent, "daily_plan", { date: selectedDateStr }).catch(() => {});
+      }}
+    />
     <InsufficientCreditsDialog
       open={showInsufficientDialog}
       onOpenChange={dismissDialog}

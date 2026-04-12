@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
 import { useAICreditGate } from "@/components/credits/useAICreditGate";
 import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
+import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
+import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 
 // Device Configurations with icons mapping
 const DEVICE_MAP = {
@@ -208,8 +210,16 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
                     toast.warning("AI服务不可用 (API Key无效)，已显示演示数据", { duration: 5000 });
                 } else {
                     toast.success("已生成全情境规划");
-                    // Save to DB automatically on success
                     savePlanToDB(data, userInput);
+
+                    // 同步到约定和心签
+                    const weekStart = data.plan_start_date || format(start, 'yyyy-MM-dd');
+                    extractAndCreateTasks(userInput, weekStart).then(tasks => {
+                      if (tasks.length > 0) toast.success(`已同步 ${tasks.length} 个约定`);
+                    }).catch(e => console.error("Task sync failed", e));
+                    syncPlanToNote(userInput, "week_plan", { dateRange: weekRangeLabel, theme: data.theme }).then(note => {
+                      if (note) toast.success("已同步到心签");
+                    }).catch(e => console.error("Note sync failed", e));
                 }
                 
                 setTimeout(() => {

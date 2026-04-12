@@ -29,6 +29,8 @@ import VoiceInput from "./planner/VoiceInput";
 import DeviceStrategyMap from "./planner/DeviceStrategyMap";
 import ContextTimeline from "./planner/ContextTimeline";
 import AutoExecCards from "./planner/AutoExecCards";
+import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
+import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -147,6 +149,14 @@ export default function SmartDailyPlanner() {
           setDayPlan(newPlan);
         }
         toast.success("规划已生成");
+
+        // 同步到约定和心签
+        extractAndCreateTasks(userInput, selectedDateStr).then(tasks => {
+          if (tasks.length > 0) toast.success(`已同步 ${tasks.length} 个约定`);
+        }).catch(e => console.error("Task sync failed", e));
+        syncPlanToNote(userInput, "daily_plan", { date: selectedDateStr }).then(note => {
+          if (note) toast.success("已同步到心签");
+        }).catch(e => console.error("Note sync failed", e));
       } else {
         setAnalysis(null);
         setResolvedDateHint(targetDate);
@@ -174,6 +184,14 @@ export default function SmartDailyPlanner() {
           await base44.entities.DailyPlan.create(targetPlanRecord);
         }
         toast.success(`已保存到 ${targetDate} 的规划`);
+
+        // 同步到约定和心签
+        extractAndCreateTasks(userInput, targetDate).then(tasks => {
+          if (tasks.length > 0) toast.success(`已同步 ${tasks.length} 个约定`);
+        }).catch(e => console.error("Task sync failed", e));
+        syncPlanToNote(userInput, "daily_plan", { date: targetDate }).then(note => {
+          if (note) toast.success("已同步到心签");
+        }).catch(e => console.error("Note sync failed", e));
       }
       localStorage.removeItem(draftKey);
       setUserInput("");

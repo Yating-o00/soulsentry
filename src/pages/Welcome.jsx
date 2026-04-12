@@ -7,6 +7,7 @@ import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
+import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
@@ -157,12 +158,15 @@ export default function Welcome({ onComplete }) {
           input: textToAnalyze
       });
 
-      // Also extract & create tasks from the input
+      // 同步到约定和心签
       extractAndCreateTasks(textToAnalyze).then(tasks => {
         if (tasks.length > 0) {
-          toast.success(`已自动添加 ${tasks.length} 个约定到列表`);
+          toast.success(`已同步 ${tasks.length} 个约定`);
         }
       }).catch(e => console.error("Task extraction failed", e));
+      syncPlanToNote(textToAnalyze, "welcome").then(note => {
+        if (note) toast.success("已同步到心签");
+      }).catch(e => console.error("Note sync failed", e));
 
       clearInterval(stepInterval);
       

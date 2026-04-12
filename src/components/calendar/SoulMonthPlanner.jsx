@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
 import { useAICreditGate } from "@/components/credits/useAICreditGate";
 import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
+import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 import { useQuery } from "@tanstack/react-query";
 import CalendarMonthView from "./CalendarMonthView";
 
@@ -179,9 +180,14 @@ export default function SoulMonthPlanner({
             // Extract & create tasks from user input
             extractAndCreateTasks(userInput, format(start, 'yyyy-MM-dd')).then(tasks => {
               if (tasks.length > 0) {
-                toast.success(`已自动添加 ${tasks.length} 个约定到列表`);
+                toast.success(`已同步 ${tasks.length} 个约定`);
               }
             }).catch(e => console.error("Task extraction failed", e));
+
+            // 同步到心签
+            syncPlanToNote(userInput, "month_plan", { dateRange: monthLabel, theme: data.theme }).then(note => {
+              if (note) toast.success("已同步到心签");
+            }).catch(e => console.error("Note sync failed", e));
             
             setTimeout(() => {
                 setStage('results');

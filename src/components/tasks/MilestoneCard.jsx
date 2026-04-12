@@ -6,6 +6,7 @@ import {
   Calendar,
   Clock,
   Paperclip,
+  Tag,
   ChevronDown,
   MoreHorizontal,
   MessageSquare,
@@ -129,6 +130,17 @@ export default function MilestoneCard({
               </span>
             }
           </div>
+          {/* AI Tags */}
+          {task.tags?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {task.tags.map((tag, idx) => (
+                <span key={idx} className="px-2 py-0.5 bg-slate-50 text-slate-500 text-[11px] rounded-full border border-slate-100 flex items-center gap-1">
+                  <Tag className="w-2.5 h-2.5" />
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

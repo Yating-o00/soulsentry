@@ -145,23 +145,29 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
     } else if (mode === 'life') {
       category = 'personal';
     } else {
-       // Auto-detect based on preview tags logic
        if (value.includes('完成') || value.includes('提交') || value.includes('规划')) {
          category = 'work';
          priority = 'high';
        }
     }
 
+    // Save AI-generated tags as string array on the task
+    const aiTagTexts = previewTags
+      .filter(t => t.text && t.text !== '智能安排')
+      .map(t => t.text);
+
     onAddTask({
       title: value,
       category,
       priority,
       status: 'pending',
-      reminder_time: new Date().toISOString()
+      reminder_time: new Date().toISOString(),
+      tags: aiTagTexts.length > 0 ? aiTagTexts : undefined
     });
     
     handleClear();
     setShowPreview(false);
+    setPreviewTags([]);
   };
 
   const handleKeyDown = (e) => {

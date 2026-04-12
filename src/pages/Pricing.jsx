@@ -195,7 +195,10 @@ export default function Pricing() {
                    </div>
                    <h4 className="font-bold text-slate-900 mb-1">{pack.name}</h4>
                    <p className="text-2xl font-bold text-slate-900 mb-0.5">{pack.credits.toLocaleString()}</p>
-                   <p className="text-xs text-slate-500 mb-3">AI 点数</p>
+                   <p className="text-xs text-slate-500 mb-1">AI 点数</p>
+                   <div className={`inline-block rounded-full px-4 py-1 mb-2 bg-gradient-to-r ${c.iconBg} border border-opacity-30`}>
+                     <span className={`text-base font-bold ${c.icon}`}>{pack.priceDisplay}</span>
+                   </div>
                    {pack.savings && (
                      <p className="text-xs text-emerald-600 font-medium mb-2">节省 {pack.savings}</p>
                    )}
@@ -203,7 +206,7 @@ export default function Pricing() {
                      className={`w-full bg-gradient-to-r ${c.btn} text-white h-9 text-sm`}
                      onClick={() => handleBuyCredits(pack)}
                    >
-                     {pack.priceDisplay}
+                     立即购买
                    </Button>
                  </div>
                </Card>

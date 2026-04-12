@@ -221,21 +221,32 @@ export default function Pricing() {
           </h2>
           <Card className="border-0 shadow-md overflow-hidden">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(AI_FEATURES).map(([key, feature], index) => (
-                <div key={key} className="flex items-center gap-3 p-4 border-b border-r border-slate-100 last:border-0">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                   <Coins className="w-4 h-4 text-indigo-500" />
+              {Object.entries(AI_FEATURES).map(([key, feature], index) => {
+                const featureColors = [
+                  { bg: "bg-blue-50/70", iconBg: "bg-blue-100", iconColor: "text-blue-600", badgeBg: "bg-blue-100 text-blue-700 border-blue-200" },
+                  { bg: "bg-violet-50/70", iconBg: "bg-violet-100", iconColor: "text-violet-600", badgeBg: "bg-violet-100 text-violet-700 border-violet-200" },
+                  { bg: "bg-amber-50/70", iconBg: "bg-amber-100", iconColor: "text-amber-600", badgeBg: "bg-amber-100 text-amber-700 border-amber-200" },
+                  { bg: "bg-emerald-50/70", iconBg: "bg-emerald-100", iconColor: "text-emerald-600", badgeBg: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+                  { bg: "bg-rose-50/70", iconBg: "bg-rose-100", iconColor: "text-rose-600", badgeBg: "bg-rose-100 text-rose-700 border-rose-200" },
+                  { bg: "bg-indigo-50/70", iconBg: "bg-indigo-100", iconColor: "text-indigo-600", badgeBg: "bg-indigo-100 text-indigo-700 border-indigo-200" },
+                ];
+                const fc = featureColors[index % featureColors.length];
+                return (
+                <div key={key} className={`flex items-center gap-3 p-4 border-b border-r border-slate-100 last:border-0 ${fc.bg} hover:brightness-95 transition-all duration-200`}>
+                  <div className={`w-8 h-8 rounded-lg ${fc.iconBg} flex items-center justify-center flex-shrink-0`}>
+                   <Coins className={`w-4 h-4 ${fc.iconColor}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800">{feature.name}</p>
                     <p className="text-xs text-slate-500 truncate">{feature.description}</p>
                   </div>
-                  <Badge variant="outline" className="text-indigo-700 border-indigo-200 bg-indigo-50 text-xs flex-shrink-0">
+                  <Badge variant="outline" className={`text-xs flex-shrink-0 ${fc.badgeBg}`}>
                     {feature.cost} 点
                   </Badge>
-                </div>
-              ))}
-            </div>
+                  </div>
+                  );
+                  })}
+                  </div>
           </Card>
         </motion.div>
 

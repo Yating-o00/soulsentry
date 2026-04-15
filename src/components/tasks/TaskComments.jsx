@@ -195,10 +195,11 @@ export default function TaskComments({ task }) {
           <Button
             type="submit"
             disabled={!newComment.trim() || createCommentMutation.isPending}
-            className="bg-gradient-to-r from-blue-600 to-blue-700"
+            variant="outline"
+            className="border-blue-300 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors"
           >
             <Send className="w-4 h-4 mr-2" />
-            <span className="text-white">发表评论</span>
+            发表评论
           </Button>
         </div>
       </form>

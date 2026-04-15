@@ -33,6 +33,7 @@ export default function TaskChangeHistory({ taskId }) {
     queryKey: ["task-change-logs", taskId],
     queryFn: () => base44.entities.TaskChangeLog.filter({ task_id: taskId }, "-created_date", 50),
     enabled: !!taskId,
+    refetchInterval: 5000,
   });
 
   const { data: completionHistory = [] } = useQuery({

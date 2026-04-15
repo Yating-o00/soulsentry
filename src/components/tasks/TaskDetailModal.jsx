@@ -117,6 +117,11 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       queryClient.invalidateQueries({ queryKey: ['task', task?.id] });
+      // Delay to let the automation create the change log record
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['task-change-logs'] });
+        queryClient.invalidateQueries({ queryKey: ['task-completions'] });
+      }, 2000);
       
       // Check if title or description changed and we have subtasks
       if ((data.title || data.description) && subtasks.length > 0) {

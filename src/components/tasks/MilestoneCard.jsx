@@ -17,7 +17,11 @@ import {
   Share2,
   Languages,
   CheckCircle2,
-  MessageSquare
+  MessageSquare,
+  Link2,
+  StickyNote,
+  Bell,
+  History
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -152,16 +156,33 @@ export default function MilestoneCard({
                 紧急
               </span>
             )}
+            {task.dependencies?.length > 0 && (
+              <span className="px-2 py-1 bg-amber-50 text-amber-600 text-xs rounded-lg font-medium flex items-center gap-1">
+                <Link2 className="w-3 h-3" />
+                {task.dependencies.length}
+              </span>
+            )}
             {task.attachments?.length > 0 && (
               <span className="px-2 py-1 bg-purple-50 text-purple-600 text-xs rounded-lg font-medium flex items-center gap-1">
                 <Paperclip className="w-3 h-3" />
                 {task.attachments.length}
               </span>
             )}
+            {task.notes?.length > 0 && (
+              <span className="px-2 py-1 bg-teal-50 text-teal-600 text-xs rounded-lg font-medium flex items-center gap-1">
+                <StickyNote className="w-3 h-3" />
+                {task.notes.length}
+              </span>
+            )}
             {commentCount > 0 && (
               <span className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded-lg font-medium flex items-center gap-1">
                 <MessageSquare className="w-3 h-3" />
                 {commentCount}
+              </span>
+            )}
+            {(task.advance_reminders?.length > 0 || task.persistent_reminder) && (
+              <span className="px-2 py-1 bg-orange-50 text-orange-600 text-xs rounded-lg font-medium flex items-center gap-1">
+                <Bell className="w-3 h-3" />
               </span>
             )}
           </div>

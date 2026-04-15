@@ -8,7 +8,8 @@ import {
   Droplets, Leaf, Flower, Coffee, Utensils,
   Car, Store, Home, AlertCircle, Timer,
   Sparkles, Lightbulb, CheckCircle2, Flag,
-  Share2, Edit, Trash2, Calendar, ChevronDown, MessageSquare
+  Share2, Edit, Trash2, Calendar, ChevronDown, MessageSquare,
+  Link2, StickyNote, Paperclip, Bell
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -277,10 +278,33 @@ export default function LifeTaskCard({
                             {badge.label}
                         </span>
                     ))}
+                    {task.dependencies?.length > 0 && (
+                        <span className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-amber-50 text-amber-600 border-amber-100">
+                            <Link2 className="w-3 h-3" />
+                            {task.dependencies.length}
+                        </span>
+                    )}
+                    {task.attachments?.length > 0 && (
+                        <span className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-purple-50 text-purple-600 border-purple-100">
+                            <Paperclip className="w-3 h-3" />
+                            {task.attachments.length}
+                        </span>
+                    )}
+                    {task.notes?.length > 0 && (
+                        <span className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-teal-50 text-teal-600 border-teal-100">
+                            <StickyNote className="w-3 h-3" />
+                            {task.notes.length}
+                        </span>
+                    )}
                     {commentCount > 0 && (
                         <span className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-blue-50 text-blue-600 border-blue-100">
                             <MessageSquare className="w-3 h-3" />
                             {commentCount}
+                        </span>
+                    )}
+                    {(task.advance_reminders?.length > 0 || task.persistent_reminder) && (
+                        <span className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-orange-50 text-orange-600 border-orange-100">
+                            <Bell className="w-3 h-3" />
                         </span>
                     )}
                 </div>

@@ -58,6 +58,22 @@ export default function Tasks() {
     initialData: []
   });
 
+  const { data: allComments = [] } = useQuery({
+    queryKey: ['all-comments'],
+    queryFn: () => base44.entities.Comment.list(),
+    initialData: []
+  });
+
+  const commentCountMap = useMemo(() => {
+    const map = {};
+    for (const c of allComments) {
+      if (c.task_id) {
+        map[c.task_id] = (map[c.task_id] || 0) + 1;
+      }
+    }
+    return map;
+  }, [allComments]);
+
   // Filter tasks
   const { milestoneTasks, lifeTasks, completedTasks, stats } = useMemo(() => {
     // Apply search filter
@@ -362,6 +378,7 @@ export default function Tasks() {
               key={task.id}
               task={task}
               subtasks={getSubtasks(task.id)}
+              commentCount={commentCountMap[task.id] || 0}
               isSelectionMode={isSelectionMode}
               isSelected={selectedTaskIds.includes(task.id)}
               onToggleSelection={() => toggleSelection(task.id)}
@@ -406,6 +423,7 @@ export default function Tasks() {
                     key={task.id}
                     task={task}
                     subtasks={getSubtasks(task.id)}
+                    commentCount={commentCountMap[task.id] || 0}
                     isSelectionMode={isSelectionMode}
                     isSelected={selectedTaskIds.includes(task.id)}
                     onToggleSelection={() => toggleSelection(task.id)}

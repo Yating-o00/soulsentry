@@ -16,7 +16,8 @@ import {
   Edit,
   Share2,
   Languages,
-  CheckCircle2
+  CheckCircle2,
+  MessageSquare
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -34,6 +35,7 @@ import { cn } from "@/lib/utils";
 export default function MilestoneCard({
   task,
   subtasks = [],
+  commentCount = 0,
   onToggleSubtask,
   onUpdateStatus,
   onAddSubtask,
@@ -154,6 +156,12 @@ export default function MilestoneCard({
               <span className="px-2 py-1 bg-purple-50 text-purple-600 text-xs rounded-lg font-medium flex items-center gap-1">
                 <Paperclip className="w-3 h-3" />
                 {task.attachments.length}
+              </span>
+            )}
+            {commentCount > 0 && (
+              <span className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded-lg font-medium flex items-center gap-1">
+                <MessageSquare className="w-3 h-3" />
+                {commentCount}
               </span>
             )}
           </div>

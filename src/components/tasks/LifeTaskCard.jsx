@@ -8,7 +8,7 @@ import {
   Droplets, Leaf, Flower, Coffee, Utensils,
   Car, Store, Home, AlertCircle, Timer,
   Sparkles, Lightbulb, CheckCircle2, Flag,
-  Share2, Edit, Trash2, Calendar, ChevronDown
+  Share2, Edit, Trash2, Calendar, ChevronDown, MessageSquare
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 export default function LifeTaskCard({ 
   task, 
   subtasks = [],
+  commentCount = 0,
   onComplete, 
   onEdit,
   onShare,
@@ -276,6 +277,12 @@ export default function LifeTaskCard({
                             {badge.label}
                         </span>
                     ))}
+                    {commentCount > 0 && (
+                        <span className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-blue-50 text-blue-600 border-blue-100">
+                            <MessageSquare className="w-3 h-3" />
+                            {commentCount}
+                        </span>
+                    )}
                 </div>
 
                 {/* Dropdown Menu */}

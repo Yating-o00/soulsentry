@@ -48,6 +48,16 @@ import TaskComments from "./TaskComments";
 import AITaskEnhancer from "./AITaskEnhancer";
 import TaskChangeHistory from "./TaskChangeHistory";
 import TaskDependencySelector from "./TaskDependencySelector";
+
+function CommentCount({ taskId }) {
+  const { data: comments = [] } = useQuery({
+    queryKey: ['comments', taskId],
+    queryFn: () => base44.entities.Comment.filter({ task_id: taskId }, '-created_date'),
+    enabled: !!taskId,
+    initialData: [],
+  });
+  return comments.length > 0 ? <span className="ml-1">({comments.length})</span> : null;
+}
 import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
@@ -598,7 +608,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
                 笔记 ({task.notes?.length || 0})
               </TabsTrigger>
               <TabsTrigger value="comments" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
-                评论
+                评论 <CommentCount taskId={task.id} />
               </TabsTrigger>
               <TabsTrigger value="reminders" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1">
                 <Clock className="w-3 h-3 md:w-3.5 md:h-3.5 text-blue-500" />

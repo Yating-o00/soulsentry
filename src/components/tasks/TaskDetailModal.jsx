@@ -489,12 +489,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
     });
   };
 
-  if (!task) return null;
-
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
 
   const recentChanges = useRecentChanges(task, subtasks);
+
+  if (!task) return null;
 
   const handleTranslate = async () => {
     if (isTranslating) return;

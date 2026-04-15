@@ -46,13 +46,13 @@ import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import TaskComments from "./TaskComments";
 import AITaskEnhancer from "./AITaskEnhancer";
+import TaskChangeHistory from "./TaskChangeHistory";
 import TaskDependencySelector from "./TaskDependencySelector";
 import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
-import TaskChangeHistory from "./TaskChangeHistory";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -66,13 +66,6 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const [originalContent, setOriginalContent] = useState({ title: "", description: "" });
   const [isTranslating, setIsTranslating] = useState(false);
   const queryClient = useQueryClient();
-
-  // Fetch completion history
-  const { data: completionHistory = [] } = useQuery({
-    queryKey: ['task-completions', initialTaskData?.id],
-    queryFn: () => base44.entities.TaskCompletion.filter({ task_id: initialTaskData.id }, "-completed_at"),
-    enabled: !!initialTaskData?.id && open,
-  });
 
   // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
   const { data: task = initialTaskData } = useQuery({
@@ -1046,66 +1039,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
             </TabsContent>
 
             {/* History Tab */}
-            <TabsContent value="history" className="space-y-6">
-                {/* 变更记录 */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                    <History className="w-4 h-4 text-slate-500" />
-                    变更记录
-                  </h3>
-                  <TaskChangeHistory taskId={task.id} />
-                </div>
-
-                {/* 完成记录 */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                     <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                       <CheckCircle2 className="w-4 h-4 text-green-500" />
-                       完成记录
-                     </h3>
-                     <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200">
-                        共 {completionHistory.length} 次
-                     </Badge>
-                  </div>
-                  
-                  {completionHistory.length === 0 ? (
-                     <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
-                        <CheckCircle2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">暂无完成记录</p>
-                     </div>
-                  ) : (
-                    <div className="relative border-l-2 border-green-100 ml-3 space-y-4 pl-6 py-2">
-                      {completionHistory.map((record, idx) => (
-                        <div key={record.id} className="relative group">
-                           <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow-sm flex items-center justify-center">
-                              <CheckCircle2 className="w-2.5 h-2.5 text-white" />
-                           </div>
-                           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 hover:border-green-200 hover:bg-green-50/30 transition-all">
-                              <div className="flex justify-between items-start">
-                                 <div>
-                                    <p className="font-semibold text-slate-800 text-sm flex items-center gap-2">
-                                        约定完成
-                                        {idx === 0 && <Badge className="h-5 text-[10px] bg-green-500 hover:bg-green-600">最新</Badge>}
-                                    </p>
-                                    <p className="text-xs text-slate-500 mt-1 font-medium font-mono">
-                                       {format(new Date(record.completed_at), "yyyy-MM-dd HH:mm:ss", { locale: zhCN })}
-                                    </p>
-                                 </div>
-                                 <Badge variant="outline" className="bg-white text-green-600 border-green-200 text-xs shadow-sm">
-                                    {record.status === 'completed' ? '已完成' : record.status}
-                                 </Badge>
-                              </div>
-                              {record.note && (
-                                <div className="mt-3 text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-100 italic">
-                                   "{record.note}"
-                                </div>
-                              )}
-                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            <TabsContent value="history" className="space-y-4">
+                <TaskChangeHistory taskId={task.id} />
             </TabsContent>
           </Tabs>
 

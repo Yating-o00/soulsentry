@@ -375,7 +375,7 @@ export default function MilestoneCard({
                 className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
               >
                 <Plus className="w-3 h-3" />
-                添加子任务
+                查看详情或添加子任务
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}

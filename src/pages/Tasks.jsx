@@ -24,6 +24,7 @@ export default function Tasks() {
   const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedTab, setSelectedTab] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [sharingTask, setSharingTask] = useState(null);
   const [user, setUser] = useState(null);
@@ -386,12 +387,14 @@ export default function Tasks() {
               onUpdateStatus={handleUpdateStatus}
               onAddSubtask={() => {
                 setSelectedTask(task);
+                setSelectedTab(null);
               }}
               onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
               onDelete={(task) => deleteTask(task.id)}
               onEdit={() => setEditingTask(task)}
               onShare={(task) => setSharingTask(task)}
-              onView={() => setSelectedTask(task)} />
+              onView={() => { setSelectedTask(task); setSelectedTab(null); }}
+              onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }} />
             )}
             </div>
           }
@@ -429,8 +432,9 @@ export default function Tasks() {
                     onToggleSelection={() => toggleSelection(task.id)}
                     onToggleSubtask={handleToggleSubtask}
                     onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                    onEdit={() => setSelectedTask(task)}
+                    onEdit={() => { setSelectedTask(task); setSelectedTab(null); }}
                     onShare={() => setSharingTask(task)}
+                    onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                   />
                 )}
               </div>
@@ -481,7 +485,8 @@ export default function Tasks() {
       <TaskDetailModal
         task={selectedTask}
         open={!!selectedTask}
-        onClose={() => setSelectedTask(null)} />
+        onClose={() => { setSelectedTask(null); setSelectedTab(null); }}
+        initialTab={selectedTab} />
 
       {/* Edit Task Dialog */}
       <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>

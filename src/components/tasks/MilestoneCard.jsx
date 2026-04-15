@@ -50,7 +50,8 @@ export default function MilestoneCard({
   onShare,
   isSelectionMode = false,
   isSelected = false,
-  onToggleSelection
+  onToggleSelection,
+  onViewTab
 }) {
   const [expanded, setExpanded] = useState(false);
   const totalSubtasks = subtasks.length;
@@ -157,31 +158,31 @@ export default function MilestoneCard({
               </span>
             )}
             {task.dependencies?.length > 0 && (
-              <span className="px-2 py-1 bg-amber-50 text-amber-600 text-xs rounded-lg font-medium flex items-center gap-1">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("dependencies"); }} className="px-2 py-1 bg-amber-50 text-amber-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-amber-100 transition-colors">
                 <Link2 className="w-3 h-3" />
                 {task.dependencies.length}
               </span>
             )}
             {task.attachments?.length > 0 && (
-              <span className="px-2 py-1 bg-purple-50 text-purple-600 text-xs rounded-lg font-medium flex items-center gap-1">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("attachments"); }} className="px-2 py-1 bg-purple-50 text-purple-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-purple-100 transition-colors">
                 <Paperclip className="w-3 h-3" />
                 {task.attachments.length}
               </span>
             )}
             {task.notes?.length > 0 && (
-              <span className="px-2 py-1 bg-teal-50 text-teal-600 text-xs rounded-lg font-medium flex items-center gap-1">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("notes"); }} className="px-2 py-1 bg-teal-50 text-teal-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-teal-100 transition-colors">
                 <StickyNote className="w-3 h-3" />
                 {task.notes.length}
               </span>
             )}
             {commentCount > 0 && (
-              <span className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded-lg font-medium flex items-center gap-1">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("comments"); }} className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-blue-100 transition-colors">
                 <MessageSquare className="w-3 h-3" />
                 {commentCount}
               </span>
             )}
             {(task.advance_reminders?.length > 0 || task.persistent_reminder) && (
-              <span className="px-2 py-1 bg-orange-50 text-orange-600 text-xs rounded-lg font-medium flex items-center gap-1">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("reminders"); }} className="px-2 py-1 bg-orange-50 text-orange-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-orange-100 transition-colors">
                 <Bell className="w-3 h-3" />
               </span>
             )}

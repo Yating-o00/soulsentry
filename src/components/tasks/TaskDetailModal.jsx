@@ -64,7 +64,7 @@ import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
 
-export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
+export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
   const [newNote, setNewNote] = useState("");
@@ -593,7 +593,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
             </div>
           )}
 
-          <Tabs defaultValue="subtasks" className="w-full">
+          <Tabs defaultValue={initialTab || "subtasks"} key={initialTab || "subtasks"} className="w-full">
             <TabsList className="flex w-full overflow-x-auto justify-start gap-1 md:gap-2 p-1 bg-slate-100/80 rounded-xl h-auto scrollbar-hide -mx-1 px-1">
               <TabsTrigger value="subtasks" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
                 子约定 ({totalSubtasks})

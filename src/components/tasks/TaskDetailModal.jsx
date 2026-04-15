@@ -58,6 +58,67 @@ function CommentCount({ taskId }) {
   });
   return comments.length > 0 ? <span className="ml-1">({comments.length})</span> : null;
 }
+
+function RecentDot() {
+  return (
+    <span className="relative flex h-2 w-2 ml-1">
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+    </span>
+  );
+}
+
+function useRecentChanges(task, subtasks) {
+  const { data: comments = [] } = useQuery({
+    queryKey: ['comments', task?.id],
+    queryFn: () => base44.entities.Comment.filter({ task_id: task.id }, '-created_date'),
+    enabled: !!task?.id,
+    initialData: [],
+  });
+
+  const { data: changeLogs = [] } = useQuery({
+    queryKey: ['task-change-logs', task?.id],
+    queryFn: () => base44.entities.TaskChangeLog.filter({ task_id: task.id }, '-created_date', 20),
+    enabled: !!task?.id,
+    initialData: [],
+  });
+
+  const isRecent = (dateStr) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    const now = new Date();
+    return (now - d) < 24 * 60 * 60 * 1000; // 24 hours
+  };
+
+  // Subtasks: any subtask updated recently
+  const subtasksRecent = subtasks.some(s => isRecent(s.updated_date));
+
+  // Dependencies: task dependencies changed recently (check change logs)
+  const depsRecent = changeLogs.some(log => 
+    isRecent(log.created_date) && log.changed_fields?.includes('dependencies')
+  );
+
+  // Attachments: any attachment uploaded recently
+  const attachmentsRecent = (task?.attachments || []).some(a => isRecent(a.uploaded_at));
+
+  // Notes: any note created recently
+  const notesRecent = (task?.notes || []).some(n => isRecent(n.created_at));
+
+  // Comments: any comment created recently
+  const commentsRecent = comments.some(c => isRecent(c.created_date));
+
+  // History: any change log created recently
+  const historyRecent = changeLogs.some(log => isRecent(log.created_date));
+
+  // Reminders: reminder settings changed recently
+  const remindersRecent = changeLogs.some(log => 
+    isRecent(log.created_date) && log.changed_fields?.some(f => 
+      ['notification_sound', 'persistent_reminder', 'notification_interval', 'advance_reminders', 'repeat_rule', 'custom_recurrence'].includes(f)
+    )
+  );
+
+  return { subtasksRecent, depsRecent, attachmentsRecent, notesRecent, commentsRecent, historyRecent, remindersRecent };
+}
 import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
@@ -433,6 +494,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const totalSubtasks = subtasks.length;
 
+  const recentChanges = useRecentChanges(task, subtasks);
+
   const handleTranslate = async () => {
     if (isTranslating) return;
     setIsTranslating(true);
@@ -595,28 +658,35 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
 
           <Tabs defaultValue="subtasks" className="w-full">
             <TabsList className="flex w-full overflow-x-auto justify-start gap-1 md:gap-2 p-1 bg-slate-100/80 rounded-xl h-auto scrollbar-hide -mx-1 px-1">
-              <TabsTrigger value="subtasks" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="subtasks" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center">
                 子约定 ({totalSubtasks})
+                {recentChanges.subtasksRecent && <RecentDot />}
               </TabsTrigger>
-              <TabsTrigger value="dependencies" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="dependencies" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center">
                 依赖 ({task.dependencies?.length || 0})
+                {recentChanges.depsRecent && <RecentDot />}
               </TabsTrigger>
-              <TabsTrigger value="attachments" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="attachments" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center">
                 附件 ({task.attachments?.length || 0})
+                {recentChanges.attachmentsRecent && <RecentDot />}
               </TabsTrigger>
-              <TabsTrigger value="notes" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="notes" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center">
                 笔记 ({task.notes?.length || 0})
+                {recentChanges.notesRecent && <RecentDot />}
               </TabsTrigger>
-              <TabsTrigger value="comments" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all">
+              <TabsTrigger value="comments" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center">
                 评论 <CommentCount taskId={task.id} />
+                {recentChanges.commentsRecent && <RecentDot />}
               </TabsTrigger>
               <TabsTrigger value="reminders" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1">
                 <Clock className="w-3 h-3 md:w-3.5 md:h-3.5 text-blue-500" />
                 提醒
+                {recentChanges.remindersRecent && <RecentDot />}
               </TabsTrigger>
               <TabsTrigger value="history" className="flex-shrink-0 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg transition-all flex items-center gap-1">
                 <History className="w-3 h-3 md:w-3.5 md:h-3.5 text-slate-500" />
                 历史
+                {recentChanges.historyRecent && <RecentDot />}
               </TabsTrigger>
             </TabsList>
 

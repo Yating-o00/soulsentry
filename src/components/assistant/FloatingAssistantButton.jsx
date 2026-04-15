@@ -26,10 +26,16 @@ export default function FloatingAssistantButton() {
     initialData: [],
   });
 
-  // 监听任务变化，更新活动时间
+  // 监听用户交互，更新活动时间
   useEffect(() => {
-    setLastActivityTime(Date.now());
-  }, [tasks]);
+    const handleActivity = () => setLastActivityTime(Date.now());
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    return () => {
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+    };
+  }, []);
 
   useEffect(() => {
     // 检查是否有需要关注的约定

@@ -1,0 +1,64 @@
+{
+  "name": "TaskChangeLog",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "\u5173\u8054\u7684\u7ea6\u5b9aID\uff08\u4e3b\u7ea6\u5b9a\u6216\u5b50\u7ea6\u5b9a\uff09"
+    },
+    "parent_task_id": {
+      "type": "string",
+      "description": "\u5982\u679c\u662f\u5b50\u7ea6\u5b9a\u53d8\u66f4\uff0c\u8bb0\u5f55\u5176\u7236\u7ea6\u5b9aID"
+    },
+    "change_type": {
+      "type": "string",
+      "enum": [
+        "created",
+        "updated",
+        "deleted",
+        "status_changed",
+        "subtask_created",
+        "subtask_updated",
+        "subtask_deleted",
+        "subtask_status_changed"
+      ],
+      "description": "\u53d8\u66f4\u7c7b\u578b"
+    },
+    "task_title": {
+      "type": "string",
+      "description": "\u7ea6\u5b9a\u6807\u9898\uff08\u8bb0\u5f55\u65f6\u5feb\u7167\uff09"
+    },
+    "changed_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u53d8\u66f4\u7684\u5b57\u6bb5\u540d\u5217\u8868"
+    },
+    "changes_detail": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "field_label": {
+            "type": "string"
+          },
+          "old_value": {
+            "type": "string"
+          },
+          "new_value": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "\u53d8\u66f4\u8be6\u60c5"
+    }
+  },
+  "required": [
+    "task_id",
+    "change_type"
+  ]
+}

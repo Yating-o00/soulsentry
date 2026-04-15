@@ -52,6 +52,7 @@ import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
+import TaskChangeHistory from "./TaskChangeHistory";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose }) {
   const [uploading, setUploading] = useState(false);
@@ -1045,25 +1046,38 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose }
             </TabsContent>
 
             {/* History Tab */}
-            <TabsContent value="history" className="space-y-4">
-                <div className="space-y-4">
+            <TabsContent value="history" className="space-y-6">
+                {/* 变更记录 */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                    <History className="w-4 h-4 text-slate-500" />
+                    变更记录
+                  </h3>
+                  <TaskChangeHistory taskId={task.id} />
+                </div>
+
+                {/* 完成记录 */}
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                     <h3 className="text-sm font-semibold text-slate-900">完成记录</h3>
+                     <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                       <CheckCircle2 className="w-4 h-4 text-green-500" />
+                       完成记录
+                     </h3>
                      <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200">
                         共 {completionHistory.length} 次
                      </Badge>
                   </div>
                   
                   {completionHistory.length === 0 ? (
-                     <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
-                        <History className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                     <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
+                        <CheckCircle2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
                         <p className="text-sm">暂无完成记录</p>
                      </div>
                   ) : (
-                    <div className="relative border-l-2 border-slate-100 ml-3 space-y-6 pl-6 py-2">
+                    <div className="relative border-l-2 border-green-100 ml-3 space-y-4 pl-6 py-2">
                       {completionHistory.map((record, idx) => (
                         <div key={record.id} className="relative group">
-                           <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow-sm flex items-center justify-center ring-2 ring-transparent group-hover:ring-green-100 transition-all">
+                           <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow-sm flex items-center justify-center">
                               <CheckCircle2 className="w-2.5 h-2.5 text-white" />
                            </div>
                            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 hover:border-green-200 hover:bg-green-50/30 transition-all">

@@ -1,0 +1,48 @@
+{
+  "name": "TaskHistory",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "\u5173\u8054\u7684\u4efb\u52a1ID"
+    },
+    "change_type": {
+      "type": "string",
+      "enum": [
+        "created",
+        "updated",
+        "status_changed",
+        "subtask_created",
+        "subtask_updated",
+        "subtask_deleted",
+        "subtask_completed"
+      ],
+      "description": "\u53d8\u66f4\u7c7b\u578b"
+    },
+    "field_name": {
+      "type": "string",
+      "description": "\u53d8\u66f4\u7684\u5b57\u6bb5\u540d\u79f0"
+    },
+    "old_value": {
+      "type": "string",
+      "description": "\u65e7\u503c"
+    },
+    "new_value": {
+      "type": "string",
+      "description": "\u65b0\u503c"
+    },
+    "summary": {
+      "type": "string",
+      "description": "\u53d8\u66f4\u6458\u8981\uff08\u53ef\u8bfb\u6587\u672c\uff09"
+    },
+    "subtask_title": {
+      "type": "string",
+      "description": "\u5b50\u4efb\u52a1\u6807\u9898\uff08\u5982\u679c\u662f\u5b50\u4efb\u52a1\u53d8\u66f4\uff09"
+    }
+  },
+  "required": [
+    "task_id",
+    "change_type",
+    "summary"
+  ]
+}

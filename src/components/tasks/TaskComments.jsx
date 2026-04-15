@@ -196,7 +196,7 @@ export default function TaskComments({ task }) {
             type="submit"
             disabled={!newComment.trim() || createCommentMutation.isPending}
             variant="outline"
-            className="border-blue-300 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors"
+            className="border-[#384877] text-[#384877] hover:bg-[#384877] hover:text-white hover:border-[#384877] transition-colors"
           >
             <Send className="w-4 h-4 mr-2" />
             发表评论

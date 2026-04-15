@@ -114,7 +114,7 @@ export default function MilestoneCard({
       }}
       className={cn(
         "task-card group bg-white rounded-2xl shadow-sm border border-stone-100 relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer",
-        "border-l-[3px] border-l-blue-400",
+        "border-l-[3px] border-l-[#384877]",
         isCompleted && "opacity-60",
         isSelected && "ring-2 ring-blue-500 bg-blue-50/30"
       )}

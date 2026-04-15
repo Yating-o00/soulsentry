@@ -198,7 +198,7 @@ export default function TaskComments({ task }) {
             className="bg-gradient-to-r from-blue-600 to-blue-700"
           >
             <Send className="w-4 h-4 mr-2" />
-            发表评论
+            <span className="text-white">发表评论</span>
           </Button>
         </div>
       </form>

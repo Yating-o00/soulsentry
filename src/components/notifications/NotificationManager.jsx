@@ -37,15 +37,14 @@ export default function NotificationManager() {
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list(),
-    refetchInterval: 30000, // 每30秒检查一次
+    staleTime: 5 * 60 * 1000, // 5分钟内不重新请求
   });
 
-  // 获取最近的用户行为，用于动态调整提醒 - reduced frequency
+  // 获取最近的用户行为，用于动态调整提醒
   const { data: recentBehaviors = [] } = useQuery({
     queryKey: ['recentBehaviors'],
     queryFn: () => base44.entities.UserBehavior.list('-created_date', 20),
-    refetchInterval: 5 * 60 * 1000, // Every 5 minutes instead of 1 minute
-    staleTime: 3 * 60 * 1000,
+    staleTime: 10 * 60 * 1000, // 10分钟内不重新请求
   });
 
   const { data: rules = [] } = useQuery({

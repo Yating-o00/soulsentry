@@ -67,14 +67,14 @@ export function useAICredits() {
     updateCachedUser({ ai_credits: newBalance });
     setCredits(newBalance);
 
-    // 记录交易
-    await base44.entities.AICreditTransaction.create({
+    // 记录交易（非阻塞，避免触发速率限制）
+    base44.entities.AICreditTransaction.create({
       type: "consume",
       amount: -feature.cost,
       balance_after: newBalance,
       feature: featureKey,
       description: description || `使用「${feature.name}」消耗 ${feature.cost} 点`
-    });
+    }).catch(e => console.warn("Credit transaction log failed:", e));
 
     return { success: true, newBalance };
   }, [credits]);

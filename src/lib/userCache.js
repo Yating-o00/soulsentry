@@ -5,7 +5,7 @@ let cachedUser = null;
 let cacheTime = 0;
 let pendingRequest = null;
 
-const CACHE_TTL = 5000; // 5 seconds
+const CACHE_TTL = 30000; // 30 seconds
 
 /**
  * Get the current user with caching.

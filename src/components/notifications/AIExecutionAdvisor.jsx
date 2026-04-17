@@ -24,6 +24,7 @@ export default function AIExecutionAdvisor({ open, onOpenChange, execution, rela
   const [loading, setLoading] = useState(false);
   const [advice, setAdvice] = useState(null);
   const [executingAction, setExecutingAction] = useState(null);
+  const [completedActions, setCompletedActions] = useState({});
   const queryClient = useQueryClient();
 
   const fetchAdvice = async () => {
@@ -115,10 +116,11 @@ ${new Date().toLocaleString('zh-CN')}
       fetchAdvice();
     } else {
       setAdvice(null);
+      setCompletedActions({});
     }
   }, [open, execution?.id]);
 
-  const executeAction = async (suggestion) => {
+  const executeAction = async (suggestion, index) => {
     if (!execution?.task_id) {
       toast.error("无关联任务，无法执行");
       return;
@@ -224,9 +226,12 @@ ${new Date().toLocaleString('zh-CN')}
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
+
+      setCompletedActions(prev => ({ ...prev, [index]: { success: true, action: suggestion.action, title: suggestion.title } }));
     } catch (err) {
       console.error("Action execution failed:", err);
       toast.error("执行失败: " + (err.message || "未知错误"));
+      setCompletedActions(prev => ({ ...prev, [index]: { success: false, action: suggestion.action, title: suggestion.title, error: err.message } }));
     }
 
     setExecutingAction(null);
@@ -289,6 +294,7 @@ ${new Date().toLocaleString('zh-CN')}
                   const cfg = ACTION_CONFIG[s.action] || ACTION_CONFIG.complete;
                   const Icon = cfg.icon;
                   const isExecuting = executingAction === s.action;
+                  const completed = completedActions[i];
 
                   return (
                     <motion.div
@@ -296,41 +302,113 @@ ${new Date().toLocaleString('zh-CN')}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.1 }}
-                      className={`p-4 rounded-xl border ${cfg.color} transition-all hover:shadow-sm`}
+                      className={`p-4 rounded-xl border transition-all ${completed?.success ? 'bg-emerald-50 border-emerald-200' : completed && !completed.success ? 'bg-red-50 border-red-200' : cfg.color + ' hover:shadow-sm'}`}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.color.split(' ')[1]}`}>
-                          <Icon className={`w-4 h-4 ${cfg.color.split(' ')[0]}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="text-sm font-semibold text-slate-800">{s.title}</h4>
-                            {s.confidence >= 0.8 && (
-                              <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px]">推荐</Badge>
-                            )}
-                            {s.requires_confirm && (
-                              <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">需确认</Badge>
+                      {completed ? (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="flex items-center gap-3"
+                        >
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${completed.success ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                            {completed.success ? (
+                              <Check className="w-5 h-5 text-emerald-600" />
+                            ) : (
+                              <AlertTriangle className="w-4 h-4 text-red-500" />
                             )}
                           </div>
-                          <p className="text-xs text-slate-600 mb-3">{s.description}</p>
-                          <Button
-                            size="sm"
-                            onClick={() => executeAction(s)}
-                            disabled={isExecuting}
-                            className="h-8 text-xs bg-slate-800 hover:bg-slate-700 text-white gap-1.5"
-                          >
-                            {isExecuting ? (
-                              <><Loader2 className="w-3 h-3 animate-spin" /> 执行中...</>
-                            ) : (
-                              <><ArrowRight className="w-3 h-3" /> 一键采纳</>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium ${completed.success ? 'text-emerald-800' : 'text-red-800'}`}>
+                              {completed.success ? '已采纳' : '执行失败'}
+                            </p>
+                            <p className={`text-xs mt-0.5 ${completed.success ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {completed.success ? `「${s.title}」已成功执行` : (completed.error || '请稍后重试')}
+                            </p>
+                            {completed.success && (
+                              <div className="flex items-center gap-1.5 mt-2">
+                                <div className="h-1 flex-1 rounded-full bg-emerald-200 overflow-hidden">
+                                  <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: '100%' }}
+                                    transition={{ duration: 0.6, ease: "easeOut" }}
+                                    className="h-full bg-emerald-500 rounded-full"
+                                  />
+                                </div>
+                                <span className="text-[10px] text-emerald-600 font-medium">100%</span>
+                              </div>
                             )}
-                          </Button>
+                            {!completed.success && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setCompletedActions(prev => { const n = {...prev}; delete n[i]; return n; });
+                                  executeAction(s, i);
+                                }}
+                                className="h-7 text-xs mt-2 border-red-300 text-red-700 hover:bg-red-100"
+                              >
+                                重试
+                              </Button>
+                            )}
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <div className="flex items-start gap-3">
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.color.split(' ')[1]}`}>
+                            <Icon className={`w-4 h-4 ${cfg.color.split(' ')[0]}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="text-sm font-semibold text-slate-800">{s.title}</h4>
+                              {s.confidence >= 0.8 && (
+                                <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px]">推荐</Badge>
+                              )}
+                              {s.requires_confirm && (
+                                <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">需确认</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-600 mb-3">{s.description}</p>
+                            <Button
+                              size="sm"
+                              onClick={() => executeAction(s, i)}
+                              disabled={isExecuting}
+                              className="h-8 text-xs bg-slate-800 hover:bg-slate-700 text-white gap-1.5"
+                            >
+                              {isExecuting ? (
+                                <><Loader2 className="w-3 h-3 animate-spin" /> 执行中...</>
+                              ) : (
+                                <><ArrowRight className="w-3 h-3" /> 一键采纳</>
+                              )}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </motion.div>
                   );
                 })}
               </div>
+
+              {Object.keys(completedActions).length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-3 rounded-xl bg-slate-50 border border-slate-200"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      </div>
+                      <span className="text-xs text-slate-600">
+                        已采纳 <span className="font-semibold text-slate-800">{Object.values(completedActions).filter(c => c.success).length}</span> / {(advice.suggestions || []).length} 项建议
+                      </span>
+                    </div>
+                    {Object.values(completedActions).filter(c => c.success).length === (advice.suggestions || []).length && (
+                      <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px]">全部完成</Badge>
+                    )}
+                  </div>
+                </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

@@ -169,12 +169,17 @@ export default function Welcome({ onComplete }) {
         if (note) toast.success("已同步到心签");
       }).catch(e => console.error("Note sync failed", e));
 
-      // 同步执行动态到通知页面
+      // 同步执行动态到通知页面（包含规划上下文）
       createExecutionRecord({
         title: textToAnalyze.slice(0, 60),
         originalInput: textToAnalyze,
         source: "welcome",
         category: "task",
+        planContext: {
+          timelineItems: response.timeline || [],
+          automationItems: response.automations || [],
+          syncTargets: ["tasks", "notes"],
+        },
       }).catch(e => console.warn("Execution tracking failed:", e));
 
       clearInterval(stepInterval);

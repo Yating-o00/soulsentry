@@ -7,6 +7,7 @@ module.exports = {
       "from-indigo-100", "to-violet-100", "text-indigo-600", "from-indigo-500", "to-violet-500", "hover:from-indigo-600", "hover:to-violet-600", "ring-indigo-400", "bg-indigo-100", "text-indigo-700",
       "from-slate-100", "text-slate-600", "from-slate-500", "to-blue-500", "hover:from-slate-600", "hover:to-blue-600", "ring-slate-400", "bg-slate-100", "text-slate-700",
       "from-violet-100", "to-purple-100", "text-violet-600", "from-violet-500", "to-purple-500", "hover:from-violet-600", "hover:to-purple-600", "ring-violet-400", "bg-violet-100", "text-violet-700",
+      "border-l-violet-500", "bg-violet-500", "text-violet-400",
     ],
   theme: {
   	extend: {

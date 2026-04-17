@@ -167,12 +167,18 @@ export default function SmartDailyPlanner() {
         queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
         toast.success("日程规划已生成", { icon: "📋" });
 
-        // 同步执行动态到通知页面
+        // 同步执行动态到通知页面（包含规划上下文）
         createExecutionRecord({
           title: capturedInput.slice(0, 60),
           originalInput: capturedInput,
           source: "dashboard",
           category: "task",
+          planContext: {
+            date: selectedDateStr,
+            timelineItems: (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr),
+            automationItems: data.automations || [],
+            syncTargets: ["tasks", "notes"],
+          },
         }).then(() => {
           queryClient.invalidateQueries({ queryKey: ['task-executions'] });
         }).catch(e => console.warn("Execution tracking failed:", e));

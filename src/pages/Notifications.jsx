@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info } from "lucide-react";
+import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter } from "lucide-react";
+import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,6 +18,7 @@ import { toast } from "sonner";
 
 export default function NotificationsPage() {
   const [activeFilter, setActiveFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("executions");
   const [advisorExecution, setAdvisorExecution] = useState(null);
   const queryClient = useQueryClient();
@@ -108,9 +110,13 @@ export default function NotificationsPage() {
   };
 
   const filteredExecutions = executions.filter(e => {
-    if (activeFilter === "all") return true;
-    return e.category === activeFilter;
+    const catMatch = activeFilter === "all" || e.category === activeFilter;
+    const srcMatch = sourceFilter === "all" || e.ai_parsed_result?.source === sourceFilter;
+    return catMatch && srcMatch;
   });
+
+  // Compute active sources for filter buttons
+  const activeSources = [...new Set(executions.map(e => e.ai_parsed_result?.source).filter(Boolean))];
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -148,7 +154,7 @@ export default function NotificationsPage() {
                 <span className="text-[10px] font-medium text-emerald-600">引擎在线</span>
               </div>
             </h1>
-            <p className="text-sm text-slate-500">AI智能规划 · 自动执行链路 · 实时决策建议</p>
+            <p className="text-sm text-slate-500">意图理解 → 智能规划 → 自动执行 → 结果反馈</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
@@ -177,10 +183,29 @@ export default function NotificationsPage() {
         {/* Execution feed */}
         {activeTab === "executions" && (
           <div className="space-y-4">
-            <div className="flex gap-1.5 bg-slate-100 p-1 rounded-lg w-fit">
-              {filters.map(f => (
-                <button key={f.key} onClick={() => setActiveFilter(f.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeFilter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{f.label}</button>
-              ))}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex gap-1.5 bg-slate-100 p-1 rounded-lg">
+                {filters.map(f => (
+                  <button key={f.key} onClick={() => setActiveFilter(f.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeFilter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{f.label}</button>
+                ))}
+              </div>
+              {activeSources.length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <Filter className="w-3 h-3 text-slate-400" />
+                  <div className="flex gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-100">
+                    <button onClick={() => setSourceFilter("all")} className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${sourceFilter === "all" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>全部来源</button>
+                    {activeSources.map(src => {
+                      const cfg = SOURCE_CONFIG[src];
+                      if (!cfg) return null;
+                      return (
+                        <button key={src} onClick={() => setSourceFilter(src)} className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${sourceFilter === src ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>
+                          {cfg.emoji} {cfg.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {loadingExec ? (

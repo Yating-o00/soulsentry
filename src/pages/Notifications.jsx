@@ -5,18 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings, BellRing, Bell, Zap, Filter, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info } from "lucide-react";
+import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import ExecutionStatusCards from "../components/notifications/ExecutionStatusCards";
 import ExecutionItem from "../components/notifications/ExecutionItem";
-import SmartInputBar from "../components/notifications/SmartInputBar";
+import SmartInputBar from "../components/notifications/SmartInputBar.js";
+import AIExecutionAdvisor from "../components/notifications/AIExecutionAdvisor.jsx";
 import { toast } from "sonner";
 
 export default function NotificationsPage() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("executions");
+  const [advisorExecution, setAdvisorExecution] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
@@ -28,6 +30,18 @@ export default function NotificationsPage() {
     queryKey: ['task-executions'],
     queryFn: () => base44.entities.TaskExecution.list("-created_date", 50),
     staleTime: 5000,
+  });
+
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => base44.entities.Task.list('-reminder_time', 30),
+    initialData: [],
+  });
+
+  const { data: allNotes = [] } = useQuery({
+    queryKey: ['notes'],
+    queryFn: () => base44.entities.Note.list('-created_date', 20),
+    initialData: [],
   });
 
   const { data: notifications = [], isLoading: loadingNotif } = useQuery({
@@ -62,9 +76,7 @@ export default function NotificationsPage() {
   const handleRetry = async (execution) => {
     const now = new Date().toISOString();
     const retrySteps = (execution.execution_steps || []).map(s => ({
-      ...s,
-      status: "pending",
-      timestamp: null,
+      ...s, status: "pending", timestamp: null,
     }));
     if (retrySteps.length > 0) {
       retrySteps[0].status = "running";
@@ -91,9 +103,7 @@ export default function NotificationsPage() {
   };
 
   const handleDismiss = async (execution) => {
-    await base44.entities.TaskExecution.update(execution.id, {
-      execution_status: "cancelled",
-    });
+    await base44.entities.TaskExecution.update(execution.id, { execution_status: "cancelled" });
     queryClient.invalidateQueries({ queryKey: ['task-executions'] });
   };
 
@@ -121,83 +131,55 @@ export default function NotificationsPage() {
     { key: "note", label: "心签" },
   ];
 
+  const advisorRelatedTasks = advisorExecution?.task_id
+    ? allTasks.filter(t => t.id === advisorExecution.task_id || t.category === allTasks.find(at => at.id === advisorExecution.task_id)?.category)
+    : allTasks.slice(0, 5);
+
   return (
     <div className="min-h-screen bg-slate-50/30 p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">智能通知中心</h1>
-            <p className="text-sm text-slate-500">AI解析内容 · 执行状态实时追踪</p>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+              智能执行控制台
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-medium text-emerald-600">引擎在线</span>
+              </div>
+            </h1>
+            <p className="text-sm text-slate-500">AI智能规划 · 自动执行链路 · 实时决策建议</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
-              <Link to={createPageUrl("ReminderSettings")}>
-                <BellRing className="w-4 h-4 mr-1.5" />
-                提醒设置
-              </Link>
+              <Link to={createPageUrl("ReminderSettings")}><BellRing className="w-4 h-4 mr-1.5" />提醒设置</Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
-              <Link to={createPageUrl("NotificationSettings")}>
-                <Settings className="w-4 h-4 mr-1.5" />
-                通知规则
-              </Link>
+              <Link to={createPageUrl("NotificationSettings")}><Settings className="w-4 h-4 mr-1.5" />通知规则</Link>
             </Button>
           </div>
         </div>
 
-        {/* Smart Input */}
         <SmartInputBar />
-
-        {/* Status Overview */}
         <ExecutionStatusCards executions={executions} />
 
         {/* Tab switch */}
         <div className="flex items-center gap-3 border-b border-slate-200 pb-0">
-          <button
-            onClick={() => setActiveTab("executions")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "executions"
-                ? "border-[#384877] text-[#384877]"
-                : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            <Zap className="w-4 h-4 inline mr-1.5" />
-            执行动态
+          <button onClick={() => setActiveTab("executions")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === "executions" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            <Zap className="w-4 h-4 inline mr-1.5" />执行控制台
           </button>
-          <button
-            onClick={() => setActiveTab("notifications")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "notifications"
-                ? "border-[#384877] text-[#384877]"
-                : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            <Bell className="w-4 h-4 inline mr-1.5" />
-            系统通知
-            {unreadCount > 0 && (
-              <Badge className="ml-1.5 bg-red-500 hover:bg-red-600 border-0 text-[10px] px-1.5">{unreadCount}</Badge>
-            )}
+          <button onClick={() => setActiveTab("notifications")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === "notifications" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            <Bell className="w-4 h-4 inline mr-1.5" />系统通知
+            {unreadCount > 0 && <Badge className="ml-1.5 bg-red-500 hover:bg-red-600 border-0 text-[10px] px-1.5">{unreadCount}</Badge>}
           </button>
         </div>
 
         {/* Execution feed */}
         {activeTab === "executions" && (
           <div className="space-y-4">
-            {/* Category filters */}
             <div className="flex gap-1.5 bg-slate-100 p-1 rounded-lg w-fit">
               {filters.map(f => (
-                <button
-                  key={f.key}
-                  onClick={() => setActiveFilter(f.key)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    activeFilter === f.key
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  {f.label}
-                </button>
+                <button key={f.key} onClick={() => setActiveFilter(f.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeFilter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{f.label}</button>
               ))}
             </div>
 
@@ -207,7 +189,7 @@ export default function NotificationsPage() {
               <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-200">
                 <Zap className="w-10 h-10 mx-auto mb-3 text-slate-300" />
                 <p className="text-slate-500">暂无执行记录</p>
-                <p className="text-xs text-slate-400 mt-1">在上方输入内容，AI将自动解析并创建任务</p>
+                <p className="text-xs text-slate-400 mt-1">输入内容后AI将自动生成执行链路并逐步执行</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -219,6 +201,7 @@ export default function NotificationsPage() {
                       onRetry={handleRetry}
                       onConfirm={handleConfirm}
                       onDismiss={handleDismiss}
+                      onOpenAdvisor={(ex) => setAdvisorExecution(ex)}
                     />
                   ))}
                 </AnimatePresence>
@@ -233,12 +216,10 @@ export default function NotificationsPage() {
             {unreadCount > 0 && (
               <div className="flex justify-end">
                 <Button variant="outline" size="sm" onClick={() => markAllReadMutation.mutate()} className="text-xs">
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                  全部已读
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />全部已读
                 </Button>
               </div>
             )}
-
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 divide-y divide-slate-100">
               {loadingNotif ? (
                 <div className="p-8 text-center text-slate-500">加载通知中...</div>
@@ -250,41 +231,19 @@ export default function NotificationsPage() {
               ) : (
                 <AnimatePresence mode="popLayout">
                   {notifications.map(n => (
-                    <motion.div
-                      key={n.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      className={`p-4 transition-colors ${!n.is_read ? "bg-blue-50/30" : ""}`}
-                    >
+                    <motion.div key={n.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }} className={`p-4 transition-colors ${!n.is_read ? "bg-blue-50/30" : ""}`}>
                       <div className="flex gap-3">
-                        <div className={`mt-0.5 p-2 rounded-lg ${n.is_read ? "bg-slate-50" : "bg-white shadow-sm"}`}>
-                          {getNotifIcon(n.type)}
-                        </div>
+                        <div className={`mt-0.5 p-2 rounded-lg ${n.is_read ? "bg-slate-50" : "bg-white shadow-sm"}`}>{getNotifIcon(n.type)}</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start mb-0.5">
-                            <h4 className={`font-medium text-sm ${n.is_read ? "text-slate-600" : "text-slate-900"}`}>
-                              {n.title}
-                            </h4>
-                            <span className="text-[11px] text-slate-400 ml-2 flex-shrink-0">
-                              {format(new Date(n.created_date), "MM-dd HH:mm", { locale: zhCN })}
-                            </span>
+                            <h4 className={`font-medium text-sm ${n.is_read ? "text-slate-600" : "text-slate-900"}`}>{n.title}</h4>
+                            <span className="text-[11px] text-slate-400 ml-2 flex-shrink-0">{format(new Date(n.created_date), "MM-dd HH:mm", { locale: zhCN })}</span>
                           </div>
                           <p className="text-xs text-slate-500 mb-2">{n.content}</p>
                           <div className="flex items-center gap-2">
-                            {n.link && (
-                              <Button variant="outline" size="sm" className="h-6 text-[11px]" asChild>
-                                <Link to={n.link}>查看 <ExternalLink className="w-3 h-3 ml-1" /></Link>
-                              </Button>
-                            )}
-                            {!n.is_read && (
-                              <Button variant="ghost" size="sm" onClick={() => markReadMutation.mutate(n.id)} className="h-6 text-[11px] text-blue-600">
-                                <Check className="w-3 h-3 mr-1" />已读
-                              </Button>
-                            )}
-                            <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(n.id)} className="h-6 text-[11px] text-slate-400 hover:text-red-500 ml-auto">
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
+                            {n.link && <Button variant="outline" size="sm" className="h-6 text-[11px]" asChild><Link to={n.link}>查看 <ExternalLink className="w-3 h-3 ml-1" /></Link></Button>}
+                            {!n.is_read && <Button variant="ghost" size="sm" onClick={() => markReadMutation.mutate(n.id)} className="h-6 text-[11px] text-blue-600"><Check className="w-3 h-3 mr-1" />已读</Button>}
+                            <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(n.id)} className="h-6 text-[11px] text-slate-400 hover:text-red-500 ml-auto"><Trash2 className="w-3 h-3" /></Button>
                           </div>
                         </div>
                         {!n.is_read && <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0" />}
@@ -297,6 +256,14 @@ export default function NotificationsPage() {
           </div>
         )}
       </div>
+
+      <AIExecutionAdvisor
+        open={!!advisorExecution}
+        onOpenChange={(open) => { if (!open) setAdvisorExecution(null); }}
+        execution={advisorExecution}
+        relatedTasks={advisorRelatedTasks}
+        relatedNotes={allNotes.slice(0, 5)}
+      />
     </div>
   );
 }

@@ -3,9 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UnifiedTaskInput from "@/components/tasks/UnifiedTaskInput";
-import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
-import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
-import { format } from "date-fns";
+import { generateExecutionPlan, executeStep } from "./ExecutionPlanGenerator";
 
 export default function SmartInputBar() {
   const [inputValue, setInputValue] = useState("");
@@ -16,24 +14,17 @@ export default function SmartInputBar() {
     if (!userInput.trim()) return;
 
     const now = new Date().toISOString();
-    const todayStr = format(new Date(), "yyyy-MM-dd");
+    let execution = null;
 
-    // Determine category based on task data
-    const execCategory = taskData.category === "work" ? "promise" : taskData.priority === "low" ? "note" : "task";
-
-    // Step 1: Create execution record
-    let execution;
+    // Create initial execution record
     try {
       execution = await base44.entities.TaskExecution.create({
         task_title: userInput.slice(0, 60),
         original_input: userInput,
         execution_status: "parsing",
-        category: execCategory,
+        category: "task",
         execution_steps: [
-          { step_name: "AI解析", status: "running", detail: "正在分析输入内容...", timestamp: now },
-          { step_name: "任务生成", status: "pending", detail: "等待创建", timestamp: null },
-          { step_name: "同步约定", status: "pending", detail: "等待同步", timestamp: null },
-          { step_name: "同步心签", status: "pending", detail: "等待同步", timestamp: null },
+          { step_name: "AI智能规划", status: "running", detail: "正在分析输入并生成执行链路...", timestamp: now },
         ],
       });
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
@@ -41,85 +32,161 @@ export default function SmartInputBar() {
       console.error("Failed to create execution record:", e);
     }
 
-    // Step 2: Create the main task (same logic as Tasks page)
+    // Generate AI execution plan
+    let plan = null;
     try {
-      const newTask = await base44.entities.Task.create({
-        title: userInput,
-        description: taskData.description || "",
-        category: taskData.category || "personal",
-        priority: taskData.priority || "medium",
-        status: "pending",
-        reminder_time: taskData.reminder_time || now,
-        tags: taskData.tags || [],
-      });
+      plan = await generateExecutionPlan(userInput);
+    } catch (e) {
+      console.error("AI plan generation failed:", e);
+    }
 
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    if (plan && plan.execution_steps?.length > 0) {
+      const mergedTaskData = {
+        ...taskData,
+        title: plan.task_data?.title || taskData.title,
+        description: plan.task_data?.description || taskData.description || "",
+        category: plan.task_data?.category || taskData.category || "personal",
+        priority: plan.task_data?.priority || taskData.priority || "medium",
+        reminder_time: plan.task_data?.reminder_time || taskData.reminder_time || now,
+        end_time: plan.task_data?.end_time || null,
+        is_all_day: plan.task_data?.is_all_day || false,
+        tags: plan.task_data?.tags || taskData.tags || [],
+      };
 
-      // Update execution: task created
+      const planSteps = plan.execution_steps.map((s, i) => ({
+        step_name: s.step_name,
+        status: i === 0 ? "running" : "pending",
+        detail: s.detail,
+        timestamp: i === 0 ? now : null,
+      }));
+
       if (execution) {
-        const step2Time = new Date().toISOString();
         await base44.entities.TaskExecution.update(execution.id, {
-          task_id: newTask.id,
+          category: plan.category || "task",
           execution_status: "executing",
           ai_parsed_result: {
-            intent: execCategory === "promise" ? "创建约定" : execCategory === "note" ? "创建心签" : "创建任务",
-            priority: taskData.priority || "medium",
-            summary: `已识别为${execCategory === "promise" ? "约定" : execCategory === "note" ? "心签" : "任务"}，正在同步...`,
-            entities: taskData.tags || [],
+            intent: plan.intent_summary,
+            summary: plan.intent_summary,
+            entities: mergedTaskData.tags,
+            priority: mergedTaskData.priority,
           },
-          execution_steps: [
-            { step_name: "AI解析", status: "completed", detail: "内容解析完成", timestamp: now },
-            { step_name: "任务生成", status: "completed", detail: `已创建: ${userInput.slice(0, 30)}`, timestamp: step2Time },
-            { step_name: "同步约定", status: "running", detail: "正在提取并同步约定...", timestamp: step2Time },
-            { step_name: "同步心签", status: "pending", detail: "等待同步", timestamp: null },
-          ],
+          execution_steps: planSteps,
         });
         queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       }
 
-      // Step 3: Background sync to tasks (extractAndCreateTasks) + notes (syncPlanToNote)
-      const results = await Promise.allSettled([
-        extractAndCreateTasks(userInput, todayStr),
-        syncPlanToNote(userInput, "notification_input", { date: todayStr }),
-      ]);
+      let taskId = null;
+      const confirmsNeeded = [];
+      const completedSteps = [];
 
-      const taskResult = results[0];
-      const noteResult = results[1];
-      const syncParts = [];
-      if (taskResult.status === "fulfilled" && taskResult.value?.length > 0) syncParts.push(`${taskResult.value.length} 个约定`);
-      if (noteResult.status === "fulfilled" && noteResult.value) syncParts.push("心签");
+      for (let i = 0; i < plan.execution_steps.length; i++) {
+        const step = plan.execution_steps[i];
 
-      // Step 4: Mark execution as completed
+        if (step.action_type === "confirm") {
+          confirmsNeeded.push(step);
+          completedSteps.push({
+            step_name: step.step_name,
+            status: "pending",
+            detail: "⏸ 待确认: " + step.detail,
+            timestamp: null,
+          });
+          continue;
+        }
+
+        try {
+          const result = await executeStep(step, taskId, mergedTaskData, execution);
+          if (result.taskId) taskId = result.taskId;
+          completedSteps.push({
+            step_name: step.step_name,
+            status: result.success ? "completed" : "failed",
+            detail: result.detail,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (err) {
+          completedSteps.push({
+            step_name: step.step_name,
+            status: "failed",
+            detail: err.message || "执行失败",
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        if (execution) {
+          await base44.entities.TaskExecution.update(execution.id, {
+            task_id: taskId || "",
+            execution_steps: completedSteps,
+          });
+          queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+        }
+      }
+
+      const hasFailures = completedSteps.some(s => s.status === "failed");
+      const hasConfirms = confirmsNeeded.length > 0;
+
       if (execution) {
-        const finalTime = new Date().toISOString();
         await base44.entities.TaskExecution.update(execution.id, {
-          execution_status: "completed",
-          completed_at: finalTime,
-          execution_steps: [
-            { step_name: "AI解析", status: "completed", detail: "内容解析完成", timestamp: now },
-            { step_name: "任务生成", status: "completed", detail: `已创建: ${userInput.slice(0, 30)}`, timestamp: now },
-            { step_name: "同步约定", status: taskResult.status === "fulfilled" ? "completed" : "failed", detail: taskResult.status === "fulfilled" ? `已同步 ${taskResult.value?.length || 0} 个约定` : "同步失败", timestamp: finalTime },
-            { step_name: "同步心签", status: noteResult.status === "fulfilled" ? "completed" : "failed", detail: noteResult.status === "fulfilled" ? "已同步到心签" : "同步失败", timestamp: finalTime },
-          ],
+          task_id: taskId || "",
+          execution_status: hasConfirms ? "waiting_confirm" : hasFailures ? "failed" : "completed",
+          completed_at: !hasConfirms && !hasFailures ? new Date().toISOString() : null,
+          execution_steps: completedSteps,
         });
         queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       }
 
-      if (syncParts.length > 0) {
-        toast.success(`已同步到${syncParts.join(" + ")}`, { icon: "🔄" });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+
+      if (hasConfirms) {
+        toast(plan.intent_summary + " — " + confirmsNeeded.length + "项需要确认", { icon: "⚡" });
+      } else if (hasFailures) {
+        toast.error("部分步骤执行失败，请查看详情");
       } else {
-        toast.success("任务已创建");
+        toast.success("执行完成: " + plan.intent_summary, { icon: "✅" });
       }
-    } catch (error) {
-      console.error("Task creation failed:", error);
-      if (execution) {
-        await base44.entities.TaskExecution.update(execution.id, {
-          execution_status: "failed",
-          error_message: error.message || "创建失败",
+
+      if (plan.user_prompts?.length > 0) {
+        plan.user_prompts.forEach(function(p) {
+          toast.info(p, { duration: 6000 });
         });
-        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       }
-      toast.error("创建失败，请重试");
+    } else {
+      // Fallback: simple task creation
+      try {
+        const newTask = await base44.entities.Task.create({
+          title: userInput,
+          description: taskData.description || "",
+          category: taskData.category || "personal",
+          priority: taskData.priority || "medium",
+          status: "pending",
+          reminder_time: taskData.reminder_time || now,
+          tags: taskData.tags || [],
+        });
+
+        if (execution) {
+          await base44.entities.TaskExecution.update(execution.id, {
+            task_id: newTask.id,
+            execution_status: "completed",
+            completed_at: new Date().toISOString(),
+            execution_steps: [
+              { step_name: "创建任务", status: "completed", detail: "已创建: " + userInput.slice(0, 40), timestamp: new Date().toISOString() },
+            ],
+          });
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+        toast.success("任务已创建");
+      } catch (error) {
+        console.error("Task creation failed:", error);
+        if (execution) {
+          await base44.entities.TaskExecution.update(execution.id, {
+            execution_status: "failed",
+            error_message: error.message || "创建失败",
+          });
+          queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+        }
+        toast.error("创建失败，请重试");
+      }
     }
 
     setInputValue("");

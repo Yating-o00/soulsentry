@@ -1,0 +1,108 @@
+{
+  "name": "TaskExecution",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "\u5173\u8054\u7684\u4efb\u52a1ID"
+    },
+    "task_title": {
+      "type": "string",
+      "description": "\u4efb\u52a1\u6807\u9898\u5feb\u7167"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "promise",
+        "task",
+        "note"
+      ],
+      "default": "task",
+      "description": "\u7c7b\u578b: \u7ea6\u5b9a/\u4efb\u52a1/\u5fc3\u7b7e"
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": [
+        "parsing",
+        "pending",
+        "executing",
+        "completed",
+        "failed",
+        "cancelled",
+        "waiting_confirm"
+      ],
+      "default": "parsing",
+      "description": "\u6267\u884c\u72b6\u6001"
+    },
+    "original_input": {
+      "type": "string",
+      "description": "\u7528\u6237\u539f\u59cb\u8f93\u5165\u5185\u5bb9"
+    },
+    "ai_parsed_result": {
+      "type": "object",
+      "description": "AI\u89e3\u6790\u7ed3\u679c",
+      "properties": {
+        "intent": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "time_expression": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    },
+    "execution_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "description": "\u6267\u884c\u6b65\u9aa4\u5217\u8868",
+      "default": []
+    },
+    "error_message": {
+      "type": "string",
+      "description": "\u9519\u8bef\u4fe1\u606f"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u5b8c\u6210\u65f6\u95f4"
+    }
+  },
+  "required": [
+    "task_title",
+    "execution_status"
+  ]
+}

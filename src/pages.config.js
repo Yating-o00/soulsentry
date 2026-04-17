@@ -55,7 +55,7 @@ import Knowledge from './pages/Knowledge';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Notes from './pages/Notes';
 import NotificationSettings from './pages/NotificationSettings';
-import Notifications from './pages/Notifications.js';
+import Notifications from './pages/Notifications';
 import Pricing from './pages/Pricing';
 import ReminderSettings from './pages/ReminderSettings';
 import Tasks from './pages/Tasks';

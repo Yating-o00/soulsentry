@@ -9,10 +9,10 @@ import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLin
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import ExecutionStatusCards from "../components/notifications/ExecutionStatusCards";
-import ExecutionItem from "../components/notifications/ExecutionItem";
-import SmartInputBar from "../components/notifications/SmartInputBar";
-import AIExecutionAdvisor from "../components/notifications/AIExecutionAdvisor";
+import ExecutionStatusCards from "@/components/notifications/ExecutionStatusCards";
+import ExecutionItem from "@/components/notifications/ExecutionItem";
+import SmartInputBar from "@/components/notifications/SmartInputBar";
+import AIExecutionAdvisor from "@/components/notifications/AIExecutionAdvisor";
 import { toast } from "sonner";
 
 export default function NotificationsPage() {

@@ -20,6 +20,7 @@ import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
 import { toast } from "sonner";
+import { createExecutionRecord } from "@/components/utils/trackExecution";
 import {
   Dialog,
   DialogContent,
@@ -144,10 +145,21 @@ export default function Notes() {
   // Mutations
   const createNoteMutation = useMutation({
     mutationFn: (data) => base44.entities.Note.create(data),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       setIsCreating(false);
       toast.success("心签已创建");
+
+      // 同步执行动态到通知页面（非阻塞）
+      const noteTitle = data?.plain_text?.slice(0, 60) || data?.ai_analysis?.summary || "新心签";
+      createExecutionRecord({
+        title: noteTitle,
+        originalInput: data?.plain_text || data?.content || "",
+        source: "note",
+        category: "note",
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      }).catch(e => console.warn("Execution tracking failed:", e));
     }
   });
 

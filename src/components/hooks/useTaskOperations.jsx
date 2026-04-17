@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { invokeAI } from "@/components/utils/aiHelper";
+import { createExecutionRecord } from "@/components/utils/trackExecution";
 
 export function useTaskOperations() {
   const queryClient = useQueryClient();
@@ -37,9 +38,21 @@ export function useTaskOperations() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       
       // 自动同步到 Google Calendar (如果已设置提醒时间)
-      // 在后台静默执行，不阻塞用户
       if (data && data.id) {
         base44.functions.invoke('syncTaskToGoogleCalendar', { task_id: data.id }).catch(console.error);
+      }
+      
+      // 同步执行动态到通知页面（非阻塞）
+      if (data && data.title) {
+        createExecutionRecord({
+          title: data.title,
+          originalInput: data.title,
+          source: "task",
+          category: "promise",
+          taskId: data.id,
+        }).then(() => {
+          queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+        }).catch(e => console.warn("Execution tracking failed:", e));
       }
       
       toast.success("任务创建成功");

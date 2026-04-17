@@ -33,6 +33,7 @@ import AutoExecCards from "./planner/AutoExecCards";
 import KanbanBoard from "./planner/KanbanBoard";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
+import { createExecutionRecord } from "@/components/utils/trackExecution";
 import { detectTimeConflicts } from "@/components/planner/detectConflicts";
 import ConflictDialog from "@/components/planner/ConflictDialog";
 
@@ -165,6 +166,16 @@ export default function SmartDailyPlanner() {
         }
         queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
         toast.success("日程规划已生成", { icon: "📋" });
+
+        // 同步执行动态到通知页面
+        createExecutionRecord({
+          title: capturedInput.slice(0, 60),
+          originalInput: capturedInput,
+          source: "dashboard",
+          category: "task",
+        }).then(() => {
+          queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+        }).catch(e => console.warn("Execution tracking failed:", e));
 
         // 冲突检测
         const mergedBlocks = planRecord.plan_json.focus_blocks || [];

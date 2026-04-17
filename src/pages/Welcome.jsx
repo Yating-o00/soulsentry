@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
+import { createExecutionRecord } from "@/components/utils/trackExecution";
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
@@ -167,6 +168,14 @@ export default function Welcome({ onComplete }) {
       syncPlanToNote(textToAnalyze, "welcome").then(note => {
         if (note) toast.success("已同步到心签");
       }).catch(e => console.error("Note sync failed", e));
+
+      // 同步执行动态到通知页面
+      createExecutionRecord({
+        title: textToAnalyze.slice(0, 60),
+        originalInput: textToAnalyze,
+        source: "welcome",
+        category: "task",
+      }).catch(e => console.warn("Execution tracking failed:", e));
 
       clearInterval(stepInterval);
       

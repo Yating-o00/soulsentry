@@ -15,6 +15,7 @@ export async function syncPlanToNote(inputText, source, extraContext = {}) {
     week_plan: "周计划",
     month_plan: "月度规划",
     welcome: "欢迎页快速录入",
+    notification_input: "通知中心录入",
   };
 
   const sourceLabel = sourceLabels[source] || "AI 规划";

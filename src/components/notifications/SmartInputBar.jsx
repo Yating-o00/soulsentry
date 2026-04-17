@@ -1,155 +1,135 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Send, Sparkles, Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { invokeAI } from "@/components/utils/aiHelper";
+import UnifiedTaskInput from "@/components/tasks/UnifiedTaskInput";
+import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
+import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
+import { format } from "date-fns";
 
 export default function SmartInputBar() {
-  const [input, setInput] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [inputValue, setInputValue] = useState("");
   const queryClient = useQueryClient();
 
-  const handleSubmit = async () => {
-    if (!input.trim() || isProcessing) return;
-    const userInput = input.trim();
-    setInput("");
-    setIsProcessing(true);
+  const handleAddTask = async (taskData) => {
+    const userInput = taskData.title || "";
+    if (!userInput.trim()) return;
 
+    const now = new Date().toISOString();
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+
+    // Determine category based on task data
+    const execCategory = taskData.category === "work" ? "promise" : taskData.priority === "low" ? "note" : "task";
+
+    // Step 1: Create execution record
+    let execution;
     try {
-      // Step 1: Create execution record in "parsing" state
-      const execution = await base44.entities.TaskExecution.create({
-        task_title: userInput.slice(0, 50),
+      execution = await base44.entities.TaskExecution.create({
+        task_title: userInput.slice(0, 60),
         original_input: userInput,
         execution_status: "parsing",
-        category: "task",
+        category: execCategory,
         execution_steps: [
-          { step_name: "AI解析", status: "running", detail: "正在分析输入内容...", timestamp: new Date().toISOString() }
-        ]
+          { step_name: "AI解析", status: "running", detail: "正在分析输入内容...", timestamp: now },
+          { step_name: "任务生成", status: "pending", detail: "等待创建", timestamp: null },
+          { step_name: "同步约定", status: "pending", detail: "等待同步", timestamp: null },
+          { step_name: "同步心签", status: "pending", detail: "等待同步", timestamp: null },
+        ],
       });
-
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    } catch (e) {
+      console.error("Failed to create execution record:", e);
+    }
 
-      // Step 2: AI parse the input
-      const parsed = await invokeAI({
-        prompt: `分析以下用户输入，识别其意图并提取关键信息。
-
-用户输入："${userInput}"
-
-请判断这属于哪种类型：
-- promise (约定/会议/会面)
-- task (任务/待办)  
-- note (心签/备忘/笔记)
-
-返回结构化JSON。`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            intent: { type: "string", description: "用户意图描述" },
-            category: { type: "string", enum: ["promise", "task", "note"] },
-            title: { type: "string", description: "提取的标题" },
-            time_expression: { type: "string", description: "时间表达" },
-            priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-            summary: { type: "string", description: "简短摘要" }
-          },
-          required: ["intent", "category", "title", "summary"]
-        }
-      });
-
-      // Step 3: Update execution with parsed result, create the task
-      const now = new Date().toISOString();
-      const steps = [
-        { step_name: "AI解析", status: "completed", detail: "内容解析完成", timestamp: now },
-        { step_name: "任务生成", status: "running", detail: "正在创建任务...", timestamp: now },
-        { step_name: "执行同步", status: "pending", detail: "等待执行", timestamp: null },
-      ];
-
-      await base44.entities.TaskExecution.update(execution.id, {
-        task_title: parsed.title || userInput.slice(0, 50),
-        category: parsed.category || "task",
-        execution_status: "executing",
-        ai_parsed_result: parsed,
-        execution_steps: steps,
-      });
-
-      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-
-      // Step 4: Create actual task
+    // Step 2: Create the main task (same logic as Tasks page)
+    try {
       const newTask = await base44.entities.Task.create({
-        title: parsed.title || userInput,
-        description: userInput,
-        priority: parsed.priority || "medium",
-        category: parsed.category === "promise" ? "work" : parsed.category === "note" ? "personal" : "work",
+        title: userInput,
+        description: taskData.description || "",
+        category: taskData.category || "personal",
+        priority: taskData.priority || "medium",
         status: "pending",
+        reminder_time: taskData.reminder_time || now,
+        tags: taskData.tags || [],
       });
 
-      // Step 5: Mark as completed
-      const finalSteps = [
-        { step_name: "AI解析", status: "completed", detail: "内容解析完成", timestamp: now },
-        { step_name: "任务生成", status: "completed", detail: `已创建: ${parsed.title}`, timestamp: new Date().toISOString() },
-        { step_name: "执行同步", status: "completed", detail: "任务已同步至系统", timestamp: new Date().toISOString() },
-      ];
-
-      await base44.entities.TaskExecution.update(execution.id, {
-        task_id: newTask.id,
-        execution_status: "completed",
-        execution_steps: finalSteps,
-        completed_at: new Date().toISOString(),
-      });
-
-      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
 
-      toast.success(`已创建${parsed.category === "promise" ? "约定" : parsed.category === "note" ? "心签" : "任务"}：${parsed.title}`);
+      // Update execution: task created
+      if (execution) {
+        const step2Time = new Date().toISOString();
+        await base44.entities.TaskExecution.update(execution.id, {
+          task_id: newTask.id,
+          execution_status: "executing",
+          ai_parsed_result: {
+            intent: execCategory === "promise" ? "创建约定" : execCategory === "note" ? "创建心签" : "创建任务",
+            priority: taskData.priority || "medium",
+            summary: `已识别为${execCategory === "promise" ? "约定" : execCategory === "note" ? "心签" : "任务"}，正在同步...`,
+            entities: taskData.tags || [],
+          },
+          execution_steps: [
+            { step_name: "AI解析", status: "completed", detail: "内容解析完成", timestamp: now },
+            { step_name: "任务生成", status: "completed", detail: `已创建: ${userInput.slice(0, 30)}`, timestamp: step2Time },
+            { step_name: "同步约定", status: "running", detail: "正在提取并同步约定...", timestamp: step2Time },
+            { step_name: "同步心签", status: "pending", detail: "等待同步", timestamp: null },
+          ],
+        });
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      }
+
+      // Step 3: Background sync to tasks (extractAndCreateTasks) + notes (syncPlanToNote)
+      const results = await Promise.allSettled([
+        extractAndCreateTasks(userInput, todayStr),
+        syncPlanToNote(userInput, "notification_input", { date: todayStr }),
+      ]);
+
+      const taskResult = results[0];
+      const noteResult = results[1];
+      const syncParts = [];
+      if (taskResult.status === "fulfilled" && taskResult.value?.length > 0) syncParts.push(`${taskResult.value.length} 个约定`);
+      if (noteResult.status === "fulfilled" && noteResult.value) syncParts.push("心签");
+
+      // Step 4: Mark execution as completed
+      if (execution) {
+        const finalTime = new Date().toISOString();
+        await base44.entities.TaskExecution.update(execution.id, {
+          execution_status: "completed",
+          completed_at: finalTime,
+          execution_steps: [
+            { step_name: "AI解析", status: "completed", detail: "内容解析完成", timestamp: now },
+            { step_name: "任务生成", status: "completed", detail: `已创建: ${userInput.slice(0, 30)}`, timestamp: now },
+            { step_name: "同步约定", status: taskResult.status === "fulfilled" ? "completed" : "failed", detail: taskResult.status === "fulfilled" ? `已同步 ${taskResult.value?.length || 0} 个约定` : "同步失败", timestamp: finalTime },
+            { step_name: "同步心签", status: noteResult.status === "fulfilled" ? "completed" : "failed", detail: noteResult.status === "fulfilled" ? "已同步到心签" : "同步失败", timestamp: finalTime },
+          ],
+        });
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      }
+
+      if (syncParts.length > 0) {
+        toast.success(`已同步到${syncParts.join(" + ")}`, { icon: "🔄" });
+      } else {
+        toast.success("任务已创建");
+      }
     } catch (error) {
-      console.error("Smart input error:", error);
-      toast.error("处理失败，请重试");
-    } finally {
-      setIsProcessing(false);
+      console.error("Task creation failed:", error);
+      if (execution) {
+        await base44.entities.TaskExecution.update(execution.id, {
+          execution_status: "failed",
+          error_message: error.message || "创建失败",
+        });
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      }
+      toast.error("创建失败，请重试");
     }
+
+    setInputValue("");
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
-      <div className="flex gap-2 items-end">
-        <div className="flex-1 relative">
-          <Textarea
-            placeholder="输入内容，AI将自动解析并创建任务执行..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            className="min-h-[44px] max-h-[120px] resize-none text-sm border-0 focus-visible:ring-0 p-2 bg-slate-50 rounded-lg"
-            rows={1}
-          />
-        </div>
-        <Button
-          onClick={handleSubmit}
-          disabled={!input.trim() || isProcessing}
-          className="h-10 px-4 bg-[#384877] hover:bg-[#2d3a63] rounded-lg flex-shrink-0"
-        >
-          {isProcessing ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4 mr-1.5" />
-              <Send className="w-3.5 h-3.5" />
-            </>
-          )}
-        </Button>
-      </div>
-      {isProcessing && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-indigo-600">
-          <Loader2 className="w-3 h-3 animate-spin" />
-          AI正在解析并执行...
-        </div>
-      )}
-    </div>
+    <UnifiedTaskInput
+      value={inputValue}
+      onChange={setInputValue}
+      onAddTask={handleAddTask}
+    />
   );
 }

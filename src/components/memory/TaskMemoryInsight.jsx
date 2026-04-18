@@ -88,21 +88,21 @@ function buildTaskContext(task, allTasks, relationships, behaviors, completions)
 }
 
 function buildPrompt(task, ctx) {
-  let prompt = `你是一个智能记忆助手。请针对这个约定，从以下数据中提炼出一句最核心的提醒（不超过80字）。
+  let prompt = `你是用户的私人效率顾问。请先深入理解这个约定的具体内容和意图，再结合用户的行为数据，给出一条自然、有针对性的建议。
 
-## 约定
-- 标题: ${task.title}
-- 描述: ${task.description || "无"}
-- 分类: ${task.category || "其他"}
-- 优先级: ${task.priority || "中"}
-- 状态: ${task.status}
-- 提醒时间: ${task.reminder_time || "未设置"}
+## 约定内容
+标题: ${task.title}
+描述: ${task.description || "无"}
+分类: ${task.category || "其他"} | 优先级: ${task.priority || "中"} | 状态: ${task.status}
+提醒时间: ${task.reminder_time || "未设置"}
+标签: ${(task.tags || []).join("、") || "无"}
 
-## 数据
-- 高效时段: ${ctx.peakHour || "不明"}，高产日: ${ctx.peakDay || "不明"}
-- 同类完成率: ${ctx.categoryCompletionRate}%（${ctx.categoryCompleted}/${ctx.categoryTotal}）
-- 平均延迟: ${ctx.avgDelayMinutes !== null ? ctx.avgDelayMinutes + "分钟" : "不明"}
-- 逾期约定数: ${ctx.overdueCount}`;
+## 用户行为画像
+- 高效时段: ${ctx.peakHour || "待观察"}，高产日: ${ctx.peakDay || "待观察"}
+- ${task.category || "该类"}约定完成率: ${ctx.categoryCompletionRate}%（${ctx.categoryCompleted}/${ctx.categoryTotal}）
+- 时间偏差: ${ctx.avgDelayMinutes !== null ? (ctx.avgDelayMinutes > 0 ? "习惯性延后" + ctx.avgDelayMinutes + "分钟" : "通常提前" + Math.abs(ctx.avgDelayMinutes) + "分钟完成") : "数据不足"}
+- 当前逾期: ${ctx.overdueCount}项${ctx.overdueCount > 10 ? "（积压严重）" : ctx.overdueCount > 3 ? "（需关注）" : ""}
+- 连续执行天数: ${ctx.streak}天`;
 
   if (ctx.relatedPeople.length > 0) {
     ctx.relatedPeople.forEach(p => {
@@ -115,14 +115,18 @@ function buildPrompt(task, ctx) {
 
   prompt += `
 
-## 规则
-1. 只输出一句话，不超过80字，直接给出最刚需的提醒
-2. 根据约定内容自动判断最相关的维度：
-   - 如果涉及人→优先给出人情/关系提醒（如联系频率、人情欠还、最佳沟通时段）
-   - 如果是时间敏感型→优先给出时间安排建议（如最佳执行时段、延迟校准）
-   - 如果逾期严重→优先给出风险警示
-3. 不要罗列多条，不要分点，就一句话，像朋友的善意提醒
-4. 返回JSON格式：{"insight": "一句话提醒"}`;
+## 思考步骤（不要输出思考过程）
+1. 先理解约定本身：用户想做什么？为什么要做？有什么隐含需求？
+2. 再匹配数据：哪些数据与这个约定最相关？能给出什么独到洞察？
+3. 最后组织语言：用自然、温和的口吻说出来，像一个了解你的朋友
+
+## 输出规则
+- 输出1-2句话，不超过100字
+- 第一句：体现你对约定内容的理解（如"整理工作内容本质上是理清优先级"）
+- 第二句：基于数据给出最相关的一个建议（时间/人情/风险，只选最重要的一个）
+- 语气自然亲切，不要用"建议""注意"等生硬词开头
+- 要有具体性：提到具体时间、具体人名、具体数据，而不是泛泛而谈
+- 返回JSON格式：{"insight": "1-2句话"}`;
 
   return prompt;
 }
@@ -174,7 +178,7 @@ export default function TaskMemoryInsight({ task }) {
       response_json_schema: {
         type: "object",
         properties: {
-          insight: { type: "string", description: "一句话核心提醒，不超过80字" },
+          insight: { type: "string", description: "1-2句自然语言洞察，不超过100字" },
         }
       }
     });

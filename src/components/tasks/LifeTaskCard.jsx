@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 
 export default function LifeTaskCard({ 
   task, 
@@ -413,7 +414,10 @@ export default function LifeTaskCard({
                         </div>
                     )}
 
-                    {/* Detailed Context Info Line (Non-Work Tasks or Supplemental) */}
+                    {/* AI Memory Insight */}
+                    <TaskMemoryInsight task={task} />
+
+                     {/* Detailed Context Info Line (Non-Work Tasks or Supplemental) */}
                     {task.category !== 'work' && (
                         <div className="flex flex-wrap items-center gap-4 text-xs">
                              {/* Location or Time Detail */}

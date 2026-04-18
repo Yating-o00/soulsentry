@@ -35,6 +35,7 @@ import {
   DropdownMenuSubContent
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 
 export default function MilestoneCard({
   task,
@@ -333,6 +334,9 @@ export default function MilestoneCard({
                 {totalSubtasks > 0 ? `${completedSubtasks}/${totalSubtasks} 子任务` : '预计2小时'}
               </span>
             </div>
+
+            {/* AI Memory Insight */}
+            <TaskMemoryInsight task={task} />
           </div>
 
           {/* Right Action */}

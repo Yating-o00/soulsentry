@@ -149,35 +149,45 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     }
   };
 
+  const DEVICE_GRADIENTS = {
+    phone: 'bg-gradient-to-br from-[#384877] to-[#3b5aa2]',
+    watch: 'bg-gradient-to-br from-[#3b5aa2] to-[#6366f1]',
+    glasses: 'bg-gradient-to-br from-[#6366f1] to-purple-600',
+    car: 'bg-gradient-to-br from-emerald-600 to-teal-700',
+    home: 'bg-gradient-to-br from-amber-500 to-orange-600',
+    pc: 'bg-gradient-to-br from-rose-500 to-pink-600',
+  };
+
+  const DEVICE_SHORT_NAMES = {
+    phone: '手机', watch: '手表', glasses: '眼镜', car: '汽车', home: '家居', pc: '工作站'
+  };
+
   const DeviceCard = ({ id, device, active, onClick }) => {
     if (!device) return null;
     const Icon = device.icon || Smartphone;
+    const hasStrategies = device.strategies && device.strategies.length > 0;
     return (
-        <div 
+        <button 
+            type="button"
             onClick={() => onClick(id)}
             className={`
-            device-card bg-white rounded-2xl p-4 text-center cursor-pointer transition-all duration-300 border-2 
-            ${active ? 'border-[#384877] shadow-md' : 'border-transparent hover:border-slate-200 hover:shadow-sm'}
-            hover:-translate-y-1
+            bg-white rounded-2xl p-3.5 text-center cursor-pointer transition-all duration-300 border-2
+            ${active ? 'border-[#384877] shadow-md ring-2 ring-[#384877]/10' : 'border-slate-100 hover:border-slate-200 hover:shadow-sm'}
+            hover:-translate-y-0.5
             `}
             >
             <div className={`
-                w-10 h-10 mx-auto mb-3 rounded-2xl flex items-center justify-center text-white shadow-md
-                ${id === 'phone' ? 'bg-gradient-to-br from-[#384877] to-[#3b5aa2]' : ''}
-                ${id === 'watch' ? 'bg-gradient-to-br from-[#3b5aa2] to-[#384877]' : ''}
-                ${id === 'glasses' ? 'bg-gradient-to-br from-[#6366f1] to-purple-600' : ''}
-                ${id === 'car' ? 'bg-gradient-to-br from-emerald-600 to-teal-700' : ''}
-                ${id === 'home' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : ''}
-                ${id === 'pc' ? 'bg-gradient-to-br from-rose-500 to-pink-600' : ''}
+                w-11 h-11 mx-auto mb-2.5 rounded-xl flex items-center justify-center shadow-md transition-all duration-300
+                ${active ? (DEVICE_GRADIENTS[id] || DEVICE_GRADIENTS.phone) + ' text-white' : 'bg-slate-100 text-slate-400'}
             `}>
                 <Icon className="w-5 h-5" />
             </div>
-            <h4 className="font-medium text-slate-700 text-sm mb-1">{device.name}</h4>
-            <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 bg-[#10b981]/10 rounded-full">
-                <div className="w-1.5 h-1.5 bg-[#10b981] rounded-full animate-pulse"></div>
-                <span className="text-[10px] text-[#10b981] font-medium">在线</span>
+            <h4 className="font-semibold text-slate-800 text-sm whitespace-nowrap mb-0.5">{DEVICE_SHORT_NAMES[id] || device.name}</h4>
+            <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full whitespace-nowrap mt-1.5 ${hasStrategies ? 'bg-emerald-50' : 'bg-slate-50'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasStrategies ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                <span className={`text-[10px] font-medium ${hasStrategies ? 'text-emerald-600' : 'text-slate-400'}`}>{hasStrategies ? '在线' : '待机'}</span>
             </div>
-        </div>
+        </button>
     );
   };
 
@@ -313,15 +323,23 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
 
                     {/* Device Matrix */}
                     <section className="animate-fade-up">
-                        <div className="flex items-center justify-between mb-4 md:mb-6">
-                            <h3 className="text-lg md:text-xl font-bold text-slate-800">全设备智能协同</h3>
-                            <span className="px-2 md:px-3 py-1 bg-white rounded-full text-[10px] md:text-xs text-slate-500 border border-slate-200 shadow-sm">
-                                <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full inline-block mr-1 md:mr-1.5 animate-pulse" />
+                        <div className="flex items-center justify-between mb-5">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md">
+                                    <Zap className="w-4 h-4 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-800">全设备智能协同</h3>
+                                    <p className="text-xs text-slate-400">基于情境的分发策略</p>
+                                </div>
+                            </div>
+                            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-xs text-slate-500 border border-slate-200 shadow-sm">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                                 云端同步正常
                             </span>
                         </div>
                         
-                        <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-4 mb-4 md:mb-6">
+                        <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-3 lg:grid-cols-6 md:gap-3 md:overflow-visible md:pb-0 mb-4 md:mb-6">
                             {Object.entries(data.devices).map(([key, device]) => (
                                 <DeviceCard 
                                     key={key} 

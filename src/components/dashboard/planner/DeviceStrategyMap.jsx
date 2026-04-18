@@ -4,12 +4,12 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
 const DEVICE_META = {
-  phone:   { icon: Smartphone, name: "智能手机", role: "主控终端",  gradient: "from-[#1e293b] to-[#384877]", accent: "#384877", bg: "bg-[#384877]/5" },
-  watch:   { icon: Watch,      name: "智能手表", role: "触觉提醒",  gradient: "from-[#334155] to-[#475569]", accent: "#475569", bg: "bg-slate-500/5" },
-  glasses: { icon: Glasses,    name: "智能眼镜", role: "AR视觉",   gradient: "from-[#6366f1]/80 to-[#7c3aed]", accent: "#6366f1", bg: "bg-indigo-500/5" },
-  car:     { icon: Car,        name: "电动汽车", role: "车载系统",  gradient: "from-emerald-600 to-teal-700", accent: "#059669", bg: "bg-emerald-500/5" },
-  home:    { icon: Home,       name: "智能家居", role: "语音中枢",  gradient: "from-amber-500 to-orange-600", accent: "#d97706", bg: "bg-amber-500/5" },
-  pc:      { icon: Monitor,    name: "工作站",   role: "深度工作",  gradient: "from-rose-500 to-pink-600", accent: "#e11d48", bg: "bg-rose-500/5" },
+  phone:   { icon: Smartphone, name: "手机",   role: "主控终端",  gradient: "from-[#384877] to-[#3b5aa2]", accent: "#384877", bg: "bg-[#384877]/5" },
+  watch:   { icon: Watch,      name: "手表",   role: "触觉提醒",  gradient: "from-[#3b5aa2] to-[#6366f1]", accent: "#475569", bg: "bg-slate-500/5" },
+  glasses: { icon: Glasses,    name: "眼镜",   role: "AR视觉",   gradient: "from-[#6366f1] to-[#7c3aed]", accent: "#6366f1", bg: "bg-indigo-500/5" },
+  car:     { icon: Car,        name: "汽车",   role: "车载系统",  gradient: "from-emerald-600 to-teal-700", accent: "#059669", bg: "bg-emerald-500/5" },
+  home:    { icon: Home,       name: "家居",   role: "语音中枢",  gradient: "from-amber-500 to-orange-600", accent: "#d97706", bg: "bg-amber-500/5" },
+  pc:      { icon: Monitor,    name: "工作站", role: "深度工作",  gradient: "from-rose-500 to-pink-600", accent: "#e11d48", bg: "bg-rose-500/5" },
 };
 
 const PRIORITY_CONFIG = {
@@ -36,19 +36,24 @@ export default function DeviceStrategyMap({ devices = [] }) {
     <section className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-xl font-bold text-[#0a0a0f] mb-0.5">全设备智能协同</h3>
-          <p className="text-sm text-[#0a0a0f]/50">基于情境的分发策略</p>
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md">
+            <Zap className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-[#0a0a0f]">全设备智能协同</h3>
+            <p className="text-xs text-[#0a0a0f]/40">基于情境的分发策略</p>
+          </div>
         </div>
-        <span className="px-3 py-1.5 glass-refined rounded-full text-xs text-[#0a0a0f]/60 flex items-center gap-1.5 border border-[#e8d5b7]/20">
+        <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-xs text-slate-500 border border-slate-200 shadow-sm">
           <Cloud className="w-3.5 h-3.5 text-emerald-500" />
           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
           云端同步正常
         </span>
       </div>
 
-      {/* Device Grid - 2x3 on mobile, 3 cols md, 6 cols lg */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* Device Grid - horizontal scroll on mobile, grid on desktop */}
+      <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-3 lg:grid-cols-6 md:gap-3 md:overflow-visible md:pb-0">
         {devices.map((d) => {
           const meta = DEVICE_META[d.id] || DEVICE_META.phone;
           const Icon = meta.icon;
@@ -60,36 +65,34 @@ export default function DeviceStrategyMap({ devices = [] }) {
               key={d.id}
               onClick={() => setActive(d.id)}
               className={cn(
-                "glass-refined rounded-2xl p-5 text-center cursor-pointer border-2 transition-all duration-500",
-                "hover:-translate-y-1 hover:shadow-[0_12px_30px_-10px_rgba(10,10,15,0.1)]",
+                "flex-shrink-0 w-[100px] md:w-auto bg-white rounded-2xl p-3.5 md:p-4 text-center cursor-pointer border-2 transition-all duration-300",
+                "hover:-translate-y-0.5 hover:shadow-md",
                 selected
-                  ? "device-active"
-                  : "border-transparent"
+                  ? "border-[#384877] shadow-md ring-2 ring-[#384877]/10"
+                  : "border-slate-100 hover:border-slate-200"
               )}
             >
-              {/* Icon - selected: dark gradient, unselected: light gray circle */}
               <div className={cn(
-                "w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500",
+                "w-11 h-11 mx-auto mb-2.5 rounded-xl flex items-center justify-center shadow-md transition-all duration-300",
                 selected
                   ? `bg-gradient-to-br ${meta.gradient} text-white`
-                  : "bg-slate-100 text-slate-500"
+                  : "bg-slate-100 text-slate-400"
               )}>
-                <Icon className="w-6 h-6" />
+                <Icon className="w-5 h-5" />
               </div>
-              <h4 className="font-medium text-[#0a0a0f] text-sm mb-0.5">{d.name || meta.name}</h4>
-              <p className="text-[10px] text-[#0a0a0f]/40 uppercase tracking-wider mb-3">{meta.role}</p>
-              {/* Online status */}
+              <h4 className="font-semibold text-slate-800 text-sm whitespace-nowrap mb-0.5">{d.name || meta.name}</h4>
+              <p className="text-[10px] text-slate-400 whitespace-nowrap mb-2">{meta.role}</p>
               <div className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full",
-                hasStrategies ? "bg-emerald-500/10" : "bg-[#0a0a0f]/5"
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full whitespace-nowrap",
+                hasStrategies ? "bg-emerald-50" : "bg-slate-50"
               )}>
-                <div className={cn(
-                  "w-1.5 h-1.5 rounded-full",
-                  hasStrategies ? "bg-emerald-500 animate-pulse" : "bg-[#0a0a0f]/30"
+                <span className={cn(
+                  "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                  hasStrategies ? "bg-emerald-500 animate-pulse" : "bg-slate-300"
                 )} />
                 <span className={cn(
                   "text-[10px] font-medium",
-                  hasStrategies ? "text-emerald-600" : "text-[#0a0a0f]/50"
+                  hasStrategies ? "text-emerald-600" : "text-slate-400"
                 )}>
                   {hasStrategies ? "在线" : "待机"}
                 </span>

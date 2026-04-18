@@ -15,28 +15,38 @@ export default function DeviceStrategyBoard({ devices }) {
     }
   }, [devices]);
 
+  const SHORT_NAMES = { phone: "手机", watch: "手表", glasses: "眼镜", car: "汽车", home: "家居", pc: "工作站" };
+
   const renderCard = (key) => {
     const d = devices?.[key] || {};
     const Icon = ICONS[key] || Smartphone;
     const hasItems = (d.strategies || []).length > 0;
+    const isSelected = selected === key;
     return (
       <button
         key={key}
         type="button"
         onClick={() => setSelected(key)}
         className={cn(
-          "device-card rounded-2xl p-5 text-center cursor-pointer transition-all border-2",
-          selected === key ? "border-[#3b5aa2] ring-1 ring-[#3b5aa2]/30 bg-white" : "border-transparent bg-white"
+          "flex-shrink-0 w-[100px] md:w-auto bg-white rounded-2xl p-3.5 md:p-4 text-center cursor-pointer transition-all duration-300 border-2",
+          "hover:-translate-y-0.5 hover:shadow-md",
+          isSelected ? "border-[#384877] shadow-md ring-2 ring-[#384877]/10" : "border-slate-100 hover:border-slate-200"
         )}
       >
         <div className={cn(
-          "w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center text-slate-600 shadow-lg",
-          selected === key ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white" : "bg-slate-100"
+          "w-11 h-11 mx-auto mb-2.5 rounded-xl flex items-center justify-center shadow-md transition-all duration-300",
+          isSelected ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white" : "bg-slate-100 text-slate-400"
         )}>
-          <Icon className="w-6 h-6" />
+          <Icon className="w-5 h-5" />
         </div>
-        <h4 className="font-medium text-slate-800 text-sm mb-1">{d.name || key}</h4>
-        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{hasItems ? "已规划" : "暂无策略"}</p>
+        <h4 className="font-semibold text-slate-800 text-sm whitespace-nowrap mb-0.5">{SHORT_NAMES[key] || d.name || key}</h4>
+        <div className={cn(
+          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full whitespace-nowrap mt-1.5",
+          hasItems ? "bg-emerald-50" : "bg-slate-50"
+        )}>
+          <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", hasItems ? "bg-emerald-500 animate-pulse" : "bg-slate-300")} />
+          <span className={cn("text-[10px] font-medium", hasItems ? "text-emerald-600" : "text-slate-400")}>{hasItems ? "已规划" : "暂无"}</span>
+        </div>
       </button>
     );
   };
@@ -45,17 +55,17 @@ export default function DeviceStrategyBoard({ devices }) {
 
   return (
     <section className="animate-fade-up" style={{ animationDelay: "0.05s" }}>
-      <div className="flex items-center justify-between mb-4 md:mb-6">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#384877] flex items-center justify-center"><Zap className="w-4 h-4" /></div>
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md"><Zap className="w-4 h-4 text-white" /></div>
           <div>
-            <h3 className="text-lg md:text-xl font-semibold text-slate-800">全设备智能协同</h3>
-            <p className="text-xs text-slate-500">基于情境的分发策略</p>
+            <h3 className="text-lg font-bold text-slate-800">全设备智能协同</h3>
+            <p className="text-xs text-slate-400">基于情境的分发策略</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
+      <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-3 lg:grid-cols-6 md:gap-3 md:overflow-visible md:pb-0">
         {deviceKeys.map(renderCard)}
       </div>
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, Image as ImagePlus, X, Brain, MapPin, Zap, Check } from "lucide-react";
+import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, Image as ImagePlus, X, Brain, MapPin, Zap, Check, Users, Clock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -9,6 +9,7 @@ import { useTranslation } from "@/components/TranslationContext";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
+import { deepSemanticParse } from "@/components/utils/semanticParser";
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
@@ -114,11 +115,12 @@ export default function Welcome({ onComplete }) {
     setIsProcessing(true);
     setParsingSteps([]);
 
-    // Steps animation matching the SoulSentryHub design
+    // Steps animation matching enhanced semantic pipeline
     const steps = [
-        { icon: Brain, text: '提取时间实体...', delay: 800 },
-        { icon: Sparkles, text: '识别意图与优先级...', delay: 600 },
-        { icon: MapPin, text: '空间计算与交通分析...', delay: 600 },
+        { icon: Brain, text: '深度语义解析中...', delay: 800 },
+        { icon: Clock, text: '模糊时间实体识别...', delay: 600 },
+        { icon: Users, text: '人物·地点·意图提取...', delay: 600 },
+        { icon: MapPin, text: '空间计算与情境推演...', delay: 600 },
         { icon: Zap, text: '生成设备协同策略...', delay: 800 }
     ];
 
@@ -154,31 +156,61 @@ export default function Welcome({ onComplete }) {
          setIsUploadingImage(false);
       }
 
+      // Pre-analyze with deep semantic parser for enhanced understanding
+      let semanticHint = null;
+      try {
+        semanticHint = await deepSemanticParse(textToAnalyze, { enableSmartComplete: true });
+      } catch (e) {
+        console.warn("Semantic pre-parse skipped:", e);
+      }
+
       // Call the custom backend function using Kimi AI
       const { data: response } = await base44.functions.invoke('analyzeIntent', {
           input: textToAnalyze
       });
 
-      // 同步到约定和心签
-      extractAndCreateTasks(textToAnalyze).then(tasks => {
-        if (tasks.length > 0) {
-          toast.success(`已同步 ${tasks.length} 个约定`);
-        }
-      }).catch(e => console.error("Task extraction failed", e));
+      // Route by intent: wishes → notes only, not tasks
+      const isWishOrNote = semanticHint?.primary_intent === "wish" || semanticHint?.primary_intent === "note";
+
+      // 同步到约定和心签（愿望类仅同步到心签）
+      if (!isWishOrNote) {
+        extractAndCreateTasks(textToAnalyze).then(tasks => {
+          if (tasks.length > 0) {
+            toast.success(`已同步 ${tasks.length} 个约定`);
+          }
+        }).catch(e => console.error("Task extraction failed", e));
+      }
+      
+      // Wishes get special note treatment
+      if (isWishOrNote) {
+        base44.entities.Note.create({
+          content: semanticHint.primary_intent === "wish" 
+            ? `💫 愿望: ${semanticHint.refined_title || textToAnalyze}\n\n${semanticHint.refined_description || ""}`
+            : textToAnalyze,
+          plain_text: textToAnalyze,
+          tags: [...(semanticHint.tags || []), semanticHint.primary_intent === "wish" ? "愿望清单" : "随手记"],
+          color: semanticHint.primary_intent === "wish" ? "yellow" : "blue",
+          is_pinned: semanticHint.primary_intent === "wish",
+        }).then(() => toast.success(semanticHint.primary_intent === "wish" ? "已加入愿望清单 💫" : "已保存随手记")).catch(e => console.error(e));
+      }
+
       syncPlanToNote(textToAnalyze, "welcome").then(note => {
         if (note) toast.success("已同步到心签");
       }).catch(e => console.error("Note sync failed", e));
 
-      // 同步执行动态到通知页面（包含规划上下文）
+      // 同步执行动态到通知页面（包含规划上下文和语义分析）
       createExecutionRecord({
-        title: textToAnalyze.slice(0, 60),
+        title: semanticHint?.refined_title || textToAnalyze.slice(0, 60),
         originalInput: textToAnalyze,
         source: "welcome",
-        category: "task",
+        category: isWishOrNote ? "note" : "task",
         planContext: {
           timelineItems: response.timeline || [],
           automationItems: response.automations || [],
-          syncTargets: ["tasks", "notes"],
+          syncTargets: isWishOrNote ? ["notes"] : ["tasks", "notes"],
+          semanticIntent: semanticHint?.primary_intent,
+          people: semanticHint?.people?.map(p => p.name) || [],
+          locations: semanticHint?.locations?.map(l => l.name) || [],
         },
       }).catch(e => console.warn("Execution tracking failed:", e));
 
@@ -258,7 +290,7 @@ export default function Welcome({ onComplete }) {
                   <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="随便写点什么... 比如「明天下午3点开会」或「今天学到了...」，也可以上传图片"
+                  placeholder="随便说... 比如「下周和老王吃饭」「后天下午开会」「我想学钢琴」，也支持语音和图片"
                   disabled={isProcessing}
                   className="w-full h-40 px-6 py-5 pr-28 text-lg rounded-2xl border-2 border-slate-200 
                              focus:border-[#384877] focus:ring-4 focus:ring-[#384877]/10 

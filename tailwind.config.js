@@ -8,6 +8,14 @@ module.exports = {
       "from-slate-100", "text-slate-600", "from-slate-500", "to-blue-500", "hover:from-slate-600", "hover:to-blue-600", "ring-slate-400", "bg-slate-100", "text-slate-700",
       "from-violet-100", "to-purple-100", "text-violet-600", "from-violet-500", "to-purple-500", "hover:from-violet-600", "hover:to-purple-600", "ring-violet-400", "bg-violet-100", "text-violet-700",
       "border-l-violet-500", "bg-violet-500", "text-violet-400",
+      "bg-emerald-50", "text-emerald-700", "border-emerald-200",
+      "bg-amber-50", "text-amber-700", "border-amber-200",
+      "bg-indigo-50", "text-indigo-700", "border-indigo-200",
+      "bg-purple-50", "text-purple-700", "border-purple-200",
+      "bg-red-50", "text-red-700", "border-red-200",
+      "bg-green-50", "text-green-600",
+      "bg-orange-50", "text-orange-600",
+      "bg-pink-50", "text-pink-700",
     ],
   theme: {
   	extend: {

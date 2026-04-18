@@ -1,19 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { 
-  Wand2, 
-  Target, 
-  Sunset, 
-  Sunrise, 
-  ShoppingBag, 
-  Sparkles,
-  ListTodo,
-  Leaf,
-  Mic,
-  MicOff
-} from "lucide-react";
+import { ListTodo, Leaf, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { base44 } from "@/api/base44Client";
-import { Loader2 } from "lucide-react";
+import { deepSemanticParse } from "@/components/utils/semanticParser";
+import SemanticPreview from "./SemanticPreview";
 
 export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange }) {
   const [internalValue, setInternalValue] = useState("");
@@ -67,56 +56,22 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
   };
 
   const [mode, setMode] = useState("auto"); // 'auto', 'milestone', 'life'
-  const [previewTags, setPreviewTags] = useState([]);
-  const [showPreview, setShowPreview] = useState(false);
+  const [semanticAnalysis, setSemanticAnalysis] = useState(null);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const aiTimerRef = useRef(null);
 
   const analyzeWithAI = useCallback(async (text) => {
-    if (!text || text.trim().length < 4) {
-      setShowPreview(false);
-      setPreviewTags([]);
+    if (!text || text.trim().length < 3) {
+      setSemanticAnalysis(null);
       return;
     }
     setIsAiAnalyzing(true);
-    setShowPreview(true);
     try {
-      const { data: resp } = await base44.functions.invoke('callAI', {
-        prompt: `分析以下用户输入的任务意图，返回标签列表。
-用户输入："${text}"
-规则：
-- 识别任务类型（里程碑/生活/工作/健康/学习/购物/社交）
-- 识别时间信息（今天/明天/本周/具体日期）
-- 识别优先级（紧急/高/中/低）
-- 识别场景触发器（下班后/到家后/早上等）
-返回2-4个最相关的标签。`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            tags: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  text: { type: "string" },
-                  category: { type: "string", enum: ["milestone", "life", "work", "health", "study", "shopping", "social", "time", "priority", "trigger"] }
-                },
-                required: ["text", "category"]
-              }
-            }
-          },
-          required: ["tags"]
-        }
-      });
-      const aiTags = (resp?.data?.tags || []).map(t => {
-        const iconMap = { milestone: Target, time: Sunrise, priority: Sparkles, trigger: Sunset, shopping: ShoppingBag, life: Leaf, work: ListTodo, health: Sparkles, study: ListTodo, social: Sparkles };
-        const colorMap = { milestone: 'bg-blue-50 text-blue-700', time: 'bg-amber-50 text-amber-700', priority: 'bg-red-50 text-red-700', trigger: 'bg-green-50 text-green-700', shopping: 'bg-purple-50 text-purple-700', life: 'bg-stone-50 text-stone-600', work: 'bg-indigo-50 text-indigo-700', health: 'bg-emerald-50 text-emerald-700', study: 'bg-amber-50 text-amber-700', social: 'bg-pink-50 text-pink-700' };
-        return { icon: iconMap[t.category] || Sparkles, text: t.text, color: colorMap[t.category] || 'bg-stone-50 text-stone-600' };
-      });
-      setPreviewTags(aiTags.length > 0 ? aiTags : [{ icon: Sparkles, text: '智能安排', color: 'bg-stone-50 text-stone-600' }]);
+      const result = await deepSemanticParse(text, { enableSmartComplete: true });
+      setSemanticAnalysis(result);
     } catch (e) {
-      console.error('AI analysis failed:', e);
-      setPreviewTags([{ icon: Sparkles, text: '智能安排', color: 'bg-stone-50 text-stone-600' }]);
+      console.error('Semantic analysis failed:', e);
+      setSemanticAnalysis(null);
     } finally {
       setIsAiAnalyzing(false);
     }
@@ -124,50 +79,69 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
 
   useEffect(() => {
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
-    if (!value || value.trim().length < 4) {
-      setShowPreview(false);
-      setPreviewTags([]);
+    if (!value || value.trim().length < 3) {
+      setSemanticAnalysis(null);
       return;
     }
-    aiTimerRef.current = setTimeout(() => analyzeWithAI(value), 800);
+    aiTimerRef.current = setTimeout(() => analyzeWithAI(value), 1000);
     return () => { if (aiTimerRef.current) clearTimeout(aiTimerRef.current); };
   }, [value, analyzeWithAI]);
+
+  const handleSuggestionAccept = (suggestion) => {
+    if (suggestion.auto_fill) {
+      const newValue = value + " " + suggestion.auto_fill;
+      if (onChange) onChange(newValue);
+      else setInternalValue(newValue);
+    }
+  };
 
   const handleSubmit = () => {
     if (!value.trim()) return;
 
     let category = 'personal';
     let priority = 'medium';
+    let reminderTime = new Date().toISOString();
+    let tags = [];
+    let title = value;
+    let description = "";
 
-    if (mode === 'milestone') {
-      category = 'work';
-      priority = 'high';
-    } else if (mode === 'life') {
-      category = 'personal';
-    } else {
-       if (value.includes('完成') || value.includes('提交') || value.includes('规划')) {
-         category = 'work';
-         priority = 'high';
-       }
+    // Use semantic analysis if available
+    if (semanticAnalysis) {
+      category = semanticAnalysis.category || category;
+      priority = semanticAnalysis.priority || priority;
+      title = semanticAnalysis.refined_title || value;
+      description = semanticAnalysis.refined_description || "";
+      tags = semanticAnalysis.tags || [];
+      
+      // Use resolved time from analysis
+      const highConfTime = semanticAnalysis.time_entities?.find(t => t.resolved_datetime && t.time_confidence !== "low");
+      if (highConfTime?.resolved_datetime) {
+        const parsed = new Date(highConfTime.resolved_datetime);
+        if (!isNaN(parsed.getTime())) reminderTime = parsed.toISOString();
+      }
+
+      // Add people and locations as tags
+      semanticAnalysis.people?.forEach(p => { if (p.name) tags.push("@" + p.name); });
+      semanticAnalysis.locations?.forEach(l => { if (l.name) tags.push("📍" + l.name); });
     }
 
-    // Save AI-generated tags as string array on the task
-    const aiTagTexts = previewTags
-      .filter(t => t.text && t.text !== '智能安排')
-      .map(t => t.text);
+    // Mode override
+    if (mode === 'milestone') { category = 'work'; priority = 'high'; }
+    else if (mode === 'life') { category = 'personal'; }
 
     onAddTask({
-      title: value,
+      title,
+      description,
       category,
       priority,
       status: 'pending',
-      reminder_time: new Date().toISOString(),
-      tags: aiTagTexts.length > 0 ? aiTagTexts : undefined
+      reminder_time: reminderTime,
+      tags: tags.length > 0 ? tags : undefined,
+      _semantic: semanticAnalysis // pass full analysis for downstream use
     });
     
     handleClear();
-    setShowPreview(false);
-    setPreviewTags([]);
+    setSemanticAnalysis(null);
   };
 
   const handleKeyDown = (e) => {
@@ -232,35 +206,13 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
         </div>
       </div>
       
-      {/* Smart Analysis Preview */}
-      {showPreview && (
-        <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-3">
-            {isAiAnalyzing ? (
-              <Loader2 className="w-4 h-4 text-[#384877] mt-0.5 animate-spin" />
-            ) : (
-              <Wand2 className="w-4 h-4 text-stone-400 mt-0.5" />
-            )}
-            <div className="flex-1">
-              <p className="text-xs text-stone-500 mb-2 font-medium">
-                {isAiAnalyzing ? 'AI 分析中…' : 'AI理解：'}
-              </p>
-              {!isAiAnalyzing && (
-              <div className="flex flex-wrap gap-2">
-                {previewTags.map((tag, idx) => {
-                  const Icon = tag.icon;
-                  return (
-                    <span key={idx} className={cn("px-2.5 py-1 text-xs rounded-full flex items-center gap-1", tag.color)}>
-                      <Icon className="w-3 h-3" />
-                      {tag.text}
-                    </span>
-                  );
-                })}
-              </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Deep Semantic Preview */}
+      {(isAiAnalyzing || semanticAnalysis) && (
+        <SemanticPreview 
+          analysis={semanticAnalysis} 
+          isLoading={isAiAnalyzing} 
+          onSuggestionAccept={handleSuggestionAccept}
+        />
       )}
     </div>
   );

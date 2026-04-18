@@ -14,6 +14,7 @@ export default function SmartInputBar() {
     if (!userInput.trim()) return;
 
     const now = new Date().toISOString();
+    const semanticHint = taskData._semantic || null;
     let execution = null;
 
     // Create initial execution record
@@ -22,20 +23,33 @@ export default function SmartInputBar() {
         task_title: userInput.slice(0, 60),
         original_input: userInput,
         execution_status: "parsing",
-        category: "task",
+        category: semanticHint?.primary_intent === "wish" ? "note" : 
+                  semanticHint?.primary_intent === "note" ? "note" : "task",
         execution_steps: [
-          { step_name: "AI智能规划", status: "running", detail: "正在分析输入并生成执行链路...", timestamp: now },
+          { step_name: "深度语义解析", status: "completed", detail: semanticHint ? `意图: ${semanticHint.primary_intent} (${Math.round((semanticHint.intent_confidence || 0) * 100)}%)` : "跳过", timestamp: now },
+          { step_name: "AI执行规划", status: "running", detail: "正在生成执行链路...", timestamp: now },
         ],
+        ai_parsed_result: semanticHint ? {
+          intent: semanticHint.primary_intent,
+          summary: semanticHint.intent_reasoning || "",
+          entities: [
+            ...(semanticHint.people || []).map(p => "@" + p.name),
+            ...(semanticHint.locations || []).map(l => "📍" + l.name),
+            ...(semanticHint.tags || []),
+          ],
+          time_expression: semanticHint.time_entities?.[0]?.original_text || "",
+          priority: semanticHint.priority || "medium",
+        } : undefined,
       });
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
     } catch (e) {
       console.error("Failed to create execution record:", e);
     }
 
-    // Generate AI execution plan
+    // Generate AI execution plan with semantic hints
     let plan = null;
     try {
-      plan = await generateExecutionPlan(userInput);
+      plan = await generateExecutionPlan(userInput, semanticHint);
     } catch (e) {
       console.error("AI plan generation failed:", e);
     }

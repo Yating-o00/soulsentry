@@ -53,6 +53,11 @@ const getNavigationItems = (t) => [
     icon: Users,
   },
   {
+    title: t('memory'),
+    url: createPageUrl("Memory"),
+    icon: Brain,
+  },
+  {
     title: t('myAccount'),
     url: createPageUrl("Account"),
     icon: User,

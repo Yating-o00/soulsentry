@@ -1,0 +1,101 @@
+{
+  "name": "Relationship",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "\u8054\u7cfb\u4eba\u59d3\u540d"
+    },
+    "nickname": {
+      "type": "string",
+      "description": "\u6635\u79f0/\u522b\u540d"
+    },
+    "relationship_type": {
+      "type": "string",
+      "enum": [
+        "family",
+        "friend",
+        "colleague",
+        "client",
+        "boss",
+        "partner",
+        "classmate",
+        "other"
+      ],
+      "default": "friend",
+      "description": "\u5173\u7cfb\u7c7b\u578b"
+    },
+    "closeness": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5,
+      "description": "\u4eb2\u5bc6\u5ea6(1-10)"
+    },
+    "interaction_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u4e92\u52a8\u6b21\u6570"
+    },
+    "last_interaction_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u6700\u540e\u4e92\u52a8\u65e5\u671f"
+    },
+    "favors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "gave",
+              "received"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "value_estimate": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "\u4eba\u60c5\u5f80\u6765\u8bb0\u5f55",
+      "default": []
+    },
+    "notes": {
+      "type": "string",
+      "description": "\u5907\u6ce8"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "preferred_contact_time": {
+      "type": "string",
+      "description": "\u504f\u597d\u8054\u7cfb\u65f6\u6bb5"
+    },
+    "contact_frequency_days": {
+      "type": "number",
+      "default": 30,
+      "description": "\u5efa\u8bae\u8054\u7cfb\u9891\u7387(\u5929)"
+    },
+    "avatar_color": {
+      "type": "string",
+      "default": "#384877"
+    }
+  },
+  "required": [
+    "name",
+    "relationship_type"
+  ]
+}

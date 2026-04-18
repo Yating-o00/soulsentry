@@ -63,6 +63,7 @@ import Teams from './pages/Teams';
 import Templates from './pages/Templates';
 import Trash from './pages/Trash';
 import Welcome from './pages/Welcome';
+import Memory from './pages/Memory';
 import __Layout from './Layout.jsx';
 
 
@@ -83,6 +84,7 @@ export const PAGES = {
     "Templates": Templates,
     "Trash": Trash,
     "Welcome": Welcome,
+    "Memory": Memory,
 }
 
 export const pagesConfig = {

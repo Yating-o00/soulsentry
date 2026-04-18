@@ -1,6 +1,6 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-export default Deno.serve(async (req) => {
+Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response(null, {
             headers: {
@@ -14,13 +14,13 @@ export default Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
         const user = await base44.auth.me();
-        
-        if (!user) {
-            return Response.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
-        }
+        if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
         const body = await req.json();
         const { task, behaviors } = body;
+
+        const apiKey = Deno.env.get("MOONSHOT_API_KEY");
+        if (!apiKey) return Response.json({ error: 'MOONSHOT_API_KEY not set' }, { status: 500 });
 
         const prompt = `你是一个时间管理专家。分析用户的约定完成行为数据，为新约定推荐最佳的提醒时间。
 
@@ -31,33 +31,18 @@ export default Deno.serve(async (req) => {
 - 优先级：${task.priority}
 - 原计划时间：${task.reminder_time || '未设置'}
 
-用户历史行为数据（最近100条）：
-${behaviors.length > 0 ? behaviors.map(b => `
-- 事件类型：${b.event_type}
-- 类别：${b.category || '未知'}
-- 时间：${b.hour_of_day}点，星期${b.day_of_week}
-`).join('\n') : '暂无历史数据'}
+用户历史行为数据：
+${behaviors.length > 0 ? behaviors.map(b => `- 事件类型：${b.event_type}，类别：${b.category || '未知'}，时间：${b.hour_of_day}点，星期${b.day_of_week}`).join('\n') : '暂无历史数据'}
 
-请分析：
-1. 用户在什么时间段对该类别约定响应最快？
-2. 用户在哪天完成该类别约定效率最高？
-3. 考虑约定优先级，推荐3个最佳提醒时间。**注意：推荐的时间必须晚于当前时间（${new Date().toISOString()}），严禁推荐过去的时间。**
-4. 给出推荐理由
+请分析并推荐3个最佳提醒时间（必须晚于当前时间 ${new Date().toISOString()}）。
 
-请生成 JSON 响应：
+返回JSON格式：
 {
-    "optimal_time_slot": "最佳时间段（如：早上9-11点）",
-    "best_day_pattern": "最佳日期模式（如：工作日、周末等）",
-    "suggestions": [
-        {
-            "datetime": "ISO格式时间字符串",
-            "reason": "推荐理由",
-            "confidence": "high/medium/low"
-        }
-    ],
+    "optimal_time_slot": "最佳时间段",
+    "best_day_pattern": "最佳日期模式",
+    "suggestions": [{ "datetime": "ISO格式时间", "reason": "推荐理由", "confidence": "high/medium/low" }],
     "insights": ["洞察1", "洞察2"]
-}
-`;
+}`;
 
         const schema = {
             type: "object",
@@ -70,50 +55,36 @@ ${behaviors.length > 0 ? behaviors.map(b => `
             required: ["optimal_time_slot", "suggestions"]
         };
 
-        // 1) Try InvokeLLM
-        try {
-            const result = await base44.integrations.Core.InvokeLLM({
-                prompt,
-                response_json_schema: schema
-            });
-            return Response.json(result, { headers: { 'Access-Control-Allow-Origin': '*' } });
-        } catch (e) {
-            console.log('[generateSmartReminders] InvokeLLM failed:', e?.message);
-        }
-
-        // 2) Fallback to Moonshot/OpenAI
-        const moonshotKey = Deno.env.get("MOONSHOT_API_KEY");
-        const openaiKey = Deno.env.get("OPENAI_API_KEY");
-        const apiKey = moonshotKey || openaiKey;
-        const baseURL = moonshotKey ? "https://api.moonshot.cn/v1" : "https://api.openai.com/v1";
-        const model = moonshotKey ? "moonshot-v1-8k" : "gpt-4o-mini";
-
-        if (!apiKey) {
-            return Response.json({ error: "AI service unavailable" }, { status: 503, headers: { 'Access-Control-Allow-Origin': '*' } });
-        }
-
-        const res = await fetch(`${baseURL}/chat/completions`, {
+        const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
             method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey.trim()}`
+            },
             body: JSON.stringify({
-                model,
+                model: "kimi-k2-turbo-preview",
                 messages: [
-                    { role: "system", content: "You are a helpful assistant that outputs JSON." },
+                    { role: "system", content: `你是一个智能时间管理助手。请严格按JSON格式返回。\n${JSON.stringify(schema)}` },
                     { role: "user", content: prompt }
                 ],
-                temperature: 0.7
+                temperature: 0.7,
+                response_format: { type: "json_object" }
             })
         });
 
-        if (!res.ok) throw new Error(`API error: ${res.status}`);
-        const data = await res.json();
-        const content = data.choices?.[0]?.message?.content || '';
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Kimi API error: ${response.status} ${errText}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || '{}';
         const cleaned = content.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
         const result = JSON.parse(cleaned);
-        return Response.json(result, { headers: { 'Access-Control-Allow-Origin': '*' } });
 
+        return Response.json(result, { headers: { 'Access-Control-Allow-Origin': '*' } });
     } catch (error) {
-        console.error("Smart Reminder Error:", error);
+        console.error("Smart Reminder Error:", error?.message || error);
         return Response.json({ error: error.message }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 });

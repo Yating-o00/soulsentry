@@ -1,6 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// Helper to get the current date/time in Shanghai timezone
 const getShanghaiTime = () => {
     return new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
 };
@@ -9,17 +8,12 @@ Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
         const user = await base44.auth.me();
-        
-        if (!user) {
-            return Response.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-        // Fetch Tasks (Pending/In Progress)
         const tasks = await base44.entities.Task.filter({
             status: ['pending', 'in_progress']
-        }, '-priority', 20); // Top 20 by priority
+        }, '-priority', 20);
 
-        // Fetch Recent Notes
         const notes = await base44.entities.Note.list('-created_date', 5);
 
         const taskSummary = tasks.map(t => `- [${t.priority}] ${t.title} (Due: ${t.end_time || 'None'})`).join('\n');
@@ -27,7 +21,7 @@ Deno.serve(async (req) => {
 
         const systemPrompt = `
 You are "SoulSentry" (心栈), a mindful personal companion.
-Your goal is to generate a "Daily Briefing" for the user based on their tasks and notes.
+Generate a "Daily Briefing" based on user's tasks and notes.
 
 **Input Data:**
 - **Current Time:** ${getShanghaiTime()}
@@ -38,119 +32,62 @@ ${taskSummary}
 ${noteSummary}
 
 **Instructions:**
-1. **Analyze**: Look at the tasks and notes. Distinguish between:
-    - **Short-term Focus (当下):** Urgent tasks, immediate deadlines, quick actions needed today.
-    - **Long-term/Strategic (远见):** recurring goals, long-term notes, future aspirations, or low priority but meaningful tasks.
-2. **Synthesize**: Write a natural, warm, and encouraging briefing. Do not just list items. Weave them into a narrative.
-3. **Format**: Return a valid JSON object strictly:
+1. Analyze tasks and notes. Distinguish short-term focus vs long-term/strategic items.
+2. Write a natural, warm, encouraging briefing.
+3. Return valid JSON:
 {
-  "title": "A short, positive, energetic title for the day (no greeting, just a title)",
-  "short_term_narrative": "A paragraph focusing on what needs to be done *today*. Mention specific high priority tasks naturally.",
-  "long_term_narrative": "A paragraph connecting recent notes or less urgent tasks to bigger picture goals or state of mind.",
-  "mindful_tip": "A one-sentence actionable mindfulness tip related to their workload."
+  "title": "A short positive title",
+  "short_term_narrative": "Focus on what needs to be done today",
+  "long_term_narrative": "Connect notes to bigger picture goals",
+  "mindful_tip": "One-sentence actionable mindfulness tip"
 }
 
-**Tone:**
-Warm, calm, supportive, efficient but not robotic. (Language: Simplified Chinese)
-`;
-
-        let result = null;
-
-        // 0) Try InvokeLLM first (uses platform credits)
-        try {
-            const schema = {
-                type: "object",
-                properties: {
-                    title: { type: "string" },
-                    short_term_narrative: { type: "string" },
-                    long_term_narrative: { type: "string" },
-                    mindful_tip: { type: "string" }
-                },
-                required: ["title", "short_term_narrative", "long_term_narrative", "mindful_tip"]
-            };
-            result = await base44.integrations.Core.InvokeLLM({
-                prompt: systemPrompt + "\n\nGenerate my daily briefing.",
-                response_json_schema: schema
-            });
-            if (result && result.title) {
-                return Response.json(result);
-            }
-            result = null;
-        } catch (e) {
-            console.log('[generateDailyBriefing] InvokeLLM failed:', e?.message);
-        }
+**Tone:** Warm, calm, supportive. Language: Simplified Chinese.`;
 
         const apiKey = Deno.env.get("MOONSHOT_API_KEY");
-        const openaiKey = Deno.env.get("OPENAI_API_KEY");
-
-        // 1) Try Moonshot
-        if (apiKey) {
-            try {
-                const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${apiKey.trim()}`
-                    },
-                    body: JSON.stringify({
-                        model: "kimi-k2-turbo-preview",
-                        messages: [
-                            { role: "system", content: systemPrompt },
-                            { role: "user", content: "Generate my daily briefing." }
-                        ],
-                        temperature: 0.7
-                    })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    const content = data.choices[0].message.content;
-                    const jsonStr = content.replace(/^```json\n|\n```$/g, '').trim();
-                    result = JSON.parse(jsonStr);
-                }
-            } catch (e) {
-                console.error("Moonshot failed:", e);
-            }
-        }
-
-        // Fallback to OpenAI
-        if (!result && openaiKey) {
-             const response = await fetch("https://api.openai.com/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${openaiKey.trim()}`
-                },
-                body: JSON.stringify({
-                    model: "gpt-4o-mini",
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: "Generate my daily briefing." }
-                    ],
-                    temperature: 0.7
-                })
-            });
-            if (response.ok) {
-                const data = await response.json();
-                const content = data.choices[0].message.content;
-                const jsonStr = content.replace(/^```json\n|\n```$/g, '').trim();
-                result = JSON.parse(jsonStr);
-            }
-        }
-
-        if (!result) {
-            // Fallback if AI fails completely
-            result = {
+        if (!apiKey) {
+            return Response.json({
                 title: "开启充满活力的一天",
                 short_term_narrative: "今天有一些待办事项需要处理，请查看任务列表。",
                 long_term_narrative: "别忘了回顾你的笔记，保持长远的目标感。",
                 mindful_tip: "深呼吸，专注于当下。"
-            };
+            });
         }
 
-        return Response.json(result);
+        const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey.trim()}`
+            },
+            body: JSON.stringify({
+                model: "kimi-k2-turbo-preview",
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: "Generate my daily briefing." }
+                ],
+                temperature: 0.7,
+                response_format: { type: "json_object" }
+            })
+        });
 
+        if (!response.ok) {
+            throw new Error(`Kimi API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || '{}';
+        const cleaned = content.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+        const result = JSON.parse(cleaned);
+
+        return Response.json(result);
     } catch (error) {
-        return Response.json({ error: error.message }, { status: 500 });
+        console.error("Daily briefing error:", error?.message || error);
+        return Response.json({
+            title: "开启充满活力的一天",
+            short_term_narrative: "今天有一些待办事项需要处理，请查看任务列表。",
+            long_term_narrative: "别忘了回顾你的笔记，保持长远的目标感。",
+            mindful_tip: "深呼吸，专注于当下。"
+        });
     }
 });

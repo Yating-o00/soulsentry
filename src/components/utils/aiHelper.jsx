@@ -3,9 +3,10 @@ import { AI_FEATURES } from "@/components/credits/creditConfig";
 
 /**
  * Unified AI call helper with credit check.
+ * Uses Kimi API exclusively via the callAI backend function.
  * 
- * @param {object} params - { prompt, response_json_schema?, file_urls?, add_context_from_internet?, model? }
- * @param {string} [featureKey] - AI功能键名，用于扣除点数。如果不传则不扣点数（向下兼容）。
+ * @param {object} params - { prompt, response_json_schema?, system_prompt? }
+ * @param {string} [featureKey] - AI功能键名，用于扣除点数。如果不传则不扣点数。
  * @returns {Promise<any>} - AI response (parsed JSON if schema provided, string otherwise)
  */
 export async function invokeAI(params, featureKey) {
@@ -38,33 +39,19 @@ export async function invokeAI(params, featureKey) {
     });
   }
 
-  // 2) 调用 AI 服务
-  try {
-    const result = await base44.integrations.Core.InvokeLLM(params);
-    return result;
-  } catch (e) {
-    console.warn('[invokeAI] InvokeLLM failed, falling back to Kimi backend:', e?.message || e);
+  // 2) 调用 Kimi API（通过 callAI 后端函数）
+  const response = await base44.functions.invoke('callAI', {
+    prompt: params.prompt,
+    response_json_schema: params.response_json_schema,
+    system_prompt: params.system_prompt,
+  });
+
+  if (response?.data?.data !== undefined) {
+    return response.data.data;
   }
 
-  // 3) Fallback to backend callAI function (uses Kimi API)
-  try {
-    const response = await base44.functions.invoke('callAI', {
-      prompt: params.prompt,
-      response_json_schema: params.response_json_schema,
-      file_urls: params.file_urls,
-      add_context_from_internet: params.add_context_from_internet,
-      model: params.model
-    });
-
-    if (response?.data?.data !== undefined) {
-      return response.data.data;
-    }
-
-    if (response?.data?.error) {
-      throw new Error(response.data.error);
-    }
-  } catch (backendErr) {
-    console.warn('[invokeAI] Backend callAI also failed:', backendErr?.message || backendErr);
+  if (response?.data?.error) {
+    throw new Error(response.data.error);
   }
 
   throw new Error('AI service unavailable');

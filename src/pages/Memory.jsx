@@ -41,6 +41,12 @@ export default function Memory() {
     initialData: [],
   });
 
+  const { data: relationships = [] } = useQuery({
+    queryKey: ["relationships-memory"],
+    queryFn: () => base44.entities.Relationship.list("-created_date", 50),
+    initialData: [],
+  });
+
   // Quick stats from real data
   const stats = useMemo(() => {
     const activeTasks = tasks.filter(t => !t.deleted_at);
@@ -120,7 +126,7 @@ export default function Memory() {
 
         {/* Timeline — from real product data */}
         <TabsContent value="timeline" className="space-y-4">
-          <ProductTimeline tasks={tasks} notes={notes} executions={executions} />
+          <ProductTimeline tasks={tasks} notes={notes} executions={executions} relationships={relationships} />
         </TabsContent>
 
         {/* Heatmap — from real product data */}
@@ -130,7 +136,7 @@ export default function Memory() {
 
         {/* Cognition — from real product data */}
         <TabsContent value="cognition">
-          <ProductInsights tasks={tasks} notes={notes} behaviors={behaviors} executions={executions} />
+          <ProductInsights tasks={tasks} notes={notes} behaviors={behaviors} executions={executions} relationships={relationships} />
         </TabsContent>
       </Tabs>
     </div>

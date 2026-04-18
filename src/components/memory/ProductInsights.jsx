@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
   Clock, Brain, Zap, Target, BarChart3,
-  AlertTriangle, Flame, ArrowRight, Lightbulb, Activity, TrendingUp, Sparkles
+  AlertTriangle, Flame, ArrowRight, Lightbulb, Activity, TrendingUp, Sparkles, Users
 } from "lucide-react";
 import moment from "moment";
 
@@ -33,7 +33,7 @@ function InsightCard({ icon: IconComp, iconColor, title, value, desc, action }) 
   );
 }
 
-export default function ProductInsights({ tasks, notes, behaviors, executions }) {
+export default function ProductInsights({ tasks, notes, behaviors, executions, relationships }) {
   const insights = useMemo(() => {
     const last30Tasks = (tasks || []).filter(t => !t.deleted_at && moment().diff(moment(t.created_date), "days") <= 30);
     const completedTasks = last30Tasks.filter(t => t.status === "completed");
@@ -126,6 +126,27 @@ export default function ProductInsights({ tasks, notes, behaviors, executions })
             desc={`近30天AI辅助执行${insights.execTotal}次，成功率${insights.execRate}%`}
           />
         )}
+        {(() => {
+          const rels = relationships || [];
+          const overdue = rels.filter(r => {
+            if (!r.last_interaction_date) return false;
+            const days = moment().diff(moment(r.last_interaction_date), "days");
+            return days > (r.contact_frequency_days || 30);
+          });
+          if (rels.length > 0) {
+            return (
+              <InsightCard icon={Users} iconColor="bg-pink-100 text-pink-600" title="人际网络"
+                value={`${rels.length}位联系人`}
+                desc={overdue.length > 0
+                  ? `${overdue.map(r => r.name).join("、")}已超过建议联系频率，建议尽快互动`
+                  : `人际关系维护良好，所有联系人均在建议联系频率内`
+                }
+                action={overdue.length > 0 ? { label: "查看关系", link: "/Teams" } : undefined}
+              />
+            );
+          }
+          return null;
+        })()}
       </div>
 
       <div className="bg-gradient-to-r from-[#384877]/5 via-white to-purple-50/30 rounded-2xl p-4 border border-slate-100">
@@ -138,6 +159,16 @@ export default function ProductInsights({ tasks, notes, behaviors, executions })
           {insights.peakDay && <p>• 高产日：<span className="font-semibold text-purple-600">{insights.peakDay}</span>，建议安排重要会议和深度工作</p>}
           {insights.avgDelay > 0 && <p>• 时间校准：每项约定建议预留额外 <span className="font-semibold text-amber-600">{insights.avgDelay}分钟</span></p>}
           <p>• 近期沉淀 <span className="font-semibold text-indigo-600">{insights.noteCount}篇心签</span>，覆盖 <span className="font-semibold text-indigo-600">{insights.tagCount}个知识领域</span></p>
+          {(relationships || []).length > 0 && (
+            <p>• 人际网络 <span className="font-semibold text-pink-600">{(relationships || []).length}位联系人</span>，
+              {(() => {
+                const overdue = (relationships || []).filter(r => r.last_interaction_date && moment().diff(moment(r.last_interaction_date), "days") > (r.contact_frequency_days || 30));
+                return overdue.length > 0
+                  ? <span className="text-amber-600 font-semibold">{overdue.length}位待联系</span>
+                  : <span className="text-emerald-600">维护状态良好</span>;
+              })()}
+            </p>
+          )}
         </div>
       </div>
     </div>

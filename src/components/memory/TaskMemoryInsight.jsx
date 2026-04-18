@@ -183,39 +183,47 @@ export default function TaskMemoryInsight({ task }) {
   };
 
   return (
-    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-      <button
-        onClick={handleGenerate}
-        className="flex items-center gap-1.5 text-[11px] text-[#384877] font-medium hover:text-[#2c3a63] transition-colors px-2 py-1 rounded-lg hover:bg-[#384877]/5"
-      >
-        <Brain className="w-3.5 h-3.5" />
-        {loading ? "深度分析中..." : insight ? "记忆洞察" : "AI 记忆洞察"}
-        {insight && (expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
-      </button>
+    <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+      {/* Collapsed: show inline insight if available, otherwise show trigger */}
+      {!expanded && !insight && (
+        <button
+          onClick={handleGenerate}
+          className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#384877] transition-colors py-0.5 rounded-md hover:bg-slate-50 no-min-size"
+        >
+          <Brain className="w-3 h-3" />
+          <span>{loading ? "分析中..." : "记忆洞察"}</span>
+        </button>
+      )}
 
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
+      {/* Loading state */}
+      {loading && (
+        <div className="flex items-center gap-1.5 mt-1 py-1">
+          <Loader2 className="w-3 h-3 text-[#384877] animate-spin" />
+          <span className="text-[11px] text-slate-400">分析中...</span>
+        </div>
+      )}
+
+      {/* Insight result - always visible once generated */}
+      {!loading && insight?.insight && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-1"
+        >
+          <div 
+            className="flex items-start gap-2 px-3 py-2 bg-gradient-to-r from-amber-50 to-yellow-50/50 rounded-lg border border-amber-100/80 cursor-pointer group"
+            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
           >
-            {loading ? (
-              <div className="flex items-center gap-2 mt-2 p-3 bg-[#384877]/5 rounded-xl">
-                <Loader2 className="w-4 h-4 text-[#384877] animate-spin" />
-                <span className="text-xs text-[#384877]">分析中...</span>
-              </div>
-            ) : insight?.insight ? (
-              <div className="mt-2 p-3 bg-yellow-50 rounded-xl border-l-4 border-yellow-300">
-                <p className="text-xs text-yellow-900 leading-relaxed">
-                  <strong className="text-yellow-800">记忆洞察：</strong>{insight.insight}
-                </p>
-              </div>
-            ) : null}
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <Brain className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+            <p className={`text-[11px] text-amber-800 leading-relaxed ${expanded ? "" : "line-clamp-1"}`}>
+              {insight.insight}
+            </p>
+            {!expanded && (
+              <ChevronDown className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }

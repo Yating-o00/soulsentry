@@ -178,25 +178,35 @@ function TimelineItem({ event, relationships, allTasks, teamUsers, comments }) {
     return (name && combinedText.includes(name)) || (nick && combinedText.includes(nick));
   });
 
-  // Build single most relevant insight per person
-  let insightText = null;
-  if (relatedPeople.length > 0) {
-    const r = relatedPeople[0]; // Focus on the primary related person
+  // Build concise inline insight
+  const insightParts = [];
+  relatedPeople.forEach(r => {
     const { meetingCount, avgIntervalText, peakHourText, displayName, teamInsights } = buildPersonInsights(r, allTasks, teamUsers, comments);
+    const segments = [];
 
     if (meetingCount > 1) {
-      let text = `第${meetingCount}次与${displayName}会面`;
-      if (avgIntervalText) text += `，${avgIntervalText}`;
-      if (peakHourText) text += `。建议安排在${peakHourText}`;
-      insightText = text;
-    } else if (teamInsights?.matchedUser && teamInsights.sharedTaskCount > 0) {
-      const ti = teamInsights;
-      insightText = `${displayName}有${ti.sharedTaskCount}项共享约定，完成率${ti.completionRate}%`;
-      if (ti.completionRate < 50) insightText += "，建议跟进";
+      let core = `第${meetingCount}次互动`;
+      if (avgIntervalText) core += `·${avgIntervalText}`;
+      segments.push(core);
+      if (peakHourText) segments.push(`最佳时段${peakHourText}`);
     } else if (meetingCount === 1) {
-      insightText = `首次涉及${displayName}，建议记录关键细节`;
+      segments.push(`首次涉及${displayName}`);
     }
-  }
+
+    if (teamInsights?.matchedUser && teamInsights.sharedTaskCount > 0) {
+      const ti = teamInsights;
+      let teamPart = `团队${ti.sharedTaskCount}项·完成率${ti.completionRate}%`;
+      if (ti.avgResponseDays > 0) teamPart += `·响应${humanizeDays(ti.avgResponseDays)}`;
+      segments.push(teamPart);
+      if (ti.completionRate < 50 && ti.sharedTaskCount >= 2) segments.push("⚡需跟进");
+      else if (ti.completionRate >= 80) segments.push("✓可委派");
+    }
+
+    if (segments.length > 0) {
+      insightParts.push(`${displayName}：${segments.join(" | ")}`);
+    }
+  });
+  const insightText = insightParts.length > 0 ? insightParts.join("；") : null;
 
   // People tags
   const peopleTags = relatedPeople.map(r => ({
@@ -283,27 +293,51 @@ function TimelineItem({ event, relationships, allTasks, teamUsers, comments }) {
             </div>
           )}
 
-          {/* Relationship Warning — only show for overdue contacts */}
+          {/* Relationship / Favor Warning with Team Data */}
           {(() => {
-            const overdueContact = relatedPeople.find(r => {
+            const overdueContacts = relatedPeople.filter(r => {
               const days = r.last_interaction_date ? moment().diff(moment(r.last_interaction_date), "days") : 0;
               return days > (r.contact_frequency_days || 30);
             });
-            if (!overdueContact) return null;
-            const days = moment().diff(moment(overdueContact.last_interaction_date), "days");
-            const favors = (overdueContact.favors || []).filter(f => f.type === "received");
-            const dn = overdueContact.nickname || overdueContact.name;
-            let msg = `已${humanizeDays(days)}未联系${dn}`;
-            if (favors.length > 0) msg += `，上次${favors[0].description}待回请`;
+            // Also find team-related insights for non-overdue contacts
+            const teamRelated = relatedPeople
+              .map(r => ({ person: r, ti: buildTeamInsightsForPerson(r, allTasks, teamUsers, comments) }))
+              .filter(({ ti }) => ti?.matchedUser && ti.sharedTaskCount > 0);
+
+            if (overdueContacts.length === 0 && teamRelated.length === 0) return null;
 
             return (
-              <div className="mt-2 p-2.5 bg-yellow-50 rounded-xl border-l-4 border-yellow-300">
-                <div className="flex items-start gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-yellow-900 leading-relaxed">
-                    <strong className="text-yellow-800">人情追踪：</strong>{msg}
-                  </p>
-                </div>
+              <div className="mt-2 p-3 bg-yellow-50 rounded-xl border-l-4 border-yellow-300 space-y-2">
+                {overdueContacts.length > 0 && (
+                  <div className="flex items-start gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                      <strong className="text-amber-800">人情追踪：</strong>
+                      {overdueContacts.map(r => {
+                        const days = moment().diff(moment(r.last_interaction_date), "days");
+                        const favors = (r.favors || []).filter(f => f.type === "received");
+                        const dn = r.nickname || r.name;
+                        let msg = `${dn}·${humanizeDays(days)}未联系`;
+                        if (favors.length > 0) msg += `·欠人情(${favors[0].description})`;
+                        return msg;
+                      }).join("；")}
+                    </p>
+                  </div>
+                )}
+                {teamRelated.length > 0 && (
+                  <div className="flex items-start gap-1.5">
+                    <Users className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-blue-700 leading-relaxed">
+                      <strong className="text-blue-800">团队关联：</strong>
+                      {teamRelated.map(({ person: r, ti }) => {
+                        const dn = r.nickname || r.name;
+                        let msg = `${dn}·${ti.sharedTaskCount}项共享·${ti.completionRate}%完成`;
+                        if (ti.coAssignedWith.length > 0) msg += `·常协作${ti.coAssignedWith[0].name}`;
+                        return msg;
+                      }).join("；")}
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })()}

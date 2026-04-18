@@ -47,6 +47,18 @@ export default function Memory() {
     initialData: [],
   });
 
+  const { data: teamUsers = [] } = useQuery({
+    queryKey: ["team-users-memory"],
+    queryFn: () => base44.entities.User.list(),
+    initialData: [],
+  });
+
+  const { data: comments = [] } = useQuery({
+    queryKey: ["comments-memory"],
+    queryFn: () => base44.entities.Comment.list("-created_date", 200),
+    initialData: [],
+  });
+
   // Quick stats from real data
   const stats = useMemo(() => {
     const activeTasks = tasks.filter(t => !t.deleted_at);
@@ -126,7 +138,7 @@ export default function Memory() {
 
         {/* Timeline — from real product data */}
         <TabsContent value="timeline" className="space-y-4">
-          <ProductTimeline tasks={tasks} notes={notes} executions={executions} relationships={relationships} />
+          <ProductTimeline tasks={tasks} notes={notes} executions={executions} relationships={relationships} teamUsers={teamUsers} comments={comments} />
         </TabsContent>
 
         {/* Heatmap — from real product data */}

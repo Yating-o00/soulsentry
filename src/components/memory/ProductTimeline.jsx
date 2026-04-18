@@ -51,10 +51,11 @@ function humanizeDays(days) {
   return `${(days / 365).toFixed(1)}年`;
 }
 
-// Helper: compute person-specific insights from all tasks
-function buildPersonInsights(person, allTasks) {
+// Helper: compute person-specific insights from all tasks + team data
+function buildPersonInsights(person, allTasks, teamUsers, comments) {
   const name = (person.name || "").toLowerCase();
   const nick = (person.nickname || "").toLowerCase();
+  const displayName = person.nickname || person.name;
 
   // Find all tasks related to this person
   const relatedTasks = (allTasks || []).filter(t => {
@@ -64,7 +65,6 @@ function buildPersonInsights(person, allTasks) {
   });
 
   const meetingCount = relatedTasks.length;
-  const displayName = person.nickname || person.name;
 
   // Calculate average interval between meetings
   let avgIntervalText = "";
@@ -99,10 +99,72 @@ function buildPersonInsights(person, allTasks) {
     peakHourText = `${period}${displayH}-${displayH + 2}点`;
   }
 
-  return { meetingCount, avgIntervalText, peakHourText, displayName };
+  // --- Team data analysis ---
+  const teamInsights = buildTeamInsightsForPerson(person, allTasks, teamUsers, comments);
+
+  return { meetingCount, avgIntervalText, peakHourText, displayName, teamInsights };
 }
 
-function TimelineItem({ event, relationships, allTasks }) {
+// Analyze team collaboration patterns related to a person
+function buildTeamInsightsForPerson(person, allTasks, teamUsers, comments) {
+  const name = (person.name || "").toLowerCase();
+  const nick = (person.nickname || "").toLowerCase();
+  if (!teamUsers?.length) return null;
+
+  // Match person to a team member
+  const matchedUser = teamUsers.find(u => {
+    const fullName = (u.full_name || "").toLowerCase();
+    return (name && fullName.includes(name)) || (nick && fullName.includes(nick)) ||
+           (name && name.includes(fullName)) || (nick && nick.includes(fullName));
+  });
+
+  const result = { matchedUser: null, sharedTaskCount: 0, coAssignedWith: [], commentCount: 0, completionRate: 0, avgResponseDays: 0 };
+  if (!matchedUser) return result;
+
+  result.matchedUser = matchedUser;
+
+  // Find tasks where this team member is assigned
+  const userTasks = (allTasks || []).filter(t =>
+    !t.deleted_at && t.assigned_to?.includes(matchedUser.id)
+  );
+  result.sharedTaskCount = userTasks.length;
+
+  // Co-assigned analysis — who else frequently works with this person
+  const coWorkerCounts = {};
+  userTasks.forEach(t => {
+    (t.assigned_to || []).forEach(uid => {
+      if (uid !== matchedUser.id) coWorkerCounts[uid] = (coWorkerCounts[uid] || 0) + 1;
+    });
+  });
+  result.coAssignedWith = Object.entries(coWorkerCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([uid, count]) => {
+      const u = teamUsers.find(tu => tu.id === uid);
+      return { name: u?.full_name || "未知", count };
+    });
+
+  // Comments involving this person's tasks
+  const taskIds = new Set(userTasks.map(t => t.id));
+  const relatedComments = (comments || []).filter(c => taskIds.has(c.task_id));
+  result.commentCount = relatedComments.length;
+
+  // Completion rate for assigned tasks
+  const completed = userTasks.filter(t => t.status === "completed");
+  result.completionRate = userTasks.length > 0 ? Math.round((completed.length / userTasks.length) * 100) : 0;
+
+  // Average response time (from created to completed)
+  const responseDays = completed
+    .filter(t => t.completed_at && t.created_date)
+    .map(t => moment(t.completed_at).diff(moment(t.created_date), "days"));
+  result.avgResponseDays = responseDays.length > 0
+    ? Math.round(responseDays.reduce((a, b) => a + b, 0) / responseDays.length)
+    : 0;
+
+  return result;
+}
+
+function TimelineItem({ event, relationships, allTasks, teamUsers, comments }) {
   const config = EVENT_CONFIG[event.type] || EVENT_CONFIG.task_created;
   const Icon = config.icon;
   const memoryType = MEMORY_TYPE_CONFIG[event.rawCategory] || MEMORY_TYPE_CONFIG.other;
@@ -119,7 +181,7 @@ function TimelineItem({ event, relationships, allTasks }) {
   // Build humanized inline insight with real data
   const insightParts = [];
   relatedPeople.forEach(r => {
-    const { meetingCount, avgIntervalText, peakHourText, displayName } = buildPersonInsights(r, allTasks);
+    const { meetingCount, avgIntervalText, peakHourText, displayName, teamInsights } = buildPersonInsights(r, allTasks, teamUsers, comments);
 
     if (meetingCount > 1) {
       let sentence = `这是您第${meetingCount}次与${displayName}会面`;
@@ -131,6 +193,24 @@ function TimelineItem({ event, relationships, allTasks }) {
       }
     } else if (meetingCount === 1) {
       insightParts.push(`首次与${displayName}相关的事项，建议记录关键细节以便后续跟进`);
+    }
+
+    // Team collaboration insights
+    if (teamInsights?.matchedUser) {
+      const ti = teamInsights;
+      if (ti.sharedTaskCount > 0) {
+        insightParts.push(`团队数据：${displayName}参与了${ti.sharedTaskCount}个共享约定，完成率${ti.completionRate}%`);
+      }
+      if (ti.avgResponseDays > 0) {
+        insightParts.push(`平均${humanizeDays(ti.avgResponseDays)}完成分配的约定`);
+      }
+      if (ti.coAssignedWith.length > 0) {
+        const coNames = ti.coAssignedWith.map(c => `${c.name}(${c.count}次)`).join("、");
+        insightParts.push(`常与${coNames}协作`);
+      }
+      if (ti.commentCount > 0) {
+        insightParts.push(`相关约定共${ti.commentCount}条讨论`);
+      }
     }
   });
   const insightText = insightParts.length > 0 ? insightParts.join("。") + "。" : null;
@@ -220,31 +300,63 @@ function TimelineItem({ event, relationships, allTasks }) {
             </div>
           )}
 
-          {/* Relationship / Favor Warning */}
-          {relatedPeople.some(r => {
-            const days = r.last_interaction_date ? moment().diff(moment(r.last_interaction_date), "days") : 0;
-            return days > (r.contact_frequency_days || 30);
-          }) && (
-            <div className="mt-2 p-3 bg-yellow-50 rounded-xl border-l-4 border-yellow-300">
-              <div className="flex items-start gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-amber-700 leading-relaxed">
-                  <strong className="text-amber-800">人情追踪：</strong>
-                  {relatedPeople.filter(r => {
-                    const days = r.last_interaction_date ? moment().diff(moment(r.last_interaction_date), "days") : 0;
-                    return days > (r.contact_frequency_days || 30);
-                  }).map(r => {
-                    const days = moment().diff(moment(r.last_interaction_date), "days");
-                    const favors = (r.favors || []).filter(f => f.type === "received");
-                    const displayName = r.nickname || r.name;
-                    let msg = `已${humanizeDays(days)}未联系${displayName}，建议：1) 发送问候`;
-                    if (favors.length > 0) msg += ` 2) 约饭回请（上次${favors[0].description}）`;
-                    return msg;
-                  }).join("；")}
-                </p>
+          {/* Relationship / Favor Warning with Team Data */}
+          {(() => {
+            const overdueContacts = relatedPeople.filter(r => {
+              const days = r.last_interaction_date ? moment().diff(moment(r.last_interaction_date), "days") : 0;
+              return days > (r.contact_frequency_days || 30);
+            });
+            // Also find team-related insights for non-overdue contacts
+            const teamRelated = relatedPeople
+              .map(r => ({ person: r, ti: buildTeamInsightsForPerson(r, allTasks, teamUsers, comments) }))
+              .filter(({ ti }) => ti?.matchedUser && ti.sharedTaskCount > 0);
+
+            if (overdueContacts.length === 0 && teamRelated.length === 0) return null;
+
+            return (
+              <div className="mt-2 p-3 bg-yellow-50 rounded-xl border-l-4 border-yellow-300 space-y-2">
+                {overdueContacts.length > 0 && (
+                  <div className="flex items-start gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                      <strong className="text-amber-800">人情追踪：</strong>
+                      {overdueContacts.map(r => {
+                        const days = moment().diff(moment(r.last_interaction_date), "days");
+                        const favors = (r.favors || []).filter(f => f.type === "received");
+                        const dn = r.nickname || r.name;
+                        let msg = `已${humanizeDays(days)}未联系${dn}，建议：1) 发送问候`;
+                        if (favors.length > 0) msg += ` 2) 约饭回请（上次${favors[0].description}）`;
+                        return msg;
+                      }).join("；")}
+                    </p>
+                  </div>
+                )}
+                {teamRelated.length > 0 && (
+                  <div className="flex items-start gap-1.5">
+                    <Users className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-blue-700 leading-relaxed">
+                      <strong className="text-blue-800">团队关联：</strong>
+                      {teamRelated.map(({ person: r, ti }) => {
+                        const dn = r.nickname || r.name;
+                        const parts = [];
+                        parts.push(`${dn}在团队中有${ti.sharedTaskCount}个共享约定`);
+                        if (ti.completionRate > 0) parts.push(`完成率${ti.completionRate}%`);
+                        if (ti.coAssignedWith.length > 0) {
+                          parts.push(`常与${ti.coAssignedWith[0].name}协作`);
+                        }
+                        if (ti.completionRate < 50 && ti.sharedTaskCount >= 2) {
+                          parts.push("建议主动跟进进度");
+                        } else if (ti.completionRate >= 80) {
+                          parts.push("执行力佳，可委派更多事项");
+                        }
+                        return parts.join("，");
+                      }).join("；")}
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Link */}
           {event.link && !insightText && (
@@ -258,7 +370,7 @@ function TimelineItem({ event, relationships, allTasks }) {
   );
 }
 
-export default function ProductTimeline({ tasks = [], notes, executions, relationships }) {
+export default function ProductTimeline({ tasks = [], notes, executions, relationships, teamUsers = [], comments = [] }) {
   const [limit, setLimit] = useState(30);
   const [typeFilter, setTypeFilter] = useState("all");
 
@@ -393,6 +505,8 @@ export default function ProductTimeline({ tasks = [], notes, executions, relatio
                 event={event}
                 relationships={relationships}
                 allTasks={tasks}
+                teamUsers={teamUsers}
+                comments={comments}
               />
             ))}
             {allEvents.length > limit && (

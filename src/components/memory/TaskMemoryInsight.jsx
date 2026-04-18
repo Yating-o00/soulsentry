@@ -173,16 +173,8 @@ export default function TaskMemoryInsight({ task }) {
     const ctx = buildTaskContext(task, allTasks, relationships, behaviors, completions);
     const prompt = buildPrompt(task, ctx);
 
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          insight: { type: "string", description: "1-2句自然语言洞察，不超过100字" },
-        }
-      }
-    });
-    setInsight(result);
+    const response = await base44.functions.invoke("kimiMemoryInsight", { prompt });
+    setInsight(response.data);
     setLoading(false);
   };
 

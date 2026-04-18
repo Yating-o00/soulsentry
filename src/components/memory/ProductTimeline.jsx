@@ -178,42 +178,35 @@ function TimelineItem({ event, relationships, allTasks, teamUsers, comments }) {
     return (name && combinedText.includes(name)) || (nick && combinedText.includes(nick));
   });
 
-  // Build humanized inline insight with real data
+  // Build concise inline insight
   const insightParts = [];
   relatedPeople.forEach(r => {
     const { meetingCount, avgIntervalText, peakHourText, displayName, teamInsights } = buildPersonInsights(r, allTasks, teamUsers, comments);
+    const segments = [];
 
     if (meetingCount > 1) {
-      let sentence = `这是您第${meetingCount}次与${displayName}会面`;
-      if (avgIntervalText) sentence += `，${avgIntervalText}`;
-      insightParts.push(sentence);
-
-      if (peakHourText) {
-        insightParts.push(`建议后续安排在${peakHourText}（${displayName}效率最高时段）`);
-      }
+      let core = `第${meetingCount}次互动`;
+      if (avgIntervalText) core += `·${avgIntervalText}`;
+      segments.push(core);
+      if (peakHourText) segments.push(`最佳时段${peakHourText}`);
     } else if (meetingCount === 1) {
-      insightParts.push(`首次与${displayName}相关的事项，建议记录关键细节以便后续跟进`);
+      segments.push(`首次涉及${displayName}`);
     }
 
-    // Team collaboration insights
-    if (teamInsights?.matchedUser) {
+    if (teamInsights?.matchedUser && teamInsights.sharedTaskCount > 0) {
       const ti = teamInsights;
-      if (ti.sharedTaskCount > 0) {
-        insightParts.push(`团队数据：${displayName}参与了${ti.sharedTaskCount}个共享约定，完成率${ti.completionRate}%`);
-      }
-      if (ti.avgResponseDays > 0) {
-        insightParts.push(`平均${humanizeDays(ti.avgResponseDays)}完成分配的约定`);
-      }
-      if (ti.coAssignedWith.length > 0) {
-        const coNames = ti.coAssignedWith.map(c => `${c.name}(${c.count}次)`).join("、");
-        insightParts.push(`常与${coNames}协作`);
-      }
-      if (ti.commentCount > 0) {
-        insightParts.push(`相关约定共${ti.commentCount}条讨论`);
-      }
+      let teamPart = `团队${ti.sharedTaskCount}项·完成率${ti.completionRate}%`;
+      if (ti.avgResponseDays > 0) teamPart += `·响应${humanizeDays(ti.avgResponseDays)}`;
+      segments.push(teamPart);
+      if (ti.completionRate < 50 && ti.sharedTaskCount >= 2) segments.push("⚡需跟进");
+      else if (ti.completionRate >= 80) segments.push("✓可委派");
+    }
+
+    if (segments.length > 0) {
+      insightParts.push(`${displayName}：${segments.join(" | ")}`);
     }
   });
-  const insightText = insightParts.length > 0 ? insightParts.join("。") + "。" : null;
+  const insightText = insightParts.length > 0 ? insightParts.join("；") : null;
 
   // People tags
   const peopleTags = relatedPeople.map(r => ({
@@ -324,8 +317,8 @@ function TimelineItem({ event, relationships, allTasks, teamUsers, comments }) {
                         const days = moment().diff(moment(r.last_interaction_date), "days");
                         const favors = (r.favors || []).filter(f => f.type === "received");
                         const dn = r.nickname || r.name;
-                        let msg = `已${humanizeDays(days)}未联系${dn}，建议：1) 发送问候`;
-                        if (favors.length > 0) msg += ` 2) 约饭回请（上次${favors[0].description}）`;
+                        let msg = `${dn}·${humanizeDays(days)}未联系`;
+                        if (favors.length > 0) msg += `·欠人情(${favors[0].description})`;
                         return msg;
                       }).join("；")}
                     </p>
@@ -338,18 +331,9 @@ function TimelineItem({ event, relationships, allTasks, teamUsers, comments }) {
                       <strong className="text-blue-800">团队关联：</strong>
                       {teamRelated.map(({ person: r, ti }) => {
                         const dn = r.nickname || r.name;
-                        const parts = [];
-                        parts.push(`${dn}在团队中有${ti.sharedTaskCount}个共享约定`);
-                        if (ti.completionRate > 0) parts.push(`完成率${ti.completionRate}%`);
-                        if (ti.coAssignedWith.length > 0) {
-                          parts.push(`常与${ti.coAssignedWith[0].name}协作`);
-                        }
-                        if (ti.completionRate < 50 && ti.sharedTaskCount >= 2) {
-                          parts.push("建议主动跟进进度");
-                        } else if (ti.completionRate >= 80) {
-                          parts.push("执行力佳，可委派更多事项");
-                        }
-                        return parts.join("，");
+                        let msg = `${dn}·${ti.sharedTaskCount}项共享·${ti.completionRate}%完成`;
+                        if (ti.coAssignedWith.length > 0) msg += `·常协作${ti.coAssignedWith[0].name}`;
+                        return msg;
                       }).join("；")}
                     </p>
                   </div>

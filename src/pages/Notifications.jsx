@@ -21,6 +21,7 @@ export default function NotificationsPage() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("executions");
   const [advisorExecution, setAdvisorExecution] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
@@ -112,7 +113,17 @@ export default function NotificationsPage() {
   const filteredExecutions = executions.filter(e => {
     const catMatch = activeFilter === "all" || e.category === activeFilter;
     const srcMatch = sourceFilter === "all" || e.ai_parsed_result?.source === sourceFilter;
-    return catMatch && srcMatch;
+    let statusMatch = true;
+    if (statusFilter === "parsing") {
+      statusMatch = e.execution_status === "parsing";
+    } else if (statusFilter === "completed") {
+      statusMatch = e.execution_status === "completed";
+    } else if (statusFilter === "waiting") {
+      statusMatch = e.execution_status === "waiting_confirm" || e.execution_status === "executing";
+    } else if (statusFilter === "failed") {
+      statusMatch = e.execution_status === "failed";
+    }
+    return catMatch && srcMatch && statusMatch;
   });
 
   // Compute active sources for filter buttons
@@ -167,7 +178,7 @@ export default function NotificationsPage() {
         </div>
 
         <SmartInputBar />
-        <ExecutionStatusCards executions={executions} />
+        <ExecutionStatusCards executions={executions} activeStatus={statusFilter} onStatusClick={setStatusFilter} />
 
         {/* Tab switch */}
         <div className="flex items-center gap-3 border-b border-slate-200 pb-0">

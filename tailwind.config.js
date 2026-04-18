@@ -17,6 +17,7 @@ module.exports = {
       "bg-orange-50", "text-orange-600",
       "bg-pink-50", "text-pink-700",
       "border-l-4", "border-yellow-300", "bg-yellow-50", "text-yellow-900", "text-yellow-800",
+      "ring-emerald-300", "ring-amber-300", "ring-red-300",
     ],
   theme: {
   	extend: {

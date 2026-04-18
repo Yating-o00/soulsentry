@@ -88,52 +88,45 @@ function buildTaskContext(task, allTasks, relationships, behaviors, completions)
 }
 
 function buildPrompt(task, ctx) {
-  let prompt = `你是一个智能记忆助手，能从用户的真实行为数据中提炼深度洞察。请基于以下约定和用户的真实历史数据，给出精准、具体、可执行的记忆洞察建议。
+  // Determine which insight type is most relevant for THIS specific task
+  const hasPeople = ctx.relatedPeople.length > 0;
+  const isOverdue = task.status === "pending" && task.reminder_time && new Date(task.reminder_time) < new Date();
+  const hasTimeData = ctx.peakHour && ctx.avgDelayMinutes !== null;
 
-## 当前约定
-- 标题: ${task.title}
-- 描述: ${task.description || "无"}
-- 分类: ${task.category || "其他"}
-- 优先级: ${task.priority || "中"}
-- 状态: ${task.status}
-- 创建时间: ${task.created_date}
-- 提醒时间: ${task.reminder_time || "未设置"}
-- 完成时间: ${task.completed_at || "未完成"}
-- 标签: ${(task.tags || []).join(", ") || "无"}
-- 重复规则: ${task.repeat_rule || "无"}
+  let prompt = `你是精准记忆助手。根据这个约定和数据，只给出1条最关键的洞察。
 
-## 用户真实行为数据
+约定：${task.title}${task.description ? `（${task.description}）` : ""}
+分类：${task.category || "其他"} | 优先级：${task.priority || "中"} | 状态：${task.status}
+提醒时间：${task.reminder_time || "未设置"}`;
 
-### Lv1 记录层（基础记忆）
-- 高效时段: ${ctx.peakHour ? `${ctx.peakHour}附近` : "数据积累中"}
-- 高产日: ${ctx.peakDay || "数据积累中"}
-- 同类约定(${task.category}): 共${ctx.categoryTotal}个，完成${ctx.categoryCompleted}个，完成率${ctx.categoryCompletionRate}%
-- 时间估算偏差: ${ctx.avgDelayMinutes !== null ? (ctx.avgDelayMinutes > 0 ? `平均延迟${ctx.avgDelayMinutes}分钟` : `提前${Math.abs(ctx.avgDelayMinutes)}分钟`) : "数据不足"}
-- 固定日程: ${ctx.recurringPatterns.length > 0 ? ctx.recurringPatterns.join("、") : "暂无"}`;
-
-  if (ctx.relatedPeople.length > 0) {
-    prompt += `\n\n### Lv2 关系层（关联记忆）`;
-    ctx.relatedPeople.forEach(p => {
-      prompt += `\n- ${p.name}(${p.type}): 亲密度${p.closeness}/10, 互动${p.interactionCount}次`;
-      if (p.daysSinceContact !== null) prompt += `, ${p.daysSinceContact}天未联系`;
-      if (p.contactOverdue) prompt += `(已超过建议联系频率!)`;
-      if (p.unreturnedFavors > 0) prompt += `, 有${p.unreturnedFavors}笔人情未还(${p.lastFavorDesc})`;
-      if (p.notes) prompt += `, 备注: ${p.notes}`;
-    });
+  // Only include the most relevant data section
+  if (hasPeople) {
+    const p = ctx.relatedPeople[0];
+    prompt += `\n\n关联人物：${p.name}(${p.type})，互动${p.interactionCount}次`;
+    if (p.daysSinceContact !== null) prompt += `，${p.daysSinceContact}天未联系`;
+    if (p.contactOverdue) prompt += `（超期）`;
+    if (p.unreturnedFavors > 0) prompt += `，欠人情${p.unreturnedFavors}笔(${p.lastFavorDesc})`;
+    if (p.preferred_time) prompt += `，偏好时段${p.preferred_time}`;
   }
 
-  prompt += `\n\n### Lv3 认知层（预测记忆）
-- 当前逾期约定: ${ctx.overdueCount}个
-- 连续打卡: ${ctx.streak}天
-- 低能量日: ${ctx.lowEnergyDay || "未识别"}
+  if (hasTimeData) {
+    prompt += `\n高效时段：${ctx.peakHour}附近 | 高产日：${ctx.peakDay || "未知"}`;
+    prompt += `\n时间偏差：${ctx.avgDelayMinutes > 0 ? `平均延迟${ctx.avgDelayMinutes}分钟` : `提前${Math.abs(ctx.avgDelayMinutes)}分钟`}`;
+  }
 
-## 要求
-1. 时间模式洞察：基于用户真实高效时段和偏差数据，给出具体的时间安排建议
-2. 执行建议：结合同类任务完成率和当前状态，给出可执行的行动建议
-3. 关系/人情洞察：如果约定涉及关联人物，给出人际互动建议（如联系频率、人情往来提醒）
-4. 风险提示：基于逾期数量、时间偏差等数据给出预警
+  if (ctx.overdueCount > 3) {
+    prompt += `\n当前逾期${ctx.overdueCount}个约定`;
+  }
 
-请用简洁自然的中文，每条洞察不超过2句话。返回JSON格式。`;
+  prompt += `\n\n## 规则
+- 只输出1条最刚需的洞察，选最相关的类型：
+  · 涉及人物 → 输出人情/关系提醒（如"第N次与XX会面，间隔X周，建议X点安排"）
+  · 有时间偏差 → 输出时间调整建议（一句话，含具体数字）
+  · 逾期严重 → 输出风险预警（一句话）
+  · 其他 → 输出执行建议（一句话）
+- 每条不超过30字，用数据说话，不要空泛建议
+- type字段填：time / action / relationship / risk 其中之一
+- 返回JSON`;
 
   return prompt;
 }
@@ -185,10 +178,8 @@ export default function TaskMemoryInsight({ task }) {
       response_json_schema: {
         type: "object",
         properties: {
-          time_pattern: { type: "string", description: "时间模式洞察" },
-          suggestion: { type: "string", description: "执行建议" },
-          relationship_insight: { type: "string", description: "关系/人情洞察，无则空字符串" },
-          risk: { type: "string", description: "风险提示，无则空字符串" },
+          type: { type: "string", description: "洞察类型: time/action/relationship/risk" },
+          insight: { type: "string", description: "一句话洞察，不超过30字" },
         }
       }
     });
@@ -216,60 +207,30 @@ export default function TaskMemoryInsight({ task }) {
             className="overflow-hidden"
           >
             {loading ? (
-              <div className="flex items-center gap-2 mt-2 p-3 bg-[#384877]/5 rounded-xl">
-                <Loader2 className="w-4 h-4 text-[#384877] animate-spin" />
-                <span className="text-xs text-[#384877]">正在整合约定、关系、行为数据...</span>
+              <div className="flex items-center gap-2 mt-2 p-2.5 bg-[#384877]/5 rounded-xl">
+                <Loader2 className="w-3.5 h-3.5 text-[#384877] animate-spin" />
+                <span className="text-[11px] text-[#384877]">分析中...</span>
               </div>
-            ) : insight ? (
-              <div className="mt-2 space-y-1.5">
-                {/* 时间模式 */}
-                {insight.time_pattern && (
-                  <div className="p-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
-                    <div className="flex items-start gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-indigo-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <span className="text-[11px] font-semibold text-indigo-800">时间模式：</span>
-                        <span className="text-[11px] text-indigo-700 leading-relaxed">{insight.time_pattern}</span>
+            ) : insight?.insight ? (
+              <div className="mt-2">
+                {(() => {
+                  const styles = {
+                    time: { bg: "bg-indigo-50", border: "border-indigo-100", icon: Clock, iconColor: "text-indigo-600", textColor: "text-indigo-700" },
+                    action: { bg: "bg-purple-50/60", border: "border-purple-100", icon: Sparkles, iconColor: "text-purple-600", textColor: "text-purple-700" },
+                    relationship: { bg: "bg-yellow-50", border: "border-yellow-300 border-l-4", icon: Users, iconColor: "text-amber-600", textColor: "text-yellow-900" },
+                    risk: { bg: "bg-red-50", border: "border-red-100", icon: AlertTriangle, iconColor: "text-red-500", textColor: "text-red-600" },
+                  };
+                  const s = styles[insight.type] || styles.action;
+                  const IconComp = s.icon;
+                  return (
+                    <div className={`p-2.5 ${s.bg} rounded-xl ${s.border}`}>
+                      <div className="flex items-start gap-1.5">
+                        <IconComp className={`w-3.5 h-3.5 ${s.iconColor} mt-0.5 flex-shrink-0`} />
+                        <span className={`text-[11px] ${s.textColor} leading-relaxed`}>{insight.insight}</span>
                       </div>
                     </div>
-                  </div>
-                )}
-                {/* 执行建议 */}
-                {insight.suggestion && (
-                  <div className="p-2.5 bg-purple-50/60 rounded-xl border border-purple-100">
-                    <div className="flex items-start gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <span className="text-[11px] font-semibold text-purple-800">执行建议：</span>
-                        <span className="text-[11px] text-purple-700 leading-relaxed">{insight.suggestion}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {/* 关系洞察 */}
-                {insight.relationship_insight && (
-                  <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200">
-                    <div className="flex items-start gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <span className="text-[11px] font-semibold text-amber-800">人情追踪：</span>
-                        <span className="text-[11px] text-amber-700 leading-relaxed">{insight.relationship_insight}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {/* 风险提示 */}
-                {insight.risk && (
-                  <div className="p-2.5 bg-red-50 rounded-xl border border-red-100">
-                    <div className="flex items-start gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <span className="text-[11px] font-semibold text-red-700">风险预警：</span>
-                        <span className="text-[11px] text-red-600 leading-relaxed">{insight.risk}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             ) : null}
           </motion.div>

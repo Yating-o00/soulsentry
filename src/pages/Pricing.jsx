@@ -57,7 +57,7 @@ export default function Pricing() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
-          <Badge className="mb-4 bg-gradient-to-r from-amber-400 to-amber-500 text-white border-0 text-sm px-4 py-1.5">
+          <Badge className="mb-4 bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white border-0 text-sm px-4 py-1.5">
             🚀 智能增强 · AI驱动
           </Badge>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">选择适合你的计划</h1>
@@ -66,16 +66,16 @@ export default function Pricing() {
 
         {/* 当前余额卡片 */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <Card className="mb-8 border-0 shadow-lg bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 overflow-hidden">
+          <Card className="mb-8 border-0 shadow-lg bg-gradient-to-r from-[#384877]/5 via-[#3b5aa2]/8 to-[#384877]/5 overflow-hidden">
             <div className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
                   <Coins className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm text-amber-700 font-medium">我的 AI 点数</p>
+                  <p className="text-sm text-[#384877] font-medium">我的 AI 点数</p>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-slate-900">
+                    <span className="text-3xl font-bold text-[#384877]">
                       {loading ? "..." : credits ?? 0}
                     </span>
                     <span className="text-slate-500 text-sm">点可用</span>
@@ -87,7 +87,7 @@ export default function Pricing() {
                   </div>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)} className="text-amber-700 border-amber-300 hover:bg-amber-100">
+              <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)} className="text-[#384877] border-[#384877]/30 hover:bg-[#384877]/5">
                 <History className="w-4 h-4 mr-1" />
                 消费明细
               </Button>
@@ -114,7 +114,7 @@ export default function Pricing() {
                   } transition-all duration-300`}>
                     {meta.badge && (
                       <div className="absolute top-3 right-3">
-                        <Badge className="bg-gradient-to-r from-amber-400 to-amber-500 text-white border-0 text-xs">{meta.badge}</Badge>
+                        <Badge className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white border-0 text-xs shadow-sm">{meta.badge}</Badge>
                       </div>
                     )}
                     <div className="p-6">
@@ -127,7 +127,7 @@ export default function Pricing() {
                         <span className="text-slate-500 text-sm"> /月</span>
                       </div>
                       {planConfig.monthlyBonus > 0 && (
-                        <div className="mb-4 flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg">
+                        <div className="mb-4 flex items-center gap-1.5 text-sm text-[#384877] bg-[#384877]/5 px-3 py-1.5 rounded-lg">
                           <Coins className="w-4 h-4" />
                           每月赠送 {planConfig.monthlyBonus} AI 点数
                         </div>

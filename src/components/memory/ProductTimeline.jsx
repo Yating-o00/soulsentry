@@ -17,8 +17,8 @@ const EVENT_CONFIG = {
 };
 
 const MEMORY_TYPE_CONFIG = {
-  work: { label: "工作记忆", gradient: "bg-gradient-to-r from-purple-500 to-indigo-500" },
-  personal: { label: "个人记忆", gradient: "bg-gradient-to-r from-blue-400 to-cyan-400" },
+  work: { label: "工作记忆", gradient: "bg-gradient-to-r from-red-400 to-orange-400" },
+  personal: { label: "人际记忆", gradient: "bg-gradient-to-r from-pink-400 to-rose-400" },
   health: { label: "健康记忆", gradient: "bg-gradient-to-r from-emerald-400 to-teal-400" },
   study: { label: "学习记忆", gradient: "bg-gradient-to-r from-indigo-400 to-violet-400" },
   family: { label: "家庭记忆", gradient: "bg-gradient-to-r from-pink-400 to-rose-400" },
@@ -32,16 +32,77 @@ const CATEGORY_MAP = {
   family: "家庭", shopping: "购物", finance: "理财", other: "其他"
 };
 
-// Infer emotion from task context
+// Infer emotion from task context — more nuanced
 function inferEmotion(event) {
-  if (event.type === "task_completed") return { label: "积极", icon: Star, color: "text-yellow-500" };
   if (event.type === "task_overdue") return { label: "焦虑", icon: AlertTriangle, color: "text-red-400" };
-  if (event.rawCategory === "family") return { label: "温暖", icon: Heart, color: "text-green-500" };
-  if (event.rawCategory === "health") return { label: "关注", icon: Heart, color: "text-emerald-500" };
+  if (event.rawCategory === "family") return { label: "温暖", icon: Heart, color: "text-emerald-500" };
+  if (event.rawCategory === "personal") return { label: "温暖", icon: Heart, color: "text-emerald-500" };
+  if (event.rawCategory === "health") return { label: "关注", icon: Heart, color: "text-teal-500" };
+  if (event.type === "task_completed") return { label: "积极", icon: Star, color: "text-yellow-500" };
+  if (event.rawCategory === "work") return { label: "积极", icon: Star, color: "text-yellow-500" };
   return null;
 }
 
-function TimelineItem({ event, relationships }) {
+// Helper: humanize days into natural language
+function humanizeDays(days) {
+  if (days < 7) return `${days}天`;
+  if (days < 30) return `${Math.round(days / 7)}周`;
+  if (days < 365) return `${Math.round(days / 30)}个月`;
+  return `${(days / 365).toFixed(1)}年`;
+}
+
+// Helper: compute person-specific insights from all tasks
+function buildPersonInsights(person, allTasks) {
+  const name = (person.name || "").toLowerCase();
+  const nick = (person.nickname || "").toLowerCase();
+
+  // Find all tasks related to this person
+  const relatedTasks = (allTasks || []).filter(t => {
+    if (t.deleted_at) return false;
+    const text = ((t.title || "") + " " + (t.description || "")).toLowerCase();
+    return (name && text.includes(name)) || (nick && text.includes(nick));
+  });
+
+  const meetingCount = relatedTasks.length;
+  const displayName = person.nickname || person.name;
+
+  // Calculate average interval between meetings
+  let avgIntervalText = "";
+  if (relatedTasks.length >= 2) {
+    const dates = relatedTasks
+      .map(t => t.completed_at || t.reminder_time || t.created_date)
+      .filter(Boolean)
+      .map(d => moment(d))
+      .sort((a, b) => a - b);
+    if (dates.length >= 2) {
+      const totalDays = dates[dates.length - 1].diff(dates[0], "days");
+      const avgDays = Math.round(totalDays / (dates.length - 1));
+      avgIntervalText = `平均间隔${humanizeDays(avgDays)}`;
+    }
+  }
+
+  // Find peak hour for this person's tasks
+  let peakHourText = "";
+  const hourCounts = {};
+  relatedTasks.forEach(t => {
+    const time = t.completed_at || t.reminder_time;
+    if (time) {
+      const h = moment(time).hour();
+      hourCounts[h] = (hourCounts[h] || 0) + 1;
+    }
+  });
+  const peakHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0];
+  if (peakHour && parseInt(peakHour[1]) >= 2) {
+    const h = parseInt(peakHour[0]);
+    const period = h < 12 ? "上午" : h < 18 ? "下午" : "晚上";
+    const displayH = h > 12 ? h - 12 : h;
+    peakHourText = `${period}${displayH}-${displayH + 2}点`;
+  }
+
+  return { meetingCount, avgIntervalText, peakHourText, displayName };
+}
+
+function TimelineItem({ event, relationships, allTasks }) {
   const config = EVENT_CONFIG[event.type] || EVENT_CONFIG.task_created;
   const Icon = config.icon;
   const memoryType = MEMORY_TYPE_CONFIG[event.rawCategory] || MEMORY_TYPE_CONFIG.other;
@@ -55,22 +116,21 @@ function TimelineItem({ event, relationships }) {
     return (name && combinedText.includes(name)) || (nick && combinedText.includes(nick));
   });
 
-  // Build inline insight
+  // Build humanized inline insight with real data
   const insightParts = [];
   relatedPeople.forEach(r => {
-    if (r.interaction_count > 1) {
-      insightParts.push(`这是您第${r.interaction_count}次与${r.nickname || r.name}相关的事项`);
-    }
-    if (r.last_interaction_date) {
-      const days = moment().diff(moment(r.last_interaction_date), "days");
-      if (days > (r.contact_frequency_days || 30)) {
-        insightParts.push(`已${days}天未联系${r.name}，建议尽快互动`);
+    const { meetingCount, avgIntervalText, peakHourText, displayName } = buildPersonInsights(r, allTasks);
+
+    if (meetingCount > 1) {
+      let sentence = `这是您第${meetingCount}次与${displayName}会面`;
+      if (avgIntervalText) sentence += `，${avgIntervalText}`;
+      insightParts.push(sentence);
+
+      if (peakHourText) {
+        insightParts.push(`建议后续安排在${peakHourText}（${displayName}效率最高时段）`);
       }
-    }
-    if (r.notes) insightParts.push(r.notes);
-    const unreturned = (r.favors || []).filter(f => f.type === "received");
-    if (unreturned.length > 0) {
-      insightParts.push(`人情待回：${unreturned[0].description}`);
+    } else if (meetingCount === 1) {
+      insightParts.push(`首次与${displayName}相关的事项，建议记录关键细节以便后续跟进`);
     }
   });
   const insightText = insightParts.length > 0 ? insightParts.join("。") + "。" : null;
@@ -153,9 +213,9 @@ function TimelineItem({ event, relationships }) {
 
           {/* Inline Memory Insight */}
           {insightText && (
-            <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-              <p className="text-xs text-indigo-800 leading-relaxed">
-                <strong className="text-indigo-900">记忆洞察：</strong>{insightText}
+            <div className="p-3 bg-yellow-50 rounded-xl border-l-4 border-yellow-300">
+              <p className="text-xs text-yellow-900 leading-relaxed">
+                <strong className="text-yellow-800">记忆洞察：</strong>{insightText}
               </p>
             </div>
           )}
@@ -165,7 +225,7 @@ function TimelineItem({ event, relationships }) {
             const days = r.last_interaction_date ? moment().diff(moment(r.last_interaction_date), "days") : 0;
             return days > (r.contact_frequency_days || 30);
           }) && (
-            <div className="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-200">
+            <div className="mt-2 p-3 bg-yellow-50 rounded-xl border-l-4 border-yellow-300">
               <div className="flex items-start gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-amber-700 leading-relaxed">
@@ -176,8 +236,9 @@ function TimelineItem({ event, relationships }) {
                   }).map(r => {
                     const days = moment().diff(moment(r.last_interaction_date), "days");
                     const favors = (r.favors || []).filter(f => f.type === "received");
-                    let msg = `已${days}天未联系${r.name}，建议：1) 发送问候`;
-                    if (favors.length > 0) msg += ` 2) 回请（上次${favors[0].description}）`;
+                    const displayName = r.nickname || r.name;
+                    let msg = `已${humanizeDays(days)}未联系${displayName}，建议：1) 发送问候`;
+                    if (favors.length > 0) msg += ` 2) 约饭回请（上次${favors[0].description}）`;
                     return msg;
                   }).join("；")}
                 </p>
@@ -197,7 +258,7 @@ function TimelineItem({ event, relationships }) {
   );
 }
 
-export default function ProductTimeline({ tasks, notes, executions, relationships }) {
+export default function ProductTimeline({ tasks = [], notes, executions, relationships }) {
   const [limit, setLimit] = useState(30);
   const [typeFilter, setTypeFilter] = useState("all");
 
@@ -331,6 +392,7 @@ export default function ProductTimeline({ tasks, notes, executions, relationship
                 key={`${event.type}-${event.sourceId}-${idx}`}
                 event={event}
                 relationships={relationships}
+                allTasks={tasks}
               />
             ))}
             {allEvents.length > limit && (

@@ -210,17 +210,48 @@ ${new Date().toLocaleString('zh-CN')}
           toast.info("此建议需要手动执行");
       }
 
-      await base44.entities.TaskExecution.update(execution.id, {
-        execution_status: suggestion.action === "complete" ? "completed" : "executing",
-        execution_steps: [
-          ...(execution.execution_steps || []),
+      // 尝试将 AI 建议匹配到已有执行链路步骤——命中则标记完成，否则才追加新步骤
+      const ACTION_STEP_KEYWORDS = {
+        sync_calendar: ["同步日历", "日历同步", "日历", "calendar"],
+        set_reminder: ["提醒", "推送提醒", "设置提醒", "多级提醒"],
+        send_email: ["发送通知", "邮件", "通知", "发邮件"],
+        link_note: ["准备资料", "记录", "笔记", "心签"],
+        complete: ["记录执行", "完成", "标记完成"],
+        update_priority: ["优先级"],
+        postpone: ["推迟", "延期"],
+        split: ["拆分", "整理清单", "清单"],
+      };
+      const keywords = ACTION_STEP_KEYWORDS[suggestion.action] || [];
+      const prevSteps = execution.execution_steps || [];
+      const matchIdx = prevSteps.findIndex(s =>
+        s && s.status !== "completed" &&
+        keywords.some(k => (s.step_name || "").toLowerCase().includes(k.toLowerCase()))
+      );
+
+      let nextSteps;
+      if (matchIdx >= 0) {
+        // 命中：把已有步骤更新为 completed，不再追加
+        nextSteps = prevSteps.map((s, idx) => idx === matchIdx
+          ? { ...s, status: "completed", detail: s.detail || `已采纳AI建议：${suggestion.title}`, timestamp: new Date().toISOString() }
+          : s
+        );
+      } else {
+        // 未命中：作为新步骤追加
+        nextSteps = [
+          ...prevSteps,
           {
             step_name: `AI建议: ${suggestion.title}`,
             status: "completed",
             detail: `已采纳并执行: ${suggestion.description?.slice(0, 50)}`,
             timestamp: new Date().toISOString(),
           }
-        ]
+        ];
+      }
+
+      const allDone = nextSteps.length > 0 && nextSteps.every(s => s.status === "completed");
+      await base44.entities.TaskExecution.update(execution.id, {
+        execution_status: suggestion.action === "complete" || allDone ? "completed" : "executing",
+        execution_steps: nextSteps,
       });
 
       queryClient.invalidateQueries({ queryKey: ['tasks'] });

@@ -15,6 +15,7 @@ import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import TaskShareCard from "../components/tasks/TaskShareCard";
+import GlobalSearch from "../components/search/GlobalSearch";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -31,6 +32,7 @@ export default function Tasks() {
   
   // Search & Selection State
   const [searchQuery, setSearchQuery] = useState("");
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [filters, setFilters] = useState({ 
@@ -282,16 +284,25 @@ export default function Tasks() {
 
         {/* Toolbar: Search, View, Selection */}
         <div className="bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-slate-200/60 mb-8 flex flex-col md:flex-row items-center justify-between gap-3 sticky top-4 z-20">
-           {/* Search */}
-           <div className="relative w-full md:max-w-md group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+           {/* Search - dual mode: local filter + global search trigger */}
+           <div className="relative w-full md:max-w-md group flex items-center">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" />
               <input 
                 type="text" 
                 placeholder="搜索约定..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-transparent border-none rounded-xl text-sm focus:ring-0 transition-all placeholder:text-slate-400"
+                className="w-full pl-9 pr-24 py-2 bg-transparent border-none rounded-xl text-sm focus:ring-0 transition-all placeholder:text-slate-400"
               />
+              <button
+                type="button"
+                onClick={() => setGlobalSearchOpen(true)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors flex items-center gap-1"
+                title="全局搜索任务、笔记和知识库"
+              >
+                <Sparkles className="w-3 h-3" />
+                全局搜索
+              </button>
            </div>
 
            {/* Controls */}
@@ -503,6 +514,9 @@ export default function Tasks() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Global Search */}
+      <GlobalSearch open={globalSearchOpen} onOpenChange={setGlobalSearchOpen} />
 
       {/* Share Task Card */}
       {sharingTask && (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Search, Loader2, ListTodo, StickyNote, User, ArrowRight, Command, Calendar, Clock, Sparkles } from "lucide-react";
+import { Search, Loader2, ListTodo, StickyNote, User, ArrowRight, Command, Calendar, Clock, Sparkles, BookOpen } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
@@ -13,14 +13,14 @@ import { zhCN } from "date-fns/locale";
 
 export default function GlobalSearch({ open, onOpenChange }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState({ tasks: [], notes: [], users: [] });
+  const [results, setResults] = useState({ tasks: [], notes: [], knowledge: [], users: [] });
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const performSearch = useCallback(
     _.debounce(async (searchTerm) => {
       if (!searchTerm.trim()) {
-        setResults({ tasks: [], notes: [], users: [] });
+        setResults({ tasks: [], notes: [], knowledge: [], users: [] });
         setIsLoading(false);
         return;
       }
@@ -29,31 +29,37 @@ export default function GlobalSearch({ open, onOpenChange }) {
       try {
         const lowerTerm = searchTerm.toLowerCase();
 
-        // Parallel fetch
-        const [tasks, notes, users] = await Promise.all([
+        // Parallel fetch (fuzzy match by partial substring, case-insensitive)
+        const [tasks, notes, knowledge, users] = await Promise.all([
           base44.entities.Task.list(),
           base44.entities.Note.list(),
-          base44.entities.User.list()
+          base44.entities.KnowledgeBase.list().catch(() => []),
+          base44.entities.User.list().catch(() => [])
         ]);
 
+        const matchStr = (s) => s && typeof s === 'string' && s.toLowerCase().includes(lowerTerm);
+        const matchArr = (arr) => Array.isArray(arr) && arr.some(item => matchStr(item));
+
         const matchedTasks = tasks.filter(t => 
-          (t.title && typeof t.title === 'string' && t.title.toLowerCase().includes(lowerTerm)) || 
-          (t.description && typeof t.description === 'string' && t.description.toLowerCase().includes(lowerTerm))
-        ).slice(0, 5);
+          !t.deleted_at && (matchStr(t.title) || matchStr(t.description) || matchArr(t.tags))
+        ).slice(0, 8);
 
         const matchedNotes = notes.filter(n => 
-          (n.plain_text && typeof n.plain_text === 'string' && n.plain_text.toLowerCase().includes(lowerTerm)) || 
-          (n.content && typeof n.content === 'string' && n.content.toLowerCase().includes(lowerTerm))
-        ).slice(0, 5);
+          !n.deleted_at && (matchStr(n.plain_text) || matchStr(n.content) || matchArr(n.tags))
+        ).slice(0, 8);
+
+        const matchedKnowledge = knowledge.filter(k => 
+          matchStr(k.title) || matchStr(k.content) || matchStr(k.summary) || matchArr(k.tags) || matchArr(k.key_points)
+        ).slice(0, 8);
 
         const matchedUsers = users.filter(u => 
-          (u.full_name && typeof u.full_name === 'string' && u.full_name.toLowerCase().includes(lowerTerm)) || 
-          (u.email && typeof u.email === 'string' && u.email.toLowerCase().includes(lowerTerm))
+          matchStr(u.full_name) || matchStr(u.email)
         ).slice(0, 5);
 
         setResults({
           tasks: matchedTasks,
           notes: matchedNotes,
+          knowledge: matchedKnowledge,
           users: matchedUsers
         });
 
@@ -72,16 +78,19 @@ export default function GlobalSearch({ open, onOpenChange }) {
 
   const handleSelect = (type, id) => {
     onOpenChange(false);
+    setQuery("");
     if (type === 'task') {
       navigate(`${createPageUrl('Tasks')}?taskId=${id}`);
     } else if (type === 'note') {
       navigate(`${createPageUrl('Notes')}?noteId=${id}`);
+    } else if (type === 'knowledge') {
+      navigate(`${createPageUrl('KnowledgeBase')}?id=${id}`);
     } else if (type === 'user') {
       navigate(`${createPageUrl('Teams')}`);
     }
   };
 
-  const hasResults = results.tasks.length > 0 || results.notes.length > 0 || results.users.length > 0;
+  const hasResults = results.tasks.length > 0 || results.notes.length > 0 || results.knowledge.length > 0 || results.users.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,7 +99,7 @@ export default function GlobalSearch({ open, onOpenChange }) {
         <div className="relative flex items-center border-b border-slate-100/80 px-4 py-4 bg-white/50">
           <Search className="w-5 h-5 text-blue-500 mr-3 animate-pulse" />
           <Input 
-            placeholder="搜索约定、灵感心签、团队成员..." 
+            placeholder="搜索约定、灵感心签、知识库、团队成员..." 
             className="border-0 bg-transparent focus-visible:ring-0 text-[17px] h-auto p-0 placeholder:text-slate-400 font-medium text-slate-700"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -214,6 +223,38 @@ export default function GlobalSearch({ open, onOpenChange }) {
                                 {format(new Date(note.created_date), 'yyyy年MM月dd日', { locale: zhCN })}
                               </div>
                            </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Knowledge Base Section */}
+                {results.knowledge.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 flex items-center gap-2">
+                      <BookOpen className="w-3.5 h-3.5" /> 知识库
+                    </h3>
+                    <div className="grid gap-1">
+                      {results.knowledge.map(item => (
+                        <motion.button
+                          layout
+                          key={item.id}
+                          onClick={() => handleSelect('knowledge', item.id)}
+                          className="w-full text-left px-3 py-3 rounded-xl hover:bg-emerald-50/50 transition-all group border border-transparent hover:border-emerald-100 flex items-center gap-4"
+                        >
+                           <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0 text-emerald-600">
+                              <BookOpen className="w-4 h-4" />
+                           </div>
+                           <div className="flex-1 min-w-0">
+                              <div className="text-sm font-semibold text-slate-700 group-hover:text-emerald-700 transition-colors truncate mb-0.5">
+                                  {item.title || "无标题"}
+                              </div>
+                              <div className="text-xs text-slate-400 truncate">
+                                {item.summary || (item.content && typeof item.content === 'string' ? item.content.slice(0, 60) : '')}
+                              </div>
+                           </div>
+                           <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
                         </motion.button>
                       ))}
                     </div>

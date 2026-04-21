@@ -40,9 +40,20 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("MOONSHOT_API_KEY");
     if (!apiKey) return Response.json({ error: 'MOONSHOT_API_KEY not set' }, { status: 500 });
 
+    const timeRules = `
+【时间输出规则 - 严格遵守】
+- 用户时区: Asia/Shanghai (UTC+8)
+- 规划日期: ${planDate}
+- 所有时间字段必须用 ISO 8601 带时区格式，例如："${planDate}T15:00:00+08:00"
+- key_tasks 和 focus_blocks 中，若有具体时间，reminder_time/start_time/end_time 都使用完整 ISO 格式
+- 若某任务为全天（无具体时间），reminder_time 使用 "${planDate}" 纯日期，并设置 is_all_day: true
+- 未指定结束时间的任务，可省略 end_time（后端会默认补 +1 小时）
+- 所有时间必须位于 ${planDate} 当天
+`.trim();
+
     const baseSystem = existingPlan
-      ? `你是一个智能日程助手。用户已有当日规划，现在想追加新内容。请将新内容智能融入现有规划中，避免时间冲突，保持合理节奏。\n现有规划: ${JSON.stringify(existingPlan)}\n当前日期: ${planDate}\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`
-      : `你是一个智能日程助手。请根据用户输入，为 ${planDate} 生成一份详细的日规划。严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`;
+      ? `你是一个智能日程助手。用户已有当日规划，现在想追加新内容。请将新内容智能融入现有规划中，避免时间冲突，保持合理节奏。\n现有规划: ${JSON.stringify(existingPlan)}\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`
+      : `你是一个智能日程助手。请根据用户输入，为 ${planDate} 生成一份详细的日规划。\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`;
 
     const content = await callKimi(apiKey.trim(), baseSystem, input);
     const planData = parseJSON(content);

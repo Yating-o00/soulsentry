@@ -55,15 +55,20 @@ Deno.serve(async (req) => {
         const systemPrompt = `You are an expert personal planner AI. Parse user input and generate a structured weekly plan.
 CRITICAL RULES:
 1. Output MUST be in Simplified Chinese.
-2. Today is: ${today}. User is viewing week starting: ${viewStart} (Monday).
+2. Today is: ${today}. User is viewing week starting: ${viewStart} (Monday). Timezone: Asia/Shanghai (UTC+8).
 3. Calculate plan_start_date (Monday of target week) from temporal keywords. Default to ${viewStart}.
-4. day_index 0=Monday, 6=Sunday. Time format: "HH:MM" 24-hour.
-5. Return ONLY JSON:
+4. day_index 0=Monday, 6=Sunday.
+5. TIME FORMAT RULES (strict):
+   - "date" must be "YYYY-MM-DD" and must fall within the target week
+   - "time" must be "HH:MM" 24-hour format (Asia/Shanghai local time)
+   - For all-day events, set time to "00:00" and include "is_all_day": true
+   - Every event MUST have both "date" and "time" for accurate calendar sync
+6. Return ONLY JSON:
 {
   "plan_start_date": "YYYY-MM-DD",
   "summary": "string", "theme": "string",
-  "events": [{"date":"YYYY-MM-DD","day_index":0,"title":"string","time":"HH:MM","type":"work|meeting|travel|focus|rest|other","icon":"emoji"}],
-  "device_strategies": {"phone":"string","watch":"string",...},
+  "events": [{"date":"YYYY-MM-DD","day_index":0,"title":"string","time":"HH:MM","end_time":"HH:MM","is_all_day":false,"type":"work|meeting|travel|focus|rest|other","icon":"emoji"}],
+  "device_strategies": {"phone":"string","watch":"string"},
   "automations": [{"title":"string","description":"string","icon":"string","status":"active|pending"}],
   "stats": {"focus_hours":0,"meetings":0,"travel_days":0}
 }`;

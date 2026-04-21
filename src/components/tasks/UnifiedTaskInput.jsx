@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ListTodo, Leaf, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { deepSemanticParse } from "@/components/utils/semanticParser";
+import { normalizeTaskTime } from "@/lib/timeCore";
 import SemanticPreview from "./SemanticPreview";
 
 export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange }) {
@@ -100,7 +101,9 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
 
     let category = 'personal';
     let priority = 'medium';
-    let reminderTime = new Date().toISOString();
+    let rawReminderTime = null;
+    let rawEndTime = null;
+    let isAllDay = false;
     let tags = [];
     let title = value;
     let description = "";
@@ -112,15 +115,13 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
       title = semanticAnalysis.refined_title || value;
       description = semanticAnalysis.refined_description || "";
       tags = semanticAnalysis.tags || [];
-      
+
       // Use resolved time from analysis
       const highConfTime = semanticAnalysis.time_entities?.find(t => t.resolved_datetime && t.time_confidence !== "low");
       if (highConfTime?.resolved_datetime) {
-        const parsed = new Date(highConfTime.resolved_datetime);
-        if (!isNaN(parsed.getTime())) reminderTime = parsed.toISOString();
+        rawReminderTime = highConfTime.resolved_datetime;
       }
 
-      // Add people and locations as tags
       semanticAnalysis.people?.forEach(p => { if (p.name) tags.push("@" + p.name); });
       semanticAnalysis.locations?.forEach(l => { if (l.name) tags.push("📍" + l.name); });
     }
@@ -129,15 +130,25 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
     if (mode === 'milestone') { category = 'work'; priority = 'high'; }
     else if (mode === 'life') { category = 'personal'; }
 
+    // 统一时间规范化：自动补全 end_time、推断 is_all_day
+    const normalized = normalizeTaskTime({
+      reminder_time: rawReminderTime,
+      end_time: rawEndTime,
+      is_all_day: isAllDay,
+    });
+
     onAddTask({
       title,
       description,
       category,
       priority,
       status: 'pending',
-      reminder_time: reminderTime,
+      reminder_time: normalized.reminder_time,
+      end_time: normalized.end_time,
+      is_all_day: normalized.is_all_day,
+      gcal_sync_enabled: true,
       tags: tags.length > 0 ? tags : undefined,
-      _semantic: semanticAnalysis // pass full analysis for downstream use
+      _semantic: semanticAnalysis
     });
     
     handleClear();

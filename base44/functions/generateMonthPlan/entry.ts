@@ -55,12 +55,18 @@ User Input: "${input}"
 Month: ${format(monthStart, 'yyyy-MM')}
 User Behavioral Data (Recent): ${behaviorSummary}
 
+TIME RULES (strict):
+- User timezone: Asia/Shanghai (UTC+8)
+- All deadlines MUST be in "YYYY-MM-DD" format and must fall within month ${format(monthStart, 'yyyy-MM')}
+- Milestones will be treated as all-day events on their deadline date
+- Each key_milestone must be a concrete, measurable task (not vague like "improve skills")
+
 Return JSON:
 {
   "theme": "string", "summary": "string",
   "stats": {"focus_hours": number, "milestones_count": number},
   "weeks_breakdown": [{"week_label": "string", "focus": "string", "key_events": ["string"]}],
-  "key_milestones": [{"title": "string", "deadline": "YYYY-MM-DD", "type": "work/personal/health"}],
+  "key_milestones": [{"title": "string", "deadline": "YYYY-MM-DD", "type": "work/personal/health/study"}],
   "strategies": {"work_life_balance": "string", "energy_management": "string", "behavioral_adjustment": "string"}
 }
 Constraint: Realistic plan, concrete milestones, RETURN ONLY JSON.`;

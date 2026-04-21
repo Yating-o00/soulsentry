@@ -33,6 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
+import { normalizeTimeRange } from "@/lib/timeCore";
 import AIText from "@/components/AIText";
 
 const CATEGORIES = [
@@ -534,10 +535,19 @@ ${task.description ? `描述: "${task.description}"` : ''}
         }
     }
 
+    // 统一时间规范化：确保 reminder_time/end_time/is_all_day 一致，并自动补全
+    const normalized = normalizeTimeRange({
+      reminder_time: reminderDateTime,
+      end_time: endDateTime,
+      is_all_day: task.is_all_day,
+    });
+
     const taskToSubmit = {
       ...task,
-      reminder_time: reminderDateTime.toISOString(),
-      end_time: endDateTime ? endDateTime.toISOString() : null,
+      reminder_time: normalized.reminder_time,
+      end_time: normalized.end_time,
+      is_all_day: normalized.is_all_day,
+      gcal_sync_enabled: task.gcal_sync_enabled !== false, // 默认启用日历同步
     };
 
     // 保存到离线存储

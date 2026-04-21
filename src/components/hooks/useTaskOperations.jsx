@@ -14,9 +14,8 @@ export function useTaskOperations() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       
-      // 自动同步到 Google Calendar (如果已设置提醒时间)
-      // 在后台静默执行，不阻塞用户
-      base44.functions.invoke('syncTaskToGoogleCalendar', { task_id: variables.id }).catch(console.error);
+      // Google Calendar 同步由实体自动化 autoSyncTaskToCalendar 统一处理，
+      // 此处不再手动触发，避免重复创建日历事件。
       
       // Log behavior based on what changed
       if (variables.data.status === 'completed') {
@@ -37,10 +36,8 @@ export function useTaskOperations() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       
-      // 自动同步到 Google Calendar (如果已设置提醒时间)
-      if (data && data.id) {
-        base44.functions.invoke('syncTaskToGoogleCalendar', { task_id: data.id }).catch(console.error);
-      }
+      // Google Calendar 同步由实体自动化 autoSyncTaskToCalendar 统一处理，
+      // 此处不再手动触发，避免重复创建日历事件。
       
       // 同步执行动态到通知页面（非阻塞）
       if (data && data.title) {

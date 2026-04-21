@@ -75,9 +75,29 @@ ${inputText}
 
   if (!result?.tasks || result.tasks.length === 0) return [];
 
+  // 去重辅助：标题标准化（去空格/标点/大小写）
+  const normTitle = (s) => (s || "").trim().toLowerCase().replace(/[\s\p{P}]+/gu, "");
+
+  // 预取用户最近任务用于重复检测（2天窗口内同标题+同提醒时间视为重复）
+  let recentTasks = [];
+  try {
+    recentTasks = await base44.entities.Task.list("-created_date", 50);
+  } catch (_) {
+    recentTasks = [];
+  }
+  const recentKeys = new Set(
+    recentTasks
+      .filter(rt => !rt.deleted_at)
+      .map(rt => `${normTitle(rt.title)}|${rt.reminder_time || ""}`)
+  );
+
+  // 本批次内去重
+  const batchKeys = new Set();
   const createdTasks = [];
 
   for (const t of result.tasks) {
+    if (!t.title) continue;
+
     // 使用统一时间规范化
     const normalized = normalizeTaskTime(
       {
@@ -87,6 +107,12 @@ ${inputText}
       },
       contextDate
     );
+
+    const dedupKey = `${normTitle(t.title)}|${normalized.reminder_time || ""}`;
+    if (batchKeys.has(dedupKey) || recentKeys.has(dedupKey)) {
+      continue; // 跳过与本批或近期任务重复的条目
+    }
+    batchKeys.add(dedupKey);
 
     const taskPayload = {
       title: t.title,

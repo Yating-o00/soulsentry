@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
@@ -54,6 +55,17 @@ export default function Tasks() {
   React.useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
+
+  // Auto-open task detail when navigated via ?taskId=xxx (e.g. from global search)
+  const location = useLocation();
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const taskId = params.get('taskId');
+    if (taskId && allTasks.length > 0) {
+      const found = allTasks.find(t => t.id === taskId);
+      if (found) setSelectedTask(found);
+    }
+  }, [location.search, allTasks]);
 
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
@@ -289,7 +301,7 @@ export default function Tasks() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" />
               <input 
                 type="text" 
-                placeholder="搜索约定... (按回车全局搜索)" 
+                placeholder="搜索约定..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {

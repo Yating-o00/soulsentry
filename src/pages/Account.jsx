@@ -7,13 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight, Brain } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { SUBSCRIPTION_PLANS } from "@/components/credits/creditConfig";
 import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
+import { useQuery } from "@tanstack/react-query";
+import ProductInsights from "@/components/memory/ProductInsights";
 
 export default function Account() {
   const [user, setUser] = useState(null);
@@ -26,6 +28,29 @@ export default function Account() {
   });
   const [historyOpen, setHistoryOpen] = useState(false);
 
+  // 认知洞察所需数据
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["tasks"],
+    queryFn: () => base44.entities.Task.list("-created_date", 300),
+  });
+  const { data: notes = [] } = useQuery({
+    queryKey: ["notes"],
+    queryFn: () => base44.entities.Note.list("-created_date", 200),
+  });
+  const { data: behaviors = [] } = useQuery({
+    queryKey: ["behaviors"],
+    queryFn: () => base44.entities.UserBehavior.list("-created_date", 500),
+  });
+  const { data: executions = [] } = useQuery({
+    queryKey: ["task-executions"],
+    queryFn: () => base44.entities.TaskExecution.list("-created_date", 100),
+    initialData: [],
+  });
+  const { data: relationships = [] } = useQuery({
+    queryKey: ["relationships-account"],
+    queryFn: () => base44.entities.Relationship.list("-created_date", 50),
+    initialData: [],
+  });
 
   useEffect(() => {
     loadUser();
@@ -406,6 +431,31 @@ export default function Account() {
       </motion.div>
 
       <CreditHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+
+      {/* 认知洞察 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+      >
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-indigo-600" />
+              认知洞察
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <ProductInsights
+              tasks={tasks}
+              notes={notes}
+              behaviors={behaviors}
+              executions={executions}
+              relationships={relationships}
+            />
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* 账户操作 */}
       <motion.div

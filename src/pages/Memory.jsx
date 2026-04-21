@@ -8,7 +8,6 @@ import { Brain, Clock, Zap, Target, Search, ArrowRight, TrendingUp, StickyNote, 
 import { Input } from "@/components/ui/input";
 import ProductTimeline from "@/components/memory/ProductTimeline";
 import ProductHeatmap from "@/components/memory/ProductHeatmap";
-import ProductInsights from "@/components/memory/ProductInsights";
 
 export default function Memory() {
   const [tab, setTab] = useState("timeline");
@@ -124,15 +123,12 @@ export default function Memory() {
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-        <TabsList className="bg-slate-100/80 p-1 rounded-xl w-full grid grid-cols-3">
+        <TabsList className="bg-slate-100/80 p-1 rounded-xl w-full grid grid-cols-2">
           <TabsTrigger value="timeline" className="rounded-lg text-xs md:text-sm gap-1 data-[state=active]:bg-white data-[state=active]:shadow-sm">
             <Clock className="w-4 h-4" /> 活动流
           </TabsTrigger>
           <TabsTrigger value="heatmap" className="rounded-lg text-xs md:text-sm gap-1 data-[state=active]:bg-white data-[state=active]:shadow-sm">
             <Zap className="w-4 h-4" /> 时间偏好
-          </TabsTrigger>
-          <TabsTrigger value="cognition" className="rounded-lg text-xs md:text-sm gap-1 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-            <Brain className="w-4 h-4" /> 认知洞察
           </TabsTrigger>
         </TabsList>
 
@@ -144,11 +140,6 @@ export default function Memory() {
         {/* Heatmap — from real product data */}
         <TabsContent value="heatmap">
           <ProductHeatmap tasks={tasks} notes={notes} behaviors={behaviors} />
-        </TabsContent>
-
-        {/* Cognition — from real product data */}
-        <TabsContent value="cognition">
-          <ProductInsights tasks={tasks} notes={notes} behaviors={behaviors} executions={executions} relationships={relationships} />
         </TabsContent>
       </Tabs>
     </div>

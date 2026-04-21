@@ -22,11 +22,25 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'skipped', reason: 'no reminder_time' });
     }
 
+    // 🔑 关键：从数据库重新读取 Task 的最新状态，避免竞态导致重复创建日历事件。
+    // 场景：Task create 瞬间多个事件可能并发触发本函数，payload 中的 taskData
+    // 没有 google_calendar_event_id，两次都会走 POST 新建路径 → 重复事件。
+    // 重读能拿到前一次调用已写回的 event_id，走 PUT 更新路径。
+    let freshTask = taskData;
+    if (event.entity_id) {
+      try {
+        const latest = await base44.asServiceRole.entities.Task.get(event.entity_id);
+        if (latest) freshTask = latest;
+      } catch (_) {
+        // 读取失败则回退到 payload
+      }
+    }
+
     // Handle delete event — remove from calendar
-    if (event.type === 'delete' && taskData.google_calendar_event_id) {
+    if (event.type === 'delete' && freshTask.google_calendar_event_id) {
       const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
       await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${taskData.google_calendar_event_id}`,
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${freshTask.google_calendar_event_id}`,
         { method: 'DELETE', headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
       return Response.json({ status: 'deleted_from_calendar' });
@@ -36,16 +50,16 @@ Deno.serve(async (req) => {
     const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
     const authHeader = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
 
-    const startTime = new Date(taskData.reminder_time);
-    const endTime = taskData.end_time ? new Date(taskData.end_time) : new Date(startTime.getTime() + 3600000);
+    const startTime = new Date(freshTask.reminder_time);
+    const endTime = freshTask.end_time ? new Date(freshTask.end_time) : new Date(startTime.getTime() + 3600000);
 
     const calEvent = {
-      summary: taskData.title,
-      description: taskData.description || '',
-      start: taskData.is_all_day
+      summary: freshTask.title,
+      description: freshTask.description || '',
+      start: freshTask.is_all_day
         ? { date: startTime.toISOString().split('T')[0] }
         : { dateTime: startTime.toISOString(), timeZone: 'Asia/Shanghai' },
-      end: taskData.is_all_day
+      end: freshTask.is_all_day
         ? { date: endTime.toISOString().split('T')[0] }
         : { dateTime: endTime.toISOString(), timeZone: 'Asia/Shanghai' },
       reminders: { useDefault: true },
@@ -53,9 +67,9 @@ Deno.serve(async (req) => {
 
     let calendarEvent;
 
-    if (taskData.google_calendar_event_id) {
+    if (freshTask.google_calendar_event_id) {
       const updateRes = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${taskData.google_calendar_event_id}`,
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${freshTask.google_calendar_event_id}`,
         { method: 'PUT', headers: authHeader, body: JSON.stringify(calEvent) }
       );
       if (updateRes.ok) {
@@ -78,7 +92,7 @@ Deno.serve(async (req) => {
     }
 
     // Save event ID back to task
-    if (calendarEvent?.id && calendarEvent.id !== taskData.google_calendar_event_id) {
+    if (calendarEvent?.id && calendarEvent.id !== freshTask.google_calendar_event_id) {
       await base44.asServiceRole.entities.Task.update(event.entity_id, {
         google_calendar_event_id: calendarEvent.id,
       });

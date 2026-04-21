@@ -183,46 +183,68 @@ export default function CalendarDayView({
     }
   }, [analysis]);
 
-  // 未输入新内容前：自动保存当日任务计划（仅在无当日计划时触发一次）
+  // 自动同步当日 Task → DailyPlan.key_tasks
+  // 合并策略：保留已有条目和 AI focus_blocks，仅追加新增的 Task（按 id 去重）
   useEffect(() => {
-    if (loadingDayPlan) return;
-    if (isAnalyzing) return;
-    if (aiInput && aiInput.trim().length > 0) return; // 用户已有新输入，不做自动保存
-    if (dayPlan) return; // 已存在当日AI规划
-    if (!tasks || tasks.length === 0) return;
+    if (loadingDayPlan || isAnalyzing) return;
+    if (aiInput && aiInput.trim().length > 0) return;
+    if (!tasks) return;
 
-    const todaysTasks = tasks.filter(t => t.reminder_time && isSameDay(new Date(t.reminder_time), safeCurrentDate) && !t.parent_task_id);
-    if (todaysTasks.length === 0) return;
+    const todaysTasks = tasks.filter(t =>
+      t.reminder_time &&
+      isSameDay(new Date(t.reminder_time), safeCurrentDate) &&
+      !t.parent_task_id &&
+      !t.deleted_at
+    );
 
-    if (saveAttemptedRef.current === dayStr) return; // 避免重复保存
-    saveAttemptedRef.current = dayStr;
+    const mapTask = (t) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description || '',
+      reminder_time: t.reminder_time,
+      end_time: t.end_time || null,
+      priority: t.priority || 'medium',
+      category: t.category || 'other',
+      status: t.status || 'pending',
+    });
 
-    const plan_json = {
-      key_tasks: todaysTasks.map(t => ({
-        id: t.id,
-        title: t.title,
-        description: t.description || '',
-        reminder_time: t.reminder_time,
-        end_time: t.end_time || null,
-        priority: t.priority || 'medium',
-        category: t.category || 'other',
-        status: t.status || 'pending'
-      })),
-      focus_blocks: []
-    };
+    if (!dayPlan) {
+      // 无当日规划：若有 Task 则创建一条
+      if (todaysTasks.length === 0) return;
+      const signature = `create-${dayStr}-${todaysTasks.length}`;
+      if (saveAttemptedRef.current === signature) return;
+      saveAttemptedRef.current = signature;
 
-    base44.entities.DailyPlan.create({
-      plan_date: dayStr,
-      original_input: '',
-      theme: '',
-      summary: '',
-      plan_json
+      base44.entities.DailyPlan.create({
+        plan_date: dayStr,
+        original_input: '',
+        theme: '',
+        summary: '',
+        plan_json: { key_tasks: todaysTasks.map(mapTask), focus_blocks: [] },
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
+      }).catch((e) => console.error('Auto-save daily plan failed', e));
+      return;
+    }
+
+    // 已有 DailyPlan：检查是否有新的 Task 需要追加
+    const existingTasks = dayPlan.plan_json?.key_tasks || [];
+    const existingIds = new Set(existingTasks.filter(t => t.id).map(t => t.id));
+    const existingTitles = new Set(existingTasks.map(t => t.title));
+    const newTasks = todaysTasks.filter(t => !existingIds.has(t.id) && !existingTitles.has(t.title));
+    if (newTasks.length === 0) return;
+
+    const signature = `append-${dayPlan.id}-${todaysTasks.map(t => t.id).sort().join(',')}`;
+    if (saveAttemptedRef.current === signature) return;
+    saveAttemptedRef.current = signature;
+
+    const mergedKeyTasks = [...existingTasks, ...newTasks.map(mapTask)];
+    base44.entities.DailyPlan.update(dayPlan.id, {
+      plan_json: { ...(dayPlan.plan_json || {}), key_tasks: mergedKeyTasks },
     }).then(() => {
       queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
-    }).catch((e) => {
-      console.error('Auto-save daily plan failed', e);
-    });
-  }, [aiInput, isAnalyzing, dayPlan, tasks, safeCurrentDate, dayStr, loadingDayPlan]);
+    }).catch((e) => console.error('Auto-append daily plan failed', e));
+  }, [aiInput, isAnalyzing, dayPlan, tasks, safeCurrentDate, dayStr, loadingDayPlan, queryClient]);
 
   const weeklyContext = useMemo(() => {
     if (!weeklyPlans || weeklyPlans.length === 0) return null;

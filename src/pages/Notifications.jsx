@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter } from "lucide-react";
+import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain } from "lucide-react";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -14,12 +14,14 @@ import ExecutionStatusCards from "@/components/notifications/ExecutionStatusCard
 import ExecutionItem from "@/components/notifications/ExecutionItem";
 import SmartInputBar from "@/components/notifications/SmartInputBar";
 import AIExecutionAdvisor from "@/components/notifications/AIExecutionAdvisor";
+import ProductTimeline from "@/components/memory/ProductTimeline";
 import { toast } from "sonner";
 
 export default function NotificationsPage() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("executions");
+  const [feedMode, setFeedMode] = useState("timeline"); // 'timeline' = 统一活动流, 'execution' = 仅执行链路
   const [advisorExecution, setAdvisorExecution] = useState(null);
   const [statusFilter, setStatusFilter] = useState(null);
   const queryClient = useQueryClient();
@@ -44,6 +46,25 @@ export default function NotificationsPage() {
   const { data: allNotes = [] } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date', 20),
+    initialData: [],
+  });
+
+  // 合并活动流所需的附加数据源
+  const { data: relationships = [] } = useQuery({
+    queryKey: ['relationships-timeline'],
+    queryFn: () => base44.entities.Relationship.list("-created_date", 50),
+    initialData: [],
+  });
+
+  const { data: teamUsers = [] } = useQuery({
+    queryKey: ['team-users-timeline'],
+    queryFn: () => base44.entities.User.list(),
+    initialData: [],
+  });
+
+  const { data: comments = [] } = useQuery({
+    queryKey: ['comments-timeline'],
+    queryFn: () => base44.entities.Comment.list("-created_date", 200),
     initialData: [],
   });
 
@@ -194,54 +215,86 @@ export default function NotificationsPage() {
         {/* Execution feed */}
         {activeTab === "executions" && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex gap-1.5 bg-slate-100 p-1 rounded-lg">
-                {filters.map(f => (
-                  <button key={f.key} onClick={() => setActiveFilter(f.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeFilter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{f.label}</button>
-                ))}
-              </div>
-              {activeSources.length > 1 && (
-                <div className="flex items-center gap-1.5">
-                  <Filter className="w-3 h-3 text-slate-400" />
-                  <div className="flex gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-100">
-                    <button onClick={() => setSourceFilter("all")} className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${sourceFilter === "all" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>全部来源</button>
-                    {activeSources.map(src => {
-                      const cfg = SOURCE_CONFIG[src];
-                      if (!cfg) return null;
-                      return (
-                        <button key={src} onClick={() => setSourceFilter(src)} className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${sourceFilter === src ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>
-                          {cfg.emoji} {cfg.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+            {/* 视图模式切换：统一活动流 vs 仅执行链路 */}
+            <div className="flex items-center justify-between gap-2 p-1 bg-slate-100 rounded-lg w-fit">
+              <button
+                onClick={() => setFeedMode("timeline")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${feedMode === "timeline" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <Brain className="w-3.5 h-3.5" />
+                统一活动流
+              </button>
+              <button
+                onClick={() => setFeedMode("execution")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${feedMode === "execution" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                执行链路
+              </button>
             </div>
 
-            {loadingExec ? (
-              <div className="p-8 text-center text-slate-500">加载中...</div>
-            ) : filteredExecutions.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-200">
-                <Zap className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                <p className="text-slate-500">暂无执行记录</p>
-                <p className="text-xs text-slate-400 mt-1">输入内容后AI将自动生成执行链路并逐步执行</p>
-              </div>
+            {feedMode === "timeline" ? (
+              /* 合并后的统一活动流（原"记忆进化"活动流） */
+              <ProductTimeline
+                tasks={allTasks}
+                notes={allNotes}
+                executions={executions}
+                relationships={relationships}
+                teamUsers={teamUsers}
+                comments={comments}
+              />
             ) : (
-              <div className="space-y-3">
-                <AnimatePresence mode="popLayout">
-                  {filteredExecutions.map(exec => (
-                    <ExecutionItem
-                      key={exec.id}
-                      execution={exec}
-                      onRetry={handleRetry}
-                      onConfirm={handleConfirm}
-                      onDismiss={handleDismiss}
-                      onOpenAdvisor={(ex) => setAdvisorExecution(ex)}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
+              <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex gap-1.5 bg-slate-100 p-1 rounded-lg">
+                    {filters.map(f => (
+                      <button key={f.key} onClick={() => setActiveFilter(f.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeFilter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{f.label}</button>
+                    ))}
+                  </div>
+                  {activeSources.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <Filter className="w-3 h-3 text-slate-400" />
+                      <div className="flex gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-100">
+                        <button onClick={() => setSourceFilter("all")} className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${sourceFilter === "all" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>全部来源</button>
+                        {activeSources.map(src => {
+                          const cfg = SOURCE_CONFIG[src];
+                          if (!cfg) return null;
+                          return (
+                            <button key={src} onClick={() => setSourceFilter(src)} className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${sourceFilter === src ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>
+                              {cfg.emoji} {cfg.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {loadingExec ? (
+                  <div className="p-8 text-center text-slate-500">加载中...</div>
+                ) : filteredExecutions.length === 0 ? (
+                  <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-200">
+                    <Zap className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                    <p className="text-slate-500">暂无执行记录</p>
+                    <p className="text-xs text-slate-400 mt-1">输入内容后AI将自动生成执行链路并逐步执行</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <AnimatePresence mode="popLayout">
+                      {filteredExecutions.map(exec => (
+                        <ExecutionItem
+                          key={exec.id}
+                          execution={exec}
+                          onRetry={handleRetry}
+                          onConfirm={handleConfirm}
+                          onDismiss={handleDismiss}
+                          onOpenAdvisor={(ex) => setAdvisorExecution(ex)}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

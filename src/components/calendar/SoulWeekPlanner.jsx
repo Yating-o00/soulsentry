@@ -32,6 +32,7 @@ import { useAICreditGate } from "@/components/credits/useAICreditGate";
 import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
+import CalendarWeekGridView from "./CalendarWeekGridView";
 
 // Device Configurations with icons mapping
 const DEVICE_MAP = {
@@ -58,7 +59,14 @@ const PROCESSING_STEPS = [
   { icon: '✨', text: '最终编织周情境网络...' }
 ];
 
-export default function SoulWeekPlanner({ currentDate: initialDate }) {
+export default function SoulWeekPlanner({
+  currentDate: initialDate,
+  tasks = [],
+  notes = [],
+  onDateClick,
+  onTaskDrop,
+  onTaskClick,
+}) {
   const [stage, setStage] = useState('input'); // input, processing, results
   const [userInput, setUserInput] = useState('');
   const [currentWeekDate, setCurrentWeekDate] = useState(initialDate || new Date());
@@ -337,6 +345,24 @@ export default function SoulWeekPlanner({ currentDate: initialDate }) {
       
       <div className="relative z-10 p-6 md:p-8 max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-100px)]">
         
+        {/* Week Task Grid - Always visible (like Month view) */}
+        <section className="mb-8">
+          <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <CalendarIcon className="w-5 h-5 text-slate-400" /> 任务视图
+            <span className="text-xs font-normal text-slate-400 ml-1">{weekRangeLabel}</span>
+          </h3>
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+            <CalendarWeekGridView
+              currentDate={currentWeekDate}
+              tasks={tasks}
+              notes={notes}
+              onDateClick={onDateClick}
+              onTaskDrop={onTaskDrop}
+              onTaskClick={onTaskClick}
+            />
+          </div>
+        </section>
+
         {/* Input Section */}
         <AnimatePresence mode="wait">
           {stage === 'input' && (

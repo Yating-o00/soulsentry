@@ -56,6 +56,12 @@ export default function Tasks() {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
 
+  const { data: allTasks = [], isLoading } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => base44.entities.Task.list('-reminder_time'),
+    initialData: []
+  });
+
   // Auto-open task detail when navigated via ?taskId=xxx (e.g. from global search)
   const location = useLocation();
   useEffect(() => {
@@ -66,12 +72,6 @@ export default function Tasks() {
       if (found) setSelectedTask(found);
     }
   }, [location.search, allTasks]);
-
-  const { data: allTasks = [], isLoading } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list('-reminder_time'),
-    initialData: []
-  });
 
   const { data: allComments = [] } = useQuery({
     queryKey: ['all-comments'],

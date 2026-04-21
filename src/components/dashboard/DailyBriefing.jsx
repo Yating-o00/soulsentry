@@ -8,9 +8,17 @@ export default function DailyBriefing() {
     const [briefing, setBriefing] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    const [refreshing, setRefreshing] = useState(false);
+
     const fetchBriefing = async (force = false) => {
         const today = new Date().toDateString();
-        const cacheKey = `daily_briefing_${today}`;
+        const cacheKey = `daily_briefing_v2_${today}`;
+
+        // Clear old v1 caches
+        try {
+            const oldKey = `daily_briefing_${today}`;
+            localStorage.removeItem(oldKey);
+        } catch (_) {}
 
         if (!force) {
             const cached = localStorage.getItem(cacheKey);
@@ -25,6 +33,7 @@ export default function DailyBriefing() {
             }
         }
 
+        if (force) setRefreshing(true);
         setLoading(true);
         try {
             const { data } = await base44.functions.invoke("generateDailyBriefing");
@@ -34,6 +43,7 @@ export default function DailyBriefing() {
             console.error("Failed to fetch briefing", error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
@@ -93,10 +103,11 @@ export default function DailyBriefing() {
                     </div>
                     <button 
                         onClick={() => fetchBriefing(true)}
-                        className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-[#384877] transition-all duration-300"
-                        title="重新生成"
+                        disabled={refreshing}
+                        className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-[#384877] transition-all duration-300 disabled:opacity-50"
+                        title="基于最新任务数据重新生成"
                     >
-                        <RefreshCw className="w-4 h-4" />
+                        <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
 
@@ -129,11 +140,20 @@ export default function DailyBriefing() {
                 </div>
 
                 {briefing.mindful_tip && (
-                    <div className="mt-4 md:mt-8 pt-4 md:pt-6 border-t border-slate-100/60 flex justify-center">
+                    <div className="mt-4 md:mt-8 pt-4 md:pt-6 border-t border-slate-100/60 flex flex-col items-center gap-3">
                         <div className="inline-flex items-center gap-2 text-slate-500 text-xs md:text-sm italic bg-white px-3 md:px-5 py-2 md:py-2.5 rounded-full border border-slate-100 shadow-sm max-w-full">
                             <Sparkles className="w-3 h-3 md:w-3.5 md:h-3.5 text-amber-400 fill-amber-400 shrink-0" />
                             <span className="truncate">"{briefing.mindful_tip}"</span>
                         </div>
+                        {briefing.task_stats && (
+                            <div className="flex items-center gap-3 text-[10px] md:text-xs text-slate-400">
+                                <span>活跃 {briefing.task_stats.active}</span>
+                                {briefing.task_stats.urgent > 0 && <span className="text-rose-400">紧急 {briefing.task_stats.urgent}</span>}
+                                {briefing.task_stats.overdue > 0 && <span className="text-amber-500">逾期 {briefing.task_stats.overdue}</span>}
+                                {briefing.task_stats.today_due > 0 && <span className="text-blue-400">今日到期 {briefing.task_stats.today_due}</span>}
+                                <span className="text-emerald-400">已完成 {briefing.task_stats.recent_completed}</span>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

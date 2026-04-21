@@ -235,23 +235,38 @@ Deno.serve(async (req) => {
       return Response.json({ created: 0, reason: 'no extractable tasks' });
     }
 
-    // 规范化时间 + 去重（按 title + reminder_time）
+    // 规范化时间 + 去重：按 owner + title 查询（无论状态/是否已完成/是否已软删都视为已存在）
+    // 修复：之前用 _plan_source 做去重，但 Task 实体根本没有这个字段，
+    // 导致每次 DailyPlan 更新都会把相同任务重新创建一次（包括用户已点击完成的）。
     const ownerEmail = planData.created_by;
-    const existingTasks = ownerEmail
-      ? await base44.asServiceRole.entities.Task.filter({
-          created_by: ownerEmail,
-          _plan_source: `${event.entity_name}:${event.entity_id}`,
-        }).catch(() => [])
-      : [];
-    const existingKeys = new Set(existingTasks.map(t => `${t.title}|${t.reminder_time}`));
+
+    const normSameDay = (isoA, isoB) => {
+      if (!isoA || !isoB) return false;
+      // 对比 Asia/Shanghai 下的 YYYY-MM-DD + HH:MM（分钟级）
+      const a = new Date(isoA), b = new Date(isoB);
+      if (isNaN(a.getTime()) || isNaN(b.getTime())) return false;
+      return Math.abs(a.getTime() - b.getTime()) <= 10 * 60 * 1000; // ±10 分钟视为同一提醒
+    };
 
     const created = [];
     for (const raw of candidateTasks) {
       const normalized = normalizeTimeRange(raw, fallbackDate);
       if (!normalized.reminder_time) continue;
 
-      const key = `${raw.title}|${normalized.reminder_time}`;
-      if (existingKeys.has(key)) continue;
+      // 按 owner + title 查询历史任务（包含已完成 / 已删除的），避免重复创建
+      let dup = false;
+      if (ownerEmail) {
+        try {
+          const existing = await base44.asServiceRole.entities.Task.filter({
+            created_by: ownerEmail,
+            title: raw.title,
+          });
+          dup = (existing || []).some(t => normSameDay(t.reminder_time, normalized.reminder_time));
+        } catch (_) {
+          dup = false;
+        }
+      }
+      if (dup) continue;
 
       const taskPayload = {
         title: raw.title,

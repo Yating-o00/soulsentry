@@ -17,6 +17,8 @@ import AnalysisSteps from "../dashboard/planner/AnalysisSteps";
 import DeviceStrategyMap from "../dashboard/planner/DeviceStrategyMap";
 import { Textarea } from "@/components/ui/textarea";
 import DayPlanSummary from "./DayPlanSummary";
+import { detectTimeConflicts } from "@/components/planner/detectConflicts";
+import ConflictDialog from "@/components/planner/ConflictDialog";
 
 const CATEGORY_STYLES = {
   work: "bg-blue-50 text-blue-700 border-l-4 border-l-blue-500",
@@ -72,6 +74,7 @@ export default function CalendarDayView({
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [resolvedDateHint, setResolvedDateHint] = useState(null);
+  const [conflictData, setConflictData] = useState(null); // { conflicts, allBlocks, planId, planJson }
 
   const DEFAULT_STEPS = [
     { key: 'time_extraction', text: '提取时间实体…' },
@@ -124,6 +127,7 @@ export default function CalendarDayView({
         },
         is_active: true,
       };
+      let savedPlanId = dayPlan?.id || null;
       if (dayPlan) {
         // Merge: keep existing key_tasks + focus_blocks, append new ones
         const existingTasks = dayPlan.plan_json?.key_tasks || [];
@@ -133,9 +137,17 @@ export default function CalendarDayView({
         planRecord.original_input = [dayPlan.original_input, aiInput].filter(Boolean).join('\n');
         await base44.entities.DailyPlan.update(dayPlan.id, planRecord);
       } else {
-        await base44.entities.DailyPlan.create(planRecord);
+        const created = await base44.entities.DailyPlan.create(planRecord);
+        savedPlanId = created?.id || null;
       }
       queryClient.invalidateQueries({ queryKey: ['dailyPlan', dayStr] });
+
+      // 冲突检测：对合并后的 focus_blocks 检查时间重叠
+      const mergedBlocks = planRecord.plan_json.focus_blocks || [];
+      const conflicts = detectTimeConflicts(mergedBlocks);
+      if (conflicts.length > 0) {
+        setConflictData({ conflicts, allBlocks: mergedBlocks, planId: savedPlanId, planJson: planRecord.plan_json });
+      }
     } else {
       // Input belongs to a different date — don't show analysis inline, only show navigation hint
       setAnalysis(null);
@@ -155,6 +167,7 @@ export default function CalendarDayView({
       };
       // Check if target date already has a plan
       const targetPlans = await base44.entities.DailyPlan.filter({ plan_date: targetDate });
+      let targetPlanId = null;
       if (targetPlans && targetPlans.length > 0) {
         const tp = targetPlans[0];
         const existingTasks = tp.plan_json?.key_tasks || [];
@@ -163,10 +176,19 @@ export default function CalendarDayView({
         targetPlanRecord.plan_json.focus_blocks = [...existingBlocks, ...targetPlanRecord.plan_json.focus_blocks];
         targetPlanRecord.original_input = [tp.original_input, aiInput].filter(Boolean).join('\n');
         await base44.entities.DailyPlan.update(tp.id, targetPlanRecord);
+        targetPlanId = tp.id;
       } else {
-        await base44.entities.DailyPlan.create(targetPlanRecord);
+        const created = await base44.entities.DailyPlan.create(targetPlanRecord);
+        targetPlanId = created?.id || null;
       }
       queryClient.invalidateQueries({ queryKey: ['dailyPlan', targetDate] });
+
+      // 冲突检测（其他日期）：检测后仍提示，便于用户跳转后调整
+      const mergedBlocks = targetPlanRecord.plan_json.focus_blocks || [];
+      const conflicts = detectTimeConflicts(mergedBlocks);
+      if (conflicts.length > 0) {
+        setConflictData({ conflicts, allBlocks: mergedBlocks, planId: targetPlanId, planJson: targetPlanRecord.plan_json, targetDate });
+      }
     }
     setAiInput("");
   } finally {
@@ -571,6 +593,34 @@ export default function CalendarDayView({
 
 
       </div>
+
+      {/* 冲突解决对话框 */}
+      <ConflictDialog
+        open={!!conflictData}
+        onClose={() => setConflictData(null)}
+        conflicts={conflictData?.conflicts || []}
+        dateStr={conflictData?.targetDate || dayStr}
+        allBlocks={conflictData?.allBlocks || []}
+        onApplyResolution={(conflictIdx, suggestion) => {
+          const conflict = conflictData?.conflicts?.[conflictIdx];
+          if (!conflict || !conflictData?.planId) return;
+          const updatedBlocks = [...(conflictData.planJson?.focus_blocks || [])];
+          if (suggestion.new_time_a) {
+            const blockA = updatedBlocks.find(b => b.title === conflict.blockA.title);
+            if (blockA) blockA.time = suggestion.new_time_a;
+          }
+          if (suggestion.new_time_b) {
+            const blockB = updatedBlocks.find(b => b.title === conflict.blockB.title);
+            if (blockB) blockB.time = suggestion.new_time_b;
+          }
+          const updatedPlanJson = { ...(conflictData.planJson || {}), focus_blocks: updatedBlocks };
+          base44.entities.DailyPlan.update(conflictData.planId, { plan_json: updatedPlanJson })
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ['dailyPlan', conflictData?.targetDate || dayStr] });
+            })
+            .catch(e => console.error("Failed to apply conflict resolution", e));
+        }}
+      />
 
       {/* Right Sidebar: Context & Notes */}
       <div className="w-full lg:w-72 bg-white border-l border-slate-100 flex flex-col overflow-hidden">

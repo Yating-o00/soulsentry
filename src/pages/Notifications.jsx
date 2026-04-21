@@ -21,7 +21,7 @@ export default function NotificationsPage() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("executions");
-  const [feedMode, setFeedMode] = useState("timeline"); // 'timeline' = 统一活动流, 'execution' = 仅执行链路
+  const [feedMode, setFeedMode] = useState("execution"); // 'execution' = 执行链路, 'timeline' = 统一活动流
   const [advisorExecution, setAdvisorExecution] = useState(null);
   const [statusFilter, setStatusFilter] = useState(null);
   const queryClient = useQueryClient();
@@ -215,21 +215,21 @@ export default function NotificationsPage() {
         {/* Execution feed */}
         {activeTab === "executions" && (
           <div className="space-y-4">
-            {/* 视图模式切换：统一活动流 vs 仅执行链路 */}
+            {/* 视图模式切换：执行链路 vs 统一活动流 */}
             <div className="flex items-center justify-between gap-2 p-1 bg-slate-100 rounded-lg w-fit">
-              <button
-                onClick={() => setFeedMode("timeline")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${feedMode === "timeline" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-              >
-                <Brain className="w-3.5 h-3.5" />
-                统一活动流
-              </button>
               <button
                 onClick={() => setFeedMode("execution")}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${feedMode === "execution" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
               >
                 <Zap className="w-3.5 h-3.5" />
                 执行链路
+              </button>
+              <button
+                onClick={() => setFeedMode("timeline")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${feedMode === "timeline" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <Brain className="w-3.5 h-3.5" />
+                统一活动流
               </button>
             </div>
 

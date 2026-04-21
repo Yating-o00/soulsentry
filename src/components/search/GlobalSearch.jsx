@@ -11,11 +11,18 @@ import _ from "lodash";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
-export default function GlobalSearch({ open, onOpenChange }) {
+export default function GlobalSearch({ open, onOpenChange, initialQuery = "" }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState({ tasks: [], notes: [], knowledge: [], users: [] });
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Sync initial query when dialog opens
+  useEffect(() => {
+    if (open && initialQuery) {
+      setQuery(initialQuery);
+    }
+  }, [open, initialQuery]);
 
   const performSearch = useCallback(
     _.debounce(async (searchTerm) => {

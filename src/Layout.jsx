@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Brain } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -51,11 +51,6 @@ const getNavigationItems = (t) => [
     title: t('teams'),
     url: createPageUrl("Teams"),
     icon: Users,
-  },
-  {
-    title: t('memory'),
-    url: createPageUrl("Memory"),
-    icon: Brain,
   },
   {
     title: t('myAccount'),

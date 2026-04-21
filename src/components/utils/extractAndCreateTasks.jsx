@@ -105,16 +105,17 @@ ${inputText}
 
 要求：
 1. 每条任务必须有清晰的标题
-2. reminder_time 必须是 ISO 8601 带 +08:00 时区格式，例如："${contextDate}T09:00:00+08:00"
-3. 若任务为全天（无具体时间点），reminder_time 使用纯日期 "YYYY-MM-DD"，并设置 is_all_day: true
-4. 若任务有明确结束时间，end_time 用同样格式；否则省略
-5. 无法推断具体时间时，默认安排在上下文日期的 09:00
-6. 【重要】对"后天下午"、"下个月第一个周一"、"十分钟后"等相对时间表达，严格使用上方【预计算的日期锚点】和【相对时间段映射】，不要自己推算日期
-7. priority：根据紧迫性和重要性判断 (low/medium/high/urgent)
-8. category：work/personal/health/study/family/shopping/finance/other
-9. 如有子任务可以放到 subtasks 字段
-10. 不要生成重复或过于相似的任务（同一件事即使表述不同也只输出一条）
-11. 只生成真正的"约定/任务"，不要生成模糊的泛概念`,
+2. 【重要】description 字段必须原样摘抄用户输入中与该任务直接相关的原句，不要改写、润色、压缩或扩写；如果用户输入就是一句话，description 就使用这句话原文。严禁用 AI 自己的表达来替换用户表达。
+3. reminder_time 必须是 ISO 8601 带 +08:00 时区格式，例如："${contextDate}T09:00:00+08:00"
+4. 若任务为全天（无具体时间点），reminder_time 使用纯日期 "YYYY-MM-DD"，并设置 is_all_day: true
+5. 若任务有明确结束时间，end_time 用同样格式；否则省略
+6. 无法推断具体时间时，默认安排在上下文日期的 09:00
+7. 【重要】对"后天下午"、"下个月第一个周一"、"十分钟后"等相对时间表达，严格使用上方【预计算的日期锚点】和【相对时间段映射】，不要自己推算日期
+8. priority：根据紧迫性和重要性判断 (low/medium/high/urgent)
+9. category：work/personal/health/study/family/shopping/finance/other
+10. 如有子任务可以放到 subtasks 字段
+11. 不要生成重复或过于相似的任务（同一件事即使表述不同也只输出一条）
+12. 只生成真正的"约定/任务"，不要生成模糊的泛概念`,
     response_json_schema: {
       type: "object",
       properties: {
@@ -124,7 +125,7 @@ ${inputText}
             type: "object",
             properties: {
               title: { type: "string" },
-              description: { type: "string" },
+              description: { type: "string", description: "必须原样摘抄用户输入中与该任务相关的原句，不得改写" },
               reminder_time: { type: "string", description: "ISO 8601 带 +08:00 时区，或 YYYY-MM-DD 全天" },
               end_time: { type: "string" },
               priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
@@ -199,9 +200,13 @@ ${inputText}
     );
     if (dupInDb) continue;
 
+    // description 保持与用户输入一致：单任务时直接用原输入；多任务时若 AI 未给描述，回退到原输入
+    const isSingleTask = result.tasks.length === 1;
+    const preservedDescription = isSingleTask ? inputText : (t.description || inputText);
+
     const taskPayload = {
       title: t.title,
-      description: t.description || "",
+      description: preservedDescription,
       reminder_time: normalized.reminder_time,
       end_time: normalized.end_time,
       is_all_day: normalized.is_all_day,

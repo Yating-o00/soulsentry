@@ -30,10 +30,36 @@ function getTimeContext(contextDate) {
   const shanghaiStr = now.toLocaleString("zh-CN", {
     timeZone: TIMEZONE,
     year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", weekday: "long", hour12: false,
+    hour: "2-digit", minute: "2-digit", second: "2-digit", weekday: "long", hour12: false,
   });
   const todayDate = contextDate || now.toLocaleDateString("en-CA", { timeZone: TIMEZONE });
-  return { shanghaiStr, todayDate, isoNow: now.toISOString() };
+  const base = new Date(`${todayDate}T00:00:00+08:00`);
+  const fmt = (d) => d.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+  const addDays = (n) => { const x = new Date(base); x.setUTCDate(x.getUTCDate() + n); return fmt(x); };
+  const nextWeekDay = (dow) => {
+    const x = new Date(base);
+    const cur = x.getUTCDay() === 0 ? 7 : x.getUTCDay();
+    x.setUTCDate(x.getUTCDate() - (cur - 1) + 7 + ((dow === 0 ? 7 : dow) - 1));
+    return fmt(x);
+  };
+  const firstOfNextMonth = (dow) => {
+    const x = new Date(base); x.setUTCMonth(x.getUTCMonth() + 1, 1);
+    x.setUTCDate(x.getUTCDate() + ((dow - x.getUTCDay() + 7) % 7));
+    return fmt(x);
+  };
+  const anchors = {
+    today: todayDate,
+    tomorrow: addDays(1),
+    dayAfter: addDays(2),
+    threeDays: addDays(3),
+    oneWeek: addDays(7),
+    nextMon: nextWeekDay(1), nextTue: nextWeekDay(2), nextWed: nextWeekDay(3),
+    nextThu: nextWeekDay(4), nextFri: nextWeekDay(5), nextSat: nextWeekDay(6), nextSun: nextWeekDay(0),
+    firstMonNextMonth: firstOfNextMonth(1), firstTueNextMonth: firstOfNextMonth(2),
+    firstWedNextMonth: firstOfNextMonth(3), firstThuNextMonth: firstOfNextMonth(4),
+    firstFriNextMonth: firstOfNextMonth(5), firstSatNextMonth: firstOfNextMonth(6), firstSunNextMonth: firstOfNextMonth(0),
+  };
+  return { shanghaiStr, todayDate, isoNow: now.toISOString(), anchors };
 }
 
 Deno.serve(async (req) => {
@@ -54,12 +80,20 @@ Deno.serve(async (req) => {
 
     const ctx = getTimeContext(contextDate);
 
+    const a = ctx.anchors;
     const systemPrompt = `你是一个专业的中文自然语言时间解析引擎。
 
 【时间上下文】
 - 当前时间（北京时间）: ${ctx.shanghaiStr}
 - 今日日期: ${ctx.todayDate}
 - 用户时区: ${TIMEZONE} (UTC+8)
+
+【预计算的日期锚点 - 必须直接使用，不要自己推算】
+- 今天=${a.today} 明天=${a.tomorrow} 后天=${a.dayAfter} 大后天=${a.threeDays} 一周后=${a.oneWeek}
+- 下周一=${a.nextMon} 下周二=${a.nextTue} 下周三=${a.nextWed} 下周四=${a.nextThu} 下周五=${a.nextFri} 下周六=${a.nextSat} 下周日=${a.nextSun}
+- 下个月第一个周一=${a.firstMonNextMonth} 周二=${a.firstTueNextMonth} 周三=${a.firstWedNextMonth} 周四=${a.firstThuNextMonth} 周五=${a.firstFriNextMonth} 周六=${a.firstSatNextMonth} 周日=${a.firstSunNextMonth}
+
+【时段映射】早上/上午=09:00 中午=12:00 下午=15:00 傍晚=18:00 晚上=20:00 深夜=22:00
 
 【任务】
 从用户输入中提取时间信息，返回规范化的 JSON。
@@ -70,10 +104,13 @@ Deno.serve(async (req) => {
 3. 有具体时间点（如"明天3点"）→ 输出完整 ISO 带时区，is_all_day=false
 4. 时间段（"3点到5点"）→ 同时输出 reminder_time 和 end_time
 5. 未给出结束时间的非全天事件 → end_time 设为 null（由调用方默认 +1 小时）
-6. 相对时间必须基于上述"当前时间"精确计算
-7. 重复规则（"每周三"、"每天"）→ is_recurring=true，在 recurrence_pattern 写明
-8. 模糊时间（"过几天"、"有空"、"最近"）→ confidence="low"，时间字段输出最合理的推断值
-9. 完全无时间信息 → reminder_time=null, confidence="low"
+6. 相对时间必须基于上述"当前时间"和【预计算日期锚点】精确计算，不要自己推算
+7. "X分钟后/X小时后" → 基于"当前时间（${ctx.shanghaiStr}）"精确累加
+8. "后天下午" → 使用"后天=${a.dayAfter}"+"下午=15:00"
+9. "下个月第一个周一" → 直接使用 ${a.firstMonNextMonth}
+10. 重复规则（"每周三"、"每天"）→ is_recurring=true，在 recurrence_pattern 写明
+11. 模糊时间（"过几天"、"有空"、"最近"）→ confidence="low"，时间字段输出最合理的推断值
+12. 完全无时间信息 → reminder_time=null, confidence="low"
 
 【confidence 级别】
 - high: 用户明确给出日期+时间（"明天下午3点"、"2025-05-01 14:00"）

@@ -22,7 +22,7 @@ export async function extractAndCreateTasks(inputText, contextDateStr) {
 
 ${timeCtx.promptSnippet}
 
-上下文日期: ${contextDate}
+上下文日期（未明确指定时的归属）: ${contextDate}
 
 用户输入:
 """
@@ -35,11 +35,12 @@ ${inputText}
 3. 若任务为全天（无具体时间点），reminder_time 使用纯日期 "YYYY-MM-DD"，并设置 is_all_day: true
 4. 若任务有明确结束时间，end_time 用同样格式；否则省略
 5. 无法推断具体时间时，默认安排在上下文日期的 09:00
-6. priority：根据紧迫性和重要性判断 (low/medium/high/urgent)
-7. category：work/personal/health/study/family/shopping/finance/other
-8. 如有子任务可以放到 subtasks 字段
-9. 不要生成重复或过于相似的任务
-10. 只生成真正的"约定/任务"，不要生成模糊的泛概念`,
+6. 【重要】对"后天下午"、"下个月第一个周一"、"十分钟后"等相对时间表达，严格使用上方【预计算的日期锚点】和【相对时间段映射】，不要自己推算日期
+7. priority：根据紧迫性和重要性判断 (low/medium/high/urgent)
+8. category：work/personal/health/study/family/shopping/finance/other
+9. 如有子任务可以放到 subtasks 字段
+10. 不要生成重复或过于相似的任务
+11. 只生成真正的"约定/任务"，不要生成模糊的泛概念`,
     response_json_schema: {
       type: "object",
       properties: {

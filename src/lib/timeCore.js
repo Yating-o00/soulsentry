@@ -125,43 +125,160 @@ export function normalizeTimeRange(raw = {}, fallbackDate = null) {
 }
 
 /**
+ * 获取"今日在北京时间下的日期字符串"，同时返回该日期对应的 Date 对象（指向当地 00:00）。
+ */
+function getShanghaiToday() {
+  const now = new Date();
+  const todayDate = now.toLocaleDateString("en-CA", { timeZone: USER_TIMEZONE }); // YYYY-MM-DD
+  // 以北京时间 00:00 构造 Date 对象用于日期计算
+  const baseDate = new Date(`${todayDate}T00:00:00+08:00`);
+  return { todayDate, baseDate };
+}
+
+/** 把 Date 按北京时区格式化为 YYYY-MM-DD */
+function toDateStr(d) {
+  return d.toLocaleDateString("en-CA", { timeZone: USER_TIMEZONE });
+}
+
+/** 在 baseDate 上加 n 天，返回 YYYY-MM-DD 字符串 */
+function addDaysStr(baseDate, n) {
+  const d = new Date(baseDate);
+  d.setUTCDate(d.getUTCDate() + n);
+  return toDateStr(d);
+}
+
+/** 计算：从 baseDate 起下一个指定星期几（0=周日, 1=周一 ... 6=周六）；includeToday=true 时若今日即该日则返回今日 */
+function nextWeekdayStr(baseDate, targetDow, includeToday = false) {
+  const d = new Date(baseDate);
+  const cur = d.getUTCDay();
+  let diff = (targetDow - cur + 7) % 7;
+  if (diff === 0 && !includeToday) diff = 7;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return toDateStr(d);
+}
+
+/** 下周(下一个自然周，周一起算)的指定星期几 */
+function nextWeekWeekdayStr(baseDate, targetDow) {
+  // 先找到本周一
+  const d = new Date(baseDate);
+  const cur = d.getUTCDay() === 0 ? 7 : d.getUTCDay(); // 周日记为7
+  d.setUTCDate(d.getUTCDate() - (cur - 1)); // 本周一
+  d.setUTCDate(d.getUTCDate() + 7); // 下周一
+  const dow = d.getUTCDay();
+  const diff = (targetDow - dow + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return toDateStr(d);
+}
+
+/** 下个月第一个指定星期几 */
+function firstWeekdayOfNextMonthStr(baseDate, targetDow) {
+  const d = new Date(baseDate);
+  d.setUTCMonth(d.getUTCMonth() + 1, 1); // 下月1号
+  const dow = d.getUTCDay();
+  const diff = (targetDow - dow + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return toDateStr(d);
+}
+
+/** 下个月月末 */
+function lastDayOfNextMonthStr(baseDate) {
+  const d = new Date(baseDate);
+  d.setUTCMonth(d.getUTCMonth() + 2, 0); // 下下月的第0天 = 下月最后一天
+  return toDateStr(d);
+}
+
+/**
  * 获取 AI prompt 中使用的"当前时间上下文"片段。
- * 所有调用 AI 解析时间的地方应使用此函数，保证上下文一致。
+ * 包含预计算的关键相对日期锚点，减少 AI 推算错误。
  */
 export function getTimeContextForAI() {
   const now = new Date();
   const shanghaiStr = now.toLocaleString("zh-CN", {
     timeZone: USER_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    weekday: "long",
-    hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    weekday: "long", hour12: false,
   });
   const isoNow = now.toISOString();
-  const todayDate = now.toLocaleDateString("en-CA", { timeZone: USER_TIMEZONE }); // YYYY-MM-DD
+  const { todayDate, baseDate } = getShanghaiToday();
+
+  // 预计算常用相对日期，作为 AI 的确定性锚点
+  const tomorrow = addDaysStr(baseDate, 1);
+  const dayAfterTomorrow = addDaysStr(baseDate, 2); // 后天
+  const threeDaysLater = addDaysStr(baseDate, 3);   // 大后天
+  const inSevenDays = addDaysStr(baseDate, 7);      // 一周后
+
+  const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  // 本周各日
+  const thisWeek = {};
+  for (let i = 1; i <= 6; i++) thisWeek[weekdayNames[i]] = nextWeekdayStr(baseDate, i, true);
+  thisWeek['周日'] = nextWeekdayStr(baseDate, 0, true);
+  // 下周各日
+  const nextWeek = {};
+  for (let i = 1; i <= 6; i++) nextWeek[weekdayNames[i]] = nextWeekWeekdayStr(baseDate, i);
+  nextWeek['周日'] = nextWeekWeekdayStr(baseDate, 0);
+
+  // 下个月第一个周X
+  const firstOfNextMonth = {};
+  for (let i = 1; i <= 6; i++) firstOfNextMonth[weekdayNames[i]] = firstWeekdayOfNextMonthStr(baseDate, i);
+  firstOfNextMonth['周日'] = firstWeekdayOfNextMonthStr(baseDate, 0);
+
+  const nextMonthEnd = lastDayOfNextMonthStr(baseDate);
+
+  // 当前小时/分钟（北京时间）
+  const hourStr = now.toLocaleString("en-GB", { timeZone: USER_TIMEZONE, hour: "2-digit", minute: "2-digit", hour12: false });
+
+  const anchors = {
+    今天: todayDate,
+    明天: tomorrow,
+    后天: dayAfterTomorrow,
+    大后天: threeDaysLater,
+    一周后: inSevenDays,
+    本周: thisWeek,
+    下周: nextWeek,
+    下个月第一个: firstOfNextMonth,
+    下月月底: nextMonthEnd,
+  };
+
+  const promptSnippet = `
+【时间上下文 - 严格按此计算】
+- 当前时间（北京时间）: ${shanghaiStr}
+- ISO 格式: ${isoNow}
+- 今日日期: ${todayDate}
+- 当前时刻: ${hourStr}
+- 用户时区: ${USER_TIMEZONE} (UTC+8)
+
+【预计算的日期锚点 - 必须使用这些值，不要自己推算】
+- 明天 = ${tomorrow}
+- 后天 = ${dayAfterTomorrow}
+- 大后天 = ${threeDaysLater}
+- 一周后 = ${inSevenDays}
+- 本周一=${thisWeek['周一']} 本周二=${thisWeek['周二']} 本周三=${thisWeek['周三']} 本周四=${thisWeek['周四']} 本周五=${thisWeek['周五']} 本周六=${thisWeek['周六']} 本周日=${thisWeek['周日']}
+- 下周一=${nextWeek['周一']} 下周二=${nextWeek['周二']} 下周三=${nextWeek['周三']} 下周四=${nextWeek['周四']} 下周五=${nextWeek['周五']} 下周六=${nextWeek['周六']} 下周日=${nextWeek['周日']}
+- 下个月第一个周一=${firstOfNextMonth['周一']} 周二=${firstOfNextMonth['周二']} 周三=${firstOfNextMonth['周三']} 周四=${firstOfNextMonth['周四']} 周五=${firstOfNextMonth['周五']} 周六=${firstOfNextMonth['周六']} 周日=${firstOfNextMonth['周日']}
+- 下月月底 = ${nextMonthEnd}
+
+【相对时间段映射】
+- 早上/上午 = 09:00    中午 = 12:00    下午 = 15:00    傍晚 = 18:00    晚上 = 20:00    深夜 = 22:00
+- "X分钟后"/"X小时后" = 基于上方"当前时间"精确累加，结果用 ISO 8601 带 +08:00
+
+【时间输出规则 - 严格遵守】
+1. 所有带时刻的时间字段必须输出为 ISO 8601 格式，带 +08:00 时区，例如："2025-04-22T15:00:00+08:00"
+2. 全天事件使用纯日期格式 "YYYY-MM-DD"，并设置 is_all_day: true
+3. 未指定具体时间的任务，默认为当天 09:00
+4. 未指定结束时间的非全天任务，end_time 可以省略（调用方默认 +1 小时）
+5. 解析"后天下午3点"这类表达时：直接使用"后天=${dayAfterTomorrow}"加上"下午=15:00" → "${dayAfterTomorrow}T15:00:00+08:00"
+6. 解析"十分钟后"：基于当前时刻（${hourStr}）精确加 10 分钟
+7. 解析"下个月第一个周一"：直接使用"下个月第一个周一=${firstOfNextMonth['周一']}"
+`.trim();
 
   return {
     now_iso: isoNow,
     now_local: shanghaiStr,
     today_date: todayDate,
     timezone: USER_TIMEZONE,
-    promptSnippet: `
-【时间上下文】
-- 当前时间（北京时间）: ${shanghaiStr}
-- ISO 格式: ${isoNow}
-- 今日日期: ${todayDate}
-- 用户时区: ${USER_TIMEZONE} (UTC+8)
-
-【时间输出规则 - 严格遵守】
-1. 所有时间字段必须输出为 ISO 8601 格式，带 +08:00 时区，例如："2025-04-22T15:00:00+08:00"
-2. 全天事件使用纯日期格式 "YYYY-MM-DD"，并设置 is_all_day: true
-3. 未指定具体时间的任务，默认为当天 09:00
-4. 未指定结束时间的非全天任务，默认持续 1 小时
-5. 相对时间（"明天"、"下周三"、"后天下午"）必须基于上述"当前时间"精确计算
-`.trim(),
+    anchors,
+    promptSnippet,
   };
 }
 

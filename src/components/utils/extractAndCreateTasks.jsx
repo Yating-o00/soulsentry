@@ -47,12 +47,44 @@ function normTitle(raw) {
 }
 
 /** 两个 ISO 时间是否在 ±toleranceMin 分钟内（任一为空则 false） */
-function isWithinTolerance(isoA, isoB, toleranceMin = 10) {
+function isWithinTolerance(isoA, isoB, toleranceMin = 30) {
   if (!isoA || !isoB) return false;
   const a = new Date(isoA).getTime();
   const b = new Date(isoB).getTime();
   if (isNaN(a) || isNaN(b)) return false;
   return Math.abs(a - b) <= toleranceMin * 60 * 1000;
+}
+
+/** 提取 YYYY-MM-DD（Asia/Shanghai 语义，用于同日判断）。接受 "YYYY-MM-DD" 或带时区 ISO。*/
+function toDateKey(val) {
+  if (!val || typeof val !== "string") return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return "";
+  // 用 +08:00 视角计算 YYYY-MM-DD
+  const shifted = new Date(d.getTime() + 8 * 3600 * 1000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+/**
+ * 判断两条任务是否应视为重复：
+ *   - 归一化标题必须相同
+ *   - 且满足以下任一：
+ *     a) 任一方缺时间（视为同名即重复，避免一条带时间一条不带被漏掉）
+ *     b) 同属全天且同日
+ *     c) 时间差 ≤ 30 分钟
+ *     d) 同一自然日（按 Asia/Shanghai）
+ */
+function isDuplicate(titleKeyA, timeA, isAllDayA, titleKeyB, timeB, isAllDayB) {
+  if (!titleKeyA || titleKeyA !== titleKeyB) return false;
+  if (!timeA || !timeB) return true;
+  if (isAllDayA || isAllDayB) {
+    return toDateKey(timeA) === toDateKey(timeB);
+  }
+  if (isWithinTolerance(timeA, timeB, 30)) return true;
+  // 兜底：同一天的同名任务也视为重复
+  if (toDateKey(timeA) === toDateKey(timeB)) return true;
+  return false;
 }
 
 async function doExtractAndCreate(inputText, contextDateStr) {
@@ -118,25 +150,25 @@ ${inputText}
 
   if (!result?.tasks || result.tasks.length === 0) return [];
 
-  // ③ 数据库层去重：拉更大窗口，并索引出"同归一标题"的已有时间列表
+  // ③ 数据库层去重：拉更大窗口，并索引出"同归一标题"的已有条目
   let recentTasks = [];
   try {
-    recentTasks = await base44.entities.Task.list("-created_date", 200);
+    recentTasks = await base44.entities.Task.list("-created_date", 500);
   } catch (_) {
     recentTasks = [];
   }
-  // Map<normTitle, Array<reminder_time>>
+  // Map<normTitle, Array<{ time, isAllDay }>>
   const recentIndex = new Map();
   for (const rt of recentTasks) {
     if (rt.deleted_at || rt.parent_task_id) continue;
     const key = normTitle(rt.title);
     if (!key) continue;
     if (!recentIndex.has(key)) recentIndex.set(key, []);
-    recentIndex.get(key).push(rt.reminder_time || null);
+    recentIndex.get(key).push({ time: rt.reminder_time || null, isAllDay: !!rt.is_all_day });
   }
 
   // ② 本批次内去重：同归一标题 & 时间容差
-  const batchCreated = []; // { titleKey, reminderISO }
+  const batchCreated = []; // { titleKey, reminderISO, isAllDay }
   const createdTasks = [];
 
   for (const t of result.tasks) {
@@ -154,19 +186,16 @@ ${inputText}
     const titleKey = normTitle(t.title);
     if (!titleKey) continue;
 
-    // 与本批已创建任务比较（标题 + 10min 容差）
+    // 与本批已创建任务比较
     const dupInBatch = batchCreated.some(b =>
-      b.titleKey === titleKey && (
-        b.reminderISO === normalized.reminder_time ||
-        isWithinTolerance(b.reminderISO, normalized.reminder_time, 10)
-      )
+      isDuplicate(b.titleKey, b.reminderISO, b.isAllDay, titleKey, normalized.reminder_time, normalized.is_all_day)
     );
     if (dupInBatch) continue;
 
-    // 与数据库最近任务比较（标题 + 10min 容差）
-    const existingTimes = recentIndex.get(titleKey) || [];
-    const dupInDb = existingTimes.some(rt =>
-      rt === normalized.reminder_time || isWithinTolerance(rt, normalized.reminder_time, 10)
+    // 与数据库最近任务比较
+    const existingEntries = recentIndex.get(titleKey) || [];
+    const dupInDb = existingEntries.some(e =>
+      isDuplicate(titleKey, e.time, e.isAllDay, titleKey, normalized.reminder_time, normalized.is_all_day)
     );
     if (dupInDb) continue;
 
@@ -185,9 +214,9 @@ ${inputText}
     const created = await base44.entities.Task.create(taskPayload);
 
     // 创建后立刻把它登记到本批索引，防止后续条目与它重复
-    batchCreated.push({ titleKey, reminderISO: normalized.reminder_time });
+    batchCreated.push({ titleKey, reminderISO: normalized.reminder_time, isAllDay: !!normalized.is_all_day });
     if (!recentIndex.has(titleKey)) recentIndex.set(titleKey, []);
-    recentIndex.get(titleKey).push(normalized.reminder_time);
+    recentIndex.get(titleKey).push({ time: normalized.reminder_time, isAllDay: !!normalized.is_all_day });
 
     // Create subtasks
     if (t.subtasks && t.subtasks.length > 0) {
@@ -227,8 +256,8 @@ export async function extractAndCreateTasks(inputText, contextDateStr) {
     return inflightMap.get(lockKey);
   }
   const p = doExtractAndCreate(input, contextDateStr).finally(() => {
-    // 延迟 2s 释放锁，防止极短时间内的重复提交（如 StrictMode 双触发）
-    setTimeout(() => inflightMap.delete(lockKey), 2000);
+    // 延迟 10s 释放锁，覆盖 AI 调用+数据库写入+用户快速重复提交的全过程
+    setTimeout(() => inflightMap.delete(lockKey), 10000);
   });
   inflightMap.set(lockKey, p);
   return p;

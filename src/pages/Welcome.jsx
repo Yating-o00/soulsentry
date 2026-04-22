@@ -169,18 +169,17 @@ export default function Welcome({ onComplete }) {
           input: textToAnalyze
       });
 
-      // Route by intent: wishes → notes only, not tasks
+      // Route by intent: wishes → notes only
       const isWishOrNote = semanticHint?.primary_intent === "wish" || semanticHint?.primary_intent === "note";
 
-      // 同步到约定和心签（愿望类仅同步到心签）
-      if (!isWishOrNote) {
-        extractAndCreateTasks(textToAnalyze).then(tasks => {
-          if (tasks.length > 0) {
-            toast.success(`已同步 ${tasks.length} 个约定`);
-          }
-        }).catch(e => console.error("Task extraction failed", e));
-      }
-      
+      // 始终尝试提取任务：AI 若识别到约定/任务类内容则自动创建约定
+      // extractAndCreateTasks 内部会判断是否存在真正的任务，无任务时返回空数组
+      extractAndCreateTasks(textToAnalyze).then(tasks => {
+        if (tasks.length > 0) {
+          toast.success(`已同步 ${tasks.length} 个约定`);
+        }
+      }).catch(e => console.error("Task extraction failed", e));
+
       // Wishes get special note treatment
       if (isWishOrNote) {
         base44.entities.Note.create({

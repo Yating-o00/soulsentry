@@ -135,24 +135,47 @@ export default function GeofenceMapView() {
       });
     };
 
-    const fallbackByIP = async (prefix = '') => {
+    // 多服务 IP 定位回退（国内环境 ipapi.co 常被拦截，依次尝试多个）
+    const IP_PROVIDERS = [
+      { url: 'https://ipwho.is/', parse: (d) => (d && d.success !== false ? { lat: d.latitude, lng: d.longitude } : null) },
+      { url: 'https://ipapi.co/json/', parse: (d) => (d ? { lat: d.latitude, lng: d.longitude } : null) },
+      { url: 'https://ipapi.com/json/', parse: (d) => (d ? { lat: d.latitude, lng: d.longitude } : null) },
+      { url: 'https://freeipapi.com/api/json', parse: (d) => (d ? { lat: d.latitude, lng: d.longitude } : null) }
+    ];
+
+    const tryOneProvider = async (p) => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
       try {
-        const res = await fetch('https://ipapi.co/json/');
-        if (!res.ok) throw new Error('IP 定位服务不可用');
+        const res = await fetch(p.url, { signal: ctrl.signal });
+        if (!res.ok) return null;
         const data = await res.json();
-        if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-          applyCoords(data.latitude, data.longitude, 'ip');
-        } else {
-          throw new Error('无法解析 IP 位置');
-        }
-      } catch (e) {
-        setGeoDialog({
-          open: true,
-          phase: 'error',
-          message: prefix + '定位失败：' + e.message + '。请手动输入坐标，或检查浏览器定位权限。',
-          coords: null
-        });
+        const c = p.parse(data);
+        if (c && typeof c.lat === 'number' && typeof c.lng === 'number') return c;
+        return null;
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(t);
       }
+    };
+
+    const fallbackByIP = async (prefix = '') => {
+      for (const p of IP_PROVIDERS) {
+        const c = await tryOneProvider(p);
+        if (c) {
+          applyCoords(c.lat, c.lng, 'ip');
+          return;
+        }
+      }
+      setGeoDialog({
+        open: true,
+        phase: 'error',
+        message:
+          prefix +
+          '网络定位也不可用（可能是网络受限或被浏览器拦截）。请在下方手动输入经纬度坐标，或在浏览器地址栏左侧解除站点的定位权限限制后重试。',
+        coords: null
+      });
     };
 
     if (!navigator.geolocation) {

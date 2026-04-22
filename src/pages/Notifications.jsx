@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain, Sparkles } from "lucide-react";
+import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain, Sparkles, Map as MapIcon } from "lucide-react";
 import SoulSentryFeed from "@/components/smart/SoulSentryFeed";
+import GeofenceMapView from "@/components/location/GeofenceMapView";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -207,6 +208,9 @@ export default function NotificationsPage() {
           <button onClick={() => setActiveTab("sentry")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "sentry" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
             <Sparkles className="w-4 h-4 inline mr-1.5" />情境哨兵
           </button>
+          <button onClick={() => setActiveTab("map")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "map" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            <MapIcon className="w-4 h-4 inline mr-1.5" />地图视图
+          </button>
           <button onClick={() => setActiveTab("executions")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "executions" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
             <Zap className="w-4 h-4 inline mr-1.5" />执行控制台
           </button>
@@ -218,6 +222,9 @@ export default function NotificationsPage() {
 
         {/* 情境哨兵 */}
         {activeTab === "sentry" && <SoulSentryFeed showHeader={true} />}
+
+        {/* 地图视图 */}
+        {activeTab === "map" && <GeofenceMapView />}
 
         {/* Execution feed */}
         {activeTab === "executions" && (

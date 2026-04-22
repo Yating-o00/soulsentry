@@ -75,6 +75,10 @@ export default function GeofenceMapView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
+  // 定位授权/状态对话框
+  const [geoDialog, setGeoDialog] = useState({ open: false, phase: 'ask', message: '', coords: null });
+  // phase: 'ask' | 'loading' | 'success' | 'error'
+
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['saved-locations'],
     queryFn: () => base44.entities.SavedLocation.list('-created_date'),
@@ -110,19 +114,28 @@ export default function GeofenceMapView() {
     }
   });
 
-  const useCurrentLocation = async () => {
-    toast.loading('正在获取当前位置...', { id: 'geo' });
+  // 点击"使用当前位置"——先弹出授权确认对话框
+  const openGeoDialog = () => {
+    setGeoDialog({ open: true, phase: 'ask', message: '', coords: null });
+  };
+
+  // 用户在对话框确认授权后，真正执行定位
+  const confirmAndLocate = async () => {
+    setGeoDialog((s) => ({ ...s, phase: 'loading', message: '正在获取位置...' }));
 
     const applyCoords = (lat, lng, source) => {
-      setForm((f) => ({
-        ...f,
-        latitude: Number(lat.toFixed(6)),
-        longitude: Number(lng.toFixed(6))
-      }));
-      toast.success(source === 'ip' ? '已使用网络定位（精度较低）' : '位置已获取', { id: 'geo' });
+      const la = Number(lat.toFixed(6));
+      const ln = Number(lng.toFixed(6));
+      setForm((f) => ({ ...f, latitude: la, longitude: ln }));
+      setGeoDialog({
+        open: true,
+        phase: 'success',
+        message: source === 'ip' ? '已使用网络定位（精度较低）' : '定位成功（GPS/浏览器）',
+        coords: { lat: la, lng: ln, source }
+      });
     };
 
-    const fallbackByIP = async () => {
+    const fallbackByIP = async (prefix = '') => {
       try {
         const res = await fetch('https://ipapi.co/json/');
         if (!res.ok) throw new Error('IP 定位服务不可用');
@@ -133,21 +146,25 @@ export default function GeofenceMapView() {
           throw new Error('无法解析 IP 位置');
         }
       } catch (e) {
-        toast.error('定位失败：' + e.message + '。请手动输入坐标。', { id: 'geo' });
+        setGeoDialog({
+          open: true,
+          phase: 'error',
+          message: prefix + '定位失败：' + e.message + '。请手动输入坐标，或检查浏览器定位权限。',
+          coords: null
+        });
       }
     };
 
     if (!navigator.geolocation) {
-      await fallbackByIP();
+      await fallbackByIP('当前浏览器不支持 Geolocation。');
       return;
     }
 
-    // 浏览器 geolocation，带超时兜底（预览 iframe 常因 permissions policy 静默阻塞）
     let finished = false;
     const timer = setTimeout(() => {
       if (finished) return;
       finished = true;
-      fallbackByIP();
+      fallbackByIP('浏览器定位超时，改用网络定位。');
     }, 8000);
 
     navigator.geolocation.getCurrentPosition(
@@ -161,11 +178,11 @@ export default function GeofenceMapView() {
         if (finished) return;
         finished = true;
         clearTimeout(timer);
-        // 权限拒绝或不可用时回退 IP
         if (err.code === 1) {
-          toast.error('浏览器已拒绝定位权限，改用网络定位...', { id: 'geo' });
+          await fallbackByIP('浏览器已拒绝定位权限，改用网络定位。');
+        } else {
+          await fallbackByIP('浏览器定位不可用（' + (err.message || 'code ' + err.code) + '），改用网络定位。');
         }
-        await fallbackByIP();
       },
       { enableHighAccuracy: true, timeout: 7000, maximumAge: 60000 }
     );
@@ -326,6 +343,80 @@ export default function GeofenceMapView() {
         location={editing}
       />
 
+      {/* 定位权限 & 状态对话框 */}
+      <Dialog
+        open={geoDialog.open}
+        onOpenChange={(o) => {
+          // loading 中不允许关闭，防止用户误触
+          if (geoDialog.phase === 'loading') return;
+          setGeoDialog((s) => ({ ...s, open: o }));
+        }}
+      >
+        <DialogContent className="max-w-sm z-[9999]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crosshair className="w-5 h-5 text-blue-500" />
+              {geoDialog.phase === 'ask' && '获取当前位置'}
+              {geoDialog.phase === 'loading' && '正在定位...'}
+              {geoDialog.phase === 'success' && '定位成功'}
+              {geoDialog.phase === 'error' && '定位失败'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-2 text-sm text-slate-600 space-y-3">
+            {geoDialog.phase === 'ask' && (
+              <>
+                <p>需要获取你的当前位置以自动填写坐标。</p>
+                <p className="text-xs text-slate-500">
+                  点击「允许」后，浏览器将请求定位权限。如果被拒绝或不可用，会尝试使用网络（IP）定位。
+                </p>
+              </>
+            )}
+            {geoDialog.phase === 'loading' && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <span>正在获取位置，请稍候（最多 8 秒）...</span>
+              </div>
+            )}
+            {geoDialog.phase === 'success' && geoDialog.coords && (
+              <div className="space-y-2">
+                <p>{geoDialog.message}</p>
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 font-mono text-xs">
+                  <div>纬度（lat）：<span className="text-blue-600 font-semibold">{geoDialog.coords.lat}</span></div>
+                  <div>经度（lng）：<span className="text-blue-600 font-semibold">{geoDialog.coords.lng}</span></div>
+                  <div className="text-slate-400 mt-1">来源：{geoDialog.coords.source === 'ip' ? 'IP 网络定位' : 'GPS / 浏览器'}</div>
+                </div>
+                <p className="text-xs text-slate-500">坐标已自动填入表单。</p>
+              </div>
+            )}
+            {geoDialog.phase === 'error' && (
+              <p className="text-red-600">{geoDialog.message}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            {geoDialog.phase === 'ask' && (
+              <>
+                <Button variant="outline" onClick={() => setGeoDialog((s) => ({ ...s, open: false }))}>
+                  取消
+                </Button>
+                <Button className="bg-[#384877] hover:bg-[#2d3a61]" onClick={confirmAndLocate}>
+                  允许并定位
+                </Button>
+              </>
+            )}
+            {geoDialog.phase === 'loading' && (
+              <Button variant="outline" disabled>定位中...</Button>
+            )}
+            {(geoDialog.phase === 'success' || geoDialog.phase === 'error') && (
+              <Button onClick={() => setGeoDialog((s) => ({ ...s, open: false }))}>
+                完成
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 新增地点 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
@@ -381,7 +472,7 @@ export default function GeofenceMapView() {
                 variant="outline"
                 size="sm"
                 className="mt-2 w-full"
-                onClick={useCurrentLocation}
+                onClick={openGeoDialog}
               >
                 <Crosshair className="w-4 h-4 mr-2" />使用当前位置
               </Button>

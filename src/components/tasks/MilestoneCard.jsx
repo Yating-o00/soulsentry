@@ -64,9 +64,14 @@ export default function MilestoneCard({
     if (!task.reminder_time) return "待定";
     const date = new Date(task.reminder_time);
     const now = new Date();
-    const diffDays = Math.floor((date - now) / (1000 * 60 * 60 * 24));
-    if (diffDays < 0) return "已过期";
+    // 按"自然日"计算，而非 24 小时毫秒差，避免"今晚→明早"被算成 0 天
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const diffDays = Math.round((startOfDay(date) - startOfDay(now)) / (1000 * 60 * 60 * 24));
+    // 用完整时间戳判断"已过期"（已到截止时刻且未完成）
+    if (date.getTime() < now.getTime() && diffDays <= 0) return "已过期";
     if (diffDays === 0) return "今天截止";
+    if (diffDays === 1) return "明天截止";
+    if (diffDays < 0) return `${Math.abs(diffDays)}天前`;
     return `${diffDays}天后`;
   };
 
@@ -326,7 +331,7 @@ export default function MilestoneCard({
             <div className="flex items-center gap-3 text-xs">
               <span className="flex items-center gap-1 text-stone-400">
                 <Calendar className="w-3 h-3" />
-                {task.reminder_time ? format(new Date(task.reminder_time), 'EEE截止', { locale: zhCN }) : '无截止日期'}
+                {task.reminder_time ? format(new Date(task.reminder_time), 'M月d日 EEE', { locale: zhCN }) : '无截止日期'}
               </span>
               <span className="w-1 h-1 rounded-full bg-stone-300"></span>
               <span className="flex items-center gap-1 text-stone-400">

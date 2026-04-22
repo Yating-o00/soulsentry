@@ -1,0 +1,82 @@
+{
+  "name": "SavedLocation",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "\u5730\u70b9\u540d\u79f0\uff0c\u5982\uff1a\u516c\u53f8\u3001\u5bb6\u3001\u5065\u8eab\u623f"
+    },
+    "location_type": {
+      "type": "string",
+      "enum": [
+        "home",
+        "office",
+        "gym",
+        "school",
+        "shopping",
+        "hospital",
+        "restaurant",
+        "other"
+      ],
+      "default": "other",
+      "description": "\u5730\u70b9\u7c7b\u578b"
+    },
+    "latitude": {
+      "type": "number",
+      "description": "\u7eac\u5ea6"
+    },
+    "longitude": {
+      "type": "number",
+      "description": "\u7ecf\u5ea6"
+    },
+    "radius": {
+      "type": "number",
+      "default": 200,
+      "description": "\u5730\u7406\u56f4\u680f\u534a\u5f84\uff08\u7c73\uff09"
+    },
+    "address": {
+      "type": "string",
+      "description": "\u8be6\u7ec6\u5730\u5740"
+    },
+    "icon": {
+      "type": "string",
+      "default": "\ud83d\udccd",
+      "description": "\u663e\u793a\u56fe\u6807"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "\u662f\u5426\u542f\u7528\u8be5\u5730\u70b9\u7684\u56f4\u680f\u63d0\u9192"
+    },
+    "trigger_on": {
+      "type": "string",
+      "enum": [
+        "enter",
+        "exit",
+        "both"
+      ],
+      "default": "enter",
+      "description": "\u89e6\u53d1\u65b9\u5f0f\uff1a\u8fdb\u5165/\u79bb\u5f00/\u4e24\u8005"
+    },
+    "last_entered_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u6700\u8fd1\u4e00\u6b21\u8fdb\u5165\u65f6\u95f4\uff08\u7528\u4e8e\u9632\u6296\uff09"
+    },
+    "last_exited_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u6700\u8fd1\u4e00\u6b21\u79bb\u5f00\u65f6\u95f4\uff08\u7528\u4e8e\u9632\u6296\uff09"
+    },
+    "quiet_minutes": {
+      "type": "number",
+      "default": 30,
+      "description": "\u9759\u9ed8\u671f\uff08\u5206\u949f\uff09\uff0c\u9632\u6b62\u91cd\u590d\u89e6\u53d1"
+    }
+  },
+  "required": [
+    "name",
+    "latitude",
+    "longitude"
+  ]
+}

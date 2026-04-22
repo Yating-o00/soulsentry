@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, MapPin } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -10,6 +10,7 @@ import WelcomeGuard from "@/components/WelcomeGuard";
 import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
+import GeofenceTracker from "./components/location/GeofenceTracker";
 import { base44 } from "@/api/base44Client";
 import { getCachedUser } from "@/lib/userCache";
 import {
@@ -61,6 +62,11 @@ const getNavigationItems = (t) => [
     title: t('notifications'),
     url: createPageUrl("Notifications"),
     icon: Bell,
+  },
+  {
+    title: "地点围栏",
+    url: createPageUrl("SavedLocations"),
+    icon: MapPin,
   },
 ];
 
@@ -345,6 +351,7 @@ function LayoutContent({ children }) {
         <PWAInstallPrompt />
         <PWAUpdateNotification />
         <NotificationManager />
+        <GeofenceTracker />
 
         {/* 离线状态提示 */}
         {!isOnline && (

@@ -148,17 +148,22 @@ Deno.serve(async (req) => {
         .join(' | ');
 
       const target = upcoming[0];
-      const targetETA = Math.round((new Date(target.reminder_time).getTime() - now.getTime()) / 60000);
+      const etaMin = Math.round((new Date(target.reminder_time).getTime() - now.getTime()) / 60000);
+      const etaLabel = etaMin < 60
+        ? `${etaMin}分钟后`
+        : etaMin < 60 * 24
+          ? `${Math.round(etaMin / 60)}小时后`
+          : `${Math.round(etaMin / 1440)}天后`;
 
       const ai = await callKimi([
         {
           role: 'system',
-          content: '你根据用户临近任务与最近心签（笔记），给出一条"预测性信息推送"，帮用户在到达/开始之前做好决策。严格 JSON：{"headline":"一行标题（20字内，含 emoji）","payload_title":"主待办一句话","suggestions":["建议1","建议2","建议3"],"context_note":"灵感来源（20字内）"}'
+          content: '你根据用户临近任务与最近心签，给出一条"预测性信息推送"，帮用户提前准备。严格 JSON：{"headline":"一行标题（20字内，含 emoji，使用自然时间词如"即将到来/今晚/明早"，不要直接写分钟数）","payload_title":"主待办一句话","suggestions":["建议1","建议2","建议3"],"context_note":"灵感来源（20字内）"}'
         },
         {
           role: 'user',
           content: `当前时间：${now.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-临近任务：${target.title}（${targetETA}分钟后 · 分类${target.category || '其他'} · 优先级${target.priority || 'medium'}）
+临近任务：${target.title}（${etaLabel} · 分类${target.category || '其他'} · 优先级${target.priority || 'medium'}）
 其他待办：${upcoming.slice(1).map((t) => t.title).join('、') || '无'}
 最近心签摘录：${noteSummary || '无'}`
         }
@@ -169,7 +174,7 @@ Deno.serve(async (req) => {
         priority: 'normal',
         title: '决策预加载',
         subtitle: '预测性信息推送',
-        headline: ai?.headline || `🛍️ ${targetETA}分钟后：${target.title}`,
+        headline: ai?.headline || `🛍️ ${etaLabel}：${target.title}`,
         payload_title: ai?.payload_title || target.title,
         suggestions: ai?.suggestions || [],
         context_note: ai?.context_note || '基于你的近期记录生成',

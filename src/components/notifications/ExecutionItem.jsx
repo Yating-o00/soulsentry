@@ -88,15 +88,28 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
                 </Badge>
               </div>
             </div>
-            {totalSteps > 0 && (
-              <div className="mt-3 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-indigo-500" /><span className="text-xs font-medium text-slate-700">执行链路</span></div>
-                  <span className="text-[11px] text-slate-400">{completedSteps}/{totalSteps}{execution.execution_status === "executing" && " · 同步中"}</span>
+            {totalSteps > 0 && (() => {
+              const isRealityChain = (execution.execution_steps || []).every(s => s.status === "todo" || !!s.when_hint);
+              return (
+                <div className="mt-3 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-indigo-500" />
+                      <span className="text-xs font-medium text-slate-700">
+                        {isRealityChain ? "事项链路" : "执行链路"}
+                      </span>
+                      {isRealityChain && (
+                        <span className="text-[10px] text-slate-400">· AI 理解生成</span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      {isRealityChain ? `${totalSteps} 项待办` : `${completedSteps}/${totalSteps}${execution.execution_status === "executing" ? " · 同步中" : ""}`}
+                    </span>
+                  </div>
+                  <ExecutionStepFlow steps={execution.execution_steps} />
                 </div>
-                <ExecutionStepFlow steps={execution.execution_steps} />
-              </div>
-            )}
+              );
+            })()}
             {execution.execution_status === "waiting_confirm" && (
               <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-amber-50 border border-amber-200">
                 <div className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-500" /><span className="text-xs font-medium text-amber-700">部分步骤需要确认</span></div>

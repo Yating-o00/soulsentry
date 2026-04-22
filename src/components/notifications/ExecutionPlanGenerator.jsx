@@ -47,38 +47,68 @@ ${semanticContext}
   },
   "execution_steps": [
     {
-      "step_name": "步骤名称",
-      "action_type": "auto/confirm",
+      "step_name": "事项名称（6-10字，动词开头）",
+      "detail": "这件事具体要做什么、为什么需要做",
+      "when_hint": "建议什么时候做（如'约定前1天'、'出发前30分钟'）"
+    }
+  ],
+  "system_actions": [
+    {
       "action_key": "create_task/sync_calendar/set_reminder/send_email/create_note/sync_google_tasks/create_wish",
-      "detail": "步骤的具体描述",
       "params": {}
     }
   ],
   "user_prompts": ["需要用户确认或补充的提示信息列表"]
 }
 
-【意图路由规则（核心）】：
-1. meeting（会议/约见）：创建任务→同步日历→设置提前提醒→(如有参会者)发送邮件通知
-2. schedule（明确日程）：创建任务→同步日历→设置提醒
-3. task（具体待办）：创建任务→设置提醒
-4. reminder（纯提醒）：创建任务→设置提醒
-5. wish（愿望/模糊想法，如"我想学钢琴"）：category设为"wish"，创建心签→关联标签。不要创建任务或日程！
-6. note（随手记/感想）：category设为"note"，创建心签→关联标签。不要创建任务！
+【🔴 execution_steps 的核心定义 - 务必理解】：
+execution_steps 不是"产品内操作流程"，而是【AI 理解用户约定后，完成这件约定在现实世界中所需的具体事项链路】。
+它描述的是用户要做的事，不是系统要做的事。
 
-【时间处理规则（增强）】：
+✅ 正确示例 - "下周和老王吃饭"：
+  [
+    {"step_name": "联系老王定时间", "detail": "微信确认下周具体哪天方便", "when_hint": "本周内"},
+    {"step_name": "选餐厅并订位", "detail": "根据老王口味选合适的餐厅，提前订位", "when_hint": "确认时间后"},
+    {"step_name": "出发前确认", "detail": "当天再次确认时间地点，规划路线", "when_hint": "赴约当天"},
+    {"step_name": "赴约", "detail": "按时到达，享受聚餐", "when_hint": "约定时间"}
+  ]
+
+✅ 正确示例 - "下个月要做季度汇报"：
+  [
+    {"step_name": "收集数据素材", "detail": "整理本季度关键指标与项目进展", "when_hint": "汇报前2周"},
+    {"step_name": "撰写汇报框架", "detail": "列提纲：成果/问题/下季计划", "when_hint": "汇报前1周"},
+    {"step_name": "制作PPT", "detail": "根据框架制作演示文稿", "when_hint": "汇报前5天"},
+    {"step_name": "内部彩排", "detail": "找同事试讲并收集反馈", "when_hint": "汇报前2天"},
+    {"step_name": "正式汇报", "detail": "按计划完成汇报", "when_hint": "汇报当天"}
+  ]
+
+❌ 错误示例（这是产品内动作，不要出现在 execution_steps 里）：
+  "创建任务"、"同步日历"、"设置提醒"、"发送邮件通知"、"加入愿望清单"
+
+【system_actions 则用于产品后台自动执行的操作】（不展示给用户为"链路"）：
+1. meeting/schedule：create_task + sync_calendar + set_reminder
+2. task/reminder：create_task + set_reminder
+3. wish：create_wish
+4. note：create_note
+
+【时间处理规则】：
 - 优先使用上游语义分析中已解析的时间实体（resolved_datetime）
-- "后天下午" → 从当前日期推算具体日期，下午默认14:00
+- "后天下午" → 从当前日期推算，下午默认14:00
 - "下个月第一个周一" → 精确计算日期
 - "下周和老王吃饭" → 下周取合理时段（如周六12:00）
-- 模糊时间（"过几天"、"有空"）→ 设 reminder_time 为3天后，标注需确认
+- 模糊时间 → 设 reminder_time 为3天后
 - 场景时间（"下班后"）→ 默认18:30
-- 会议默认时长1小时，设置提前15分钟提醒
+- 会议默认时长1小时
 
-【智能补全规则】：
+【智能补全】：
 - 提到人名时 → tags 中加 "@人名"
-- 提到地点时 → tags 中加 "📍地点"  
-- 涉及他人时 → 添加邮件通知步骤(标记confirm)
-- execution_steps至少2步`,
+- 提到地点时 → tags 中加 "📍地点"
+
+【execution_steps 生成要求】：
+- 步骤数量 3-6 个，视事项复杂度而定
+- 每一步都是用户需要付诸行动的具体事项
+- 按时间/逻辑先后顺序排列
+- 对于 wish/note 类，可以生成"实现这个愿望的路径"（如"我想学钢琴"→ 找老师/买琴/每日练习）`,
     response_json_schema: {
       type: "object",
       properties: {
@@ -99,13 +129,23 @@ ${semanticContext}
         },
         execution_steps: {
           type: "array",
+          description: "AI理解约定后生成的【现实事项链路】——用户要做的事",
           items: {
             type: "object",
             properties: {
               step_name: { type: "string" },
-              action_type: { type: "string" },
-              action_key: { type: "string" },
               detail: { type: "string" },
+              when_hint: { type: "string" }
+            }
+          }
+        },
+        system_actions: {
+          type: "array",
+          description: "产品后台自动执行的系统动作",
+          items: {
+            type: "object",
+            properties: {
+              action_key: { type: "string" },
               params: { type: "object" }
             }
           }
@@ -114,6 +154,11 @@ ${semanticContext}
       }
     }
   });
+
+  // 向后兼容：如果调用方按 action_key 执行步骤，优先使用 system_actions
+  if (result && Array.isArray(result.system_actions) && result.system_actions.length > 0) {
+    result._system_actions = result.system_actions;
+  }
 
   return result;
 }

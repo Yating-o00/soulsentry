@@ -1,4 +1,5 @@
 import { base44 } from "@/api/base44Client";
+import { generateRealityChain } from "@/components/utils/generateRealityChain";
 
 const SOURCE_CONFIG = {
   welcome: { label: "欢迎页", emoji: "👋", color: "purple" },
@@ -32,64 +33,36 @@ export async function createExecutionRecord({ title, originalInput, source, cate
   const now = new Date().toISOString();
   const cfg = SOURCE_CONFIG[source] || { label: source, emoji: "⚡", color: "slate" };
 
-  // Build rich execution steps from plan context
-  const steps = [];
-
-  // Step 1: Source capture
-  steps.push({
-    step_name: "意图捕获",
-    status: "completed",
-    detail: `${cfg.emoji} 来源: ${cfg.label}`,
-    timestamp: now,
-  });
-
-  // Step 2: AI analysis
-  steps.push({
-    step_name: "AI智能解析",
-    status: "completed",
-    detail: title?.slice(0, 60) || "内容已解析",
-    timestamp: now,
-  });
-
-  // Step 3+: Timeline items created
-  if (planContext?.timelineItems?.length > 0) {
-    steps.push({
-      step_name: "日程生成",
-      status: "completed",
-      detail: `已规划 ${planContext.timelineItems.length} 个时间段: ${planContext.timelineItems.slice(0, 3).map(t => t.time ? `${t.time} ${t.title}` : t.title).join('、')}${planContext.timelineItems.length > 3 ? '...' : ''}`,
-      timestamp: now,
+  // 【核心变更】执行链路不再是"产品内流程"，而是
+  // AI 理解用户约定后推导的"现实事项链路"——用户真正要做的事
+  let steps = [];
+  try {
+    const chain = await generateRealityChain({
+      title,
+      originalInput,
+      category,
+      dueAt: planContext?.date,
     });
+    if (chain && chain.length > 0) {
+      steps = chain.map((s) => ({
+        step_name: s.step_name,
+        detail: s.detail || "",
+        when_hint: s.when_hint || "",
+        status: "todo", // 事项链路用 todo 态，表示"待去做"，区别于产品内的 completed/running/pending
+        timestamp: null,
+      }));
+    }
+  } catch (e) {
+    console.warn("generateRealityChain failed, fallback to product steps:", e);
   }
 
-  // Step 4: Automation items
-  if (planContext?.automationItems?.length > 0) {
-    steps.push({
-      step_name: "执行清单",
-      status: "completed",
-      detail: `已生成 ${planContext.automationItems.length} 项: ${planContext.automationItems.slice(0, 3).map(a => a.title).join('、')}${planContext.automationItems.length > 3 ? '...' : ''}`,
-      timestamp: now,
-    });
-  }
-
-  // Step 5: Sync targets
-  if (planContext?.syncTargets?.length > 0) {
-    const targetLabels = { tasks: "约定", notes: "心签", calendar: "日历" };
-    steps.push({
-      step_name: "数据同步",
-      status: "completed",
-      detail: `已同步到: ${planContext.syncTargets.map(t => targetLabels[t] || t).join(' + ')}`,
-      timestamp: now,
-    });
-  }
-
-  // Fallback if no rich steps
-  if (steps.length <= 2) {
-    steps.push({
-      step_name: "创建完成",
-      status: "completed",
-      detail: title?.slice(0, 40) || "已创建",
-      timestamp: now,
-    });
+  // Fallback：AI 未产出有效链路时，回退到原产品内步骤（保持数据结构兼容）
+  if (steps.length === 0) {
+    steps = [
+      { step_name: "意图捕获", status: "completed", detail: `${cfg.emoji} 来源: ${cfg.label}`, timestamp: now },
+      { step_name: "AI智能解析", status: "completed", detail: title?.slice(0, 60) || "内容已解析", timestamp: now },
+      { step_name: "创建完成", status: "completed", detail: title?.slice(0, 40) || "已创建", timestamp: now },
+    ];
   }
 
   const aiParsedResult = {

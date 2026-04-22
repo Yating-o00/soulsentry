@@ -138,13 +138,37 @@ ${taskSummary || '（暂无待办）'}
         related_entity_id: t.location.id
       });
 
+      // 发送 Web Push：即使页面已关闭，SW 也能接收并弹出系统通知
+      let pushed = false;
+      try {
+        const pushBody = aiResult?.top_tasks?.length
+          ? `${message}\n待办：${aiResult.top_tasks.slice(0, 3).join('、')}`
+          : message;
+        await base44.functions.invoke('sendWebPush', {
+          title: `${t.location.icon || '📍'} ${title}`,
+          body: pushBody,
+          url: '/Tasks',
+          tag: `geofence-${t.location.id}`,
+          data: {
+            location_id: t.location.id,
+            location_name: t.location.name,
+            event: t.event,
+            notification_id: notif.id
+          }
+        });
+        pushed = true;
+      } catch (pushErr) {
+        console.warn('[geofence] web push failed:', pushErr?.message);
+      }
+
       reminders.push({
         event: t.event,
         location_name: t.location.name,
         title,
         message,
         top_tasks: aiResult?.top_tasks || [],
-        notification_id: notif.id
+        notification_id: notif.id,
+        pushed
       });
     }
 

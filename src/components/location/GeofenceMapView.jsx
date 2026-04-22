@@ -110,23 +110,64 @@ export default function GeofenceMapView() {
     }
   });
 
-  const useCurrentLocation = () => {
+  const useCurrentLocation = async () => {
+    toast.loading('正在获取当前位置...', { id: 'geo' });
+
+    const applyCoords = (lat, lng, source) => {
+      setForm((f) => ({
+        ...f,
+        latitude: Number(lat.toFixed(6)),
+        longitude: Number(lng.toFixed(6))
+      }));
+      toast.success(source === 'ip' ? '已使用网络定位（精度较低）' : '位置已获取', { id: 'geo' });
+    };
+
+    const fallbackByIP = async () => {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        if (!res.ok) throw new Error('IP 定位服务不可用');
+        const data = await res.json();
+        if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+          applyCoords(data.latitude, data.longitude, 'ip');
+        } else {
+          throw new Error('无法解析 IP 位置');
+        }
+      } catch (e) {
+        toast.error('定位失败：' + e.message + '。请手动输入坐标。', { id: 'geo' });
+      }
+    };
+
     if (!navigator.geolocation) {
-      toast.error('当前浏览器不支持定位');
+      await fallbackByIP();
       return;
     }
-    toast.loading('正在获取当前位置...', { id: 'geo' });
+
+    // 浏览器 geolocation，带超时兜底（预览 iframe 常因 permissions policy 静默阻塞）
+    let finished = false;
+    const timer = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      fallbackByIP();
+    }, 8000);
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setForm((f) => ({
-          ...f,
-          latitude: Number(pos.coords.latitude.toFixed(6)),
-          longitude: Number(pos.coords.longitude.toFixed(6))
-        }));
-        toast.success('位置已获取', { id: 'geo' });
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        applyCoords(pos.coords.latitude, pos.coords.longitude, 'gps');
       },
-      (err) => toast.error('获取位置失败: ' + err.message, { id: 'geo' }),
-      { enableHighAccuracy: true, timeout: 15000 }
+      async (err) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        // 权限拒绝或不可用时回退 IP
+        if (err.code === 1) {
+          toast.error('浏览器已拒绝定位权限，改用网络定位...', { id: 'geo' });
+        }
+        await fallbackByIP();
+      },
+      { enableHighAccuracy: true, timeout: 7000, maximumAge: 60000 }
     );
   };
 

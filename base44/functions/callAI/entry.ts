@@ -21,9 +21,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'prompt is required' }, { status: 400 });
     }
 
-    const apiKey = Deno.env.get("MOONSHOT_API_KEY");
+    const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
     if (!apiKey) {
-      return Response.json({ error: 'MOONSHOT_API_KEY not set' }, { status: 500 });
+      return Response.json({ error: 'KIMI_API_KEY not set' }, { status: 500 });
     }
 
     const messages = [];

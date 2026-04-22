@@ -13,7 +13,7 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 async function callKimi(prompt) {
-  const apiKey = Deno.env.get("MOONSHOT_API_KEY");
+  const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
   if (!apiKey) return null;
 
   try {

@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Mic, MicOff, Image as ImageIcon, Send, Sparkles, Smartphone, Watch, Glasses, Car, Home, Laptop, Check, Brain, MapPin, Zap } from "lucide-react";
 import { toast } from "sonner";
 import "./SoulSentryHub.css";
+import { getEventIcon } from "./iconMatcher";
 
 // Color mapping for inline styles or arbitrary tailwind classes - Updated to match Product Tone
 const colors = {
@@ -403,7 +404,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                                 <div key={idx} className="timeline-item relative pl-12 pb-8 last:pb-0 group cursor-pointer">
                                     <div className="timeline-line bg-slate-100"></div>
                                     <div className={`absolute left-0 top-0 w-12 h-12 rounded-full ${event.highlight ? 'bg-[#384877]/10' : 'bg-slate-50'} flex items-center justify-center text-2xl border border-slate-100 shadow-sm z-10 group-hover:scale-110 transition-transform`}>
-                                        {event.icon}
+                                        {getEventIcon(event)}
                                     </div>
                                     <div className="pt-2">
                                         <div className="flex items-baseline gap-3 mb-1">
@@ -431,7 +432,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                                 <div key={idx} className="bg-white rounded-xl md:rounded-2xl p-4 md:p-5 border border-slate-100 hover:border-[#384877]/30 hover:shadow-md transition-all group">
                                     <div className="flex items-start justify-between mb-3">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-2xl">{task.icon}</span>
+                                            <span className="text-2xl">{getEventIcon(task)}</span>
                                             <div>
                                                 <h4 className="font-medium text-slate-800 text-sm mb-0.5">{task.title}</h4>
                                                 <div className="flex items-center gap-2">

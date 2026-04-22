@@ -12,6 +12,31 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+// 拉取未来 windowMinutes 分钟内的 Google Calendar 事件（若已授权）
+async function fetchUpcomingCalendarEvents(base44, windowMinutes = 240) {
+  try {
+    const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
+    if (!accessToken) return [];
+    const timeMin = new Date().toISOString();
+    const timeMax = new Date(Date.now() + windowMinutes * 60 * 1000).toISOString();
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?`
+      + `timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`
+      + `&singleEvents=true&orderBy=startTime&maxResults=10`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.items || []).map((e) => ({
+      id: e.id,
+      summary: e.summary || '(无标题)',
+      start: e.start?.dateTime || e.start?.date,
+      location: e.location || '',
+      hangoutLink: e.hangoutLink || e.conferenceData?.entryPoints?.[0]?.uri || ''
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function callKimi(prompt) {
   const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
   if (!apiKey) return null;
@@ -113,6 +138,17 @@ Deno.serve(async (req) => {
         `- [${t.priority || 'medium'}] ${t.title}${t.reminder_time ? ` (计划: ${new Date(t.reminder_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })})` : ''}`
       ).join('\n');
 
+      // 拉取未来 4 小时内的日历会议
+      const upcomingEvents = await fetchUpcomingCalendarEvents(base44, 240);
+      const eventSummary = upcomingEvents.slice(0, 5).map((ev) => {
+        const startStr = ev.start
+          ? new Date(ev.start).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+          : '时间未定';
+        const loc = ev.location ? ` @ ${ev.location}` : '';
+        const link = ev.hangoutLink ? ' [线上会议]' : '';
+        return `- ${ev.summary} (开始: ${startStr})${loc}${link}`;
+      }).join('\n');
+
       const eventText = t.event === 'enter' ? '刚刚到达' : '刚刚离开';
       const prompt = `用户${eventText}【${t.location.name}】（类型：${t.location.location_type}）。
 
@@ -121,7 +157,13 @@ Deno.serve(async (req) => {
 用户待办清单：
 ${taskSummary || '（暂无待办）'}
 
-请根据地点类型和待办内容，挑选最相关的1-3条任务，生成情境化提醒。例如：到达公司推送工作任务，到达商场推送购物清单，离开公司推送生活待办。`;
+未来4小时内的日历会议：
+${eventSummary || '（无即将开始的会议）'}
+
+请综合考虑地点、待办和即将开始的会议，生成情境化提醒：
+- 若有会议即将开始（尤其是30分钟内），优先提醒会议（含开始时间/地点/是否线上）；
+- 到达公司推送工作任务与会议；到达商场推送购物清单；离开公司推送生活待办；
+- 挑选最相关的1-3条，top_tasks 中同时可包含任务标题和会议标题。`;
 
       const aiResult = await callKimi(prompt);
 
@@ -167,6 +209,7 @@ ${taskSummary || '（暂无待办）'}
         title,
         message,
         top_tasks: aiResult?.top_tasks || [],
+        calendar_events: upcomingEvents.slice(0, 5),
         notification_id: notif.id,
         pushed
       });

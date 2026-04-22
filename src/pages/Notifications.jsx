@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain } from "lucide-react";
+import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain, Sparkles } from "lucide-react";
+import SoulSentryFeed from "@/components/smart/SoulSentryFeed";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -202,15 +203,21 @@ export default function NotificationsPage() {
         <ExecutionStatusCards executions={executions} activeStatus={statusFilter} onStatusClick={setStatusFilter} />
 
         {/* Tab switch */}
-        <div className="flex items-center gap-3 border-b border-slate-200 pb-0">
-          <button onClick={() => setActiveTab("executions")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === "executions" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+        <div className="flex items-center gap-3 border-b border-slate-200 pb-0 overflow-x-auto">
+          <button onClick={() => setActiveTab("sentry")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "sentry" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            <Sparkles className="w-4 h-4 inline mr-1.5" />情境哨兵
+          </button>
+          <button onClick={() => setActiveTab("executions")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "executions" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
             <Zap className="w-4 h-4 inline mr-1.5" />执行控制台
           </button>
-          <button onClick={() => setActiveTab("notifications")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === "notifications" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+          <button onClick={() => setActiveTab("notifications")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "notifications" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
             <Bell className="w-4 h-4 inline mr-1.5" />系统通知
             {unreadCount > 0 && <Badge className="ml-1.5 bg-red-500 hover:bg-red-600 border-0 text-[10px] px-1.5">{unreadCount}</Badge>}
           </button>
         </div>
+
+        {/* 情境哨兵 */}
+        {activeTab === "sentry" && <SoulSentryFeed showHeader={true} />}
 
         {/* Execution feed */}
         {activeTab === "executions" && (

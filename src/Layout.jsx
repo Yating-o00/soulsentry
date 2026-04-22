@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, MapPin } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -62,11 +62,6 @@ const getNavigationItems = (t) => [
     title: t('notifications'),
     url: createPageUrl("Notifications"),
     icon: Bell,
-  },
-  {
-    title: "地点围栏",
-    url: createPageUrl("SavedLocations"),
-    icon: MapPin,
   },
 ];
 

@@ -10,6 +10,8 @@ import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks"
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
 import { deepSemanticParse } from "@/components/utils/semanticParser";
+import { detectEmailIntent } from "@/components/gmail/detectEmailIntent";
+import EmailSendConfirmDialog from "@/components/gmail/EmailSendConfirmDialog";
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
@@ -20,6 +22,8 @@ export default function Welcome({ onComplete }) {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [emailSuggestion, setEmailSuggestion] = useState(null);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
   const recognitionRef = useRef(null);
   const imageInputRef = useRef(null);
   const navigate = useNavigate();
@@ -196,6 +200,14 @@ export default function Welcome({ onComplete }) {
       syncPlanToNote(textToAnalyze, "welcome").then(note => {
         if (note) toast.success("已同步到心签");
       }).catch(e => console.error("Note sync failed", e));
+
+      // 邮件意图检测：识别到发送邮件意图时弹出确认对话框
+      detectEmailIntent(textToAnalyze).then(suggestion => {
+        if (suggestion) {
+          setEmailSuggestion(suggestion);
+          setShowEmailDialog(true);
+        }
+      }).catch(e => console.warn("Email intent detection skipped:", e));
 
       // 同步执行动态到通知页面（包含规划上下文和语义分析）
       createExecutionRecord({
@@ -437,6 +449,12 @@ export default function Welcome({ onComplete }) {
           }
         </AnimatePresence>
       </div>
+
+      <EmailSendConfirmDialog
+        open={showEmailDialog}
+        onOpenChange={setShowEmailDialog}
+        suggestion={emailSuggestion}
+      />
     </div>
   );
 }

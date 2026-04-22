@@ -36,6 +36,8 @@ import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
 import { detectTimeConflicts } from "@/components/planner/detectConflicts";
 import ConflictDialog from "@/components/planner/ConflictDialog";
+import { detectEmailIntent } from "@/components/gmail/detectEmailIntent";
+import EmailSendConfirmDialog from "@/components/gmail/EmailSendConfirmDialog";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -58,6 +60,8 @@ export default function SmartDailyPlanner() {
   const [resolvedDateHint, setResolvedDateHint] = useState(null);
   const [inputMode, setInputMode] = useState("text"); // "text" | "voice"
   const [conflictData, setConflictData] = useState(null); // { conflicts, allBlocks }
+  const [emailSuggestion, setEmailSuggestion] = useState(null);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null); // null | 'syncing' | 'done'
   const [viewMode, setViewMode] = useState("timeline"); // "timeline" | "kanban"
   const resultsRef = useRef(null);
@@ -189,6 +193,14 @@ export default function SmartDailyPlanner() {
         if (conflicts.length > 0) {
           setConflictData({ conflicts, allBlocks: mergedBlocks });
         }
+
+        // 邮件发送意图检测
+        detectEmailIntent(capturedInput).then(suggestion => {
+          if (suggestion) {
+            setEmailSuggestion(suggestion);
+            setShowEmailDialog(true);
+          }
+        }).catch(e => console.warn("Email intent detection skipped:", e));
 
         // 后台静默同步到约定和心签
         setSyncStatus('syncing');
@@ -737,6 +749,11 @@ export default function SmartDailyPlanner() {
       open={showInsufficientDialog}
       onOpenChange={dismissDialog}
       {...insufficientProps}
+    />
+    <EmailSendConfirmDialog
+      open={showEmailDialog}
+      onOpenChange={setShowEmailDialog}
+      suggestion={emailSuggestion}
     />
     </>
   );

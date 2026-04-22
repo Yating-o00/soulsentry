@@ -50,7 +50,6 @@
 import Account from './pages/Account';
 import Dashboard from './pages/Dashboard';
 import GeminiTest from './pages/GeminiTest';
-import Home from './pages/Home';
 import Knowledge from './pages/Knowledge';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Notes from './pages/Notes';
@@ -70,7 +69,6 @@ export const PAGES = {
     "Account": Account,
     "Dashboard": Dashboard,
     "GeminiTest": GeminiTest,
-    "Home": Home,
     "Knowledge": Knowledge,
     "KnowledgeBase": KnowledgeBase,
     "Notes": Notes,
@@ -86,7 +84,7 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "Home",
+    mainPage: "Welcome",
     Pages: PAGES,
     Layout: __Layout,
 };

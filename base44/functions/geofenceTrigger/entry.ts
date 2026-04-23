@@ -213,6 +213,19 @@ ${eventSummary || '（无即将开始的会议）'}
         notification_id: notif.id,
         pushed
       });
+
+      // 决策预加载：对「公司、家」等关键地点额外触发 sentinelLocationDigest
+      const keyTypes = ['office', 'home', 'school', 'gym'];
+      if (keyTypes.includes(t.location.location_type)) {
+        try {
+          await base44.functions.invoke('sentinelLocationDigest', {
+            location_id: t.location.id,
+            event: t.event
+          });
+        } catch (digestErr) {
+          console.warn('[geofence] sentinelLocationDigest failed:', digestErr?.message);
+        }
+      }
     }
 
     return Response.json({

@@ -5,13 +5,27 @@ import { toast } from "sonner";
 const BRAND_PRIMARY = "#384877";
 const BRAND_SECONDARY = "#3b5aa2";
 
-// 轻量级成功：右下角、紧凑、带主色
+// 轻量级成功：右下角、紧凑、带主色（石墨主题）
 export const success = (message, opts = {}) => {
-  return toast.success(message, {
-    position: "bottom-right",
-    duration: 2800,
-    ...opts,
-  });
+  const { duration = 2800, ...rest } = opts;
+  return toast.custom(
+    (id) => (
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-white rounded-xl border border-[#384877]/20 shadow-[0_8px_24px_rgba(56,72,119,0.12)] min-w-[260px]">
+        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center flex-shrink-0 shadow-sm shadow-[#384877]/30">
+          <span className="text-white text-[11px] font-bold">✓</span>
+        </div>
+        <div className="flex-1 text-[13px] font-medium text-[#384877] leading-snug">{message}</div>
+        <button
+          onClick={() => toast.dismiss(id)}
+          className="text-slate-400 hover:text-slate-600 text-base leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-slate-100 flex-shrink-0"
+          aria-label="关闭"
+        >
+          ×
+        </button>
+      </div>
+    ),
+    { position: "bottom-right", duration, ...rest }
+  );
 };
 
 // 轻量级错误：右下角、紧凑、带重试入口（可选）

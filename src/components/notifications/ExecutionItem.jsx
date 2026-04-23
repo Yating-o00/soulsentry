@@ -9,6 +9,9 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import ExecutionStepFlow from "./ExecutionStepFlow";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
+import { base44 } from "@/api/base44Client";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const categoryConfig = {
   promise: { label: "约定", emoji: "🤝", color: "bg-purple-50 text-purple-600 border-purple-200" },
@@ -28,11 +31,67 @@ const statusConfig = {
 
 export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss, onOpenAdvisor }) {
   const [expanded, setExpanded] = useState(false);
+  const queryClient = useQueryClient();
   const cat = categoryConfig[execution.category] || categoryConfig.task;
   const status = statusConfig[execution.execution_status] || statusConfig.pending;
   const StatusIcon = status.icon;
   const completedSteps = (execution.execution_steps || []).filter(s => s.status === "completed").length;
   const totalSteps = (execution.execution_steps || []).length;
+
+  // 节点状态手动变更：同步到后端，并按节点整体状况推算 execution_status
+  const handleStepStatusChange = async (index, newStatus) => {
+    const now = new Date().toISOString();
+    const currentSteps = execution.execution_steps || [];
+    const nextSteps = currentSteps.map((s, i) =>
+      i === index
+        ? { ...s, status: newStatus, timestamp: newStatus === "todo" ? null : now }
+        : s
+    );
+
+    // 根据新步骤列表推算整体执行状态
+    const activeSteps = nextSteps.filter((s) => s.status !== "skipped");
+    const hasRunning = nextSteps.some((s) => s.status === "running");
+    const allDoneOrSkipped = nextSteps.every(
+      (s) => s.status === "completed" || s.status === "skipped"
+    );
+    const hasProgress = activeSteps.some((s) => s.status === "completed" || s.status === "running");
+
+    let nextExecStatus = execution.execution_status;
+    let completedAt = execution.completed_at || null;
+
+    if (activeSteps.length > 0 && allDoneOrSkipped) {
+      nextExecStatus = "completed";
+      completedAt = now;
+    } else if (hasRunning) {
+      nextExecStatus = "executing";
+      completedAt = null;
+    } else if (hasProgress) {
+      nextExecStatus = "executing";
+      completedAt = null;
+    } else {
+      // 所有步骤都被重置/跳过 → 回到 pending
+      nextExecStatus = "pending";
+      completedAt = null;
+    }
+
+    try {
+      await base44.entities.TaskExecution.update(execution.id, {
+        execution_steps: nextSteps,
+        execution_status: nextExecStatus,
+        completed_at: completedAt,
+      });
+      queryClient.invalidateQueries({ queryKey: ["task-executions"] });
+      const labelMap = {
+        completed: "已标记完成",
+        running: "已标记执行中",
+        skipped: "已跳过",
+        todo: "已重置为待执行",
+      };
+      toast.success(labelMap[newStatus] || "已更新", { duration: 1500 });
+    } catch (e) {
+      toast.error("更新失败：" + (e.message || "请重试"));
+    }
+  };
 
   // Extract source context from ai_parsed_result
   const parsed = execution.ai_parsed_result || null;
@@ -139,7 +198,13 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
 
                   {/* 节点流 */}
                   <div className="px-3 py-3">
-                    <ExecutionStepFlow steps={execution.execution_steps} />
+                    <ExecutionStepFlow
+                      steps={execution.execution_steps}
+                      onStepStatusChange={handleStepStatusChange}
+                    />
+                    <p className="mt-2 text-[10px] text-slate-400">
+                      💡 点击节点可手动标记完成/跳过或重置
+                    </p>
                   </div>
                 </div>
               );

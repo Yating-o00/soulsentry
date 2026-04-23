@@ -1,18 +1,27 @@
 import React from "react";
-import { Check, Loader2, Circle, AlertCircle, Clock } from "lucide-react";
+import { Check, Loader2, Circle, AlertCircle, Clock, SkipForward, RotateCcw, Play } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 /**
  * AI 智能规划 · 执行编排节点流
  *
- * 含义：AI 对用户输入（约定/任务/愿望）理解后，推导出的现实世界行动步骤 —
- * 以横向"执行节点"形式呈现，每个节点代表一个行动，附带状态与时机提示。
+ * 每个节点支持点击弹出菜单，手动修改状态：
+ *   - 标记完成 (completed)
+ *   - 标记执行中 (running)
+ *   - 跳过 (skipped)
+ *   - 重置为待执行 (todo)
  *
- * 每个 step 数据结构：
- *   - step_name: 节点名称
- *   - detail?: 详情（hover title）
- *   - when_hint?: 时机提示（如"本周内"）
- *   - status?: completed | running | failed | pending | todo
- *   - icon?: emoji 图标（可选，缺省按 status 或序号生成）
+ * Props:
+ *   steps: Array<Step>
+ *   onStepStatusChange?: (index, newStatus) => void
+ *     如未提供则节点为展示态（不可交互）
  */
 
 const statusTheme = {
@@ -58,19 +67,91 @@ const statusTheme = {
     label: "待执行",
     icon: Circle,
   },
+  skipped: {
+    bg: "bg-slate-50",
+    border: "border-slate-200 border-dashed",
+    ring: "",
+    text: "text-slate-400",
+    label: "已跳过",
+    icon: SkipForward,
+    muted: true,
+  },
 };
 
 const NUM_EMOJIS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"];
 
-export default function ExecutionStepFlow({ steps = [] }) {
+const StepNode = React.forwardRef(({ step, index, interactive }, ref) => {
+  const theme = statusTheme[step.status] || statusTheme.todo;
+  const Icon = theme.icon;
+  const emoji = step.icon || NUM_EMOJIS[index] || "•";
+  const isSkipped = step.status === "skipped";
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      disabled={!interactive}
+      onClick={(e) => e.stopPropagation()}
+      className={`group flex flex-col items-center gap-1.5 flex-shrink-0 min-w-[68px] ${
+        theme.muted ? "opacity-60" : ""
+      } ${interactive ? "cursor-pointer" : "cursor-default"} rounded-xl p-1 -m-1 transition-colors ${
+        interactive ? "hover:bg-slate-50 active:bg-slate-100" : ""
+      }`}
+      title={step.detail || step.step_name}
+    >
+      <div
+        className={`relative w-14 h-14 rounded-2xl border-2 ${theme.bg} ${theme.border} ${theme.ring} flex items-center justify-center transition-all ${
+          interactive ? "group-hover:scale-105" : ""
+        }`}
+      >
+        <span
+          className={`text-2xl leading-none ${isSkipped ? "grayscale opacity-60" : ""}`}
+        >
+          {emoji}
+        </span>
+        <div
+          className={`absolute -top-1 -right-1 w-5 h-5 rounded-full ${theme.bg} border-2 border-white flex items-center justify-center`}
+        >
+          <Icon
+            className={`w-3 h-3 ${theme.text} ${theme.spin ? "animate-spin" : ""}`}
+          />
+        </div>
+      </div>
+      <span
+        className={`text-[11px] font-medium text-slate-700 text-center leading-tight max-w-[76px] line-clamp-2 ${
+          isSkipped ? "line-through" : ""
+        }`}
+      >
+        {step.step_name}
+      </span>
+      <span className={`text-[10px] font-medium ${theme.text} leading-none`}>
+        {theme.label}
+      </span>
+      {step.when_hint && (
+        <span className="inline-flex items-center gap-0.5 text-[9px] text-slate-400 leading-none">
+          <Clock className="w-2 h-2" />
+          {step.when_hint}
+        </span>
+      )}
+    </button>
+  );
+});
+StepNode.displayName = "StepNode";
+
+const ACTIONS = [
+  { key: "completed", label: "标记完成", icon: Check, className: "text-emerald-600" },
+  { key: "running", label: "标记执行中", icon: Play, className: "text-indigo-600" },
+  { key: "skipped", label: "跳过此步", icon: SkipForward, className: "text-slate-500" },
+  { key: "todo", label: "重置为待执行", icon: RotateCcw, className: "text-slate-500" },
+];
+
+export default function ExecutionStepFlow({ steps = [], onStepStatusChange }) {
   if (!steps || steps.length === 0) return null;
+  const interactive = typeof onStepStatusChange === "function";
 
   return (
     <div className="flex items-stretch gap-1 overflow-x-auto pb-1 scrollbar-hide">
       {steps.map((step, i) => {
-        const theme = statusTheme[step.status] || statusTheme.todo;
-        const Icon = theme.icon;
-        const emoji = step.icon || NUM_EMOJIS[i] || "•";
         const isLast = i === steps.length - 1;
         const nextStatus = !isLast ? steps[i + 1]?.status : null;
         const connectorActive =
@@ -79,53 +160,49 @@ export default function ExecutionStepFlow({ steps = [] }) {
           nextStatus === "running" ||
           nextStatus === "completed";
 
+        const node = <StepNode step={step} index={i} interactive={interactive} />;
+
         return (
           <React.Fragment key={i}>
-            <div
-              className={`flex flex-col items-center gap-1.5 flex-shrink-0 min-w-[68px] ${
-                theme.muted ? "opacity-60" : ""
-              }`}
-              title={step.detail || step.step_name}
-            >
-              {/* 节点主体 */}
-              <div
-                className={`relative w-14 h-14 rounded-2xl border-2 ${theme.bg} ${theme.border} ${theme.ring} flex items-center justify-center transition-all`}
-              >
-                <span className="text-2xl leading-none">{emoji}</span>
-                {/* 状态角标 */}
-                <div
-                  className={`absolute -top-1 -right-1 w-5 h-5 rounded-full ${theme.bg} border-2 border-white flex items-center justify-center`}
+            {interactive ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>{node}</DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="center"
+                  className="w-44"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Icon
-                    className={`w-3 h-3 ${theme.text} ${
-                      theme.spin ? "animate-spin" : ""
-                    }`}
-                  />
-                </div>
-              </div>
+                  <DropdownMenuLabel className="text-[11px] font-normal text-slate-500 truncate">
+                    {step.step_name}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {ACTIONS.map((a) => {
+                    const ActIcon = a.icon;
+                    const isCurrent = step.status === a.key;
+                    return (
+                      <DropdownMenuItem
+                        key={a.key}
+                        disabled={isCurrent}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          onStepStatusChange(i, a.key);
+                        }}
+                        className={`${a.className} text-xs`}
+                      >
+                        <ActIcon className="w-3.5 h-3.5" />
+                        {a.label}
+                        {isCurrent && (
+                          <span className="ml-auto text-[10px] text-slate-400">当前</span>
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              node
+            )}
 
-              {/* 名称 */}
-              <span className="text-[11px] font-medium text-slate-700 text-center leading-tight max-w-[76px] line-clamp-2">
-                {step.step_name}
-              </span>
-
-              {/* 状态标签 */}
-              <span
-                className={`text-[10px] font-medium ${theme.text} leading-none`}
-              >
-                {theme.label}
-              </span>
-
-              {/* 时机提示 */}
-              {step.when_hint && (
-                <span className="inline-flex items-center gap-0.5 text-[9px] text-slate-400 leading-none">
-                  <Clock className="w-2 h-2" />
-                  {step.when_hint}
-                </span>
-              )}
-            </div>
-
-            {/* 连接线 */}
             {!isLast && (
               <div className="flex items-center flex-shrink-0 pt-6">
                 <div

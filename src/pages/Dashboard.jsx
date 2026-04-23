@@ -42,7 +42,6 @@ import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
 import SoulSentryHub from "../components/dashboard/SoulSentryHub";
-import SentinelContextPanel from "../components/smart/SentinelContextPanel";
 import DailyBriefing from "../components/dashboard/DailyBriefing";
 import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
 import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
@@ -414,16 +413,6 @@ export default function Dashboard() {
         transition={{ delay: 0.15 }}
       >
         <SmartDailyPlanner />
-      </motion.div>
-
-      {/* 情境哨兵：地理感知 / 遗忘拯救 / 决策预加载 */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.18 }}
-        className="mt-6"
-      >
-        <SentinelContextPanel />
       </motion.div>
 
       {/* Main Content: SoulSentry Hub */}

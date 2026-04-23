@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
-import feedback from "@/lib/feedback";
+import feedback from "@/lib/feedback.jsx";
 import { findDuplicateTasks, getPostCompletionLinks } from "@/lib/entityBridge";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { invokeAI } from "@/components/utils/aiHelper";

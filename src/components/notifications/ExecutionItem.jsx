@@ -9,7 +9,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import feedback from "@/lib/feedback";
+import feedback from "@/lib/feedback.jsx";
 import ExecutionStepFlow from "./ExecutionStepFlow";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 

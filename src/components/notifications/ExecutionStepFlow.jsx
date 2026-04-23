@@ -2,7 +2,7 @@ import React from "react";
 import { Check, Loader2, Circle, AlertCircle, ChevronRight, Clock, Zap } from "lucide-react";
 
 const statusConfig = {
-  completed: { icon: Check, color: "text-emerald-500 bg-emerald-50 border-emerald-300" },
+  completed: { icon: Check, color: "text-[#384877] bg-[#384877]/8 border-[#384877]/40" },
   running: { icon: Loader2, color: "text-[#384877] bg-[#384877]/10 border-[#384877]/40", spin: true },
   failed: { icon: AlertCircle, color: "text-red-500 bg-red-50 border-red-300" },
   pending: { icon: Circle, color: "text-slate-300 bg-slate-50 border-slate-200" },
@@ -40,7 +40,7 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
                   <div
                     className={`relative h-full rounded-xl p-2.5 border transition-all ${
                       isDone
-                        ? "bg-emerald-50 border-emerald-300 shadow-sm"
+                        ? "bg-[#384877]/6 border-[#384877]/35 shadow-sm"
                         : isAuto
                         ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] border-[#384877] text-white shadow-md shadow-[#384877]/20"
                         : "bg-white border-[#384877]/15 hover:border-[#384877]/40 hover:shadow-sm"
@@ -51,7 +51,7 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
                       <div
                         className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
                           isDone
-                            ? "bg-emerald-500 text-white"
+                            ? "bg-[#384877] text-white"
                             : isAuto
                             ? "bg-white/20 text-white"
                             : "bg-[#384877]/10 text-[#384877]"
@@ -60,7 +60,7 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
                         {isDone ? <Check className="w-3 h-3" /> : isAuto ? <Zap className="w-2.5 h-2.5" /> : i + 1}
                       </div>
                       {isDone ? (
-                        <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-medium">
+                        <span className="text-[9px] bg-[#384877] text-white px-1.5 py-0.5 rounded font-medium">
                           完成
                         </span>
                       ) : isAuto ? (
@@ -74,7 +74,7 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
                     <div
                       className={`text-[12px] font-semibold leading-snug line-clamp-2 mb-1 ${
                         isDone
-                          ? "text-emerald-700 line-through decoration-emerald-400/60"
+                          ? "text-[#384877] line-through decoration-[#384877]/50"
                           : isAuto
                           ? "text-white"
                           : "text-slate-800"
@@ -87,7 +87,7 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
                     {step.detail && (
                       <p
                         className={`text-[10px] leading-tight line-clamp-2 mb-1.5 ${
-                          isDone ? "text-emerald-600/80" : isAuto ? "text-white/75" : "text-slate-500"
+                          isDone ? "text-[#384877]/75" : isAuto ? "text-white/75" : "text-slate-500"
                         }`}
                       >
                         {step.detail}
@@ -99,7 +99,7 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
                       <div
                         className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded ${
                           isDone
-                            ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                            ? "bg-[#384877]/12 text-[#384877] border border-[#384877]/20"
                             : isAuto
                             ? "bg-white/20 text-white/90"
                             : "bg-[#384877]/8 text-[#384877]/80 border border-[#384877]/10"
@@ -143,14 +143,14 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
               <div className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all ${cfg.color} ${step.status === "running" ? "shadow-md shadow-[#384877]/20" : ""}`}>
                 <Icon className={`w-4 h-4 ${cfg.spin ? "animate-spin" : ""}`} />
               </div>
-              <span className={`text-[10px] text-center leading-tight max-w-[64px] truncate ${step.status === "completed" ? "text-emerald-600 line-through" : "text-slate-500"}`}>
+              <span className={`text-[10px] text-center leading-tight max-w-[64px] truncate ${step.status === "completed" ? "text-[#384877] line-through" : "text-slate-500"}`}>
                 {step.step_name}
               </span>
             </div>
             {i < steps.length - 1 && (
               <div className="flex items-center flex-shrink-0 -mt-4">
-                <div className={`w-5 h-0.5 ${step.status === "completed" ? "bg-emerald-300" : step.status === "running" ? "bg-[#384877]/30 animate-pulse" : "bg-slate-200"}`} />
-                <ChevronRight className={`w-3 h-3 -mx-0.5 ${step.status === "completed" ? "text-emerald-400" : step.status === "running" ? "text-[#384877]/60" : "text-slate-300"}`} />
+                <div className={`w-5 h-0.5 ${step.status === "completed" ? "bg-[#384877]/40" : step.status === "running" ? "bg-[#384877]/30 animate-pulse" : "bg-slate-200"}`} />
+                <ChevronRight className={`w-3 h-3 -mx-0.5 ${step.status === "completed" ? "text-[#384877]/50" : step.status === "running" ? "text-[#384877]/60" : "text-slate-300"}`} />
               </div>
             )}
           </React.Fragment>

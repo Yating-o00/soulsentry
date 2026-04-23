@@ -221,25 +221,42 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
       });
 
       if (response) {
-        // 显示AI总结
-        toast.success(
-          <div className="space-y-2">
-            <p className="font-semibold">🎉 {response.summary}</p>
-            {response.next_steps && response.next_steps.length > 0 && (
-              <div className="text-sm">
-                <p className="font-medium mb-1">💡 下一步:</p>
-                <ul className="list-disc list-inside space-y-0.5">
-                  {response.next_steps.map((step, idx) => (
-                    <li key={idx}>{step}</li>
-                  ))}
-                </ul>
+        // 紧凑卡片风格，右下角显示，不遮挡内容
+        toast.custom(
+          (id) => (
+            <div className="w-[320px] bg-white rounded-2xl border border-[#384877]/15 shadow-[0_8px_24px_rgba(56,72,119,0.15)] overflow-hidden">
+              <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] px-4 py-2.5 flex items-center gap-2">
+                <span className="text-base">🎉</span>
+                <span className="text-[13px] font-semibold text-white flex-1 line-clamp-1">{response.summary}</span>
+                <button
+                  onClick={() => toast.dismiss(id)}
+                  className="text-white/70 hover:text-white text-sm leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-white/10"
+                  aria-label="关闭"
+                >×</button>
               </div>
-            )}
-            {response.encouragement && (
-              <p className="text-sm italic opacity-80">"{response.encouragement}"</p>
-            )}
-          </div>,
-          { duration: 8000 }
+              {response.next_steps && response.next_steps.length > 0 && (
+                <div className="px-4 py-2.5 border-b border-slate-100">
+                  <div className="text-[11px] font-medium text-[#384877] mb-1.5 flex items-center gap-1">
+                    💡 <span>下一步</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {response.next_steps.slice(0, 3).map((step, idx) => (
+                      <li key={idx} className="text-[12px] text-slate-600 leading-snug flex gap-1.5">
+                        <span className="text-[#384877]/50 mt-0.5">·</span>
+                        <span className="flex-1">{step}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {response.encouragement && (
+                <p className="px-4 py-2 text-[11px] italic text-slate-400 bg-slate-50/50 line-clamp-2">
+                  "{response.encouragement}"
+                </p>
+              )}
+            </div>
+          ),
+          { duration: 6000, position: "bottom-right" }
         );
       }
     } catch (error) {

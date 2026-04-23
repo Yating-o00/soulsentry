@@ -26,52 +26,71 @@ import {
 
 const statusTheme = {
   completed: {
-    bg: "bg-emerald-50",
-    border: "border-emerald-400",
-    ring: "shadow-[0_0_14px_rgba(16,185,129,0.35)]",
+    bg: "bg-gradient-to-br from-emerald-50 via-white to-emerald-100/60",
+    border: "border-emerald-300/80",
+    ring: "shadow-[0_6px_20px_-6px_rgba(16,185,129,0.45),inset_0_1px_0_rgba(255,255,255,0.9)]",
+    glow: "bg-emerald-400/20",
     text: "text-emerald-600",
+    badgeBg: "bg-gradient-to-br from-emerald-400 to-emerald-600",
+    badgeText: "text-white",
     label: "已完成",
     icon: Check,
   },
   running: {
-    bg: "bg-indigo-50",
-    border: "border-indigo-400",
-    ring: "shadow-[0_0_14px_rgba(99,102,241,0.45)]",
+    bg: "bg-gradient-to-br from-indigo-50 via-white to-blue-100/60",
+    border: "border-indigo-300/80",
+    ring: "shadow-[0_6px_22px_-4px_rgba(99,102,241,0.5),inset_0_1px_0_rgba(255,255,255,0.9)]",
+    glow: "bg-indigo-400/30 animate-pulse",
     text: "text-indigo-600",
+    badgeBg: "bg-gradient-to-br from-indigo-400 to-blue-600",
+    badgeText: "text-white",
     label: "执行中",
     icon: Loader2,
     spin: true,
+    pulseRing: true,
   },
   failed: {
-    bg: "bg-red-50",
-    border: "border-red-400",
-    ring: "shadow-[0_0_14px_rgba(239,68,68,0.35)]",
+    bg: "bg-gradient-to-br from-red-50 via-white to-rose-100/60",
+    border: "border-red-300/80",
+    ring: "shadow-[0_6px_20px_-6px_rgba(239,68,68,0.45),inset_0_1px_0_rgba(255,255,255,0.9)]",
+    glow: "bg-red-400/20",
     text: "text-red-600",
+    badgeBg: "bg-gradient-to-br from-red-400 to-rose-600",
+    badgeText: "text-white",
     label: "失败",
     icon: AlertCircle,
   },
   pending: {
-    bg: "bg-slate-100",
-    border: "border-slate-300",
-    ring: "",
+    bg: "bg-gradient-to-br from-slate-50 to-slate-100/80",
+    border: "border-slate-200",
+    ring: "shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
+    glow: "",
     text: "text-slate-400",
+    badgeBg: "bg-slate-200",
+    badgeText: "text-slate-500",
     label: "待触发",
     icon: Circle,
     muted: true,
   },
   todo: {
-    bg: "bg-white",
-    border: "border-indigo-300",
-    ring: "",
+    bg: "bg-gradient-to-br from-white to-indigo-50/40",
+    border: "border-indigo-200",
+    ring: "shadow-[0_3px_10px_-4px_rgba(99,102,241,0.25),inset_0_1px_0_rgba(255,255,255,0.9)]",
+    glow: "",
     text: "text-indigo-500",
+    badgeBg: "bg-white",
+    badgeText: "text-indigo-500",
     label: "待执行",
     icon: Circle,
   },
   skipped: {
-    bg: "bg-slate-50",
+    bg: "bg-slate-50/50",
     border: "border-slate-200 border-dashed",
     ring: "",
+    glow: "",
     text: "text-slate-400",
+    badgeBg: "bg-slate-100",
+    badgeText: "text-slate-400",
     label: "已跳过",
     icon: SkipForward,
     muted: true,
@@ -99,22 +118,42 @@ const StepNode = React.forwardRef(({ step, index, interactive }, ref) => {
       }`}
       title={step.detail || step.step_name}
     >
-      <div
-        className={`relative w-14 h-14 rounded-2xl border-2 ${theme.bg} ${theme.border} ${theme.ring} flex items-center justify-center transition-all ${
-          interactive ? "group-hover:scale-105" : ""
-        }`}
-      >
-        <span
-          className={`text-2xl leading-none ${isSkipped ? "grayscale opacity-60" : ""}`}
-        >
-          {emoji}
-        </span>
-        <div
-          className={`absolute -top-1 -right-1 w-5 h-5 rounded-full ${theme.bg} border-2 border-white flex items-center justify-center`}
-        >
-          <Icon
-            className={`w-3 h-3 ${theme.text} ${theme.spin ? "animate-spin" : ""}`}
+      <div className="relative">
+        {/* 环境光晕 */}
+        {theme.glow && (
+          <div
+            className={`absolute inset-0 rounded-2xl blur-xl ${theme.glow}`}
+            aria-hidden="true"
           />
+        )}
+        {/* 执行中呼吸环 */}
+        {theme.pulseRing && (
+          <div
+            className="absolute -inset-1 rounded-3xl border border-indigo-300/40 animate-ping"
+            aria-hidden="true"
+          />
+        )}
+        <div
+          className={`relative w-14 h-14 rounded-2xl border ${theme.bg} ${theme.border} ${theme.ring} flex items-center justify-center transition-all duration-300 ${
+            interactive ? "group-hover:scale-[1.08] group-hover:-translate-y-0.5 group-active:scale-95" : ""
+          }`}
+        >
+          <span
+            className={`text-2xl leading-none drop-shadow-sm ${isSkipped ? "grayscale opacity-50" : ""}`}
+          >
+            {emoji}
+          </span>
+          {/* 顶部高光 */}
+          <div className="pointer-events-none absolute inset-x-1.5 top-1 h-1/3 rounded-xl bg-gradient-to-b from-white/70 to-transparent opacity-80" aria-hidden="true" />
+          {/* 状态角标 */}
+          <div
+            className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full ${theme.badgeBg} ring-2 ring-white shadow-sm flex items-center justify-center`}
+          >
+            <Icon
+              className={`w-3 h-3 ${theme.badgeText} ${theme.spin ? "animate-spin" : ""}`}
+              strokeWidth={3}
+            />
+          </div>
         </div>
       </div>
       <span

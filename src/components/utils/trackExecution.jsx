@@ -81,6 +81,12 @@ export async function createExecutionRecord({ title, originalInput, source, cate
   }
   if (planContext?.automationItems?.length > 0) {
     aiParsedResult.automation_count = planContext.automationItems.length;
+    // 保存自动执行清单明细，便于在执行记录中展示
+    aiParsedResult.automation_items = planContext.automationItems.slice(0, 8).map((it) => ({
+      title: it.title || "",
+      status: it.status || "READY",
+      desc: it.desc || it.description || "",
+    }));
   }
 
   const execution = await base44.entities.TaskExecution.create({

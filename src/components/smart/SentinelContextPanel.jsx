@@ -33,31 +33,36 @@ export default function SentinelContextPanel() {
     [tasks]
   );
 
-  // 1) 地理情境卡：挑一个最近触发 geofence 的任务或绑定常用地点的任务
+  // 1) 地理情境卡：始终展示（有数据→真实情境，无数据→引导添加）
   const geoCard = useMemo(() => {
     if (dismissed.geo) return null;
 
-    // 优先：最近有 geo_state.last_trigger_at 的任务
     const recentGeoTask = [...active]
       .filter((t) => t.ai_analysis?.geo_state?.last_trigger_at)
       .sort((a, b) => new Date(b.ai_analysis.geo_state.last_trigger_at) - new Date(a.ai_analysis.geo_state.last_trigger_at))[0];
 
-    // 退化：拿一个启用 location_reminder 的任务作为"候选"地点卡
     const locBound = active.find((t) => t.location_reminder?.enabled && t.location_reminder?.location_name);
-
     const anchor = recentGeoTask || locBound;
-    const locName = anchor?.location_reminder?.location_name
-      || savedLocations[0]?.name
-      || null;
-    if (!anchor && !locName) return null;
+    const locName = anchor?.location_reminder?.location_name || savedLocations[0]?.name || null;
 
-    // 归类此地点的今日待办
+    // 空态：引导用户在 Account 页绑定常用地点
+    if (!anchor && !locName) {
+      return {
+        title: "地理情境感知",
+        subtitle: "基于位置的智能提醒",
+        headline: "📍 尚未绑定常用地点",
+        priority: 'medium',
+        today_tasks: [],
+        cta_link: '/Account',
+        empty: true,
+      };
+    }
+
     const todayRelated = active
       .filter((t) => {
         if (!t.reminder_time) return false;
         if (!isToday(parseISO(t.reminder_time))) return false;
         if (anchor?.location_reminder?.location_name && t.location_reminder?.location_name === anchor.location_reminder.location_name) return true;
-        // 无 location_reminder 时，按类别粗略归类（office→work）
         const locType = savedLocations.find((s) => s.name === locName)?.location_type;
         if (locType === 'office' && t.category === 'work') return true;
         if (locType === 'home' && ['personal', 'family', 'health'].includes(t.category)) return true;
@@ -79,9 +84,7 @@ export default function SentinelContextPanel() {
 
     return {
       title: "地理情境感知",
-      subtitle: recentlyTriggered
-        ? `进入${locName || '目标地点'}附近 · 刚刚`
-        : `常用地点 · ${locName || '已绑定'}`,
+      subtitle: recentlyTriggered ? `进入${locName || '目标地点'}附近 · 刚刚` : `常用地点 · ${locName || '已绑定'}`,
       headline: recentlyTriggered
         ? `📍 您已到达${locName}附近${recentGeoTask?.ai_analysis?.geo_state?.last_distance_m ? `（${recentGeoTask.ai_analysis.geo_state.last_distance_m}米）` : ''}`
         : `📍 今日${locName || '此处'}的待办预加载`,
@@ -113,7 +116,33 @@ export default function SentinelContextPanel() {
       .sort((a, b) => b.score - a.score);
 
     const top = candidates[0];
-    if (!top) return null;
+
+    // 空态：全部任务都按时 → 给出正向反馈，保持三张卡齐平
+    if (!top) {
+      // 找一个最久未更新的待办作为"轻提醒"候选
+      const stalest = [...active]
+        .filter((t) => t.updated_date)
+        .sort((a, b) => new Date(a.updated_date) - new Date(b.updated_date))[0];
+      if (!stalest) {
+        return {
+          title: "遗忘拯救",
+          subtitle: "基于遗忘曲线预警",
+          headline: "🎉 没有检测到遗忘风险",
+          risk_note: "所有约定都在掌控之中，继续保持",
+          context_note: "当任务超期或长时间未更新，哨兵将在此提醒你。",
+          cta_link: '/Tasks',
+        };
+      }
+      const staleDays = differenceInDays(new Date(), new Date(stalest.updated_date));
+      return {
+        title: "遗忘拯救",
+        subtitle: "基于遗忘曲线预警",
+        headline: `「${stalest.title}」${staleDays}天未更新`,
+        risk_note: `较久未动静，建议复盘一下进度`,
+        context_note: stalest.ai_context_summary || stalest.description || `最近更新于 ${format(new Date(stalest.updated_date), 'M月d日')}`,
+        cta_link: `/Tasks?taskId=${stalest.id}`,
+      };
+    }
 
     const t = top.task;
     const days = top.overdueDays;

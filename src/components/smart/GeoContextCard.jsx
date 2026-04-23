@@ -61,7 +61,7 @@ export default function GeoContextCard({ card, onSnooze }) {
           className="flex-1 bg-blue-600 hover:bg-blue-700"
           onClick={() => navigate(card.cta_link || '/Tasks')}
         >
-          查看详情
+          {card.empty ? '去绑定地点' : '查看详情'}
         </Button>
         <Button variant="outline" onClick={onSnooze}>稍后</Button>
       </div>

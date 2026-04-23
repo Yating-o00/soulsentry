@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Plus, Trash2, Crosshair } from 'lucide-react';
+import { MapPin, Plus, Trash2, Crosshair, Sparkles, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -79,6 +79,9 @@ export default function GeofenceMapView() {
   const [geoDialog, setGeoDialog] = useState({ open: false, phase: 'ask', message: '', coords: null });
   // phase: 'ask' | 'loading' | 'success' | 'error'
 
+  // AI 参数建议
+  const [aiSuggest, setAiSuggest] = useState({ loading: false, data: null });
+
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['saved-locations'],
     queryFn: () => base44.entities.SavedLocation.list('-created_date'),
@@ -96,6 +99,7 @@ export default function GeofenceMapView() {
       queryClient.invalidateQueries({ queryKey: ['saved-locations'] });
       setDialogOpen(false);
       setForm(EMPTY_FORM);
+      setAiSuggest({ loading: false, data: null });
       toast.success('地点已保存');
     },
     onError: (e) => toast.error('保存失败: ' + e.message)
@@ -214,6 +218,40 @@ export default function GeofenceMapView() {
   const handleTypeChange = (type) => {
     const preset = LOCATION_TYPES.find((t) => t.value === type);
     setForm((f) => ({ ...f, location_type: type, icon: preset?.icon || '📍' }));
+    // 切换类型时清空旧建议
+    setAiSuggest({ loading: false, data: null });
+  };
+
+  // AI 建议：根据类型/坐标/历史数据推荐半径与静默期
+  const fetchAISuggestion = async () => {
+    setAiSuggest({ loading: true, data: null });
+    try {
+      const res = await base44.functions.invoke('suggestGeofenceParams', {
+        location_type: form.location_type,
+        name: form.name,
+        latitude: form.latitude,
+        longitude: form.longitude
+      });
+      const data = res?.data;
+      if (!data || typeof data.radius !== 'number') {
+        throw new Error(data?.error || '无建议数据');
+      }
+      setAiSuggest({ loading: false, data });
+      toast.success('已生成 AI 建议');
+    } catch (e) {
+      setAiSuggest({ loading: false, data: null });
+      toast.error('AI 建议失败：' + (e.message || '未知错误'));
+    }
+  };
+
+  const applyAISuggestion = () => {
+    if (!aiSuggest.data) return;
+    setForm((f) => ({
+      ...f,
+      radius: aiSuggest.data.radius,
+      quiet_minutes: aiSuggest.data.quiet_minutes
+    }));
+    toast.success('已应用 AI 推荐值');
   };
 
   const handleSubmit = () => {
@@ -509,6 +547,75 @@ export default function GeofenceMapView() {
                 placeholder="例如：北京市朝阳区xx路"
                 className="mt-1"
               />
+            </div>
+
+            {/* AI 推荐卡片 */}
+            <div className="rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-blue-50/60 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-500 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-slate-800">AI 智能推荐</div>
+                    <div className="text-[10px] text-slate-500">根据历史行为建议半径与静默期</div>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs flex-shrink-0 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                  onClick={fetchAISuggestion}
+                  disabled={aiSuggest.loading}
+                >
+                  {aiSuggest.loading ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-1" />
+                      分析中
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      {aiSuggest.data ? '重新生成' : '获取建议'}
+                    </>
+                  )}
+                </Button>
+              </div>
+              {aiSuggest.data && (
+                <div className="mt-2.5 space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-700 font-mono">
+                      半径 {aiSuggest.data.radius}m
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-700 font-mono">
+                      静默 {aiSuggest.data.quiet_minutes}分
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      aiSuggest.data.confidence === 'high' ? 'bg-emerald-100 text-emerald-700'
+                      : aiSuggest.data.confidence === 'medium' ? 'bg-amber-100 text-amber-700'
+                      : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {aiSuggest.data.confidence === 'high' ? '高置信度'
+                        : aiSuggest.data.confidence === 'medium' ? '中置信度' : '低置信度'}
+                    </span>
+                  </div>
+                  {aiSuggest.data.reasoning && (
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      💡 {aiSuggest.data.reasoning}
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full h-7 text-xs bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600"
+                    onClick={applyAISuggestion}
+                  >
+                    <Check className="w-3 h-3 mr-1" />
+                    应用推荐值
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

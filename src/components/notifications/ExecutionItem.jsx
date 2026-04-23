@@ -97,7 +97,7 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-1.5">
                       <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                      <span className="text-xs font-semibold text-slate-800">OpenClaw 执行编排</span>
+                      <span className="text-xs font-semibold text-slate-800">执行链路</span>
                     </div>
                     <span className={`text-[11px] font-medium ${isExecuting ? "text-indigo-500" : "text-slate-400"}`}>
                       {isExecuting ? `同步中 ${Math.max(doneCount, 1)}/${totalSteps}` : `${totalSteps} 个节点`}

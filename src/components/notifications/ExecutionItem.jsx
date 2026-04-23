@@ -92,19 +92,21 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
               const isRealityChain = (execution.execution_steps || []).every(s => s.status === "todo" || !!s.when_hint);
               const autoCount = (execution.execution_steps || []).filter(s => s.is_automation).length;
               return (
-                <div className="mt-3 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                  <div className="flex items-center justify-between mb-2">
+                <div className="mt-3 p-3 rounded-xl bg-gradient-to-br from-[#384877]/[0.03] to-[#3b5aa2]/[0.03] border border-[#384877]/10">
+                  <div className="flex items-center justify-between mb-2.5">
                     <div className="flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                      <span className="text-xs font-medium text-slate-700">
+                      <div className="w-5 h-5 rounded-md bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm shadow-[#384877]/20">
+                        <Zap className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="text-xs font-semibold text-[#384877]">
                         {isRealityChain ? "事项链路" : "执行链路"}
                       </span>
                       {isRealityChain && (
                         <span className="text-[10px] text-slate-400">· AI 理解生成</span>
                       )}
                       {autoCount > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100">
-                          含 {autoCount} 项自动执行
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#384877]/8 text-[#384877] border border-[#384877]/15 font-medium">
+                          含 {autoCount} 项自动
                         </span>
                       )}
                     </div>

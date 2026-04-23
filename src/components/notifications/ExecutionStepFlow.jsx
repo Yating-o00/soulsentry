@@ -1,66 +1,105 @@
 import React from "react";
-import { Check, Loader2, Circle, AlertCircle, ArrowRight, Clock, Zap } from "lucide-react";
+import { Check, Loader2, Circle, AlertCircle, ChevronRight, Clock, Zap } from "lucide-react";
 
 const statusConfig = {
   completed: { icon: Check, color: "text-emerald-500 bg-emerald-50 border-emerald-300" },
-  running: { icon: Loader2, color: "text-indigo-500 bg-indigo-50 border-indigo-300", spin: true },
+  running: { icon: Loader2, color: "text-[#384877] bg-[#384877]/10 border-[#384877]/40", spin: true },
   failed: { icon: AlertCircle, color: "text-red-500 bg-red-50 border-red-300" },
   pending: { icon: Circle, color: "text-slate-300 bg-slate-50 border-slate-200" },
-  todo: { icon: Circle, color: "text-indigo-400 bg-white border-indigo-200" },
+  todo: { icon: Circle, color: "text-[#384877] bg-white border-[#384877]/30" },
 };
 
 export default function ExecutionStepFlow({ steps = [] }) {
   if (!steps || steps.length === 0) return null;
 
-  // 判断是否为「事项链路」模式：全部步骤为 todo 态，即 AI 生成的现实事项链路
+  // 判断是否为「事项链路」模式：AI 生成的现实事项链路
   const isRealityChain = steps.length > 0 && steps.every((s) => s.status === "todo" || !!s.when_hint);
 
   if (isRealityChain) {
-    // 事项链路：AI 理解约定后生成的、用户要去完成的现实事项清单
+    // 横向事项链路：卡片 + 箭头连接，视觉与主题深蓝统一
     return (
-      <ol className="space-y-1.5">
-        {steps.map((step, i) => {
-          const isAuto = !!step.is_automation;
-          return (
-            <li
-              key={i}
-              className="flex items-start gap-2.5 group"
-              title={step.detail || step.step_name}
-            >
-              <div className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-semibold ${
-                isAuto
-                  ? "bg-gradient-to-br from-indigo-500 to-blue-500 border-indigo-400 text-white"
-                  : "bg-indigo-50 border-indigo-200 text-indigo-500"
-              }`}>
-                {isAuto ? <Zap className="w-2.5 h-2.5" /> : i + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-[13px] font-medium text-slate-800 leading-snug">
-                    {step.step_name}
-                  </span>
-                  {isAuto && (
-                    <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded">
-                      自动执行
-                    </span>
-                  )}
-                  {step.when_hint && (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">
-                      <Clock className="w-2.5 h-2.5" />
-                      {step.when_hint}
-                    </span>
-                  )}
+      <div className="relative -mx-0.5">
+        <div className="flex items-stretch gap-0 overflow-x-auto pb-1 px-0.5 scrollbar-hide">
+          {steps.map((step, i) => {
+            const isAuto = !!step.is_automation;
+            return (
+              <React.Fragment key={i}>
+                <div
+                  className="flex-shrink-0 w-[132px] group"
+                  title={step.detail || step.step_name}
+                >
+                  <div
+                    className={`relative h-full rounded-xl p-2.5 border transition-all ${
+                      isAuto
+                        ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] border-[#384877] text-white shadow-md shadow-[#384877]/20"
+                        : "bg-white border-[#384877]/15 hover:border-[#384877]/40 hover:shadow-sm"
+                    }`}
+                  >
+                    {/* 序号 / 图标 */}
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div
+                        className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
+                          isAuto
+                            ? "bg-white/20 text-white"
+                            : "bg-[#384877]/10 text-[#384877]"
+                        }`}
+                      >
+                        {isAuto ? <Zap className="w-2.5 h-2.5" /> : i + 1}
+                      </div>
+                      {isAuto && (
+                        <span className="text-[9px] bg-white/25 text-white px-1.5 py-0.5 rounded font-medium">
+                          自动
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 事项名 */}
+                    <div
+                      className={`text-[12px] font-semibold leading-snug line-clamp-2 mb-1 ${
+                        isAuto ? "text-white" : "text-slate-800"
+                      }`}
+                    >
+                      {step.step_name}
+                    </div>
+
+                    {/* 详情 */}
+                    {step.detail && (
+                      <p
+                        className={`text-[10px] leading-tight line-clamp-2 mb-1.5 ${
+                          isAuto ? "text-white/75" : "text-slate-500"
+                        }`}
+                      >
+                        {step.detail}
+                      </p>
+                    )}
+
+                    {/* 时间提示 */}
+                    {step.when_hint && (
+                      <div
+                        className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded ${
+                          isAuto
+                            ? "bg-white/20 text-white/90"
+                            : "bg-[#384877]/8 text-[#384877]/80 border border-[#384877]/10"
+                        }`}
+                      >
+                        <Clock className="w-2.5 h-2.5" />
+                        {step.when_hint}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {step.detail && (
-                  <p className="text-[11px] text-slate-500 leading-snug mt-0.5 line-clamp-2">
-                    {step.detail}
-                  </p>
+
+                {/* 连接箭头 */}
+                {i < steps.length - 1 && (
+                  <div className="flex items-center flex-shrink-0 px-1">
+                    <ChevronRight className="w-4 h-4 text-[#384877]/35" strokeWidth={2.5} />
+                  </div>
                 )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
     );
   }
 
@@ -73,7 +112,7 @@ export default function ExecutionStepFlow({ steps = [] }) {
         return (
           <React.Fragment key={i}>
             <div className="flex flex-col items-center gap-1 flex-shrink-0 min-w-[60px]" title={step.detail || step.step_name}>
-              <div className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all ${cfg.color} ${step.status === "running" ? "shadow-md shadow-indigo-200" : ""}`}>
+              <div className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all ${cfg.color} ${step.status === "running" ? "shadow-md shadow-[#384877]/20" : ""}`}>
                 <Icon className={`w-4 h-4 ${cfg.spin ? "animate-spin" : ""}`} />
               </div>
               <span className="text-[10px] text-slate-500 text-center leading-tight max-w-[64px] truncate">
@@ -82,8 +121,8 @@ export default function ExecutionStepFlow({ steps = [] }) {
             </div>
             {i < steps.length - 1 && (
               <div className="flex items-center flex-shrink-0 -mt-4">
-                <div className={`w-5 h-0.5 ${step.status === "completed" ? "bg-emerald-300" : step.status === "running" ? "bg-indigo-200 animate-pulse" : "bg-slate-200"}`} />
-                <ArrowRight className={`w-3 h-3 -mx-0.5 ${step.status === "completed" ? "text-emerald-400" : step.status === "running" ? "text-indigo-400" : "text-slate-300"}`} />
+                <div className={`w-5 h-0.5 ${step.status === "completed" ? "bg-emerald-300" : step.status === "running" ? "bg-[#384877]/30 animate-pulse" : "bg-slate-200"}`} />
+                <ChevronRight className={`w-3 h-3 -mx-0.5 ${step.status === "completed" ? "text-emerald-400" : step.status === "running" ? "text-[#384877]/60" : "text-slate-300"}`} />
               </div>
             )}
           </React.Fragment>

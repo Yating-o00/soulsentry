@@ -1,5 +1,5 @@
 import React from "react";
-import { Check, Loader2, Circle, AlertCircle, ArrowRight, Clock } from "lucide-react";
+import { Check, Loader2, Circle, AlertCircle, ArrowRight, Clock, Zap } from "lucide-react";
 
 const statusConfig = {
   completed: { icon: Check, color: "text-emerald-500 bg-emerald-50 border-emerald-300" },
@@ -19,35 +19,47 @@ export default function ExecutionStepFlow({ steps = [] }) {
     // 事项链路：AI 理解约定后生成的、用户要去完成的现实事项清单
     return (
       <ol className="space-y-1.5">
-        {steps.map((step, i) => (
-          <li
-            key={i}
-            className="flex items-start gap-2.5 group"
-            title={step.detail || step.step_name}
-          >
-            <div className="flex-shrink-0 mt-0.5 w-5 h-5 rounded-full bg-indigo-50 border border-indigo-200 flex items-center justify-center text-[10px] font-semibold text-indigo-500">
-              {i + 1}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="text-[13px] font-medium text-slate-800 leading-snug">
-                  {step.step_name}
-                </span>
-                {step.when_hint && (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">
-                    <Clock className="w-2.5 h-2.5" />
-                    {step.when_hint}
+        {steps.map((step, i) => {
+          const isAuto = !!step.is_automation;
+          return (
+            <li
+              key={i}
+              className="flex items-start gap-2.5 group"
+              title={step.detail || step.step_name}
+            >
+              <div className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-semibold ${
+                isAuto
+                  ? "bg-gradient-to-br from-indigo-500 to-blue-500 border-indigo-400 text-white"
+                  : "bg-indigo-50 border-indigo-200 text-indigo-500"
+              }`}>
+                {isAuto ? <Zap className="w-2.5 h-2.5" /> : i + 1}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-[13px] font-medium text-slate-800 leading-snug">
+                    {step.step_name}
                   </span>
+                  {isAuto && (
+                    <span className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded">
+                      自动执行
+                    </span>
+                  )}
+                  {step.when_hint && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">
+                      <Clock className="w-2.5 h-2.5" />
+                      {step.when_hint}
+                    </span>
+                  )}
+                </div>
+                {step.detail && (
+                  <p className="text-[11px] text-slate-500 leading-snug mt-0.5 line-clamp-2">
+                    {step.detail}
+                  </p>
                 )}
               </div>
-              {step.detail && (
-                <p className="text-[11px] text-slate-500 leading-snug mt-0.5 line-clamp-2">
-                  {step.detail}
-                </p>
-              )}
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ol>
     );
   }

@@ -56,6 +56,21 @@ export async function createExecutionRecord({ title, originalInput, source, cate
     console.warn("generateRealityChain failed, fallback to product steps:", e);
   }
 
+  // 将「自动执行清单」合并进执行链路末尾，作为 AI 派发的自动化事项
+  if (planContext?.automationItems?.length > 0) {
+    const autoSteps = planContext.automationItems.slice(0, 6).map((it) => ({
+      step_name: it.title || "自动执行项",
+      detail: it.desc || it.description || "AI 自动派发",
+      when_hint: it.status === "ACTIVE" ? "运行中"
+              : it.status === "MONITORING" ? "监控中"
+              : "待就绪",
+      status: "todo",
+      is_automation: true, // 标记为自动化事项，UI 可用于区分样式
+      timestamp: null,
+    }));
+    steps = [...steps, ...autoSteps];
+  }
+
   // Fallback：AI 未产出有效链路时，回退到原产品内步骤（保持数据结构兼容）
   if (steps.length === 0) {
     steps = [

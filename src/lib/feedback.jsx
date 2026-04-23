@@ -101,12 +101,28 @@ export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 
   );
 };
 
-// 执行链路全部完成：更隆重一点，带庆祝感
+// 执行链路全部完成：更隆重一点，带庆祝感（主题石墨色调）
 export const executionChainDone = (chainTitle) => {
-  return toast.success(`🎉 执行链路已全部完成${chainTitle ? " · " + chainTitle : ""}`, {
-    position: "bottom-right",
-    duration: 3500,
-  });
+  return toast.custom(
+    (id) => (
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-white rounded-xl border border-[#384877]/20 shadow-[0_8px_24px_rgba(56,72,119,0.12)] min-w-[280px]">
+        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center flex-shrink-0 shadow-sm shadow-[#384877]/30">
+          <span className="text-white text-xs">✓</span>
+        </div>
+        <div className="flex-1 text-[13px] font-semibold text-[#384877] leading-snug">
+          🎉 执行链路已全部完成{chainTitle ? ` · ${chainTitle}` : ""}
+        </div>
+        <button
+          onClick={() => toast.dismiss(id)}
+          className="text-slate-400 hover:text-slate-600 text-base leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-slate-100 flex-shrink-0"
+          aria-label="关闭"
+        >
+          ×
+        </button>
+      </div>
+    ),
+    { position: "bottom-right", duration: 3500 }
+  );
 };
 
 export default {

@@ -9,6 +9,7 @@ import PreferenceOnboarding from "@/components/smart/PreferenceOnboarding";
 import GeoContextCard from "@/components/smart/GeoContextCard";
 import DecisionPreloadCard from "@/components/smart/DecisionPreloadCard";
 import OnTheWayCard from "@/components/smart/OnTheWayCard";
+import SentinelGuardPanel from "@/components/dashboard/SentinelGuardPanel";
 import { sendToSW } from "@/lib/pwaRegister";
 
 const cardComponents = {
@@ -116,6 +117,11 @@ export default function SoulSentryFeed({ showHeader = true, compact = false }) {
           </Button>
         </div>
       )}
+
+      {/* 时空感知守护（真实数据：地理情境 + 遗忘拯救） */}
+      <div className="mb-3">
+        <SentinelGuardPanel />
+      </div>
 
       <div className="space-y-3">
         {fetching && cards.length === 0 && (

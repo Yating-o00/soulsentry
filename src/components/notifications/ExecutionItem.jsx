@@ -88,19 +88,25 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
                 </Badge>
               </div>
             </div>
-            {totalSteps > 0 && (
-              <div className="mt-3 p-2.5 rounded-lg bg-gradient-to-br from-indigo-50/50 to-slate-50 border border-indigo-100">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                    <span className="text-xs font-medium text-slate-700">AI 智能规划</span>
-                    <span className="text-[10px] text-slate-400">· 基于你的输入推导</span>
+            {totalSteps > 0 && (() => {
+              const runningCount = (execution.execution_steps || []).filter(s => s.status === "running").length;
+              const doneCount = (execution.execution_steps || []).filter(s => s.status === "completed").length;
+              const isExecuting = execution.execution_status === "executing" || runningCount > 0;
+              return (
+                <div className="mt-3 p-3 rounded-xl bg-gradient-to-br from-indigo-50/60 via-white to-purple-50/40 border border-indigo-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-indigo-500" />
+                      <span className="text-xs font-semibold text-slate-800">OpenClaw 执行编排</span>
+                    </div>
+                    <span className={`text-[11px] font-medium ${isExecuting ? "text-indigo-500" : "text-slate-400"}`}>
+                      {isExecuting ? `同步中 ${Math.max(doneCount, 1)}/${totalSteps}` : `${totalSteps} 个节点`}
+                    </span>
                   </div>
-                  <span className="text-[11px] text-slate-400">{totalSteps} 个步骤</span>
+                  <ExecutionStepFlow steps={execution.execution_steps} />
                 </div>
-                <ExecutionStepFlow steps={execution.execution_steps} />
-              </div>
-            )}
+              );
+            })()}
             {execution.execution_status === "waiting_confirm" && (
               <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-amber-50 border border-amber-200">
                 <div className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-500" /><span className="text-xs font-medium text-amber-700">部分步骤需要确认</span></div>

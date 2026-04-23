@@ -5,6 +5,7 @@ import { Mic, MicOff, Image as ImageIcon, Send, Sparkles, Smartphone, Watch, Gla
 import { toast } from "sonner";
 import "./SoulSentryHub.css";
 import { getEventIcon } from "./iconMatcher";
+import SentinelGuardPanel from "./SentinelGuardPanel";
 
 // Color mapping for inline styles or arbitrary tailwind classes - Updated to match Product Tone
 const colors = {
@@ -259,6 +260,18 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                             {text}
                         </button>
                     ))}
+                </div>
+
+                {/* 时空感知守护 - 真实数据驱动 */}
+                <div className="w-full max-w-3xl mx-auto mt-8 md:mt-12">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center">
+                            <Sparkles className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-700">时空感知守护</h3>
+                        <span className="text-xs text-slate-400">· 基于你的约定与心签</span>
+                    </div>
+                    <SentinelGuardPanel />
                 </div>
             </motion.div>
 

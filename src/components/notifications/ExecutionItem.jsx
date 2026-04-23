@@ -35,12 +35,11 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
   const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
 
-  // 仅在展开时拉取关联的 Task，以展示哨兵分析
-  const linkedTaskId = execution.task_id;
-  const { data: linkedTask } = useQuery({
-    queryKey: ['task-sentinel', linkedTaskId],
-    queryFn: () => base44.entities.Task.get(linkedTaskId),
-    enabled: !!linkedTaskId && expanded,
+  // 拉取关联任务的哨兵分析（仅在展开时启用）
+  const { data: sentinelTask } = useQuery({
+    queryKey: ['sentinel-task', execution.task_id],
+    queryFn: () => base44.entities.Task.get(execution.task_id),
+    enabled: expanded && !!execution.task_id,
     staleTime: 30_000,
   });
   const cat = categoryConfig[execution.category] || categoryConfig.task;
@@ -231,9 +230,8 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
                 </div>
               )}
 
-              {/* 用户意图 / AI 理解与执行摘要 / 执行日志 已隐藏——仅后台运作 */}
-
-              {linkedTask && <SentinelSummaryCard task={linkedTask} />}
+              {/* 情境哨兵摘要：合适的时间 / 地点 / 方式 */}
+              {sentinelTask && <SentinelSummaryCard task={sentinelTask} />}
 
               <Button variant="outline" size="sm" className="w-full gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 h-9" onClick={(e) => { e.stopPropagation(); onOpenAdvisor?.(execution); }}>
                 <Brain className="w-4 h-4" />AI 执行顾问 · 获取智能建议

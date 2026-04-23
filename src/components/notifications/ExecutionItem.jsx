@@ -12,6 +12,8 @@ import { base44 } from "@/api/base44Client";
 import feedback from "@/lib/feedback.jsx";
 import ExecutionStepFlow from "./ExecutionStepFlow";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
+import SentinelSummaryCard from "@/components/smart/SentinelSummaryCard";
+import { useQuery } from "@tanstack/react-query";
 
 const categoryConfig = {
   promise: { label: "约定", emoji: "🤝", color: "bg-purple-50 text-purple-600 border-purple-200" },
@@ -32,6 +34,15 @@ const statusConfig = {
 export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss, onOpenAdvisor }) {
   const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
+
+  // 仅在展开时拉取关联的 Task，以展示哨兵分析
+  const linkedTaskId = execution.task_id;
+  const { data: linkedTask } = useQuery({
+    queryKey: ['task-sentinel', linkedTaskId],
+    queryFn: () => base44.entities.Task.get(linkedTaskId),
+    enabled: !!linkedTaskId && expanded,
+    staleTime: 30_000,
+  });
   const cat = categoryConfig[execution.category] || categoryConfig.task;
   const status = statusConfig[execution.execution_status] || statusConfig.pending;
   const StatusIcon = status.icon;
@@ -221,6 +232,8 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
               )}
 
               {/* 用户意图 / AI 理解与执行摘要 / 执行日志 已隐藏——仅后台运作 */}
+
+              {linkedTask && <SentinelSummaryCard task={linkedTask} />}
 
               <Button variant="outline" size="sm" className="w-full gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 h-9" onClick={(e) => { e.stopPropagation(); onOpenAdvisor?.(execution); }}>
                 <Brain className="w-4 h-4" />AI 执行顾问 · 获取智能建议

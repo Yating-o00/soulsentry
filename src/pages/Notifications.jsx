@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain, Sparkles, Map as MapIcon } from "lucide-react";
 import SoulSentryFeed from "@/components/smart/SoulSentryFeed";
+import SentinelContextPanel from "@/components/smart/SentinelContextPanel";
 import GeofenceMapView from "@/components/location/GeofenceMapView";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 import { format } from "date-fns";
@@ -220,8 +221,13 @@ export default function NotificationsPage() {
           </button>
         </div>
 
-        {/* 情境哨兵 */}
-        {activeTab === "sentry" && <SoulSentryFeed showHeader={true} />}
+        {/* 情境哨兵：地理情境 / 遗忘拯救 / 决策预加载 三分析并列 */}
+        {activeTab === "sentry" && (
+          <div className="space-y-6">
+            <SentinelContextPanel />
+            <SoulSentryFeed showHeader={false} />
+          </div>
+        )}
 
         {/* 地图视图 */}
         {activeTab === "map" && <GeofenceMapView />}

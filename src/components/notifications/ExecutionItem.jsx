@@ -92,18 +92,55 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
               const runningCount = (execution.execution_steps || []).filter(s => s.status === "running").length;
               const doneCount = (execution.execution_steps || []).filter(s => s.status === "completed").length;
               const isExecuting = execution.execution_status === "executing" || runningCount > 0;
+              const progress = Math.round((doneCount / totalSteps) * 100);
               return (
-                <div className="mt-3 p-3 rounded-xl bg-gradient-to-br from-indigo-50/60 via-white to-purple-50/40 border border-indigo-100">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                      <span className="text-xs font-semibold text-slate-800">执行链路</span>
+                <div className="mt-3 relative rounded-2xl overflow-hidden border border-indigo-100/80 bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30 shadow-[0_1px_2px_rgba(99,102,241,0.04)]">
+                  {/* 顶部装饰光条 */}
+                  <div className={`absolute inset-x-0 top-0 h-[2px] ${isExecuting ? 'bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-400 animate-pulse' : 'bg-gradient-to-r from-transparent via-indigo-200 to-transparent'}`} />
+
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-3 pt-3 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-sm shadow-indigo-500/30">
+                        <Zap className="w-3.5 h-3.5 text-white" fill="currentColor" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-slate-800 leading-tight">执行链路</span>
+                        <span className="text-[10px] text-slate-400 leading-tight">AI 智能编排</span>
+                      </div>
                     </div>
-                    <span className={`text-[11px] font-medium ${isExecuting ? "text-indigo-500" : "text-slate-400"}`}>
-                      {isExecuting ? `同步中 ${Math.max(doneCount, 1)}/${totalSteps}` : `${totalSteps} 个节点`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {/* 进度胶囊 */}
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white border border-slate-200/80">
+                        {isExecuting && (
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75 animate-ping" />
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500" />
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-semibold tabular-nums ${isExecuting ? 'text-indigo-600' : 'text-slate-500'}`}>
+                          {doneCount}<span className="text-slate-300 font-normal mx-0.5">/</span>{totalSteps}
+                        </span>
+                        <span className="text-[9px] text-slate-400">·</span>
+                        <span className="text-[10px] text-slate-500 font-medium">{progress}%</span>
+                      </div>
+                    </div>
                   </div>
-                  <ExecutionStepFlow steps={execution.execution_steps} />
+
+                  {/* 进度条 */}
+                  <div className="px-3">
+                    <div className="h-1 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${isExecuting ? 'bg-gradient-to-r from-indigo-400 to-purple-500' : 'bg-gradient-to-r from-emerald-400 to-teal-400'}`}
+                        style={{ width: `${Math.max(progress, doneCount > 0 ? 4 : 0)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 节点流 */}
+                  <div className="px-3 py-3">
+                    <ExecutionStepFlow steps={execution.execution_steps} />
+                  </div>
                 </div>
               );
             })()}

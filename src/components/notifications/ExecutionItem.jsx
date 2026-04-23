@@ -7,6 +7,9 @@ import { ChevronDown, ChevronUp, RotateCcw, CheckCircle2, XCircle, Zap, Clock, A
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
 import ExecutionStepFlow from "./ExecutionStepFlow";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 
@@ -28,11 +31,58 @@ const statusConfig = {
 
 export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss, onOpenAdvisor }) {
   const [expanded, setExpanded] = useState(false);
+  const queryClient = useQueryClient();
   const cat = categoryConfig[execution.category] || categoryConfig.task;
   const status = statusConfig[execution.execution_status] || statusConfig.pending;
   const StatusIcon = status.icon;
   const completedSteps = (execution.execution_steps || []).filter(s => s.status === "completed").length;
   const totalSteps = (execution.execution_steps || []).length;
+
+  // 手动/自动反馈：切换某步骤的完成状态，写回 TaskExecution
+  const handleStepToggle = async (stepIndex) => {
+    const currentSteps = execution.execution_steps || [];
+    const step = currentSteps[stepIndex];
+    if (!step) return;
+
+    const isDone = step.status === "completed";
+    const newStatus = isDone ? "todo" : "completed";
+    const newSteps = currentSteps.map((s, i) =>
+      i === stepIndex
+        ? { ...s, status: newStatus, timestamp: new Date().toISOString() }
+        : s
+    );
+
+    // 全部完成 → 自动把执行记录也标为 completed
+    const allDone = newSteps.every(s => s.status === "completed");
+    const anyDone = newSteps.some(s => s.status === "completed");
+    const nextExecStatus = allDone
+      ? "completed"
+      : (execution.execution_status === "completed" && !allDone ? "executing" : execution.execution_status);
+
+    const payload = { execution_steps: newSteps, execution_status: nextExecStatus };
+    if (allDone) payload.completed_at = new Date().toISOString();
+
+    // 乐观更新
+    queryClient.setQueryData(['task-executions'], (old) => {
+      if (!Array.isArray(old)) return old;
+      return old.map(e => e.id === execution.id ? { ...e, ...payload } : e);
+    });
+
+    try {
+      await base44.entities.TaskExecution.update(execution.id, payload);
+      if (allDone) {
+        toast.success("🎉 执行链路已全部完成");
+      } else if (!isDone) {
+        toast.success(`已标记「${step.step_name}」完成`);
+      } else {
+        toast.message(`已取消「${step.step_name}」完成标记`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    } catch (e) {
+      toast.error("更新失败，请重试");
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    }
+  };
 
   // Extract source context from ai_parsed_result
   const parsed = execution.ai_parsed_result || null;
@@ -114,7 +164,7 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
                       {isRealityChain ? `${totalSteps} 项待办` : `${completedSteps}/${totalSteps}${execution.execution_status === "executing" ? " · 同步中" : ""}`}
                     </span>
                   </div>
-                  <ExecutionStepFlow steps={execution.execution_steps} />
+                  <ExecutionStepFlow steps={execution.execution_steps} onStepToggle={handleStepToggle} />
                 </div>
               );
             })()}

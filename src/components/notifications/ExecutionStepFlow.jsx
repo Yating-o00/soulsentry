@@ -9,11 +9,17 @@ const statusConfig = {
   todo: { icon: Circle, color: "text-[#384877] bg-white border-[#384877]/30" },
 };
 
-export default function ExecutionStepFlow({ steps = [] }) {
+export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
   if (!steps || steps.length === 0) return null;
 
   // 判断是否为「事项链路」模式：AI 生成的现实事项链路
-  const isRealityChain = steps.length > 0 && steps.every((s) => s.status === "todo" || !!s.when_hint);
+  const isRealityChain = steps.length > 0 && steps.every((s) => s.status === "todo" || s.status === "completed" || !!s.when_hint);
+
+  const handleToggle = (e, i) => {
+    if (!onStepToggle) return;
+    e.stopPropagation();
+    onStepToggle(i);
+  };
 
   if (isRealityChain) {
     // 横向事项链路：卡片 + 箭头连接，视觉与主题深蓝统一
@@ -22,15 +28,20 @@ export default function ExecutionStepFlow({ steps = [] }) {
         <div className="flex items-stretch gap-0 overflow-x-auto pb-1 px-0.5 scrollbar-hide">
           {steps.map((step, i) => {
             const isAuto = !!step.is_automation;
+            const isDone = step.status === "completed";
+            const clickable = !!onStepToggle;
             return (
               <React.Fragment key={i}>
                 <div
-                  className="flex-shrink-0 w-[132px] group"
-                  title={step.detail || step.step_name}
+                  className={`flex-shrink-0 w-[132px] group ${clickable ? "cursor-pointer" : ""}`}
+                  title={clickable ? (isDone ? "点击标记为未完成" : "点击标记完成") : (step.detail || step.step_name)}
+                  onClick={(e) => handleToggle(e, i)}
                 >
                   <div
                     className={`relative h-full rounded-xl p-2.5 border transition-all ${
-                      isAuto
+                      isDone
+                        ? "bg-emerald-50 border-emerald-300 shadow-sm"
+                        : isAuto
                         ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] border-[#384877] text-white shadow-md shadow-[#384877]/20"
                         : "bg-white border-[#384877]/15 hover:border-[#384877]/40 hover:shadow-sm"
                     }`}
@@ -39,24 +50,34 @@ export default function ExecutionStepFlow({ steps = [] }) {
                     <div className="flex items-center justify-between mb-1.5">
                       <div
                         className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
-                          isAuto
+                          isDone
+                            ? "bg-emerald-500 text-white"
+                            : isAuto
                             ? "bg-white/20 text-white"
                             : "bg-[#384877]/10 text-[#384877]"
                         }`}
                       >
-                        {isAuto ? <Zap className="w-2.5 h-2.5" /> : i + 1}
+                        {isDone ? <Check className="w-3 h-3" /> : isAuto ? <Zap className="w-2.5 h-2.5" /> : i + 1}
                       </div>
-                      {isAuto && (
+                      {isDone ? (
+                        <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-medium">
+                          完成
+                        </span>
+                      ) : isAuto ? (
                         <span className="text-[9px] bg-white/25 text-white px-1.5 py-0.5 rounded font-medium">
                           自动
                         </span>
-                      )}
+                      ) : null}
                     </div>
 
                     {/* 事项名 */}
                     <div
                       className={`text-[12px] font-semibold leading-snug line-clamp-2 mb-1 ${
-                        isAuto ? "text-white" : "text-slate-800"
+                        isDone
+                          ? "text-emerald-700 line-through decoration-emerald-400/60"
+                          : isAuto
+                          ? "text-white"
+                          : "text-slate-800"
                       }`}
                     >
                       {step.step_name}
@@ -66,7 +87,7 @@ export default function ExecutionStepFlow({ steps = [] }) {
                     {step.detail && (
                       <p
                         className={`text-[10px] leading-tight line-clamp-2 mb-1.5 ${
-                          isAuto ? "text-white/75" : "text-slate-500"
+                          isDone ? "text-emerald-600/80" : isAuto ? "text-white/75" : "text-slate-500"
                         }`}
                       >
                         {step.detail}
@@ -77,7 +98,9 @@ export default function ExecutionStepFlow({ steps = [] }) {
                     {step.when_hint && (
                       <div
                         className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded ${
-                          isAuto
+                          isDone
+                            ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                            : isAuto
                             ? "bg-white/20 text-white/90"
                             : "bg-[#384877]/8 text-[#384877]/80 border border-[#384877]/10"
                         }`}
@@ -109,13 +132,18 @@ export default function ExecutionStepFlow({ steps = [] }) {
       {steps.map((step, i) => {
         const cfg = statusConfig[step.status] || statusConfig.pending;
         const Icon = cfg.icon;
+        const clickable = !!onStepToggle;
         return (
           <React.Fragment key={i}>
-            <div className="flex flex-col items-center gap-1 flex-shrink-0 min-w-[60px]" title={step.detail || step.step_name}>
+            <div
+              className={`flex flex-col items-center gap-1 flex-shrink-0 min-w-[60px] ${clickable ? "cursor-pointer" : ""}`}
+              title={clickable ? (step.status === "completed" ? "点击标记为未完成" : "点击标记完成") : (step.detail || step.step_name)}
+              onClick={(e) => handleToggle(e, i)}
+            >
               <div className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all ${cfg.color} ${step.status === "running" ? "shadow-md shadow-[#384877]/20" : ""}`}>
                 <Icon className={`w-4 h-4 ${cfg.spin ? "animate-spin" : ""}`} />
               </div>
-              <span className="text-[10px] text-slate-500 text-center leading-tight max-w-[64px] truncate">
+              <span className={`text-[10px] text-center leading-tight max-w-[64px] truncate ${step.status === "completed" ? "text-emerald-600 line-through" : "text-slate-500"}`}>
                 {step.step_name}
               </span>
             </div>

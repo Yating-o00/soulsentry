@@ -415,15 +415,6 @@ export default function Dashboard() {
         <SmartDailyPlanner />
       </motion.div>
 
-      {/* Main Content: SoulSentry Hub */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="mt-6"
-      >
-        <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
-      </motion.div>
       </TabsContent>
 
       <TabsContent value="calendar" className="space-y-4 md:space-y-6">

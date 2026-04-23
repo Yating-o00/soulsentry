@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain, Sparkles, Map as MapIcon } from "lucide-react";
-import SoulSentryFeed from "@/components/smart/SoulSentryFeed";
+import SoulSentryHub from "@/components/dashboard/SoulSentryHub";
 import GeofenceMapView from "@/components/location/GeofenceMapView";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 import { format } from "date-fns";
@@ -221,7 +221,7 @@ export default function NotificationsPage() {
         </div>
 
         {/* 情境哨兵 */}
-        {activeTab === "sentry" && <SoulSentryFeed showHeader={true} />}
+        {activeTab === "sentry" && <SoulSentryHub />}
 
         {/* 地图视图 */}
         {activeTab === "map" && <GeofenceMapView />}

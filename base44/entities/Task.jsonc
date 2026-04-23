@@ -298,7 +298,61 @@
     },
     "optimal_reminder_time": {
       "type": "string",
-      "description": "AI\u5efa\u8bae\u7684\u6700\u4f73\u63d0\u9192\u65f6\u95f4"
+      "description": "AI\u5efa\u8bae\u7684\u6700\u4f73\u63d0\u9192\u65f6\u95f4\uff08ISO\u5b57\u7b26\u4e32\uff09"
+    },
+    "ai_context_summary": {
+      "type": "string",
+      "description": "\u54e8\u5175AI\u751f\u6210\u76843\u53e5\u8bdd\u80cc\u666f\u91cd\u5efa\u6458\u8981\u2014\u2014\u4e3a\u4ec0\u4e48\u8fd9\u4ef6\u4e8b\u5bf9\u4f60\u73b0\u5728\u91cd\u8981"
+    },
+    "interruption_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "\u54e8\u5175AI\u8bc4\u5b9a\u7684\u6253\u65ad\u5e72\u6270\u5206\u6570\uff080-100\uff09\uff0c\u51b3\u5b9a\u901a\u77e5\u68af\u5ea6"
+    },
+    "interruption_level": {
+      "type": "string",
+      "enum": [
+        "silent",
+        "ambient",
+        "standard",
+        "assertive",
+        "critical"
+      ],
+      "description": "\u6253\u65ad\u68af\u5ea6\u7b49\u7ea7\uff1a\u9759\u9ed8/\u73af\u5883/\u6807\u51c6/\u5f3a\u63d0\u9192/\u5173\u952e"
+    },
+    "is_waiting_for_reply": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u4e3a\u6c89\u9ed8\u4efb\u52a1\uff08\u7b49\u5f85\u4ed6\u4eba\u56de\u590d/\u53cd\u9988\uff09"
+    },
+    "waiting_for": {
+      "type": "string",
+      "description": "\u6b63\u5728\u7b49\u5f85\u8c01\uff08\u4eba\u540d/\u7cfb\u7edf/\u4e8b\u4ef6\uff09"
+    },
+    "silence_followup_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u6c89\u9ed8\u8ffd\u95ee\u7684\u89e6\u53d1\u65f6\u95f4"
+    },
+    "last_forgetting_check": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u4e0a\u6b21\u9057\u5fd8\u66f2\u7ebf\u68c0\u67e5\u65f6\u95f4"
+    },
+    "forgetting_risk": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "description": "\u9057\u5fd8\u98ce\u9669\u7b49\u7ea7"
+    },
+    "sentinel_analyzed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u54e8\u5175\u5927\u8111\u4e0a\u6b21\u5206\u6790\u65f6\u95f4"
     },
     "ai_analysis": {
       "type": "object",
@@ -366,6 +420,24 @@
             "critical"
           ],
           "description": "\u6574\u4f53\u98ce\u9669\u7b49\u7ea7"
+        },
+        "time_is_fuzzy": {
+          "type": "boolean",
+          "description": "\u7528\u6237\u7ed9\u51fa\u7684\u65f6\u95f4\u662f\u5426\u4e3a\u6a21\u7cca\u8868\u8fbe"
+        },
+        "best_location": {
+          "type": "string",
+          "description": "\u6700\u5408\u9002\u7684\u6267\u884c/\u63d0\u9192\u5730\u70b9"
+        },
+        "delivery_channel": {
+          "type": "string",
+          "enum": [
+            "in_app",
+            "browser",
+            "email",
+            "silent"
+          ],
+          "description": "\u54e8\u5175\u5efa\u8bae\u7684\u901a\u77e5\u6e20\u9053"
         }
       }
     },

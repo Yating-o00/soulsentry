@@ -121,15 +121,30 @@ ${new Date().toLocaleString('zh-CN')}
   }, [open, execution?.id]);
 
   const executeAction = async (suggestion, index) => {
-    if (!execution?.task_id) {
-      toast.error("无关联任务，无法执行");
-      return;
-    }
-
     setExecutingAction(`${suggestion.action}-${index}`);
-    const taskId = execution.task_id;
+
+    // 不需要 task 的动作：link_note 可直接创建心签
+    const NO_TASK_REQUIRED = ["link_note"];
 
     try {
+      // 若无关联 task，但动作需要 task，则自动创建一个任务作为载体
+      let taskId = execution?.task_id;
+      if (!taskId && !NO_TASK_REQUIRED.includes(suggestion.action)) {
+        const newTask = await base44.entities.Task.create({
+          title: execution?.task_title || suggestion.title || "AI 采纳任务",
+          description: execution?.original_input || suggestion.description || "",
+          status: "pending",
+          priority: suggestion.params?.priority || "medium",
+          category: suggestion.params?.category || "work",
+        });
+        taskId = newTask.id;
+        // 回写到执行记录，避免后续重复创建
+        if (execution?.id) {
+          await base44.entities.TaskExecution.update(execution.id, { task_id: taskId });
+        }
+        toast.success(`已为"${newTask.title}"创建任务`);
+      }
+
       switch (suggestion.action) {
         case "postpone": {
           const newTime = suggestion.params?.new_time || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();

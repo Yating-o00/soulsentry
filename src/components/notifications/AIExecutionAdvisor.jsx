@@ -126,7 +126,7 @@ ${new Date().toLocaleString('zh-CN')}
       return;
     }
 
-    setExecutingAction(suggestion.action);
+    setExecutingAction(`${suggestion.action}-${index}`);
     const taskId = execution.task_id;
 
     try {
@@ -324,7 +324,7 @@ ${new Date().toLocaleString('zh-CN')}
                 {(advice.suggestions || []).map((s, i) => {
                   const cfg = ACTION_CONFIG[s.action] || ACTION_CONFIG.complete;
                   const Icon = cfg.icon;
-                  const isExecuting = executingAction === s.action;
+                  const isExecuting = executingAction === `${s.action}-${i}`;
                   const completed = completedActions[i];
 
                   return (

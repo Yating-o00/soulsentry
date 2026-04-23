@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
+import feedback from "@/lib/feedback";
+import { findDuplicateTasks, getPostCompletionLinks } from "@/lib/entityBridge";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
@@ -27,7 +29,7 @@ export function useTaskOperations() {
       }
     },
     onError: () => {
-        toast.error("更新任务失败");
+        feedback.error("更新任务失败");
     }
   });
 
@@ -52,11 +54,20 @@ export function useTaskOperations() {
         }).catch(e => console.warn("Execution tracking failed:", e));
       }
       
-      toast.success("任务创建成功");
+      feedback.success("约定创建成功");
+
+      // 跨入口去重提示：若已有高度相似的进行中任务，静默提示用户避免重复
+      findDuplicateTasks({ title: data?.title || "" }).then((dups) => {
+        const others = (dups || []).filter((d) => d.id !== data?.id);
+        if (others.length > 0) {
+          feedback.info(`发现 ${others.length} 个相似约定，可考虑合并`, { duration: 4500 });
+        }
+      }).catch(() => {});
+
       logUserBehavior("task_created", data);
     },
     onError: () => {
-        toast.error("创建任务失败");
+        feedback.error("创建任务失败");
     }
   });
 
@@ -64,11 +75,11 @@ export function useTaskOperations() {
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
     onSuccess: (data, id) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("任务已移至垃圾箱");
+      feedback.success("已移至垃圾箱");
       logUserBehavior("task_deleted", { id });
     },
     onError: () => {
-        toast.error("删除任务失败");
+        feedback.error("删除任务失败");
     }
   });
 
@@ -108,7 +119,7 @@ export function useTaskOperations() {
             id: depTask.id,
             data: { status: 'pending' }
           });
-          toast.success(`任务 "${depTask.title}" 已解除阻塞`, { icon: "🔓" });
+          feedback.success(`🔓 「${depTask.title}」已解除阻塞`);
         }
       }
 
@@ -134,7 +145,7 @@ export function useTaskOperations() {
                data: { status: 'completed', completed_at: completedAt }
             });
          }
-         toast.success(`已自动完成 ${subtasks.length} 个子约定`);
+         feedback.success(`已自动完成 ${subtasks.length} 个子约定`);
       }
     }
 
@@ -156,9 +167,9 @@ export function useTaskOperations() {
         });
         
         if (isRecurring) {
-          toast.success("✓ 已记录完成，约定继续重复");
+          feedback.success("✓ 已记录完成，约定继续重复");
         } else {
-          toast.success("✓ 约定已完成");
+          feedback.success("✓ 约定已完成");
         }
 
         // AI完成总结和建议 (后台异步执行，不阻塞用户操作)
@@ -221,43 +232,23 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
       });
 
       if (response) {
-        // 紧凑卡片风格，右下角显示，不遮挡内容
-        toast.custom(
-          (id) => (
-            <div className="w-[320px] bg-white rounded-2xl border border-[#384877]/15 shadow-[0_8px_24px_rgba(56,72,119,0.15)] overflow-hidden">
-              <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] px-4 py-2.5 flex items-center gap-2">
-                <span className="text-base">🎉</span>
-                <span className="text-[13px] font-semibold text-white flex-1 line-clamp-1">{response.summary}</span>
-                <button
-                  onClick={() => toast.dismiss(id)}
-                  className="text-white/70 hover:text-white text-sm leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-white/10"
-                  aria-label="关闭"
-                >×</button>
-              </div>
-              {response.next_steps && response.next_steps.length > 0 && (
-                <div className="px-4 py-2.5 border-b border-slate-100">
-                  <div className="text-[11px] font-medium text-[#384877] mb-1.5 flex items-center gap-1">
-                    💡 <span>下一步</span>
-                  </div>
-                  <ul className="space-y-1">
-                    {response.next_steps.slice(0, 3).map((step, idx) => (
-                      <li key={idx} className="text-[12px] text-slate-600 leading-snug flex gap-1.5">
-                        <span className="text-[#384877]/50 mt-0.5">·</span>
-                        <span className="flex-1">{step}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {response.encouragement && (
-                <p className="px-4 py-2 text-[11px] italic text-slate-400 bg-slate-50/50 line-clamp-2">
-                  "{response.encouragement}"
-                </p>
-              )}
-            </div>
-          ),
-          { duration: 6000, position: "bottom-right" }
-        );
+        // 合并 AI 建议 + 跨入口关联建议（相关待办 / 相关心签），统一通过 feedback.aiRichCard 展示
+        let mergedSuggestions = [...(response.next_steps || [])];
+        try {
+          const links = await getPostCompletionLinks(task);
+          if (links.nextTasks && links.nextTasks.length > 0) {
+            mergedSuggestions.push(`继续推进：${links.nextTasks[0].title}`);
+          }
+          if (links.relatedNotes && links.relatedNotes.length > 0) {
+            mergedSuggestions.push(`回顾相关心签（${links.relatedNotes.length} 条）`);
+          }
+        } catch (_) {}
+
+        feedback.aiRichCard({
+          title: response.summary,
+          suggestions: mergedSuggestions,
+          footnote: response.encouragement,
+        });
       }
     } catch (error) {
       console.error("AI总结生成失败:", error);
@@ -321,7 +312,7 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
     handleComplete,
     handleSubtaskToggle,
     translateTask: async (task, subtasks = []) => {
-        const toastId = toast.loading("正在准备翻译...");
+        const toastId = feedback.loading("正在准备翻译...");
         try {
             if (!task || !task.title) {
               throw new Error("任务信息不完整");
@@ -341,7 +332,7 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
             const targetLang = isChinese ? "English" : "Simplified Chinese";
             const targetLangDisplay = isChinese ? "英文" : "中文";
             
-            toast.message(`正在翻译为${targetLangDisplay}...`, { id: toastId });
+            feedback.update(toastId, "info", `正在翻译为${targetLangDisplay}...`);
             
             const subtasksList = subtasks.map(st => ({
               id: st.id,
@@ -394,13 +385,13 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
                 await Promise.all(updatePromises);
               }
               
-              toast.success(`✅ 已翻译为${targetLangDisplay}`, { id: toastId });
+              feedback.update(toastId, "success", `✅ 已翻译为${targetLangDisplay}`);
             } else {
-              toast.error("翻译未返回有效结果", { id: toastId });
+              feedback.update(toastId, "error", "翻译未返回有效结果");
             }
         } catch (error) {
             console.error("翻译失败:", error);
-            toast.error(`翻译服务出错: ${error.message || "未知错误"}`, { id: toastId });
+            feedback.update(toastId, "error", `翻译服务出错: ${error.message || "未知错误"}`);
         }
     }
   };

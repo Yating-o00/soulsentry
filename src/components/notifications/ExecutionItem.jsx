@@ -7,9 +7,9 @@ import { ChevronDown, ChevronUp, RotateCcw, CheckCircle2, XCircle, Zap, Clock, A
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import feedback from "@/lib/feedback";
 import ExecutionStepFlow from "./ExecutionStepFlow";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 
@@ -71,15 +71,15 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
     try {
       await base44.entities.TaskExecution.update(execution.id, payload);
       if (allDone) {
-        toast.success("🎉 执行链路已全部完成");
+        feedback.executionChainDone(execution.task_title);
       } else if (!isDone) {
-        toast.success(`已标记「${step.step_name}」完成`);
+        feedback.success(`已标记「${step.step_name}」完成`);
       } else {
-        toast.message(`已取消「${step.step_name}」完成标记`);
+        feedback.info(`已取消「${step.step_name}」完成标记`);
       }
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
     } catch (e) {
-      toast.error("更新失败，请重试");
+      feedback.error("更新失败，请重试");
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
     }
   };

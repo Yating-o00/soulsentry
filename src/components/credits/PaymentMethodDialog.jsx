@@ -1,16 +1,64 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard, Smartphone, Loader2, ExternalLink, QrCode, ArrowLeft, RefreshCw } from "lucide-react";
+import { CreditCard, Smartphone, Loader2, ExternalLink, QrCode, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
 export default function PaymentMethodDialog({ open, onOpenChange, pack, onPaymentSuccess }) {
   const [loading, setLoading] = useState(null);
   const [wechatQR, setWechatQR] = useState(null); // { code_url, order_no }
-  const [polling, setPolling] = useState(false);
+  const [paid, setPaid] = useState(false);
+  const pollTimerRef = useRef(null);
+
+  // 支付成功后自动关闭弹窗
+  useEffect(() => {
+    if (!paid) return;
+    const t = setTimeout(() => {
+      setWechatQR(null);
+      setPaid(false);
+      onOpenChange?.(false);
+      onPaymentSuccess?.();
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [paid, onOpenChange, onPaymentSuccess]);
+
+  // 轮询订单状态
+  useEffect(() => {
+    if (!wechatQR?.order_no || paid) return;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const res = await base44.functions.invoke("queryWechatOrder", { order_no: wechatQR.order_no });
+        if (!stopped && res.data?.paid) {
+          setPaid(true);
+          toast.success("支付成功！点数已到账");
+          return;
+        }
+      } catch (e) {
+        // 忽略单次失败，继续轮询
+      }
+      if (!stopped) {
+        pollTimerRef.current = setTimeout(poll, 3000);
+      }
+    };
+    pollTimerRef.current = setTimeout(poll, 3000);
+    return () => {
+      stopped = true;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, [wechatQR, paid]);
+
+  // 关闭弹窗时重置状态
+  useEffect(() => {
+    if (!open) {
+      setWechatQR(null);
+      setPaid(false);
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    }
+  }, [open]);
 
   if (!pack) return null;
 
@@ -77,23 +125,41 @@ export default function PaymentMethodDialog({ open, onOpenChange, pack, onPaymen
         {wechatQR ? (
           /* 微信二维码支付视图 */
           <div className="flex flex-col items-center gap-4 mt-2">
-            <div className="w-52 h-52 bg-white border-2 border-emerald-200 rounded-2xl flex items-center justify-center p-3 shadow-inner">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(wechatQR.code_url)}`}
-                alt="微信支付二维码"
-                className="w-full h-full"
-              />
-            </div>
+            {paid ? (
+              <div className="w-52 h-52 bg-emerald-50 border-2 border-emerald-200 rounded-2xl flex flex-col items-center justify-center p-3 gap-3">
+                <CheckCircle2 className="w-20 h-20 text-emerald-500" />
+                <p className="text-lg font-bold text-emerald-700">支付成功</p>
+                <p className="text-xs text-emerald-600">点数已到账</p>
+              </div>
+            ) : (
+              <div className="w-52 h-52 bg-white border-2 border-emerald-200 rounded-2xl flex items-center justify-center p-3 shadow-inner relative">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(wechatQR.code_url)}`}
+                  alt="微信支付二维码"
+                  className="w-full h-full"
+                />
+                <div className="absolute bottom-2 right-2 bg-white/90 rounded-full px-2 py-1 flex items-center gap-1 shadow-sm">
+                  <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />
+                  <span className="text-[10px] text-slate-500">等待支付</span>
+                </div>
+              </div>
+            )}
             <div className="text-center space-y-1">
-              <p className="text-sm text-slate-700 font-medium">请使用微信扫码支付</p>
+              <p className="text-sm text-slate-700 font-medium">
+                {paid ? "即将关闭..." : "请使用微信扫码支付"}
+              </p>
               <p className="text-xs text-slate-400">订单号: {wechatQR.order_no}</p>
               <p className="text-lg font-bold text-emerald-600">{pack.priceDisplay}</p>
             </div>
-            <p className="text-[11px] text-slate-400 text-center">支付完成后点数将自动到账，请勿关闭此窗口</p>
-            <Button variant="outline" size="sm" onClick={handleBackToMethods} className="mt-1">
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              返回选择支付方式
-            </Button>
+            {!paid && (
+              <>
+                <p className="text-[11px] text-slate-400 text-center">支付完成后点数将自动到账，请勿关闭此窗口</p>
+                <Button variant="outline" size="sm" onClick={handleBackToMethods} className="mt-1">
+                  <ArrowLeft className="w-4 h-4 mr-1" />
+                  返回选择支付方式
+                </Button>
+              </>
+            )}
           </div>
         ) : (
           /* 支付方式选择视图 */

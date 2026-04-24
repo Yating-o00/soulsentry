@@ -306,8 +306,8 @@ export default function GeofenceMapView() {
         </div>
       ) : (
         <>
-          <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm" style={{ height: 480 }}>
-            <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
+          <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative" style={{ height: 480, zIndex: 0 }}>
+            <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }}>
               <TileLayer
                 attribution='&copy; OpenStreetMap'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

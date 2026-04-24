@@ -480,7 +480,7 @@ export default function GeofenceMapView() {
 
       {/* 新增地点 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>添加地点</DialogTitle>
           </DialogHeader>

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import GeoAwarenessCard from "@/components/smart/GeoAwarenessCard";
 import ForgettingRescueCard from "@/components/smart/ForgettingRescueCard";
+import AssociationRuleCard from "@/components/smart/AssociationRuleCard";
 import { toast } from "sonner";
 import { Shield } from "lucide-react";
 
@@ -10,6 +11,7 @@ import { Shield } from "lucide-react";
  */
 export default function SentinelGuardPanel() {
   const [data, setData] = useState(null);
+  const [assoc, setAssoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [coords, setCoords] = useState(null);
   const [dismissed, setDismissed] = useState({ geo: false, forget: false });
@@ -27,8 +29,12 @@ export default function SentinelGuardPanel() {
   const fetchGuard = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await base44.functions.invoke('getSentinelGuard', coords || {});
-      setData(res?.data || null);
+      const [guardRes, assocRes] = await Promise.all([
+        base44.functions.invoke('getSentinelGuard', coords || {}),
+        base44.functions.invoke('getAssociationRecommendations', coords || {})
+      ]);
+      setData(guardRes?.data || null);
+      setAssoc(assocRes?.data || null);
     } catch (e) {
       console.warn('[sentinel-guard] 拉取失败', e);
     } finally {
@@ -47,6 +53,7 @@ export default function SentinelGuardPanel() {
 
   const hasGeo = data?.geo_context && !dismissed.geo;
   const hasForget = data?.forgetting_rescue?.primary && !dismissed.forget;
+  const hasAssoc = !!(assoc?.sequential_recommendation || assoc?.location_pattern);
 
   if (loading) {
     return (
@@ -59,7 +66,7 @@ export default function SentinelGuardPanel() {
     );
   }
 
-  if (!hasGeo && !hasForget) {
+  if (!hasGeo && !hasForget && !hasAssoc) {
     return (
       <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
         <Shield className="w-8 h-8 mx-auto mb-2 text-slate-300" />
@@ -81,6 +88,12 @@ export default function SentinelGuardPanel() {
         <ForgettingRescueCard
           data={data.forgetting_rescue}
           onSnooze={() => handleSnooze('forget')}
+        />
+      )}
+      {hasAssoc && (
+        <AssociationRuleCard
+          sequential={assoc.sequential_recommendation}
+          location={assoc.location_pattern}
         />
       )}
     </div>

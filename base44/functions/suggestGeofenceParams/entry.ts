@@ -1,24 +1,69 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
- * 根据用户已有地点、地点类型、历史行为，AI 推荐新建围栏的 radius（半径）与 quiet_minutes（静默期）。
+ * 根据用户已有地点、地点类型、详细地址、历史行为，AI 推荐新建围栏的参数。
+ * 如果用户填写了详细地址（address），会优先通过地理编码解析出 latitude/longitude。
  *
  * Input:
- *   - location_type: string (home/office/gym/school/shopping/hospital/restaurant/other)
+ *   - location_type: string
  *   - name?: string
+ *   - address?: string       // 详细地址（用于地理编码）
  *   - latitude?: number
  *   - longitude?: number
  *
  * Output:
- *   { radius: number, quiet_minutes: number, reasoning: string, confidence: 'low'|'medium'|'high' }
+ *   { radius, quiet_minutes, reasoning, confidence,
+ *     latitude?, longitude?, resolved_address?, geocode_source? }
  */
+
+// 使用 OpenStreetMap Nominatim 进行地理编码（免费、无需 key）
+async function geocodeAddress(address) {
+  if (!address || !address.trim()) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(address.trim())}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'SoulSentry-Geofence/1.0',
+        'Accept-Language': 'zh-CN,zh,en'
+      },
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const arr = await res.json();
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const hit = arr[0];
+    const lat = parseFloat(hit.lat);
+    const lon = parseFloat(hit.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return {
+      latitude: Number(lat.toFixed(6)),
+      longitude: Number(lon.toFixed(6)),
+      display_name: hit.display_name || ''
+    };
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { location_type = 'other', name = '', latitude, longitude } = await req.json();
+    const { location_type = 'other', name = '', address = '', latitude, longitude } = await req.json();
+
+    // 0. 如果用户填写了详细地址，先尝试地理编码解析坐标
+    let geocoded = null;
+    if (address && address.trim()) {
+      geocoded = await geocodeAddress(address);
+    }
+    // 地址解析出的坐标优先；若无，退回前端传来的坐标
+    const finalLat = geocoded?.latitude ?? latitude;
+    const finalLng = geocoded?.longitude ?? longitude;
 
     // 1. 拉取用户已有地点（同类型优先）+ 近期行为
     const [allLocations, behaviors] = await Promise.all([
@@ -46,6 +91,15 @@ Deno.serve(async (req) => {
     };
     const baseline = DEFAULTS[location_type] || DEFAULTS.other;
 
+    const geocodePart = geocoded
+      ? {
+          latitude: geocoded.latitude,
+          longitude: geocoded.longitude,
+          resolved_address: geocoded.display_name,
+          geocode_source: 'nominatim'
+        }
+      : {};
+
     // 4. 构造给 Kimi 的上下文
     const recentBehaviorSummary = behaviors.slice(0, 50).map((b) => ({
       type: b.event_type,
@@ -59,8 +113,11 @@ Deno.serve(async (req) => {
       return Response.json({
         radius: baseline.radius,
         quiet_minutes: baseline.quiet_minutes,
-        reasoning: `使用类型"${location_type}"的默认推荐值（未启用 AI）。`,
-        confidence: 'low'
+        reasoning: geocoded
+          ? `已根据地址解析出坐标；使用类型"${location_type}"默认参数。`
+          : `使用类型"${location_type}"的默认推荐值（未启用 AI）。`,
+        confidence: geocoded ? 'medium' : 'low',
+        ...geocodePart
       });
     }
 
@@ -69,7 +126,9 @@ Deno.serve(async (req) => {
 【目标地点】
 - 名称：${name || '（未填写）'}
 - 类型：${location_type}
-- 坐标：${latitude && longitude ? `${latitude}, ${longitude}` : '（未定位）'}
+- 详细地址：${address || '（未填写）'}
+- 坐标：${finalLat && finalLng ? `${finalLat}, ${finalLng}` : '（未定位）'}
+${geocoded ? `- 地址已由 OpenStreetMap 解析为：${geocoded.display_name}` : ''}
 
 【用户已有同类型地点的统计】
 - 同类型地点数量：${sameType.length}
@@ -120,7 +179,8 @@ ${recentBehaviorSummary.length ? JSON.stringify(recentBehaviorSummary).slice(0, 
         radius: baseline.radius,
         quiet_minutes: baseline.quiet_minutes,
         reasoning: `AI 暂不可用，使用类型默认值。`,
-        confidence: 'low'
+        confidence: 'low',
+        ...geocodePart
       });
     }
 
@@ -143,8 +203,11 @@ ${recentBehaviorSummary.length ? JSON.stringify(recentBehaviorSummary).slice(0, 
     return Response.json({
       radius: clamp(parsed.radius, 50, 1000, baseline.radius),
       quiet_minutes: clamp(parsed.quiet_minutes, 10, 240, baseline.quiet_minutes),
-      reasoning: parsed.reasoning || `基于类型"${location_type}"与${sameType.length}个同类地点推荐。`,
-      confidence: ['low', 'medium', 'high'].includes(parsed.confidence) ? parsed.confidence : 'medium'
+      reasoning: parsed.reasoning || (geocoded
+        ? `已根据地址解析坐标，并基于类型"${location_type}"和${sameType.length}个同类地点推荐。`
+        : `基于类型"${location_type}"与${sameType.length}个同类地点推荐。`),
+      confidence: ['low', 'medium', 'high'].includes(parsed.confidence) ? parsed.confidence : 'medium',
+      ...geocodePart
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

@@ -229,6 +229,7 @@ export default function GeofenceMapView() {
       const res = await base44.functions.invoke('suggestGeofenceParams', {
         location_type: form.location_type,
         name: form.name,
+        address: form.address,
         latitude: form.latitude,
         longitude: form.longitude
       });
@@ -246,12 +247,20 @@ export default function GeofenceMapView() {
 
   const applyAISuggestion = () => {
     if (!aiSuggest.data) return;
+    const d = aiSuggest.data;
     setForm((f) => ({
       ...f,
-      radius: aiSuggest.data.radius,
-      quiet_minutes: aiSuggest.data.quiet_minutes
+      radius: d.radius,
+      quiet_minutes: d.quiet_minutes,
+      // 若 AI 通过地址解析出坐标，一并填入
+      latitude: typeof d.latitude === 'number' ? d.latitude : f.latitude,
+      longitude: typeof d.longitude === 'number' ? d.longitude : f.longitude
     }));
-    toast.success('已应用 AI 推荐值');
+    toast.success(
+      typeof d.latitude === 'number'
+        ? '已应用 AI 推荐值（含解析出的坐标）'
+        : '已应用 AI 推荐值'
+    );
   };
 
   const handleSubmit = () => {
@@ -558,7 +567,7 @@ export default function GeofenceMapView() {
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-semibold text-slate-800">AI 智能推荐</div>
-                    <div className="text-[10px] text-slate-500">根据历史行为建议半径与静默期</div>
+                    <div className="text-[10px] text-slate-500">根据详细地址解析坐标，并建议半径与静默期</div>
                   </div>
                 </div>
                 <Button
@@ -584,6 +593,19 @@ export default function GeofenceMapView() {
               </div>
               {aiSuggest.data && (
                 <div className="mt-2.5 space-y-2">
+                  {typeof aiSuggest.data.latitude === 'number' && (
+                    <div className="rounded-lg bg-white border border-indigo-200 p-2 text-[11px] space-y-0.5">
+                      <div className="text-slate-500">📍 已从地址解析出坐标</div>
+                      <div className="font-mono text-slate-700">
+                        {aiSuggest.data.latitude}, {aiSuggest.data.longitude}
+                      </div>
+                      {aiSuggest.data.resolved_address && (
+                        <div className="text-slate-500 truncate" title={aiSuggest.data.resolved_address}>
+                          {aiSuggest.data.resolved_address}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 text-xs">
                     <span className="px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-700 font-mono">
                       半径 {aiSuggest.data.radius}m

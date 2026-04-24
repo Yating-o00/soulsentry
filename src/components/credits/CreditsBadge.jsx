@@ -10,10 +10,24 @@ export default function CreditsBadge({ compact = false }) {
   const [plan, setPlan] = useState("free");
 
   useEffect(() => {
-    getCachedUser().then(user => {
-      setCredits(user.ai_credits ?? 200);
-      setPlan(user.subscription_plan || "free");
-    }).catch(() => {});
+    const load = (forceRefresh = false) => {
+      getCachedUser(forceRefresh).then(user => {
+        setCredits(user.ai_credits ?? 200);
+        setPlan(user.subscription_plan || "free");
+      }).catch(() => {});
+    };
+    load();
+
+    const handleUpdate = (e) => {
+      if (e.detail?.credits != null) {
+        setCredits(e.detail.credits);
+        if (e.detail.plan) setPlan(e.detail.plan);
+      } else {
+        load(true);
+      }
+    };
+    window.addEventListener("credits-updated", handleUpdate);
+    return () => window.removeEventListener("credits-updated", handleUpdate);
   }, []);
 
   if (credits === null) return null;

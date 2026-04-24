@@ -15,6 +15,9 @@ export function useAICredits() {
     setCredits(currentCredits);
     setPlan(currentPlan);
     setLoading(false);
+    if (forceRefresh) {
+      window.dispatchEvent(new CustomEvent("credits-updated", { detail: { credits: currentCredits, plan: currentPlan } }));
+    }
     return { credits: currentCredits, plan: currentPlan };
   }, []);
 
@@ -66,6 +69,7 @@ export function useAICredits() {
     await base44.auth.updateMe({ ai_credits: newBalance });
     updateCachedUser({ ai_credits: newBalance });
     setCredits(newBalance);
+    window.dispatchEvent(new CustomEvent("credits-updated", { detail: { credits: newBalance } }));
 
     // 记录交易（非阻塞，避免触发速率限制）
     base44.entities.AICreditTransaction.create({

@@ -274,7 +274,7 @@ export default function Pricing() {
           open={!!paymentPack}
           onOpenChange={(open) => { if (!open) setPaymentPack(null); }}
           pack={paymentPack}
-          onPaymentSuccess={() => { setPaymentPack(null); refreshCredits(); }}
+          onPaymentSuccess={() => { setPaymentPack(null); refreshCredits(true); }}
         />
       </div>
     </div>

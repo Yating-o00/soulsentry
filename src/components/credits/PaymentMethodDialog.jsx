@@ -95,7 +95,6 @@ export default function PaymentMethodDialog({ open, onOpenChange, pack, onPaymen
 
       if (response.data?.code_url) {
         setWechatQR({ code_url: response.data.code_url, order_no: response.data.order_no });
-        toast.success("订单创建成功，请扫码支付");
       } else {
         toast.error(response.data?.error || "微信支付下单失败");
       }

@@ -521,8 +521,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     <Dialog open={open} onOpenChange={(isOpen) => {
       if (!isOpen) onClose();
     }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden w-[calc(100%-16px)] md:w-full rounded-2xl md:rounded-2xl bg-[#f1f3f7]">
-        <DialogHeader className="flex flex-col md:flex-row md:items-start md:justify-between space-y-3 md:space-y-0 p-4 md:p-5 shrink-0 bg-white rounded-t-2xl z-10 border-b border-slate-100">
+      <DialogContent className="max-w-3xl max-h-[90vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden w-[calc(100%-16px)] md:w-full rounded-2xl bg-white">
+        <DialogHeader className="flex flex-col md:flex-row md:items-start md:justify-between space-y-3 md:space-y-0 px-5 md:px-6 pt-5 pb-4 shrink-0 bg-white z-10">
           <DialogTitle className="text-lg md:text-[22px] font-bold tracking-tight text-slate-900 line-clamp-2 pr-8 leading-snug flex-1">
             {task.title}
           </DialogTitle>
@@ -532,7 +532,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 size="sm" 
                 onClick={handleTranslate}
                 disabled={isTranslating}
-                className="h-9 w-9 md:h-10 md:w-10 p-0 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 flex flex-col items-center justify-center"
+                className="h-9 w-9 p-0 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500"
                 title={targetLangLabel}
              >
                 {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
@@ -542,7 +542,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 size="sm" 
                 onClick={handleAIAnalysis}
                 disabled={isAnalyzing}
-                className="h-9 w-9 md:h-10 md:w-10 p-0 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 text-purple-600"
+                className="h-9 w-9 p-0 rounded-lg bg-[#eef0fa] hover:bg-[#e0e4f3] text-[#384877]"
                 title="AI 分析"
              >
                 {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -550,26 +550,24 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto p-3 md:p-5 space-y-3 md:space-y-4 bg-[#f1f3f7]">
-          <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-slate-100">
-            <AITaskEnhancer 
-              taskTitle={task.title} 
-              currentDescription={task.description} 
-              onApply={handleEnhanceApply} 
-            />
-          </div>
+        <div className="flex-1 overflow-y-auto px-5 md:px-6 pb-6 space-y-5 bg-white">
+          <AITaskEnhancer 
+            taskTitle={task.title} 
+            currentDescription={task.description} 
+            onApply={handleEnhanceApply} 
+          />
 
 
           {/* Progress */}
           {totalSubtasks > 0 && (
-            <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-slate-100 space-y-3">
+            <div className="space-y-2.5 pt-1">
               <div className="flex justify-between items-baseline">
-                <span className="text-sm text-slate-500 font-medium">完成进度</span>
-                <span className="font-bold text-slate-900 text-base">
-                  {completedSubtasks}/{totalSubtasks} <span className="text-sm font-medium text-slate-500">子约定</span>
+                <span className="text-sm text-slate-500">完成进度</span>
+                <span className="font-semibold text-slate-900 text-sm">
+                  {completedSubtasks}/{totalSubtasks} <span className="text-slate-500 font-normal">子约定</span>
                 </span>
               </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-[#384877] to-[#6366f1] rounded-full transition-all duration-500"
                   style={{ width: `${task.progress || 0}%` }}
@@ -601,35 +599,33 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           )}
 
           <Tabs defaultValue={initialTab || "subtasks"} key={initialTab || "subtasks"} className="w-full">
-            <div className="bg-white rounded-2xl p-2 shadow-sm border border-slate-100">
-              <TabsList className="flex w-full overflow-x-auto justify-start gap-1 p-0 bg-transparent rounded-xl h-auto scrollbar-hide">
-                <TabsTrigger value="subtasks" className="flex-shrink-0 px-3 md:px-4 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
-                  子约定 ({totalSubtasks})
-                </TabsTrigger>
-                <TabsTrigger value="dependencies" className="flex-shrink-0 px-3 md:px-4 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
-                  依赖 ({task.dependencies?.length || 0})
-                </TabsTrigger>
-                <TabsTrigger value="attachments" className="flex-shrink-0 px-3 md:px-4 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
-                  附件 ({task.attachments?.length || 0})
-                </TabsTrigger>
-                <TabsTrigger value="notes" className="flex-shrink-0 px-3 md:px-4 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
-                  笔记 ({task.notes?.length || 0})
-                </TabsTrigger>
-                <TabsTrigger value="comments" className="flex-shrink-0 px-3 md:px-4 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
-                  评论 <CommentCount taskId={task.id} />
-                </TabsTrigger>
-                <TabsTrigger value="reminders" className="flex-shrink-0 px-3 md:px-4 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
-                  <Clock className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                  提醒
-                </TabsTrigger>
-                <TabsTrigger value="history" className="flex-shrink-0 px-3 md:px-4 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
-                  <History className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                  历史
-                </TabsTrigger>
-              </TabsList>
-            </div>
+            <TabsList className="flex w-full overflow-x-auto justify-start gap-1 p-0 bg-transparent h-auto scrollbar-hide border-b border-slate-100 rounded-none">
+              <TabsTrigger value="subtasks" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                子约定 ({totalSubtasks})
+              </TabsTrigger>
+              <TabsTrigger value="dependencies" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                依赖 ({task.dependencies?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="attachments" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                附件 ({task.attachments?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="notes" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                笔记 ({task.notes?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="comments" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                评论 <CommentCount taskId={task.id} />
+              </TabsTrigger>
+              <TabsTrigger value="reminders" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                提醒
+              </TabsTrigger>
+              <TabsTrigger value="history" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+                <History className="w-3.5 h-3.5" />
+                历史
+              </TabsTrigger>
+            </TabsList>
 
-            <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-slate-100 mt-3 md:mt-4">
+            <div className="pt-4">
 
               {/* Reminders Tab */}
               <TabsContent value="reminders" className="space-y-4">

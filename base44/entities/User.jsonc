@@ -79,6 +79,40 @@
       "type": "string",
       "format": "date-time",
       "description": "\u8ba2\u9605\u5230\u671f\u65f6\u95f4"
+    },
+    "wework_webhook_url": {
+      "type": "string",
+      "description": "\u4f01\u4e1a\u5fae\u4fe1\u7fa4\u673a\u5668\u4eba Webhook URL\uff0c\u7528\u4e8e\u63a5\u6536\u4efb\u52a1\u63d0\u9192\u63a8\u9001"
+    },
+    "task_alert_settings": {
+      "type": "object",
+      "description": "\u4efb\u52a1\u9884\u8b66\u63a8\u9001\u8bbe\u7f6e",
+      "properties": {
+        "auto_alert_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "\u662f\u5426\u5f00\u542f\u4e34\u8fd1\u622a\u6b62\u81ea\u52a8\u9884\u8b66"
+        },
+        "alert_channels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "email",
+              "wework"
+            ]
+          },
+          "default": [
+            "wework"
+          ],
+          "description": "\u81ea\u52a8\u9884\u8b66\u4f7f\u7528\u7684\u63a8\u9001\u6e20\u9053"
+        },
+        "alert_hours_before": {
+          "type": "number",
+          "default": 2,
+          "description": "\u5728\u622a\u6b62\u524d\u591a\u5c11\u5c0f\u65f6\u89e6\u53d1\u81ea\u52a8\u9884\u8b66"
+        }
+      }
     }
   },
   "required": []

@@ -16,6 +16,7 @@ import { SUBSCRIPTION_PLANS } from "@/components/credits/creditConfig";
 import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
 import { useQuery } from "@tanstack/react-query";
 import ProductInsights from "@/components/memory/ProductInsights";
+import AlertChannelSettings from "@/components/account/AlertChannelSettings";
 
 export default function Account() {
   const [user, setUser] = useState(null);
@@ -455,6 +456,15 @@ export default function Account() {
             />
           </CardContent>
         </Card>
+      </motion.div>
+
+      {/* 预警通道设置 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.19 }}
+      >
+        <AlertChannelSettings user={user} />
       </motion.div>
 
       {/* 账户操作 */}

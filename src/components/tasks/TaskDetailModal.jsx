@@ -48,6 +48,7 @@ import TaskComments from "./TaskComments";
 import AITaskEnhancer from "./AITaskEnhancer";
 import TaskChangeHistory from "./TaskChangeHistory";
 import TaskDependencySelector from "./TaskDependencySelector";
+import QuickAlertButton from "./QuickAlertButton";
 
 function CommentCount({ taskId }) {
   const { data: comments = [] } = useQuery({
@@ -527,6 +528,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             {task.title}
           </DialogTitle>
           <div className="flex items-center gap-2 md:absolute md:right-12 md:top-5">
+             <QuickAlertButton task={task} />
              <Button 
                 variant="ghost" 
                 size="sm" 

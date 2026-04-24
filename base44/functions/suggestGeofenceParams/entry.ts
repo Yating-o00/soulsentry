@@ -16,8 +16,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  *     latitude?, longitude?, resolved_address?, geocode_source? }
  */
 
-// 使用 OpenStreetMap Nominatim 进行地理编码（免费、无需 key）
-async function geocodeAddress(address) {
+// 1) OpenStreetMap Nominatim 地理编码（免费、无需 key）
+async function geocodeNominatim(address) {
   if (!address || !address.trim()) return null;
   try {
     const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(address.trim())}`;
@@ -41,11 +41,77 @@ async function geocodeAddress(address) {
     return {
       latitude: Number(lat.toFixed(6)),
       longitude: Number(lon.toFixed(6)),
-      display_name: hit.display_name || ''
+      display_name: hit.display_name || '',
+      source: 'nominatim'
     };
   } catch {
     return null;
   }
+}
+
+// 2) Kimi 推理地理编码（针对中文地址的 fallback）
+async function geocodeByKimi(address, apiKey) {
+  if (!address || !address.trim() || !apiKey) return null;
+  try {
+    const body = {
+      model: "kimi-k2-turbo-preview",
+      messages: [
+        {
+          role: "system",
+          content: "你是中国地理坐标专家。根据用户提供的详细地址（可能是中文），推理出该地点的 WGS-84 经纬度坐标。只输出 JSON，不要解释。"
+        },
+        {
+          role: "user",
+          content: `地址：${address.trim()}
+
+请返回严格 JSON：
+{ "latitude": number, "longitude": number, "normalized_address": "规范化后的完整地址" }
+
+要求：
+- 中国境内的地址请给出 WGS-84 坐标（不是 GCJ-02）。
+- 如果无法确定具体门牌，可定位到最近的道路或建筑。
+- 若地址完全无法识别，返回 { "latitude": null, "longitude": null, "normalized_address": "" }。`
+        }
+      ],
+      temperature: 0.1,
+      response_format: { type: "json_object" }
+    };
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey.trim()}`
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    const parsed = JSON.parse(content);
+    const lat = Number(parsed.latitude);
+    const lon = Number(parsed.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (lat === 0 && lon === 0) return null;
+    return {
+      latitude: Number(lat.toFixed(6)),
+      longitude: Number(lon.toFixed(6)),
+      display_name: parsed.normalized_address || address.trim(),
+      source: 'kimi'
+    };
+  } catch {
+    return null;
+  }
+}
+
+// 综合地理编码：优先 Nominatim，失败后用 Kimi 兜底
+async function geocodeAddress(address, apiKey) {
+  const primary = await geocodeNominatim(address);
+  if (primary) return primary;
+  return await geocodeByKimi(address, apiKey);
 }
 
 Deno.serve(async (req) => {
@@ -56,10 +122,12 @@ Deno.serve(async (req) => {
 
     const { location_type = 'other', name = '', address = '', latitude, longitude } = await req.json();
 
+    const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
+
     // 0. 如果用户填写了详细地址，先尝试地理编码解析坐标
     let geocoded = null;
     if (address && address.trim()) {
-      geocoded = await geocodeAddress(address);
+      geocoded = await geocodeAddress(address, apiKey);
     }
     // 地址解析出的坐标优先；若无，退回前端传来的坐标
     const finalLat = geocoded?.latitude ?? latitude;
@@ -107,7 +175,6 @@ Deno.serve(async (req) => {
       category: b.category
     }));
 
-    const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
     if (!apiKey) {
       // 没配 Kimi 也能返回兜底建议
       return Response.json({

@@ -256,11 +256,6 @@ export default function GeofenceMapView() {
       latitude: typeof d.latitude === 'number' ? d.latitude : f.latitude,
       longitude: typeof d.longitude === 'number' ? d.longitude : f.longitude
     }));
-    toast.success(
-      typeof d.latitude === 'number'
-        ? '已应用 AI 推荐值（含解析出的坐标）'
-        : '已应用 AI 推荐值'
-    );
   };
 
   const handleSubmit = () => {

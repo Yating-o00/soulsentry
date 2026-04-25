@@ -38,7 +38,14 @@ Deno.serve(async (req) => {
     const notifTitle = `${titlePrefix}：${task.title}`;
     const notifContent = task.description || '现在是完成这个约定的时间';
 
-    const results = { in_app: false, email: false, calendar: false };
+    const results = { in_app: false, email: false, calendar: false, wechat: false };
+
+    // 读取任务创建者，用于企业微信 webhook 与默认渠道
+    let creator = null;
+    try {
+      const creators = await base44.asServiceRole.entities.User.filter({ email: task.created_by });
+      creator = creators?.[0] || null;
+    } catch (_) {}
 
     // 1) 应用内通知：创建 Notification 实体
     if (channels.includes('in_app') || channels.includes('browser')) {
@@ -70,6 +77,45 @@ Deno.serve(async (req) => {
         results.email = true;
       } catch (e) {
         console.error('sendTaskEmailReminder failed:', e.message);
+      }
+    }
+
+    // 2.5) 企业微信推送（任务勾选 wechat 渠道，或用户在 task_alert_settings 中默认启用 wework）
+    const userAlertChannels = creator?.task_alert_settings?.alert_channels || [];
+    const wechatEnabled =
+      channels.includes('wechat') ||
+      channels.includes('wework') ||
+      userAlertChannels.includes('wework');
+    if (wechatEnabled && creator?.wework_webhook_url) {
+      try {
+        const priorityMap = { urgent: '🔴 紧急', high: '🟠 高', medium: '🟡 中', low: '🟢 低' };
+        const dueStr = task.reminder_time
+          ? new Date(task.reminder_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+          : '未设置';
+        const md = [
+          `## ${isAdvance ? '📋 即将到来' : '⏰ 任务提醒'}：${task.title}`,
+          isAdvance ? `> 距离开始还有 <font color="warning">${advanceMinutes} 分钟</font>` : `> 现在是完成这个约定的时间`,
+          ``,
+          `**⏱ 时间**：${dueStr}`,
+          `**🎯 优先级**：${priorityMap[task.priority] || '中'}`,
+          `**📈 进度**：${task.progress || 0}%`,
+          task.description ? `\n> 📝 ${String(task.description).slice(0, 200)}` : '',
+          ``,
+          `<font color="comment">— 由 灵魂哨兵 发送</font>`,
+        ].filter(Boolean).join('\n');
+
+        const wxRes = await fetch(creator.wework_webhook_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ msgtype: 'markdown', markdown: { content: md } }),
+        });
+        const wxData = await wxRes.json().catch(() => ({}));
+        if (wxData.errcode !== 0) {
+          throw new Error(wxData.errmsg || JSON.stringify(wxData));
+        }
+        results.wechat = true;
+      } catch (e) {
+        console.error('wework push failed:', e.message);
       }
     }
 

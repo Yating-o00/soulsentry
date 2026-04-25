@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Bell, MessageSquare, Mail, Save, Loader2, ExternalLink } from "lucide-react";
+import { Bell, MessageSquare, Mail, Save, Loader2, ExternalLink, Send } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
@@ -18,6 +18,7 @@ export default function AlertChannelSettings({ user }) {
   const [channels, setChannels] = useState(["wework"]);
   const [hoursBefore, setHoursBefore] = useState(2);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -32,6 +33,31 @@ export default function AlertChannelSettings({ user }) {
     setChannels((prev) =>
       prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
     );
+  };
+
+  const handleTest = async () => {
+    const url = webhookUrl.trim();
+    if (!url) {
+      toast.error("请先填写企业微信 Webhook URL");
+      return;
+    }
+    if (!/qyapi\.weixin\.qq\.com/.test(url)) {
+      toast.error("Webhook URL 格式不正确");
+      return;
+    }
+    setTesting(true);
+    try {
+      const res = await base44.functions.invoke("testWeworkWebhook", { webhook_url: url });
+      if (res?.data?.success) {
+        toast.success("测试消息已发送，请到企业微信群查看 ✅");
+      } else {
+        toast.error("推送失败：" + (res?.data?.error || "未知错误"));
+      }
+    } catch (e) {
+      toast.error("推送失败：" + (e.message || "请检查 Webhook"));
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleSave = async () => {
@@ -80,14 +106,30 @@ export default function AlertChannelSettings({ user }) {
             onChange={(e) => setWebhookUrl(e.target.value)}
             className="rounded-lg font-mono text-xs"
           />
-          <a
-            href="https://developer.work.weixin.qq.com/document/path/91770"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-[#384877]"
-          >
-            如何获取 Webhook URL <ExternalLink className="w-3 h-3" />
-          </a>
+          <div className="flex items-center justify-between">
+            <a
+              href="https://developer.work.weixin.qq.com/document/path/91770"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-[#384877]"
+            >
+              如何获取 Webhook URL <ExternalLink className="w-3 h-3" />
+            </a>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTest}
+              disabled={testing || !webhookUrl}
+              className="h-7 text-xs border-[#384877]/20 text-[#384877] hover:bg-[#384877]/5"
+            >
+              {testing ? (
+                <><Loader2 className="w-3 h-3 mr-1 animate-spin" />测试中</>
+              ) : (
+                <><Send className="w-3 h-3 mr-1" />测试推送</>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* 自动预警开关 */}

@@ -249,6 +249,31 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
           suggestions: mergedSuggestions,
           footnote: response.encouragement,
         });
+
+        // 同步到「消息通知 → 系统通知」
+        try {
+          const me = await base44.auth.me();
+          const lines = [];
+          if (mergedSuggestions.length > 0) {
+            lines.push("💡 下一步：");
+            mergedSuggestions.slice(0, 5).forEach((s) => lines.push(`· ${s}`));
+          }
+          if (response.encouragement) {
+            lines.push("");
+            lines.push(`"${response.encouragement}"`);
+          }
+          await base44.entities.Notification.create({
+            recipient_id: me?.id || me?.email,
+            type: "system",
+            title: `✨ ${response.summary}`,
+            content: lines.join("\n"),
+            link: `/Tasks?taskId=${task.id}`,
+            related_entity_id: task.id,
+            is_read: false,
+          });
+        } catch (e) {
+          console.warn("写入系统通知失败:", e);
+        }
       }
     } catch (error) {
       console.error("AI总结生成失败:", error);

@@ -433,11 +433,20 @@ export default function Account() {
 
       <CreditHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
 
-      {/* 认知洞察 */}
+      {/* 预警通道设置 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.18 }}
+      >
+        <AlertChannelSettings user={user} />
+      </motion.div>
+
+      {/* 认知洞察 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.19 }}
       >
         <Card className="border-0 shadow-lg overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
@@ -456,15 +465,6 @@ export default function Account() {
             />
           </CardContent>
         </Card>
-      </motion.div>
-
-      {/* 预警通道设置 */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.19 }}
-      >
-        <AlertChannelSettings user={user} />
       </motion.div>
 
       {/* 账户操作 */}

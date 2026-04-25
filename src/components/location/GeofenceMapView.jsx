@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Plus, Trash2, Crosshair, Sparkles, Check } from 'lucide-react';
+import { MapPin, Plus, Trash2, Crosshair, Sparkles, Check, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import LocationEditDialog from './LocationEditDialog';
+import BatchImportDialog from './BatchImportDialog';
 
 const LOCATION_TYPES = [
   { value: 'home', label: '家', icon: '🏠' },
@@ -73,6 +74,7 @@ export default function GeofenceMapView() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
   // 定位授权/状态对话框
@@ -282,17 +284,27 @@ export default function GeofenceMapView() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={() => {
-            setForm(EMPTY_FORM);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus className="w-3.5 h-3.5 mr-1" />新增地点
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+            onClick={() => setBatchOpen(true)}
+          >
+            <Upload className="w-3.5 h-3.5 mr-1" />批量导入
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => {
+              setForm(EMPTY_FORM);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />新增地点
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -407,6 +419,9 @@ export default function GeofenceMapView() {
         onOpenChange={(o) => !o && setEditing(null)}
         location={editing}
       />
+
+      {/* 批量导入 */}
+      <BatchImportDialog open={batchOpen} onOpenChange={setBatchOpen} />
 
       {/* 定位权限 & 状态对话框 */}
       <Dialog

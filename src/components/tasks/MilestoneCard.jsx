@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
+import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 
 export default function MilestoneCard({
   task,
@@ -329,10 +330,25 @@ export default function MilestoneCard({
 
             {/* Metadata Line */}
             <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1 text-stone-400">
-                <Calendar className="w-3 h-3" />
-                {task.reminder_time ? format(new Date(task.reminder_time), 'M月d日 EEE', { locale: zhCN }) : '无截止日期'}
-              </span>
+              <MilestoneTimeEditor
+                task={task}
+                onSave={(payload) => onUpdate && onUpdate(task, payload)}
+              >
+                <button
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 text-stone-400 hover:text-[#384877] hover:bg-stone-50 px-1.5 py-0.5 -ml-1.5 rounded transition-colors cursor-pointer"
+                  title="点击编辑时间"
+                >
+                  <Calendar className="w-3 h-3" />
+                  {(() => {
+                    const fmt = (iso) => format(new Date(iso), 'M月d日 HH:mm', { locale: zhCN });
+                    if (task.reminder_time && task.end_time) return `${fmt(task.reminder_time)} → ${fmt(task.end_time)}`;
+                    if (task.end_time) return `截止 ${fmt(task.end_time)}`;
+                    if (task.reminder_time) return fmt(task.reminder_time);
+                    return '点击设置时间';
+                  })()}
+                </button>
+              </MilestoneTimeEditor>
               <span className="w-1 h-1 rounded-full bg-stone-300"></span>
               <span className="flex items-center gap-1 text-stone-400">
                 <Clock className="w-3 h-3" />

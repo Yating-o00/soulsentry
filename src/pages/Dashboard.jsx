@@ -570,11 +570,11 @@ export default function Dashboard() {
       />
 
       <Dialog open={taskListDialog.open} onOpenChange={(open) => setTaskListDialog(prev => ({ ...prev, open }))}>
-        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{taskListDialog.title}</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="flex-1 mt-2 pr-4 -mr-4">
+          <div className="flex-1 overflow-y-auto mt-2 pr-2 -mr-2 min-h-0">
             <div className="space-y-3 p-1">
               {taskListDialog.tasks.length > 0 ? (
                 taskListDialog.tasks.map(task => (
@@ -611,7 +611,7 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
 

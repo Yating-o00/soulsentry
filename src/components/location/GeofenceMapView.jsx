@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import LocationEditDialog from './LocationEditDialog';
 import BatchImportDialog from './BatchImportDialog';
+import QuietPolicyEditor, { DEFAULT_QUIET_POLICY } from './QuietPolicyEditor';
 
 const LOCATION_TYPES = [
   { value: 'home', label: '家', icon: '🏠' },
@@ -36,7 +37,8 @@ const EMPTY_FORM = {
   icon: '📍',
   is_active: true,
   trigger_on: 'enter',
-  quiet_minutes: 30
+  quiet_minutes: 30,
+  quiet_policy: { ...DEFAULT_QUIET_POLICY }
 };
 
 // Emoji-based divIcon (avoid leaflet default-marker asset 404 issues)
@@ -682,6 +684,11 @@ export default function GeofenceMapView() {
                 </SelectContent>
               </Select>
             </div>
+
+            <QuietPolicyEditor
+              value={form.quiet_policy}
+              onChange={(qp) => setForm({ ...form, quiet_policy: qp })}
+            />
           </div>
 
           <DialogFooter>

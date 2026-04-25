@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { MapPin, ListChecks } from 'lucide-react';
 import { toast } from 'sonner';
+import QuietPolicyEditor, { DEFAULT_QUIET_POLICY } from './QuietPolicyEditor';
 
 /**
  * 点击地图标记后的快速编辑弹窗：
@@ -26,7 +27,8 @@ export default function LocationEditDialog({ open, onOpenChange, location }) {
         radius: location.radius || 200,
         trigger_on: location.trigger_on || 'enter',
         quiet_minutes: location.quiet_minutes || 30,
-        is_active: location.is_active ?? true
+        is_active: location.is_active ?? true,
+        quiet_policy: { ...DEFAULT_QUIET_POLICY, ...(location.quiet_policy || {}) }
       });
     }
   }, [location]);
@@ -134,6 +136,11 @@ export default function LocationEditDialog({ open, onOpenChange, location }) {
               </SelectContent>
             </Select>
           </div>
+
+          <QuietPolicyEditor
+            value={form.quiet_policy}
+            onChange={(qp) => setForm({ ...form, quiet_policy: qp })}
+          />
 
           <Button
             size="sm"

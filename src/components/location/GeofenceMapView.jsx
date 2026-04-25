@@ -310,6 +310,45 @@ export default function GeofenceMapView() {
         </div>
       ) : (
         <>
+          {/* 地点列表 */}
+          <div className="grid gap-2">
+            {locations.map((loc) => (
+              <div
+                key={loc.id}
+                className="bg-white rounded-xl p-3 border border-slate-200 flex items-center gap-3"
+              >
+                <div className="text-2xl">{loc.icon || '📍'}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <h4 className="font-medium text-slate-900 text-sm truncate">{loc.name}</h4>
+                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] flex-shrink-0">
+                      {LOCATION_TYPES.find((t) => t.value === loc.location_type)?.label || '其他'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 truncate">
+                    半径 {loc.radius}m ·{' '}
+                    {loc.trigger_on === 'enter' ? '进入时' : loc.trigger_on === 'exit' ? '离开时' : '进出都'}触发 ·
+                    静默 {loc.quiet_minutes}分
+                  </div>
+                </div>
+                <Switch
+                  checked={loc.is_active}
+                  onCheckedChange={(v) => toggleMutation.mutate({ id: loc.id, is_active: v })}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    if (window.confirm(`删除地点"${loc.name}"？`)) deleteMutation.mutate(loc.id);
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
           <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative" style={{ height: 480, zIndex: 0 }}>
             <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }}>
               <TileLayer
@@ -358,45 +397,6 @@ export default function GeofenceMapView() {
                 </React.Fragment>
               ))}
             </MapContainer>
-          </div>
-
-          {/* 地点列表 */}
-          <div className="grid gap-2">
-            {locations.map((loc) => (
-              <div
-                key={loc.id}
-                className="bg-white rounded-xl p-3 border border-slate-200 flex items-center gap-3"
-              >
-                <div className="text-2xl">{loc.icon || '📍'}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h4 className="font-medium text-slate-900 text-sm truncate">{loc.name}</h4>
-                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] flex-shrink-0">
-                      {LOCATION_TYPES.find((t) => t.value === loc.location_type)?.label || '其他'}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-500 truncate">
-                    半径 {loc.radius}m ·{' '}
-                    {loc.trigger_on === 'enter' ? '进入时' : loc.trigger_on === 'exit' ? '离开时' : '进出都'}触发 ·
-                    静默 {loc.quiet_minutes}分
-                  </div>
-                </div>
-                <Switch
-                  checked={loc.is_active}
-                  onCheckedChange={(v) => toggleMutation.mutate({ id: loc.id, is_active: v })}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => {
-                    if (window.confirm(`删除地点"${loc.name}"？`)) deleteMutation.mutate(loc.id);
-                  }}
-                >
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                </Button>
-              </div>
-            ))}
           </div>
         </>
       )}

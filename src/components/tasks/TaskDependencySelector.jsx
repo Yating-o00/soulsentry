@@ -56,7 +56,10 @@ function TaskRow({ task, isSelected, isChild, parentTitle, onToggle }) {
     );
 }
 
-export default function TaskDependencySelector({ currentTaskId, selectedDependencies = [], onUpdate, onClose }) {
+export default function TaskDependencySelector({ currentTaskId, currentTask, selectedDependencies, selectedDependencyIds, onUpdate, onClose }) {
+    // 兼容两种调用方式：currentTask/selectedDependencyIds 或 currentTaskId/selectedDependencies
+    const effectiveCurrentId = currentTaskId || currentTask?.id;
+    const effectiveSelected = selectedDependencyIds ?? selectedDependencies ?? [];
     const [searchQuery, setSearchQuery] = useState("");
     const [filterType, setFilterType] = useState("all"); // "all" | "parent" | "child"
 
@@ -75,7 +78,7 @@ export default function TaskDependencySelector({ currentTaskId, selectedDependen
 
     // Separate parent and child tasks
     const { parentTasks, childTasks } = useMemo(() => {
-        const available = allTasks.filter(t => t.id !== currentTaskId && !t.deleted_at);
+        const available = allTasks.filter(t => t.id !== effectiveCurrentId && !t.deleted_at);
         const parents = [];
         const children = [];
         available.forEach(t => {
@@ -86,7 +89,7 @@ export default function TaskDependencySelector({ currentTaskId, selectedDependen
             }
         });
         return { parentTasks: parents, childTasks: children };
-    }, [allTasks, currentTaskId]);
+    }, [allTasks, effectiveCurrentId]);
 
     // Apply search and type filter
     const filteredTasks = useMemo(() => {
@@ -124,12 +127,12 @@ export default function TaskDependencySelector({ currentTaskId, selectedDependen
         return list;
     }, [parentTasks, childTasks, taskMap, filterType, searchQuery]);
 
-    const dependencies = allTasks.filter(t => selectedDependencies.includes(t.id));
+    const dependencies = allTasks.filter(t => effectiveSelected.includes(t.id));
 
     const handleToggle = (taskId) => {
-        const newIds = selectedDependencies.includes(taskId)
-            ? selectedDependencies.filter(id => id !== taskId)
-            : [...selectedDependencies, taskId];
+        const newIds = effectiveSelected.includes(taskId)
+            ? effectiveSelected.filter(id => id !== taskId)
+            : [...effectiveSelected, taskId];
         onUpdate(newIds);
     };
 
@@ -222,7 +225,7 @@ export default function TaskDependencySelector({ currentTaskId, selectedDependen
                                 <TaskRow
                                     key={task.id}
                                     task={task}
-                                    isSelected={selectedDependencies.includes(task.id)}
+                                    isSelected={effectiveSelected.includes(task.id)}
                                     isChild={task._isChild}
                                     parentTitle={task._parentTitle}
                                     onToggle={handleToggle}

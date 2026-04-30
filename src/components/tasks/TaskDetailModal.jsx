@@ -1069,103 +1069,68 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             </div>
           </Tabs>
 
-          {/* AI Analysis Result */}
+          {/* AI Analysis Result - 极简版 */}
           {task.ai_analysis && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                className="bg-gradient-to-br from-slate-50 to-white border border-indigo-100 rounded-xl p-4 shadow-sm"
-              >
-                  <h4 className="text-sm font-semibold text-indigo-900 mb-3 flex items-center gap-2">
-                      <div className="p-1 bg-indigo-100 rounded-md">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
-                      </div>
-                      智能分析报告
-                  </h4>
-                  <div className="grid md:grid-cols-2 gap-4 text-sm">
-                      {task.ai_analysis.suggested_priority && (
-                          <div className="col-span-2 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50 p-3 rounded-lg border border-indigo-100">
-                              <div className="flex items-center gap-3">
-                                  <Badge variant="outline" className="bg-white border-indigo-200 text-indigo-700">
-                                      AI 建议: {
-                                          {low: "低优先级", medium: "中优先级", high: "高优先级", urgent: "紧急"}[task.ai_analysis.suggested_priority] || task.ai_analysis.suggested_priority
-                                      }
-                                  </Badge>
-                                  <span className="text-xs text-indigo-600">{task.ai_analysis.priority_reasoning}</span>
-                              </div>
-                              {task.ai_analysis.suggested_priority !== task.priority && (
-                                  <Button 
-                                      size="sm" 
-                                      variant="ghost"
-                                      onClick={() => updateTaskMutation.mutate({
-                                          id: task.id,
-                                          data: { priority: task.ai_analysis.suggested_priority }
-                                      })}
-                                      className="h-7 text-xs bg-white/80 hover:bg-white text-indigo-600 border border-indigo-200"
-                                  >
-                                      应用建议
-                                  </Button>
-                              )}
-                          </div>
-                      )}
-                      <div className="col-span-2 bg-white/60 p-3 rounded-lg border border-indigo-50/50">
-                          <span className="text-slate-500 text-xs block mb-1">状态摘要</span>
-                          <p className="text-slate-700 leading-relaxed">{task.ai_analysis.status_summary}</p>
-                      </div>
-                      
-                      {/* Risk Section */}
-                      <div className={`p-3 rounded-lg border ${
-                          ['high', 'critical'].includes(task.ai_analysis.risk_level) ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'
-                      }`}>
-                          <div className="flex items-center justify-between mb-1">
-                              <span className={`text-xs font-medium ${['high', 'critical'].includes(task.ai_analysis.risk_level) ? 'text-red-600' : 'text-amber-600'}`}>
-                                  ⚠️ 风险评估: {task.ai_analysis.risk_level?.toUpperCase() || 'N/A'}
-                              </span>
-                          </div>
-                          {task.ai_analysis.risks?.length > 0 ? (
-                              <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
-                                  {task.ai_analysis.risks.map((risk, i) => <li key={i}>{risk}</li>)}
-                              </ul>
-                          ) : <span className="text-xs text-slate-500">无显著风险</span>}
-                      </div>
+            <details className="group bg-slate-50 border border-slate-200 rounded-lg text-sm">
+              <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer list-none">
+                <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                <span className="font-medium text-slate-700">智能分析</span>
+                {task.ai_analysis.suggested_priority && (
+                  <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-indigo-200 text-indigo-700">
+                    {{low: "低", medium: "中", high: "高", urgent: "紧急"}[task.ai_analysis.suggested_priority]}
+                  </Badge>
+                )}
+                {task.ai_analysis.risk_level && (
+                  <span className={`text-[10px] ${['high','critical'].includes(task.ai_analysis.risk_level) ? 'text-red-500' : 'text-slate-400'}`}>
+                    风险 {task.ai_analysis.risk_level}
+                  </span>
+                )}
+                <span className="ml-auto text-xs text-slate-400 group-open:hidden">展开</span>
+                <span className="ml-auto text-xs text-slate-400 hidden group-open:inline">收起</span>
+              </summary>
 
-                      {/* Time Suggestion Section */}
-                      {(task.ai_analysis.recommended_execution_start || task.ai_analysis.time_reasoning) && (
-                          <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100/50">
-                              <span className="text-blue-600 text-xs block mb-1 font-medium">⏰ 最佳执行时间建议</span>
-                              {task.ai_analysis.recommended_execution_start && (
-                                  <div className="text-xs font-semibold text-slate-700 mb-1">
-                                      {format(new Date(task.ai_analysis.recommended_execution_start), "MM月dd日 HH:mm")}
-                                      {task.ai_analysis.recommended_execution_end && ` - ${format(new Date(task.ai_analysis.recommended_execution_end), "HH:mm")}`}
-                                  </div>
-                              )}
-                              <p className="text-xs text-slate-600 italic">{task.ai_analysis.time_reasoning}</p>
-                          </div>
-                      )}
+              <div className="px-3 pb-3 pt-1 space-y-2 text-xs text-slate-600">
+                {task.ai_analysis.status_summary && (
+                  <p className="leading-relaxed">{task.ai_analysis.status_summary}</p>
+                )}
 
-                      {task.ai_analysis.key_dependencies?.length > 0 && (
-                          <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-100/50">
-                              <span className="text-amber-600 text-xs block mb-1 font-medium">🔗 关键依赖</span>
-                              <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
-                                  {task.ai_analysis.key_dependencies.map((dep, i) => <li key={i}>{dep}</li>)}
-                              </ul>
-                          </div>
-                      )}
-                      {task.ai_analysis.suggestions?.length > 0 && (
-                           <div className="col-span-2 bg-blue-50/50 p-3 rounded-lg border border-blue-100/50">
-                              <span className="text-blue-600 text-xs block mb-1 font-medium">💡 改进建议</span>
-                              <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {task.ai_analysis.suggestions.map((sug, i) => (
-                                      <li key={i} className="flex items-start gap-2 text-slate-700 text-xs">
-                                          <span className="text-blue-400 mt-0.5">•</span>
-                                          {sug}
-                                      </li>
-                                  ))}
-                              </ul>
-                          </div>
-                      )}
+                {task.ai_analysis.suggested_priority && task.ai_analysis.suggested_priority !== task.priority && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => updateTaskMutation.mutate({
+                      id: task.id,
+                      data: { priority: task.ai_analysis.suggested_priority }
+                    })}
+                    className="h-6 text-[11px] px-2"
+                  >
+                    应用建议优先级
+                  </Button>
+                )}
+
+                {task.ai_analysis.recommended_execution_start && (
+                  <div>
+                    <span className="text-slate-400">⏰ 建议时间：</span>
+                    {format(new Date(task.ai_analysis.recommended_execution_start), "MM/dd HH:mm")}
+                    {task.ai_analysis.recommended_execution_end && ` - ${format(new Date(task.ai_analysis.recommended_execution_end), "HH:mm")}`}
                   </div>
-              </motion.div>
+                )}
+
+                {task.ai_analysis.risks?.length > 0 && (
+                  <div>
+                    <span className="text-slate-400">风险：</span>
+                    {task.ai_analysis.risks.join('；')}
+                  </div>
+                )}
+
+                {task.ai_analysis.suggestions?.length > 0 && (
+                  <div>
+                    <span className="text-slate-400">💡 建议：</span>
+                    {task.ai_analysis.suggestions.join('；')}
+                  </div>
+                )}
+              </div>
+            </details>
           )}
 
         </div>

@@ -232,40 +232,45 @@ export default function Pricing() {
           </div>
 
           {(() => {
-            const featureMeta = {
-              smart_priority:     { Icon: Flag,          accent: "#3b82f6", from: "from-blue-50",    to: "to-sky-50/40" },
-              task_breakdown:     { Icon: ListTree,      accent: "#8b5cf6", from: "from-violet-50",  to: "to-purple-50/40" },
-              note_summary:       { Icon: FileText,      accent: "#0ea5e9", from: "from-sky-50",     to: "to-cyan-50/40" },
-              schedule_optimize:  { Icon: CalendarClock, accent: "#6366f1", from: "from-indigo-50",  to: "to-blue-50/40" },
-              emotional_reminder: { Icon: Heart,         accent: "#ec4899", from: "from-rose-50",    to: "to-pink-50/40" },
-              daily_briefing:     { Icon: Sunrise,       accent: "#f59e0b", from: "from-amber-50",   to: "to-orange-50/40" },
-              weekly_plan:        { Icon: CalendarRange, accent: "#10b981", from: "from-emerald-50", to: "to-teal-50/40" },
-              monthly_plan:       { Icon: CalendarDays,  accent: "#0d9488", from: "from-teal-50",    to: "to-cyan-50/40" },
-              general_ai:         { Icon: MessageCircle, accent: "#64748b", from: "from-slate-50",   to: "to-slate-100/60" },
+            // 统一使用品牌主题色系 #384877 → #3b5aa2，仅通过图标区分功能
+            const PRIMARY = "#384877";
+            const PRIMARY_LIGHT = "#3b5aa2";
+            const featureIcons = {
+              smart_priority: Flag,
+              task_breakdown: ListTree,
+              note_summary: FileText,
+              schedule_optimize: CalendarClock,
+              emotional_reminder: Heart,
+              daily_briefing: Sunrise,
+              weekly_plan: CalendarRange,
+              monthly_plan: CalendarDays,
+              general_ai: MessageCircle,
             };
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {Object.entries(AI_FEATURES).map(([key, feature]) => {
-                  const meta = featureMeta[key] || featureMeta.general_ai;
-                  const { Icon, accent, from, to } = meta;
+                  const Icon = featureIcons[key] || MessageCircle;
                   const m = feature.multiplier || 1;
                   const pct = Math.min(100, Math.round((m / 3) * 100));
                   return (
                     <div
                       key={key}
-                      className={`group relative rounded-2xl border border-slate-100 bg-gradient-to-br ${from} ${to} p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 overflow-hidden`}
+                      className="group relative rounded-2xl border border-[#384877]/10 bg-gradient-to-br from-white to-[#f5f7fb] p-4 hover:shadow-lg hover:shadow-[#384877]/5 hover:-translate-y-0.5 hover:border-[#384877]/20 transition-all duration-300 overflow-hidden"
                     >
-                      {/* Decorative gradient orb */}
+                      {/* Decorative gradient orb in theme color */}
                       <div
-                        className="absolute -right-8 -top-8 w-24 h-24 rounded-full opacity-20 blur-2xl pointer-events-none"
-                        style={{ backgroundColor: accent }}
+                        className="absolute -right-10 -top-10 w-28 h-28 rounded-full opacity-[0.07] blur-2xl pointer-events-none"
+                        style={{ backgroundColor: PRIMARY }}
                       />
 
                       <div className="relative">
                         <div className="flex items-start gap-3 mb-3">
                           <div
                             className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm"
-                            style={{ backgroundColor: `${accent}18`, color: accent }}
+                            style={{
+                              background: `linear-gradient(135deg, ${PRIMARY}15, ${PRIMARY_LIGHT}10)`,
+                              color: PRIMARY,
+                            }}
                           >
                             <Icon className="w-5 h-5" strokeWidth={2} />
                           </div>
@@ -275,19 +280,19 @@ export default function Pricing() {
                           </div>
                           <div
                             className="text-[11px] font-bold px-2 py-0.5 rounded-md"
-                            style={{ backgroundColor: `${accent}15`, color: accent }}
+                            style={{ backgroundColor: `${PRIMARY}12`, color: PRIMARY }}
                           >
                             {feature.estimated?.replace(/\s?点\/次$/, "") || `${m}x`}
                           </div>
                         </div>
 
-                        {/* Complexity bar */}
-                        <div className="h-1.5 rounded-full bg-white/60 overflow-hidden">
+                        {/* Complexity bar - theme gradient */}
+                        <div className="h-1.5 rounded-full bg-[#384877]/8 overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all duration-700"
                             style={{
                               width: `${pct}%`,
-                              background: `linear-gradient(90deg, ${accent}80, ${accent})`,
+                              background: `linear-gradient(90deg, ${PRIMARY}, ${PRIMARY_LIGHT})`,
                             }}
                           />
                         </div>

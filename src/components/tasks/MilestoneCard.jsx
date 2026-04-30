@@ -314,20 +314,6 @@ export default function MilestoneCard({
               {task.description || "暂无描述"}
             </p>
 
-            {/* AI Tags */}
-            {task.tags?.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-2">
-                {task.tags.slice(0, 4).map((tag, idx) => (
-                  <span key={idx} className="px-1.5 py-0.5 text-[10px] text-stone-400 bg-stone-50 rounded border border-stone-100">
-                    {tag}
-                  </span>
-                ))}
-                {task.tags.length > 4 && (
-                  <span className="px-1.5 py-0.5 text-[10px] text-stone-300">+{task.tags.length - 4}</span>
-                )}
-              </div>
-            )}
-
             {/* Metadata Line */}
             <div className="flex items-center gap-3 text-xs">
               <MilestoneTimeEditor

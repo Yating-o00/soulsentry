@@ -1,49 +1,62 @@
-// AI功能点数消耗配置
+// AI 功能动态计费配置
+// 计费模型：基于本次 AI 调用的真实 token 用量动态扣费
+//   1 credit ≈ 1,000 tokens（输入+输出）
+//   不同功能有不同的复杂度倍率（在 functions/callAI 中应用）
+//   estimated 字段仅用于在「点数」页面展示参考估算
 export const AI_FEATURES = {
   smart_priority: {
     name: "智能优先级建议",
-    cost: 30,
-    description: "AI分析任务并推荐最佳优先级"
+    multiplier: 1.2,
+    estimated: "1-3 点/次",
+    description: "基于实际 token 用量动态计费，约 1-3 点/次"
   },
   task_breakdown: {
     name: "任务智能分解",
-    cost: 150,
-    description: "AI将复杂任务分解为可执行的子任务"
+    multiplier: 2.0,
+    estimated: "3-8 点/次",
+    description: "基于实际 token 用量动态计费，约 3-8 点/次"
   },
   note_summary: {
     name: "笔记智能摘要",
-    cost: 50,
-    description: "AI为笔记生成精炼摘要"
+    multiplier: 1.5,
+    estimated: "2-6 点/次",
+    description: "基于实际 token 用量动态计费，约 2-6 点/次"
   },
   schedule_optimize: {
     name: "日程智能优化",
-    cost: 100,
-    description: "AI分析效率曲线，优化日程安排"
+    multiplier: 2.0,
+    estimated: "3-8 点/次",
+    description: "基于实际 token 用量动态计费，约 3-8 点/次"
   },
   emotional_reminder: {
     name: "情感化提醒",
-    cost: 30,
-    description: "AI生成个性化激励提醒文案"
+    multiplier: 1.0,
+    estimated: "1-2 点/次",
+    description: "基于实际 token 用量动态计费，约 1-2 点/次"
   },
   daily_briefing: {
     name: "每日智能简报",
-    cost: 80,
-    description: "AI生成每日任务简报与建议"
+    multiplier: 1.8,
+    estimated: "2-5 点/次",
+    description: "基于实际 token 用量动态计费,约 2-5 点/次"
   },
   weekly_plan: {
     name: "周计划生成",
-    cost: 200,
-    description: "AI智能规划一周安排"
+    multiplier: 2.5,
+    estimated: "5-12 点/次",
+    description: "基于实际 token 用量动态计费,约 5-12 点/次"
   },
   monthly_plan: {
     name: "月计划生成",
-    cost: 300,
-    description: "AI智能规划月度安排"
+    multiplier: 2.8,
+    estimated: "8-20 点/次",
+    description: "基于实际 token 用量动态计费,约 8-20 点/次"
   },
   general_ai: {
-    name: "AI对话",
-    cost: 20,
-    description: "通用AI助手对话"
+    name: "AI 对话",
+    multiplier: 1.0,
+    estimated: "1-2 点/次",
+    description: "基于实际 token 用量动态计费,约 1-2 点/次"
   }
 };
 

@@ -1,64 +1,41 @@
 import { useState, useCallback } from "react";
 import { useAICredits } from "./useAICredits";
-import { AI_FEATURES } from "./creditConfig";
 
 /**
- * Hook that gates AI feature usage behind credit checks.
- * Returns { gate, showInsufficientDialog, insufficientProps, dismissDialog }
- * 
+ * Hook that gates AI feature usage behind a balance pre-check.
+ * 动态计费模式：只校验余额是否 ≥ 1 点；真正扣费在后端基于 token 用量进行。
+ *
  * Usage:
  *   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
- *   
+ *
  *   const handleClick = async () => {
  *     const allowed = await gate("task_breakdown");
- *     if (!allowed) return; // dialog will show automatically
- *     // proceed with AI call...
+ *     if (!allowed) return;
+ *     // proceed with AI call (扣费由后端 callAI 完成)
  *   };
  */
+const MIN_BALANCE = 1;
+
 export function useAICreditGate() {
-  const { checkCredits, consumeCredits, refreshCredits, loading: creditsLoading } = useAICredits();
+  const { refreshCredits } = useAICredits();
   const [showInsufficientDialog, setShowInsufficientDialog] = useState(false);
   const [insufficientProps, setInsufficientProps] = useState({ cost: 0, balance: 0, featureName: "" });
 
-  /**
-   * Check and consume credits for a feature.
-   * Returns true if credits were deducted, false if insufficient.
-   */
-  const gate = useCallback(async (featureKey, description) => {
-    const feature = AI_FEATURES[featureKey];
-    if (!feature) {
-      console.warn("Unknown AI feature:", featureKey);
-      return true;
-    }
-
-    // Refresh credits (uses shared user cache, so no extra me() calls)
+  const gate = useCallback(async (featureKey, _description) => {
     const freshData = await refreshCredits();
     const freshBalance = freshData?.credits ?? 0;
 
-    if (freshBalance < feature.cost) {
+    if (freshBalance < MIN_BALANCE) {
       setInsufficientProps({
-        cost: feature.cost,
+        cost: MIN_BALANCE,
         balance: freshBalance,
-        featureName: feature.name,
+        featureName: "AI 服务",
       });
       setShowInsufficientDialog(true);
       return false;
     }
-
-    // Pass freshBalance to consumeCredits to avoid another me() call
-    const result = await consumeCredits(featureKey, description, freshBalance);
-    if (!result.success) {
-      setInsufficientProps({
-        cost: feature.cost,
-        balance: result.newBalance,
-        featureName: feature.name,
-      });
-      setShowInsufficientDialog(true);
-      return false;
-    }
-
     return true;
-  }, [consumeCredits, refreshCredits]);
+  }, [refreshCredits]);
 
   const dismissDialog = useCallback(() => {
     setShowInsufficientDialog(false);

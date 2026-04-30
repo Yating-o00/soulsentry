@@ -1,50 +1,34 @@
 import { base44 } from "@/api/base44Client";
-import { AI_FEATURES } from "@/components/credits/creditConfig";
+import { updateCachedUser } from "@/lib/userCache";
 
 /**
- * Unified AI call helper with credit check.
- * Uses Kimi API exclusively via the callAI backend function.
- * 
+ * Unified AI call helper.
+ * Billing happens **server-side** in functions/callAI based on real token usage.
+ *
  * @param {object} params - { prompt, response_json_schema?, system_prompt? }
- * @param {string} [featureKey] - AI功能键名，用于扣除点数。如果不传则不扣点数。
+ * @param {string} [featureKey] - 功能键，传给后端用于应用计费倍率（仅元信息，无前置扣费）
  * @returns {Promise<any>} - AI response (parsed JSON if schema provided, string otherwise)
  */
 export async function invokeAI(params, featureKey) {
-  // 1) 如果指定了功能键，先检查并扣除点数
-  if (featureKey && AI_FEATURES[featureKey]) {
-    const user = await base44.auth.me();
-    const currentCredits = user.ai_credits ?? 0;
-    const cost = AI_FEATURES[featureKey].cost;
-
-    if (currentCredits < cost) {
-      const err = new Error(`AI点数不足：需要 ${cost} 点，当前余额 ${currentCredits} 点`);
-      err.code = "INSUFFICIENT_CREDITS";
-      err.cost = cost;
-      err.balance = currentCredits;
-      err.featureName = AI_FEATURES[featureKey].name;
-      throw err;
-    }
-
-    // 预扣点数
-    const newBalance = currentCredits - cost;
-    await base44.auth.updateMe({ ai_credits: newBalance });
-
-    // 记录交易
-    await base44.entities.AICreditTransaction.create({
-      type: "consume",
-      amount: -cost,
-      balance_after: newBalance,
-      feature: featureKey,
-      description: `使用「${AI_FEATURES[featureKey].name}」消耗 ${cost} 点`
-    });
-  }
-
-  // 2) 调用 Kimi API（通过 callAI 后端函数）
   const response = await base44.functions.invoke('callAI', {
     prompt: params.prompt,
     response_json_schema: params.response_json_schema,
     system_prompt: params.system_prompt,
+    feature: featureKey,
   });
+
+  // 后端返回时已扣费 + 写入交易记录；此处刷新本地缓存的余额
+  if (response?.data?.balance != null) {
+    updateCachedUser({ ai_credits: response.data.balance });
+    window.dispatchEvent(new CustomEvent("credits-updated", { detail: { credits: response.data.balance } }));
+  }
+
+  if (response?.data?.error === 'INSUFFICIENT_CREDITS' || response?.status === 402) {
+    const err = new Error(response.data.message || 'AI 点数不足');
+    err.code = "INSUFFICIENT_CREDITS";
+    err.balance = response.data.balance ?? 0;
+    throw err;
+  }
 
   if (response?.data?.data !== undefined) {
     return response.data.data;

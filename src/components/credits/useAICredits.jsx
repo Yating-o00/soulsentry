@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { AI_FEATURES } from "./creditConfig";
-import { getCachedUser, updateCachedUser } from "@/lib/userCache";
+import { getCachedUser } from "@/lib/userCache";
 
 export function useAICredits() {
   const [credits, setCredits] = useState(null);
@@ -26,61 +25,28 @@ export function useAICredits() {
   }, [loadCredits]);
 
   /**
-   * 检查是否有足够点数执行某个AI功能
-   * @param {string} featureKey - AI功能键名
-   * @returns {{ canUse: boolean, cost: number, balance: number, featureName: string }}
+   * 检查是否有足够点数（动态计费下：余额 ≥ 1 即可调用）
    */
-  const checkCredits = useCallback((featureKey) => {
-    const feature = AI_FEATURES[featureKey];
-    if (!feature) {
-      return { canUse: false, cost: 0, balance: credits || 0, featureName: "未知功能" };
-    }
+  const checkCredits = useCallback(() => {
     return {
-      canUse: (credits || 0) >= feature.cost,
-      cost: feature.cost,
+      canUse: (credits || 0) >= 1,
+      cost: 1,
       balance: credits || 0,
-      featureName: feature.name
+      featureName: "AI 服务"
     };
   }, [credits]);
 
   /**
-   * 消耗点数
-   * @param {string} featureKey - AI功能键名
-   * @param {string} [description] - 可选的描述
-   * @returns {Promise<{ success: boolean, newBalance: number, error?: string }>}
+   * 消耗点数（动态计费下：实际扣费由后端 callAI 完成；
+   * 此函数仅在前端做余额预检 + 同步缓存，保持向后兼容）
    */
-  const consumeCredits = useCallback(async (featureKey, description, knownBalance) => {
-    const feature = AI_FEATURES[featureKey];
-    if (!feature) {
-      return { success: false, newBalance: credits || 0, error: "未知的AI功能" };
-    }
-
-    // Use knownBalance if provided (already fetched by gate), otherwise use local state
+  const consumeCredits = useCallback(async (featureKey, _description, knownBalance) => {
     const currentCredits = knownBalance ?? credits ?? 0;
-
-    if (currentCredits < feature.cost) {
+    if (currentCredits < 1) {
       setCredits(currentCredits);
-      return { success: false, newBalance: currentCredits, error: `点数不足，需要 ${feature.cost} 点，当前余额 ${currentCredits} 点` };
+      return { success: false, newBalance: currentCredits, error: "AI 点数不足，请前往「AI 点数」页面充值" };
     }
-
-    const newBalance = currentCredits - feature.cost;
-
-    // 更新用户点数
-    await base44.auth.updateMe({ ai_credits: newBalance });
-    updateCachedUser({ ai_credits: newBalance });
-    setCredits(newBalance);
-    window.dispatchEvent(new CustomEvent("credits-updated", { detail: { credits: newBalance } }));
-
-    // 记录交易（非阻塞，避免触发速率限制）
-    base44.entities.AICreditTransaction.create({
-      type: "consume",
-      amount: -feature.cost,
-      balance_after: newBalance,
-      feature: featureKey,
-      description: description || `使用「${feature.name}」消耗 ${feature.cost} 点`
-    }).catch(e => console.warn("Credit transaction log failed:", e));
-
-    return { success: true, newBalance };
+    return { success: true, newBalance: currentCredits };
   }, [credits]);
 
   /**

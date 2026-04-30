@@ -1,19 +1,5 @@
-import React from "react";
-import { Coins } from "lucide-react";
-import { AI_FEATURES } from "./creditConfig";
-
-/**
- * 在AI功能按钮旁显示点数消耗标签
- * @param {{ featureKey: string, className?: string }} props
- */
-export default function CreditCostTag({ featureKey, className = "" }) {
-  const feature = AI_FEATURES[featureKey];
-  if (!feature) return null;
-
-  return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md ${className}`}>
-      <Coins className="w-3 h-3" />
-      {feature.cost}
-    </span>
-  );
+// 此组件已停用：动态计费下不再在 AI 入口显示点数，所有消耗信息只在 “AI 点数” 页（Pricing）中查看。
+// 保留导出以兼容历史调用。
+export default function CreditCostTag() {
+  return null;
 }

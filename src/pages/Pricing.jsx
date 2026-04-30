@@ -215,10 +215,13 @@ export default function Pricing() {
 
         {/* AI功能消耗参考 */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-          <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="text-xl font-bold text-slate-900 mb-2 flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-[#384877]" />
             AI 功能点数消耗参考
           </h2>
+          <p className="text-sm text-slate-500 mb-4">
+            按真实 token 用量动态计费：1 点 ≈ 1,000 tokens（输入+输出），不同功能有 1.0x ~ 2.8x 复杂度倍率。下表为典型范围。
+          </p>
           <Card className="border-0 shadow-md overflow-hidden">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {Object.entries(AI_FEATURES).map(([key, feature], index) => {
@@ -241,7 +244,7 @@ export default function Pricing() {
                     <p className="text-xs text-slate-500 truncate">{feature.description}</p>
                   </div>
                   <Badge variant="outline" className={`text-xs flex-shrink-0 ${fc.badgeBg}`}>
-                    {feature.cost} 点
+                    {feature.estimated || `${feature.multiplier || 1}x`}
                   </Badge>
                   </div>
                   );

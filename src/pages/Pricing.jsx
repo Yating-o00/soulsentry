@@ -227,7 +227,7 @@ export default function Pricing() {
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#384877]/8 to-[#3b5aa2]/8 border border-[#384877]/15">
               <Cpu className="w-3.5 h-3.5 text-[#384877]" />
-              <span className="text-xs text-[#384877] font-medium">1 点 ≈ 1,000 tokens</span>
+              <span className="text-xs text-[#384877] font-medium">1 点 ≈ 100 tokens</span>
             </div>
           </div>
 

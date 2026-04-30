@@ -7,7 +7,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * Returns the AI response (parsed JSON if schema provided, string otherwise) along with usage info
  *
  * Dynamic billing model:
- *  - 1 credit ≈ 1,000 tokens (combined input + output) by default
+ *  - 1 credit ≈ 100 tokens (combined input + output) by default
  *  - Each call has a minimum charge of 1 credit if it succeeded
  *  - Different `feature` keys can apply a multiplier (see FEATURE_MULTIPLIERS)
  */
@@ -27,8 +27,8 @@ const FEATURE_MULTIPLIERS = {
   default: 1.0,
 };
 
-// 1 credit ≈ 1000 tokens (input + output)
-const TOKENS_PER_CREDIT = 1000;
+// 1 credit ≈ 100 tokens (input + output)
+const TOKENS_PER_CREDIT = 100;
 const MIN_CHARGE = 1;
 
 function calcCharge(usage, feature) {

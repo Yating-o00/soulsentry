@@ -125,8 +125,19 @@ Deno.serve(async (req) => {
 - description：原样使用用户输入（不得改写）
 - reminder_time：ISO 8601 带 +08:00 时区，如 "${contextDate}T15:00:00+08:00"；如是全天则用 "YYYY-MM-DD"
 - is_all_day：无具体时刻则 true
-- category：根据语义判断（会议/工作→work；吃药/运动→health；学习→study；家人→family；购物→shopping；还款/账单→finance；其他→personal）
+- category：根据语义判断（会议/工作→work；吃药/运动→health；学习→study；家人→family;购物→shopping；还款/账单→finance；其他→personal）
 - priority：根据紧迫性判断
+- repeat_rule：识别重复表达，取值之一: "none" | "daily" | "weekly" | "monthly" | "custom"
+  · "每天/每晚/每日/天天" → daily
+  · "每周X/每个星期X" → weekly
+  · "每月X日/每个月" → monthly
+  · "每两天/每隔X天/工作日/周末" → custom
+  · 无重复表达 → none
+- custom_recurrence：仅当 repeat_rule="custom" 或 "weekly"+多天 时返回，结构:
+  { "frequency": "daily|weekly|monthly", "interval": 数字, "days_of_week": [0-6], "days_of_month": [数字], "end_date": "YYYY-MM-DD（如有截止日则填，否则留空）" }
+  · 例："每天晚上8点提醒" → repeat_rule="daily"
+  · 例："工作日早9点开会" → repeat_rule="custom", custom_recurrence={frequency:"weekly", interval:1, days_of_week:[1,2,3,4,5]}
+  · 例："连续30天每晚8点打卡" → repeat_rule="daily", custom_recurrence={frequency:"daily", interval:1, end_date:"<起始日+30天>"}
 
 【第二步：规划执行链路（execution_steps）】
 根据任务类型自动生成一个"AI 需要实施的步骤"列表。这不是用户的子任务，而是 AI 为完成此任务所规划要做的事。
@@ -152,7 +163,9 @@ Deno.serve(async (req) => {
     "reminder_time": "string",
     "is_all_day": false,
     "category": "string",
-    "priority": "string"
+    "priority": "string",
+    "repeat_rule": "none",
+    "custom_recurrence": null
   },
   "execution_steps": [
     { "step_name": "string", "status": "pending", "detail": "string" }
@@ -171,6 +184,9 @@ Deno.serve(async (req) => {
     const category = aiTask.category || "personal";
 
     // ---------- ② 创建 Task 实体 ----------
+    const validRepeatRules = ["none", "daily", "weekly", "monthly", "custom"];
+    const repeatRule = validRepeatRules.includes(aiTask.repeat_rule) ? aiTask.repeat_rule : "none";
+
     const taskPayload = {
       title,
       description: aiTask.description || input,
@@ -180,7 +196,11 @@ Deno.serve(async (req) => {
       priority: aiTask.priority || "medium",
       status: "pending",
       gcal_sync_enabled: true,
+      repeat_rule: repeatRule,
     };
+    if (repeatRule !== "none" && aiTask.custom_recurrence && typeof aiTask.custom_recurrence === "object") {
+      taskPayload.custom_recurrence = aiTask.custom_recurrence;
+    }
     const createdTask = await base44.entities.Task.create(taskPayload);
 
     // ---------- ③ 规划执行步骤（AI 返回为准，缺失则用默认模板兜底） ----------

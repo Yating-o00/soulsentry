@@ -524,9 +524,36 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     }}>
       <DialogContent className="max-w-3xl max-h-[90vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden w-[calc(100%-16px)] md:w-full rounded-2xl bg-white">
         <DialogHeader className="flex flex-col md:flex-row md:items-start md:justify-between space-y-3 md:space-y-0 px-5 md:px-6 pt-5 pb-4 shrink-0 bg-white z-10">
-          <DialogTitle className="text-lg md:text-[22px] font-bold tracking-tight text-slate-900 line-clamp-2 pr-8 leading-snug flex-1">
-            {task.title}
-          </DialogTitle>
+          <div className="flex items-start gap-3 flex-1 pr-8">
+            <button
+              type="button"
+              onClick={() => {
+                const isDone = task.status === 'completed';
+                updateTaskMutation.mutate({
+                  id: task.id,
+                  data: {
+                    status: isDone ? 'pending' : 'completed',
+                    completed_at: isDone ? null : new Date().toISOString(),
+                    progress: isDone ? (task.progress || 0) : 100,
+                  }
+                });
+                if (!isDone) toast.success('已标记为完成 🎉');
+              }}
+              title={task.status === 'completed' ? '标记为未完成' : '标记为完成'}
+              className={`mt-1 flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                task.status === 'completed'
+                  ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200 hover:bg-green-600'
+                  : 'bg-white border-slate-300 hover:border-[#384877] hover:bg-[#eef0fa]'
+              }`}
+            >
+              {task.status === 'completed' && <CheckCircle2 className="w-5 h-5" strokeWidth={2.5} />}
+            </button>
+            <DialogTitle className={`text-lg md:text-[22px] font-bold tracking-tight line-clamp-2 leading-snug flex-1 transition-colors ${
+              task.status === 'completed' ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-900'
+            }`}>
+              {task.title}
+            </DialogTitle>
+          </div>
           <div className="flex items-center gap-2 md:absolute md:right-12 md:top-5">
              <QuickAlertButton task={task} />
              <Button 

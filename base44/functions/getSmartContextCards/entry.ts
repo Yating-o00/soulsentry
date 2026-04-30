@@ -61,7 +61,9 @@ Deno.serve(async (req) => {
       base44.entities.SavedLocation.filter({ created_by: user.email, is_active: true }),
       base44.entities.Task.filter({ created_by: user.email, status: 'pending' }, '-reminder_time', 50)
     ]);
-    const tasks = (tasksAll || []).filter((t) => !t.deleted_at);
+    const tasks = (tasksAll || []).filter((t) =>
+      !t.deleted_at && t.status !== 'completed' && t.status !== 'cancelled'
+    );
 
     const cards = [];
     const now = new Date();

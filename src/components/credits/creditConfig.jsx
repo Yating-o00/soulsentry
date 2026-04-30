@@ -1,62 +1,62 @@
 // AI 功能动态计费配置
 // 计费模型：基于本次 AI 调用的真实 token 用量动态扣费
-//   1 credit ≈ 1,000 tokens（输入+输出）
+//   1 credit ≈ 100 tokens（输入+输出）
 //   不同功能有不同的复杂度倍率（在 functions/callAI 中应用）
 //   estimated 字段仅用于在「点数」页面展示参考估算
 export const AI_FEATURES = {
   smart_priority: {
     name: "智能优先级建议",
     multiplier: 1.2,
-    estimated: "1-3 点/次",
-    description: "基于实际 token 用量动态计费，约 1-3 点/次"
+    estimated: "10-30 点/次",
+    description: "基于实际 token 用量动态计费，约 10-30 点/次"
   },
   task_breakdown: {
     name: "任务智能分解",
     multiplier: 2.0,
-    estimated: "3-8 点/次",
-    description: "基于实际 token 用量动态计费，约 3-8 点/次"
+    estimated: "30-80 点/次",
+    description: "基于实际 token 用量动态计费，约 30-80 点/次"
   },
   note_summary: {
     name: "笔记智能摘要",
     multiplier: 1.5,
-    estimated: "2-6 点/次",
-    description: "基于实际 token 用量动态计费，约 2-6 点/次"
+    estimated: "20-60 点/次",
+    description: "基于实际 token 用量动态计费，约 20-60 点/次"
   },
   schedule_optimize: {
     name: "日程智能优化",
     multiplier: 2.0,
-    estimated: "3-8 点/次",
-    description: "基于实际 token 用量动态计费，约 3-8 点/次"
+    estimated: "30-80 点/次",
+    description: "基于实际 token 用量动态计费，约 30-80 点/次"
   },
   emotional_reminder: {
     name: "情感化提醒",
     multiplier: 1.0,
-    estimated: "1-2 点/次",
-    description: "基于实际 token 用量动态计费，约 1-2 点/次"
+    estimated: "10-20 点/次",
+    description: "基于实际 token 用量动态计费，约 10-20 点/次"
   },
   daily_briefing: {
     name: "每日智能简报",
     multiplier: 1.8,
-    estimated: "2-5 点/次",
-    description: "基于实际 token 用量动态计费,约 2-5 点/次"
+    estimated: "20-50 点/次",
+    description: "基于实际 token 用量动态计费,约 20-50 点/次"
   },
   weekly_plan: {
     name: "周计划生成",
     multiplier: 2.5,
-    estimated: "5-12 点/次",
-    description: "基于实际 token 用量动态计费,约 5-12 点/次"
+    estimated: "50-120 点/次",
+    description: "基于实际 token 用量动态计费,约 50-120 点/次"
   },
   monthly_plan: {
     name: "月计划生成",
     multiplier: 2.8,
-    estimated: "8-20 点/次",
-    description: "基于实际 token 用量动态计费,约 8-20 点/次"
+    estimated: "80-200 点/次",
+    description: "基于实际 token 用量动态计费,约 80-200 点/次"
   },
   general_ai: {
     name: "AI 对话",
     multiplier: 1.0,
-    estimated: "1-2 点/次",
-    description: "基于实际 token 用量动态计费,约 1-2 点/次"
+    estimated: "10-20 点/次",
+    description: "基于实际 token 用量动态计费,约 10-20 点/次"
   }
 };
 

@@ -94,15 +94,34 @@ Deno.serve(async (req) => {
         shopping: ['shopping'], restaurant: ['personal'], other: []
       };
       const preferred = typeMap[geoLoc.location_type] || [];
-      const todayTasks = tasks.filter((t) => {
-        if (!t.reminder_time) return false;
-        const ts = new Date(t.reminder_time).getTime();
-        return ts >= todayStart && ts < todayEnd;
-      });
-      const relevantTasks = (preferred.length > 0
-        ? todayTasks.filter((t) => preferred.includes(t.category))
-        : todayTasks
-      ).slice(0, 4);
+      const weekEnd = todayStart + 7 * 24 * 3600 * 1000;
+      const priorityRank = { urgent: 0, high: 1, medium: 2, low: 3 };
+
+      // 与该地点类型相关的待办（按分类匹配）。无 reminder_time 也算入；
+      // 有 reminder_time 的只保留今天及未来一周内（避免把远期任务都堆进来）。
+      const candidatePool = preferred.length > 0
+        ? tasks.filter((t) => preferred.includes(t.category))
+        : tasks;
+
+      const relevantTasks = candidatePool
+        .filter((t) => {
+          if (!t.reminder_time) return true; // 没设时间的工作任务也带上
+          const ts = new Date(t.reminder_time).getTime();
+          return ts < weekEnd; // 包含已逾期 + 今天 + 未来一周
+        })
+        .sort((a, b) => {
+          // 逾期/今天优先；其次按优先级；再按时间近的先
+          const aTs = a.reminder_time ? new Date(a.reminder_time).getTime() : Infinity;
+          const bTs = b.reminder_time ? new Date(b.reminder_time).getTime() : Infinity;
+          const aToday = aTs < todayEnd ? 0 : 1;
+          const bToday = bTs < todayEnd ? 0 : 1;
+          if (aToday !== bToday) return aToday - bToday;
+          const ap = priorityRank[a.priority] ?? 2;
+          const bp = priorityRank[b.priority] ?? 2;
+          if (ap !== bp) return ap - bp;
+          return aTs - bTs;
+        })
+        .slice(0, 6);
 
       const overdueOnes = tasks.filter((t) =>
         t.reminder_time && new Date(t.reminder_time).getTime() < now.getTime()

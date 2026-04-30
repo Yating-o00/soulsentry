@@ -34,7 +34,7 @@ export default function GeoContextCard({ card, onSnooze }) {
         <div className="text-sm font-semibold text-slate-900 mb-2">{card.headline}</div>
         {card.today_tasks?.length > 0 && (
           <>
-            <div className="text-xs text-slate-500 mb-2">今日待办：</div>
+            <div className="text-xs text-slate-500 mb-2">此地点相关待办：</div>
             <ul className="space-y-1.5">
               {card.today_tasks.map((t) => (
                 <li key={t.id} className="flex items-center gap-2 text-sm text-slate-700">
@@ -52,7 +52,7 @@ export default function GeoContextCard({ card, onSnooze }) {
           </>
         )}
         {(!card.today_tasks || card.today_tasks.length === 0) && (
-          <div className="text-xs text-slate-500">今日此地点暂无相关待办，放松一下 ☕</div>
+          <div className="text-xs text-slate-500">此地点暂无相关待办，放松一下 ☕</div>
         )}
       </div>
 

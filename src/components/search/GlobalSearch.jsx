@@ -88,8 +88,11 @@ export default function GlobalSearch({ open, onOpenChange, initialQuery = "" }) 
     setQuery("");
     if (type === 'task') {
       navigate(`${createPageUrl('Tasks')}?taskId=${id}`);
+      // 若已在 Tasks 页面，URL 不会变化，触发自定义事件强制打开详情
+      window.dispatchEvent(new CustomEvent('open-task-detail', { detail: { taskId: id } }));
     } else if (type === 'note') {
       navigate(`${createPageUrl('Notes')}?noteId=${id}`);
+      window.dispatchEvent(new CustomEvent('open-note-detail', { detail: { noteId: id } }));
     } else if (type === 'knowledge') {
       navigate(`${createPageUrl('KnowledgeBase')}?id=${id}`);
     } else if (type === 'user') {

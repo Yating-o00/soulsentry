@@ -73,6 +73,21 @@ export default function Tasks() {
     }
   }, [location.search, allTasks]);
 
+  // Listen for in-app open event (when user is already on Tasks page and clicks a search result)
+  useEffect(() => {
+    const handler = (e) => {
+      const taskId = e.detail?.taskId;
+      if (!taskId) return;
+      const found = allTasks.find(t => t.id === taskId);
+      if (found) {
+        setSelectedTask(found);
+        setSelectedTab(null);
+      }
+    };
+    window.addEventListener('open-task-detail', handler);
+    return () => window.removeEventListener('open-task-detail', handler);
+  }, [allTasks]);
+
   const { data: allComments = [] } = useQuery({
     queryKey: ['all-comments'],
     queryFn: () => base44.entities.Comment.list(),

@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Sparkles, Zap, Crown, Coins, History, Package } from "lucide-react";
+import { Check, Sparkles, Zap, Crown, Coins, History, Package, Flag, ListTree, FileText, CalendarClock, Heart, Sunrise, CalendarRange, CalendarDays, MessageCircle, Cpu } from "lucide-react";
 import { SUBSCRIPTION_PLANS, CREDIT_PACKS, AI_FEATURES } from "@/components/credits/creditConfig";
 import { useAICredits } from "@/components/credits/useAICredits";
 import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
@@ -215,42 +215,89 @@ export default function Pricing() {
 
         {/* AI功能消耗参考 */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-          <h2 className="text-xl font-bold text-slate-900 mb-2 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-[#384877]" />
-            AI 功能点数消耗参考
-          </h2>
-          <p className="text-sm text-slate-500 mb-4">
-            按真实 token 用量动态计费：1 点 ≈ 1,000 tokens（输入+输出），不同功能有 1.0x ~ 2.8x 复杂度倍率。下表为典型范围。
-          </p>
-          <Card className="border-0 shadow-md overflow-hidden">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(AI_FEATURES).map(([key, feature], index) => {
-                const featureColors = [
-                  { bg: "bg-blue-50/70", iconBg: "bg-blue-100", iconColor: "text-blue-600", badgeBg: "bg-blue-100 text-blue-700 border-blue-200" },
-                  { bg: "bg-violet-50/70", iconBg: "bg-violet-100", iconColor: "text-violet-600", badgeBg: "bg-violet-100 text-violet-700 border-violet-200" },
-                  { bg: "bg-amber-50/70", iconBg: "bg-amber-100", iconColor: "text-amber-600", badgeBg: "bg-amber-100 text-amber-700 border-amber-200" },
-                  { bg: "bg-emerald-50/70", iconBg: "bg-emerald-100", iconColor: "text-emerald-600", badgeBg: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-                  { bg: "bg-rose-50/70", iconBg: "bg-rose-100", iconColor: "text-rose-600", badgeBg: "bg-rose-100 text-rose-700 border-rose-200" },
-                  { bg: "bg-indigo-50/70", iconBg: "bg-indigo-100", iconColor: "text-indigo-600", badgeBg: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-                ];
-                const fc = featureColors[index % featureColors.length];
-                return (
-                <div key={key} className={`flex items-center gap-3 p-4 border-b border-r border-slate-100 last:border-0 ${fc.bg} hover:brightness-95 transition-all duration-200`}>
-                  <div className={`w-8 h-8 rounded-lg ${fc.iconBg} flex items-center justify-center flex-shrink-0`}>
-                   <Coins className={`w-4 h-4 ${fc.iconColor}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800">{feature.name}</p>
-                    <p className="text-xs text-slate-500 truncate">{feature.description}</p>
-                  </div>
-                  <Badge variant="outline" className={`text-xs flex-shrink-0 ${fc.badgeBg}`}>
-                    {feature.estimated || `${feature.multiplier || 1}x`}
-                  </Badge>
-                  </div>
+          <div className="flex items-end justify-between gap-4 mb-4 flex-wrap">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-[#384877]" />
+                AI 功能点数消耗参考
+              </h2>
+              <p className="text-sm text-slate-500 mt-1.5">
+                按真实 token 用量动态计费 · 不同功能有不同复杂度倍率
+              </p>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#384877]/8 to-[#3b5aa2]/8 border border-[#384877]/15">
+              <Cpu className="w-3.5 h-3.5 text-[#384877]" />
+              <span className="text-xs text-[#384877] font-medium">1 点 ≈ 1,000 tokens</span>
+            </div>
+          </div>
+
+          {(() => {
+            const featureMeta = {
+              smart_priority:     { Icon: Flag,          accent: "#3b82f6", from: "from-blue-50",    to: "to-sky-50/40" },
+              task_breakdown:     { Icon: ListTree,      accent: "#8b5cf6", from: "from-violet-50",  to: "to-purple-50/40" },
+              note_summary:       { Icon: FileText,      accent: "#0ea5e9", from: "from-sky-50",     to: "to-cyan-50/40" },
+              schedule_optimize:  { Icon: CalendarClock, accent: "#6366f1", from: "from-indigo-50",  to: "to-blue-50/40" },
+              emotional_reminder: { Icon: Heart,         accent: "#ec4899", from: "from-rose-50",    to: "to-pink-50/40" },
+              daily_briefing:     { Icon: Sunrise,       accent: "#f59e0b", from: "from-amber-50",   to: "to-orange-50/40" },
+              weekly_plan:        { Icon: CalendarRange, accent: "#10b981", from: "from-emerald-50", to: "to-teal-50/40" },
+              monthly_plan:       { Icon: CalendarDays,  accent: "#0d9488", from: "from-teal-50",    to: "to-cyan-50/40" },
+              general_ai:         { Icon: MessageCircle, accent: "#64748b", from: "from-slate-50",   to: "to-slate-100/60" },
+            };
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {Object.entries(AI_FEATURES).map(([key, feature]) => {
+                  const meta = featureMeta[key] || featureMeta.general_ai;
+                  const { Icon, accent, from, to } = meta;
+                  const m = feature.multiplier || 1;
+                  const pct = Math.min(100, Math.round((m / 3) * 100));
+                  return (
+                    <div
+                      key={key}
+                      className={`group relative rounded-2xl border border-slate-100 bg-gradient-to-br ${from} ${to} p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 overflow-hidden`}
+                    >
+                      {/* Decorative gradient orb */}
+                      <div
+                        className="absolute -right-8 -top-8 w-24 h-24 rounded-full opacity-20 blur-2xl pointer-events-none"
+                        style={{ backgroundColor: accent }}
+                      />
+
+                      <div className="relative">
+                        <div className="flex items-start gap-3 mb-3">
+                          <div
+                            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm"
+                            style={{ backgroundColor: `${accent}18`, color: accent }}
+                          >
+                            <Icon className="w-5 h-5" strokeWidth={2} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 leading-tight">{feature.name}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">{m.toFixed(1)}x 复杂度</p>
+                          </div>
+                          <div
+                            className="text-[11px] font-bold px-2 py-0.5 rounded-md"
+                            style={{ backgroundColor: `${accent}15`, color: accent }}
+                          >
+                            {feature.estimated?.replace(/\s?点\/次$/, "") || `${m}x`}
+                          </div>
+                        </div>
+
+                        {/* Complexity bar */}
+                        <div className="h-1.5 rounded-full bg-white/60 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{
+                              width: `${pct}%`,
+                              background: `linear-gradient(90deg, ${accent}80, ${accent})`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   );
-                  })}
-                  </div>
-          </Card>
+                })}
+              </div>
+            );
+          })()}
         </motion.div>
 
         {/* FAQ */}

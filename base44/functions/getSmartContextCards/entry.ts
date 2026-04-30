@@ -56,13 +56,26 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { latitude, longitude } = body || {};
 
-    // 拉取数据
-    const [locations, tasksAll] = await Promise.all([
+    // 拉取数据（同时取所有任务用于父子状态判断）
+    const [locations, tasksAll, allTasksRaw] = await Promise.all([
       base44.entities.SavedLocation.filter({ created_by: user.email, is_active: true }),
-      base44.entities.Task.filter({ created_by: user.email, status: 'pending' }, '-reminder_time', 50)
+      base44.entities.Task.filter({ created_by: user.email, status: 'pending' }, '-reminder_time', 50),
+      base44.entities.Task.filter({ created_by: user.email }, '-updated_date', 500)
     ]);
+
+    // 父约定 id -> 是否已完成（或取消/删除）
+    const completedParentIds = new Set(
+      (allTasksRaw || [])
+        .filter((t) => t.status === 'completed' || t.status === 'cancelled' || t.deleted_at)
+        .map((t) => t.id)
+    );
+
     const tasks = (tasksAll || []).filter((t) =>
-      !t.deleted_at && t.status !== 'completed' && t.status !== 'cancelled'
+      !t.deleted_at &&
+      t.status !== 'completed' &&
+      t.status !== 'cancelled' &&
+      // 父约定已完成 → 子约定也视作完成，不显示
+      !(t.parent_task_id && completedParentIds.has(t.parent_task_id))
     );
 
     const cards = [];

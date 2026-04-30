@@ -93,12 +93,21 @@ Deno.serve(async (req) => {
         gym: ['health'], school: ['study'], hospital: ['health'],
         shopping: ['shopping'], restaurant: ['personal'], other: []
       };
-      const preferred = typeMap[geoLoc.location_type] || [];
-      const weekEnd = todayStart + 7 * 24 * 3600 * 1000;
+      // 同时使用名称关键词与 location_type 推断场景，名称命中优先（避免 type 选错的情况）
+      const name = (geoLoc.name || '').toLowerCase();
+      let preferred = [];
+      if (/办公|公司|单位|工位|office|work/i.test(name)) preferred = ['work', 'study'];
+      else if (/家|宿舍|住所|home/i.test(name)) preferred = ['personal', 'family', 'shopping'];
+      else if (/健身|gym/i.test(name)) preferred = ['health'];
+      else if (/学校|教室|图书馆|school|library/i.test(name)) preferred = ['study'];
+      else if (/医院|诊所|hospital|clinic/i.test(name)) preferred = ['health'];
+      else if (/超市|商场|市场|mall|market|shop/i.test(name)) preferred = ['shopping'];
+      else preferred = typeMap[geoLoc.location_type] || [];
+      const monthEnd = todayStart + 30 * 24 * 3600 * 1000;
       const priorityRank = { urgent: 0, high: 1, medium: 2, low: 3 };
 
       // 与该地点类型相关的待办（按分类匹配）。无 reminder_time 也算入；
-      // 有 reminder_time 的只保留今天及未来一周内（避免把远期任务都堆进来）。
+      // 有 reminder_time 的保留逾期 + 未来 30 天内（避免把远期堆进来，但保证当天能办的工作都看得到）。
       const candidatePool = preferred.length > 0
         ? tasks.filter((t) => preferred.includes(t.category))
         : tasks;
@@ -107,7 +116,7 @@ Deno.serve(async (req) => {
         .filter((t) => {
           if (!t.reminder_time) return true; // 没设时间的工作任务也带上
           const ts = new Date(t.reminder_time).getTime();
-          return ts < weekEnd; // 包含已逾期 + 今天 + 未来一周
+          return ts < monthEnd; // 包含已逾期 + 今天 + 未来 30 天
         })
         .sort((a, b) => {
           // 逾期/今天优先；其次按优先级；再按时间近的先

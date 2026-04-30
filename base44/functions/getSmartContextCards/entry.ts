@@ -127,6 +127,14 @@ Deno.serve(async (req) => {
         ? tasks.filter((t) => preferred.includes(t.category))
         : tasks;
 
+      // 子约定"特别标注"判定：urgent 优先级 / 已逾期 / 标记 high+有明确时间
+      const isSubtaskFlagged = (t) => {
+        if (!t.parent_task_id) return false;
+        if (t.priority === 'urgent') return true;
+        if (t.reminder_time && new Date(t.reminder_time).getTime() < now.getTime()) return true;
+        return false;
+      };
+
       const relevantTasks = candidatePool
         .filter((t) => {
           if (!t.reminder_time) return true; // 没设时间的工作任务也带上
@@ -134,15 +142,32 @@ Deno.serve(async (req) => {
           return ts < monthEnd; // 包含已逾期 + 今天 + 未来 30 天
         })
         .sort((a, b) => {
-          // 逾期/今天优先；其次按优先级；再按时间近的先
+          // 1) 父约定优先（除非子约定有特别标注）
+          const aIsSub = !!a.parent_task_id && !isSubtaskFlagged(a);
+          const bIsSub = !!b.parent_task_id && !isSubtaskFlagged(b);
+          if (aIsSub !== bIsSub) return aIsSub ? 1 : -1;
+
+          // 2) 逾期/今天优先
           const aTs = a.reminder_time ? new Date(a.reminder_time).getTime() : Infinity;
           const bTs = b.reminder_time ? new Date(b.reminder_time).getTime() : Infinity;
           const aToday = aTs < todayEnd ? 0 : 1;
           const bToday = bTs < todayEnd ? 0 : 1;
           if (aToday !== bToday) return aToday - bToday;
+
+          // 3) 优先级
           const ap = priorityRank[a.priority] ?? 2;
           const bp = priorityRank[b.priority] ?? 2;
           if (ap !== bp) return ap - bp;
+
+          // 4) 复杂度（子任务多/有依赖/有描述 视为更重要）
+          const complexity = (t) =>
+            (t.subtasks?.length || 0) +
+            (t.dependencies?.length || 0) +
+            (t.description ? 1 : 0);
+          const cDiff = complexity(b) - complexity(a);
+          if (cDiff !== 0) return cDiff;
+
+          // 5) 时间近的先
           return aTs - bTs;
         })
         .slice(0, 6);

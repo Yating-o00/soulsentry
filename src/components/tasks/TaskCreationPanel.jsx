@@ -24,6 +24,7 @@ import SmartReminderSuggestion from "./SmartReminderSuggestion";
 import AITaskEnhancer from "./AITaskEnhancer";
 import TaskDependencySelector from "./TaskDependencySelector";
 import UnifiedTaskInput from "./UnifiedTaskInput";
+import SmartDialogInput from "./SmartDialogInput";
 import {
   Dialog,
   DialogContent,
@@ -543,12 +544,41 @@ Return JSON.`,
               </TabsList>
 
               <TabsContent value="smart" className="mt-0">
-                <UnifiedTaskInput
+                <SmartDialogInput
                   value={smartInputValue}
                   onChange={setSmartInputValue}
-                  onAddTask={onAddTask}
+                  onConfirm={(parsed) => {
+                    const reminderDate = parsed.reminder_time ? new Date(parsed.reminder_time) : new Date();
+                    const endDate = parsed.end_time ? new Date(parsed.end_time) : null;
+                    setTask(prev => ({
+                      ...prev,
+                      title: parsed.title || prev.title,
+                      description: parsed.description || prev.description,
+                      reminder_time: !isNaN(reminderDate.getTime()) ? reminderDate : prev.reminder_time,
+                      time: !isNaN(reminderDate.getTime()) ? format(reminderDate, "HH:mm") : prev.time,
+                      end_time: endDate && !isNaN(endDate.getTime()) ? endDate : prev.end_time,
+                      end_time_str: endDate && !isNaN(endDate.getTime()) ? format(endDate, "HH:mm") : prev.end_time_str,
+                      has_end_time: !!(endDate && !isNaN(endDate.getTime())) || prev.has_end_time,
+                      priority: parsed.priority || prev.priority,
+                      category: parsed.category || prev.category,
+                      tags: [...new Set([...(prev.tags || []), ...(parsed.tags || [])])],
+                      subtasks: [
+                        ...(prev.subtasks || []),
+                        ...((parsed.subtasks || []).map(st => ({
+                          title: st.title,
+                          is_completed: false,
+                          priority: st.priority || parsed.priority || prev.priority,
+                          category: parsed.category || prev.category,
+                          time: !isNaN(reminderDate.getTime()) ? format(reminderDate, "HH:mm") : prev.time
+                        })))
+                      ]
+                    }));
+                    setIsExpanded(true);
+                    setSmartInputValue("");
+                    toast.success("✨ 已填入表单，请核对后提交");
+                  }}
                 />
-                
+
                 <div className="mt-6 flex flex-wrap gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
                   <span className="text-xs font-medium text-slate-400 py-1.5">试一试:</span>
                   <button onClick={() => setSmartInputValue("周五前完成周报")} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-100">📅 周五前完成周报</button>

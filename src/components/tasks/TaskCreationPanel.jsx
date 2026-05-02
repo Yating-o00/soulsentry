@@ -80,6 +80,8 @@ export default function TaskCreationPanel({ onAddTask, initialData = null, onCan
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openSubtaskTimeIdx, setOpenSubtaskTimeIdx] = useState(null);
   const [smartInputValue, setSmartInputValue] = useState("");
+  const lastSubmitAtRef = useRef(0);
+  const lastOCRAtRef = useRef(0);
   
   const { data: templates } = useQuery({
     queryKey: ['task-templates'],
@@ -284,6 +286,11 @@ Return JSON.`,
 
   const handleOCRProcess = async () => {
     if (!ocrFile) return;
+    // 防重复点击：状态锁 + 500ms 时间窗节流
+    if (isOCRProcessing) return;
+    const now = Date.now();
+    if (now - lastOCRAtRef.current < 500) return;
+    lastOCRAtRef.current = now;
     setIsOCRProcessing(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file: ocrFile });
@@ -413,7 +420,11 @@ Return JSON.`,
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // 防重复提交：状态锁 + 500ms 时间窗节流
     if (isSubmitting) return;
+    const now = Date.now();
+    if (now - lastSubmitAtRef.current < 500) return;
+    lastSubmitAtRef.current = now;
 
     if (!task.title.trim() || !task.reminder_time) {
       triggerHaptic('error');

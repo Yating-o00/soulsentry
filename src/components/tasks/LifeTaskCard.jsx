@@ -487,23 +487,28 @@ export default function LifeTaskCard({
             {/* 3. AI Smart Status Bar (Bottom) */}
             {!completed && (
                 <div className={cn(
-                    "mt-3 rounded-xl p-3 flex items-center gap-3 transition-colors relative group/statusbar",
-                    task.location_reminder?.enabled ? "bg-green-50/80 border border-green-100" :
-                    (task.ai_analysis?.status_summary || task.ai_analysis?.suggestions?.length > 0) ? 
-                        (task.category === 'work' ? "bg-indigo-50/60 border border-indigo-100" : "bg-purple-50/60 border border-purple-100") :
-                    "bg-stone-50/60 border border-stone-100"
+                    "mt-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 transition-all duration-300 relative group/statusbar backdrop-blur-sm",
+                    task.location_reminder?.enabled ? "bg-gradient-to-r from-emerald-50/80 to-green-50/40 border border-emerald-100/70 hover:border-emerald-200" :
+                    (task.ai_analysis?.status_summary || task.ai_analysis?.suggestions?.length > 0) ?
+                        (task.category === 'work'
+                            ? "bg-gradient-to-r from-indigo-50/70 to-blue-50/30 border border-indigo-100/70 hover:border-indigo-200"
+                            : "bg-gradient-to-r from-purple-50/70 to-fuchsia-50/30 border border-purple-100/70 hover:border-purple-200") :
+                    "bg-gradient-to-r from-stone-50/80 to-stone-50/30 border border-stone-100 hover:border-stone-200"
                 )}>
                     {/* Icon & Content Logic */}
                     {(() => {
                         if (task.location_reminder?.enabled) {
                             return (
                                 <>
-                                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 animate-pulse">
-                                        <Navigation className="w-4 h-4 text-green-600" />
+                                    <div className="relative flex-shrink-0">
+                                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center shadow-sm shadow-emerald-500/20">
+                                            <Navigation className="w-4 h-4 text-white" />
+                                        </div>
+                                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white animate-pulse" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-bold text-green-800">智能地理围栏已激活</p>
-                                        <p className="text-[10px] text-green-600 truncate">将在你离开当前位置或到达目的地附近时提醒</p>
+                                        <p className="text-xs font-semibold text-emerald-900 tracking-tight">地理围栏守护中</p>
+                                        <p className="text-[11px] text-emerald-700/80 truncate leading-relaxed">离开或到达目的地时自动提醒</p>
                                     </div>
                                 </>
                             );
@@ -516,16 +521,18 @@ export default function LifeTaskCard({
                             return (
                                 <>
                                     <div className={cn(
-                                        "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                                        isWork ? "bg-indigo-100" : "bg-purple-100"
+                                        "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm",
+                                        isWork
+                                            ? "bg-gradient-to-br from-indigo-400 to-blue-500 shadow-indigo-500/20"
+                                            : "bg-gradient-to-br from-purple-400 to-fuchsia-500 shadow-purple-500/20"
                                     )}>
-                                        <Sparkles className={cn("w-4 h-4", isWork ? "text-indigo-600" : "text-purple-600")} />
+                                        <Sparkles className="w-4 h-4 text-white" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className={cn("text-xs font-bold", isWork ? "text-indigo-800" : "text-purple-800")}>
-                                            {task.ai_analysis?.status_summary ? "AI 智能分析" : "AI 智能建议"}
+                                        <p className={cn("text-xs font-semibold tracking-tight", isWork ? "text-indigo-900" : "text-purple-900")}>
+                                            {task.ai_analysis?.status_summary ? "AI 洞察" : "AI 建议"}
                                         </p>
-                                        <p className={cn("text-[10px] truncate", isWork ? "text-indigo-600" : "text-purple-600")}>
+                                        <p className={cn("text-[11px] truncate leading-relaxed", isWork ? "text-indigo-700/80" : "text-purple-700/80")}>
                                             {aiContent}
                                         </p>
                                     </div>
@@ -536,29 +543,27 @@ export default function LifeTaskCard({
                         // Default
                         return (
                             <>
-                                <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0">
-                                    <Lightbulb className="w-4 h-4 text-stone-500" />
+                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-stone-200 to-stone-300 flex items-center justify-center flex-shrink-0">
+                                    <Lightbulb className="w-4 h-4 text-stone-600" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-stone-700">智能助手守护中</p>
-                                    <p className="text-[10px] text-stone-500 truncate">
-                                        根据你的习惯，建议在 {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '稍后'} 处理
+                                    <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>
+                                    <p className="text-[11px] text-stone-500 truncate leading-relaxed">
+                                        建议在 {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '稍后'} 处理
                                     </p>
                                 </div>
                             </>
                         );
                     })()}
 
-                    {/* Right Action - Divider & Snooze */}
-                    <div className="flex items-center pl-3 border-l border-black/5 h-full self-stretch">
-                        <button 
-                            className="flex items-center gap-1 text-[10px] font-medium text-stone-500 hover:text-stone-800 px-2 py-1 rounded-md hover:bg-stone-200/50 transition-colors whitespace-nowrap"
-                            onClick={(e) => { e.stopPropagation(); /* onSnooze */ }}
-                        >
-                            <Clock className="w-3 h-3" />
-                            推迟
-                        </button>
-                    </div>
+                    {/* Right Action - Snooze */}
+                    <button
+                        className="flex items-center gap-1 text-[11px] font-medium text-stone-500 hover:text-stone-900 px-2.5 py-1.5 rounded-lg hover:bg-white/70 active:scale-95 transition-all whitespace-nowrap flex-shrink-0"
+                        onClick={(e) => { e.stopPropagation(); /* onSnooze */ }}
+                    >
+                        <Clock className="w-3 h-3" />
+                        推迟
+                    </button>
                 </div>
             )}
 

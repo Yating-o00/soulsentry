@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
-import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid } from "lucide-react";
+import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -17,12 +17,13 @@ import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import TaskShareCard from "../components/tasks/TaskShareCard";
 import GlobalSearch from "../components/search/GlobalSearch";
+import SmartGroupSection from "../components/tasks/SmartGroupSection";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
 export default function Tasks() {
   const { t } = useTranslation();
-  const [viewMode, setViewMode] = useState("all"); // 'all', 'milestone', 'life'
+  const [viewMode, setViewMode] = useState("overview"); // 'overview', 'milestone', 'life'
   const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
   const [showCompleted, setShowCompleted] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -105,7 +106,7 @@ export default function Tasks() {
   }, [allComments]);
 
   // Filter tasks
-  const { milestoneTasks, lifeTasks, completedTasks, stats } = useMemo(() => {
+  const { milestoneTasks, lifeTasks, completedTasks, smartGroups, stats } = useMemo(() => {
     // Apply search filter
     const searchLower = searchQuery.toLowerCase();
     let filteredTasks = allTasks.filter(t => 
@@ -177,17 +178,55 @@ export default function Tasks() {
       return cDate.getTime() === today.getTime();
     }).length;
 
+    // Smart 4-group classification (AI logic over rules)
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    const dueSoon = [];      // 即将截止: 已逾期 或 24h 内到期
+    const fixedSchedule = []; // 固定安排: 重复任务 或 >24h 后的明确时间
+    const smartSuggestion = []; // 智能建议: AI 已生成建议/上下文摘要
+    const canDoNow = [];     // 现在能做: 其余可立即执行
+
+    roots.forEach((task) => {
+      const reminderTs = task.reminder_time ? new Date(task.reminder_time).getTime() : null;
+      const diff = reminderTs ? reminderTs - now.getTime() : null;
+      const hasAISuggestion = !!(
+        task.ai_context_summary ||
+        (task.ai_analysis && (
+          (Array.isArray(task.ai_analysis.suggestions) && task.ai_analysis.suggestions.length > 0) ||
+          task.ai_analysis.suggested_priority ||
+          task.ai_analysis.recommended_execution_start
+        ))
+      );
+      const isRepeating = task.repeat_rule && task.repeat_rule !== 'none';
+
+      if (reminderTs !== null && diff !== null && diff <= oneDayMs) {
+        // overdue or within 24h
+        dueSoon.push(task);
+      } else if (isRepeating || (reminderTs !== null && diff > oneDayMs)) {
+        fixedSchedule.push(task);
+      } else if (hasAISuggestion) {
+        smartSuggestion.push(task);
+      } else {
+        canDoNow.push(task);
+      }
+    });
+
     return {
       milestoneTasks: milestone,
       lifeTasks: life,
       completedTasks: completed,
+      smartGroups: {
+        canDoNow,
+        dueSoon,
+        smartSuggestion,
+        fixedSchedule
+      },
       stats: {
         pending: todayPendingCount,
         overdue: overdueCount,
         completedToday: completedTodayCount
       }
     };
-  }, [allTasks]);
+  }, [allTasks, searchQuery, filters]);
 
   const getSubtasks = (parentId) => {
     return allTasks.filter((t) => t.parent_task_id === parentId && !t.deleted_at);
@@ -260,10 +299,10 @@ export default function Tasks() {
 
           <div className="bg-white p-1 rounded-full shadow-sm border border-slate-200 inline-flex">
             <button
-              onClick={() => setViewMode('all')}
+              onClick={() => setViewMode('overview')}
               className={cn(
                 "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
-                viewMode === 'all' ?
+                viewMode === 'overview' ?
                 "bg-[#384877] text-white shadow-md" :
                 "text-slate-600 hover:bg-slate-50"
               )}>
@@ -405,9 +444,94 @@ export default function Tasks() {
 
         {/* Content Area */}
         <div className="space-y-8">
-          
+
+          {/* Overview Mode: 4 Smart Groups */}
+          {viewMode === 'overview' && (
+            <div className="space-y-10">
+              <SmartGroupSection
+                title="现在能做"
+                description="无固定时间或当下可执行的事项"
+                icon={Zap}
+                iconBg="bg-emerald-50"
+                iconColor="text-emerald-600"
+                tasks={smartGroups.canDoNow}
+                emptyHint="暂无可立即执行的约定"
+                getSubtasks={getSubtasks}
+                commentCountMap={commentCountMap}
+                isSelectionMode={isSelectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelection={toggleSelection}
+                onToggleSubtask={handleToggleSubtask}
+                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
+                onShare={(task) => setSharingTask(task)}
+                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+              />
+
+              <SmartGroupSection
+                title="即将截止"
+                description="24 小时内到期或已逾期"
+                icon={AlarmClock}
+                iconBg="bg-rose-50"
+                iconColor="text-rose-600"
+                tasks={smartGroups.dueSoon}
+                emptyHint="暂无紧急到期的约定"
+                getSubtasks={getSubtasks}
+                commentCountMap={commentCountMap}
+                isSelectionMode={isSelectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelection={toggleSelection}
+                onToggleSubtask={handleToggleSubtask}
+                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
+                onShare={(task) => setSharingTask(task)}
+                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+              />
+
+              <SmartGroupSection
+                title="智能建议"
+                description="哨兵 AI 已生成执行建议或上下文摘要"
+                icon={Lightbulb}
+                iconBg="bg-amber-50"
+                iconColor="text-amber-600"
+                tasks={smartGroups.smartSuggestion}
+                emptyHint="暂无 AI 智能建议"
+                getSubtasks={getSubtasks}
+                commentCountMap={commentCountMap}
+                isSelectionMode={isSelectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelection={toggleSelection}
+                onToggleSubtask={handleToggleSubtask}
+                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
+                onShare={(task) => setSharingTask(task)}
+                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+              />
+
+              <SmartGroupSection
+                title="固定安排"
+                description="有明确未来时间或周期重复的约定"
+                icon={CalendarClock}
+                iconBg="bg-blue-50"
+                iconColor="text-blue-600"
+                tasks={smartGroups.fixedSchedule}
+                emptyHint="暂无固定时间安排"
+                getSubtasks={getSubtasks}
+                commentCountMap={commentCountMap}
+                isSelectionMode={isSelectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelection={toggleSelection}
+                onToggleSubtask={handleToggleSubtask}
+                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
+                onShare={(task) => setSharingTask(task)}
+                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+              />
+            </div>
+          )}
+
           {/* Milestone Section */}
-          {(viewMode === 'all' || viewMode === 'milestone') && milestoneTasks.length > 0 &&
+          {viewMode === 'milestone' && milestoneTasks.length > 0 &&
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {milestoneTasks.map((task) =>
             <MilestoneCard
@@ -434,13 +558,8 @@ export default function Tasks() {
             </div>
           }
 
-          {/* Divider */}
-          {viewMode === 'all' && milestoneTasks.length > 0 && lifeTasks.length > 0 &&
-          <div className="h-px bg-gradient-to-r from-transparent via-[#E8E4E0] to-transparent my-8"></div>
-          }
-
           {/* Life Section */}
-          {(viewMode === 'all' || viewMode === 'life') && lifeTasks.length > 0 &&
+          {viewMode === 'life' && lifeTasks.length > 0 &&
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">

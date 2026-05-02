@@ -547,35 +547,52 @@ Return JSON.`,
                 <SmartDialogInput
                   value={smartInputValue}
                   onChange={setSmartInputValue}
-                  onConfirm={(parsed) => {
-                    const reminderDate = parsed.reminder_time ? new Date(parsed.reminder_time) : new Date();
+                  onConfirm={async (parsed) => {
+                    if (!parsed?.title) {
+                      toast.error("缺少标题，无法生成约定");
+                      return;
+                    }
+                    const reminderDate = parsed.reminder_time ? new Date(parsed.reminder_time) : (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; })();
                     const endDate = parsed.end_time ? new Date(parsed.end_time) : null;
-                    setTask(prev => ({
-                      ...prev,
-                      title: parsed.title || prev.title,
-                      description: parsed.description || prev.description,
-                      reminder_time: !isNaN(reminderDate.getTime()) ? reminderDate : prev.reminder_time,
-                      time: !isNaN(reminderDate.getTime()) ? format(reminderDate, "HH:mm") : prev.time,
-                      end_time: endDate && !isNaN(endDate.getTime()) ? endDate : prev.end_time,
-                      end_time_str: endDate && !isNaN(endDate.getTime()) ? format(endDate, "HH:mm") : prev.end_time_str,
-                      has_end_time: !!(endDate && !isNaN(endDate.getTime())) || prev.has_end_time,
-                      priority: parsed.priority || prev.priority,
-                      category: parsed.category || prev.category,
-                      tags: [...new Set([...(prev.tags || []), ...(parsed.tags || [])])],
-                      subtasks: [
-                        ...(prev.subtasks || []),
-                        ...((parsed.subtasks || []).map(st => ({
-                          title: st.title,
-                          is_completed: false,
-                          priority: st.priority || parsed.priority || prev.priority,
-                          category: parsed.category || prev.category,
-                          time: !isNaN(reminderDate.getTime()) ? format(reminderDate, "HH:mm") : prev.time
-                        })))
-                      ]
-                    }));
-                    setIsExpanded(true);
-                    setSmartInputValue("");
-                    toast.success("✨ 已填入表单，请核对后提交");
+                    const validReminder = !isNaN(reminderDate.getTime()) ? reminderDate : new Date();
+                    const validEnd = endDate && !isNaN(endDate.getTime()) ? endDate : null;
+
+                    const taskToSubmit = {
+                      title: parsed.title,
+                      description: parsed.description || "",
+                      reminder_time: validReminder.toISOString(),
+                      end_time: validEnd ? validEnd.toISOString() : null,
+                      priority: parsed.priority || "medium",
+                      category: parsed.category || "personal",
+                      tags: parsed.tags || [],
+                      status: "pending"
+                    };
+
+                    try {
+                      if (onAddTask) {
+                        await onAddTask(taskToSubmit);
+                      } else {
+                        const created = await base44.entities.Task.create(taskToSubmit);
+                        const subs = (parsed.subtasks || []).filter(st => st.title?.trim());
+                        if (subs.length > 0) {
+                          await Promise.all(subs.map(st => base44.entities.Task.create({
+                            title: st.title,
+                            parent_task_id: created.id,
+                            status: "pending",
+                            priority: st.priority || taskToSubmit.priority,
+                            category: taskToSubmit.category,
+                            reminder_time: validReminder.toISOString()
+                          })));
+                        }
+                      }
+                      logUserBehavior("task_created", taskToSubmit);
+                      setSmartInputValue("");
+                      triggerHaptic('success');
+                      toast.success("✨ 约定已生成");
+                    } catch (err) {
+                      console.error("Smart create failed:", err);
+                      toast.error("生成失败，请重试");
+                    }
                   }}
                 />
 

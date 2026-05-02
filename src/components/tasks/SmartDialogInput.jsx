@@ -123,12 +123,15 @@ ${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!draft?.title) {
       toast.error("请先描述任务标题");
       return;
     }
-    onConfirm(draft);
+    await onConfirm(draft);
+    setMessages([]);
+    setDraft(null);
+    onChange("");
   };
 
   const handleReset = () => {

@@ -588,7 +588,6 @@ Return JSON.`,
                       logUserBehavior("task_created", taskToSubmit);
                       setSmartInputValue("");
                       triggerHaptic('success');
-                      toast.success("✨ 约定已生成");
                     } catch (err) {
                       console.error("Smart create failed:", err);
                       toast.error("生成失败，请重试");

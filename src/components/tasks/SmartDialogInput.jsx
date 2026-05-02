@@ -251,7 +251,7 @@ ${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首
 
               <div className="flex gap-2 pt-2">
                 <Button onClick={handleConfirm} className="flex-1 bg-[#384877] hover:bg-[#2c3b63] text-white">
-                  <Check className="w-4 h-4 mr-1.5" /> 确认无误，填入表单
+                  <Check className="w-4 h-4 mr-1.5" /> 确认无误，生成约定
                 </Button>
                 <Button onClick={handleReset} variant="outline" size="icon" title="重新开始">
                   <RotateCcw className="w-4 h-4" />

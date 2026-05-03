@@ -178,16 +178,83 @@ export default function Tasks() {
       return cDate.getTime() === today.getTime();
     }).length;
 
-    // Smart 4-group classification (AI logic over rules)
+    // Smart 4-group classification: hard rules + AI scoring for "现在能做"
     const oneDayMs = 24 * 60 * 60 * 1000;
     const dueSoon = [];      // 即将截止: 已逾期 或 24h 内到期
     const fixedSchedule = []; // 固定安排: 重复任务 或 >24h 后的明确时间
-    const smartSuggestion = []; // 智能建议: AI 已生成建议/上下文摘要
-    const canDoNow = [];     // 现在能做: 其余可立即执行
+    const candidates = [];    // 待评估候选 -> 现在能做 / 智能建议
 
     roots.forEach((task) => {
       const reminderTs = task.reminder_time ? new Date(task.reminder_time).getTime() : null;
-      const diff = reminderTs ? reminderTs - now.getTime() : null;
+      const diff = reminderTs !== null ? reminderTs - now.getTime() : null;
+      const isRepeating = task.repeat_rule && task.repeat_rule !== 'none';
+
+      if (reminderTs !== null && diff !== null && diff <= oneDayMs) {
+        dueSoon.push(task);
+      } else if (isRepeating || (reminderTs !== null && diff > oneDayMs)) {
+        fixedSchedule.push(task);
+      } else {
+        candidates.push(task);
+      }
+    });
+
+    // AI 评估打分: 重要 + 紧急 + 可简单完成 + 当前时间匹配
+    const currentHour = now.getHours();
+    const scoreTask = (task) => {
+      let score = 0;
+      // 1) 重要性 (优先级)
+      const pri = task.priority || 'medium';
+      score += pri === 'urgent' ? 40 : pri === 'high' ? 30 : pri === 'medium' ? 15 : 5;
+      // AI 建议优先级加成
+      const aiPri = task.ai_analysis?.suggested_priority;
+      if (aiPri === 'urgent') score += 15;
+      else if (aiPri === 'high') score += 10;
+      // 2) 紧急度 (AI 风险等级)
+      const risk = task.ai_analysis?.risk_level;
+      if (risk === 'critical') score += 20;
+      else if (risk === 'high') score += 12;
+      else if (risk === 'medium') score += 6;
+      // 3) 可简单完成 (耗时估算)
+      const dur = task.estimated_duration;
+      if (typeof dur === 'number') {
+        if (dur <= 15) score += 20;
+        else if (dur <= 30) score += 12;
+        else if (dur <= 60) score += 5;
+      } else {
+        // 无估算时,短标题/描述视为轻量任务
+        const len = (task.title || '').length + (task.description || '').length;
+        if (len > 0 && len < 30) score += 8;
+      }
+      // 4) 当前时间匹配 (AI 推荐执行窗口 / 类别时段)
+      const recStart = task.ai_analysis?.recommended_execution_start;
+      const recEnd = task.ai_analysis?.recommended_execution_end;
+      if (recStart) {
+        const s = new Date(recStart).getTime();
+        const e = recEnd ? new Date(recEnd).getTime() : s + 60 * 60 * 1000;
+        if (now.getTime() >= s && now.getTime() <= e) score += 25;
+        else if (Math.abs(now.getTime() - s) <= 2 * 60 * 60 * 1000) score += 10;
+      } else {
+        // 类别-时段启发式
+        const cat = task.category;
+        const isWorkHours = currentHour >= 9 && currentHour < 18;
+        const isEvening = currentHour >= 18 && currentHour < 22;
+        const isMorning = currentHour >= 6 && currentHour < 11;
+        if ((cat === 'work' || cat === 'study') && isWorkHours) score += 10;
+        if ((cat === 'family' || cat === 'shopping') && isEvening) score += 10;
+        if (cat === 'health' && (isMorning || isEvening)) score += 10;
+        if (cat === 'personal' || cat === 'other') score += 5;
+      }
+      return score;
+    };
+
+    const scored = candidates.map((t) => ({ task: t, score: scoreTask(t) }));
+    scored.sort((a, b) => b.score - a.score);
+
+    // 阈值: 60 分以上直接进"现在能做"; 低于阈值但有 AI 建议 -> 智能建议; 否则也归入"现在能做"兜底前 N 项
+    const NOW_THRESHOLD = 50;
+    const canDoNow = [];
+    const smartSuggestion = [];
+    scored.forEach(({ task, score }) => {
       const hasAISuggestion = !!(
         task.ai_context_summary ||
         (task.ai_analysis && (
@@ -196,13 +263,8 @@ export default function Tasks() {
           task.ai_analysis.recommended_execution_start
         ))
       );
-      const isRepeating = task.repeat_rule && task.repeat_rule !== 'none';
-
-      if (reminderTs !== null && diff !== null && diff <= oneDayMs) {
-        // overdue or within 24h
-        dueSoon.push(task);
-      } else if (isRepeating || (reminderTs !== null && diff > oneDayMs)) {
-        fixedSchedule.push(task);
+      if (score >= NOW_THRESHOLD) {
+        canDoNow.push(task);
       } else if (hasAISuggestion) {
         smartSuggestion.push(task);
       } else {

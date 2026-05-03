@@ -192,7 +192,9 @@ export default function Tasks() {
       if (reminderTs !== null && diff !== null && diff <= oneDayMs) {
         dueSoon.push(task);
       } else if (isRepeating || (reminderTs !== null && diff > oneDayMs)) {
+        // 仍归入"固定安排",但同时也作为候选参与"现在能做"评估
         fixedSchedule.push(task);
+        candidates.push(task);
       } else {
         candidates.push(task);
       }
@@ -250,11 +252,12 @@ export default function Tasks() {
     const scored = candidates.map((t) => ({ task: t, score: scoreTask(t) }));
     scored.sort((a, b) => b.score - a.score);
 
-    // 阈值: 60 分以上直接进"现在能做"; 低于阈值但有 AI 建议 -> 智能建议; 否则也归入"现在能做"兜底前 N 项
-    const NOW_THRESHOLD = 50;
-    const canDoNow = [];
+    // 阈值降到 30 分,并保证至少有 Top 5 候选进入"现在能做"
+    const NOW_THRESHOLD = 30;
+    const MIN_NOW_COUNT = 5;
+    const canDoNowSet = new Set();
     const smartSuggestion = [];
-    scored.forEach(({ task, score }) => {
+    scored.forEach(({ task, score }, idx) => {
       const hasAISuggestion = !!(
         task.ai_context_summary ||
         (task.ai_analysis && (
@@ -263,14 +266,15 @@ export default function Tasks() {
           task.ai_analysis.recommended_execution_start
         ))
       );
-      if (score >= NOW_THRESHOLD) {
-        canDoNow.push(task);
+      if (score >= NOW_THRESHOLD || idx < MIN_NOW_COUNT) {
+        canDoNowSet.add(task.id);
       } else if (hasAISuggestion) {
         smartSuggestion.push(task);
       } else {
-        canDoNow.push(task);
+        canDoNowSet.add(task.id);
       }
     });
+    const canDoNow = scored.filter(({ task }) => canDoNowSet.has(task.id)).map(({ task }) => task);
 
     return {
       milestoneTasks: milestone,

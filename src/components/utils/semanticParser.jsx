@@ -1,4 +1,5 @@
 import { base44 } from "@/api/base44Client";
+import { invokeAI } from "@/components/utils/aiHelper";
 import { format, addDays, addWeeks, addMonths, startOfWeek, nextMonday } from "date-fns";
 
 /**
@@ -51,7 +52,7 @@ export async function deepSemanticParse(inputText, options = {}) {
     }
   }
 
-  const result = await base44.integrations.Core.InvokeLLM({
+  const result = await invokeAI({
     prompt: `你是一个超强的中文自然语言理解引擎。请深度解析用户输入，提取所有语义信息。
 
 用户输入: "${inputText}"
@@ -165,7 +166,7 @@ ${recentContext}
       },
       required: ["primary_intent", "intent_confidence", "time_entities", "smart_suggestions", "refined_title"]
     }
-  });
+  }, "smart_priority");
 
   return {
     ...result,

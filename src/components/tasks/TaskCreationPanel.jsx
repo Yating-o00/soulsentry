@@ -35,6 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import AIText from "@/components/AIText";
+import { invokeAI } from "@/components/utils/aiHelper";
 
 const CATEGORIES = [
   { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
@@ -150,7 +151,7 @@ export default function TaskCreationPanel({ onAddTask, initialData = null, onCan
       setIsSuggestingTags(true);
       try {
         const now = new Date().toISOString();
-        const res = await base44.integrations.Core.InvokeLLM({
+        const res = await invokeAI({
           prompt: `分析约定标题和描述，智能推荐标签、优先级和截止日期。
 Title: "${task.title}"
 ${task.description ? `Description: "${task.description}"` : ''}
@@ -172,7 +173,7 @@ Return JSON.`,
               reasoning: { type: "string" }
             }
           }
-        });
+        }, "smart_priority");
         
         if (res) {
           if (res.tags) {
@@ -366,7 +367,7 @@ Return JSON.`,
   const parseSmartInput = async (inputText) => {
     setIsProcessing(true);
     try {
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await invokeAI({
         prompt: `Parse tasks from text: ${inputText}. Return JSON with tasks array.`,
         response_json_schema: {
           type: "object",
@@ -387,7 +388,7 @@ Return JSON.`,
             }
           }
         }
-      });
+      }, "task_breakdown");
 
       if (response.tasks && response.tasks.length > 0) {
         setShowVoiceDialog(false);

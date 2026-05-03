@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { invokeAI } from "@/components/utils/aiHelper";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Loader2, Lightbulb, TrendingUp, Clock, MapPin, Users, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -34,7 +35,7 @@ export default function AITaskAssistant({ task, onApplySuggestion }) {
         base44.auth.me().catch(() => null)
       ]);
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await invokeAI({
         prompt: `你是一个智能约定助手，帮助用户更高效地完成约定。请对以下约定进行多维度深度分析，并提供可操作的建议。
 
 当前约定:
@@ -140,7 +141,7 @@ ${task.location_reminder?.enabled ? `- 地点提醒: ${task.location_reminder.lo
           },
           required: ["completion_tips", "next_actions", "efficiency_tips"]
         }
-      });
+      }, "task_breakdown");
 
       setSuggestions(response);
       setShowSuggestions(true);

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { invokeAI } from "@/components/utils/aiHelper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +55,7 @@ ${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首
 5. confidence 表示当前解析的完整度（0-100），>=80 表示信息已较完整
 返回 JSON。`;
 
-    return await base44.integrations.Core.InvokeLLM({
+    return await invokeAI({
       prompt,
       response_json_schema: {
         type: "object",
@@ -86,7 +87,7 @@ ${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首
         },
         required: ["reply", "task"]
       }
-    });
+    }, "task_breakdown");
   };
 
   const handleSend = async () => {

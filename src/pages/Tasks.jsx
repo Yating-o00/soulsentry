@@ -276,6 +276,10 @@ export default function Tasks() {
     });
     const canDoNow = scored.filter(({ task }) => canDoNowSet.has(task.id)).map(({ task }) => task);
 
+    // 去重: 已进入"现在能做"或"智能建议"的约定从"固定安排"中移除
+    const smartSuggestionIds = new Set(smartSuggestion.map(t => t.id));
+    const dedupedFixedSchedule = fixedSchedule.filter(t => !canDoNowSet.has(t.id) && !smartSuggestionIds.has(t.id));
+
     return {
       milestoneTasks: milestone,
       lifeTasks: life,
@@ -284,7 +288,7 @@ export default function Tasks() {
         canDoNow,
         dueSoon,
         smartSuggestion,
-        fixedSchedule
+        fixedSchedule: dedupedFixedSchedule
       },
       stats: {
         pending: todayPendingCount,

@@ -462,14 +462,32 @@ export default function SoulMonthPlanner({
                         <Sparkles className="w-4 h-4" /> 核心策略
                     </h4>
                     <div className="space-y-3 relative z-10 text-sm opacity-90">
-                        {monthData.strategies && Object.entries(monthData.strategies).map(([key, val]) => (
-                            <div key={key}>
-                                <span className="font-medium opacity-70 block text-xs uppercase tracking-wider mb-0.5">
-                                    {key.replace(/_/g, ' ')}
-                                </span>
-                                <p>{val}</p>
-                            </div>
-                        ))}
+                        {monthData.strategies && Object.entries(monthData.strategies).map(([key, val]) => {
+                            const STRATEGY_LABELS = {
+                                focus: '专注重点',
+                                priority: '优先级',
+                                pace: '节奏',
+                                rhythm: '节奏',
+                                balance: '平衡',
+                                risk: '风险',
+                                risks: '风险',
+                                review: '复盘',
+                                approach: '方法',
+                                method: '方法',
+                                principle: '原则',
+                                principles: '原则',
+                                execution: '执行',
+                            };
+                            const label = STRATEGY_LABELS[key] || key.replace(/_/g, ' ');
+                            return (
+                                <div key={key}>
+                                    <span className="font-medium opacity-70 block text-xs tracking-wider mb-0.5">
+                                        {label}
+                                    </span>
+                                    <p>{val}</p>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
              </div>
@@ -485,7 +503,7 @@ export default function SoulMonthPlanner({
                             <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
                                 <div>
                                     <div className="font-semibold text-slate-800">{m.title}</div>
-                                    <div className="text-xs text-slate-500 mt-1 capitalize">{m.type}</div>
+                                    <div className="text-xs text-slate-500 mt-1">{({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || m.type}</div>
                                 </div>
                                 <div className="text-sm font-medium text-[#384877] bg-[#384877]/5 px-3 py-1 rounded-lg">
                                     {m.deadline}
@@ -512,7 +530,7 @@ export default function SoulMonthPlanner({
                                     <h4 className="font-semibold text-slate-900">{week.week_label}</h4>
                                 </div>
                                 <div className="bg-slate-50 px-3 py-1 rounded-lg text-sm text-slate-600 border border-slate-100">
-                                    <span className="font-medium mr-2">Focus:</span>
+                                    <span className="font-medium mr-2">聚焦：</span>
                                     {week.focus}
                                 </div>
                             </div>

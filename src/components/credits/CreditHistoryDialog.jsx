@@ -54,9 +54,19 @@ export default function CreditHistoryDialog({ open, onOpenChange }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800 truncate">
-                        {tx.description || featureName || config.label}
+                        {featureName || tx.description || config.label}
                       </p>
-                      <p className="text-[11px] text-slate-400">
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {featureName && tx.description && tx.description !== featureName && (
+                          <span className="text-[11px] text-slate-500 truncate">{tx.description}</span>
+                        )}
+                        {tx.feature && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal text-slate-500 border-slate-200">
+                            {tx.feature}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
                         {new Date(tx.created_date).toLocaleString("zh-CN")}
                       </p>
                     </div>

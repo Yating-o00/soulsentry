@@ -170,15 +170,39 @@ ${eventSummary || '（无即将开始的会议）'}
       const title = aiResult?.title || (t.event === 'enter' ? `到达${t.location.name}` : `离开${t.location.name}`);
       const message = aiResult?.message || `您已${eventText}${t.location.name}`;
 
-      // Create notification
-      const notif = await base44.entities.Notification.create({
-        recipient_id: user.id,
-        type: 'reminder',
-        title: `${t.location.icon || '📍'} ${title}`,
-        content: message,
-        link: '/Tasks',
-        related_entity_id: t.location.id
-      });
+      // 不再写 Notification（避免堆积在通知中心）；改为：
+      //   1) 创建一个 15 分钟短日历事件（用户翻日历能回看到）
+      //   2) WebPush（系统级即时弹窗）
+      //   3) 返回给前端，由 GeofenceTracker 弹 sonner toast
+      let calendarEventId = null;
+      try {
+        const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
+        if (accessToken) {
+          const start = new Date();
+          const end = new Date(start.getTime() + 15 * 60 * 1000);
+          const tasksLine = aiResult?.top_tasks?.length ? `\n· ${aiResult.top_tasks.slice(0, 3).join('\n· ')}` : '';
+          const evt = {
+            summary: `${t.location.icon || '📍'} ${title}`,
+            description: `${message}${tasksLine}\n\n— SoulSentry · 地点提醒`,
+            start: { dateTime: start.toISOString(), timeZone: 'Asia/Shanghai' },
+            end: { dateTime: end.toISOString(), timeZone: 'Asia/Shanghai' },
+            reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] },
+            colorId: '5',
+            transparency: 'transparent'
+          };
+          const cr = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(evt)
+          });
+          if (cr.ok) {
+            const ev = await cr.json();
+            calendarEventId = ev.id;
+          }
+        }
+      } catch (calErr) {
+        console.warn('[geofence] calendar create failed:', calErr?.message);
+      }
 
       // 发送 Web Push：即使页面已关闭，SW 也能接收并弹出系统通知
       let pushed = false;
@@ -195,7 +219,7 @@ ${eventSummary || '（无即将开始的会议）'}
             location_id: t.location.id,
             location_name: t.location.name,
             event: t.event,
-            notification_id: notif.id
+            calendar_event_id: calendarEventId
           }
         });
         pushed = true;
@@ -210,7 +234,7 @@ ${eventSummary || '（无即将开始的会议）'}
         message,
         top_tasks: aiResult?.top_tasks || [],
         calendar_events: upcomingEvents.slice(0, 5),
-        notification_id: notif.id,
+        calendar_event_id: calendarEventId,
         pushed
       });
 

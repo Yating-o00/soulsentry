@@ -179,16 +179,39 @@ ${calLines}
       top_items: ranked.slice(0, 3).map((t) => t.title)
     };
 
-    // 写 Notification
-    const notif = await base44.asServiceRole.entities.Notification.create({
-      recipient_id: user.id,
-      type: 'reminder',
-      title: `${loc.icon || '📍'} ${digest.title || (event === 'enter' ? '到达提醒' : '离开提醒')}`,
-      content: `${digest.message || ''}${digest.top_items?.length ? `\n· ${digest.top_items.join('\n· ')}` : ''}`,
-      link: '/Tasks',
-      related_entity_id: loc.id,
-      sender_id: 'sentinel'
-    }).catch(() => null);
+    // 不再写 Notification —— 改为：
+    //   1) 创建 15 分钟短日历事件（可回看，且原生日历会弹提醒）
+    //   2) WebPush（系统级即时弹窗）
+    //   3) 返回给前端，由 SentinelGeoWatcher / GeofenceTracker 弹 sonner toast
+    let calendarEventId = null;
+    try {
+      const { accessToken } = await base44.asServiceRole.connectors.getConnection('googlecalendar');
+      if (accessToken) {
+        const start = new Date();
+        const end = new Date(start.getTime() + 15 * 60 * 1000);
+        const itemsLine = digest.top_items?.length ? `\n· ${digest.top_items.slice(0, 3).join('\n· ')}` : '';
+        const evt = {
+          summary: `${loc.icon || '📍'} ${digest.title || loc.name}`,
+          description: `${digest.message || ''}${itemsLine}\n\n— SoulSentry · 决策预加载`,
+          start: { dateTime: start.toISOString(), timeZone: 'Asia/Shanghai' },
+          end: { dateTime: end.toISOString(), timeZone: 'Asia/Shanghai' },
+          reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] },
+          colorId: '5',
+          transparency: 'transparent'
+        };
+        const cr = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(evt)
+        });
+        if (cr.ok) {
+          const ev = await cr.json();
+          calendarEventId = ev.id;
+        }
+      }
+    } catch (calErr) {
+      console.warn('[sentinelLocationDigest] calendar create failed:', calErr?.message);
+    }
 
     // WebPush
     let pushed = false;
@@ -198,7 +221,7 @@ ${calLines}
         body: `${digest.message || ''}${digest.top_items?.length ? '\n' + digest.top_items.slice(0, 3).join('、') : ''}`,
         url: '/Tasks',
         tag: `sentinel-loc-${loc.id}`,
-        data: { location_id: loc.id, event, source: 'sentinelLocationDigest' }
+        data: { location_id: loc.id, event, source: 'sentinelLocationDigest', calendar_event_id: calendarEventId }
       });
       pushed = true;
     } catch (e) {
@@ -211,7 +234,7 @@ ${calLines}
       event,
       digest,
       top_tasks: ranked.slice(0, 3).map((t) => ({ id: t.id, title: t.title })),
-      notification_id: notif?.id || null,
+      calendar_event_id: calendarEventId,
       pushed
     });
   } catch (error) {

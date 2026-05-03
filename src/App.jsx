@@ -70,7 +70,27 @@ function App() {
           <AuthenticatedApp />
         </Router>
         <Toaster />
-        <SonnerToaster position="top-center" richColors closeButton />
+        <SonnerToaster
+          position="top-center"
+          closeButton
+          toastOptions={{
+            classNames: {
+              toast: "group rounded-2xl border shadow-lg shadow-black/5 backdrop-blur-md px-4 py-3 flex items-center gap-3",
+              title: "text-sm font-semibold leading-tight",
+              description: "text-xs opacity-80",
+              closeButton:
+                "!left-auto !right-2 !top-1/2 !-translate-y-1/2 !w-6 !h-6 !rounded-full !bg-white/70 hover:!bg-white !border !border-black/5 !text-slate-500 hover:!text-slate-700 transition-all",
+              success:
+                "!bg-emerald-50/95 !border-emerald-200/70 !text-emerald-900 [&_[data-icon]]:!text-emerald-600",
+              error:
+                "!bg-rose-50/95 !border-rose-200/70 !text-rose-900 [&_[data-icon]]:!text-rose-600",
+              warning:
+                "!bg-amber-50/95 !border-amber-200/70 !text-amber-900 [&_[data-icon]]:!text-amber-600",
+              info:
+                "!bg-sky-50/95 !border-sky-200/70 !text-sky-900 [&_[data-icon]]:!text-sky-600",
+            },
+          }}
+        />
         <VisualEditAgent />
       </QueryClientProvider>
     </AuthProvider>

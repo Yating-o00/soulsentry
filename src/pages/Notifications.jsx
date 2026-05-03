@@ -17,7 +17,6 @@ import ExecutionItem from "@/components/notifications/ExecutionItem";
 import SmartInputBar from "@/components/notifications/SmartInputBar";
 import AIExecutionAdvisor from "@/components/notifications/AIExecutionAdvisor";
 import ProductTimeline from "@/components/memory/ProductTimeline";
-import ReminderCard from "@/components/notifications/ReminderCard";
 import { toast } from "sonner";
 
 export default function NotificationsPage() {
@@ -324,27 +323,39 @@ export default function NotificationsPage() {
                 </Button>
               </div>
             )}
-            {loadingNotif ? (
-              <div className="p-8 text-center text-slate-500">加载通知中...</div>
-            ) : notifications.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
-                <Bell className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                <p className="text-slate-500">暂无通知</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 divide-y divide-slate-100">
+              {loadingNotif ? (
+                <div className="p-8 text-center text-slate-500">加载通知中...</div>
+              ) : notifications.length === 0 ? (
+                <div className="text-center py-12">
+                  <Bell className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                  <p className="text-slate-500">暂无通知</p>
+                </div>
+              ) : (
                 <AnimatePresence mode="popLayout">
                   {notifications.map(n => (
-                    <ReminderCard
-                      key={n.id}
-                      notification={n}
-                      onMarkRead={(id) => markReadMutation.mutate(id)}
-                      onDelete={(id) => deleteMutation.mutate(id)}
-                    />
+                    <motion.div key={n.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }} className={`p-4 transition-colors ${!n.is_read ? "bg-blue-50/30" : ""}`}>
+                      <div className="flex gap-3">
+                        <div className={`mt-0.5 p-2 rounded-lg ${n.is_read ? "bg-slate-50" : "bg-white shadow-sm"}`}>{getNotifIcon(n.type)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start mb-0.5">
+                            <h4 className={`font-medium text-sm ${n.is_read ? "text-slate-600" : "text-slate-900"}`}>{n.title}</h4>
+                            <span className="text-[11px] text-slate-400 ml-2 flex-shrink-0">{format(new Date(n.created_date), "MM-dd HH:mm", { locale: zhCN })}</span>
+                          </div>
+                          <p className="text-xs text-slate-500 mb-2">{n.content}</p>
+                          <div className="flex items-center gap-2">
+                            {n.link && <Button variant="outline" size="sm" className="h-6 text-[11px]" asChild><Link to={n.link}>查看 <ExternalLink className="w-3 h-3 ml-1" /></Link></Button>}
+                            {!n.is_read && <Button variant="ghost" size="sm" onClick={() => markReadMutation.mutate(n.id)} className="h-6 text-[11px] text-blue-600"><Check className="w-3 h-3 mr-1" />已读</Button>}
+                            <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(n.id)} className="h-6 text-[11px] text-slate-400 hover:text-red-500 ml-auto"><Trash2 className="w-3 h-3" /></Button>
+                          </div>
+                        </div>
+                        {!n.is_read && <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0" />}
+                      </div>
+                    </motion.div>
                   ))}
                 </AnimatePresence>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>

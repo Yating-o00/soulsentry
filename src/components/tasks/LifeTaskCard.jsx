@@ -41,8 +41,22 @@ export default function LifeTaskCard({
   onToggleSelection,
   onViewTab
 }) {
-  const [timeDraft, setTimeDraft] = useState("");
   const [timePopoverOpen, setTimePopoverOpen] = useState(false);
+  const [startDraft, setStartDraft] = useState("");
+  const [endDraft, setEndDraft] = useState("");
+  const [reminderDraft, setReminderDraft] = useState("");
+
+  const toLocalInput = (iso) => {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      // YYYY-MM-DDTHH:mm in local time for <input type="datetime-local">
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch {
+      return "";
+    }
+  };
 
   const openTimeEditor = (e) => {
     e.stopPropagation();
@@ -50,31 +64,26 @@ export default function LifeTaskCard({
       onEdit && onEdit();
       return;
     }
-    if (task.reminder_time) {
-      try {
-        setTimeDraft(format(new Date(task.reminder_time), "HH:mm"));
-      } catch {
-        setTimeDraft("");
-      }
-    } else {
-      setTimeDraft("");
-    }
+    setStartDraft(toLocalInput(task.reminder_time));
+    setEndDraft(toLocalInput(task.end_time));
+    setReminderDraft(toLocalInput(task.reminder_time));
     setTimePopoverOpen(true);
   };
 
   const saveTime = () => {
-    if (!timeDraft) {
-      setTimePopoverOpen(false);
-      return;
+    const patch = {};
+    if (startDraft) patch.reminder_time = new Date(startDraft).toISOString();
+    if (endDraft) patch.end_time = new Date(endDraft).toISOString();
+    // 若用户单独修改了"提醒时间"且未改开始时间，使用提醒时间作为 reminder_time
+    if (reminderDraft && !startDraft) {
+      patch.reminder_time = new Date(reminderDraft).toISOString();
+    } else if (reminderDraft && startDraft && reminderDraft !== startDraft) {
+      // 提醒和开始不同时，提醒优先
+      patch.reminder_time = new Date(reminderDraft).toISOString();
     }
-    const [h, m] = timeDraft.split(":").map(Number);
-    if (Number.isNaN(h) || Number.isNaN(m)) {
-      setTimePopoverOpen(false);
-      return;
+    if (Object.keys(patch).length > 0) {
+      onUpdateTask && onUpdateTask(task, patch);
     }
-    const base = task.reminder_time ? new Date(task.reminder_time) : new Date();
-    base.setHours(h, m, 0, 0);
-    onUpdateTask && onUpdateTask(task, { reminder_time: base.toISOString() });
     setTimePopoverOpen(false);
   };
 
@@ -485,19 +494,41 @@ export default function LifeTaskCard({
                                         </button>
                                     </PopoverTrigger>
                                     <PopoverContent
-                                        className="w-56 p-3"
+                                        className="w-72 p-4"
                                         align="start"
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                        <div className="text-xs font-medium text-stone-600 mb-2">调整提醒时间</div>
-                                        <Input
-                                            type="time"
-                                            value={timeDraft}
-                                            onChange={(e) => setTimeDraft(e.target.value)}
-                                            className="text-sm"
-                                            autoFocus
-                                        />
-                                        <div className="flex gap-2 mt-3">
+                                        <div className="text-sm font-semibold text-stone-700 mb-3">设定时间</div>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="text-xs text-stone-500 mb-1 block">开始时间</label>
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={startDraft}
+                                                    onChange={(e) => setStartDraft(e.target.value)}
+                                                    className="text-sm h-9"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-stone-500 mb-1 block">结束时间</label>
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={endDraft}
+                                                    onChange={(e) => setEndDraft(e.target.value)}
+                                                    className="text-sm h-9"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-stone-500 mb-1 block">提醒时间</label>
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={reminderDraft}
+                                                    onChange={(e) => setReminderDraft(e.target.value)}
+                                                    className="text-sm h-9"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 mt-4">
                                             <Button size="sm" variant="outline" className="flex-1" onClick={() => setTimePopoverOpen(false)}>
                                                 取消
                                             </Button>

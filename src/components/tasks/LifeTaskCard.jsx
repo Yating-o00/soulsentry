@@ -458,13 +458,19 @@ export default function LifeTaskCard({
                                         title="点击调整时间"
                                     >
                                         <Clock className="w-3.5 h-3.5 text-stone-400" />
-                                        {task.reminder_time && task.end_time
-                                            ? `${format(new Date(task.reminder_time), 'MM-dd HH:mm')} → ${format(new Date(task.end_time), 'HH:mm')}`
-                                            : task.end_time
-                                                ? `截止 ${format(new Date(task.end_time), 'MM-dd HH:mm')}`
-                                                : task.reminder_time
-                                                    ? format(new Date(task.reminder_time), 'HH:mm')
-                                                    : '全天'}
+                                        {(() => {
+                                            if (task.reminder_time && task.end_time) {
+                                                const start = new Date(task.reminder_time);
+                                                const end = new Date(task.end_time);
+                                                const sameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
+                                                return sameDay
+                                                    ? `${format(start, 'MM-dd HH:mm')} → ${format(end, 'HH:mm')}`
+                                                    : `${format(start, 'MM-dd HH:mm')} → ${format(end, 'MM-dd HH:mm')}`;
+                                            }
+                                            if (task.end_time) return `截止 ${format(new Date(task.end_time), 'MM-dd HH:mm')}`;
+                                            if (task.reminder_time) return format(new Date(task.reminder_time), 'HH:mm');
+                                            return '全天';
+                                        })()}
                                     </button>
                                 </MilestoneTimeEditor>
                              ) : (

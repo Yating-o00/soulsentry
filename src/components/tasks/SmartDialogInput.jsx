@@ -38,19 +38,27 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
     }
   }, [messages, draft, isLoading]);
 
-  const callAI = async (userText, prevDraft) => {
+  const callAI = async (userText, prevDraft, lastAiReply) => {
     const now = new Date();
-    const prompt = `你是一个任务结构化助手。用户用自然语言描述任务，可能分多轮补充修正。请基于"已有解析"和"本轮用户输入"，更新结构化任务。
+    const prompt = `你是一个任务结构化助手。用户用自然语言描述任务，可能分多轮补充修正。请基于"已有解析"、"上一轮 AI 提问"和"本轮用户输入"，更新结构化任务。
 
 当前时间：${now.toISOString()}（用户时区 Asia/Shanghai）
 ${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首轮，无已有解析）"}
+${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 
 本轮用户输入："${userText}"
 
-请：
-1. 合并/修正字段（用户新输入优先覆盖旧值）
+⚠️ 极其重要的对话规则：
+- 如果"上一轮 AI 提问"是一个**是/否问题**（如"是否需要添加提醒？"、"是否要设置截止时间？"、"要不要拆成子任务？"），那么用户的简短回答（如"是"、"好"、"添加"、"要"、"对"、"嗯"、"否"、"不"、"不用"、"不需要"、"算了"）是对该问题的**回答**，绝对不可以当作任务标题、子任务或描述内容！
+  - "是/好/要/添加/对/嗯" → 表示同意，请执行 AI 上一轮提议的操作（如开启提醒、添加默认子任务等），并在 reply 中再追问具体细节（如"好的，要在什么时间提醒？"）
+  - "否/不/不用/不需要/算了" → 表示拒绝，跳过该项设置即可
+- 如果用户输入是具体内容（如"准备会议资料"、"明天下午3点"），才作为新字段或新子任务处理。
+- 当不确定用户意图时，宁可在 reply 中再问一次，也不要乱填字段。
+
+其他规则：
+1. 合并/修正字段（用户新的具体输入优先覆盖旧值）
 2. 时间表达解析为 ISO 字符串
-3. 如果有多个动作，拆为 subtasks
+3. 只有当用户明确说出**多个具体动作**时，才拆为 subtasks；不要把"添加""好""是"这类回应词当作 subtask
 4. 用一句简短中文回复，告诉用户你理解了什么；如果有歧义请提出 1 个澄清问题
 5. confidence 表示当前解析的完整度（0-100），>=80 表示信息已较完整
 返回 JSON。`;
@@ -100,7 +108,8 @@ ${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首
     setIsLoading(true);
 
     try {
-      const res = await callAI(text, draft);
+      const lastAiMsg = [...messages].reverse().find(m => m.role === "ai");
+      const res = await callAI(text, draft, lastAiMsg?.content);
       if (res?.task) setDraft(res.task);
       setMessages(prev => [...prev, {
         role: "ai",

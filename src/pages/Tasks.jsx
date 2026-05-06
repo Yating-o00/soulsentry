@@ -536,6 +536,7 @@ export default function Tasks() {
                 onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
               />
 
               <SmartGroupSection
@@ -556,6 +557,7 @@ export default function Tasks() {
                 onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
               />
 
               <SmartGroupSection
@@ -576,6 +578,7 @@ export default function Tasks() {
                 onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
               />
 
               <SmartGroupSection
@@ -596,6 +599,7 @@ export default function Tasks() {
                 onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
               />
             </div>
           )}

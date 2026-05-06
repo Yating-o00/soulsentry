@@ -17,15 +17,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
+import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 
 export default function LifeTaskCard({ 
   task, 
@@ -41,52 +35,6 @@ export default function LifeTaskCard({
   onToggleSelection,
   onViewTab
 }) {
-  const [timePopoverOpen, setTimePopoverOpen] = useState(false);
-  const [startDraft, setStartDraft] = useState("");
-  const [endDraft, setEndDraft] = useState("");
-  const [reminderDraft, setReminderDraft] = useState("");
-
-  const toLocalInput = (iso) => {
-    if (!iso) return "";
-    try {
-      const d = new Date(iso);
-      // YYYY-MM-DDTHH:mm in local time for <input type="datetime-local">
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    } catch {
-      return "";
-    }
-  };
-
-  const openTimeEditor = (e) => {
-    e.stopPropagation();
-    if (!onUpdateTask) {
-      onEdit && onEdit();
-      return;
-    }
-    setStartDraft(toLocalInput(task.reminder_time));
-    setEndDraft(toLocalInput(task.end_time));
-    setReminderDraft(toLocalInput(task.reminder_time));
-    setTimePopoverOpen(true);
-  };
-
-  const saveTime = () => {
-    const patch = {};
-    if (startDraft) patch.reminder_time = new Date(startDraft).toISOString();
-    if (endDraft) patch.end_time = new Date(endDraft).toISOString();
-    // 若用户单独修改了"提醒时间"且未改开始时间，使用提醒时间作为 reminder_time
-    if (reminderDraft && !startDraft) {
-      patch.reminder_time = new Date(reminderDraft).toISOString();
-    } else if (reminderDraft && startDraft && reminderDraft !== startDraft) {
-      // 提醒和开始不同时，提醒优先
-      patch.reminder_time = new Date(reminderDraft).toISOString();
-    }
-    if (Object.keys(patch).length > 0) {
-      onUpdateTask && onUpdateTask(task, patch);
-    }
-    setTimePopoverOpen(false);
-  };
-
   const [completed, setCompleted] = useState(task.status === 'completed');
   const [expanded, setExpanded] = useState(false);
 
@@ -480,64 +428,32 @@ export default function LifeTaskCard({
                                     <MapPin className="w-3.5 h-3.5 text-stone-400" />
                                     {task.location_reminder.location_name || "指定地点"}
                                 </span>
-                             ) : (
-                                <Popover open={timePopoverOpen} onOpenChange={setTimePopoverOpen}>
-                                    <PopoverTrigger asChild>
-                                        <button
-                                            type="button"
-                                            onClick={openTimeEditor}
-                                            className="flex items-center gap-1.5 text-stone-600 bg-stone-50 hover:bg-stone-100 px-2 py-0.5 rounded-md transition-colors cursor-pointer border border-transparent hover:border-stone-200"
-                                            title="点击调整时间"
-                                        >
-                                            <Clock className="w-3.5 h-3.5 text-stone-400" />
-                                            {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '全天'}
-                                        </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent
-                                        className="w-72 p-4"
-                                        align="start"
+                             ) : onUpdateTask ? (
+                                <MilestoneTimeEditor
+                                    task={task}
+                                    onSave={(patch) => onUpdateTask(task, patch)}
+                                >
+                                    <button
+                                        type="button"
                                         onClick={(e) => e.stopPropagation()}
+                                        className="flex items-center gap-1.5 text-stone-600 bg-stone-50 hover:bg-stone-100 px-2 py-0.5 rounded-md transition-colors cursor-pointer border border-transparent hover:border-stone-200"
+                                        title="点击调整时间"
                                     >
-                                        <div className="text-sm font-semibold text-stone-700 mb-3">设定时间</div>
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="text-xs text-stone-500 mb-1 block">开始时间</label>
-                                                <Input
-                                                    type="datetime-local"
-                                                    value={startDraft}
-                                                    onChange={(e) => setStartDraft(e.target.value)}
-                                                    className="text-sm h-9"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs text-stone-500 mb-1 block">结束时间</label>
-                                                <Input
-                                                    type="datetime-local"
-                                                    value={endDraft}
-                                                    onChange={(e) => setEndDraft(e.target.value)}
-                                                    className="text-sm h-9"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs text-stone-500 mb-1 block">提醒时间</label>
-                                                <Input
-                                                    type="datetime-local"
-                                                    value={reminderDraft}
-                                                    onChange={(e) => setReminderDraft(e.target.value)}
-                                                    className="text-sm h-9"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2 mt-4">
-                                            <Button size="sm" variant="outline" className="flex-1" onClick={() => setTimePopoverOpen(false)}>
-                                                取消
-                                            </Button>
-                                            <Button size="sm" className="flex-1" onClick={saveTime}>
-                                                保存
-                                            </Button>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
+                                        <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                        {task.reminder_time && task.end_time
+                                            ? `${format(new Date(task.reminder_time), 'MM-dd HH:mm')} → ${format(new Date(task.end_time), 'HH:mm')}`
+                                            : task.end_time
+                                                ? `截止 ${format(new Date(task.end_time), 'MM-dd HH:mm')}`
+                                                : task.reminder_time
+                                                    ? format(new Date(task.reminder_time), 'HH:mm')
+                                                    : '全天'}
+                                    </button>
+                                </MilestoneTimeEditor>
+                             ) : (
+                                <span className="flex items-center gap-1.5 text-stone-500 bg-stone-50 px-2 py-0.5 rounded-md">
+                                    <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                    {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '全天'}
+                                </span>
                              )}
                              
                              {/* Route/Distance or Streak Info */}

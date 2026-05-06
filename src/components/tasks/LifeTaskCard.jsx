@@ -369,11 +369,29 @@ export default function LifeTaskCard({
                     {task.category === 'work' && (
                         <div className="flex flex-wrap items-center gap-2 mb-3">
                             {/* Date Range */}
-                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-50 text-stone-600 text-xs border border-stone-100">
-                                <Clock className="w-3 h-3 text-stone-400" />
-                                {task.reminder_time ? format(new Date(task.reminder_time), 'MM月dd日 HH:mm') : '待定'}
-                                {task.end_time && ` - ${format(new Date(task.end_time), 'MM月dd日 HH:mm')}`}
-                            </span>
+                            {onUpdateTask ? (
+                                <MilestoneTimeEditor
+                                    task={task}
+                                    onSave={(patch) => onUpdateTask(task, patch)}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-50 hover:bg-stone-100 text-stone-600 text-xs border border-stone-100 hover:border-stone-200 transition-colors cursor-pointer"
+                                        title="点击调整时间"
+                                    >
+                                        <Clock className="w-3 h-3 text-stone-400" />
+                                        {task.reminder_time ? format(new Date(task.reminder_time), 'MM月dd日 HH:mm') : '待定'}
+                                        {task.end_time && ` - ${format(new Date(task.end_time), 'MM月dd日 HH:mm')}`}
+                                    </button>
+                                </MilestoneTimeEditor>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-50 text-stone-600 text-xs border border-stone-100">
+                                    <Clock className="w-3 h-3 text-stone-400" />
+                                    {task.reminder_time ? format(new Date(task.reminder_time), 'MM月dd日 HH:mm') : '待定'}
+                                    {task.end_time && ` - ${format(new Date(task.end_time), 'MM月dd日 HH:mm')}`}
+                                </span>
+                            )}
 
                             {/* Recurrence */}
                             {task.repeat_rule !== 'none' && (

@@ -62,6 +62,7 @@ import Teams from './pages/Teams';
 import Templates from './pages/Templates';
 import Trash from './pages/Trash';
 import Welcome from './pages/Welcome';
+import StructuredCards from './pages/StructuredCards.jsx';
 import __Layout from './Layout.jsx';
 
 
@@ -81,6 +82,7 @@ export const PAGES = {
     "Templates": Templates,
     "Trash": Trash,
     "Welcome": Welcome,
+    "StructuredCards": StructuredCards,
 }
 
 export const pagesConfig = {

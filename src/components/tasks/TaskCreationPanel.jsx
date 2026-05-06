@@ -25,6 +25,7 @@ import AITaskEnhancer from "./AITaskEnhancer";
 import TaskDependencySelector from "./TaskDependencySelector";
 import UnifiedTaskInput from "./UnifiedTaskInput";
 import SmartDialogInput from "./SmartDialogInput";
+import TaskMemoryInheritance from "./TaskMemoryInheritance";
 import {
   Dialog,
   DialogContent,
@@ -744,6 +745,11 @@ Return JSON.`,
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                <TaskMemoryInheritance
+                  task={task}
+                  onApply={(patch) => setTask((prev) => ({ ...prev, ...patch }))}
+                />
 
                 <Textarea
                   placeholder="添加详细描述（可选）"

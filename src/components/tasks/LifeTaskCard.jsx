@@ -17,6 +17,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 
@@ -28,11 +35,49 @@ export default function LifeTaskCard({
   onEdit,
   onShare,
   onToggleSubtask,
+  onUpdateTask,
   isSelectionMode = false,
   isSelected = false,
   onToggleSelection,
   onViewTab
 }) {
+  const [timeDraft, setTimeDraft] = useState("");
+  const [timePopoverOpen, setTimePopoverOpen] = useState(false);
+
+  const openTimeEditor = (e) => {
+    e.stopPropagation();
+    if (!onUpdateTask) {
+      onEdit && onEdit();
+      return;
+    }
+    if (task.reminder_time) {
+      try {
+        setTimeDraft(format(new Date(task.reminder_time), "HH:mm"));
+      } catch {
+        setTimeDraft("");
+      }
+    } else {
+      setTimeDraft("");
+    }
+    setTimePopoverOpen(true);
+  };
+
+  const saveTime = () => {
+    if (!timeDraft) {
+      setTimePopoverOpen(false);
+      return;
+    }
+    const [h, m] = timeDraft.split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) {
+      setTimePopoverOpen(false);
+      return;
+    }
+    const base = task.reminder_time ? new Date(task.reminder_time) : new Date();
+    base.setHours(h, m, 0, 0);
+    onUpdateTask && onUpdateTask(task, { reminder_time: base.toISOString() });
+    setTimePopoverOpen(false);
+  };
+
   const [completed, setCompleted] = useState(task.status === 'completed');
   const [expanded, setExpanded] = useState(false);
 
@@ -420,20 +465,49 @@ export default function LifeTaskCard({
                      {/* Detailed Context Info Line (Non-Work Tasks or Supplemental) */}
                     {task.category !== 'work' && (
                         <div className="flex flex-wrap items-center gap-4 text-xs">
-                             {/* Location or Time Detail */}
-                             <span className="flex items-center gap-1.5 text-stone-500 bg-stone-50 px-2 py-0.5 rounded-md">
-                                {task.location_reminder?.enabled ? (
-                                    <>
-                                        <MapPin className="w-3.5 h-3.5 text-stone-400" />
-                                        {task.location_reminder.location_name || "指定地点"}
-                                    </>
-                                ) : (
-                                    <>
-                                        <Clock className="w-3.5 h-3.5 text-stone-400" />
-                                        {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '全天'}
-                                    </>
-                                )}
-                             </span>
+                             {/* Location or Time Detail (time is click-to-edit) */}
+                             {task.location_reminder?.enabled ? (
+                                <span className="flex items-center gap-1.5 text-stone-500 bg-stone-50 px-2 py-0.5 rounded-md">
+                                    <MapPin className="w-3.5 h-3.5 text-stone-400" />
+                                    {task.location_reminder.location_name || "指定地点"}
+                                </span>
+                             ) : (
+                                <Popover open={timePopoverOpen} onOpenChange={setTimePopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={openTimeEditor}
+                                            className="flex items-center gap-1.5 text-stone-600 bg-stone-50 hover:bg-stone-100 px-2 py-0.5 rounded-md transition-colors cursor-pointer border border-transparent hover:border-stone-200"
+                                            title="点击调整时间"
+                                        >
+                                            <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                            {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '全天'}
+                                        </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent
+                                        className="w-56 p-3"
+                                        align="start"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <div className="text-xs font-medium text-stone-600 mb-2">调整提醒时间</div>
+                                        <Input
+                                            type="time"
+                                            value={timeDraft}
+                                            onChange={(e) => setTimeDraft(e.target.value)}
+                                            className="text-sm"
+                                            autoFocus
+                                        />
+                                        <div className="flex gap-2 mt-3">
+                                            <Button size="sm" variant="outline" className="flex-1" onClick={() => setTimePopoverOpen(false)}>
+                                                取消
+                                            </Button>
+                                            <Button size="sm" className="flex-1" onClick={saveTime}>
+                                                保存
+                                            </Button>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                             )}
                              
                              {/* Route/Distance or Streak Info */}
                              {task.location_reminder?.enabled ? (

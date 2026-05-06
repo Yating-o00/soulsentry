@@ -659,6 +659,7 @@ export default function Tasks() {
                     onEdit={() => { setSelectedTask(task); setSelectedTab(null); }}
                     onShare={() => setSharingTask(task)}
                     onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+                    onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                   />
                 )}
               </div>

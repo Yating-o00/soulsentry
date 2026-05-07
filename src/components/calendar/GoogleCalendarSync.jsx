@@ -63,18 +63,33 @@ export default function GoogleCalendarSync({ tasks = [] }) {
 
   const handleBatchSync = async () => {
     setBatchSyncing(true);
-    let successCount = 0;
-    let failCount = 0;
-    for (const task of unsyncedTasks) {
-      try {
-        await base44.functions.invoke('syncTaskToGoogleCalendar', { task_id: task.id });
-        successCount++;
-      } catch { failCount++; }
+    const toastId = toast.loading("正在同步到 Google Calendar...");
+    let cursor = 0;
+    let totalSynced = 0;
+    let totalFailed = 0;
+    let safety = 50; // 最多 50 批，避免极端情况下死循环
+    try {
+      while (safety-- > 0) {
+        const res = await base44.functions.invoke('bulkSyncTasksToCalendar', {
+          batch_size: 15,
+          cursor,
+          only_unsynced: true,
+        });
+        const d = res.data || {};
+        totalSynced += d.synced || 0;
+        totalFailed += d.failed || 0;
+        cursor = d.cursor || cursor;
+        toast.loading(`已同步 ${totalSynced} 个约定…`, { id: toastId });
+        if (d.done) break;
+      }
+      toast.success(`完成！已同步 ${totalSynced} 个约定到 Google Calendar`, { id: toastId, icon: '📅' });
+      if (totalFailed > 0) toast.error(`${totalFailed} 个约定同步失败`);
+    } catch (err) {
+      toast.error(`同步失败: ${err.response?.data?.error || err.message}`, { id: toastId });
+    } finally {
+      setBatchSyncing(false);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     }
-    setBatchSyncing(false);
-    queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    if (successCount > 0) toast.success(`成功同步 ${successCount} 个约定`, { icon: '📅' });
-    if (failCount > 0) toast.error(`${failCount} 个约定同步失败`);
   };
 
   const handleEnableAutoSync = async (task) => {

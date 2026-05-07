@@ -328,7 +328,15 @@ export default function MilestoneCard({
                   <Calendar className="w-3 h-3" />
                   {(() => {
                     const fmt = (iso) => format(new Date(iso), 'M月d日 HH:mm', { locale: zhCN });
-                    if (task.reminder_time && task.end_time) return `${fmt(task.reminder_time)} → ${fmt(task.end_time)}`;
+                    // 只有当用户显式设置了起始时间（即与 end_time 不在同一天）时才显示为范围
+                    // 否则 reminder_time 通常是"提前提醒"自动算出的，不应作为起始时间展示
+                    if (task.reminder_time && task.end_time) {
+                      const r = new Date(task.reminder_time);
+                      const e = new Date(task.end_time);
+                      const sameDay = r.getFullYear() === e.getFullYear() && r.getMonth() === e.getMonth() && r.getDate() === e.getDate();
+                      if (!sameDay) return `${fmt(task.reminder_time)} → ${fmt(task.end_time)}`;
+                      return `截止 ${fmt(task.end_time)}`;
+                    }
                     if (task.end_time) return `截止 ${fmt(task.end_time)}`;
                     if (task.reminder_time) return fmt(task.reminder_time);
                     return '点击设置时间';

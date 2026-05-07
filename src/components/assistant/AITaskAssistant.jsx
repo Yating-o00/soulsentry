@@ -34,6 +34,8 @@ import React, { useState, useEffect, useRef } from "react";
    import { format } from "date-fns";
    import { zhCN } from "date-fns/locale";
    import MiniNoteCard from "./MiniNoteCard";
+   import ConversationHistoryPanel from "./ConversationHistoryPanel";
+   import { History } from "lucide-react";
    
    export default function AITaskAssistant({ isOpen, onClose }) {
      const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
@@ -45,7 +47,8 @@ import React, { useState, useEffect, useRef } from "react";
      const [isLoading, setIsLoading] = useState(false);
      const [voiceEnabled, setVoiceEnabled] = useState(false);
      const [showSummary, setShowSummary] = useState(false);
-     const [discussedTasks, setDiscussedTasks] = useState([]);
+         const [showHistory, setShowHistory] = useState(false);
+         const [discussedTasks, setDiscussedTasks] = useState([]);
      const messagesEndRef = useRef(null);
      const recognitionRef = useRef(null);
      const synthRef = useRef(null);
@@ -231,25 +234,57 @@ import React, { useState, useEffect, useRef } from "react";
          }, [conversationId]); // Removed voiceEnabled dependency to prevent websocket reconnection loops
    
      const initConversation = async () => {
-       try {
-         const conversation = await base44.agents.createConversation({
-           agent_name: "task_assistant",
-           metadata: {
-             name: "约定检查对话",
-             type: "task_check"
-           }
-         });
-         setConversationId(conversation.id);
-   
-         // 触发AI主动分析
-         setTimeout(() => {
-           triggerSmartAnalysis(conversation.id);
-         }, 800);
-       } catch (error) {
-         console.error("Failed to create conversation:", error);
-         toast.error("初始化对话失败");
-       }
-     };
+        try {
+          const conversation = await base44.agents.createConversation({
+            agent_name: "task_assistant",
+            metadata: {
+              name: "约定检查对话",
+              type: "task_check"
+            }
+          });
+          setConversationId(conversation.id);
+
+          // 触发AI主动分析
+          setTimeout(() => {
+            triggerSmartAnalysis(conversation.id);
+          }, 800);
+        } catch (error) {
+          console.error("Failed to create conversation:", error);
+          toast.error("初始化对话失败");
+        }
+      };
+
+      // 切换到某个历史对话：加载消息并订阅
+      const switchToConversation = async (convId) => {
+        if (!convId || convId === conversationId) {
+          setShowHistory(false);
+          return;
+        }
+        setIsLoading(true);
+        setShowHistory(false);
+        processedToolCallIds.current = new Set(); // 重置已处理 tool call 标记
+        try {
+          const conv = await base44.agents.getConversation(convId);
+          setConversationId(convId);
+          setMessages(conv?.messages || []);
+        } catch (error) {
+          console.error("Failed to load conversation:", error);
+          toast.error("加载对话失败");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      // 开启一个全新对话
+      const startNewConversation = async () => {
+        setShowHistory(false);
+        setIsLoading(true);
+        setMessages([]);
+        setDiscussedTasks([]);
+        processedToolCallIds.current = new Set();
+        setConversationId(null); // 触发 useEffect 重新创建
+        await initConversation();
+      };
    
      const triggerSmartAnalysis = async (convId) => {
        if (!convId) {
@@ -401,7 +436,7 @@ import React, { useState, useEffect, useRef } from "react";
          exit={{ opacity: 0, scale: 0.9, y: 20 }}
          className="fixed bottom-20 right-6 z-50 w-80 max-w-[calc(100vw-3rem)]"
        >
-         <Card className="shadow-2xl border border-[#222222] bg-white overflow-hidden">
+         <Card className="shadow-2xl border border-[#222222] bg-white overflow-hidden relative">
            {/* 头部 - 精简版 */}
            <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] p-3 text-white">
              <div className="flex items-center justify-between">
@@ -417,20 +452,29 @@ import React, { useState, useEffect, useRef } from "react";
                  </div>
                </div>
                <div className="flex items-center gap-1">
-                 {discussedTasks.length > 0 && (
-                   <Button
-                     size="icon"
-                     variant="ghost"
-                     onClick={() => setShowSummary(!showSummary)}
-                     className="h-7 w-7 text-white hover:bg-white/20 relative"
-                     title="对话摘要"
-                   >
-                     <BarChart3 className="w-3.5 h-3.5" />
-                     <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-yellow-400 text-[8px] font-bold text-slate-800 rounded-full flex items-center justify-center">
-                       {discussedTasks.length}
-                     </span>
-                   </Button>
-                 )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setShowHistory(true)}
+                      className="h-7 w-7 text-white hover:bg-white/20"
+                      title="历史对话"
+                    >
+                      <History className="w-3.5 h-3.5" />
+                    </Button>
+                    {discussedTasks.length > 0 && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setShowSummary(!showSummary)}
+                        className="h-7 w-7 text-white hover:bg-white/20 relative"
+                        title="对话摘要"
+                      >
+                        <BarChart3 className="w-3.5 h-3.5" />
+                        <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-yellow-400 text-[8px] font-bold text-slate-800 rounded-full flex items-center justify-center">
+                          {discussedTasks.length}
+                        </span>
+                      </Button>
+                    )}
                  <Button
                    size="icon"
                    variant="ghost"
@@ -593,8 +637,15 @@ import React, { useState, useEffect, useRef } from "react";
                </Button>
              </form>
            </div>
+         <ConversationHistoryPanel
+              open={showHistory}
+              currentConversationId={conversationId}
+              onSelect={switchToConversation}
+              onNewConversation={startNewConversation}
+              onClose={() => setShowHistory(false)}
+            />
          </Card>
-        <InsufficientCreditsDialog
+         <InsufficientCreditsDialog
           open={showInsufficientDialog}
           onOpenChange={dismissDialog}
           {...insufficientProps}

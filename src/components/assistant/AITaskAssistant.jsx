@@ -234,58 +234,61 @@ import React, { useState, useEffect, useRef } from "react";
          }, [conversationId]); // Removed voiceEnabled dependency to prevent websocket reconnection loops
    
      const initConversation = async () => {
-        try {
-          const conversation = await base44.agents.createConversation({
-            agent_name: "task_assistant",
-            metadata: {
-              name: "约定检查对话",
-              type: "task_check"
-            }
-          });
-          setConversationId(conversation.id);
+         try {
+           const conversation = await base44.agents.createConversation({
+             agent_name: "task_assistant",
+             metadata: {
+               name: "约定检查对话",
+               type: "task_check"
+             }
+           });
+           setConversationId(conversation.id);
 
-          // 触发AI主动分析
-          setTimeout(() => {
-            triggerSmartAnalysis(conversation.id);
-          }, 800);
-        } catch (error) {
-          console.error("Failed to create conversation:", error);
-          toast.error("初始化对话失败");
-        }
-      };
+           // 触发AI主动分析
+           setTimeout(() => {
+             triggerSmartAnalysis(conversation.id);
+           }, 800);
+         } catch (error) {
+           console.error("Failed to create conversation:", error);
+           toast.error("初始化对话失败");
+         }
+       };
 
-      // 切换到某个历史对话：加载消息并订阅
-      const switchToConversation = async (convId) => {
-        if (!convId || convId === conversationId) {
-          setShowHistory(false);
-          return;
-        }
-        setIsLoading(true);
-        setShowHistory(false);
-        processedToolCallIds.current = new Set(); // 重置已处理 tool call 标记
-        try {
-          const conv = await base44.agents.getConversation(convId);
-          setConversationId(convId);
-          setMessages(conv?.messages || []);
-        } catch (error) {
-          console.error("Failed to load conversation:", error);
-          toast.error("加载对话失败");
-        } finally {
-          setIsLoading(false);
-        }
-      };
+       // 切换到历史会话（只加载，不触发新分析）
+       const switchToConversation = async (convId) => {
+         if (!convId || convId === conversationId) {
+           setShowHistory(false);
+           return;
+         }
+         try {
+           setIsLoading(true);
+           processedToolCallIds.current = new Set();
+           setDiscussedTasks([]);
+           setMessages([]);
+           const conv = await base44.agents.getConversation(convId);
+           setMessages(conv?.messages || []);
+           setConversationId(convId);
+           setShowHistory(false);
+         } catch (e) {
+           console.error("Failed to load conversation:", e);
+           toast.error("加载对话失败");
+         } finally {
+           setIsLoading(false);
+         }
+       };
 
-      // 开启一个全新对话
-      const startNewConversation = async () => {
-        setShowHistory(false);
-        setIsLoading(true);
-        setMessages([]);
-        setDiscussedTasks([]);
-        processedToolCallIds.current = new Set();
-        setConversationId(null); // 触发 useEffect 重新创建
-        await initConversation();
-      };
-   
+       // 新建会话
+       const startNewConversation = async () => {
+         setShowHistory(false);
+         processedToolCallIds.current = new Set();
+         setDiscussedTasks([]);
+         setMessages([]);
+         setConversationId(null);
+         setIsLoading(true);
+         await initConversation();
+       };
+
+
      const triggerSmartAnalysis = async (convId) => {
        if (!convId) {
            console.error("No conversation ID provided for analysis");
@@ -638,12 +641,12 @@ import React, { useState, useEffect, useRef } from "react";
              </form>
            </div>
          <ConversationHistoryPanel
-              open={showHistory}
-              currentConversationId={conversationId}
-              onSelect={switchToConversation}
-              onNewConversation={startNewConversation}
-              onClose={() => setShowHistory(false)}
-            />
+           open={showHistory}
+           currentConversationId={conversationId}
+           onSelect={switchToConversation}
+           onNewConversation={startNewConversation}
+           onClose={() => setShowHistory(false)}
+         />
          </Card>
          <InsufficientCreditsDialog
           open={showInsufficientDialog}

@@ -33,6 +33,7 @@ import React, { useState, useEffect, useRef } from "react";
    import ReactMarkdown from "react-markdown";
    import { format } from "date-fns";
    import { zhCN } from "date-fns/locale";
+   import MiniNoteCard from "./MiniNoteCard";
    
    export default function AITaskAssistant({ isOpen, onClose }) {
      const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
@@ -180,6 +181,15 @@ import React, { useState, useEffect, useRef } from "react";
                              }
                              if (toolName.includes('KnowledgeBase')) {
                                  queryClient.invalidateQueries({ queryKey: ['knowledgeBase'] });
+                             }
+                             if (toolName.includes('Note')) {
+                                 queryClient.invalidateQueries({ queryKey: ['notes'] });
+                             }
+                             if (toolName.includes('Relationship')) {
+                                 queryClient.invalidateQueries({ queryKey: ['relationships'] });
+                             }
+                             if (toolName.includes('SavedLocation')) {
+                                 queryClient.invalidateQueries({ queryKey: ['savedLocations'] });
                              }
                              if (toolName.includes('HealthLog')) {
                                  queryClient.invalidateQueries({ queryKey: ['healthLogs'] });
@@ -537,7 +547,6 @@ import React, { useState, useEffect, useRef } from "react";
              <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white/50 border-t border-slate-100">
                {[
                  { label: "⏰ 今日截止未做", text: "今天有哪些截止的约定或事项还没做？请按列表给我，每条带时间和状态。" },
-                 { label: "📅 今日约定", text: "今天有哪些约定？" },
                  { label: "⚠️ 过期未完成", text: "列出所有已过期但还没完成的约定" },
                  { label: "📝 最近心签", text: "查一下我最近一周写的心签，列出标题或第一句话" },
                  { label: "✏️ 改时间示例", text: "把明天上午10点的会议改到下午2点" },
@@ -695,8 +704,10 @@ import React, { useState, useEffect, useRef } from "react";
 
      const renderResults = () => {
        if (!toolCall.results) return null;
-       // Only render tasks for now
-       if (!toolName.includes("Task")) return null;
+       const isTask = toolName.includes("Task");
+       const isNote = toolName.includes("Note");
+       // Only render Task and Note results visually
+       if (!isTask && !isNote) return null;
 
        try {
          // Handle potential stringified JSON
@@ -712,7 +723,9 @@ import React, { useState, useEffect, useRef } from "react";
 
          if (!data) return null;
 
-         // Handle array of tasks (list/filter)
+         const itemLabel = isNote ? "心签" : "约定";
+
+         // Handle array
          if (Array.isArray(data)) {
             if (data.length === 0) {
               return (
@@ -721,23 +734,23 @@ import React, { useState, useEffect, useRef } from "react";
                   animate={{ opacity: 1, scale: 1 }}
                   className="text-[10px] text-slate-400 bg-slate-50 py-2 px-3 rounded-lg mt-2 text-center border border-slate-100"
                 >
-                  未找到相关约定
+                  未找到相关{itemLabel}
                 </motion.div>
               );
             }
 
             return (
               <div className="mt-2 w-full">
-                <TaskListSummary tasks={data} />
+                {isTask && <TaskListSummary tasks={data} />}
                 <div className="flex flex-col gap-2 mt-2">
-                  {data.slice(0, 4).map((task, idx) => (
+                  {data.slice(0, 4).map((item, idx) => (
                     <motion.div
-                      key={task.id}
+                      key={item.id}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: idx * 0.05 }}
                     >
-                      <MiniTaskCard task={task} />
+                      {isNote ? <MiniNoteCard note={item} /> : <MiniTaskCard task={item} />}
                     </motion.div>
                   ))}
                   {data.length > 4 && (
@@ -746,7 +759,7 @@ import React, { useState, useEffect, useRef } from "react";
                       animate={{ opacity: 1 }}
                       className="text-[10px] text-center text-slate-500 bg-gradient-to-r from-slate-50 via-white to-slate-50 py-1.5 rounded-lg border border-dashed border-slate-200"
                     >
-                      还有 {data.length - 4} 个约定...
+                      还有 {data.length - 4} 个{itemLabel}...
                     </motion.div>
                   )}
                 </div>
@@ -754,7 +767,7 @@ import React, { useState, useEffect, useRef } from "react";
             );
          }
 
-         // Handle single task (create/update/get)
+         // Handle single item (create/update/get)
          if (typeof data === 'object' && data.id) {
             return (
               <motion.div 
@@ -762,7 +775,10 @@ import React, { useState, useEffect, useRef } from "react";
                 animate={{ opacity: 1, scale: 1 }}
                 className="mt-2 w-full"
               >
-                <MiniTaskCard task={data} isHighlight={toolCall.name.includes("create")} />
+                {isNote
+                  ? <MiniNoteCard note={data} isHighlight={toolCall.name.includes("create")} />
+                  : <MiniTaskCard task={data} isHighlight={toolCall.name.includes("create")} />
+                }
               </motion.div>
             );
          }

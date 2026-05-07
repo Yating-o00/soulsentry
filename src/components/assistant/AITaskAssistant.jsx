@@ -168,6 +168,19 @@ import React, { useState, useEffect, useRef } from "react";
                                  queryClient.invalidateQueries({ queryKey: ['subtasks'] });
                                  queryClient.invalidateQueries({ queryKey: ['task'] });
                              }
+                             if (toolName.includes('Note')) {
+                                 queryClient.invalidateQueries({ queryKey: ['notes'] });
+                                 queryClient.invalidateQueries({ queryKey: ['note'] });
+                             }
+                             if (toolName.includes('Relationship')) {
+                                 queryClient.invalidateQueries({ queryKey: ['relationships'] });
+                             }
+                             if (toolName.includes('SavedLocation')) {
+                                 queryClient.invalidateQueries({ queryKey: ['savedLocations'] });
+                             }
+                             if (toolName.includes('KnowledgeBase')) {
+                                 queryClient.invalidateQueries({ queryKey: ['knowledgeBase'] });
+                             }
                              if (toolName.includes('HealthLog')) {
                                  queryClient.invalidateQueries({ queryKey: ['healthLogs'] });
                              }
@@ -523,11 +536,12 @@ import React, { useState, useEffect, useRef } from "react";
            {messages.length > 0 && !isLoading && (
              <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white/50 border-t border-slate-100">
                {[
+                 { label: "⏰ 今日截止未做", text: "今天有哪些截止的约定或事项还没做？请按列表给我，每条带时间和状态。" },
                  { label: "📅 今日约定", text: "今天有哪些约定？" },
-                 { label: "⚠️ 紧急事项", text: "列出紧急和过期的约定" },
-                 { label: "🌟 核心事项", text: "请以列表形式列出我的核心事项（高优先级、紧急或重要的约定），重点关注主任务的完成情况" },
+                 { label: "⚠️ 过期未完成", text: "列出所有已过期但还没完成的约定" },
+                 { label: "📝 最近心签", text: "查一下我最近一周写的心签，列出标题或第一句话" },
+                 { label: "✏️ 改时间示例", text: "把明天上午10点的会议改到下午2点" },
                  { label: "📊 进度分析", text: "分析当前约定状况并给出建议，请先关注主任务，再检查子任务" },
-                 { label: "💡 解决痛点", text: "我感觉最近效率很低，事情做不完，帮我分析一下痛点并提供解决方案" },
                ].map((action) => (
                  <button
                    key={action.label}
@@ -546,7 +560,7 @@ import React, { useState, useEffect, useRef } from "react";
                <Input
                  value={inputText}
                  onChange={(e) => setInputText(e.target.value)}
-                 placeholder="输入约定（如：明天10点开会）或 询问进度..."
+                 placeholder="问问题或下指令（如：今天截止没做的有哪些？）"
                  className="flex-1 text-sm h-9 border-[#dce4ed] focus-visible:ring-[#384877]"
                  disabled={isLoading}
                />
@@ -664,15 +678,20 @@ import React, { useState, useEffect, useRef } from "react";
      };
 
      const getLabel = () => {
-       const isTask = toolName.includes("Task");
-       const suffix = isTask ? "约定" : "数据";
+        let suffix = "数据";
+        if (toolName.includes("Task")) suffix = "约定";
+        else if (toolName.includes("Note")) suffix = "心签";
+        else if (toolName.includes("Relationship")) suffix = "联系人";
+        else if (toolName.includes("SavedLocation")) suffix = "地点";
+        else if (toolName.includes("KnowledgeBase")) suffix = "知识库";
+        else if (toolName.includes("HealthLog")) suffix = "健康记录";
 
-       if (toolName.includes("create")) return `创建${suffix}`;
-       if (toolName.includes("update")) return `更新${suffix}`;
-       if (toolName.includes("read") || toolName.includes("list")) return `查询${suffix}`;
-       if (toolName.includes("delete")) return `删除${suffix}`;
-       return "执行操作";
-     };
+        if (toolName.includes("create")) return `创建${suffix}`;
+        if (toolName.includes("update")) return `更新${suffix}`;
+        if (toolName.includes("read") || toolName.includes("list") || toolName.includes("filter")) return `查询${suffix}`;
+        if (toolName.includes("delete")) return `删除${suffix}`;
+        return "执行操作";
+      };
 
      const renderResults = () => {
        if (!toolCall.results) return null;

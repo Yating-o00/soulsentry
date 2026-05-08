@@ -12,6 +12,14 @@ export function useTaskOperations() {
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
+    onMutate: ({ id, data }) => {
+      // 乐观更新：立即把新字段写入缓存，让依赖 ['tasks'] 的 useMemo
+      // (例如 pages/Tasks 的智能分组) 立刻按新时间/状态重新分类
+      queryClient.setQueryData(['tasks'], (oldData) => {
+        if (!Array.isArray(oldData)) return oldData;
+        return oldData.map(t => t.id === id ? { ...t, ...data } : t);
+      });
+    },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });

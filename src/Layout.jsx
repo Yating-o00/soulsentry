@@ -10,10 +10,10 @@ import WelcomeGuard from "@/components/WelcomeGuard";
 import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
+import GlobalTextTranslator from "@/components/GlobalTextTranslator";
 import GeofenceTracker from "./components/location/GeofenceTracker";
 import SentinelGeoWatcher from "./components/location/SentinelGeoWatcher";
 import OnTheWayReminderHost from "./components/location/OnTheWayReminderHost";
-import GlobalTextTranslator from "@/components/GlobalTextTranslator";
 import { base44 } from "@/api/base44Client";
 import { getCachedUser } from "@/lib/userCache";
 import {

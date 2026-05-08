@@ -616,7 +616,7 @@ export default function LifeTaskCard({
             {subtasks.length > 0 && (
               <div className={cn(
                 "border-t border-stone-100 transition-all duration-300 ease-in-out overflow-hidden mt-3",
-                expanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0 mt-0 border-t-0"
+                expanded ? "opacity-100" : "max-h-0 opacity-0 mt-0 border-t-0"
               )}>
                 <div className="pt-3 space-y-2">
                   {subtasks.map((subtask) => (
@@ -660,13 +660,25 @@ export default function LifeTaskCard({
               </div>
             )}
 
-            {/* Expand hint */}
-            {!expanded && subtasks.length > 0 && (
+            {/* Expand / Collapse hint */}
+            {subtasks.length > 0 && (
               <div className="flex justify-center pt-2">
-                <div className="flex items-center gap-1 text-xs text-stone-400">
-                  <span>{subtasks.filter(s => s.status === 'completed').length}/{subtasks.length} 子任务</span>
-                  <ChevronDown className="w-3 h-3" />
-                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpanded(!expanded);
+                  }}
+                  className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 px-2 py-1 rounded-md hover:bg-stone-50 transition-colors"
+                >
+                  <span>
+                    {expanded ? '收起子约定' : `展开全部 ${subtasks.length} 个子约定`}
+                    <span className="ml-1 text-stone-400">
+                      ({subtasks.filter(s => s.status === 'completed').length}/{subtasks.length})
+                    </span>
+                  </span>
+                  <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
+                </button>
               </div>
             )}
         </div>

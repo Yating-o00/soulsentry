@@ -95,10 +95,15 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
 
           <button
             onClick={toggleLanguage}
-            className="h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors group"
-            title={language === 'zh' ? 'Switch to English' : '切换到中文'}
+            className="group relative h-8 px-2.5 rounded-full bg-gradient-to-r from-[#384877]/5 to-[#3b5aa2]/5 hover:from-[#384877] hover:to-[#3b5aa2] border border-slate-200 hover:border-transparent flex items-center gap-1.5 transition-all duration-300 hover:shadow-md hover:shadow-[#384877]/20 active:scale-95"
+            title={language === 'zh' ? '一键翻译为英文 / Translate everything to English' : '一键翻译为中文 / Translate everything to Chinese'}
           >
-            <Languages className="w-4 h-4 text-slate-500 group-hover:text-[#384877]" />
+            <Languages className="w-3.5 h-3.5 text-[#384877] group-hover:text-white transition-colors" />
+            <span className="text-[11px] font-semibold tracking-wide text-slate-600 group-hover:text-white transition-colors flex items-center gap-1">
+              <span className={language === 'zh' ? 'text-[#384877] group-hover:text-white' : 'text-slate-400 group-hover:text-white/60'}>中</span>
+              <span className="text-slate-300 group-hover:text-white/40">/</span>
+              <span className={language === 'en' ? 'text-[#384877] group-hover:text-white' : 'text-slate-400 group-hover:text-white/60'}>EN</span>
+            </span>
           </button>
         </div>
       </SidebarHeader>

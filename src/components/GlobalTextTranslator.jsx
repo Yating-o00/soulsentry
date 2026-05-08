@@ -180,6 +180,10 @@ export default function GlobalTextTranslator() {
   const debounceRef = useRef(null);
 
   useEffect(() => {
+    // 标记 body 语言，触发全局英文优化样式
+    document.body.setAttribute("data-lang", language);
+    document.documentElement.setAttribute("lang", language === "en" ? "en" : "zh");
+
     if (language === "en") {
       translateAll(document.body);
 

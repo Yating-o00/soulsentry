@@ -81,29 +81,27 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   return (
     <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
       <SidebarHeader className="border-b border-slate-200/50 p-6">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20 flex-shrink-0">
               <Bell className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+            <div className="min-w-0 flex-1">
+              <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent whitespace-nowrap">
                 {t('soulSentry')}
               </h2>
-              <p className="text-xs text-slate-500">{t('tagline')}</p>
+              <p className="text-xs text-slate-500 truncate">{t('tagline')}</p>
             </div>
           </div>
 
           <button
             onClick={toggleLanguage}
-            className="group relative h-8 px-2.5 rounded-full bg-gradient-to-r from-[#384877]/5 to-[#3b5aa2]/5 hover:from-[#384877] hover:to-[#3b5aa2] border border-slate-200 hover:border-transparent flex items-center gap-1.5 transition-all duration-300 hover:shadow-md hover:shadow-[#384877]/20 active:scale-95"
-            title={language === 'zh' ? '一键翻译为英文 / Translate everything to English' : '一键翻译为中文 / Translate everything to Chinese'}
+            className="group relative h-7 w-7 rounded-full bg-gradient-to-r from-[#384877]/5 to-[#3b5aa2]/5 hover:from-[#384877] hover:to-[#3b5aa2] border border-slate-200 hover:border-transparent flex items-center justify-center transition-all duration-300 hover:shadow-md hover:shadow-[#384877]/20 active:scale-95 flex-shrink-0"
+            title={language === 'zh' ? '切换到英文 / Switch to English' : '切换到中文 / Switch to Chinese'}
           >
             <Languages className="w-3.5 h-3.5 text-[#384877] group-hover:text-white transition-colors" />
-            <span className="text-[11px] font-semibold tracking-wide text-slate-600 group-hover:text-white transition-colors flex items-center gap-1">
-              <span className={language === 'zh' ? 'text-[#384877] group-hover:text-white' : 'text-slate-400 group-hover:text-white/60'}>中</span>
-              <span className="text-slate-300 group-hover:text-white/40">/</span>
-              <span className={language === 'en' ? 'text-[#384877] group-hover:text-white' : 'text-slate-400 group-hover:text-white/60'}>EN</span>
+            <span className="absolute -bottom-1 -right-1 text-[8px] font-bold px-1 py-0 rounded-full bg-[#384877] text-white leading-tight">
+              {language === 'zh' ? '中' : 'EN'}
             </span>
           </button>
         </div>

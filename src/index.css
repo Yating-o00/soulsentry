@@ -156,3 +156,61 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+
+/* ============================================================
+   英文模式 UI 优化：当 body[data-lang="en"] 生效时自动应用
+   - 允许长单词换行，避免溢出卡片
+   - 收紧字距、放宽行高，让长英文更易读
+   - 弹窗 / 卡片标题降一档字号，给副信息留空间
+   - 给侧边导航和按钮上的图标+文字组合留出更舒适的间距
+   ============================================================ */
+body[data-lang="en"] {
+  /* 全局长词处理：长单词在卡片/按钮里也能优雅折行 */
+  word-break: normal;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  letter-spacing: 0.005em;
+}
+
+/* 卡片 / 弹窗内的标题与正文：行高更舒适 */
+body[data-lang="en"] h1,
+body[data-lang="en"] h2,
+body[data-lang="en"] h3,
+body[data-lang="en"] h4 {
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+body[data-lang="en"] p,
+body[data-lang="en"] li,
+body[data-lang="en"] span,
+body[data-lang="en"] label {
+  line-height: 1.5;
+}
+
+/* Dialog 标题字号收敛，避免英文过宽溢出 */
+body[data-lang="en"] [role="dialog"] h2,
+body[data-lang="en"] [role="dialog"] h3 {
+  font-size: 0.95em;
+}
+
+/* 截断类（line-clamp / truncate）在英文下放开 1 行高度，防止半字裁切 */
+body[data-lang="en"] .line-clamp-1 { -webkit-line-clamp: 2; }
+body[data-lang="en"] .line-clamp-2 { -webkit-line-clamp: 3; }
+
+/* 防止按钮里的小字号英文挤压：给按钮内边距微增 */
+body[data-lang="en"] button {
+  letter-spacing: 0.01em;
+}
+
+/* Badge / 小标签：英文下允许换行而不是横向溢出 */
+body[data-lang="en"] [class*="rounded-full"][class*="text-xs"],
+body[data-lang="en"] [class*="rounded-md"][class*="text-[10px]"],
+body[data-lang="en"] [class*="rounded-md"][class*="text-[11px]"] {
+  white-space: normal;
+}
+
+/* 侧边栏菜单项：英文下文本可换行,图标与文字间距略增 */
+body[data-lang="en"] [data-sidebar="menu-button"] {
+  white-space: normal;
+  line-height: 1.3;
+}

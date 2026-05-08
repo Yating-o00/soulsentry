@@ -73,6 +73,22 @@ export function useGeolocation({ enabled = true, intervalMs = 120000 } = {}) {
         } catch (e) {
           console.error('Geofence check failed:', e);
         }
+
+        // Additional: AI-driven "on-the-way" matcher for nearby POIs vs errand tasks
+        // (independent of saved geofences — finds shops on the route)
+        try {
+          const matchRes = await base44.functions.invoke('nearbyTaskMatcher', {
+            latitude: coords.latitude,
+            longitude: coords.longitude
+          });
+          if (matchRes?.data?.matched && matchRes.data.card) {
+            window.dispatchEvent(new CustomEvent('on-the-way-reminder', {
+              detail: { card: matchRes.data.card }
+            }));
+          }
+        } catch (e) {
+          console.warn('Nearby task match failed:', e);
+        }
       },
       (err) => {
         setError(err.message);

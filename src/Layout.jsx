@@ -12,6 +12,7 @@ import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
 import GeofenceTracker from "./components/location/GeofenceTracker";
 import SentinelGeoWatcher from "./components/location/SentinelGeoWatcher";
+import OnTheWayReminderHost from "./components/location/OnTheWayReminderHost";
 import { base44 } from "@/api/base44Client";
 import { getCachedUser } from "@/lib/userCache";
 import {
@@ -349,6 +350,7 @@ function LayoutContent({ children }) {
         <NotificationManager />
         <GeofenceTracker />
         <SentinelGeoWatcher />
+        <OnTheWayReminderHost />
 
         {/* 离线状态提示 */}
         {!isOnline && (

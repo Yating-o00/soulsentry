@@ -455,10 +455,18 @@ export default function LifeTaskCard({
                                     <button
                                         type="button"
                                         onClick={(e) => e.stopPropagation()}
-                                        className="flex items-center gap-1.5 text-stone-600 bg-stone-50 hover:bg-stone-100 px-2 py-0.5 rounded-md transition-colors cursor-pointer border border-transparent hover:border-stone-200"
-                                        title="点击调整时间"
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-2 py-0.5 rounded-md transition-colors cursor-pointer border",
+                                            task.tags?.includes('ai_suggested_time')
+                                                ? "text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200/60"
+                                                : "text-stone-600 bg-stone-50 hover:bg-stone-100 border-transparent hover:border-stone-200"
+                                        )}
+                                        title={task.tags?.includes('ai_suggested_time') ? "AI 建议时间，点击调整" : "点击调整时间"}
                                     >
-                                        <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                        {task.tags?.includes('ai_suggested_time')
+                                            ? <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                                            : <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                        }
                                         {(() => {
                                             if (task.reminder_time && task.end_time) {
                                                 const start = new Date(task.reminder_time);
@@ -472,6 +480,9 @@ export default function LifeTaskCard({
                                             if (task.reminder_time) return format(new Date(task.reminder_time), 'HH:mm');
                                             return '全天';
                                         })()}
+                                        {task.tags?.includes('ai_suggested_time') && (
+                                            <span className="text-[10px] text-purple-500 font-medium">建议</span>
+                                        )}
                                     </button>
                                 </MilestoneTimeEditor>
                              ) : (

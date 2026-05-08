@@ -20,6 +20,11 @@
       "format": "date-time",
       "description": "\u7ed3\u675f\u65f6\u95f4"
     },
+    "time_is_suggested": {
+      "type": "boolean",
+      "default": false,
+      "description": "reminder_time \u662f\u5426\u4e3aAI\u5efa\u8bae\u65f6\u95f4\uff08\u7528\u6237\u672a\u660e\u786e\u6307\u5b9a\uff09"
+    },
     "priority": {
       "type": "string",
       "enum": [

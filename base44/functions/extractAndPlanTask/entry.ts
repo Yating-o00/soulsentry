@@ -109,6 +109,29 @@ Deno.serve(async (req) => {
     // ---------- ① 用 Kimi 解析任务 + 规划执行步骤 ----------
     const nowBJ = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
 
+    // 拉取用户最近的完成习惯（按 category 聚合常见处理时段）
+    let userHabits = "暂无历史数据，请基于常识判断";
+    try {
+      const recentBehaviors = await base44.asServiceRole.entities.UserBehavior.filter(
+        { event_type: "task_completed", created_by: user.email },
+        "-created_date",
+        50
+      );
+      if (recentBehaviors && recentBehaviors.length > 0) {
+        const byCategory = {};
+        recentBehaviors.forEach(b => {
+          if (!b.category || b.hour_of_day == null) return;
+          if (!byCategory[b.category]) byCategory[b.category] = [];
+          byCategory[b.category].push(b.hour_of_day);
+        });
+        const lines = Object.entries(byCategory).map(([cat, hours]) => {
+          const avg = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
+          return `- ${cat}：通常在 ${String(avg).padStart(2,'0')}:00 左右处理`;
+        });
+        if (lines.length > 0) userHabits = lines.join('\n');
+      }
+    } catch (_) { /* ignore */ }
+
     const systemMsg = `你是 SoulSentry 的任务规划引擎。严格返回 JSON，不要输出任何其它文本。
 任务分类枚举: work, personal, health, study, family, shopping, finance, other
 优先级枚举: low, medium, high, urgent
@@ -120,11 +143,24 @@ Deno.serve(async (req) => {
 上下文日期: ${contextDate}
 当前北京时间: ${nowBJ}
 
+【用户历史习惯参考】
+${userHabits}
+
 【第一步：解析任务】
 - title：简短清晰的任务标题
 - description：原样使用用户输入（不得改写）
 - reminder_time：ISO 8601 带 +08:00 时区，如 "${contextDate}T15:00:00+08:00"；如是全天则用 "YYYY-MM-DD"
-- is_all_day：无具体时刻则 true
+  · 如果用户**明确**说了时间（如"明天3点"），按用户说的来，time_is_suggested=false
+  · 如果用户**未指定**时间，根据任务语义+用户习惯智能建议时间，并设 time_is_suggested=true：
+    - "买花/带书/取快递/逛超市/路过XX"等顺路型 → 下班时间 18:00-19:00
+    - "晨跑/早餐/晨间" → 07:00-08:00
+    - "午饭/午休" → 12:00-13:00
+    - "吃药" → 饭后 30 分钟
+    - "学习/阅读" → 20:00-21:00
+    - "睡前/冥想" → 22:00-22:30
+    - 其他 → 优先参考下方用户习惯；无习惯数据则默认当天 18:00
+- time_is_suggested：true 表示是 AI 建议的时间，false 表示用户明确指定
+- is_all_day：无具体时刻且无法智能建议时为 true
 - category：根据语义判断（会议/工作→work；吃药/运动→health；学习→study；家人→family;购物→shopping；还款/账单→finance；其他→personal）
 - priority：根据紧迫性判断
 - repeat_rule：识别重复表达，取值之一: "none" | "daily" | "weekly" | "monthly" | "custom"
@@ -158,14 +194,15 @@ Deno.serve(async (req) => {
 严格按以下 JSON 返回：
 {
   "task": {
-    "title": "string",
-    "description": "string",
-    "reminder_time": "string",
-    "is_all_day": false,
-    "category": "string",
-    "priority": "string",
-    "repeat_rule": "none",
-    "custom_recurrence": null
+  "title": "string",
+  "description": "string",
+  "reminder_time": "string",
+  "is_all_day": false,
+  "time_is_suggested": false,
+  "category": "string",
+  "priority": "string",
+  "repeat_rule": "none",
+  "custom_recurrence": null
   },
   "execution_steps": [
     { "step_name": "string", "status": "pending", "detail": "string" }
@@ -192,6 +229,7 @@ Deno.serve(async (req) => {
       description: aiTask.description || input,
       reminder_time: aiTask.reminder_time,
       is_all_day: !!aiTask.is_all_day,
+      time_is_suggested: !!aiTask.time_is_suggested,
       category,
       priority: aiTask.priority || "medium",
       status: "pending",

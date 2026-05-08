@@ -4,27 +4,24 @@ import { base44 } from "@/api/base44Client";
 
 /**
  * GlobalTextTranslator
- * 一键翻译：切到英文时遍历全站 DOM 文本节点，批量调用 AI 翻译并就地替换。
- * 切回中文时还原原始文案。
- *
- * 特性：
- * - 仅翻译包含中文字符的文本节点
- * - 跳过 <script>/<style>/<code>/<pre>/<textarea>/<input>，及含 data-no-translate 的元素
- * - 内存缓存翻译结果，避免重复请求
- * - 对路由切换 / 动态渲染使用 MutationObserver 增量翻译
+ * 一键翻译：切到英文时遍历全站 DOM 文本节点 + 关键属性（placeholder/title/aria-label/alt/value）
+ * 批量调用 AI 翻译并就地替换。切回中文时还原原始文案。
  */
 
 const CN_REGEX = /[\u4e00-\u9fff]/;
-const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA", "INPUT", "NOSCRIPT", "SVG", "PATH"]);
+const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA", "NOSCRIPT", "SVG", "PATH"]);
+const TRANSLATABLE_ATTRS = ["placeholder", "title", "aria-label", "alt"];
 
 const cache = new Map(); // 原文 -> 译文
-const originalMap = new WeakMap(); // textNode -> 原始中文
-const translatedNodes = new Set(); // 已翻译的节点（用于还原）
+const originalTextMap = new WeakMap(); // textNode -> 原始中文
+const originalAttrMap = new WeakMap(); // element -> { attr: original }
+const translatedTextNodes = new Set();
+const translatedAttrEls = new Set();
 
 function shouldSkip(node) {
-  let p = node.parentElement;
+  let p = node.parentElement || node;
   while (p) {
-    if (SKIP_TAGS.has(p.tagName)) return true;
+    if (p.tagName && SKIP_TAGS.has(p.tagName)) return true;
     if (p.hasAttribute && p.hasAttribute("data-no-translate")) return true;
     if (p.isContentEditable) return true;
     p = p.parentElement;
@@ -48,8 +45,25 @@ function collectChineseTextNodes(root) {
   return nodes;
 }
 
+function collectAttrTargets(root) {
+  // 收集需要翻译的属性目标：[{el, attr, text}]
+  const targets = [];
+  const selector = TRANSLATABLE_ATTRS.map((a) => `[${a}]`).join(",");
+  const els = root.querySelectorAll ? root.querySelectorAll(selector) : [];
+  els.forEach((el) => {
+    if (SKIP_TAGS.has(el.tagName)) return;
+    if (el.closest && el.closest("[data-no-translate]")) return;
+    TRANSLATABLE_ATTRS.forEach((attr) => {
+      const v = el.getAttribute(attr);
+      if (v && CN_REGEX.test(v)) {
+        targets.push({ el, attr, text: v });
+      }
+    });
+  });
+  return targets;
+}
+
 async function translateBatch(texts) {
-  // 批量翻译：用编号包装，要求模型按 JSON 返回
   const indexed = texts.map((t, i) => `${i + 1}. ${t}`).join("\n");
   const prompt = `Translate each of the following Chinese UI strings into concise, natural English suitable for a productivity app. Preserve emoji, numbers, punctuation, and placeholders. Do NOT add explanations.
 
@@ -77,55 +91,87 @@ ${indexed}`;
   }
 }
 
-async function translateAll(root) {
-  const nodes = collectChineseTextNodes(root);
-  if (!nodes.length) return;
-
-  // 保存原始文本
-  nodes.forEach((n) => {
-    if (!originalMap.has(n)) originalMap.set(n, n.nodeValue);
-  });
-
-  // 收集需要请求的去重文本
-  const uniqueTexts = [];
-  const seen = new Set();
-  nodes.forEach((n) => {
-    const t = n.nodeValue.trim();
-    if (!cache.has(t) && !seen.has(t)) {
-      seen.add(t);
-      uniqueTexts.push(t);
-    }
-  });
-
-  // 分批翻译（每批 ~30 条）
+async function ensureTranslated(uniqueTexts) {
+  const need = uniqueTexts.filter((t) => !cache.has(t));
   const BATCH = 30;
-  for (let i = 0; i < uniqueTexts.length; i += BATCH) {
-    const slice = uniqueTexts.slice(i, i + BATCH);
+  for (let i = 0; i < need.length; i += BATCH) {
+    const slice = need.slice(i, i + BATCH);
     const translated = await translateBatch(slice);
     slice.forEach((src, idx) => cache.set(src, translated[idx]));
   }
+}
 
-  // 应用翻译
-  nodes.forEach((n) => {
-    const original = originalMap.get(n) || n.nodeValue;
+async function translateAll(root) {
+  const textNodes = collectChineseTextNodes(root);
+  const attrTargets = collectAttrTargets(root);
+  if (!textNodes.length && !attrTargets.length) return;
+
+  // 保存原始
+  textNodes.forEach((n) => {
+    if (!originalTextMap.has(n)) originalTextMap.set(n, n.nodeValue);
+  });
+  attrTargets.forEach(({ el, attr, text }) => {
+    let store = originalAttrMap.get(el);
+    if (!store) {
+      store = {};
+      originalAttrMap.set(el, store);
+    }
+    if (!(attr in store)) store[attr] = text;
+  });
+
+  // 去重
+  const seen = new Set();
+  const uniqueTexts = [];
+  const pushUnique = (t) => {
+    const trimmed = t.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    uniqueTexts.push(trimmed);
+  };
+  textNodes.forEach((n) => pushUnique(n.nodeValue));
+  attrTargets.forEach(({ text }) => pushUnique(text));
+
+  await ensureTranslated(uniqueTexts);
+
+  // 应用文本
+  textNodes.forEach((n) => {
+    const original = originalTextMap.get(n) || n.nodeValue;
     const trimmed = original.trim();
     const translated = cache.get(trimmed);
     if (translated && translated !== trimmed) {
-      // 保留前后空白
       const leading = original.match(/^\s*/)[0];
       const trailing = original.match(/\s*$/)[0];
       n.nodeValue = leading + translated + trailing;
-      translatedNodes.add(n);
+      translatedTextNodes.add(n);
+    }
+  });
+
+  // 应用属性
+  attrTargets.forEach(({ el, attr, text }) => {
+    const trimmed = text.trim();
+    const translated = cache.get(trimmed);
+    if (translated && translated !== trimmed) {
+      el.setAttribute(attr, translated);
+      translatedAttrEls.add(el);
     }
   });
 }
 
 function restoreAll() {
-  translatedNodes.forEach((n) => {
-    const original = originalMap.get(n);
+  translatedTextNodes.forEach((n) => {
+    const original = originalTextMap.get(n);
     if (original != null) n.nodeValue = original;
   });
-  translatedNodes.clear();
+  translatedTextNodes.clear();
+
+  translatedAttrEls.forEach((el) => {
+    const store = originalAttrMap.get(el);
+    if (!store) return;
+    Object.entries(store).forEach(([attr, original]) => {
+      if (original != null) el.setAttribute(attr, original);
+    });
+  });
+  translatedAttrEls.clear();
 }
 
 export default function GlobalTextTranslator() {
@@ -135,21 +181,14 @@ export default function GlobalTextTranslator() {
 
   useEffect(() => {
     if (language === "en") {
-      // 首次/切换时翻译整页
       translateAll(document.body);
 
-      // 监听后续 DOM 变化（路由切换、异步渲染）
       const observer = new MutationObserver((mutations) => {
         let hasNew = false;
         for (const m of mutations) {
-          if (m.addedNodes && m.addedNodes.length) {
-            hasNew = true;
-            break;
-          }
-          if (m.type === "characterData") {
-            hasNew = true;
-            break;
-          }
+          if (m.addedNodes && m.addedNodes.length) { hasNew = true; break; }
+          if (m.type === "characterData") { hasNew = true; break; }
+          if (m.type === "attributes") { hasNew = true; break; }
         }
         if (!hasNew) return;
         clearTimeout(debounceRef.current);
@@ -161,6 +200,8 @@ export default function GlobalTextTranslator() {
         childList: true,
         subtree: true,
         characterData: true,
+        attributes: true,
+        attributeFilter: TRANSLATABLE_ATTRS,
       });
       observerRef.current = observer;
 
@@ -169,7 +210,6 @@ export default function GlobalTextTranslator() {
         clearTimeout(debounceRef.current);
       };
     } else {
-      // 切回中文，还原
       if (observerRef.current) {
         observerRef.current.disconnect();
         observerRef.current = null;

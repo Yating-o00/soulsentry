@@ -586,6 +586,25 @@ export default function LifeTaskCard({
                             );
                         }
 
+                        // 检测顺路型/地点关联任务（路过、带、买、取、寄、加油等关键词）
+                        const title = task.title || '';
+                        const isOnTheWay = /路过|顺路|带.*回|带.*去|捎|买|取|寄|快递|加油|超市|花店|药店|便利店/.test(title);
+                        if (isOnTheWay) {
+                            return (
+                                <>
+                                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-300 to-green-400 flex items-center justify-center flex-shrink-0 shadow-sm shadow-emerald-500/20">
+                                        <Navigation className="w-4 h-4 text-white" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold text-emerald-900 tracking-tight">顺路提醒已开启</p>
+                                        <p className="text-[11px] text-emerald-700/80 truncate leading-relaxed">
+                                            经过相关地点时会自动提醒你
+                                        </p>
+                                    </div>
+                                </>
+                            );
+                        }
+
                         // Default
                         return (
                             <>

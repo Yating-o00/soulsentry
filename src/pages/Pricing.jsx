@@ -275,14 +275,16 @@ export default function Pricing() {
                             <Icon className="w-5 h-5" strokeWidth={2} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 leading-tight">{feature.name}</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">{m.toFixed(1)}x 复杂度</p>
-                          </div>
-                          <div
-                            className="text-[11px] font-bold px-2 py-0.5 rounded-md"
-                            style={{ backgroundColor: `${PRIMARY}12`, color: PRIMARY }}
-                          >
-                            {feature.estimated?.replace(/\s?点\/次$/, "") || `${m}x`}
+                            <p className="text-sm font-semibold text-slate-900 leading-tight break-words">{feature.name}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span
+                                className="text-[10px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap"
+                                style={{ backgroundColor: `${PRIMARY}12`, color: PRIMARY }}
+                              >
+                                {feature.estimated?.replace(/\s?点\/次$/, "") || `${m}x`}
+                              </span>
+                              <span className="text-[11px] text-slate-500">{m.toFixed(1)}x 复杂度</span>
+                            </div>
                           </div>
                         </div>
 

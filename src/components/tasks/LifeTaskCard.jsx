@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
+import SnoozePopover from "@/components/tasks/SnoozePopover";
 
 export default function LifeTaskCard({ 
   task, 
@@ -602,13 +603,24 @@ export default function LifeTaskCard({
                     })()}
 
                     {/* Right Action - Snooze */}
-                    <button
-                        className="flex items-center gap-1 text-[11px] font-medium text-stone-500 hover:text-stone-900 px-2.5 py-1.5 rounded-lg hover:bg-white/70 active:scale-95 transition-all whitespace-nowrap flex-shrink-0"
-                        onClick={(e) => { e.stopPropagation(); /* onSnooze */ }}
+                    <SnoozePopover
+                        onSnooze={(newTimeISO) => {
+                            onUpdateTask && onUpdateTask(task, {
+                                reminder_time: newTimeISO,
+                                status: 'snoozed',
+                                snooze_until: newTimeISO,
+                                snooze_count: (task.snooze_count || 0) + 1,
+                            });
+                        }}
                     >
-                        <Clock className="w-3 h-3" />
-                        推迟
-                    </button>
+                        <button
+                            className="flex items-center gap-1 text-[11px] font-medium text-stone-500 hover:text-stone-900 px-2.5 py-1.5 rounded-lg hover:bg-white/70 active:scale-95 transition-all whitespace-nowrap flex-shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Clock className="w-3 h-3" />
+                            推迟
+                        </button>
+                    </SnoozePopover>
                 </div>
             )}
 

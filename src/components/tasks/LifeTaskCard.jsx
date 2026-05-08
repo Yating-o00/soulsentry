@@ -576,7 +576,7 @@ export default function LifeTaskCard({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className={cn("text-xs font-semibold tracking-tight", isWork ? "text-indigo-900" : "text-purple-900")}>
-                                            {task.ai_analysis?.status_summary ? "AI 洞察" : "AI 建议"}
+                                            灵魂哨兵守护中
                                         </p>
                                         <p className={cn("text-[11px] truncate leading-relaxed", isWork ? "text-indigo-700/80" : "text-purple-700/80")}>
                                             {aiContent}

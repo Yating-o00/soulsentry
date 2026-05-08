@@ -520,7 +520,7 @@ export default function Tasks() {
             <div className="space-y-10">
               <SmartGroupSection
                 title="现在能做"
-                description="无固定时间或当下可执行的事项"
+                description="长期计划且当下可执行"
                 icon={Zap}
                 iconBg="bg-emerald-50"
                 iconColor="text-emerald-600"

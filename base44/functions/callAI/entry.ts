@@ -14,18 +14,18 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  *  - Different `feature` keys can apply a multiplier (see FEATURE_MULTIPLIERS)
  */
 
-// 计费倍率：保持透明可预期，最高 1.5x，避免感知突兀
+// 计费倍率：全局 ×5（在原倍率基础上统一放大 5 倍）
 const FEATURE_MULTIPLIERS = {
-  general_ai: 1.0,
-  emotional_reminder: 1.0,
-  smart_priority: 1.1,
-  note_summary: 1.2,
-  daily_briefing: 1.3,
-  task_breakdown: 1.4,
-  schedule_optimize: 1.4,
-  weekly_plan: 1.5,
-  monthly_plan: 1.5,
-  default: 1.0,
+  general_ai: 5.0,
+  emotional_reminder: 5.0,
+  smart_priority: 5.5,
+  note_summary: 6.0,
+  daily_briefing: 6.5,
+  task_breakdown: 7.0,
+  schedule_optimize: 7.0,
+  weekly_plan: 7.5,
+  monthly_plan: 7.5,
+  default: 5.0,
 };
 
 // 1 credit ≈ 200 tokens (input + output) —— 比之前便宜一半，更贴近用户直觉

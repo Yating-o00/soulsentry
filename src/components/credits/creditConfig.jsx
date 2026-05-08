@@ -7,56 +7,56 @@
 export const AI_FEATURES = {
   smart_priority: {
     name: "智能优先级建议",
-    multiplier: 2.2,
-    estimated: "约 10-30 点/次",
+    multiplier: 5.5,
+    estimated: "约 50-150 点/次",
     description: "基于实际 token 用量动态计费"
   },
   task_breakdown: {
     name: "任务智能分解",
-    multiplier: 2.8,
-    estimated: "约 30-80 点/次",
+    multiplier: 7.0,
+    estimated: "约 150-400 点/次",
     description: "基于实际 token 用量动态计费"
   },
   note_summary: {
     name: "笔记智能摘要",
-    multiplier: 2.4,
-    estimated: "约 20-60 点/次",
+    multiplier: 6.0,
+    estimated: "约 100-300 点/次",
     description: "基于实际 token 用量动态计费"
   },
   schedule_optimize: {
     name: "日程智能优化",
-    multiplier: 2.8,
-    estimated: "约 30-80 点/次",
+    multiplier: 7.0,
+    estimated: "约 150-400 点/次",
     description: "基于实际 token 用量动态计费"
   },
   emotional_reminder: {
     name: "情感化提醒",
-    multiplier: 2.0,
-    estimated: "约 10-20 点/次",
+    multiplier: 5.0,
+    estimated: "约 50-100 点/次",
     description: "基于实际 token 用量动态计费"
   },
   daily_briefing: {
     name: "每日智能简报",
-    multiplier: 2.6,
-    estimated: "约 20-50 点/次",
+    multiplier: 6.5,
+    estimated: "约 100-250 点/次",
     description: "基于实际 token 用量动态计费"
   },
   weekly_plan: {
     name: "周计划生成",
-    multiplier: 3.0,
-    estimated: "约 50-120 点/次",
+    multiplier: 7.5,
+    estimated: "约 250-600 点/次",
     description: "基于实际 token 用量动态计费"
   },
   monthly_plan: {
     name: "月计划生成",
-    multiplier: 3.0,
-    estimated: "约 80-200 点/次",
+    multiplier: 7.5,
+    estimated: "约 400-1000 点/次",
     description: "基于实际 token 用量动态计费"
   },
   general_ai: {
     name: "AI 对话",
-    multiplier: 2.0,
-    estimated: "约 10-20 点/次",
+    multiplier: 5.0,
+    estimated: "约 50-100 点/次",
     description: "基于实际 token 用量动态计费"
   }
 };

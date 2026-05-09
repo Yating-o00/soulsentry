@@ -179,24 +179,66 @@ export default function NotificationsPage() {
     <div className="min-h-screen bg-slate-50/30 p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-              智能执行控制台
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] font-medium text-emerald-600">引擎在线</span>
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-white to-slate-50/80 border border-slate-200/70 shadow-sm p-5 md:p-6">
+          {/* 装饰性光晕 */}
+          <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-gradient-to-br from-[#384877]/8 to-emerald-400/8 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-10 w-40 h-40 rounded-full bg-gradient-to-tr from-blue-400/5 to-transparent blur-3xl pointer-events-none" />
+
+          <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2.5 flex-wrap mb-2">
+                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md shadow-[#384877]/20 flex-shrink-0">
+                  <Zap className="w-4.5 h-4.5 text-white" strokeWidth={2.5} />
+                </div>
+                <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-slate-900 via-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+                  智能执行控制台
+                </h1>
+                {/* 引擎在线 - 精致徽标 */}
+                <div className="group relative flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-emerald-50 to-emerald-50/70 border border-emerald-200/80 shadow-sm">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <span className="text-[10px] font-semibold tracking-wide text-emerald-700">引擎在线</span>
+                </div>
               </div>
-            </h1>
-            <p className="text-sm text-slate-500">意图理解 → 智能规划 → 自动执行 → 结果反馈</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link to={createPageUrl("ReminderSettings")}><BellRing className="w-4 h-4 mr-1.5" />提醒设置</Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link to={createPageUrl("NotificationSettings")}><Settings className="w-4 h-4 mr-1.5" />通知规则</Link>
-            </Button>
+              {/* 流程胶囊标签 */}
+              <div className="flex items-center gap-1 flex-wrap text-[11px] md:text-xs text-slate-500">
+                {['意图理解', '智能规划', '自动执行', '结果反馈'].map((step, idx, arr) => (
+                  <React.Fragment key={step}>
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100/80 text-slate-600 font-medium">
+                      {step}
+                    </span>
+                    {idx < arr.length - 1 && (
+                      <span className="text-slate-300">→</span>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 rounded-xl bg-white/80 backdrop-blur border-slate-200 hover:border-[#384877]/40 hover:bg-[#384877]/5 hover:text-[#384877] transition-all"
+              >
+                <Link to={createPageUrl("ReminderSettings")}>
+                  <BellRing className="w-4 h-4 mr-1.5" />提醒设置
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 rounded-xl bg-white/80 backdrop-blur border-slate-200 hover:border-[#384877]/40 hover:bg-[#384877]/5 hover:text-[#384877] transition-all"
+              >
+                <Link to={createPageUrl("NotificationSettings")}>
+                  <Settings className="w-4 h-4 mr-1.5" />通知规则
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
 

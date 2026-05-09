@@ -4,12 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UnifiedTaskInput from "@/components/tasks/UnifiedTaskInput";
 import { generateExecutionPlan, executeStep } from "./ExecutionPlanGenerator";
-import { getCurrentLocationContext } from "@/lib/locationContext.js";
-import RoutineQuickAsk from "@/components/tasks/RoutineQuickAsk";
 
 export default function SmartInputBar() {
   const [inputValue, setInputValue] = useState("");
-  const [routineAskOpen, setRoutineAskOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const handleAddTask = async (taskData) => {
@@ -26,7 +23,7 @@ export default function SmartInputBar() {
         task_title: userInput.slice(0, 60),
         original_input: userInput,
         execution_status: "parsing",
-        category: semanticHint?.primary_intent === "wish" ? "note" : 
+        category: semanticHint?.primary_intent === "wish" ? "note" :
                   semanticHint?.primary_intent === "note" ? "note" : "task",
         execution_steps: [
           { step_name: "深度语义解析", status: "completed", detail: semanticHint ? `意图: ${semanticHint.primary_intent} (${Math.round((semanticHint.intent_confidence || 0) * 100)}%)` : "跳过", timestamp: now },
@@ -49,25 +46,10 @@ export default function SmartInputBar() {
       console.error("Failed to create execution record:", e);
     }
 
-    // 获取当前位置语义 + 用户作息（用于智能推断顺路型任务的最佳时间）
-    let locationContext = null;
-    try {
-      locationContext = await getCurrentLocationContext();
-    } catch (e) {
-      console.warn("locationContext failed:", e);
-    }
-
-    // 顺路型关键词 + 缺少作息数据时，提示用户补充
-    const isLocationTriggeredTask = /路过|顺路|经过|出门时|回家时|下次去|去.{0,4}时/.test(userInput);
-    const hasRoutine = !!locationContext?.daily_routine?.leave_home || !!locationContext?.daily_routine?.arrive_home;
-    if (isLocationTriggeredTask && !hasRoutine) {
-      setRoutineAskOpen(true);
-    }
-
-    // Generate AI execution plan with semantic hints + location context
+    // Generate AI execution plan with semantic hints
     let plan = null;
     try {
-      plan = await generateExecutionPlan(userInput, semanticHint, locationContext);
+      plan = await generateExecutionPlan(userInput, semanticHint);
     } catch (e) {
       console.error("AI plan generation failed:", e);
     }
@@ -225,17 +207,10 @@ export default function SmartInputBar() {
   };
 
   return (
-    <>
-      <UnifiedTaskInput
-        value={inputValue}
-        onChange={setInputValue}
-        onAddTask={handleAddTask}
-      />
-      <RoutineQuickAsk
-        open={routineAskOpen}
-        onOpenChange={setRoutineAskOpen}
-        reasoning="检测到这是顺路型提醒。告诉我你的作息，下次 AI 就能精准推断'回家路上'或'出门时'的最佳时机。"
-      />
-    </>
+    <UnifiedTaskInput
+      value={inputValue}
+      onChange={setInputValue}
+      onAddTask={handleAddTask}
+    />
   );
 }

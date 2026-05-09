@@ -39,29 +39,71 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
     }
   }, [messages, draft, isLoading]);
 
-  const callAI = async (userText, prevDraft, lastAiReply) => {
+  const callAI = async (userText, prevDraft, lastAiReply, locationCtx) => {
     const now = new Date();
+
+    // 构建位置/作息上下文区块
+    let ctxBlock = "";
+    if (locationCtx) {
+      const placeMap = {
+        home: "家中", office: "办公室", gym: "健身房", school: "学校",
+        shopping: "购物场所", hospital: "医院", restaurant: "餐厅",
+        other: "外出（非常用地点）", unknown: "位置未知（用户拒绝定位或无匹配）",
+      };
+      const placeText = placeMap[locationCtx.current_place_type] || "位置未知";
+      const placeName = locationCtx.current_place_name ? `（${locationCtx.current_place_name}）` : "";
+      ctxBlock += `\n【当前位置】${placeText}${placeName}`;
+      ctxBlock += `\n【当前时间】${locationCtx.current_time}（${locationCtx.is_workday ? "工作日" : "休息日"}）`;
+      if (locationCtx.daily_routine) {
+        const r = locationCtx.daily_routine;
+        const lines = [];
+        if (r.wake_up) lines.push(`起床 ${r.wake_up}`);
+        if (r.leave_home) lines.push(`出门 ${r.leave_home}`);
+        if (r.arrive_office) lines.push(`到办公室 ${r.arrive_office}`);
+        if (r.leave_office) lines.push(`下班 ${r.leave_office}`);
+        if (r.arrive_home) lines.push(`到家 ${r.arrive_home}`);
+        if (r.sleep) lines.push(`睡觉 ${r.sleep}`);
+        if (lines.length > 0) ctxBlock += `\n【用户日常作息】${lines.join(" → ")}`;
+      }
+    }
+
     const prompt = `你是一个任务结构化助手。用户用自然语言描述任务，可能分多轮补充修正。请基于"已有解析"、"上一轮 AI 提问"和"本轮用户输入"，更新结构化任务。
 
-当前时间：${now.toISOString()}（用户时区 Asia/Shanghai）
+当前时间：${now.toISOString()}（用户时区 Asia/Shanghai）${ctxBlock}
 ${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首轮，无已有解析）"}
 ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 
 本轮用户输入："${userText}"
 
 ⚠️ 极其重要的对话规则：
-- 如果"上一轮 AI 提问"是一个**是/否问题**（如"是否需要添加提醒？"、"是否要设置截止时间？"、"要不要拆成子任务？"），那么用户的简短回答（如"是"、"好"、"添加"、"要"、"对"、"嗯"、"否"、"不"、"不用"、"不需要"、"算了"）是对该问题的**回答**，绝对不可以当作任务标题、子任务或描述内容！
-  - "是/好/要/添加/对/嗯" → 表示同意，请执行 AI 上一轮提议的操作（如开启提醒、添加默认子任务等），并在 reply 中再追问具体细节（如"好的，要在什么时间提醒？"）
-  - "否/不/不用/不需要/算了" → 表示拒绝，跳过该项设置即可
-- 如果用户输入是具体内容（如"准备会议资料"、"明天下午3点"），才作为新字段或新子任务处理。
-- 当不确定用户意图时，宁可在 reply 中再问一次，也不要乱填字段。
+- 如果"上一轮 AI 提问"是一个**是/否问题**，用户的简短回答（"是/好/要/对/嗯/否/不/不用"）是对该问题的**回答**，绝不可当作任务标题或子任务！
+  - 同意 → 执行上一轮 AI 提议，在 reply 里追问下一步具体细节
+  - 拒绝 → 跳过该设置
+- 用户输入是具体内容时，才作为新字段或新子任务处理
+- 不确定时宁可再问一次，也不乱填
+
+🧠 智能时间推断（极重要）：
+当用户**没有明确说出时间**（如"路过加油站提醒我加油"、"出门买菜"），你必须结合【当前位置】+【当前时间】+【用户作息】综合推断 reminder_time，不要简单默认 09:00：
+
+★ 顺路型 / 位置触发型任务（含"路过"、"顺便"、"出门"、"下班路上"等）：
+  - 关键：找用户**下一次会经过该地点**的时间窗口
+  - 当前在【家中】→ 推断为下次出门通勤前 15 分钟（参考作息 leave_home，无则默认 08:45）
+  - 当前在【办公室】或【外出】→ 推断为下次回家路上（参考作息 leave_office/arrive_home，无则默认 18:30）
+  - 当前时间已接近通勤时段（差 ≤30 分钟）→ 直接安排在通勤开始时刻
+  - 周末/休息日 → 安排在白天外出常见时段（10:00 或 15:30）
+
+★ 时间锚定型任务：晨跑 7:30 / 午饭 12:00 / 吃药 餐后30分钟 / 学习 20:00 / 睡前 22:00
+
+★ 在 task.time_reasoning 字段（不是 description）用一句中文说明**为什么定在这个时间**（例如"你现在在办公室，下班 18:00 后回家路上会路过"）
+
+★ 如果【当前位置】= "unknown" 或【用户作息】缺失，且任务是顺路/位置型 → 在 reply 里**主动追问一句**："为了帮你算最佳提醒时机，告诉我一下：你现在大概在家还是办公室？平时几点出门、几点到家？"，并把 needs_user_context 设为 true。
 
 其他规则：
 1. 合并/修正字段（用户新的具体输入优先覆盖旧值）
 2. 时间表达解析为 ISO 字符串
-3. 只有当用户明确说出**多个具体动作**时，才拆为 subtasks；不要把"添加""好""是"这类回应词当作 subtask
-4. 用一句简短中文回复，告诉用户你理解了什么；如果有歧义请提出 1 个澄清问题
-5. confidence 表示当前解析的完整度（0-100），>=80 表示信息已较完整
+3. 只有用户明确说**多个具体动作**才拆 subtasks
+4. confidence 表示当前解析完整度（0-100），>=80 表示信息已完整
+
 返回 JSON。`;
 
     return await invokeAI({
@@ -71,6 +113,7 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
         properties: {
           reply: { type: "string", description: "给用户的简短回复或澄清问题" },
           confidence: { type: "number" },
+          needs_user_context: { type: "boolean", description: "是否需要用户补充位置/作息信息" },
           task: {
             type: "object",
             properties: {
@@ -78,6 +121,7 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
               description: { type: "string" },
               reminder_time: { type: "string", description: "ISO 时间" },
               end_time: { type: "string" },
+              time_reasoning: { type: "string", description: "为什么定在这个时间（中文一句话）" },
               priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
               category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
               tags: { type: "array", items: { type: "string" } },
@@ -109,8 +153,16 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
     setIsLoading(true);
 
     try {
+      // 获取当前位置 + 作息上下文（仅首轮或 draft 还没时间时拿一次，避免重复定位）
+      let locationCtx = null;
+      try {
+        locationCtx = await getCurrentLocationContext();
+      } catch (e) {
+        console.warn("Location context unavailable:", e);
+      }
+
       const lastAiMsg = [...messages].reverse().find(m => m.role === "ai");
-      const res = await callAI(text, draft, lastAiMsg?.content);
+      const res = await callAI(text, draft, lastAiMsg?.content, locationCtx);
       if (res?.task) setDraft(res.task);
       setMessages(prev => [...prev, {
         role: "ai",
@@ -139,7 +191,12 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
       toast.error("请先描述任务标题");
       return;
     }
-    await onConfirm(draft);
+    // 把 time_reasoning 作为 ai_context_summary 透传，让灵魂哨兵卡片能展示
+    const enriched = {
+      ...draft,
+      ai_context_summary: draft.time_reasoning || draft.ai_context_summary,
+    };
+    await onConfirm(enriched);
     setMessages([]);
     setDraft(null);
     onChange("");
@@ -218,6 +275,16 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
               )}
               {draft.description && (
                 <div className="text-sm text-slate-600">{draft.description}</div>
+              )}
+
+              {draft.time_reasoning && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-100">
+                  <Brain className="w-3.5 h-3.5 text-purple-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-xs text-slate-700 leading-relaxed">
+                    <span className="font-semibold text-purple-700">AI 时机推断：</span>
+                    {draft.time_reasoning}
+                  </span>
+                </div>
               )}
 
               <div className="flex flex-wrap gap-2">

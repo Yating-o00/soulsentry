@@ -4,11 +4,12 @@ import { invokeAI } from "@/components/utils/aiHelper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Send, Loader2, Check, RotateCcw, Bot, User, CalendarIcon, Clock, Tag, Flag, ListTodo } from "lucide-react";
+import { Sparkles, Send, Loader2, Check, RotateCcw, Bot, User, CalendarIcon, Clock, Tag, Flag, ListTodo, MapPin, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { getCurrentLocationContext } from "@/lib/locationContext";
 
 const CATEGORY_LABELS = {
   work: "💼 工作", personal: "👤 个人", health: "❤️ 健康", study: "📚 学习",

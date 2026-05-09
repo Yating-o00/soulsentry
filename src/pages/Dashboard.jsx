@@ -166,10 +166,14 @@ export default function Dashboard() {
     isToday(parseISO(t.completed_at))
   ), [rootTasks]);
 
-  // Stats
-  const completionRate = React.useMemo(() => todayTasks.length > 0 
-    ? Math.round((todayTasks.filter(t => t.status === 'completed').length / todayTasks.length) * 100) 
-    : 0, [todayTasks]);
+  // Stats - 进度条 = 今天实际完成数 / (今天待办 + 今天已完成)
+  // 与"今日已完成"卡片口径保持一致，避免被 processedTasks 强制 pending 污染
+  const completionRate = React.useMemo(() => {
+    const pendingToday = todayTasks.filter(t => t.status === 'pending').length;
+    const doneToday = completedToday.length;
+    const total = pendingToday + doneToday;
+    return total > 0 ? Math.round((doneToday / total) * 100) : 0;
+  }, [todayTasks, completedToday]);
 
 
 

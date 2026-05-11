@@ -48,6 +48,37 @@ const DEFAULT_STEPS = [
   { key: 'automation', text: '生成自动化任务…' },
 ];
 
+/**
+ * 查找当日已经创建的"根父约定"用于"追加"复用。
+ * 规则:
+ *   - 必须无 parent_task_id (顶层约定)
+ *   - reminder_time 落在 dateStr 当天 (Asia/Shanghai)
+ *   - 没有标签 "AI自动执行" / "情境时间线"(那些是子约定标签)
+ *   - 按 created_date 升序取最早一个(代表当日首次输入的整体意图)
+ */
+async function findExistingParentForDay(dateStr) {
+  if (!dateStr) return null;
+  try {
+    const tasks = await base44.entities.Task.list("-created_date", 200);
+    const dayStart = new Date(`${dateStr}T00:00:00+08:00`).getTime();
+    const dayEnd = dayStart + 24 * 3600 * 1000;
+    const candidates = (tasks || []).filter(t => {
+      if (!t || t.deleted_at || t.parent_task_id) return false;
+      const tags = Array.isArray(t.tags) ? t.tags : [];
+      if (tags.includes("AI自动执行") || tags.includes("情境时间线") || tags.includes("来自日规划")) return false;
+      if (!t.reminder_time) return false;
+      const ts = new Date(t.reminder_time).getTime();
+      if (isNaN(ts)) return false;
+      return ts >= dayStart && ts < dayEnd;
+    });
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => new Date(a.created_date).getTime() - new Date(b.created_date).getTime());
+    return candidates[0];
+  } catch (_) {
+    return null;
+  }
+}
+
 export default function SmartDailyPlanner() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [selectedDateStr, setSelectedDateStr] = useState(todayStr);
@@ -205,17 +236,21 @@ export default function SmartDailyPlanner() {
 
         // 后台静默同步到约定和心签
         setSyncStatus('syncing');
+        const isAppend = !!existingPlanId; // 当日已有规划 → 本次为"追加"，复用既有父约定，不再创建新父
+        const taskPromise = isAppend
+          ? findExistingParentForDay(selectedDateStr)
+          : extractAndCreateTasks(capturedInput, selectedDateStr).then(arr => arr?.[0] || null);
+
         Promise.allSettled([
-          extractAndCreateTasks(capturedInput, selectedDateStr),
+          taskPromise,
           syncPlanToNote(capturedInput, "daily_plan", { date: selectedDateStr })
         ]).then(async results => {
           const taskResult = results[0];
           const noteResult = results[1];
-          // 把情境时间线 + 自动执行清单挂到父约定下,而不是创建独立顶层任务
-          if (taskResult.status === 'fulfilled' && taskResult.value?.[0]?.id) {
-            const parentId = taskResult.value[0].id;
+          const parentTask = taskResult.status === 'fulfilled' ? taskResult.value : null;
+          if (parentTask?.id) {
             const timelineForDay = (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr);
-            await attachPlanChildrenToParent(parentId, {
+            await attachPlanChildrenToParent(parentTask.id, {
               timeline: timelineForDay,
               automations: data.automations || [],
               dateStr: selectedDateStr,
@@ -223,7 +258,8 @@ export default function SmartDailyPlanner() {
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
           }
           const parts = [];
-          if (taskResult.status === 'fulfilled' && taskResult.value?.length > 0) parts.push(`${taskResult.value.length} 个约定`);
+          if (!isAppend && parentTask) parts.push('1 个约定');
+          else if (isAppend && parentTask) parts.push('已并入当日约定');
           if (noteResult.status === 'fulfilled' && noteResult.value) parts.push('心签');
           if (parts.length > 0) toast.success(`已同步到${parts.join(' + ')}`, { icon: '🔄' });
           setSyncStatus('done');
@@ -266,16 +302,21 @@ export default function SmartDailyPlanner() {
 
         // 后台静默同步到约定和心签
         setSyncStatus('syncing');
+        const targetHasPlan = targetPlans && targetPlans.length > 0;
+        const taskPromise = targetHasPlan
+          ? findExistingParentForDay(targetDate)
+          : extractAndCreateTasks(capturedInput, targetDate).then(arr => arr?.[0] || null);
+
         Promise.allSettled([
-          extractAndCreateTasks(capturedInput, targetDate),
+          taskPromise,
           syncPlanToNote(capturedInput, "daily_plan", { date: targetDate })
         ]).then(async results => {
           const taskResult = results[0];
           const noteResult = results[1];
-          if (taskResult.status === 'fulfilled' && taskResult.value?.[0]?.id) {
-            const parentId = taskResult.value[0].id;
+          const parentTask = taskResult.status === 'fulfilled' ? taskResult.value : null;
+          if (parentTask?.id) {
             const timelineForDay = (data.timeline || []).filter(t => !t.date || t.date === targetDate);
-            await attachPlanChildrenToParent(parentId, {
+            await attachPlanChildrenToParent(parentTask.id, {
               timeline: timelineForDay,
               automations: data.automations || [],
               dateStr: targetDate,
@@ -283,7 +324,8 @@ export default function SmartDailyPlanner() {
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
           }
           const parts = [];
-          if (taskResult.status === 'fulfilled' && taskResult.value?.length > 0) parts.push(`${taskResult.value.length} 个约定`);
+          if (!targetHasPlan && parentTask) parts.push('1 个约定');
+          else if (targetHasPlan && parentTask) parts.push('已并入当日约定');
           if (noteResult.status === 'fulfilled' && noteResult.value) parts.push('心签');
           if (parts.length > 0) toast.success(`已同步到${parts.join(' + ')}`, { icon: '🔄' });
           setSyncStatus('done');

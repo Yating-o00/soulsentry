@@ -73,21 +73,35 @@ function App() {
         <SonnerToaster
           position="top-center"
           closeButton
+          offset={20}
+          gap={10}
+          duration={3500}
           toastOptions={{
+            unstyled: false,
             classNames: {
-              toast: "group rounded-2xl border shadow-lg shadow-black/5 backdrop-blur-md px-4 py-3 flex items-center gap-3",
-              title: "text-sm font-semibold leading-tight",
-              description: "text-xs opacity-80",
+              toast:
+                "group !w-auto !max-w-[440px] !rounded-2xl !border !shadow-[0_8px_30px_-8px_rgba(15,23,42,0.18),0_2px_6px_-2px_rgba(15,23,42,0.08)] !backdrop-blur-xl !px-3.5 !py-3 !pr-10 !flex !items-center !gap-3 !font-sans",
+              title: "!text-[13.5px] !font-semibold !leading-snug !tracking-tight",
+              description: "!text-[12px] !opacity-75 !leading-relaxed !mt-0.5",
+              icon: "!w-8 !h-8 !rounded-xl !flex !items-center !justify-center !shrink-0 !shadow-sm [&>svg]:!w-4 [&>svg]:!h-4",
               closeButton:
-                "!left-auto !right-2 !top-1/2 !-translate-y-1/2 !w-6 !h-6 !rounded-full !bg-white/70 hover:!bg-white !border !border-black/5 !text-slate-500 hover:!text-slate-700 transition-all",
+                "!left-auto !right-2.5 !top-1/2 !-translate-y-1/2 !w-6 !h-6 !rounded-full !bg-white/80 hover:!bg-white !border !border-black/[0.06] !text-slate-400 hover:!text-slate-700 !shadow-sm hover:!shadow !transition-all hover:!scale-105 active:!scale-95",
+              default:
+                "!bg-white/95 !border-slate-200/80 !text-slate-900 [&_[data-icon]]:!bg-slate-100 [&_[data-icon]]:!text-slate-600",
               success:
-                "!bg-emerald-50/95 !border-emerald-200/70 !text-emerald-900 [&_[data-icon]]:!text-emerald-600",
+                "!bg-gradient-to-br !from-emerald-50/98 !to-white/95 !border-emerald-200/60 !text-emerald-950 [&_[data-icon]]:!bg-emerald-100 [&_[data-icon]]:!text-emerald-600",
               error:
-                "!bg-rose-50/95 !border-rose-200/70 !text-rose-900 [&_[data-icon]]:!text-rose-600",
+                "!bg-gradient-to-br !from-rose-50/98 !to-white/95 !border-rose-200/60 !text-rose-950 [&_[data-icon]]:!bg-rose-100 [&_[data-icon]]:!text-rose-600",
               warning:
-                "!bg-amber-50/95 !border-amber-200/70 !text-amber-900 [&_[data-icon]]:!text-amber-600",
+                "!bg-gradient-to-br !from-amber-50/98 !to-white/95 !border-amber-200/60 !text-amber-950 [&_[data-icon]]:!bg-amber-100 [&_[data-icon]]:!text-amber-600",
               info:
-                "!bg-sky-50/95 !border-sky-200/70 !text-sky-900 [&_[data-icon]]:!text-sky-600",
+                "!bg-gradient-to-br !from-sky-50/98 !to-white/95 !border-sky-200/60 !text-sky-950 [&_[data-icon]]:!bg-sky-100 [&_[data-icon]]:!text-sky-600",
+              loading:
+                "!bg-white/95 !border-slate-200/80 !text-slate-900 [&_[data-icon]]:!bg-slate-100 [&_[data-icon]]:!text-slate-600",
+              actionButton:
+                "!bg-slate-900 !text-white !rounded-lg !px-3 !py-1.5 !text-xs !font-medium hover:!bg-slate-700 !transition-colors",
+              cancelButton:
+                "!bg-slate-100 !text-slate-600 !rounded-lg !px-3 !py-1.5 !text-xs !font-medium hover:!bg-slate-200 !transition-colors",
             },
           }}
         />

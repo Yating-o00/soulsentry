@@ -692,16 +692,24 @@ export default function Tasks() {
             </button>
 
             {showCompleted && completedTasks.length > 0 && (() => {
-              const parents = completedTasks.filter(t => !t.parent_task_id);
+              // 按完成时间倒序（无 completed_at 排到最后）
+              const byCompletedDesc = (a, b) => {
+                const ta = a.completed_at ? new Date(a.completed_at).getTime() : 0;
+                const tb = b.completed_at ? new Date(b.completed_at).getTime() : 0;
+                return tb - ta;
+              };
+
+              const parents = completedTasks.filter(t => !t.parent_task_id).sort(byCompletedDesc);
               const subs = completedTasks.filter(t => t.parent_task_id);
               const taskById = new Map(allTasks.map(t => [t.id, t]));
 
-              // 把已完成子约定按 parent_task_id 分组
+              // 把已完成子约定按 parent_task_id 分组，并在组内按完成时间倒序
               const subsByParent = new Map();
               subs.forEach(s => {
                 if (!subsByParent.has(s.parent_task_id)) subsByParent.set(s.parent_task_id, []);
                 subsByParent.get(s.parent_task_id).push(s);
               });
+              subsByParent.forEach(list => list.sort(byCompletedDesc));
 
               // 父级不在已完成列表中（但有已完成子约定）的孤儿子约定
               const orphanGroups = [];

@@ -149,16 +149,41 @@ ${userHabits}
 【第一步：解析任务】
 - title：简短清晰的任务标题
 - description：原样使用用户输入（不得改写）
-- reminder_time：ISO 8601 带 +08:00 时区，如 "${contextDate}T15:00:00+08:00"；如是全天则用 "YYYY-MM-DD"
-  · 如果用户**明确**说了时间（如"明天3点"），按用户说的来，time_is_suggested=false
-  · 如果用户**未指定**时间，根据任务语义+用户习惯智能建议时间，并设 time_is_suggested=true：
-    - "买花/带书/取快递/逛超市/路过XX"等顺路型 → 下班时间 18:00-19:00
-    - "晨跑/早餐/晨间" → 07:00-08:00
-    - "午饭/午休" → 12:00-13:00
-    - "吃药" → 饭后 30 分钟
-    - "学习/阅读" → 20:00-21:00
-    - "睡前/冥想" → 22:00-22:30
-    - 其他 → 优先参考下方用户习惯；无习惯数据则默认当天 18:00
+- reminder_time：任务的**开始/起算时间**，ISO 8601 带 +08:00 时区，如 "${contextDate}T15:00:00+08:00"；如是全天则用 "YYYY-MM-DD"
+- end_time：任务的**截止/结束时间**，ISO 8601 带 +08:00 时区；**没有明确结束时间则留空字符串 ""，不要瞎编**
+- duration_minutes：执行时长（分钟）。仅用于"明确的单点事件"（如开会、跑步、看医生），如不明确请留 null
+
+【时间设定规则——必须根据用户语义灵活判断，不要套死 09:00-10:00】
+
+A) **窗口型 / 倒计时型**（"X 天内"、"X 小时内"、"48 小时倒计时"、"截止到 X"、"在 X 之前"）
+   · reminder_time = **当前时间**（现在就开始倒计时）
+   · end_time = **窗口的结束时刻**（now + X 天 / X 小时 / 用户指定的截止时刻）
+   · 例："两天内敲定方案"（现在 ${nowBJ}） → reminder_time=现在, end_time=现在+48小时
+   · 例："48 小时倒计时" → reminder_time=现在, end_time=现在+48小时
+   · 例："周五前提交" → reminder_time=现在, end_time=本周五 23:59
+   · duration_minutes = null
+   · time_is_suggested = false（用户明确给了截止窗口）
+
+B) **明确时间点型**（"明天3点开会"、"今晚8点跑步"）
+   · reminder_time = 用户说的时间
+   · end_time = reminder_time + duration_minutes（如有合理时长估计），否则留空 ""
+   · 会议默认 60 分钟、跑步 45 分钟、吃饭 60 分钟、看医生 60 分钟、看电影 120 分钟、通话 30 分钟
+   · time_is_suggested = false
+
+C) **模糊/无时间型**（"买花"、"取快递"、"读书"）
+   · 根据任务语义 + 用户习惯智能建议：
+     - 顺路型（买花/带书/取快递/逛超市） → 今天 18:00-19:00
+     - 晨间型（晨跑/早餐） → 明天 07:00-08:00
+     - 午餐 → 今天/明天 12:00
+     - 吃药 → 下一个饭后 30 分钟
+     - 学习/阅读 → 今晚 20:00-21:00
+     - 睡前/冥想 → 今晚 22:00
+     - 其他 → 参考用户习惯，否则今天 18:00
+   · end_time：仅当是明确事件时才填，否则留 ""
+   · time_is_suggested = true
+
+⚠️ 严禁：不要给所有任务无脑填 09:00-10:00；不要给"截止/窗口/倒计时"型任务设单点时间。
+
 - time_is_suggested：true 表示是 AI 建议的时间，false 表示用户明确指定
 - is_all_day：无具体时刻且无法智能建议时为 true
 - category：根据语义判断（会议/工作→work；吃药/运动→health；学习→study；家人→family;购物→shopping；还款/账单→finance；其他→personal）
@@ -197,6 +222,8 @@ ${userHabits}
   "title": "string",
   "description": "string",
   "reminder_time": "string",
+  "end_time": "string or empty",
+  "duration_minutes": null,
   "is_all_day": false,
   "time_is_suggested": false,
   "category": "string",
@@ -224,6 +251,16 @@ ${userHabits}
     const validRepeatRules = ["none", "daily", "weekly", "monthly", "custom"];
     const repeatRule = validRepeatRules.includes(aiTask.repeat_rule) ? aiTask.repeat_rule : "none";
 
+    // end_time 兜底：如果 AI 没给 end_time，但给了 duration_minutes 且有 reminder_time，就推算
+    let endTime = (aiTask.end_time && typeof aiTask.end_time === 'string' && aiTask.end_time.trim()) ? aiTask.end_time.trim() : '';
+    if (!endTime && aiTask.duration_minutes && aiTask.reminder_time && !aiTask.is_all_day) {
+      const startMs = Date.parse(aiTask.reminder_time);
+      const dur = Number(aiTask.duration_minutes);
+      if (!isNaN(startMs) && !isNaN(dur) && dur > 0) {
+        endTime = new Date(startMs + dur * 60 * 1000).toISOString();
+      }
+    }
+
     const taskPayload = {
       title,
       description: aiTask.description || input,
@@ -236,6 +273,7 @@ ${userHabits}
       gcal_sync_enabled: true,
       repeat_rule: repeatRule,
     };
+    if (endTime) taskPayload.end_time = endTime;
     if (repeatRule !== "none" && aiTask.custom_recurrence && typeof aiTask.custom_recurrence === "object") {
       taskPayload.custom_recurrence = aiTask.custom_recurrence;
     }

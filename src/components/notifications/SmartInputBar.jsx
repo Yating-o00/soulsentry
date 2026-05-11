@@ -134,6 +134,36 @@ export default function SmartInputBar() {
         }
       }
 
+      // 🆕 把 AI 规划的"情境感知事项链路"作为子约定挂到父约定下
+      // 每一条子约定 = 一个 execution_step，备注情境时间(when_hint) 与「自动执行」来源
+      if (taskId && Array.isArray(plan.execution_steps) && plan.execution_steps.length > 0) {
+        try {
+          const childPayloads = plan.execution_steps
+            .filter(s => s && s.step_name && s.action_type !== "confirm")
+            .map(s => {
+              const parts = [];
+              if (s.detail) parts.push(s.detail);
+              if (s.when_hint) parts.push(`⏱ 情境时间：${s.when_hint}`);
+              parts.push("⚙️ 自动执行：由哨兵 AI 规划");
+              return {
+                title: s.step_name,
+                description: parts.join("\n"),
+                parent_task_id: taskId,
+                category: mergedTaskData.category || "personal",
+                priority: mergedTaskData.priority || "medium",
+                status: "pending",
+                tags: ["AI自动执行"],
+              };
+            });
+          if (childPayloads.length > 0) {
+            await base44.entities.Task.bulkCreate(childPayloads);
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          }
+        } catch (e) {
+          console.error("Failed to create child tasks from execution steps:", e);
+        }
+      }
+
       const hasFailures = completedSteps.some(s => s.status === "failed");
       const hasConfirms = confirmsNeeded.length > 0;
 

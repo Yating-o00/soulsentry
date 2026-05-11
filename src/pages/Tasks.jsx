@@ -685,7 +685,7 @@ export default function Tasks() {
                 </div>
                 <div className="text-left">
                   <p className="text-sm font-semibold text-slate-800">已完成约定 ({completedTasks.length})</p>
-                  <p className="text-xs text-slate-500 mt-0.5">点击查看父约定与子约定记录</p>
+                  <p className="text-xs text-slate-500 mt-0.5">点击查看完成约定的记录或恢复</p>
                 </div>
               </div>
               <ChevronDown className={cn("w-5 h-5 text-slate-400 group-hover:text-[#384877] transition-transform", showCompleted && "rotate-180")} />

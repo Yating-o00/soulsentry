@@ -28,6 +28,7 @@ export default function Tasks() {
   const [viewMode, setViewMode] = useState("overview"); // 'overview', 'milestone', 'life'
   const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
   const [showCompleted, setShowCompleted] = useState(false);
+  const [expandedParents, setExpandedParents] = useState(new Set());
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedTab, setSelectedTab] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
@@ -711,24 +712,24 @@ export default function Tasks() {
                 }
               });
 
-              const renderRow = (task, isSub) => (
+              const toggleParent = (pid) => {
+                setExpandedParents(prev => {
+                  const next = new Set(prev);
+                  if (next.has(pid)) next.delete(pid); else next.add(pid);
+                  return next;
+                });
+              };
+
+              const renderSubRow = (task) => (
                 <div
                   key={task.id}
-                  className={cn(
-                    "flex items-start gap-3 p-3 rounded-xl border transition-colors",
-                    isSub ? "bg-slate-50/60 border-slate-100" : "bg-white border-slate-200"
-                  )}
+                  className="flex items-start gap-3 p-3 rounded-xl border bg-slate-50/60 border-slate-100"
                 >
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded-md border font-medium flex-shrink-0",
-                        isSub
-                          ? "bg-slate-100 text-slate-500 border-slate-200"
-                          : "bg-[#eef2ff] text-[#384877] border-[#c7d2fe]"
-                      )}>
-                        {isSub ? "子约定" : "父约定"}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md border font-medium flex-shrink-0 bg-slate-100 text-slate-500 border-slate-200">
+                        子约定
                       </span>
                       <p className="text-sm text-slate-700 font-medium line-through decoration-slate-300 truncate">
                         {task.title}
@@ -741,16 +742,57 @@ export default function Tasks() {
                 </div>
               );
 
+              const renderParentRow = (parent, childCount, isExpanded) => {
+                const hasChildren = childCount > 0;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => hasChildren && toggleParent(parent.id)}
+                    className={cn(
+                      "w-full flex items-start gap-3 p-3 rounded-xl border bg-white border-slate-200 text-left transition-colors",
+                      hasChildren ? "hover:border-[#c7d2fe] hover:bg-[#eef2ff]/30 cursor-pointer" : "cursor-default"
+                    )}
+                  >
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md border font-medium flex-shrink-0 bg-[#eef2ff] text-[#384877] border-[#c7d2fe]">
+                          父约定
+                        </span>
+                        <p className="text-sm text-slate-700 font-medium line-through decoration-slate-300 truncate">
+                          {parent.title}
+                        </p>
+                        {hasChildren && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 flex-shrink-0">
+                            {childCount} 个子约定
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {parent.completed_at ? `完成于 ${new Date(parent.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
+                      </p>
+                    </div>
+                    {hasChildren && (
+                      <ChevronDown className={cn(
+                        "w-4 h-4 text-slate-400 flex-shrink-0 mt-1 transition-transform",
+                        isExpanded && "rotate-180"
+                      )} />
+                    )}
+                  </button>
+                );
+              };
+
               return (
                 <div className="mt-4 space-y-3 animate-in fade-in">
                   {parents.map(parent => {
                     const childList = subsByParent.get(parent.id) || [];
+                    const isExpanded = expandedParents.has(parent.id);
                     return (
                       <div key={parent.id} className="space-y-2">
-                        {renderRow(parent, false)}
-                        {childList.length > 0 && (
-                          <div className="ml-6 pl-3 border-l-2 border-slate-200 space-y-2">
-                            {childList.map(s => renderRow(s, true))}
+                        {renderParentRow(parent, childList.length, isExpanded)}
+                        {isExpanded && childList.length > 0 && (
+                          <div className="ml-6 pl-3 border-l-2 border-slate-200 space-y-2 animate-in fade-in slide-in-from-top-1">
+                            {childList.map(s => renderSubRow(s))}
                           </div>
                         )}
                       </div>
@@ -765,7 +807,7 @@ export default function Tasks() {
                             属于：{parent?.title || "（父约定已删除）"}
                           </p>
                           <div className="ml-6 pl-3 border-l-2 border-slate-200 space-y-2">
-                            {list.map(s => renderRow(s, true))}
+                            {list.map(s => renderSubRow(s))}
                           </div>
                         </div>
                       ))}

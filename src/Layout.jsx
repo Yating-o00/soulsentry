@@ -182,28 +182,6 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
             <SidebarMenuButton 
               asChild 
               className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
-                location.pathname === createPageUrl("Archive") 
-                  ? 'bg-[#eef2ff] text-[#384877] shadow-sm border border-[#c7d2fe]' 
-                  : 'hover:bg-[#eef2ff] hover:text-[#384877] text-slate-700'
-              }`}
-            >
-              <Link 
-                to={createPageUrl("Archive")} 
-                onClick={handleMobileClick}
-                className="flex items-center gap-3 px-4 py-3"
-              >
-                <ArchiveBoxIcon className={`w-5 h-5 transition-transform duration-300 ${
-                  location.pathname === createPageUrl("Archive") ? 'scale-110 text-[#384877]' : 'group-hover:scale-110 group-hover:text-[#384877] text-slate-500'
-                }`} />
-                <span className="font-medium">{t('archive')}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem>
-            <SidebarMenuButton 
-              asChild 
-              className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
                 location.pathname === createPageUrl("Trash") 
                   ? 'bg-[#fff1f2] text-[#d5495f] shadow-sm border border-[#e0919e]' 
                   : 'hover:bg-[#fff1f2] hover:text-[#d5495f] text-slate-700'

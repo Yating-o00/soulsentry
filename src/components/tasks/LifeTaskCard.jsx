@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 import SnoozePopover from "@/components/tasks/SnoozePopover";
+import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
 
 export default function LifeTaskCard({ 
   task, 
@@ -669,24 +670,27 @@ export default function LifeTaskCard({
                         onToggleSubtask && onToggleSubtask(subtask);
                       }}
                       className={cn(
-                        "flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all bg-stone-50 border border-stone-100 hover:border-stone-300",
+                        "flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-all bg-stone-50 border border-stone-100 hover:border-stone-300",
                         subtask.status === 'completed' && "opacity-60"
                       )}
                     >
                       <div className={cn(
-                        "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border",
+                        "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
                         subtask.status === 'completed'
                           ? "bg-green-500 border-green-500 text-white"
                           : "border-stone-300 bg-white"
                       )}>
                         {subtask.status === 'completed' && <Check className="w-3 h-3" />}
                       </div>
-                      <span className={cn(
-                        "text-sm flex-1",
-                        subtask.status === 'completed' ? "text-stone-400 line-through" : "text-stone-700"
-                      )}>
-                        {subtask.title}
-                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className={cn(
+                          "text-sm block",
+                          subtask.status === 'completed' ? "text-stone-400 line-through" : "text-stone-700"
+                        )}>
+                          {subtask.title}
+                        </span>
+                        <SubtaskContextBadges subtask={subtask} />
+                      </div>
                     </div>
                   ))}
                   <button

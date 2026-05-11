@@ -694,59 +694,81 @@ export default function Tasks() {
               const parents = completedTasks.filter(t => !t.parent_task_id);
               const subs = completedTasks.filter(t => t.parent_task_id);
               const taskById = new Map(allTasks.map(t => [t.id, t]));
-              const renderRow = (task, isSub) => {
-                const parent = isSub ? taskById.get(task.parent_task_id) : null;
-                return (
-                  <div
-                    key={task.id}
-                    className={cn(
-                      "flex items-start gap-3 p-3 rounded-xl border transition-colors",
-                      isSub ? "bg-slate-50/60 border-slate-100 ml-6" : "bg-white border-slate-200"
-                    )}
-                  >
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded-md border font-medium flex-shrink-0",
-                          isSub
-                            ? "bg-slate-100 text-slate-500 border-slate-200"
-                            : "bg-[#eef2ff] text-[#384877] border-[#c7d2fe]"
-                        )}>
-                          {isSub ? "子约定" : "父约定"}
-                        </span>
-                        <p className="text-sm text-slate-700 font-medium line-through decoration-slate-300 truncate">
-                          {task.title}
-                        </p>
-                      </div>
-                      {isSub && (
-                        <p className="text-xs text-slate-400 mt-0.5 truncate">
-                          属于：{parent?.title || "（父约定已删除）"}
-                        </p>
-                      )}
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {task.completed_at ? `完成于 ${new Date(task.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
-                      </p>
-                    </div>
-                  </div>
-                );
-              };
-              return (
-                <div className="mt-4 space-y-6 animate-in fade-in">
-                  {parents.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
-                        父约定 · {parents.length}
-                      </p>
-                      <div className="space-y-2">{parents.map(t => renderRow(t, false))}</div>
-                    </div>
+
+              // 把已完成子约定按 parent_task_id 分组
+              const subsByParent = new Map();
+              subs.forEach(s => {
+                if (!subsByParent.has(s.parent_task_id)) subsByParent.set(s.parent_task_id, []);
+                subsByParent.get(s.parent_task_id).push(s);
+              });
+
+              // 父级不在已完成列表中（但有已完成子约定）的孤儿子约定
+              const orphanGroups = [];
+              subsByParent.forEach((list, pid) => {
+                const parentInCompleted = parents.some(p => p.id === pid);
+                if (!parentInCompleted) {
+                  orphanGroups.push({ parent: taskById.get(pid), subs: list });
+                }
+              });
+
+              const renderRow = (task, isSub) => (
+                <div
+                  key={task.id}
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-xl border transition-colors",
+                    isSub ? "bg-slate-50/60 border-slate-100" : "bg-white border-slate-200"
                   )}
-                  {subs.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
-                        子约定 · {subs.length}
+                >
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={cn(
+                        "text-[10px] px-1.5 py-0.5 rounded-md border font-medium flex-shrink-0",
+                        isSub
+                          ? "bg-slate-100 text-slate-500 border-slate-200"
+                          : "bg-[#eef2ff] text-[#384877] border-[#c7d2fe]"
+                      )}>
+                        {isSub ? "子约定" : "父约定"}
+                      </span>
+                      <p className="text-sm text-slate-700 font-medium line-through decoration-slate-300 truncate">
+                        {task.title}
                       </p>
-                      <div className="space-y-2">{subs.map(t => renderRow(t, true))}</div>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {task.completed_at ? `完成于 ${new Date(task.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
+                    </p>
+                  </div>
+                </div>
+              );
+
+              return (
+                <div className="mt-4 space-y-3 animate-in fade-in">
+                  {parents.map(parent => {
+                    const childList = subsByParent.get(parent.id) || [];
+                    return (
+                      <div key={parent.id} className="space-y-2">
+                        {renderRow(parent, false)}
+                        {childList.length > 0 && (
+                          <div className="ml-6 pl-3 border-l-2 border-slate-200 space-y-2">
+                            {childList.map(s => renderRow(s, true))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {orphanGroups.length > 0 && (
+                    <div className="pt-2 space-y-3">
+                      {orphanGroups.map(({ parent, subs: list }, idx) => (
+                        <div key={parent?.id || `orphan-${idx}`} className="space-y-2">
+                          <p className="text-xs text-slate-400 px-1">
+                            属于：{parent?.title || "（父约定已删除）"}
+                          </p>
+                          <div className="ml-6 pl-3 border-l-2 border-slate-200 space-y-2">
+                            {list.map(s => renderRow(s, true))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

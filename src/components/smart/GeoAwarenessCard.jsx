@@ -17,6 +17,12 @@ export default function GeoAwarenessCard({ data, onSnooze }) {
     ? `进入${data.location_name}附近`
     : `离开${data.location_name}附近`;
 
+  // 过滤掉已完成的任务，仅显示未完成项
+  const visibleTasks = (data.tasks || []).filter(
+    (t) => t.status !== 'completed' && t.status !== 'cancelled' && !t.completed_at
+  );
+  if (visibleTasks.length === 0) return null;
+
   const priorityDot = (p) => {
     if (p === 'urgent') return 'bg-red-500';
     if (p === 'high') return 'bg-red-500';
@@ -56,7 +62,7 @@ export default function GeoAwarenessCard({ data, onSnooze }) {
         </div>
         <div className="text-xs text-slate-500 mb-2">今日待办：</div>
         <ul className="space-y-2">
-          {data.tasks.map((t) => (
+          {visibleTasks.map((t) => (
             <li key={t.id} className="flex items-start gap-2 text-sm">
               <span className={`w-2 h-2 rounded-full ${priorityDot(t.priority)} mt-1.5 flex-shrink-0`} />
               <div className="flex-1">
@@ -80,7 +86,7 @@ export default function GeoAwarenessCard({ data, onSnooze }) {
       {/* Actions */}
       <div className="flex gap-2 px-4 pb-4">
         <Button
-          onClick={() => navigate(`/Tasks?taskId=${data.tasks[0]?.id || ''}`)}
+          onClick={() => navigate(`/Tasks?taskId=${visibleTasks[0]?.id || ''}`)}
           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10"
         >
           查看详情

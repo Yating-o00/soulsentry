@@ -1,0 +1,9 @@
+{
+  "name": "\u5fc3\u6808 (SoulSentry)",
+  "site": {
+    "installCommand": "npm install",
+    "buildCommand": "npm run build",
+    "serveCommand": "npm run dev",
+    "outputDirectory": "./dist"
+  }
+}

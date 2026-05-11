@@ -23,7 +23,8 @@ export default function ConflictDialog({ open, onClose, conflicts, dateStr, allB
   const [resolutions, setResolutions] = useState(null);
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
-  const [appliedIndexes, setAppliedIndexes] = useState(new Set());
+  // 记录每个冲突已应用的方案索引：{ [conflictIdx]: suggestionIdx }
+  const [appliedMap, setAppliedMap] = useState({});
 
   useEffect(() => {
     if (open && conflicts && conflicts.length > 0 && !resolutions) {
@@ -47,15 +48,15 @@ export default function ConflictDialog({ open, onClose, conflicts, dateStr, allB
     if (!open) {
       setResolutions(null);
       setSummary("");
-      setAppliedIndexes(new Set());
+      setAppliedMap({});
     }
   }, [open]);
 
   if (!open) return null;
 
-  const handleApply = (conflictIdx, suggestion) => {
+  const handleApply = (conflictIdx, suggestionIdx, suggestion) => {
     onApplyResolution(conflictIdx, suggestion);
-    setAppliedIndexes(prev => new Set([...prev, conflictIdx]));
+    setAppliedMap(prev => ({ ...prev, [conflictIdx]: suggestionIdx }));
   };
 
   return (
@@ -136,47 +137,68 @@ export default function ConflictDialog({ open, onClose, conflicts, dateStr, allB
                       {(resolutions.find(r => r.conflict_index === idx)?.suggestions || []).map((s, si) => {
                         const StrategyIcon = STRATEGY_ICONS[s.strategy] || Sparkles;
                         const colorClass = STRATEGY_COLORS[s.strategy] || "bg-slate-50 text-slate-700 border-slate-200";
-                        const isApplied = appliedIndexes.has(idx);
+                        const appliedSi = appliedMap[idx];
+                        const hasApplied = appliedSi !== undefined;
+                        const isThisApplied = appliedSi === si;
+                        const isOtherApplied = hasApplied && !isThisApplied;
 
                         return (
                           <div
                             key={si}
                             className={cn(
                               "rounded-xl border p-3 transition-all",
-                              isApplied ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-100 hover:border-slate-200"
+                              isThisApplied && "bg-emerald-50 border-emerald-200",
+                              isOtherApplied && "bg-slate-50/60 border-slate-100 opacity-55",
+                              !hasApplied && "bg-white border-slate-100 hover:border-slate-200"
                             )}
                           >
                             <div className="flex items-start gap-2.5">
-                              <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border text-xs", colorClass)}>
+                              <div className={cn(
+                                "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border text-xs",
+                                colorClass,
+                                isOtherApplied && "grayscale"
+                              )}>
                                 <StrategyIcon className="w-3.5 h-3.5" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border", colorClass)}>
+                                  <span className={cn(
+                                    "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                                    colorClass,
+                                    isOtherApplied && "grayscale"
+                                  )}>
                                     {s.strategy_label}
                                   </span>
                                 </div>
-                                <p className="text-xs text-slate-700 leading-relaxed">{s.description}</p>
+                                <p className={cn(
+                                  "text-xs leading-relaxed",
+                                  isOtherApplied ? "text-slate-400 line-through decoration-slate-300" : "text-slate-700"
+                                )}>{s.description}</p>
                                 {(s.new_time_a || s.new_time_b) && (
-                                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500">
+                                  <div className={cn(
+                                    "flex items-center gap-2 mt-1.5 text-[11px]",
+                                    isOtherApplied ? "text-slate-300" : "text-slate-500"
+                                  )}>
                                     {s.new_time_a && <span className="font-mono bg-slate-50 px-1.5 py-0.5 rounded">{s.new_time_a}</span>}
                                     {s.new_time_a && s.new_time_b && <ArrowRight className="w-3 h-3" />}
                                     {s.new_time_b && <span className="font-mono bg-slate-50 px-1.5 py-0.5 rounded">{s.new_time_b}</span>}
                                   </div>
                                 )}
                               </div>
-                              {!isApplied ? (
-                                <Button
-                                  size="sm"
-                                  className="h-7 px-3 text-[11px] bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-lg shrink-0"
-                                  onClick={() => handleApply(idx, s)}
-                                >
-                                  应用
-                                </Button>
-                              ) : (
+                              {isThisApplied ? (
                                 <div className="flex items-center gap-1 text-emerald-600 text-xs font-medium shrink-0">
                                   <Check className="w-3.5 h-3.5" /> 已应用
                                 </div>
+                              ) : isOtherApplied ? (
+                                <span className="text-[11px] text-slate-400 shrink-0 px-2 py-1">已跳过</span>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-3 text-[11px] bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-lg shrink-0"
+                                  onClick={() => handleApply(idx, si, s)}
+                                >
+                                  应用
+                                </Button>
                               )}
                             </div>
                           </div>

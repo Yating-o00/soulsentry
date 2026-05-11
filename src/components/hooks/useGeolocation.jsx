@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { base44 } from '@/api/base44Client';
 
+// Read user preference once to decide whether to enable tracking.
+// We don't block the hook on this — if pref says off, we just skip reporting.
+async function readTrackingPref() {
+  try {
+    const prefs = await base44.entities.UserPreference.list();
+    const p = prefs?.[0];
+    // Default: enabled (backward compatible). Only disable when explicitly false.
+    return p?.location_tracking_enabled !== false;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Continuously tracks user geolocation and reports to backend geofence trigger.
  * - Checks position every `intervalMs` milliseconds (default 2 min)
@@ -13,6 +26,12 @@ export function useGeolocation({ enabled = true, intervalMs = 120000 } = {}) {
   const [permission, setPermission] = useState('prompt');
   const lastSentRef = useRef(null);
   const timerRef = useRef(null);
+  const trackingEnabledRef = useRef(true);
+
+  // Cache user preference on mount
+  useEffect(() => {
+    readTrackingPref().then((v) => { trackingEnabledRef.current = v; });
+  }, []);
 
   // Check permission state
   useEffect(() => {
@@ -41,6 +60,8 @@ export function useGeolocation({ enabled = true, intervalMs = 120000 } = {}) {
       setError('当前浏览器不支持地理定位');
       return;
     }
+    if (!trackingEnabledRef.current) return;
+    if (permission === 'denied') return;
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {

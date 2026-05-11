@@ -71,12 +71,16 @@ export async function getCurrentLocationContext() {
     // 静默
   }
 
-  // 2. 取当前位置 + 匹配 SavedLocation
+  // 2. 取当前位置 + 匹配 SavedLocation（只匹配当前用户 active 的地点）
   const pos = await getBrowserPosition();
   if (!pos) return ctx;
+  ctx.coords = { latitude: pos.latitude, longitude: pos.longitude };
 
   try {
-    const saved = await base44.entities.SavedLocation.list();
+    let me = null;
+    try { me = await base44.auth.me(); } catch { /* 未登录则取全部，RLS 兜底 */ }
+    const query = me?.email ? { created_by: me.email, is_active: true } : { is_active: true };
+    const saved = await base44.entities.SavedLocation.filter(query);
     let best = null;
     let bestDist = Infinity;
     for (const loc of saved || []) {
@@ -91,6 +95,7 @@ export async function getCurrentLocationContext() {
     if (best) {
       ctx.current_place_type = best.location_type || "other";
       ctx.current_place_name = best.name;
+      ctx.current_place_id = best.id;
     } else {
       ctx.current_place_type = "other";
     }

@@ -14,6 +14,7 @@ const translations = {
     'memory': '记忆进化',
     'feedback': '反馈与联系',
     'trash': '回收站',
+    'archive': '归档',
     'soulSentry': '心栈',
     'tagline': '坚定守护，适时轻唤',
     
@@ -168,6 +169,7 @@ const translations = {
     'memory': 'Memory',
     'feedback': 'Feedback & Contact',
     'trash': 'Trash',
+    'archive': 'Archive',
     'soulSentry': 'Soul Sentry',
     'tagline': 'Your steadfast companion for mindful living',
     

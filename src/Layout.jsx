@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -30,7 +30,7 @@ import {
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Trash2, MessageSquarePlus, Search } from "lucide-react";
+import { Trash2, MessageSquarePlus, Search, Archive as ArchiveBoxIcon } from "lucide-react";
 import FeedbackDialog from "@/components/feedback/FeedbackDialog";
 import GlobalSearch from "@/components/search/GlobalSearch";
 import CreditsBadge from "@/components/credits/CreditsBadge";
@@ -175,6 +175,28 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                 <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-[#384877] group-hover:scale-110 transition-all duration-300" />
                 <span className="font-medium group-hover:text-[#384877] transition-colors">{t('feedback')}</span>
               </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton 
+              asChild 
+              className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
+                location.pathname === createPageUrl("Archive") 
+                  ? 'bg-[#eef2ff] text-[#384877] shadow-sm border border-[#c7d2fe]' 
+                  : 'hover:bg-[#eef2ff] hover:text-[#384877] text-slate-700'
+              }`}
+            >
+              <Link 
+                to={createPageUrl("Archive")} 
+                onClick={handleMobileClick}
+                className="flex items-center gap-3 px-4 py-3"
+              >
+                <ArchiveBoxIcon className={`w-5 h-5 transition-transform duration-300 ${
+                  location.pathname === createPageUrl("Archive") ? 'scale-110 text-[#384877]' : 'group-hover:scale-110 group-hover:text-[#384877] text-slate-500'
+                }`} />
+                <span className="font-medium">{t('archive')}</span>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
 

@@ -32,6 +32,7 @@ import ContextTimeline from "./planner/ContextTimeline";
 import AutoExecCards from "./planner/AutoExecCards";
 import KanbanBoard from "./planner/KanbanBoard";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
+import { attachPlanChildrenToParent } from "@/components/utils/attachPlanChildren";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
 import { detectTimeConflicts } from "@/components/planner/detectConflicts";
@@ -207,9 +208,20 @@ export default function SmartDailyPlanner() {
         Promise.allSettled([
           extractAndCreateTasks(capturedInput, selectedDateStr),
           syncPlanToNote(capturedInput, "daily_plan", { date: selectedDateStr })
-        ]).then(results => {
+        ]).then(async results => {
           const taskResult = results[0];
           const noteResult = results[1];
+          // 把情境时间线 + 自动执行清单挂到父约定下,而不是创建独立顶层任务
+          if (taskResult.status === 'fulfilled' && taskResult.value?.[0]?.id) {
+            const parentId = taskResult.value[0].id;
+            const timelineForDay = (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr);
+            await attachPlanChildrenToParent(parentId, {
+              timeline: timelineForDay,
+              automations: data.automations || [],
+              dateStr: selectedDateStr,
+            }).catch(e => console.warn("attach children failed", e));
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          }
           const parts = [];
           if (taskResult.status === 'fulfilled' && taskResult.value?.length > 0) parts.push(`${taskResult.value.length} 个约定`);
           if (noteResult.status === 'fulfilled' && noteResult.value) parts.push('心签');
@@ -257,9 +269,19 @@ export default function SmartDailyPlanner() {
         Promise.allSettled([
           extractAndCreateTasks(capturedInput, targetDate),
           syncPlanToNote(capturedInput, "daily_plan", { date: targetDate })
-        ]).then(results => {
+        ]).then(async results => {
           const taskResult = results[0];
           const noteResult = results[1];
+          if (taskResult.status === 'fulfilled' && taskResult.value?.[0]?.id) {
+            const parentId = taskResult.value[0].id;
+            const timelineForDay = (data.timeline || []).filter(t => !t.date || t.date === targetDate);
+            await attachPlanChildrenToParent(parentId, {
+              timeline: timelineForDay,
+              automations: data.automations || [],
+              dateStr: targetDate,
+            }).catch(e => console.warn("attach children failed", e));
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          }
           const parts = [];
           if (taskResult.status === 'fulfilled' && taskResult.value?.length > 0) parts.push(`${taskResult.value.length} 个约定`);
           if (noteResult.status === 'fulfilled' && noteResult.value) parts.push('心签');

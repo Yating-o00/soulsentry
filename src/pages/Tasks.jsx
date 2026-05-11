@@ -3,7 +3,9 @@ import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
-import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -670,35 +672,23 @@ export default function Tasks() {
             </div>
           }
 
-          {/* Completed Toggle Button - at bottom */}
+          {/* 已完成约定入口 - 跳转到归档页 */}
           <div className="mt-8 pt-8 border-t border-stone-200">
-            <button
-              onClick={() => setShowCompleted(!showCompleted)}
-              className="text-sm font-medium text-slate-500 hover:text-[#384877] flex items-center gap-1 transition-colors mb-4">
-              <ChevronDown className={cn("w-4 h-4 transition-transform", showCompleted && "rotate-180")} />
-              <span>已完成约定 ({completedTasks.length})</span>
-            </button>
-
-            {/* Completed Section */}
-            {showCompleted && completedTasks.length > 0 && (
-              <div className="animate-in fade-in">
-                <div className="space-y-3 opacity-60">
-                  {completedTasks.map((task) =>
-                    <div key={task.id} className="flex items-center gap-4 p-4 bg-stone-50 rounded-2xl border border-stone-100">
-                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-5 h-5 text-green-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-stone-700 font-medium line-through decoration-stone-300">{task.title}</p>
-                        <p className="text-xs text-stone-400 mt-0.5">
-                          {task.category === 'work' ? '里程碑' : '生活提醒'} · {task.completed_at ? new Date(task.completed_at).toLocaleDateString() : '已完成'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+            <Link
+              to={createPageUrl("Archive")}
+              className="group flex items-center justify-between gap-3 p-4 rounded-2xl bg-white border border-slate-200 hover:border-[#c7d2fe] hover:bg-[#eef2ff]/40 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
+                  <ArchiveIcon className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">已完成约定 ({completedTasks.length})</p>
+                  <p className="text-xs text-slate-500 mt-0.5">前往归档查看父/子约定记录并恢复</p>
                 </div>
               </div>
-            )}
+              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-[#384877] group-hover:translate-x-0.5 transition-all" />
+            </Link>
           </div>
 
         </div>

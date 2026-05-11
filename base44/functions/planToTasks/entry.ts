@@ -242,26 +242,47 @@ Deno.serve(async (req) => {
 
     const normSameDay = (isoA, isoB) => {
       if (!isoA || !isoB) return false;
-      // 对比 Asia/Shanghai 下的 YYYY-MM-DD + HH:MM（分钟级）
       const a = new Date(isoA), b = new Date(isoB);
       if (isNaN(a.getTime()) || isNaN(b.getTime())) return false;
-      return Math.abs(a.getTime() - b.getTime()) <= 10 * 60 * 1000; // ±10 分钟视为同一提醒
+      return Math.abs(a.getTime() - b.getTime()) <= 10 * 60 * 1000;
     };
+
+    // 计算 plan 所属日期的 [start, end) 区间（Asia/Shanghai）
+    const planDayStart = fallbackDate ? new Date(`${fallbackDate}T00:00:00+08:00`).getTime() : null;
+    const planDayEnd = fallbackDate ? new Date(`${fallbackDate}T00:00:00+08:00`).getTime() + 24 * 3600 * 1000 : null;
+    const sameDayAsPlan = (iso) => {
+      if (!iso || planDayStart === null) return false;
+      const t = new Date(iso).getTime();
+      if (isNaN(t)) return false;
+      return t >= planDayStart && t < planDayEnd;
+    };
+
+    const normalizeTitle = (s) => (s || "").trim().replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s🎯]+/u, "").toLowerCase();
 
     const created = [];
     for (const raw of candidateTasks) {
       const normalized = normalizeTimeRange(raw, fallbackDate);
       if (!normalized.reminder_time) continue;
 
-      // 按 owner + title 查询历史任务（包含已完成 / 已删除的），避免重复创建
+      // 去重升级：
+      //   1) 同 owner + 同 title 且时间 ±10 分钟 → 重复
+      //   2) 同 owner + 同 title（忽略 emoji/大小写）且 reminder_time 落在 plan_date 当天 → 重复
+      //      用于避免前端 SmartDailyPlanner 已把该项作为父任务的子约定挂载后，
+      //      planToTasks 又重复创建一个顶层 Task。
       let dup = false;
       if (ownerEmail) {
         try {
+          const normTitle = normalizeTitle(raw.title);
           const existing = await base44.asServiceRole.entities.Task.filter({
             created_by: ownerEmail,
-            title: raw.title,
           });
-          dup = (existing || []).some(t => normSameDay(t.reminder_time, normalized.reminder_time));
+          dup = (existing || []).some(t => {
+            if (!t || t.deleted_at) return false;
+            if (normalizeTitle(t.title) !== normTitle) return false;
+            if (normSameDay(t.reminder_time, normalized.reminder_time)) return true;
+            if (sameDayAsPlan(t.reminder_time)) return true;
+            return false;
+          });
         } catch (_) {
           dup = false;
         }

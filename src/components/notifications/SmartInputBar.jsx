@@ -175,6 +175,20 @@ export default function SmartInputBar() {
           execution_steps: completedSteps,
         });
         queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+
+        // 🤖 自动判定是否属于"自动执行"类型（邮件草稿/调研/办公文档/文件整理/总结心签/日历事件）
+        // 是 → 写入 automation_type & automation_plan，由用户在 UI 点击触发 execute 阶段
+        try {
+          const planResp = await base44.functions.invoke('executeAutomation', {
+            execution_id: execution.id,
+            phase: "plan",
+          });
+          if (planResp?.data?.success) {
+            queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+          }
+        } catch (e) {
+          console.warn("Automation plan probing failed (non-fatal):", e?.message);
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: ['tasks'] });

@@ -1,277 +1,234 @@
-import React, { useState } from "react";
-import { motion } from "framer-motion";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
+import React, { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  CheckCircle2, AlertTriangle, RefreshCw, Edit3, UserCog,
-  FileText, Mail, Globe, FileSpreadsheet, Calendar as CalIcon, StickyNote, ChevronRight, Sparkles,
-} from "lucide-react";
-
-const TYPE_ICON = {
-  email_draft: Mail,
-  web_research: Globe,
-  office_doc: FileSpreadsheet,
-  file_organize: FileText,
-  calendar_event: CalIcon,
-  summary_note: StickyNote,
-};
-
-const TYPE_LABEL = {
-  email_draft: "邮件草稿",
-  web_research: "网页调研",
-  office_doc: "办公文档",
-  file_organize: "文件整理",
-  calendar_event: "日历事件",
-  summary_note: "心签总结",
-};
+import { CheckCircle2, AlertTriangle, RotateCcw, Pencil, UserCog, ChevronRight, Sparkles, X, Lightbulb } from "lucide-react";
 
 /**
- * 任务执行后的反馈弹窗：
- * - mode="success" 明确告知结果摘要 + 查看详情/继续按钮
- * - mode="failed"  展示困难原因 + 三种处置建议（重试 / 修改后重试 / 人工接管）
+ * 任务执行结果统一弹窗
+ * mode = "success"
+ *   - 明确告知完成；展示结果预览；提供「查看完整详情」入口
+ * mode = "failed"
+ *   - 告知失败原因；给出可执行的修改建议；提供「重试 / 修改描述后重试 / 人工接管」
  */
 export default function ExecutionResultDialog({
   open,
   onOpenChange,
-  mode = "success",          // "success" | "failed"
+  mode = "success",
   title = "",
-  automationType = "summary_note",
-  resultPreview = "",        // success: 结果摘要文本
-  errorMessage = "",         // failed: 错误描述
-  suggestions = [],          // failed: AI 给出的修改建议字符串数组
-  onRetry,                   // failed: 直接重试
-  onRetryWithEdit,           // failed: (newInput) => Promise  携带新输入重试
-  onHandover,                // failed: 人工接管（如转为普通约定 / 打开编辑器）
-  onViewDetail,              // success: 查看完整结果
+  automationType,
+  // success
+  resultPreview = "",
+  onViewDetail,
+  // failed
+  errorMessage = "",
+  suggestions = [],
+  onRetry,
+  onRetryWithEdit, // (newInput: string) => void
+  onHandover,
 }) {
-  const [editMode, setEditMode] = useState(false);
-  const [editInput, setEditInput] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
 
-  const Icon = TYPE_ICON[automationType] || StickyNote;
-  const typeLabel = TYPE_LABEL[automationType] || "自动任务";
-
-  const handleSubmitEdit = async () => {
-    if (!editInput.trim() || !onRetryWithEdit) return;
-    setSubmitting(true);
-    try {
-      await onRetryWithEdit(editInput.trim());
-      onOpenChange?.(false);
-    } finally {
-      setSubmitting(false);
-      setEditMode(false);
-      setEditInput("");
+  useEffect(() => {
+    if (open) {
+      setEditing(false);
+      setDraft("");
     }
-  };
+  }, [open, mode]);
 
-  const close = () => {
-    setEditMode(false);
-    setEditInput("");
-    onOpenChange?.(false);
-  };
+  const isSuccess = mode === "success";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
-      <DialogContent className="max-w-md p-0 overflow-hidden rounded-2xl border-slate-200">
-        {/* 顶部状态条 */}
-        <div className={`relative px-5 pt-5 pb-4 ${
-          mode === "success"
-            ? "bg-gradient-to-br from-emerald-50 via-white to-emerald-50/30"
-            : "bg-gradient-to-br from-amber-50 via-white to-rose-50/40"
-        }`}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md p-0 overflow-hidden rounded-2xl">
+        {/* 顶部色带 */}
+        <div className={isSuccess
+          ? "bg-gradient-to-br from-emerald-50 to-teal-50 px-6 pt-6 pb-5 border-b border-emerald-100/60"
+          : "bg-gradient-to-br from-rose-50 to-amber-50 px-6 pt-6 pb-5 border-b border-rose-100/60"
+        }>
           <DialogHeader className="space-y-2">
             <div className="flex items-center gap-3">
-              <motion.div
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 320, damping: 18 }}
-                className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-md ${
-                  mode === "success"
-                    ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/30"
-                    : "bg-gradient-to-br from-amber-400 to-rose-500 shadow-amber-500/30"
-                }`}
-              >
-                {mode === "success"
-                  ? <CheckCircle2 className="w-6 h-6 text-white" />
-                  : <AlertTriangle className="w-6 h-6 text-white" />}
-              </motion.div>
-              <div className="flex-1 min-w-0">
-                <DialogTitle className="text-[15px] font-bold text-slate-900 leading-tight">
-                  {mode === "success" ? "AI 执行成功" : "执行遇到困难"}
+              <div className={`w-10 h-10 rounded-xl bg-white shadow-sm border flex items-center justify-center flex-shrink-0 ${
+                isSuccess ? "border-emerald-200/60" : "border-rose-200/60"
+              }`}>
+                {isSuccess
+                  ? <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  : <AlertTriangle className="w-5 h-5 text-rose-500" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-[15px] font-bold text-slate-800 leading-tight">
+                  {isSuccess ? "✅ 执行成功" : "AI 执行遇到困难"}
                 </DialogTitle>
-                <DialogDescription className="text-[11.5px] text-slate-500 mt-0.5 flex items-center gap-1.5">
-                  <Icon className="w-3 h-3" />
-                  {typeLabel}
-                  <span className="text-slate-300">·</span>
-                  <span className="truncate">{title}</span>
+                <DialogDescription className="text-[12px] text-slate-500 mt-0.5 truncate">
+                  {title || "自动执行任务"}
                 </DialogDescription>
               </div>
             </div>
+            {!isSuccess && errorMessage && (
+              <div className="text-[12px] text-rose-700 bg-white/70 border border-rose-200/60 rounded-lg px-3 py-2 leading-relaxed mt-2">
+                {errorMessage}
+              </div>
+            )}
           </DialogHeader>
         </div>
 
-        {/* 内容区 */}
-        <div className="px-5 py-4 max-h-[55vh] overflow-y-auto">
-          {mode === "success" ? (
-            <SuccessContent resultPreview={resultPreview} />
-          ) : (
-            <FailedContent
-              errorMessage={errorMessage}
-              suggestions={suggestions}
-              editMode={editMode}
-              editInput={editInput}
-              setEditInput={setEditInput}
-              submitting={submitting}
-            />
+        {/* 主体 */}
+        <div className="px-6 py-5 space-y-3">
+          {/* 成功 */}
+          {isSuccess && (
+            <>
+              {resultPreview ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3 max-h-56 overflow-y-auto">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 mb-1.5">
+                    <Sparkles className="w-3 h-3 text-emerald-500" />
+                    AI 结果预览
+                  </div>
+                  <pre className="text-[12px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
+                    {resultPreview}
+                  </pre>
+                </div>
+              ) : (
+                <p className="text-[12.5px] text-slate-600 leading-relaxed">
+                  任务已完成，点击下方查看完整执行详情与结果。
+                </p>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1 h-9 rounded-xl text-[12px]"
+                  onClick={() => onOpenChange(false)}
+                >
+                  关闭
+                </Button>
+                {onViewDetail && (
+                  <Button
+                    onClick={() => { onOpenChange(false); onViewDetail(); }}
+                    className="flex-1 h-9 rounded-xl text-[12px] bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white"
+                  >
+                    查看完整详情
+                    <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* 失败 - 选择视图 */}
+          {!isSuccess && !editing && (
+            <>
+              {suggestions.length > 0 && (
+                <div className="rounded-xl bg-amber-50/70 border border-amber-200/60 px-3.5 py-3">
+                  <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-amber-700 mb-1.5">
+                    <Lightbulb className="w-3.5 h-3.5" />
+                    修改建议
+                  </div>
+                  <ul className="space-y-1.5 text-[12px] text-slate-700 leading-relaxed">
+                    {suggestions.map((s, i) => (
+                      <li key={i} className="flex gap-1.5">
+                        <span className="text-amber-500 flex-shrink-0">·</span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {onRetry && (
+                <button
+                  onClick={() => { onOpenChange(false); onRetry(); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 hover:border-[#384877]/40 hover:bg-[#384877]/5 transition-all text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[#384877]/10 flex items-center justify-center flex-shrink-0">
+                    <RotateCcw className="w-4 h-4 text-[#384877]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-slate-800">原样重试</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">网络/接口波动时常常重试就能成功</div>
+                  </div>
+                </button>
+              )}
+
+              {onRetryWithEdit && (
+                <button
+                  onClick={() => setEditing(true)}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 hover:border-amber-400/60 hover:bg-amber-50 transition-all text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <Pencil className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-slate-800">修改描述后重试</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">补充细节或换个说法让 AI 更好理解</div>
+                  </div>
+                </button>
+              )}
+
+              {onHandover && (
+                <button
+                  onClick={() => { onOpenChange(false); onHandover(); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 hover:border-emerald-400/60 hover:bg-emerald-50 transition-all text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                    <UserCog className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-slate-800">我来接管</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">转为人工待办，由你手动处理</div>
+                  </div>
+                </button>
+              )}
+            </>
+          )}
+
+          {/* 失败 - 编辑描述视图 */}
+          {!isSuccess && editing && onRetryWithEdit && (
+            <>
+              <div>
+                <label className="text-[12px] font-medium text-slate-700 mb-1.5 block">
+                  调整任务描述
+                </label>
+                <Textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  className="min-h-[110px] text-[13px] rounded-xl resize-none"
+                  placeholder="例如：把收件人改成 xxx@company.com、补充背景信息、限定回答格式…"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1 h-9 rounded-xl text-[12px]"
+                  onClick={() => setEditing(false)}
+                >
+                  返回
+                </Button>
+                <Button
+                  disabled={!draft.trim()}
+                  onClick={() => {
+                    const v = draft.trim();
+                    onOpenChange(false);
+                    onRetryWithEdit(v);
+                  }}
+                  className="flex-1 h-9 rounded-xl text-[12px] bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white"
+                >
+                  使用新描述重试
+                </Button>
+              </div>
+            </>
           )}
         </div>
 
-        {/* 操作区 */}
-        <div className="px-5 py-3 bg-slate-50/60 border-t border-slate-100 flex items-center justify-end gap-2">
-          {mode === "success" ? (
-            <>
-              <Button variant="ghost" size="sm" onClick={close} className="h-8 text-xs text-slate-500">
-                完成
-              </Button>
-              {onViewDetail && (
-                <Button
-                  size="sm"
-                  onClick={() => { onViewDetail(); close(); }}
-                  className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  查看完整结果
-                  <ChevronRight className="w-3 h-3 ml-0.5" />
-                </Button>
-              )}
-            </>
-          ) : editMode ? (
-            <>
-              <Button
-                variant="ghost" size="sm"
-                onClick={() => { setEditMode(false); setEditInput(""); }}
-                className="h-8 text-xs text-slate-500"
-                disabled={submitting}
-              >
-                取消
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSubmitEdit}
-                disabled={!editInput.trim() || submitting}
-                className="h-8 px-3 text-xs bg-[#384877] hover:bg-[#2d3a5f] text-white"
-              >
-                <Sparkles className="w-3 h-3 mr-1" />
-                {submitting ? "提交中…" : "用新内容重试"}
-              </Button>
-            </>
-          ) : (
-            <>
-              {onHandover && (
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => { onHandover(); close(); }}
-                  className="h-8 text-xs border-slate-200 text-slate-600"
-                >
-                  <UserCog className="w-3 h-3 mr-1" />
-                  人工接管
-                </Button>
-              )}
-              {onRetryWithEdit && (
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => setEditMode(true)}
-                  className="h-8 text-xs border-amber-200 text-amber-700 hover:bg-amber-50"
-                >
-                  <Edit3 className="w-3 h-3 mr-1" />
-                  修改后重试
-                </Button>
-              )}
-              {onRetry && (
-                <Button
-                  size="sm"
-                  onClick={() => { onRetry(); close(); }}
-                  className="h-8 px-3 text-xs bg-[#384877] hover:bg-[#2d3a5f] text-white"
-                >
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  重试
-                </Button>
-              )}
-            </>
-          )}
-        </div>
+        {/* 关闭 */}
+        <button
+          onClick={() => onOpenChange(false)}
+          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/80 hover:bg-white border border-slate-200/70 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function SuccessContent({ resultPreview }) {
-  return (
-    <div className="space-y-3">
-      <div className="text-[12.5px] text-slate-600 leading-relaxed">
-        AI 已按你的要求完成本项任务，结果摘要如下：
-      </div>
-      <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 px-3.5 py-3">
-        <div className="text-[10px] font-semibold text-emerald-700 mb-1.5 tracking-wide">执行结果</div>
-        <div className="text-[12.5px] text-slate-800 leading-[1.65] whitespace-pre-wrap line-clamp-[10]">
-          {resultPreview || "已生成结果，点击下方按钮查看完整内容。"}
-        </div>
-      </div>
-      <div className="text-[11px] text-slate-400 leading-relaxed">
-        ✓ 已自动同步至执行历史 · 可在「通知」页随时回看
-      </div>
-    </div>
-  );
-}
-
-function FailedContent({ errorMessage, suggestions, editMode, editInput, setEditInput, submitting }) {
-  if (editMode) {
-    return (
-      <div className="space-y-2">
-        <div className="text-[12px] text-slate-600">
-          请补充或修正你的需求，AI 会按新内容重新尝试：
-        </div>
-        <Textarea
-          value={editInput}
-          onChange={(e) => setEditInput(e.target.value)}
-          placeholder="例如：把对方称呼改为「王经理」，并加上紧急程度…"
-          className="min-h-[100px] text-[13px] rounded-xl border-slate-200 focus-visible:ring-[#384877]/30"
-          autoFocus
-          disabled={submitting}
-        />
-        <div className="text-[11px] text-slate-400">提示：越具体的描述，AI 越能精准完成。</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-xl bg-rose-50/70 border border-rose-100 px-3.5 py-3">
-        <div className="text-[10px] font-semibold text-rose-700 mb-1.5 tracking-wide">遇到的问题</div>
-        <div className="text-[12.5px] text-slate-800 leading-relaxed">
-          {errorMessage || "AI 未能顺利完成本项任务，可能是描述不够清晰或缺少关键信息。"}
-        </div>
-      </div>
-
-      {suggestions && suggestions.length > 0 && (
-        <div>
-          <div className="text-[11px] font-semibold text-slate-600 mb-1.5">建议尝试</div>
-          <ul className="space-y-1.5">
-            {suggestions.slice(0, 3).map((s, i) => (
-              <li key={i} className="flex items-start gap-2 text-[12px] text-slate-600 leading-relaxed">
-                <span className="mt-1 w-1 h-1 rounded-full bg-amber-500 flex-shrink-0" />
-                <span>{s}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="text-[11px] text-slate-400 leading-relaxed pt-1">
-        你可以「重试」直接再执行一次，「修改后重试」补充新信息，或选择「人工接管」自己处理。
-      </div>
-    </div>
   );
 }

@@ -6,7 +6,6 @@ import { Loader2, Check, ChevronRight, Sparkles, Zap, Plus, FileText, Mail, Glob
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
-import ExecutionFailureDialog from "@/components/automation/ExecutionFailureDialog";
 import ExecutionResultDialog from "@/components/automation/ExecutionResultDialog";
 
 // 从标题/描述粗略推断 automation_type，让单条卡片直接走 executeAutomation
@@ -52,7 +51,6 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState([]);
   const [openExec, setOpenExec] = useState(null);
-  const [failureCtx, setFailureCtx] = useState(null); // { item, error }
   const [feedback, setFeedback] = useState(null); // { mode, item, resultPreview?, errorMessage?, suggestions? }
 
   // 把 props 同步进 state（保持父组件传入的最新清单），但保留本地已授权状态

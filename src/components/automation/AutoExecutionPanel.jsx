@@ -12,12 +12,19 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { AUTOMATION_TYPES, QUICK_AUTOMATION_TEMPLATES } from "./automationConfig";
 import AutomationDetailDialog from "./AutomationDetailDialog";
+import AutomationCandidateGrid from "./AutomationCandidateGrid";
 
 export default function AutoExecutionPanel() {
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [openExec, setOpenExec] = useState(null);
+
+  // 候选清单态
+  const [candidates, setCandidates] = useState([]);
+  const [sceneSummary, setSceneSummary] = useState("");
+  const [authorizingIds, setAuthorizingIds] = useState(new Set());
+  const [authorizedIds, setAuthorizedIds] = useState(new Set());
 
   const { data: executions = [] } = useQuery({
     queryKey: ['task-executions'],
@@ -26,43 +33,81 @@ export default function AutoExecutionPanel() {
     refetchInterval: 4000,
   });
 
-  // 仅展示有自动执行类型的记录
   const autoExecutions = executions.filter(e => e.automation_type && e.automation_type !== "none");
-  const activeOnes = autoExecutions.filter(e =>
-    ["parsing", "waiting_confirm", "executing", "failed"].includes(e.execution_status)
-  ).slice(0, 5);
   const recentDone = autoExecutions.filter(e => e.execution_status === "completed").slice(0, 3);
 
-  const handleSubmit = async (text) => {
+  // 1) 让 AI 拆解一句话场景 → 候选清单
+  const handleAnalyze = async (text) => {
     const content = (text || input).trim();
     if (!content) return;
     setSubmitting(true);
+    setCandidates([]);
+    setAuthorizedIds(new Set());
     try {
-      const exec = await base44.entities.TaskExecution.create({
-        task_title: content.length > 40 ? content.slice(0, 40) + "..." : content,
-        original_input: content,
-        category: "task",
-        execution_status: "parsing",
-        ai_parsed_result: { source: "dashboard", summary: content }
-      });
-      setInput("");
-      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-
-      const res = await base44.functions.invoke('executeAutomation', {
-        execution_id: exec.id,
-        phase: "plan"
-      });
+      const res = await base44.functions.invoke('proposeAutomations', { input: content });
       if (res.data?.error) throw new Error(res.data.error);
-
-      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-      // 直接打开方案对话框
-      const updated = await base44.entities.TaskExecution.get(exec.id);
-      setOpenExec(updated);
+      const list = (res.data?.candidates || []).map((c, i) => ({ ...c, _id: `cand-${Date.now()}-${i}` }));
+      setCandidates(list);
+      setSceneSummary(res.data?.scene_summary || content);
+      if (list.length === 0) toast.info("AI 暂未识别出可自动执行的子项，可点击 + 自定义添加");
     } catch (e) {
-      toast.error("AI 规划失败：" + e.message);
+      toast.error("AI 解析失败：" + e.message);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // 2) 用户对单条子项点击"授权执行" → 创建 TaskExecution + 触发 executeAutomation
+  const handleAuthorize = async (candidate) => {
+    const id = candidate._id;
+    setAuthorizingIds(prev => new Set(prev).add(id));
+    try {
+      const exec = await base44.entities.TaskExecution.create({
+        task_title: candidate.title,
+        original_input: candidate.detail || candidate.title,
+        category: "task",
+        execution_status: "parsing",
+        automation_type: candidate.automation_type,
+        ai_parsed_result: {
+          source: "dashboard",
+          summary: candidate.detail || candidate.title,
+          scene: sceneSummary,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+
+      // 规划 → 执行（一次性走完，让用户在结果对话框中查看产物）
+      const planRes = await base44.functions.invoke('executeAutomation', {
+        execution_id: exec.id,
+        phase: "plan",
+      });
+      if (planRes.data?.error) throw new Error(planRes.data.error);
+
+      const execRes = await base44.functions.invoke('executeAutomation', {
+        execution_id: exec.id,
+        phase: "execute",
+      });
+      if (execRes.data?.error) throw new Error(execRes.data.error);
+
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      setAuthorizedIds(prev => new Set(prev).add(id));
+      toast.success(`已完成：${candidate.title}`, { icon: "✅" });
+    } catch (e) {
+      toast.error("执行失败：" + e.message);
+    } finally {
+      setAuthorizingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  // 3) 用户自定义添加一条子项 → 直接进入授权流程
+  const handleAddCustom = (custom) => {
+    const item = { ...custom, _id: `cand-${Date.now()}-custom` };
+    setCandidates(prev => [...prev, item]);
+    handleAuthorize(item);
   };
 
   return (
@@ -76,7 +121,7 @@ export default function AutoExecutionPanel() {
               </div>
               <div>
                 <h3 className="text-sm md:text-base font-semibold text-slate-900">自动执行清单</h3>
-                <p className="text-[11px] text-slate-500">让 AI 帮你写邮件、做调研、生成文档</p>
+                <p className="text-[11px] text-slate-500">告诉 AI 你的场景，自动拆解出可执行子项</p>
               </div>
             </div>
             <Button variant="ghost" size="sm" asChild className="text-xs text-indigo-600 hover:bg-indigo-50">
@@ -86,18 +131,18 @@ export default function AutoExecutionPanel() {
             </Button>
           </div>
 
-          {/* 快捷输入 */}
+          {/* 输入区 */}
           <div className="flex gap-2 mb-3">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !submitting && handleSubmit()}
+              onKeyDown={(e) => e.key === "Enter" && !submitting && handleAnalyze()}
               placeholder="告诉 AI 你想自动完成什么..."
               className="text-sm bg-white"
               disabled={submitting}
             />
             <Button
-              onClick={() => handleSubmit()}
+              onClick={() => handleAnalyze()}
               disabled={submitting || !input.trim()}
               className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] flex-shrink-0"
             >
@@ -106,11 +151,11 @@ export default function AutoExecutionPanel() {
           </div>
 
           {/* 快捷模板 */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 scrollbar-hide">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
             {QUICK_AUTOMATION_TEMPLATES.map(t => (
               <button
                 key={t.type}
-                onClick={() => handleSubmit(t.example)}
+                onClick={() => handleAnalyze(t.example)}
                 disabled={submitting}
                 className="flex-shrink-0 px-2.5 py-1.5 rounded-full bg-white border border-slate-200 text-[11px] text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
               >
@@ -119,27 +164,36 @@ export default function AutoExecutionPanel() {
             ))}
           </div>
 
-          {/* 活跃任务清单 */}
-          {activeOnes.length === 0 && recentDone.length === 0 && (
-            <div className="text-center py-6 text-slate-400">
+          {/* AI 解析中提示 */}
+          {submitting && candidates.length === 0 && (
+            <div className="mt-4 flex items-center justify-center gap-2 py-6 text-indigo-500 text-xs">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              AI 正在解析场景，拆解可自动执行的子项...
+            </div>
+          )}
+
+          {/* 候选清单网格 */}
+          {candidates.length > 0 && (
+            <AutomationCandidateGrid
+              candidates={candidates}
+              authorizingIds={authorizingIds}
+              authorizedIds={authorizedIds}
+              onAuthorize={handleAuthorize}
+              onAddCustom={handleAddCustom}
+            />
+          )}
+
+          {/* 空态：仅在未输入时显示 */}
+          {!submitting && candidates.length === 0 && recentDone.length === 0 && (
+            <div className="text-center py-6 text-slate-400 mt-2">
               <Sparkles className="w-7 h-7 mx-auto mb-2 text-slate-300" />
-              <p className="text-xs">还没有自动执行任务，试试上方的快捷指令</p>
+              <p className="text-xs">还没有自动执行任务，输入场景或点击上方快捷指令</p>
             </div>
           )}
 
-          {activeOnes.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-1">进行中</div>
-              <AnimatePresence>
-                {activeOnes.map(exec => (
-                  <ExecRow key={exec.id} exec={exec} onClick={() => setOpenExec(exec)} />
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-
+          {/* 最近完成 */}
           {recentDone.length > 0 && (
-            <div className="space-y-1.5 mt-3">
+            <div className="space-y-1.5 mt-4 pt-3 border-t border-slate-100">
               <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-1">最近完成</div>
               {recentDone.map(exec => (
                 <ExecRow key={exec.id} exec={exec} onClick={() => setOpenExec(exec)} />

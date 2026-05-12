@@ -19,19 +19,20 @@ function inferAutomationType(title = "", desc = "") {
   return "summary_note";
 }
 
+// 统一使用应用主色调（#384877 深蓝）+ 中性灰，避免彩虹色冲突
 const TYPE_META = {
-  email_draft:    { icon: Mail,            bg: "bg-blue-100/70",    color: "text-blue-700",    label: "邮件" },
-  web_research:   { icon: Globe,           bg: "bg-cyan-100/70",    color: "text-cyan-700",    label: "调研" },
-  office_doc:     { icon: FileSpreadsheet, bg: "bg-amber-100/70",   color: "text-amber-700",   label: "文档" },
-  file_organize:  { icon: FileText,        bg: "bg-violet-100/70",  color: "text-violet-700",  label: "文件" },
-  calendar_event: { icon: CalIcon,         bg: "bg-emerald-100/70", color: "text-emerald-700", label: "日历" },
-  summary_note:   { icon: StickyNote,      bg: "bg-pink-100/70",    color: "text-pink-700",    label: "心签" },
+  email_draft:    { icon: Mail,            bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "邮件" },
+  web_research:   { icon: Globe,           bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "调研" },
+  office_doc:     { icon: FileSpreadsheet, bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "文档" },
+  file_organize:  { icon: FileText,        bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "文件" },
+  calendar_event: { icon: CalIcon,         bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "日历" },
+  summary_note:   { icon: StickyNote,      bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "心签" },
 };
 
 const STATUS_STYLE = {
-  ready:      { dot: "bg-emerald-500", text: "text-emerald-700", label: "就绪",   border: "border-l-emerald-400" },
+  ready:      { dot: "bg-[#384877]",   text: "text-[#384877]",   label: "就绪",   border: "border-l-[#384877]/30" },
   pending:    { dot: "bg-amber-500",   text: "text-amber-700",   label: "待确认", border: "border-l-amber-400" },
-  running:    { dot: "bg-blue-500",    text: "text-blue-700",    label: "执行中", border: "border-l-blue-400", pulse: true },
+  running:    { dot: "bg-[#3b5aa2]",   text: "text-[#3b5aa2]",   label: "执行中", border: "border-l-[#3b5aa2]", pulse: true },
   done:       { dot: "bg-emerald-500", text: "text-emerald-700", label: "完成",   border: "border-l-emerald-400" },
   failed:     { dot: "bg-rose-500",    text: "text-rose-700",    label: "失败",   border: "border-l-rose-400" },
 };
@@ -110,23 +111,23 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
 
   return (
     <>
-      <div className="relative rounded-3xl border border-slate-200/60 bg-gradient-to-br from-white via-indigo-50/20 to-purple-50/20 p-5 shadow-[0_4px_24px_-8px_rgba(99,102,241,0.12)] overflow-hidden">
-        {/* 背景装饰光晕 */}
-        <div className="absolute -top-16 -right-16 w-40 h-40 bg-gradient-to-br from-indigo-200/30 to-purple-200/30 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-10 w-32 h-32 bg-gradient-to-br from-blue-200/20 to-cyan-200/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative rounded-3xl border border-slate-200/60 bg-gradient-to-br from-white via-slate-50/60 to-[#384877]/5 p-5 shadow-[0_4px_24px_-12px_rgba(56,72,119,0.15)] overflow-hidden">
+        {/* 背景装饰光晕 - 主色调 */}
+        <div className="absolute -top-16 -right-16 w-40 h-40 bg-[#384877]/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-10 w-32 h-32 bg-[#3b5aa2]/8 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/25">
               <Zap className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h4 className="text-[15px] font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">自动执行清单</h4>
+              <h4 className="text-[15px] font-bold text-slate-800">自动执行清单</h4>
               <p className="text-[11px] text-slate-500 mt-0.5">点击「确认执行」由 AI 自动完成</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/70 backdrop-blur-sm border border-slate-200/60">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200/60">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#384877] animate-pulse" />
             <span className="text-[11px] font-medium text-slate-600">{items.length} 项待执行</span>
           </div>
         </div>
@@ -169,7 +170,7 @@ function ExecCard({ item, onAuthorize, onOpen }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       whileHover={{ y: -1 }}
-      className={`group relative bg-white rounded-xl border border-slate-200/80 border-l-[3px] ${status.border} px-3 py-2.5 hover:shadow-[0_6px_20px_-10px_rgba(99,102,241,0.3)] hover:border-indigo-200/60 transition-all duration-200 overflow-hidden`}
+      className={`group relative bg-white rounded-xl border border-slate-200/80 border-l-[3px] ${status.border} px-3 py-2.5 hover:shadow-[0_6px_20px_-10px_rgba(56,72,119,0.25)] hover:border-[#384877]/30 transition-all duration-200 overflow-hidden`}
     >
       {/* Header: 图标 + 标题 + 类型 + 状态 */}
       <div className="flex items-center gap-2 mb-1.5">
@@ -197,14 +198,14 @@ function ExecCard({ item, onAuthorize, onOpen }) {
           <Button
             size="sm"
             onClick={onAuthorize}
-            className="h-6 px-2.5 text-[10.5px] font-medium bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-md shadow-sm shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all"
+            className="h-6 px-2.5 text-[10.5px] font-medium bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white rounded-md shadow-sm shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all"
           >
             <Sparkles className="w-2.5 h-2.5 mr-0.5" />
             确认执行
           </Button>
         )}
         {isRunning && (
-          <span className="flex items-center gap-1 text-[10.5px] font-medium text-blue-600 px-2 py-0.5 rounded-md bg-blue-50">
+          <span className="flex items-center gap-1 text-[10.5px] font-medium text-[#3b5aa2] px-2 py-0.5 rounded-md bg-[#384877]/8">
             <Loader2 className="w-2.5 h-2.5 animate-spin" />
             执行中
           </span>

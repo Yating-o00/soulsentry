@@ -56,6 +56,35 @@ const DEFAULT_STEPS = [
  *   - 没有标签 "AI自动执行" / "情境时间线"(那些是子约定标签)
  *   - 按 created_date 升序取最早一个(代表当日首次输入的整体意图)
  */
+// 去重工具：按 time+title 标准化键合并 focus_blocks，按 title 合并 key_tasks
+function normKey(s) {
+  return String(s || "").trim().toLowerCase().replace(/\s+/g, "");
+}
+function dedupeBlocks(blocks) {
+  const seen = new Set();
+  const out = [];
+  for (const b of blocks || []) {
+    if (!b) continue;
+    const k = `${normKey(b.time)}|${normKey(b.title)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(b);
+  }
+  return out;
+}
+function dedupeTasks(tasks) {
+  const seen = new Set();
+  const out = [];
+  for (const t of tasks || []) {
+    if (!t) continue;
+    const k = normKey(t.title);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
 async function findExistingParentForDay(dateStr) {
   if (!dateStr) return null;
   try {
@@ -189,8 +218,8 @@ export default function SmartDailyPlanner() {
           theme: data.parsed?.intents?.[0] || '',
           summary: '',
           plan_json: {
-            key_tasks: [...(dayPlan?.plan_json?.key_tasks || []), ...(data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' }))],
-            focus_blocks: [...(dayPlan?.plan_json?.focus_blocks || []), ...(data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' }))],
+            key_tasks: dedupeTasks([...(dayPlan?.plan_json?.key_tasks || []), ...(data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' }))]),
+            focus_blocks: dedupeBlocks([...(dayPlan?.plan_json?.focus_blocks || []), ...(data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' }))]),
           },
           is_active: true,
         };
@@ -282,8 +311,8 @@ export default function SmartDailyPlanner() {
         const targetPlans = await base44.entities.DailyPlan.filter({ plan_date: targetDate });
         if (targetPlans && targetPlans.length > 0) {
           const tp = targetPlans[0];
-          targetPlanRecord.plan_json.key_tasks = [...(tp.plan_json?.key_tasks || []), ...targetPlanRecord.plan_json.key_tasks];
-          targetPlanRecord.plan_json.focus_blocks = [...(tp.plan_json?.focus_blocks || []), ...targetPlanRecord.plan_json.focus_blocks];
+          targetPlanRecord.plan_json.key_tasks = dedupeTasks([...(tp.plan_json?.key_tasks || []), ...targetPlanRecord.plan_json.key_tasks]);
+          targetPlanRecord.plan_json.focus_blocks = dedupeBlocks([...(tp.plan_json?.focus_blocks || []), ...targetPlanRecord.plan_json.focus_blocks]);
           targetPlanRecord.original_input = [tp.original_input, capturedInput].filter(Boolean).join('\n');
           await base44.entities.DailyPlan.update(tp.id, targetPlanRecord);
         } else {

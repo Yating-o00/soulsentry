@@ -20,20 +20,20 @@ function inferAutomationType(title = "", desc = "") {
 }
 
 const TYPE_META = {
-  email_draft:    { icon: Mail,            bg: "bg-blue-50",    color: "text-blue-600",   label: "邮件草稿" },
-  web_research:   { icon: Globe,           bg: "bg-cyan-50",    color: "text-cyan-600",   label: "网页调研" },
-  office_doc:     { icon: FileSpreadsheet, bg: "bg-amber-50",   color: "text-amber-600",  label: "办公文档" },
-  file_organize:  { icon: FileText,        bg: "bg-violet-50",  color: "text-violet-600", label: "文件整理" },
-  calendar_event: { icon: CalIcon,         bg: "bg-emerald-50", color: "text-emerald-600",label: "日历事件" },
-  summary_note:   { icon: StickyNote,      bg: "bg-pink-50",    color: "text-pink-600",   label: "总结心签" },
+  email_draft:    { icon: Mail,            bg: "bg-blue-100/70",    color: "text-blue-700",    label: "邮件" },
+  web_research:   { icon: Globe,           bg: "bg-cyan-100/70",    color: "text-cyan-700",    label: "调研" },
+  office_doc:     { icon: FileSpreadsheet, bg: "bg-amber-100/70",   color: "text-amber-700",   label: "文档" },
+  file_organize:  { icon: FileText,        bg: "bg-violet-100/70",  color: "text-violet-700",  label: "文件" },
+  calendar_event: { icon: CalIcon,         bg: "bg-emerald-100/70", color: "text-emerald-700", label: "日历" },
+  summary_note:   { icon: StickyNote,      bg: "bg-pink-100/70",    color: "text-pink-700",    label: "心签" },
 };
 
 const STATUS_STYLE = {
-  ready:      { dot: "bg-emerald-500", text: "text-emerald-600", label: "已就绪", border: "border-l-emerald-500" },
-  pending:    { dot: "bg-amber-500",   text: "text-amber-600",   label: "待确认", border: "border-l-amber-500" },
-  running:    { dot: "bg-blue-500",    text: "text-blue-600",    label: "执行中", border: "border-l-blue-500", pulse: true },
-  done:       { dot: "bg-emerald-500", text: "text-emerald-600", label: "已完成", border: "border-l-emerald-500" },
-  failed:     { dot: "bg-rose-500",    text: "text-rose-600",    label: "失败",   border: "border-l-rose-500" },
+  ready:      { dot: "bg-emerald-500", text: "text-emerald-700", label: "就绪",   border: "border-l-emerald-400" },
+  pending:    { dot: "bg-amber-500",   text: "text-amber-700",   label: "待确认", border: "border-l-amber-400" },
+  running:    { dot: "bg-blue-500",    text: "text-blue-700",    label: "执行中", border: "border-l-blue-400", pulse: true },
+  done:       { dot: "bg-emerald-500", text: "text-emerald-700", label: "完成",   border: "border-l-emerald-400" },
+  failed:     { dot: "bg-rose-500",    text: "text-rose-700",    label: "失败",   border: "border-l-rose-400" },
 };
 
 function normalizeStatus(s) {
@@ -165,63 +165,62 @@ function ExecCard({ item, onAuthorize, onOpen }) {
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      whileHover={{ y: -2 }}
-      className={`group relative bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/70 border-l-[3px] ${status.border} p-3.5 hover:shadow-[0_8px_24px_-12px_rgba(99,102,241,0.25)] hover:border-slate-200 transition-all duration-300`}
+      exit={{ opacity: 0, y: -6 }}
+      whileHover={{ y: -1 }}
+      className={`group relative bg-white rounded-xl border border-slate-200/80 border-l-[3px] ${status.border} px-3 py-2.5 hover:shadow-[0_6px_20px_-10px_rgba(99,102,241,0.3)] hover:border-indigo-200/60 transition-all duration-200 overflow-hidden`}
     >
-      <div className="flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center flex-shrink-0 ring-1 ring-inset ring-white/60 shadow-sm group-hover:scale-105 transition-transform`}>
-          <Icon className={`w-4 h-4 ${meta.color}`} />
+      {/* Header: 图标 + 标题 + 类型 + 状态 */}
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className={`w-6 h-6 rounded-md ${meta.bg} flex items-center justify-center flex-shrink-0`}>
+          <Icon className={`w-3 h-3 ${meta.color}`} />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-1">
-            <div className="text-[13.5px] font-semibold text-slate-800 truncate leading-snug">{item.title}</div>
-            <div className={`flex items-center gap-1 text-[10px] font-semibold ${status.text} flex-shrink-0 px-1.5 py-0.5 rounded-md bg-white/80`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
-              {status.label}
-            </div>
-          </div>
-          <div className="text-[11.5px] text-slate-500 line-clamp-2 leading-relaxed mb-2.5">{item.desc}</div>
-
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] px-2 py-0.5 rounded-md ${meta.bg} ${meta.color} font-semibold tracking-wide`}>
-              {meta.label}
-            </span>
-
-            <div className="flex-1" />
-
-            {canAuthorize && (
-              <Button
-                size="sm"
-                onClick={onAuthorize}
-                className="h-7 px-3 text-[11px] bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 transition-all"
-              >
-                <Sparkles className="w-3 h-3 mr-1" />
-                确认执行
-              </Button>
-            )}
-            {isRunning && (
-              <span className="flex items-center gap-1.5 text-[11px] font-medium text-blue-600 px-2 py-1 rounded-md bg-blue-50">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                执行中
-              </span>
-            )}
-            {isDone && item.execution_id && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={onOpen}
-                className="h-7 px-2.5 text-[11px] text-emerald-600 hover:bg-emerald-50 rounded-lg font-medium"
-              >
-                <Check className="w-3 h-3 mr-0.5" />
-                查看结果
-                <ChevronRight className="w-3 h-3 ml-0.5" />
-              </Button>
-            )}
-          </div>
+        <div className="text-[13px] font-semibold text-slate-800 truncate flex-1 leading-tight">{item.title}</div>
+        <span className={`text-[9.5px] font-semibold ${meta.color} px-1.5 py-0.5 rounded ${meta.bg} flex-shrink-0`}>
+          {meta.label}
+        </span>
+        <div className={`flex items-center gap-0.5 text-[9.5px] font-medium ${status.text} flex-shrink-0`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
+          {status.label}
         </div>
+      </div>
+
+      {/* 描述 */}
+      <div className="text-[11.5px] text-slate-500 line-clamp-2 leading-[1.5] pl-8 pr-1 mb-2">
+        {item.desc}
+      </div>
+
+      {/* 操作行 */}
+      <div className="flex items-center justify-end pl-8">
+        {canAuthorize && (
+          <Button
+            size="sm"
+            onClick={onAuthorize}
+            className="h-6 px-2.5 text-[10.5px] font-medium bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-md shadow-sm shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all"
+          >
+            <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+            确认执行
+          </Button>
+        )}
+        {isRunning && (
+          <span className="flex items-center gap-1 text-[10.5px] font-medium text-blue-600 px-2 py-0.5 rounded-md bg-blue-50">
+            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+            执行中
+          </span>
+        )}
+        {isDone && item.execution_id && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onOpen}
+            className="h-6 px-2 text-[10.5px] text-emerald-600 hover:bg-emerald-50 rounded-md font-medium"
+          >
+            <Check className="w-2.5 h-2.5 mr-0.5" />
+            查看结果
+            <ChevronRight className="w-2.5 h-2.5 ml-0.5" />
+          </Button>
+        )}
       </div>
     </motion.div>
   );

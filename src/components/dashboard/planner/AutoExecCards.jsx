@@ -47,6 +47,35 @@ function normalizeStatus(s) {
   return "ready";
 }
 
+// 从 automation_result 中提炼一段可在卡片内直接展示的摘要文本
+function extractPreview(ar) {
+  if (!ar) return "";
+  if (ar.preview && typeof ar.preview === "string") return ar.preview.trim();
+  if (ar.data) {
+    const d = ar.data;
+    // 邮件：主题 + 收件人 + 正文片段
+    if (d.subject || d.body || d.to) {
+      const lines = [];
+      if (d.subject) lines.push(`📧 ${d.subject}`);
+      if (d.to) lines.push(`收件人：${d.to}`);
+      if (d.body) lines.push("");
+      if (d.body) lines.push(String(d.body));
+      return lines.join("\n").trim();
+    }
+    // 会议纪要 / 文档：title + summary / content
+    if (d.title || d.summary || d.content) {
+      const lines = [];
+      if (d.title) lines.push(d.title);
+      if (d.summary) lines.push(d.summary);
+      if (d.content) lines.push(String(d.content));
+      return lines.join("\n").trim();
+    }
+    if (typeof d === "string") return d;
+    return JSON.stringify(d, null, 2);
+  }
+  return "";
+}
+
 export default function AutoExecCards({ tasks = [], userText = "" }) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState([]);
@@ -61,11 +90,29 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
       desc: t.desc || t.description || "根据规划自动派生",
       status: normalizeStatus(t.status),
       automation_type: inferAutomationType(t.title, t.desc || t.description),
-      execution_id: null,
+      execution_id: t.execution_id || null,
+      result_preview: null,
     }));
     setItems(list);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(tasks)]);
+
+  // 自动为「已完成且带 execution_id 但缺预览」的卡片拉取结果
+  React.useEffect(() => {
+    const targets = items.filter(it => it.status === "done" && it.execution_id && !it.result_preview);
+    if (targets.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const it of targets) {
+        const exec = await base44.entities.TaskExecution.get(it.execution_id).catch(() => null);
+        if (cancelled || !exec) continue;
+        const preview = extractPreview(exec.automation_result);
+        if (preview) updateItem(it._id, { result_preview: preview });
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.map(i => i._id + i.status + (i.execution_id || "")).join("|")]);
 
   if (items.length === 0) return null;
 
@@ -98,19 +145,11 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
       if (execRes.data?.error) throw new Error(execRes.data.error);
 
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-      updateItem(item._id, { status: "done" });
 
       // 成功反馈：拉取最终 execution 并取 preview 作为摘要
       const finalExec = await base44.entities.TaskExecution.get(exec.id).catch(() => null);
-      const ar = finalExec?.automation_result;
-      let preview = "";
-      if (ar?.preview) {
-        preview = ar.preview;
-      } else if (ar?.data) {
-        preview = typeof ar.data === "string"
-          ? ar.data
-          : JSON.stringify(ar.data, null, 2).slice(0, 600);
-      }
+      const preview = extractPreview(finalExec?.automation_result);
+      updateItem(item._id, { status: "done", result_preview: preview });
       setFeedback({
         mode: "success",
         item: { ...item, execution_id: exec.id },
@@ -302,6 +341,24 @@ function ExecCard({ item, onAuthorize, onOpen }) {
         {item.desc}
       </div>
 
+      {/* 已执行：内嵌结果预览（AI 产物） */}
+      {isDone && item.result_preview && (
+        <div className="ml-8 mb-2 rounded-lg bg-emerald-50/40 border border-emerald-100 px-2.5 py-2 max-h-32 overflow-y-auto">
+          <div className="flex items-center gap-1 text-[9.5px] font-semibold text-emerald-700 mb-1">
+            <Sparkles className="w-2.5 h-2.5" />
+            AI 执行结果
+          </div>
+          <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans leading-[1.5] line-clamp-5">
+            {item.result_preview}
+          </pre>
+        </div>
+      )}
+      {isDone && !item.result_preview && item.execution_id && (
+        <div className="ml-8 mb-2 text-[10.5px] text-slate-400 italic">
+          正在加载执行结果…
+        </div>
+      )}
+
       {/* 操作行 */}
       <div className="flex items-center justify-end pl-8">
         {canAuthorize && (
@@ -328,7 +385,7 @@ function ExecCard({ item, onAuthorize, onOpen }) {
             className="h-6 px-2 text-[10.5px] text-emerald-600 hover:bg-emerald-50 rounded-md font-medium"
           >
             <Check className="w-2.5 h-2.5 mr-0.5" />
-            查看结果
+            查看完整结果
             <ChevronRight className="w-2.5 h-2.5 ml-0.5" />
           </Button>
         )}

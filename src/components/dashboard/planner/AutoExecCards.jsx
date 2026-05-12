@@ -1,64 +1,220 @@
-import React from "react";
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQueryClient } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
+import { Loader2, Check, ChevronRight, Sparkles, Zap, Plus, FileText, Mail, Globe, FileSpreadsheet, Calendar as CalIcon, StickyNote } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
 
-// 兼容旧引用：实际渲染由 Dashboard 顶层的 <AutoExecutionPanel /> 承载（输入+清单已合并到那里）
-// 此组件保留为空壳避免双重展示。
-export default function AutoExecCards() {
-  return null;
+// 从标题/描述粗略推断 automation_type，让单条卡片直接走 executeAutomation
+function inferAutomationType(title = "", desc = "") {
+  const t = `${title} ${desc}`.toLowerCase();
+  if (/邮件|email|mail|发信|回邮/.test(t)) return "email_draft";
+  if (/调研|research|查|搜索|网|资讯/.test(t)) return "web_research";
+  if (/ppt|excel|word|文档|报告|方案|表格|演示/.test(t)) return "office_doc";
+  if (/文件|整理|归档|分类|目录/.test(t)) return "file_organize";
+  if (/日历|会议|预约|安排|事件/.test(t)) return "calendar_event";
+  if (/笔记|总结|心签|note|summary|复盘/.test(t)) return "summary_note";
+  return "summary_note";
 }
 
-function _LegacyAutoExecCards({ tasks = [], userText = "" }) {
-  const text = (userText || "").trim();
+const TYPE_META = {
+  email_draft:    { icon: Mail,            bg: "bg-blue-50",    color: "text-blue-600",   label: "邮件草稿" },
+  web_research:   { icon: Globe,           bg: "bg-cyan-50",    color: "text-cyan-600",   label: "网页调研" },
+  office_doc:     { icon: FileSpreadsheet, bg: "bg-amber-50",   color: "text-amber-600",  label: "办公文档" },
+  file_organize:  { icon: FileText,        bg: "bg-violet-50",  color: "text-violet-600", label: "文件整理" },
+  calendar_event: { icon: CalIcon,         bg: "bg-emerald-50", color: "text-emerald-600",label: "日历事件" },
+  summary_note:   { icon: StickyNote,      bg: "bg-pink-50",    color: "text-pink-600",   label: "总结心签" },
+};
 
-  const derivePlaceholders = (t) => {
-    if (!t) return [];
-    const res = [];
-    const push = (title, status = 'READY', desc = '根据你的规划自动执行') => {
-      if (!res.find(x => x.title === title)) res.push({ title, status, desc });
-    };
+const STATUS_STYLE = {
+  ready:      { dot: "bg-emerald-500", text: "text-emerald-600", label: "已就绪", border: "border-l-emerald-500" },
+  pending:    { dot: "bg-amber-500",   text: "text-amber-600",   label: "待确认", border: "border-l-amber-500" },
+  running:    { dot: "bg-blue-500",    text: "text-blue-600",    label: "执行中", border: "border-l-blue-500", pulse: true },
+  done:       { dot: "bg-emerald-500", text: "text-emerald-600", label: "已完成", border: "border-l-emerald-500" },
+  failed:     { dot: "bg-rose-500",    text: "text-rose-600",    label: "失败",   border: "border-l-rose-500" },
+};
 
-    if (/[Qq][1-4]|报告|季度|周报|月报/.test(t)) push('报告完成提醒', 'MONITORING', '自动执行项');
-    if (/进度|检查|检视|复盘/.test(t)) {
-      if (/晚|夜|晚上|晚间/.test(t)) push('晚间检查进度', 'READY', '自动执行项');
-      push('每日进度提醒', 'ACTIVE', '自动执行项');
+function normalizeStatus(s) {
+  if (!s) return "ready";
+  const v = String(s).toLowerCase();
+  if (v === "active" || v === "monitoring" || v === "in_progress") return "running";
+  if (v === "completed") return "done";
+  if (["ready","pending","running","done","failed"].includes(v)) return v;
+  return "ready";
+}
+
+export default function AutoExecCards({ tasks = [], userText = "" }) {
+  const queryClient = useQueryClient();
+  const [items, setItems] = useState([]);
+  const [openExec, setOpenExec] = useState(null);
+
+  // 把 props 同步进 state（保持父组件传入的最新清单），但保留本地已授权状态
+  React.useEffect(() => {
+    const list = (tasks || []).slice(0, 6).map((t, i) => ({
+      _id: `plan-${i}-${(t.title || "").slice(0, 12)}`,
+      title: t.title || `自动项 ${i + 1}`,
+      desc: t.desc || t.description || "根据规划自动派生",
+      status: normalizeStatus(t.status),
+      automation_type: inferAutomationType(t.title, t.desc || t.description),
+      execution_id: null,
+    }));
+    setItems(list);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(tasks)]);
+
+  if (items.length === 0) return null;
+
+  const updateItem = (id, patch) => setItems(prev => prev.map(it => it._id === id ? { ...it, ...patch } : it));
+
+  // 授权 → 创建 TaskExecution → plan → execute
+  const handleAuthorize = async (item) => {
+    updateItem(item._id, { status: "running" });
+    try {
+      const exec = await base44.entities.TaskExecution.create({
+        task_title: item.title,
+        original_input: item.desc || item.title,
+        category: "task",
+        execution_status: "parsing",
+        automation_type: item.automation_type,
+        ai_parsed_result: {
+          source: "smart_daily_planner",
+          summary: item.desc || item.title,
+          scene: userText || "",
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      updateItem(item._id, { execution_id: exec.id });
+
+      const planRes = await base44.functions.invoke('executeAutomation', { execution_id: exec.id, phase: "plan" });
+      if (planRes.data?.error) throw new Error(planRes.data.error);
+
+      const execRes = await base44.functions.invoke('executeAutomation', { execution_id: exec.id, phase: "execute" });
+      if (execRes.data?.error) throw new Error(execRes.data.error);
+
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      updateItem(item._id, { status: "done" });
+      toast.success(`已完成：${item.title}`, { icon: "✅" });
+    } catch (e) {
+      updateItem(item._id, { status: "failed" });
+      toast.error("执行失败：" + e.message);
     }
-    if (/电话|来电|联系|通话/.test(t)) push('通话提醒', 'READY', '自动执行项');
-    if (/航班|飞|出发|机场|登机/.test(t)) push('行程出发提醒', 'ACTIVE', '自动执行项');
-    if (/会议|见面|面谈|准备/.test(t)) push('会议前准备清单', 'READY', '自动执行项');
-
-    return res.slice(0, 4);
   };
 
-  const fromInput = derivePlaceholders(text);
-
-  const items = (tasks || []).map((t, i) => ({
-    title: t.title,
-    status: t.status || (i === 0 ? 'ACTIVE' : i === 1 ? 'MONITORING' : 'READY'),
-    desc: t.desc || t.description || (t.estimated_minutes ? `${t.estimated_minutes}分钟预留` : '自动执行项')
-  })).slice(0, 4);
-
-  const merged = [...items, ...fromInput].slice(0, 4);
-
-  if (merged.length === 0) return null;
-
-  const badgeColor = (s) => s==='ACTIVE' ? 'text-emerald-600' : s==='READY' ? 'text-indigo-600' : s==='MONITORING' ? 'text-amber-600' : 'text-slate-600';
+  const openExecution = async (item) => {
+    if (!item.execution_id) return;
+    const exec = await base44.entities.TaskExecution.get(item.execution_id);
+    setOpenExec(exec);
+  };
 
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-lg font-bold text-slate-800">自动执行清单</h4>
-        <span className="text-xs text-slate-500">{merged.length} 项待执行</span>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {merged.map((it, idx) => (
-          <div key={idx} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="text-slate-800 font-medium truncate">{it.title}</div>
-              <span className={`text-[10px] font-medium ${badgeColor(it.status)}`}>• {it.status}</span>
+    <>
+      <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-sm">
+              <Zap className="w-3.5 h-3.5 text-white" />
             </div>
-            <div className="text-xs text-slate-500">{it.desc}</div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-800">自动执行清单</h4>
+              <p className="text-[11px] text-slate-400">点击「确认执行」由 AI 自动完成</p>
+            </div>
           </div>
-        ))}
+          <span className="text-[11px] text-slate-400">{items.length} 项</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <AnimatePresence>
+            {items.map((it) => (
+              <ExecCard
+                key={it._id}
+                item={it}
+                onAuthorize={() => handleAuthorize(it)}
+                onOpen={() => openExecution(it)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
+
+      <AutomationDetailDialog
+        execution={openExec}
+        open={!!openExec}
+        onOpenChange={(o) => !o && setOpenExec(null)}
+      />
+    </>
+  );
+}
+
+function ExecCard({ item, onAuthorize, onOpen }) {
+  const meta = TYPE_META[item.automation_type] || TYPE_META.summary_note;
+  const status = STATUS_STYLE[item.status] || STATUS_STYLE.ready;
+  const Icon = meta.icon;
+  const isRunning = item.status === "running";
+  const isDone = item.status === "done";
+  const canAuthorize = item.status === "ready" || item.status === "pending" || item.status === "failed";
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className={`relative bg-white rounded-2xl border border-slate-100 border-l-4 ${status.border} p-3.5 hover:shadow-sm transition-shadow`}
+    >
+      <div className="flex items-start gap-2.5">
+        <div className={`w-8 h-8 rounded-lg ${meta.bg} flex items-center justify-center flex-shrink-0`}>
+          <Icon className={`w-4 h-4 ${meta.color}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="text-sm font-semibold text-slate-800 truncate">{item.title}</div>
+            <div className={`flex items-center gap-1 text-[10px] font-medium ${status.text} flex-shrink-0`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
+              {status.label}
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed mb-2">{item.desc}</div>
+
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${meta.bg} ${meta.color} font-medium`}>
+              {meta.label}
+            </span>
+
+            <div className="flex-1" />
+
+            {canAuthorize && (
+              <Button
+                size="sm"
+                onClick={onAuthorize}
+                className="h-6 px-2.5 text-[11px] bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg shadow-sm"
+              >
+                <Sparkles className="w-2.5 h-2.5 mr-1" />
+                确认执行
+              </Button>
+            )}
+            {isRunning && (
+              <span className="flex items-center gap-1 text-[11px] text-blue-600">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                执行中
+              </span>
+            )}
+            {isDone && item.execution_id && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onOpen}
+                className="h-6 px-2 text-[11px] text-emerald-600 hover:bg-emerald-50 rounded-lg"
+              >
+                <Check className="w-3 h-3 mr-0.5" />
+                查看结果
+                <ChevronRight className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }

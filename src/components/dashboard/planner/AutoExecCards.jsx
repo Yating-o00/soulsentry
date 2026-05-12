@@ -1,6 +1,12 @@
 import React from "react";
 
-export default function AutoExecCards({ tasks = [], userText = "" }) {
+// 兼容旧引用：实际渲染由 Dashboard 顶层的 <AutoExecutionPanel /> 承载（输入+清单已合并到那里）
+// 此组件保留为空壳避免双重展示。
+export default function AutoExecCards() {
+  return null;
+}
+
+function _LegacyAutoExecCards({ tasks = [], userText = "" }) {
   const text = (userText || "").trim();
 
   const derivePlaceholders = (t) => {

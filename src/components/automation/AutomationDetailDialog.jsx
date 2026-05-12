@@ -262,23 +262,9 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
             </div>
           )}
 
-          {/* 已完成：调整反馈 + 评分 */}
+          {/* 已完成：调整反馈 */}
           {status === "completed" && (
             <div className="space-y-3 pt-2 border-t border-slate-100">
-              <div>
-                <div className="text-xs text-slate-500 mb-1.5">对这次执行满意吗？</div>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map(n => (
-                    <button
-                      key={n}
-                      onClick={() => handleRate(n)}
-                      className={`text-xl transition-colors ${
-                        (execution.user_feedback?.rating || 0) >= n ? "text-amber-400" : "text-slate-200 hover:text-amber-300"
-                      }`}
-                    >★</button>
-                  ))}
-                </div>
-              </div>
               <details className="text-xs">
                 <summary className="cursor-pointer text-slate-500 hover:text-slate-700 flex items-center gap-1">
                   <MessageSquarePlus className="w-3 h-3" />不满意？继续沟通调整

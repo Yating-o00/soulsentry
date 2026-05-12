@@ -60,16 +60,32 @@ export default function EmailPreviewDialog({
       // 同步回 TaskExecution（让卡片预览也变成最新内容）
       if (executionId) {
         const finalData = { to: to.trim(), subject: subject.trim(), body: body.trim() };
+        const nowIso = new Date().toISOString();
         try {
-          await base44.entities.TaskExecution.update(executionId, {
+          const execRecord = await base44.entities.TaskExecution.update(executionId, {
             execution_status: "completed",
-            completed_at: new Date().toISOString(),
+            completed_at: nowIso,
             automation_result: {
               type: "email_draft",
               preview: `收件人: ${finalData.to}\n主题: ${finalData.subject}\n\n${finalData.body}`,
               data: { ...finalData, sent: true, gmail_message_id: res?.data?.gmail_message_id || "" },
             },
           });
+          // 把对应父任务及其子任务（事项链路）全部标记为完成
+          const parentId = execRecord?.task_id;
+          if (parentId) {
+            try {
+              await base44.entities.Task.update(parentId, { status: "completed", completed_at: nowIso, progress: 100 });
+            } catch (_) { /* ignore */ }
+            try {
+              const children = await base44.entities.Task.filter({ parent_task_id: parentId });
+              await Promise.all(
+                (children || [])
+                  .filter(c => c && !c.deleted_at && c.status !== "completed")
+                  .map(c => base44.entities.Task.update(c.id, { status: "completed", completed_at: nowIso, progress: 100 }))
+              );
+            } catch (_) { /* ignore */ }
+          }
         } catch (_) { /* 写回失败不阻塞用户 */ }
       }
 

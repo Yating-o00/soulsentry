@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import feedback from "@/lib/feedback.jsx";
 import { findDuplicateTasks, getPostCompletionLinks } from "@/lib/entityBridge";
+import { findReusableTask } from "@/lib/findOrReuseTask";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
@@ -42,8 +43,19 @@ export function useTaskOperations() {
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: (taskData) => base44.entities.Task.create(taskData),
+    mutationFn: async (taskData) => {
+      // 入口去重：若已有同标题 + 同日（或 ±30 分钟）的活跃顶层任务，复用而不新建。
+      // 防止同一意图（包括 AI 拆解出的 automation 项）被反复创建为独立父约定。
+      const reuse = await findReusableTask(taskData);
+      if (reuse) return { ...reuse, _reused: true };
+      return base44.entities.Task.create(taskData);
+    },
     onSuccess: (data) => {
+      if (data?._reused) {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        feedback.info(`已合并到已有约定「${data.title}」，避免重复`);
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       
       // Google Calendar 同步由实体自动化 autoSyncTaskToCalendar 统一处理，

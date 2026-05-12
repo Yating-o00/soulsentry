@@ -1,5 +1,6 @@
 import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
+import { findReusableTask } from "@/lib/findOrReuseTask";
 
 export async function generateExecutionPlan(userInput, semanticHint, locationContext = null) {
   const now = new Date();
@@ -201,7 +202,7 @@ export async function executeStep(step, taskId, taskData, execution) {
 
   switch (step.action_key) {
     case "create_task": {
-      const newTask = await base44.entities.Task.create({
+      const payload = {
         title: taskData.title,
         description: taskData.description || "",
         category: taskData.category || "personal",
@@ -211,7 +212,13 @@ export async function executeStep(step, taskId, taskData, execution) {
         end_time: taskData.end_time || null,
         is_all_day: taskData.is_all_day || false,
         tags: taskData.tags || [],
-      });
+      };
+      // 入口去重：避免同一意图反复变成独立父约定
+      const reuse = await findReusableTask(payload);
+      if (reuse) {
+        return { success: true, detail: `已合并到已有约定: ${reuse.title}`, taskId: reuse.id };
+      }
+      const newTask = await base44.entities.Task.create(payload);
       return { success: true, detail: `任务已创建: ${newTask.title}`, taskId: newTask.id };
     }
 

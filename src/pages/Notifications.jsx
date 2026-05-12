@@ -134,7 +134,10 @@ export default function NotificationsPage() {
   };
 
   const filteredExecutions = executions.filter(e => {
-    const catMatch = activeFilter === "all" || e.category === activeFilter;
+    let catMatch = false;
+    if (activeFilter === "all") catMatch = true;
+    else if (activeFilter === "automation") catMatch = !!e.automation_type && e.automation_type !== "none";
+    else catMatch = e.category === activeFilter;
     const srcMatch = sourceFilter === "all" || e.ai_parsed_result?.source === sourceFilter;
     let statusMatch = true;
     if (statusFilter === "parsing") {
@@ -166,6 +169,7 @@ export default function NotificationsPage() {
 
   const filters = [
     { key: "all", label: "全部" },
+    { key: "automation", label: "🤖 自动执行" },
     { key: "promise", label: "约定" },
     { key: "task", label: "任务" },
     { key: "note", label: "心签" },

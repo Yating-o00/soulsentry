@@ -45,6 +45,7 @@ import SoulSentryHub from "../components/dashboard/SoulSentryHub";
 import DailyBriefing from "../components/dashboard/DailyBriefing";
 import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
 import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
+import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -417,6 +418,15 @@ export default function Dashboard() {
         transition={{ delay: 0.15 }}
       >
         <SmartDailyPlanner />
+      </motion.div>
+
+      {/* 自动执行清单 - AI 帮你做事 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+      >
+        <AutoExecutionPanel />
       </motion.div>
 
       {/* Main Content: SoulSentry Hub */}

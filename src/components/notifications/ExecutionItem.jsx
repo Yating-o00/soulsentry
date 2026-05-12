@@ -14,6 +14,8 @@ import ExecutionStepFlow from "./ExecutionStepFlow";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
 import SentinelSummaryCard from "@/components/smart/SentinelSummaryCard";
 import { useQuery } from "@tanstack/react-query";
+import { AUTOMATION_TYPES } from "@/components/automation/automationConfig";
+import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
 
 const categoryConfig = {
   promise: { label: "约定", emoji: "🤝", color: "bg-purple-50 text-purple-600 border-purple-200" },
@@ -33,7 +35,12 @@ const statusConfig = {
 
 export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss, onOpenAdvisor }) {
   const [expanded, setExpanded] = useState(false);
+  const [autoDetailOpen, setAutoDetailOpen] = useState(false);
   const queryClient = useQueryClient();
+
+  const autoType = execution.automation_type;
+  const isAutomation = autoType && autoType !== "none";
+  const autoCfg = isAutomation ? (AUTOMATION_TYPES[autoType] || null) : null;
 
   // 拉取关联任务的哨兵分析（仅在展开时启用）
   const { data: sentinelTask } = useQuery({
@@ -233,6 +240,24 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
               {/* 情境哨兵摘要：合适的时间 / 地点 / 方式 */}
               {sentinelTask && <SentinelSummaryCard task={sentinelTask} />}
 
+              {/* 自动执行入口 - 当是自动执行任务时优先展示 */}
+              {isAutomation && autoCfg && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`w-full gap-2 h-9 ${autoCfg.color}`}
+                  onClick={(e) => { e.stopPropagation(); setAutoDetailOpen(true); }}
+                >
+                  <span>{autoCfg.emoji}</span>
+                  查看{autoCfg.label}
+                  {execution.execution_status === "waiting_confirm" && (
+                    <Badge variant="outline" className="ml-auto bg-amber-50 text-amber-600 border-amber-200 text-[10px]">
+                      待审批
+                    </Badge>
+                  )}
+                </Button>
+              )}
+
               <Button variant="outline" size="sm" className="w-full gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 h-9" onClick={(e) => { e.stopPropagation(); onOpenAdvisor?.(execution); }}>
                 <Brain className="w-4 h-4" />AI 执行顾问 · 获取智能建议
               </Button>
@@ -240,6 +265,15 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 自动执行详情对话框 */}
+      {isAutomation && (
+        <AutomationDetailDialog
+          execution={execution}
+          open={autoDetailOpen}
+          onOpenChange={setAutoDetailOpen}
+        />
+      )}
     </motion.div>
   );
 }

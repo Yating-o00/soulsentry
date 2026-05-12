@@ -62,6 +62,8 @@ export default function EmailPreviewDialog({
         const finalData = { to: to.trim(), subject: subject.trim(), body: body.trim() };
         try {
           await base44.entities.TaskExecution.update(executionId, {
+            execution_status: "completed",
+            completed_at: new Date().toISOString(),
             automation_result: {
               type: "email_draft",
               preview: `收件人: ${finalData.to}\n主题: ${finalData.subject}\n\n${finalData.body}`,

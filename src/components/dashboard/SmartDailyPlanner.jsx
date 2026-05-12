@@ -234,14 +234,35 @@ export default function SmartDailyPlanner() {
           }
         }).catch(e => console.warn("Email intent detection skipped:", e));
 
-        // 后台静默同步到心签（AI 规划内容不再单独生成约定）
+        // 后台静默：用户原始输入 → 父约定；AI 规划结果（时间线/自动执行）→ 子约定挂在父下
         setSyncStatus('syncing');
-        syncPlanToNote(capturedInput, "daily_plan", { date: selectedDateStr })
-          .then(note => {
-            if (note) toast.success("已同步到心签", { icon: '🔄' });
-          })
-          .catch(e => console.warn("syncPlanToNote failed", e))
-          .finally(() => setSyncStatus('done'));
+        const isAppend = !!existingPlanId;
+        const taskPromise = isAppend
+          ? findExistingParentForDay(selectedDateStr)
+          : extractAndCreateTasks(capturedInput, selectedDateStr).then(arr => arr?.[0] || null);
+
+        Promise.allSettled([
+          taskPromise,
+          syncPlanToNote(capturedInput, "daily_plan", { date: selectedDateStr })
+        ]).then(async results => {
+          const parentTask = results[0].status === 'fulfilled' ? results[0].value : null;
+          const noteOk = results[1].status === 'fulfilled' && results[1].value;
+          if (parentTask?.id) {
+            const timelineForDay = (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr);
+            await attachPlanChildrenToParent(parentTask.id, {
+              timeline: timelineForDay,
+              automations: data.automations || [],
+              dateStr: selectedDateStr,
+            }).catch(e => console.warn("attach children failed", e));
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          }
+          const parts = [];
+          if (!isAppend && parentTask) parts.push('1 个约定');
+          else if (isAppend && parentTask) parts.push('已并入当日约定');
+          if (noteOk) parts.push('心签');
+          if (parts.length > 0) toast.success(`已同步到${parts.join(' + ')}`, { icon: '🔄' });
+          setSyncStatus('done');
+        });
       } else {
         setAnalysis(null);
         setResolvedDateHint(targetDate);
@@ -278,14 +299,35 @@ export default function SmartDailyPlanner() {
           setConflictData({ conflicts: targetConflicts, allBlocks: targetBlocks });
         }
 
-        // 后台静默同步到心签（AI 规划内容不再单独生成约定）
+        // 后台静默：用户原始输入 → 父约定；AI 规划结果 → 子约定
         setSyncStatus('syncing');
-        syncPlanToNote(capturedInput, "daily_plan", { date: targetDate })
-          .then(note => {
-            if (note) toast.success("已同步到心签", { icon: '🔄' });
-          })
-          .catch(e => console.warn("syncPlanToNote failed", e))
-          .finally(() => setSyncStatus('done'));
+        const targetHasPlan = targetPlans && targetPlans.length > 0;
+        const taskPromise = targetHasPlan
+          ? findExistingParentForDay(targetDate)
+          : extractAndCreateTasks(capturedInput, targetDate).then(arr => arr?.[0] || null);
+
+        Promise.allSettled([
+          taskPromise,
+          syncPlanToNote(capturedInput, "daily_plan", { date: targetDate })
+        ]).then(async results => {
+          const parentTask = results[0].status === 'fulfilled' ? results[0].value : null;
+          const noteOk = results[1].status === 'fulfilled' && results[1].value;
+          if (parentTask?.id) {
+            const timelineForDay = (data.timeline || []).filter(t => !t.date || t.date === targetDate);
+            await attachPlanChildrenToParent(parentTask.id, {
+              timeline: timelineForDay,
+              automations: data.automations || [],
+              dateStr: targetDate,
+            }).catch(e => console.warn("attach children failed", e));
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          }
+          const parts = [];
+          if (!targetHasPlan && parentTask) parts.push('1 个约定');
+          else if (targetHasPlan && parentTask) parts.push('已并入当日约定');
+          if (noteOk) parts.push('心签');
+          if (parts.length > 0) toast.success(`已同步到${parts.join(' + ')}`, { icon: '🔄' });
+          setSyncStatus('done');
+        });
       }
     } catch (err) {
       console.error("Analysis failed", err);

@@ -32,11 +32,11 @@ const TYPE_META = {
 };
 
 const STATUS_STYLE = {
-  ready:      { dot: "bg-[#384877]",   text: "text-[#384877]",   label: "就绪",   border: "border-l-[#384877]/30" },
-  pending:    { dot: "bg-amber-500",   text: "text-amber-700",   label: "待确认", border: "border-l-amber-400" },
-  running:    { dot: "bg-[#3b5aa2]",   text: "text-[#3b5aa2]",   label: "执行中", border: "border-l-[#3b5aa2]", pulse: true },
-  done:       { dot: "bg-emerald-500", text: "text-emerald-700", label: "完成",   border: "border-l-emerald-400" },
-  failed:     { dot: "bg-rose-500",    text: "text-rose-700",    label: "失败",   border: "border-l-rose-400" },
+  ready:      { dot: "bg-[#384877]",   text: "text-[#384877]",   label: "就绪",     border: "border-l-[#384877]/30" },
+  pending:    { dot: "bg-amber-500",   text: "text-amber-700",   label: "待确认",   border: "border-l-amber-400" },
+  running:    { dot: "bg-[#3b5aa2]",   text: "text-[#3b5aa2]",   label: "执行中",   border: "border-l-[#3b5aa2]", pulse: true },
+  done:       { dot: "bg-emerald-500", text: "text-emerald-700", label: "已执行",   border: "border-l-emerald-400" },
+  failed:     { dot: "bg-rose-500",    text: "text-rose-700",    label: "失败",     border: "border-l-rose-400" },
 };
 
 function normalizeStatus(s) {
@@ -226,10 +226,27 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
               <p className="text-[11px] text-slate-500 mt-0.5">点击「确认执行」由 AI 自动完成</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200/60">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#384877] animate-pulse" />
-            <span className="text-[11px] font-medium text-slate-600">{items.length} 项待执行</span>
-          </div>
+          {(() => {
+            const doneCount = items.filter(it => it.status === "done").length;
+            const pendingCount = items.length - doneCount;
+            return (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200/60">
+                {doneCount > 0 && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-[11px] font-medium text-emerald-700">{doneCount} 已执行</span>
+                    {pendingCount > 0 && <span className="text-[11px] text-slate-300">·</span>}
+                  </>
+                )}
+                {pendingCount > 0 && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#384877] animate-pulse" />
+                    <span className="text-[11px] font-medium text-slate-600">{pendingCount} 项待执行</span>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3">

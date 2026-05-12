@@ -766,7 +766,15 @@ export default function SmartDailyPlanner() {
                   <ContextTimeline blocks={dayPlan.plan_json.focus_blocks} />
                 )}
                 {dayPlan.plan_json?.key_tasks?.length > 0 && (
-                  <AutoExecCards tasks={dayPlan.plan_json.key_tasks.map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'active' : 'ready' }))} />
+                  <AutoExecCards tasks={dayPlan.plan_json.key_tasks.map(t => ({
+                    title: t.title,
+                    desc: t.description || '',
+                    // 已完成 → done(已执行)；执行中 → running；其它 → ready
+                    status: t.status === 'completed' ? 'done'
+                      : (t.status === 'in_progress' || t.status === 'running') ? 'running'
+                      : 'ready',
+                    execution_id: t.execution_id || null,
+                  }))} />
                 )}
               </>
             )}

@@ -6,6 +6,8 @@ import { Loader2, Check, ChevronRight, Sparkles, Zap, Plus, FileText, Mail, Glob
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
+import ExecutionFailureDialog from "@/components/automation/ExecutionFailureDialog";
+import ExecutionResultDialog from "@/components/automation/ExecutionResultDialog";
 
 // 从标题/描述粗略推断 automation_type，让单条卡片直接走 executeAutomation
 function inferAutomationType(title = "", desc = "") {
@@ -50,6 +52,8 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState([]);
   const [openExec, setOpenExec] = useState(null);
+  const [failureCtx, setFailureCtx] = useState(null); // { item, error }
+  const [feedback, setFeedback] = useState(null); // { mode, item, resultPreview?, errorMessage?, suggestions? }
 
   // 把 props 同步进 state（保持父组件传入的最新清单），但保留本地已授权状态
   React.useEffect(() => {
@@ -69,19 +73,20 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
 
   const updateItem = (id, patch) => setItems(prev => prev.map(it => it._id === id ? { ...it, ...patch } : it));
 
-  // 授权 → 创建 TaskExecution → plan → execute
-  const handleAuthorize = async (item) => {
+  // 授权 → 创建 TaskExecution → plan → execute（支持 overrideInput 重试时携带修改后的需求）
+  const handleAuthorize = async (item, overrideInput) => {
     updateItem(item._id, { status: "running" });
+    const input = overrideInput || item.desc || item.title;
     try {
       const exec = await base44.entities.TaskExecution.create({
         task_title: item.title,
-        original_input: item.desc || item.title,
+        original_input: input,
         category: "task",
         execution_status: "parsing",
         automation_type: item.automation_type,
         ai_parsed_result: {
           source: "smart_daily_planner",
-          summary: item.desc || item.title,
+          summary: input,
           scene: userText || "",
         },
       });
@@ -96,10 +101,32 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
 
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       updateItem(item._id, { status: "done" });
-      toast.success(`已完成：${item.title}`, { icon: "✅" });
+
+      // 成功反馈：拉取最终 execution 并取 preview 作为摘要
+      const finalExec = await base44.entities.TaskExecution.get(exec.id).catch(() => null);
+      const ar = finalExec?.automation_result;
+      let preview = "";
+      if (ar?.preview) {
+        preview = ar.preview;
+      } else if (ar?.data) {
+        preview = typeof ar.data === "string"
+          ? ar.data
+          : JSON.stringify(ar.data, null, 2).slice(0, 600);
+      }
+      setFeedback({
+        mode: "success",
+        item: { ...item, execution_id: exec.id },
+        resultPreview: preview,
+      });
     } catch (e) {
       updateItem(item._id, { status: "failed" });
-      toast.error("执行失败：" + e.message);
+      const msg = e?.message || "未知错误";
+      setFeedback({
+        mode: "failed",
+        item,
+        errorMessage: msg,
+        suggestions: buildSuggestions(item.automation_type, msg),
+      });
     }
   };
 
@@ -151,8 +178,93 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
         open={!!openExec}
         onOpenChange={(o) => !o && setOpenExec(null)}
       />
+
+      <ExecutionResultDialog
+        open={!!feedback}
+        onOpenChange={(o) => !o && setFeedback(null)}
+        mode={feedback?.mode}
+        title={feedback?.item?.title || ""}
+        automationType={feedback?.item?.automation_type}
+        resultPreview={feedback?.resultPreview}
+        errorMessage={feedback?.errorMessage}
+        suggestions={feedback?.suggestions}
+        onRetry={feedback?.mode === "failed" ? () => handleAuthorize(feedback.item) : undefined}
+        onRetryWithEdit={feedback?.mode === "failed"
+          ? (newInput) => handleAuthorize(feedback.item, newInput)
+          : undefined}
+        onHandover={feedback?.mode === "failed" ? async () => {
+          // 人工接管：创建一个普通约定，状态为待办，由用户手动处理
+          try {
+            await base44.entities.Task.create({
+              title: feedback.item.title,
+              description: `${feedback.item.desc || ""}\n\n⚠️ AI 自动执行失败，已转为人工待办。\n失败原因：${feedback.errorMessage || "未知"}`,
+              status: "pending",
+              priority: "medium",
+              tags: ["人工接管", "AI失败回退"],
+            });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+            toast.success("已转为人工待办，请在「约定」中处理", { icon: "👤" });
+          } catch (err) {
+            toast.error("接管失败：" + err.message);
+          }
+        } : undefined}
+        onViewDetail={feedback?.mode === "success" && feedback?.item?.execution_id
+          ? async () => {
+              const exec = await base44.entities.TaskExecution.get(feedback.item.execution_id);
+              setOpenExec(exec);
+            }
+          : undefined}
+      />
     </>
   );
+}
+
+// 根据错误特征 + 任务类型生成「修改建议」
+function buildSuggestions(automationType, errorMsg = "") {
+  const msg = errorMsg.toLowerCase();
+  const list = [];
+
+  if (/timeout|超时|network|网络/.test(msg)) {
+    list.push("网络可能不稳定，稍后重试一次通常即可解决。");
+  }
+  if (/key|api|密钥|401|403|权限/.test(msg)) {
+    list.push("可能是相关服务未授权，请到「我的账户 → 集成」检查授权状态。");
+  }
+  if (/parse|json|格式|解析/.test(msg)) {
+    list.push("AI 解析需求时出现歧义，建议把任务描述写得更具体（包含人名、时间、目标）。");
+  }
+
+  // 按类型补建议
+  const byType = {
+    email_draft: [
+      "明确收件人、邮件主旨与希望传达的核心一句话。",
+      "如果是回复某邮件，附带原始邮件标题会让 AI 更精准。",
+    ],
+    web_research: [
+      "提供具体的关键词或要回答的问题，而非宽泛主题。",
+      "限定信息源类型（行业报告 / 新闻 / 维基）会更聚焦。",
+    ],
+    office_doc: [
+      "说明文档结构（如：3 页 PPT、含 3 个章节的 Word）。",
+      "提供目标读者与核心结论，AI 会按对应口吻撰写。",
+    ],
+    file_organize: [
+      "告诉 AI 整理后的目录结构或命名规则。",
+    ],
+    calendar_event: [
+      "补充具体的开始/结束时间、参与人、是否要提醒。",
+    ],
+    summary_note: [
+      "贴上要总结的原文或关键要点，AI 会更准确。",
+    ],
+  };
+  (byType[automationType] || []).forEach(s => list.push(s));
+
+  if (list.length === 0) {
+    list.push("把任务描述补充得更具体（包含目标、对象、约束），通常就能修复。");
+    list.push("如果仍不行，可以选择「人工接管」转为普通待办自己处理。");
+  }
+  return list.slice(0, 3);
 }
 
 function ExecCard({ item, onAuthorize, onOpen }) {

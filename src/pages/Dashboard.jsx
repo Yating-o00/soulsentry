@@ -420,6 +420,15 @@ export default function Dashboard() {
         <SmartDailyPlanner />
       </motion.div>
 
+      {/* 自动执行清单 - AI 帮你写邮件/做调研/生成文档 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+      >
+        <AutoExecutionPanel />
+      </motion.div>
+
       {/* 自动执行清单 - AI 帮你做事 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

@@ -110,21 +110,28 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
 
   return (
     <>
-      <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-sm">
-              <Zap className="w-3.5 h-3.5 text-white" />
+      <div className="relative rounded-3xl border border-slate-200/60 bg-gradient-to-br from-white via-indigo-50/20 to-purple-50/20 p-5 shadow-[0_4px_24px_-8px_rgba(99,102,241,0.12)] overflow-hidden">
+        {/* 背景装饰光晕 */}
+        <div className="absolute -top-16 -right-16 w-40 h-40 bg-gradient-to-br from-indigo-200/30 to-purple-200/30 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-10 w-32 h-32 bg-gradient-to-br from-blue-200/20 to-cyan-200/20 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <Zap className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-slate-800">自动执行清单</h4>
-              <p className="text-[11px] text-slate-400">点击「确认执行」由 AI 自动完成</p>
+              <h4 className="text-[15px] font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">自动执行清单</h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">点击「确认执行」由 AI 自动完成</p>
             </div>
           </div>
-          <span className="text-[11px] text-slate-400">{items.length} 项</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/70 backdrop-blur-sm border border-slate-200/60">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+            <span className="text-[11px] font-medium text-slate-600">{items.length} 项待执行</span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+        <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3">
           <AnimatePresence>
             {items.map((it) => (
               <ExecCard
@@ -161,24 +168,25 @@ function ExecCard({ item, onAuthorize, onOpen }) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className={`relative bg-white rounded-2xl border border-slate-100 border-l-4 ${status.border} p-3.5 hover:shadow-sm transition-shadow`}
+      whileHover={{ y: -2 }}
+      className={`group relative bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/70 border-l-[3px] ${status.border} p-3.5 hover:shadow-[0_8px_24px_-12px_rgba(99,102,241,0.25)] hover:border-slate-200 transition-all duration-300`}
     >
-      <div className="flex items-start gap-2.5">
-        <div className={`w-8 h-8 rounded-lg ${meta.bg} flex items-center justify-center flex-shrink-0`}>
+      <div className="flex items-start gap-3">
+        <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center flex-shrink-0 ring-1 ring-inset ring-white/60 shadow-sm group-hover:scale-105 transition-transform`}>
           <Icon className={`w-4 h-4 ${meta.color}`} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
-            <div className="text-sm font-semibold text-slate-800 truncate">{item.title}</div>
-            <div className={`flex items-center gap-1 text-[10px] font-medium ${status.text} flex-shrink-0`}>
+            <div className="text-[13.5px] font-semibold text-slate-800 truncate leading-snug">{item.title}</div>
+            <div className={`flex items-center gap-1 text-[10px] font-semibold ${status.text} flex-shrink-0 px-1.5 py-0.5 rounded-md bg-white/80`}>
               <span className={`w-1.5 h-1.5 rounded-full ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
               {status.label}
             </div>
           </div>
-          <div className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed mb-2">{item.desc}</div>
+          <div className="text-[11.5px] text-slate-500 line-clamp-2 leading-relaxed mb-2.5">{item.desc}</div>
 
-          <div className="flex items-center gap-1.5">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded ${meta.bg} ${meta.color} font-medium`}>
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] px-2 py-0.5 rounded-md ${meta.bg} ${meta.color} font-semibold tracking-wide`}>
               {meta.label}
             </span>
 
@@ -188,14 +196,14 @@ function ExecCard({ item, onAuthorize, onOpen }) {
               <Button
                 size="sm"
                 onClick={onAuthorize}
-                className="h-6 px-2.5 text-[11px] bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg shadow-sm"
+                className="h-7 px-3 text-[11px] bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 transition-all"
               >
-                <Sparkles className="w-2.5 h-2.5 mr-1" />
+                <Sparkles className="w-3 h-3 mr-1" />
                 确认执行
               </Button>
             )}
             {isRunning && (
-              <span className="flex items-center gap-1 text-[11px] text-blue-600">
+              <span className="flex items-center gap-1.5 text-[11px] font-medium text-blue-600 px-2 py-1 rounded-md bg-blue-50">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 执行中
               </span>
@@ -205,11 +213,11 @@ function ExecCard({ item, onAuthorize, onOpen }) {
                 size="sm"
                 variant="ghost"
                 onClick={onOpen}
-                className="h-6 px-2 text-[11px] text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                className="h-7 px-2.5 text-[11px] text-emerald-600 hover:bg-emerald-50 rounded-lg font-medium"
               >
                 <Check className="w-3 h-3 mr-0.5" />
                 查看结果
-                <ChevronRight className="w-3 h-3" />
+                <ChevronRight className="w-3 h-3 ml-0.5" />
               </Button>
             )}
           </div>

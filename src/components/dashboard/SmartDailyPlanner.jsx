@@ -234,36 +234,14 @@ export default function SmartDailyPlanner() {
           }
         }).catch(e => console.warn("Email intent detection skipped:", e));
 
-        // 后台静默同步到约定和心签
+        // 后台静默同步到心签（AI 规划内容不再单独生成约定）
         setSyncStatus('syncing');
-        const isAppend = !!existingPlanId; // 当日已有规划 → 本次为"追加"，复用既有父约定，不再创建新父
-        const taskPromise = isAppend
-          ? findExistingParentForDay(selectedDateStr)
-          : extractAndCreateTasks(capturedInput, selectedDateStr).then(arr => arr?.[0] || null);
-
-        Promise.allSettled([
-          taskPromise,
-          syncPlanToNote(capturedInput, "daily_plan", { date: selectedDateStr })
-        ]).then(async results => {
-          const taskResult = results[0];
-          const noteResult = results[1];
-          const parentTask = taskResult.status === 'fulfilled' ? taskResult.value : null;
-          if (parentTask?.id) {
-            const timelineForDay = (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr);
-            await attachPlanChildrenToParent(parentTask.id, {
-              timeline: timelineForDay,
-              automations: data.automations || [],
-              dateStr: selectedDateStr,
-            }).catch(e => console.warn("attach children failed", e));
-            queryClient.invalidateQueries({ queryKey: ['tasks'] });
-          }
-          const parts = [];
-          if (!isAppend && parentTask) parts.push('1 个约定');
-          else if (isAppend && parentTask) parts.push('已并入当日约定');
-          if (noteResult.status === 'fulfilled' && noteResult.value) parts.push('心签');
-          if (parts.length > 0) toast.success(`已同步到${parts.join(' + ')}`, { icon: '🔄' });
-          setSyncStatus('done');
-        });
+        syncPlanToNote(capturedInput, "daily_plan", { date: selectedDateStr })
+          .then(note => {
+            if (note) toast.success("已同步到心签", { icon: '🔄' });
+          })
+          .catch(e => console.warn("syncPlanToNote failed", e))
+          .finally(() => setSyncStatus('done'));
       } else {
         setAnalysis(null);
         setResolvedDateHint(targetDate);
@@ -300,36 +278,14 @@ export default function SmartDailyPlanner() {
           setConflictData({ conflicts: targetConflicts, allBlocks: targetBlocks });
         }
 
-        // 后台静默同步到约定和心签
+        // 后台静默同步到心签（AI 规划内容不再单独生成约定）
         setSyncStatus('syncing');
-        const targetHasPlan = targetPlans && targetPlans.length > 0;
-        const taskPromise = targetHasPlan
-          ? findExistingParentForDay(targetDate)
-          : extractAndCreateTasks(capturedInput, targetDate).then(arr => arr?.[0] || null);
-
-        Promise.allSettled([
-          taskPromise,
-          syncPlanToNote(capturedInput, "daily_plan", { date: targetDate })
-        ]).then(async results => {
-          const taskResult = results[0];
-          const noteResult = results[1];
-          const parentTask = taskResult.status === 'fulfilled' ? taskResult.value : null;
-          if (parentTask?.id) {
-            const timelineForDay = (data.timeline || []).filter(t => !t.date || t.date === targetDate);
-            await attachPlanChildrenToParent(parentTask.id, {
-              timeline: timelineForDay,
-              automations: data.automations || [],
-              dateStr: targetDate,
-            }).catch(e => console.warn("attach children failed", e));
-            queryClient.invalidateQueries({ queryKey: ['tasks'] });
-          }
-          const parts = [];
-          if (!targetHasPlan && parentTask) parts.push('1 个约定');
-          else if (targetHasPlan && parentTask) parts.push('已并入当日约定');
-          if (noteResult.status === 'fulfilled' && noteResult.value) parts.push('心签');
-          if (parts.length > 0) toast.success(`已同步到${parts.join(' + ')}`, { icon: '🔄' });
-          setSyncStatus('done');
-        });
+        syncPlanToNote(capturedInput, "daily_plan", { date: targetDate })
+          .then(note => {
+            if (note) toast.success("已同步到心签", { icon: '🔄' });
+          })
+          .catch(e => console.warn("syncPlanToNote failed", e))
+          .finally(() => setSyncStatus('done'));
       }
     } catch (err) {
       console.error("Analysis failed", err);

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
 import ExecutionResultDialog from "@/components/automation/ExecutionResultDialog";
+import EmailPreviewDialog from "@/components/automation/EmailPreviewDialog";
 
 // 从标题/描述粗略推断 automation_type，让单条卡片直接走 executeAutomation
 function inferAutomationType(title = "", desc = "") {
@@ -81,6 +82,7 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
   const [items, setItems] = useState([]);
   const [openExec, setOpenExec] = useState(null);
   const [feedback, setFeedback] = useState(null); // { mode, item, resultPreview?, errorMessage?, suggestions? }
+  const [emailDraft, setEmailDraft] = useState(null); // { item, draft:{to,subject,body}, executionId }
 
   // 把 props 同步进 state（保持父组件传入的最新清单），但保留本地已授权状态
   React.useEffect(() => {
@@ -120,6 +122,26 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
 
   // 授权 → 创建 TaskExecution → plan → execute（支持 overrideInput 重试时携带修改后的需求）
   const handleAuthorize = async (item, overrideInput) => {
+    // 邮件类：已有草稿且未发送时，直接重新打开预览窗，避免重复调用 AI
+    if (
+      item.automation_type === "email_draft" &&
+      item.execution_id &&
+      item.result_preview &&
+      item.status === "ready" &&
+      !overrideInput
+    ) {
+      const exec = await base44.entities.TaskExecution.get(item.execution_id).catch(() => null);
+      const d = exec?.automation_result?.data;
+      if (d) {
+        setEmailDraft({
+          item,
+          executionId: item.execution_id,
+          draft: { to: d.to || "", subject: d.subject || "", body: d.body || "" },
+        });
+        return;
+      }
+    }
+
     updateItem(item._id, { status: "running" });
     const input = overrideInput || item.desc || item.title;
     try {
@@ -149,6 +171,20 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
       // 成功反馈：拉取最终 execution 并取 preview 作为摘要
       const finalExec = await base44.entities.TaskExecution.get(exec.id).catch(() => null);
       const preview = extractPreview(finalExec?.automation_result);
+
+      // 邮件类型：execute 仅生成草稿，弹出预览窗让用户编辑并确认发送
+      if (item.automation_type === "email_draft" && finalExec?.automation_result?.data) {
+        const d = finalExec.automation_result.data;
+        // 草稿已生成但尚未发送 → 状态保持 ready，UI 显示「待发送」由预览窗推进
+        updateItem(item._id, { status: "ready", execution_id: exec.id, result_preview: preview });
+        setEmailDraft({
+          item: { ...item, execution_id: exec.id },
+          executionId: exec.id,
+          draft: { to: d.to || "", subject: d.subject || "", body: d.body || "" },
+        });
+        return;
+      }
+
       updateItem(item._id, { status: "done", result_preview: preview });
       setFeedback({
         mode: "success",
@@ -214,6 +250,23 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
         execution={openExec}
         open={!!openExec}
         onOpenChange={(o) => !o && setOpenExec(null)}
+      />
+
+      <EmailPreviewDialog
+        open={!!emailDraft}
+        onOpenChange={(o) => !o && setEmailDraft(null)}
+        draft={emailDraft?.draft}
+        executionId={emailDraft?.executionId}
+        instruction={emailDraft?.item?.desc || emailDraft?.item?.title || userText}
+        onSent={(finalDraft) => {
+          // 发送成功 → 把卡片标为 done 并刷新预览
+          if (emailDraft?.item) {
+            const preview = `📧 ${finalDraft.subject}\n收件人：${finalDraft.to}\n\n${finalDraft.body}`;
+            updateItem(emailDraft.item._id, { status: "done", result_preview: preview });
+            queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          }
+        }}
       />
 
       <ExecutionResultDialog

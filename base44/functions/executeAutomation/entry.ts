@@ -128,7 +128,156 @@ async function executeWebResearch(base44, exec) {
   };
 }
 
+// 识别"复盘/日报/周报/总结当日"等需要拉取真实数据的指令
+function isRecapTask(text) {
+  if (!text) return false;
+  return /复盘|日报|周报|月报|总结当日|总结今天|今日总结|日终|日结|review|recap/i.test(text);
+}
+
+async function fetchTodayCompletedTasks(base44) {
+  // 拉取今日已完成任务（用户范围，按 RLS 自动限定）
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+
+  try {
+    // 尝试用 filter（用户身份调用时返回当前用户的任务）
+    const completed = await base44.entities.Task.filter({ status: 'completed' }, '-completed_at', 200);
+    return completed.filter(t => {
+      const ts = t.completed_at || t.updated_date;
+      return ts && ts >= start && ts < end;
+    });
+  } catch (e) {
+    // 回退：拉取最近任务再前端过滤
+    const recent = await base44.entities.Task.list('-updated_date', 200);
+    return recent.filter(t => {
+      if (t.status !== 'completed') return false;
+      const ts = t.completed_at || t.updated_date;
+      return ts && ts >= start && ts < end;
+    });
+  }
+}
+
+function buildRecapMarkdown(date, tasks, aiSummary) {
+  const dateStr = date.toISOString().slice(0, 10);
+  const lines = [];
+  lines.push(`# ${dateStr} 日终复盘报告`);
+  lines.push('');
+  lines.push(`> 生成时间：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`);
+  lines.push('');
+  lines.push(`## 📊 完成项统计`);
+  lines.push('');
+  lines.push(`- 当日已完成任务：**${tasks.length}** 项`);
+
+  const byCategory = {};
+  const byPriority = {};
+  tasks.forEach(t => {
+    byCategory[t.category || 'other'] = (byCategory[t.category || 'other'] || 0) + 1;
+    byPriority[t.priority || 'medium'] = (byPriority[t.priority || 'medium'] || 0) + 1;
+  });
+  if (Object.keys(byCategory).length) {
+    lines.push(`- 按分类：${Object.entries(byCategory).map(([k, v]) => `${k}(${v})`).join(' · ')}`);
+  }
+  if (Object.keys(byPriority).length) {
+    lines.push(`- 按优先级：${Object.entries(byPriority).map(([k, v]) => `${k}(${v})`).join(' · ')}`);
+  }
+  lines.push('');
+
+  lines.push(`## ✅ 完成事项明细`);
+  lines.push('');
+  if (tasks.length === 0) {
+    lines.push('_今日暂无已完成任务。_');
+  } else {
+    tasks.forEach((t, i) => {
+      const time = t.completed_at ? new Date(t.completed_at).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit' }) : '-';
+      lines.push(`${i + 1}. **${t.title}** _(${time} · ${t.category || 'personal'} · ${t.priority || 'medium'})_`);
+      if (t.description) lines.push(`   - ${t.description.replace(/\n/g, ' ')}`);
+    });
+  }
+  lines.push('');
+
+  if (aiSummary) {
+    lines.push(`## 💡 AI 复盘洞察`);
+    lines.push('');
+    lines.push(aiSummary);
+    lines.push('');
+  }
+
+  lines.push(`---`);
+  lines.push(`*由心栈 SoulSentry 自动生成*`);
+  return lines.join('\n');
+}
+
+async function uploadMarkdownReport(base44, fileName, markdown) {
+  const bytes = new TextEncoder().encode(markdown);
+  const blob = new Blob([bytes], { type: 'text/markdown' });
+  const file = new File([blob], fileName, { type: 'text/markdown' });
+  const resp = await base44.integrations.Core.UploadFile({ file });
+  return resp?.file_url || resp?.data?.file_url;
+}
+
 async function executeSummaryNote(base44, exec) {
+  const userText = exec.original_input || exec.task_title;
+
+  // === 分支 A：日终复盘 / 日报类——拉真实数据 + 生成 Markdown + 上传 ===
+  if (isRecapTask(userText)) {
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+
+    // 1. 拉取真实数据
+    const tasks = await fetchTodayCompletedTasks(base44);
+
+    // 2. 让 AI 基于真实数据写一段洞察
+    const insightSchema = {
+      type: "object",
+      properties: {
+        insight: { type: "string", description: "基于当日完成数据的 2-3 段 Markdown 洞察，包含亮点、改进建议" },
+        tags: { type: "array", items: { type: "string" } }
+      },
+      required: ["insight"]
+    };
+    const taskBrief = tasks.slice(0, 30).map(t => `- ${t.title} (${t.category}/${t.priority})`).join('\n') || '(今日无已完成任务)';
+    const aiData = await callKimi(
+      base44,
+      `用户指令：${userText}\n\n今日已完成的任务清单：\n${taskBrief}\n\n请生成简洁的复盘洞察。`,
+      insightSchema,
+      "你是用户的私人复盘教练。基于真实数据，给出鼓励 + 改进建议。"
+    );
+
+    // 3. 渲染 Markdown
+    const markdown = buildRecapMarkdown(now, tasks, aiData.insight || '');
+    const fileName = `${dateStr}_复盘.md`;
+
+    // 4. 上传文件
+    const fileUrl = await uploadMarkdownReport(base44, fileName, markdown);
+
+    // 5. 同时保存为心签，方便检索
+    const note = await base44.entities.Note.create({
+      content: `<h2>${dateStr} 日终复盘</h2><div>${markdown.replace(/\n/g, '<br/>')}</div>`,
+      plain_text: markdown,
+      tags: ['复盘', '日报', ...(aiData.tags || [])],
+      color: "yellow"
+    });
+
+    return {
+      type: "summary_note",
+      preview: `📄 已生成《${fileName}》\n\n📊 当日完成 ${tasks.length} 项任务\n\n📥 下载链接：${fileUrl}\n\n${markdown.slice(0, 600)}${markdown.length > 600 ? '\n…(更多内容见文件)' : ''}`,
+      data: {
+        title: `${dateStr} 日终复盘`,
+        file_name: fileName,
+        file_url: fileUrl,
+        completed_count: tasks.length,
+        note_id: note.id,
+        markdown
+      },
+      diff: [
+        { action: "create", target: fileName, detail: `Markdown 复盘报告（${tasks.length}项已完成）已上传` },
+        { action: "create", target: `心签：${dateStr} 日终复盘`, detail: "已归档到心签库" }
+      ]
+    };
+  }
+
+  // === 分支 B：普通总结心签（保持原有行为）===
   const schema = {
     type: "object",
     properties: {
@@ -141,12 +290,11 @@ async function executeSummaryNote(base44, exec) {
 
   const data = await callKimi(
     base44,
-    `请把以下内容整理成一篇心签（笔记）：\n${exec.original_input || exec.task_title}`,
+    `请把以下内容整理成一篇心签（笔记）：\n${userText}`,
     schema,
     "你是用户的思维整理助手，把零散输入提炼成结构清晰、富有启发的心签。"
   );
 
-  // 真正写入 Note 实体
   const note = await base44.entities.Note.create({
     content: `<h2>${data.title}</h2><div>${data.content.replace(/\n/g, '<br/>')}</div>`,
     plain_text: `${data.title}\n\n${data.content}`,
@@ -299,7 +447,12 @@ Deno.serve(async (req) => {
     const { execution_id, phase = "plan" } = await req.json();
     if (!execution_id) return Response.json({ error: 'execution_id required' }, { status: 400 });
 
-    const exec = await base44.entities.TaskExecution.get(execution_id);
+    let exec;
+    try {
+      exec = await base44.entities.TaskExecution.get(execution_id);
+    } catch (e) {
+      return Response.json({ error: 'Failed to load execution: ' + (e.message || e) }, { status: 500 });
+    }
     if (!exec) return Response.json({ error: 'Execution not found' }, { status: 404 });
 
     // === Phase 1: PLAN ===

@@ -18,8 +18,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) {
+    // 允许两种调用：1) 已登录用户  2) 服务角色内部互调（无 user）
+    let user = null;
+    try { user = await base44.auth.me(); } catch {}
+    const isServiceCall = req.headers.get('x-base44-service-role') || !user;
+    if (!user && !isServiceCall) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

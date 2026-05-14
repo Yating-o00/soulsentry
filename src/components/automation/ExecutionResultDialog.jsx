@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, AlertTriangle, RotateCcw, Pencil, UserCog, ChevronRight, Sparkles, X, Lightbulb } from "lucide-react";
+import { CheckCircle2, AlertTriangle, RotateCcw, Pencil, UserCog, ChevronRight, Sparkles, X, Lightbulb, Download } from "lucide-react";
 
 /**
  * 任务执行结果统一弹窗
@@ -78,6 +78,30 @@ export default function ExecutionResultDialog({
           {/* 成功 */}
           {isSuccess && (
             <>
+              {(() => {
+                // 从预览文本提取首个文件下载链接（支持复盘报告等已上传文件）
+                const urlMatch = resultPreview && resultPreview.match(/https?:\/\/[^\s)）"】>]+/);
+                const fileUrl = urlMatch ? urlMatch[0] : null;
+                return fileUrl ? (
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-50 px-3.5 py-2.5 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center flex-shrink-0">
+                      <Download className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-emerald-800">下载已生成的文件</div>
+                      <div className="text-[10.5px] text-emerald-600 truncate">{fileUrl}</div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                  </a>
+                ) : null;
+              })()}
+
               {resultPreview ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3 max-h-56 overflow-y-auto">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 mb-1.5">

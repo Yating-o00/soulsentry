@@ -766,15 +766,35 @@ export default function SmartDailyPlanner() {
                   <ContextTimeline blocks={dayPlan.plan_json.focus_blocks} />
                 )}
                 {dayPlan.plan_json?.key_tasks?.length > 0 && (
-                  <AutoExecCards tasks={dayPlan.plan_json.key_tasks.map(t => ({
-                    title: t.title,
-                    desc: t.description || '',
-                    // 已完成 → done(已执行)；执行中 → running；其它 → ready
-                    status: t.status === 'completed' ? 'done'
-                      : (t.status === 'in_progress' || t.status === 'running') ? 'running'
-                      : 'ready',
-                    execution_id: t.execution_id || null,
-                  }))} />
+                  <AutoExecCards
+                    tasks={dayPlan.plan_json.key_tasks.map(t => ({
+                      title: t.title,
+                      desc: t.description || '',
+                      // 已完成 → done(已执行)；执行中 → running；其它 → ready
+                      status: t.status === 'completed' ? 'done'
+                        : (t.status === 'in_progress' || t.status === 'running') ? 'running'
+                        : 'ready',
+                      execution_id: t.execution_id || null,
+                      result_preview: t.result_preview || null,
+                    }))}
+                    onItemStatusChange={async (idx, patch) => {
+                      // 持久化已执行状态到 DailyPlan，避免刷新后丢失
+                      if (!existingPlanId) return;
+                      const planJson = { ...(dayPlan?.plan_json || {}) };
+                      const tasks = [...(planJson.key_tasks || [])];
+                      if (!tasks[idx]) return;
+                      tasks[idx] = {
+                        ...tasks[idx],
+                        ...(patch.status === 'done' ? { status: 'completed' } : {}),
+                        ...(patch.status === 'running' ? { status: 'in_progress' } : {}),
+                        ...(patch.execution_id !== undefined ? { execution_id: patch.execution_id } : {}),
+                        ...(patch.result_preview !== undefined ? { result_preview: patch.result_preview } : {}),
+                      };
+                      planJson.key_tasks = tasks;
+                      updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
+                      await base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist key_task status failed', e));
+                    }}
+                  />
                 )}
               </>
             )}

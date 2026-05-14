@@ -77,7 +77,7 @@ function extractPreview(ar) {
   return "";
 }
 
-export default function AutoExecCards({ tasks = [], userText = "" }) {
+export default function AutoExecCards({ tasks = [], userText = "", onItemStatusChange }) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState([]);
   const [openExec, setOpenExec] = useState(null);
@@ -88,12 +88,13 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
   React.useEffect(() => {
     const list = (tasks || []).slice(0, 6).map((t, i) => ({
       _id: `plan-${i}-${(t.title || "").slice(0, 12)}`,
+      _idx: i, // 原始索引，用于回写父组件 plan_json.key_tasks
       title: t.title || `自动项 ${i + 1}`,
       desc: t.desc || t.description || "根据规划自动派生",
       status: normalizeStatus(t.status),
       automation_type: inferAutomationType(t.title, t.desc || t.description),
       execution_id: t.execution_id || null,
-      result_preview: null,
+      result_preview: t.result_preview || null,
     }));
     setItems(list);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -118,7 +119,22 @@ export default function AutoExecCards({ tasks = [], userText = "" }) {
 
   if (items.length === 0) return null;
 
-  const updateItem = (id, patch) => setItems(prev => prev.map(it => it._id === id ? { ...it, ...patch } : it));
+  const updateItem = (id, patch, opts = {}) => {
+    setItems(prev => prev.map(it => it._id === id ? { ...it, ...patch } : it));
+    // 关键状态变化（done/running 或带 execution_id/result_preview）回写到父组件持久化
+    if (opts.persist !== false && onItemStatusChange) {
+      const target = items.find(it => it._id === id);
+      if (target && typeof target._idx === 'number') {
+        const persistPatch = {};
+        if (patch.status === 'done' || patch.status === 'running') persistPatch.status = patch.status;
+        if (patch.execution_id !== undefined) persistPatch.execution_id = patch.execution_id;
+        if (patch.result_preview !== undefined) persistPatch.result_preview = patch.result_preview;
+        if (Object.keys(persistPatch).length > 0) {
+          onItemStatusChange(target._idx, persistPatch);
+        }
+      }
+    }
+  };
 
   // 授权 → 创建 TaskExecution → plan → execute（支持 overrideInput 重试时携带修改后的需求）
   const handleAuthorize = async (item, overrideInput) => {

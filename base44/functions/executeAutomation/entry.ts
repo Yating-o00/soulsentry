@@ -352,175 +352,171 @@ async function executeOfficeDoc(base44, exec) {
   };
 }
 
-// === 文件整理：扫描真实附件 → AI 制定重命名+归档映射 → 实际复制为新名重新入库 ===
+// 列出用户所有 Task.attachments 中的文件
 async function listUserFiles(base44) {
-  const tasks = await base44.entities.Task.list('-updated_date', 100);
+  const tasks = await base44.entities.Task.list('-updated_date', 200);
   const files = [];
   for (const t of tasks) {
     if (Array.isArray(t.attachments)) {
-      for (const a of t.attachments) {
+      t.attachments.forEach((a, idx) => {
         if (a?.file_url) {
           files.push({
-            file_name: a.file_name || a.file_url.split('/').pop(),
-            file_url: a.file_url,
-            file_type: a.file_type || '',
-            file_size: a.file_size || 0,
-            uploaded_at: a.uploaded_at,
             task_id: t.id,
             task_title: t.title,
+            attachment_index: idx,
+            file_name: a.file_name || a.file_url.split('/').pop(),
+            file_url: a.file_url,
+            file_size: a.file_size,
+            file_type: a.file_type,
+            uploaded_at: a.uploaded_at,
           });
         }
-      }
+      });
     }
   }
-  return files;
+  return { tasks, files };
 }
 
-async function copyFileWithNewName(base44, sourceUrl, newName) {
-  const r = await fetch(sourceUrl);
-  if (!r.ok) throw new Error(`下载源文件失败：${r.status}`);
-  const ct = r.headers.get('content-type') || 'application/octet-stream';
-  const bytes = new Uint8Array(await r.arrayBuffer());
-  const blob = new Blob([bytes], { type: ct });
-  const file = new File([blob], newName, { type: ct });
-  const up = await base44.integrations.Core.UploadFile({ file });
-  return up?.file_url || up?.data?.file_url;
-}
-
+// 真正执行文件整理：扫描用户附件、AI 匹配 → 重命名/归档元数据落库
 async function executeFileOrganize(base44, exec) {
-  const userInput = exec.original_input || exec.task_title;
+  const userText = exec.original_input || exec.task_title;
 
-  // 1. 拉取用户真实附件清单
-  const files = await listUserFiles(base44);
+  // 1. 拉取用户真实文件列表
+  const { tasks, files } = await listUserFiles(base44);
 
-  // 2. 让 AI 基于真实文件清单给出每个文件的新名 + 目标文件夹
+  if (files.length === 0) {
+    return {
+      type: "file_organize",
+      preview: `⚠️ 未在你的任务附件中找到任何文件。\n\n请先把需要整理的文件上传到任意一个任务的附件，再让我执行此操作。\n\n你的指令：${userText}`,
+      data: { strategy: "无文件可整理", operations: [], executed: [], failed: [] },
+      diff: []
+    };
+  }
+
+  // 2. 让 AI 基于真实文件清单输出具体的「重命名 + 归档」操作
+  const fileBrief = files.slice(0, 50).map((f, i) =>
+    `${i}. ${f.file_name} (${f.file_type || '?'}, ${f.file_size || '?'}B, 来自任务「${f.task_title}」)`
+  ).join('\n');
+
   const schema = {
     type: "object",
     properties: {
-      strategy: { type: "string", description: "整理策略说明（中文）" },
-      mappings: {
+      strategy: { type: "string", description: "整理策略说明" },
+      operations: {
         type: "array",
-        description: "针对每个待处理文件的处理方案。只挑选与用户指令相关的文件；若清单为空则给出空数组。",
+        description: "针对每个匹配文件的具体操作",
         items: {
           type: "object",
           properties: {
-            source_file_url: { type: "string", description: "源文件的 file_url，必须取自下方清单" },
-            source_file_name: { type: "string", description: "源文件原始文件名" },
-            new_file_name: { type: "string", description: "重命名后的文件名（含扩展名）" },
-            target_folder: { type: "string", description: "目标虚拟文件夹路径，如 客户沟通/2026" },
-            reason: { type: "string", description: "为什么这样处理（一句话）" }
+            file_index: { type: "number", description: "对应文件清单中的序号" },
+            new_name: { type: "string", description: "重命名后的文件名（含扩展名）" },
+            folder: { type: "string", description: "归档目标文件夹路径，如 客户沟通/2026" },
+            reason: { type: "string", description: "选择此文件并这样命名/归档的原因" }
           },
-          required: ["source_file_url", "new_file_name", "target_folder"]
+          required: ["file_index", "new_name", "folder"]
         }
       },
-      cautions: { type: "string", description: "提醒事项" }
+      skipped_reason: { type: "string", description: "若没有匹配到文件，说明原因" }
     },
-    required: ["strategy", "mappings"]
+    required: ["strategy", "operations"]
   };
 
-  const fileListText = files.length === 0
-    ? '(用户暂无任何已上传附件)'
-    : files.map((f, i) => `${i + 1}. ${f.file_name} (${f.file_type || '?'}, 任务: ${f.task_title})\n   URL: ${f.file_url}`).join('\n');
-
-  const aiResult = await callKimi(
+  const data = await callKimi(
     base44,
-    `用户指令：${userInput}\n\n当前用户已上传的附件清单：\n${fileListText}\n\n请基于真实清单，挑出符合条件的文件并给出 mappings。注意：source_file_url 必须严格来自上方清单。若清单为空，mappings 返回空数组。`,
+    `用户的文件整理指令：\n${userText}\n\n用户当前已上传的文件清单：\n${fileBrief}\n\n请筛选出与指令匹配的文件，并为每个文件给出新名称和归档目标文件夹。\n注意：必须保留原扩展名。如果指令中明确给出了新名称，必须严格使用。如果清单里没有任何文件匹配指令，operations 返回空数组，并在 skipped_reason 中说明。`,
     schema,
-    "你是文件整理执行器。只能基于真实清单决策。不要编造文件。"
+    "你是文件整理执行官。基于真实的文件清单，输出可直接执行的重命名与归档操作。"
   );
 
-  // 3. 实际执行：每个 mapping 复制源文件为新名重新入库
-  const diff = [];
-  const results = [];
-  const mappings = Array.isArray(aiResult.mappings) ? aiResult.mappings : [];
+  // 3. 真实落地：更新每个 attachment 的 file_name 和 folder 元数据
+  const operations = Array.isArray(data.operations) ? data.operations : [];
+  const executed = [];
+  const failed = [];
 
-  for (const m of mappings) {
+  const updatesByTask = {};
+  for (const op of operations) {
+    const f = files[op.file_index];
+    if (!f) {
+      failed.push({ op, reason: `文件索引 ${op.file_index} 越界` });
+      continue;
+    }
+    if (!updatesByTask[f.task_id]) updatesByTask[f.task_id] = [];
+    updatesByTask[f.task_id].push({ file: f, op });
+  }
+
+  for (const [taskId, items] of Object.entries(updatesByTask)) {
     try {
-      const newUrl = await copyFileWithNewName(base44, m.source_file_url, m.new_file_name);
-      results.push({
-        source_file_name: m.source_file_name || m.source_file_url.split('/').pop(),
-        new_file_name: m.new_file_name,
-        target_folder: m.target_folder,
-        new_file_url: newUrl,
-        status: 'success',
-        reason: m.reason || ''
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) continue;
+      const newAttachments = (task.attachments || []).map((a, idx) => {
+        const hit = items.find(it => it.file.attachment_index === idx);
+        if (!hit) return a;
+        return {
+          ...a,
+          file_name: hit.op.new_name,
+          folder: hit.op.folder,
+          organized_at: new Date().toISOString(),
+          organize_note: hit.op.reason || ''
+        };
       });
-      diff.push({
-        action: 'create',
-        target: `${m.target_folder}/${m.new_file_name}`,
-        detail: `已从《${m.source_file_name || '原文件'}》重命名归档`
+      const folderTags = items.map(it => `📁${it.op.folder}`);
+      const existingTags = Array.isArray(task.tags) ? task.tags : [];
+      const mergedTags = Array.from(new Set([...existingTags, ...folderTags]));
+
+      await base44.entities.Task.update(taskId, {
+        attachments: newAttachments,
+        tags: mergedTags
       });
+
+      items.forEach(it => executed.push({
+        original_name: it.file.file_name,
+        new_name: it.op.new_name,
+        folder: it.op.folder,
+        file_url: it.file.file_url,
+        task_title: it.file.task_title,
+        reason: it.op.reason || ''
+      }));
     } catch (e) {
-      results.push({
-        source_file_name: m.source_file_name,
-        new_file_name: m.new_file_name,
-        target_folder: m.target_folder,
-        status: 'failed',
-        error: e.message
-      });
+      items.forEach(it => failed.push({ op: it.op, reason: e.message }));
     }
   }
 
-  // 4. 生成 manifest.md 让用户可下载查看
-  const manifestLines = [
-    `# 文件整理执行结果`,
-    ``,
-    `> 指令：${userInput}`,
-    `> 时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`,
-    ``,
-    `## 策略`,
-    aiResult.strategy || '(无)',
-    ``,
-    `## 处理明细（共 ${results.length} 个文件）`,
-    ``
-  ];
-  if (results.length === 0) {
-    manifestLines.push(`_未找到匹配的文件。请先在任务中上传附件（如会议纪要 PDF），再让心栈整理。_`);
-  } else {
-    results.forEach((r, i) => {
-      manifestLines.push(`### ${i + 1}. ${r.new_file_name}`);
-      manifestLines.push(`- 源文件：${r.source_file_name}`);
-      manifestLines.push(`- 目标位置：📁 ${r.target_folder}`);
-      manifestLines.push(`- 状态：${r.status === 'success' ? '✅ 成功' : '❌ 失败 — ' + (r.error || '')}`);
-      if (r.new_file_url) manifestLines.push(`- 新文件链接：${r.new_file_url}`);
-      if (r.reason) manifestLines.push(`- 说明：${r.reason}`);
-      manifestLines.push('');
+  // 4. 生成可读 preview + diff
+  const previewLines2 = [`📋 整理策略：${data.strategy}`, ''];
+  if (executed.length > 0) {
+    previewLines2.push(`✅ 已执行 ${executed.length} 项：`);
+    executed.forEach((e, i) => {
+      previewLines2.push(`  ${i + 1}. 「${e.original_name}」→ 「${e.new_name}」（归档至 📁${e.folder}）`);
     });
   }
-  const manifest = manifestLines.join('\n');
-  const manifestBlob = new Blob([new TextEncoder().encode(manifest)], { type: 'text/markdown' });
-  const manifestFile = new File([manifestBlob], `文件整理_${new Date().toISOString().slice(0, 10)}.md`, { type: 'text/markdown' });
-  const manifestResp = await base44.integrations.Core.UploadFile({ file: manifestFile });
-  const manifestUrl = manifestResp?.file_url || manifestResp?.data?.file_url;
-
-  const successCount = results.filter(r => r.status === 'success').length;
-  const preview = [
-    `📂 文件整理已执行（${successCount}/${results.length} 成功）`,
-    ``,
-    `策略：${aiResult.strategy || '-'}`,
-    ``,
-    results.length === 0
-      ? `⚠️ 未找到可处理的附件。请先把会议纪要等 PDF 作为附件上传到任务中。`
-      : results.map(r => `${r.status === 'success' ? '✅' : '❌'} ${r.source_file_name} → ${r.target_folder}/${r.new_file_name}`).join('\n'),
-    ``,
-    manifestUrl ? `📥 详细清单：${manifestUrl}` : ''
-  ].join('\n');
+  if (failed.length > 0) {
+    previewLines2.push('', `⚠️ 跳过 ${failed.length} 项：`);
+    failed.forEach(f => previewLines2.push(`  • ${f.reason}`));
+  }
+  if (executed.length === 0 && failed.length === 0) {
+    previewLines2.push('（AI 未匹配到任何需要整理的文件）');
+    if (data.skipped_reason) previewLines2.push(`原因：${data.skipped_reason}`);
+    previewLines2.push('', `已扫描 ${files.length} 个文件。若希望我整理其他文件，请先把目标文件添加到任意任务的附件，再重试。`);
+  }
+  if (executed.length > 0) {
+    previewLines2.push('', '📥 文件下载链接（重命名只改元数据，URL 保持不变）：');
+    executed.forEach(e => previewLines2.push(`  • ${e.new_name}: ${e.file_url}`));
+  }
 
   return {
     type: "file_organize",
-    preview,
+    preview: previewLines2.join('\n'),
     data: {
-      strategy: aiResult.strategy,
-      total_files_scanned: files.length,
-      mappings_count: results.length,
-      success_count: successCount,
-      results,
-      manifest_url: manifestUrl,
-      file_url: manifestUrl, // 让 ExecutionResultDialog 自动渲染下载按钮
-      file_name: manifestFile.name,
-      cautions: aiResult.cautions || ''
+      strategy: data.strategy,
+      executed,
+      failed,
+      total_files_scanned: files.length
     },
-    diff
+    diff: executed.map(e => ({
+      action: "update",
+      target: `${e.folder}/${e.new_name}`,
+      detail: `原文件「${e.original_name}」已重命名并归档`
+    }))
   };
 }
 

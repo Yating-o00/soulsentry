@@ -447,12 +447,7 @@ Deno.serve(async (req) => {
     const { execution_id, phase = "plan" } = await req.json();
     if (!execution_id) return Response.json({ error: 'execution_id required' }, { status: 400 });
 
-    let exec;
-    try {
-      exec = await base44.entities.TaskExecution.get(execution_id);
-    } catch (e) {
-      return Response.json({ error: 'Failed to load execution: ' + (e.message || e) }, { status: 500 });
-    }
+    const exec = await base44.entities.TaskExecution.get(execution_id);
     if (!exec) return Response.json({ error: 'Execution not found' }, { status: 404 });
 
     // === Phase 1: PLAN ===

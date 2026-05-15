@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle2, AlertTriangle, Sparkles, Send, RefreshCw, MessageSquarePlus, Mail, X, ArrowRight, Clock } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, Sparkles, Send, RefreshCw, MessageSquarePlus, Mail, X, ArrowRight, Clock, Maximize2, Minimize2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -18,6 +18,8 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
   const [sending, setSending] = useState(false);
   // 邮件类：本地维护可编辑的草稿（收件人/抄送/主题/正文），编辑后用于发送
   const [emailDraft, setEmailDraft] = useState(null);
+  // 弹层尺寸档位：md(默认) / lg / xl
+  const [size, setSize] = useState("lg");
 
   // 当 execution 变化时（首次打开 / 重新规划后），同步邮件草稿
   useEffect(() => {
@@ -138,11 +140,38 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
     refresh();
   };
 
+  const sizeCls = size === "xl"
+    ? "sm:max-w-[96vw] md:max-w-[1200px]"
+    : size === "lg"
+      ? "sm:max-w-[90vw] md:max-w-[860px]"
+      : "sm:max-w-lg";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className={`${sizeCls} max-h-[90vh] overflow-y-auto transition-[max-width] duration-200`}>
+        {/* 尺寸切换：在三档之间循环（中/宽/超宽）*/}
+        <div className="absolute right-12 top-3.5 z-10 flex items-center gap-0.5 bg-slate-100 rounded-full p-0.5">
+          {[
+            { k: "md", label: "中" },
+            { k: "lg", label: "宽" },
+            { k: "xl", label: "超宽" },
+          ].map(s => (
+            <button
+              key={s.k}
+              type="button"
+              onClick={() => setSize(s.k)}
+              className={`text-[10px] px-2 py-0.5 rounded-full font-semibold transition ${
+                size === s.k ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+              title={`切换为${s.label}尺寸`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
+          <DialogTitle className="flex items-center gap-2 text-base pr-28">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${cfg.iconBg}`}>
               <Icon className="w-4.5 h-4.5" />
             </div>

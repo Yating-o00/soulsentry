@@ -90,11 +90,12 @@ async function executeEmailDraft(base44, exec) {
     required: ["subject", "body"]
   };
 
+  const todayCN = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'long', day: 'numeric' });
   const data = await callKimi(
     base44,
-    `请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}`,
+    `当前日期：${todayCN}（请在邮件落款日期处使用这个真实日期，不要编造其它日期）\n\n请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}`,
     schema,
-    "你是专业商务邮件助手。要求：1) 主题精炼，10字内最好；2) 正文结构清晰，含问候、正文、署名；3) 根据指令推断语气（正式/友好/简洁）；4) 收件人未指明则留空，由用户在确认时填写。"
+    `你是专业商务邮件助手。今日日期：${todayCN}。要求：1) 主题精炼，10字内最好；2) 正文结构清晰，含问候、正文、署名；3) 若需写落款日期，必须使用今日真实日期，禁止编造历史日期；4) 根据指令推断语气（正式/友好/简洁）；5) 收件人未指明则留空，由用户在确认时填写。`
   );
 
   const previewLines = [

@@ -6,11 +6,6 @@ import PptPreviewModal from "./PptPreviewModal";
 export default function PptResultView({ data, preview }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [initialSlide, setInitialSlide] = useState(0);
-  const openAt = (idx) => {
-    if (!canPreview) return;
-    setInitialSlide(idx);
-    setPreviewOpen(true);
-  };
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "演示文稿.html";
   const title = data?.title || data?.subject || "演示文稿";
@@ -29,6 +24,12 @@ export default function PptResultView({ data, preview }) {
         : null);
   const previewData = previewSlides ? { ...data, slides: previewSlides } : data;
   const canPreview = !!(previewSlides && previewSlides.length > 0);
+
+  const openAt = (idx) => {
+    if (!canPreview) return;
+    setInitialSlide(idx);
+    setPreviewOpen(true);
+  };
 
   return (
     <div className="space-y-2.5">

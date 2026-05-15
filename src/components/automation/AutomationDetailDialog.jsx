@@ -16,19 +16,57 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
   const [adjusting, setAdjusting] = useState(false);
   const [adjustText, setAdjustText] = useState("");
   const [sending, setSending] = useState(false);
-  // 邮件类：本地维护可编辑的草稿（收件人/抄送/主题/正文），编辑后用于发送
+  // 邮件类：本地维护可编辑的草稿（收件人/抄送/主题/正文 + 附件），编辑后用于发送
   const [emailDraft, setEmailDraft] = useState(null);
   // 弹层尺寸档位：md(默认) / lg / xl
   const [size, setSize] = useState("lg");
+  // 同任务下其它已完成自动化产生的可挂载附件候选
+  const [availableAttachments, setAvailableAttachments] = useState([]);
 
   // 当 execution 变化时（首次打开 / 重新规划后），同步邮件草稿
   useEffect(() => {
     if (execution?.automation_type === "email_draft") {
-      setEmailDraft(execution.automation_result?.data || null);
+      const initial = execution.automation_result?.data || null;
+      // 兼容历史草稿：未带 attachments 字段时初始化为空数组
+      setEmailDraft(initial ? { attachments: [], ...initial } : null);
     } else {
       setEmailDraft(null);
     }
   }, [execution?.id, execution?.automation_result?.data]);
+
+  // 邮件类：拉取同任务下其它执行产物，作为可一键挂载的附件候选
+  useEffect(() => {
+    if (execution?.automation_type !== "email_draft" || !execution?.task_id) {
+      setAvailableAttachments([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await base44.entities.TaskExecution.filter({ task_id: execution.task_id });
+        if (cancelled) return;
+        const files = [];
+        const seen = new Set();
+        (list || []).forEach(ex => {
+          if (ex.id === execution.id) return;
+          const d = ex.automation_result?.data;
+          if (d?.file_url && d?.file_name && !seen.has(d.file_url)) {
+            seen.add(d.file_url);
+            files.push({
+              file_name: d.file_name,
+              file_url: d.file_url,
+              source: ex.task_title || AUTOMATION_TYPES[ex.automation_type]?.label || "自动化产物"
+            });
+          }
+        });
+        setAvailableAttachments(files);
+      } catch (e) {
+        console.error("加载候选附件失败", e);
+        setAvailableAttachments([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [execution?.id, execution?.task_id, execution?.automation_type]);
 
   if (!execution) return null;
 
@@ -253,6 +291,7 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
                 result={execution.automation_type === "email_draft" && emailDraft ? { ...result, data: emailDraft } : result}
                 automationType={execution.automation_type}
                 onDataChange={execution.automation_type === "email_draft" ? setEmailDraft : undefined}
+                availableAttachments={execution.automation_type === "email_draft" ? availableAttachments : undefined}
               />
 
               {/* 邮件草稿：提供发送按钮 */}

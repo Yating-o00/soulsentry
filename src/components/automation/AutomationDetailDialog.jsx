@@ -94,16 +94,17 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
   const handleSendEmail = async () => {
     if (execution.automation_type !== "email_draft") return;
     const emailData = emailDraft || result?.data;
-    if (!emailData?.to?.trim()) {
-      toast.error("请先填写收件人邮箱");
-      return;
-    }
+    if (!emailData?.to?.trim()) { toast.error("请填写收件人"); return; }
     if (!emailData?.subject?.trim() || !emailData?.body?.trim()) {
-      toast.error("邮件主题和正文不能为空");
+      toast.error("主题与正文不能为空");
       return;
     }
     setSending(true);
     try {
+      // 先把用户的最新编辑持久化（即便发送失败，下次打开也能看到）
+      await base44.entities.TaskExecution.update(execution.id, {
+        automation_result: { ...result, data: emailData }
+      });
       const res = await base44.functions.invoke('sendGmailEmail', {
         to: emailData.to,
         cc: emailData.cc || undefined,
@@ -112,28 +113,17 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
       });
       if (res.data?.error) throw new Error(res.data.error);
       toast.success("邮件已发送");
+      const sentData = { ...emailData, sent_at: new Date().toISOString() };
       await base44.entities.TaskExecution.update(execution.id, {
-        automation_result: {
-          ...result,
-          data: { ...emailData, sent_at: new Date().toISOString() }
-        }
+        automation_result: { ...result, data: sentData }
       });
+      setEmailDraft(sentData);
       refresh();
     } catch (e) {
       toast.error("发送失败：" + e.message);
     } finally {
       setSending(false);
     }
-  };
-
-  // 邮件草稿编辑：本地暂存 + 静默写回 entity，避免误关弹窗丢失改动
-  const handleEmailDataChange = async (newData) => {
-    setEmailDraft(newData);
-    try {
-      await base44.entities.TaskExecution.update(execution.id, {
-        automation_result: { ...result, data: newData }
-      });
-    } catch (e) { /* 静默：本地草稿已保留 */ }
   };
 
   const handleRate = async (rating) => {
@@ -230,20 +220,18 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
               <AutomationResultPreview
                 result={execution.automation_type === "email_draft" && emailDraft ? { ...result, data: emailDraft } : result}
                 automationType={execution.automation_type}
-                onDataChange={execution.automation_type === "email_draft" && !result.data?.sent_at ? handleEmailDataChange : undefined}
+                onDataChange={execution.automation_type === "email_draft" ? setEmailDraft : undefined}
               />
 
               {/* 邮件草稿：提供发送按钮 */}
-              {execution.automation_type === "email_draft" && (emailDraft || result.data) && !result.data?.sent_at && (
+              {execution.automation_type === "email_draft" && emailDraft && !emailDraft.sent_at && (
                 <Button
                   className="w-full mt-3 bg-orange-500 hover:bg-orange-600"
                   onClick={handleSendEmail}
-                  disabled={sending || !(emailDraft?.to || result.data?.to)?.trim()}
+                  disabled={sending || !emailDraft.to?.trim()}
                 >
                   {sending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-                  {(emailDraft?.to || result.data?.to)?.trim()
-                    ? `发送给 ${emailDraft?.to || result.data?.to}`
-                    : "请先填写收件人后发送"}
+                  {emailDraft.to?.trim() ? `发送给 ${emailDraft.to}` : "请先填写收件人"}
                 </Button>
               )}
               {execution.automation_type === "email_draft" && result.data?.sent_at && (

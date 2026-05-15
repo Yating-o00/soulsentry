@@ -19,9 +19,15 @@ export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName
     setCur((c) => Math.max(0, Math.min(slides.length - 1, c + d)));
   }, [slides.length]);
 
+  // 打开时 / initialSlide 变化时同步当前页码
   useEffect(() => {
     if (!open) return;
     setCur(Math.max(0, Math.min(slides.length - 1, initialSlide || 0)));
+  }, [open, initialSlide, slides.length]);
+
+  // 键盘控制
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e) => {
       if (e.key === "Escape") onClose();
       else if (["ArrowRight", "PageDown", " "].includes(e.key)) go(1);

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,17 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
   const [adjusting, setAdjusting] = useState(false);
   const [adjustText, setAdjustText] = useState("");
   const [sending, setSending] = useState(false);
+  // 邮件类：本地维护可编辑的草稿（收件人/抄送/主题/正文），编辑后用于发送
+  const [emailDraft, setEmailDraft] = useState(null);
+
+  // 当 execution 变化时（首次打开 / 重新规划后），同步邮件草稿
+  useEffect(() => {
+    if (execution?.automation_type === "email_draft") {
+      setEmailDraft(execution.automation_result?.data || null);
+    } else {
+      setEmailDraft(null);
+    }
+  }, [execution?.id, execution?.automation_result?.data]);
 
   if (!execution) return null;
 
@@ -82,15 +93,20 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
 
   const handleSendEmail = async () => {
     if (execution.automation_type !== "email_draft") return;
-    const emailData = result?.data;
-    if (!emailData?.to || !emailData?.subject || !emailData?.body) {
-      toast.error("邮件信息不完整，请补充收件人");
+    const emailData = emailDraft || result?.data;
+    if (!emailData?.to?.trim()) {
+      toast.error("请先填写收件人邮箱");
+      return;
+    }
+    if (!emailData?.subject?.trim() || !emailData?.body?.trim()) {
+      toast.error("邮件主题和正文不能为空");
       return;
     }
     setSending(true);
     try {
       const res = await base44.functions.invoke('sendGmailEmail', {
         to: emailData.to,
+        cc: emailData.cc || undefined,
         subject: emailData.subject,
         body: emailData.body,
       });
@@ -108,6 +124,16 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
     } finally {
       setSending(false);
     }
+  };
+
+  // 邮件草稿编辑：本地暂存 + 静默写回 entity，避免误关弹窗丢失改动
+  const handleEmailDataChange = async (newData) => {
+    setEmailDraft(newData);
+    try {
+      await base44.entities.TaskExecution.update(execution.id, {
+        automation_result: { ...result, data: newData }
+      });
+    } catch (e) { /* 静默：本地草稿已保留 */ }
   };
 
   const handleRate = async (rating) => {
@@ -201,17 +227,23 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                 <span className="text-xs font-semibold text-emerald-700">执行结果</span>
               </div>
-              <AutomationResultPreview result={result} automationType={execution.automation_type} />
+              <AutomationResultPreview
+                result={execution.automation_type === "email_draft" && emailDraft ? { ...result, data: emailDraft } : result}
+                automationType={execution.automation_type}
+                onDataChange={execution.automation_type === "email_draft" && !result.data?.sent_at ? handleEmailDataChange : undefined}
+              />
 
               {/* 邮件草稿：提供发送按钮 */}
-              {execution.automation_type === "email_draft" && result.data && !result.data.sent_at && (
+              {execution.automation_type === "email_draft" && (emailDraft || result.data) && !result.data?.sent_at && (
                 <Button
                   className="w-full mt-3 bg-orange-500 hover:bg-orange-600"
                   onClick={handleSendEmail}
-                  disabled={sending || !result.data.to}
+                  disabled={sending || !(emailDraft?.to || result.data?.to)?.trim()}
                 >
                   {sending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-                  {result.data.to ? `发送给 ${result.data.to}` : "请先在通知页补充收件人"}
+                  {(emailDraft?.to || result.data?.to)?.trim()
+                    ? `发送给 ${emailDraft?.to || result.data?.to}`
+                    : "请先填写收件人后发送"}
                 </Button>
               )}
               {execution.automation_type === "email_draft" && result.data?.sent_at && (

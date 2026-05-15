@@ -41,13 +41,13 @@ function pickView(result, automationType) {
   return null;
 }
 
-export default function AutomationResultPreview({ result, automationType }) {
+export default function AutomationResultPreview({ result, automationType, onDataChange }) {
   if (!result) return null;
 
   const view = pickView(result, automationType);
 
   // ---- 类型化视图分发 ----
-  if (view === "email")    return <EmailResultView    data={result.data} preview={result.preview} />;
+  if (view === "email")    return <EmailResultView    data={result.data} preview={result.preview} onChange={onDataChange} />;
   if (view === "research") return <ResearchResultView data={result.data} preview={result.preview} />;
   if (view === "ppt")      return <PptResultView      data={result.data} preview={result.preview} />;
   if (view === "note")     return <NoteResultView     data={result.data} preview={result.preview} />;

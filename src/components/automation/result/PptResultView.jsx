@@ -5,6 +5,12 @@ import PptPreviewModal from "./PptPreviewModal";
 // PPT/办公文档结果视图：封面块 + 在线预览 + 大纲 + 下载
 export default function PptResultView({ data, preview }) {
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [initialSlide, setInitialSlide] = useState(0);
+  const openAt = (idx) => {
+    if (!canPreview) return;
+    setInitialSlide(idx);
+    setPreviewOpen(true);
+  };
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "演示文稿.html";
   const title = data?.title || data?.subject || "演示文稿";
@@ -30,7 +36,7 @@ export default function PptResultView({ data, preview }) {
       <div className="rounded-xl overflow-hidden border border-slate-200 relative group">
         <button
           type="button"
-          onClick={() => canPreview && setPreviewOpen(true)}
+          onClick={() => openAt(0)}
           disabled={!canPreview}
           className="w-full aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col items-center justify-center text-white px-4 relative overflow-hidden disabled:cursor-default"
         >
@@ -60,23 +66,33 @@ export default function PptResultView({ data, preview }) {
         data={previewData}
         fileUrl={fileUrl}
         fileName={fileName}
+        initialSlide={initialSlide}
       />
 
-      {/* 缩略图条 */}
+      {/* 缩略图条（点击跳转到对应页）*/}
       {pageCount > 1 && (
         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
           {Array.from({ length: Math.min(pageCount, 12) }).map((_, i) => (
-            <div
+            <button
               key={i}
-              className="w-12 h-8 rounded bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 border border-slate-200"
+              type="button"
+              onClick={() => openAt(i)}
+              disabled={!canPreview}
+              title={`预览第 ${i + 1} 页`}
+              className="w-12 h-8 rounded bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 border border-slate-200 hover:scale-110 hover:shadow-md hover:ring-2 hover:ring-[#3b5998]/40 active:scale-95 transition-all disabled:cursor-default disabled:hover:scale-100 disabled:hover:shadow-none disabled:hover:ring-0"
             >
               {i + 1}
-            </div>
+            </button>
           ))}
           {pageCount > 12 && (
-            <div className="w-12 h-8 rounded bg-slate-100 flex items-center justify-center text-slate-500 text-[10px] font-semibold flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => openAt(12)}
+              disabled={!canPreview}
+              className="w-12 h-8 rounded bg-slate-100 flex items-center justify-center text-slate-500 text-[10px] font-semibold flex-shrink-0 hover:bg-slate-200 transition-colors"
+            >
               +{pageCount - 12}
-            </div>
+            </button>
           )}
         </div>
       )}

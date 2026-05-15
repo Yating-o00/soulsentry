@@ -8,7 +8,7 @@ const THEMES = {
   tech:     { bg: "#020617", fg: "#e2e8f0", accent: "#22d3ee", muted: "#64748b" },
 };
 
-export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName }) {
+export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName, initialSlide = 0 }) {
   const slides = Array.isArray(data?.slides) ? data.slides : [];
   const theme = THEMES[data?.theme] || THEMES.minimal;
   const title = data?.title || "演示文稿";
@@ -21,7 +21,7 @@ export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName
 
   useEffect(() => {
     if (!open) return;
-    setCur(0);
+    setCur(Math.max(0, Math.min(slides.length - 1, initialSlide || 0)));
     const onKey = (e) => {
       if (e.key === "Escape") onClose();
       else if (["ArrowRight", "PageDown", " "].includes(e.key)) go(1);

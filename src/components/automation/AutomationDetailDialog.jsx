@@ -34,17 +34,16 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
     }
   }, [execution?.id, execution?.automation_result?.data]);
 
-  // 邮件类：拉取同任务下其它执行产物，作为可一键挂载的附件候选
+  // 邮件类：拉取候选附件
+  // 优先：同 task_id 下其它执行的产物；回退：当前用户最近 50 条已完成执行中的产物
   useEffect(() => {
-    if (execution?.automation_type !== "email_draft" || !execution?.task_id) {
+    if (execution?.automation_type !== "email_draft") {
       setAvailableAttachments([]);
       return;
     }
     let cancelled = false;
     (async () => {
-      try {
-        const list = await base44.entities.TaskExecution.filter({ task_id: execution.task_id });
-        if (cancelled) return;
+      const collect = (list) => {
         const files = [];
         const seen = new Set();
         (list || []).forEach(ex => {
@@ -59,6 +58,26 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
             });
           }
         });
+        return files;
+      };
+      try {
+        // 1) 同任务关联（如果有 task_id）
+        let files = [];
+        if (execution.task_id) {
+          const sib = await base44.entities.TaskExecution.filter({ task_id: execution.task_id });
+          if (cancelled) return;
+          files = collect(sib);
+        }
+        // 2) 回退：最近的已完成执行（无论是否同任务）
+        if (files.length === 0) {
+          const recent = await base44.entities.TaskExecution.filter(
+            { execution_status: 'completed' },
+            '-completed_at',
+            50
+          );
+          if (cancelled) return;
+          files = collect(recent);
+        }
         setAvailableAttachments(files);
       } catch (e) {
         console.error("加载候选附件失败", e);

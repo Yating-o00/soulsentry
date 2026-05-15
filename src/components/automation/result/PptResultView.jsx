@@ -6,6 +6,7 @@ import PptPreviewModal from "./PptPreviewModal";
 export default function PptResultView({ data, preview }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [initialSlide, setInitialSlide] = useState(0);
+  const [activeIdx, setActiveIdx] = useState(0);
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "演示文稿.html";
   const title = data?.title || data?.subject || "演示文稿";
@@ -30,32 +31,64 @@ export default function PptResultView({ data, preview }) {
     setInitialSlide(idx);
     setPreviewOpen(true);
   };
+  // 内联切换封面预览（不打开全屏）
+  const showAt = (idx) => {
+    if (!canPreview) return;
+    setActiveIdx(idx);
+  };
+  const activeSlide = canPreview ? (previewSlides[activeIdx] || previewSlides[0]) : null;
+  const activeHeading = activeSlide?.heading || title;
+  const activeSubtitle = activeSlide?.subtitle || (activeIdx === 0 ? subtitle : "");
+  const activeBullets = Array.isArray(activeSlide?.bullets) ? activeSlide.bullets : [];
+  const activeBody = activeSlide?.body || "";
 
   return (
     <div className="space-y-2.5">
-      {/* 封面（可点击预览）*/}
+      {/* 封面（点击数字会在此处直接切换内容；点击大屏打开全屏）*/}
       <div className="rounded-xl overflow-hidden border border-slate-200 relative group">
         <button
           type="button"
-          onClick={() => openAt(0)}
+          onClick={() => openAt(activeIdx)}
           disabled={!canPreview}
-          className="w-full aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col items-center justify-center text-white px-4 relative overflow-hidden disabled:cursor-default"
+          className="w-full aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col items-center justify-center text-white px-6 py-6 relative overflow-hidden disabled:cursor-default text-left"
         >
-          <Presentation className="w-6 h-6 mb-2 opacity-80" />
-          <div className="text-[15px] font-bold text-center line-clamp-2">{title}</div>
-          {subtitle && <div className="text-[11px] opacity-80 mt-1 text-center line-clamp-1">{subtitle}</div>}
+          {activeIdx === 0 ? (
+            <div className="flex flex-col items-center justify-center w-full">
+              <Presentation className="w-6 h-6 mb-2 opacity-80" />
+              <div className="text-[15px] font-bold text-center line-clamp-2">{activeHeading}</div>
+              {activeSubtitle && <div className="text-[11px] opacity-80 mt-1 text-center line-clamp-1">{activeSubtitle}</div>}
+            </div>
+          ) : (
+            <div className="w-full max-w-full">
+              <div className="text-[10px] tracking-widest opacity-60 mb-1.5">{activeIdx + 1} / {previewSlides.length}</div>
+              <div className="text-[14px] md:text-[16px] font-bold mb-2 line-clamp-2">{activeHeading}</div>
+              {activeBullets.length > 0 && (
+                <ul className="space-y-1 text-[11.5px] md:text-[12.5px] opacity-95">
+                  {activeBullets.slice(0, 5).map((b, i) => (
+                    <li key={i} className="flex gap-1.5 items-start">
+                      <span className="mt-1.5 w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                      <span className="line-clamp-2">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!activeBullets.length && activeBody && (
+                <p className="text-[11.5px] opacity-90 line-clamp-4 whitespace-pre-wrap">{activeBody}</p>
+              )}
+            </div>
+          )}
           {canPreview && (
             <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 text-[#1e3a5f] text-[12px] font-semibold shadow-lg">
                 <Play className="w-3.5 h-3.5 fill-current" />
-                在线预览
+                全屏预览
               </div>
             </div>
           )}
         </button>
         {pageCount > 0 && (
           <div className="bg-white px-3 py-1.5 text-[10.5px] text-slate-500 text-center border-t border-slate-100">
-            共 {pageCount} 页 {canPreview && "· 点击封面预览"}
+            共 {pageCount} 页 · 点击下方数字切换 · 点击封面全屏
           </div>
         )}
       </div>
@@ -70,21 +103,29 @@ export default function PptResultView({ data, preview }) {
         initialSlide={initialSlide}
       />
 
-      {/* 缩略图条（点击跳转到对应页）*/}
+      {/* 缩略图条（单击切换上方封面，双击打开全屏）*/}
       {pageCount > 1 && (
         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
-          {Array.from({ length: Math.min(pageCount, 12) }).map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => openAt(i)}
-              disabled={!canPreview}
-              title={`预览第 ${i + 1} 页`}
-              className="w-12 h-8 rounded bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 border border-slate-200 hover:scale-110 hover:shadow-md hover:ring-2 hover:ring-[#3b5998]/40 active:scale-95 transition-all disabled:cursor-default disabled:hover:scale-100 disabled:hover:shadow-none disabled:hover:ring-0"
-            >
-              {i + 1}
-            </button>
-          ))}
+          {Array.from({ length: Math.min(pageCount, 12) }).map((_, i) => {
+            const isActive = i === activeIdx;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => showAt(i)}
+                onDoubleClick={() => openAt(i)}
+                disabled={!canPreview}
+                title={`第 ${i + 1} 页（双击全屏）`}
+                className={`w-12 h-8 rounded flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 border transition-all active:scale-95 ${
+                  isActive
+                    ? "bg-gradient-to-br from-[#3b5998] to-[#5b7fc7] ring-2 ring-[#3b5998] border-white shadow-md scale-105"
+                    : "bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] border-slate-200 hover:scale-110 hover:shadow-md hover:ring-2 hover:ring-[#3b5998]/40"
+                } disabled:cursor-default`}
+              >
+                {i + 1}
+              </button>
+            );
+          })}
           {pageCount > 12 && (
             <button
               type="button"

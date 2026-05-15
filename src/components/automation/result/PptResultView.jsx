@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Presentation, Download, ExternalLink, Play, X, Maximize2 } from "lucide-react";
+import { Presentation, Download, ExternalLink, Play } from "lucide-react";
+import PptPreviewModal from "./PptPreviewModal";
 
 // PPT/办公文档结果视图：封面块 + 在线预览 + 大纲 + 下载
 export default function PptResultView({ data, preview }) {
@@ -11,7 +12,8 @@ export default function PptResultView({ data, preview }) {
   const slides = Array.isArray(data?.slides) ? data.slides : null;
   const outline = Array.isArray(data?.outline) ? data.outline : null;
   const pageCount = slides?.length || outline?.length || data?.page_count || 0;
-  const canPreview = !!fileUrl && /\.html?($|\?)/i.test(fileUrl);
+  // 只要有 slides 数据就能内置渲染预览（不依赖远程 HTML）
+  const canPreview = !!(slides && slides.length > 0);
 
   return (
     <div className="space-y-2.5">
@@ -54,35 +56,14 @@ export default function PptResultView({ data, preview }) {
         </button>
       )}
 
-      {/* 预览弹层 */}
-      {previewOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex flex-col" onClick={() => setPreviewOpen(false)}>
-          <div className="flex items-center justify-between px-4 py-2.5 bg-black/40 text-white" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[13px] font-medium truncate">{fileName}</div>
-            <div className="flex items-center gap-1">
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 rounded-lg hover:bg-white/15 transition-colors"
-                title="在新标签页打开"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </a>
-              <button onClick={() => setPreviewOpen(false)} className="p-2 rounded-lg hover:bg-white/15 transition-colors" title="关闭">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          <iframe
-            src={fileUrl}
-            title={fileName}
-            className="flex-1 w-full bg-white"
-            sandbox="allow-scripts allow-same-origin"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      {/* 预览弹层（内置渲染，不依赖远程文件）*/}
+      <PptPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        data={data}
+        fileUrl={fileUrl}
+        fileName={fileName}
+      />
 
       {/* 缩略图条 */}
       {pageCount > 1 && (

@@ -16,19 +16,55 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
   const [adjusting, setAdjusting] = useState(false);
   const [adjustText, setAdjustText] = useState("");
   const [sending, setSending] = useState(false);
-  // 邮件类：本地维护可编辑的草稿（收件人/抄送/主题/正文），编辑后用于发送
+  // 邮件类：本地维护可编辑的草稿（收件人/抄送/主题/正文 + 附件），编辑后用于发送
   const [emailDraft, setEmailDraft] = useState(null);
   // 弹层尺寸档位：md(默认) / lg / xl
   const [size, setSize] = useState("lg");
+  // 同任务下其它已完成自动化产生的可挂载附件候选
+  const [availableAttachments, setAvailableAttachments] = useState([]);
 
   // 当 execution 变化时（首次打开 / 重新规划后），同步邮件草稿
   useEffect(() => {
     if (execution?.automation_type === "email_draft") {
-      setEmailDraft(execution.automation_result?.data || null);
+      const initial = execution.automation_result?.data || null;
+      // 兼容历史数据：若草稿尚未带 attachments 字段，初始化为空数组
+      setEmailDraft(initial ? { attachments: [], ...initial } : null);
     } else {
       setEmailDraft(null);
     }
   }, [execution?.id, execution?.automation_result?.data]);
+
+  // 邮件类：拉取同任务下其它执行产物作为可挂载附件
+  useEffect(() => {
+    if (execution?.automation_type !== "email_draft" || !execution?.task_id) {
+      setAvailableAttachments([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await base44.entities.TaskExecution.filter({ task_id: execution.task_id });
+        if (cancelled) return;
+        const files = [];
+        (list || []).forEach(ex => {
+          if (ex.id === execution.id) return;
+          const d = ex.automation_result?.data;
+          if (d?.file_url && d?.file_name) {
+            files.push({
+              file_name: d.file_name,
+              file_url: d.file_url,
+              source: ex.task_title || AUTOMATION_TYPES[ex.automation_type]?.label || "自动化产物"
+            });
+          }
+        });
+        setAvailableAttachments(files);
+      } catch (e) {
+        console.error("加载候选附件失败", e);
+        setAvailableAttachments([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [execution?.id, execution?.task_id, execution?.automation_type]);
 
   if (!execution) return null;
 
@@ -107,14 +143,23 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
       await base44.entities.TaskExecution.update(execution.id, {
         automation_result: { ...result, data: emailData }
       });
+      const attachmentsPayload = Array.isArray(emailData.attachments)
+        ? emailData.attachments.filter(a => a?.file_url).map(a => ({ file_name: a.file_name, file_url: a.file_url }))
+        : [];
       const res = await base44.functions.invoke('sendGmailEmail', {
         to: emailData.to,
         cc: emailData.cc || undefined,
         subject: emailData.subject,
         body: emailData.body,
+        attachments: attachmentsPayload,
       });
       if (res.data?.error) throw new Error(res.data.error);
-      toast.success("邮件已发送");
+      const errs = res.data?.attachment_errors;
+      if (Array.isArray(errs) && errs.length > 0) {
+        toast.warning(`邮件已发送，但 ${errs.length} 个附件失败：${errs.map(e => e.file_name).join('、')}`);
+      } else {
+        toast.success(attachmentsPayload.length > 0 ? `邮件已发送（含 ${attachmentsPayload.length} 个附件）` : "邮件已发送");
+      }
       const sentData = { ...emailData, sent_at: new Date().toISOString() };
       await base44.entities.TaskExecution.update(execution.id, {
         automation_result: { ...result, data: sentData }
@@ -250,6 +295,7 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
                 result={execution.automation_type === "email_draft" && emailDraft ? { ...result, data: emailDraft } : result}
                 automationType={execution.automation_type}
                 onDataChange={execution.automation_type === "email_draft" ? setEmailDraft : undefined}
+                availableAttachments={execution.automation_type === "email_draft" ? availableAttachments : undefined}
               />
 
               {/* 邮件草稿：提供发送按钮 */}
@@ -260,7 +306,9 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
                   disabled={sending || !emailDraft.to?.trim()}
                 >
                   {sending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-                  {emailDraft.to?.trim() ? `发送给 ${emailDraft.to}` : "请先填写收件人"}
+                  {emailDraft.to?.trim()
+                    ? `发送给 ${emailDraft.to}${Array.isArray(emailDraft.attachments) && emailDraft.attachments.length > 0 ? `（含 ${emailDraft.attachments.length} 个附件）` : ""}`
+                    : "请先填写收件人"}
                 </Button>
               )}
               {execution.automation_type === "email_draft" && result.data?.sent_at && (

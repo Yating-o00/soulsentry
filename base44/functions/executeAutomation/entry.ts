@@ -76,6 +76,50 @@ async function generatePlan(base44, exec) {
   return planRes;
 }
 
+// 收集与当前邮件任务关联的可作附件的产物：
+// 1) 同一 task_id 下其它已完成的 TaskExecution（PPT/调研/办公文档/复盘等）的 file_url
+// 2) 关联 Task 自身的 attachments
+async function collectEmailAttachments(base44, exec) {
+  const attachments = [];
+  const seen = new Set();
+
+  const push = (file_url, file_name, mime_type, source) => {
+    if (!file_url || seen.has(file_url)) return;
+    seen.add(file_url);
+    attachments.push({ file_url, file_name: file_name || file_url.split('/').pop(), mime_type, source });
+  };
+
+  if (exec.task_id) {
+    try {
+      const siblings = await base44.entities.TaskExecution.filter(
+        { task_id: exec.task_id, execution_status: 'completed' },
+        '-completed_at',
+        10
+      );
+      for (const s of siblings) {
+        if (s.id === exec.id) continue;
+        const d = s.automation_result?.data;
+        if (d?.file_url) {
+          push(d.file_url, d.file_name, null, s.automation_type || s.task_title);
+        }
+      }
+    } catch (e) {
+      console.warn('collect siblings failed', e.message);
+    }
+
+    try {
+      const task = await base44.entities.Task.get(exec.task_id);
+      if (Array.isArray(task?.attachments)) {
+        task.attachments.forEach(a => push(a.file_url, a.file_name, a.file_type, '任务附件'));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  return attachments;
+}
+
 async function executeEmailDraft(base44, exec) {
   const schema = {
     type: "object",
@@ -90,10 +134,16 @@ async function executeEmailDraft(base44, exec) {
     required: ["subject", "body"]
   };
 
+  // 先收集附件候选
+  const attachments = await collectEmailAttachments(base44, exec);
+  const attachmentBrief = attachments.length > 0
+    ? attachments.map((a, i) => `${i + 1}. ${a.file_name}（来源：${a.source || '未知'}）`).join('\n')
+    : '（无）';
+
   const todayCN = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'long', day: 'numeric' });
   const data = await callKimi(
     base44,
-    `当前日期：${todayCN}（请在邮件落款日期处使用这个真实日期，不要编造其它日期）\n\n请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}`,
+    `当前日期：${todayCN}（请在邮件落款日期处使用这个真实日期，不要编造其它日期）\n\n该任务下已生成的产物（将随邮件作为附件发送）：\n${attachmentBrief}\n\n请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}\n\n若有附件，请在正文中自然提及"附件"，但不要罗列附件名。`,
     schema,
     `你是专业商务邮件助手。今日日期：${todayCN}。要求：1) 主题精炼，10字内最好；2) 正文结构清晰，含问候、正文、署名；3) 若需写落款日期，必须使用今日真实日期，禁止编造历史日期；4) 根据指令推断语气（正式/友好/简洁）；5) 收件人未指明则留空，由用户在确认时填写。`
   );
@@ -104,12 +154,15 @@ async function executeEmailDraft(base44, exec) {
   ];
   if (data.cc) previewLines.push(`抄送：${data.cc}`);
   if (data.tone) previewLines.push(`语气：${data.tone}`);
+  if (attachments.length > 0) {
+    previewLines.push(`📎 附件：${attachments.map(a => a.file_name).join('、')}`);
+  }
   previewLines.push('', data.body, '', '⚠️ 此为草稿，需在弹窗中确认后才会真正发送。');
 
   return {
     type: "email_draft",
     preview: previewLines.join('\n'),
-    data
+    data: { ...data, attachments }
   };
 }
 

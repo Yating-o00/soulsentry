@@ -41,13 +41,13 @@ function pickView(result, automationType) {
   return null;
 }
 
-export default function AutomationResultPreview({ result, automationType, onDataChange }) {
+export default function AutomationResultPreview({ result, automationType, onDataChange, availableAttachments }) {
   if (!result) return null;
 
   const view = pickView(result, automationType);
 
   // ---- 类型化视图分发 ----
-  if (view === "email")    return <EmailResultView    data={result.data} preview={result.preview} onChange={onDataChange} />;
+  if (view === "email")    return <EmailResultView    data={result.data} preview={result.preview} onChange={onDataChange} availableAttachments={availableAttachments} />;
   if (view === "research") return <ResearchResultView data={result.data} preview={result.preview} />;
   if (view === "ppt")      return <PptResultView      data={result.data} preview={result.preview} />;
   if (view === "note")     return <NoteResultView     data={result.data} preview={result.preview} />;

@@ -1,62 +1,133 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// RFC 2047 encode non-ASCII subject
-function encodeSubject(subject) {
-  // If pure ASCII, return as-is
+// RFC 2047 encode non-ASCII strings (for Subject and filename)
+function encodeRFC2047(s) {
+  if (!s) return '';
   // eslint-disable-next-line no-control-regex
-  if (/^[\x00-\x7F]*$/.test(subject)) return subject;
-  const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(subject)));
+  if (/^[\x00-\x7F]*$/.test(s)) return s;
+  const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(s)));
   return `=?UTF-8?B?${b64}?=`;
 }
 
-// Build a simple MIME message (supports plain text + optional HTML)
-function buildMime({ to, from, subject, body, isHtml, cc, bcc }) {
-  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  const headers = [
+// Encode arbitrary bytes (Uint8Array) to base64
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+// Wrap a long base64 string to 76-char lines (MIME requirement)
+function wrapBase64(b64) {
+  return b64.match(/.{1,76}/g)?.join('\r\n') || b64;
+}
+
+async function fetchAttachment(att) {
+  if (!att?.file_url) return null;
+  try {
+    const res = await fetch(att.file_url);
+    if (!res.ok) {
+      console.warn('attachment fetch failed', att.file_url, res.status);
+      return null;
+    }
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const name = att.file_name || att.file_url.split('/').pop() || 'attachment';
+    const mime = att.mime_type
+      || res.headers.get('content-type')?.split(';')[0]
+      || 'application/octet-stream';
+    return { name, mime, b64: bytesToBase64(buf) };
+  } catch (e) {
+    console.warn('attachment error', att.file_url, e.message);
+    return null;
+  }
+}
+
+// Build a MIME message. If attachments[] is non-empty, wraps the body
+// (text or alternative text+html) inside a multipart/mixed envelope.
+function buildMime({ to, from, subject, body, isHtml, cc, bcc, attachments = [] }) {
+  const baseHeaders = [
     `From: ${from}`,
     `To: ${to}`,
   ];
-  if (cc) headers.push(`Cc: ${cc}`);
-  if (bcc) headers.push(`Bcc: ${bcc}`);
-  headers.push(`Subject: ${encodeSubject(subject || '')}`);
-  headers.push('MIME-Version: 1.0');
+  if (cc) baseHeaders.push(`Cc: ${cc}`);
+  if (bcc) baseHeaders.push(`Bcc: ${bcc}`);
+  baseHeaders.push(`Subject: ${encodeRFC2047(subject || '')}`);
+  baseHeaders.push('MIME-Version: 1.0');
 
+  const altBoundary = `----=_Alt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const mixedBoundary = `----=_Mixed_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+
+  // Build the body part (either text-only or multipart/alternative)
+  let bodyPart;
   if (isHtml) {
-    headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
-    const plainFallback = body.replace(/<[^>]+>/g, '');
-    const mime = [
-      headers.join('\r\n'),
+    const plainFallback = (body || '').replace(/<[^>]+>/g, '');
+    bodyPart = [
+      `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
       '',
-      `--${boundary}`,
+      `--${altBoundary}`,
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: base64',
       '',
       btoa(unescape(encodeURIComponent(plainFallback))),
-      `--${boundary}`,
+      `--${altBoundary}`,
       'Content-Type: text/html; charset="UTF-8"',
       'Content-Transfer-Encoding: base64',
       '',
-      btoa(unescape(encodeURIComponent(body))),
-      `--${boundary}--`,
-      ''
+      btoa(unescape(encodeURIComponent(body || ''))),
+      `--${altBoundary}--`,
     ].join('\r\n');
-    return mime;
+  } else {
+    bodyPart = [
+      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      btoa(unescape(encodeURIComponent(body || ''))),
+    ].join('\r\n');
   }
 
-  headers.push('Content-Type: text/plain; charset="UTF-8"');
-  headers.push('Content-Transfer-Encoding: base64');
-  const mime = [
+  if (!hasAttachments) {
+    return [baseHeaders.join('\r\n'), '', bodyPart].join('\r\n');
+  }
+
+  // Wrap body + attachments in multipart/mixed
+  const headers = [
+    ...baseHeaders,
+    `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
+  ];
+
+  const attachmentParts = attachments.map(att => {
+    const filename = encodeRFC2047(att.name);
+    return [
+      `--${mixedBoundary}`,
+      `Content-Type: ${att.mime}; name="${filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${filename}"`,
+      '',
+      wrapBase64(att.b64),
+    ].join('\r\n');
+  });
+
+  return [
     headers.join('\r\n'),
     '',
-    btoa(unescape(encodeURIComponent(body || '')))
+    `--${mixedBoundary}`,
+    bodyPart,
+    ...attachmentParts,
+    `--${mixedBoundary}--`,
+    '',
   ].join('\r\n');
-  return mime;
 }
 
 function toBase64Url(str) {
   const bytes = new TextEncoder().encode(str);
   let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
@@ -68,14 +139,12 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { to, subject, body, isHtml = false, cc, bcc, scheduledAt } = await req.json();
+    const { to, subject, body, isHtml = false, cc, bcc, scheduledAt, attachments } = await req.json();
 
     if (!to || !subject || !body) {
       return Response.json({ error: 'Missing fields: to, subject, body required' }, { status: 400 });
     }
 
-    // If scheduledAt is in the future, return without sending (a scheduled
-    // automation or task scheduler should call this function again at that time).
     if (scheduledAt) {
       const scheduled = new Date(scheduledAt);
       if (!isNaN(scheduled.getTime()) && scheduled.getTime() > Date.now() + 60 * 1000) {
@@ -90,8 +159,16 @@ Deno.serve(async (req) => {
 
     const { accessToken } = await base44.asServiceRole.connectors.getConnection('gmail');
 
+    // Fetch attachments in parallel (cap to 10)
+    let fetched = [];
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      const list = attachments.slice(0, 10);
+      const results = await Promise.all(list.map(fetchAttachment));
+      fetched = results.filter(Boolean);
+    }
+
     const fromAddr = user.email;
-    const mime = buildMime({ to, from: fromAddr, subject, body, isHtml, cc, bcc });
+    const mime = buildMime({ to, from: fromAddr, subject, body, isHtml, cc, bcc, attachments: fetched });
     const raw = toBase64Url(mime);
 
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -110,7 +187,12 @@ Deno.serve(async (req) => {
     }
 
     const result = await res.json();
-    return Response.json({ ok: true, messageId: result.id, threadId: result.threadId });
+    return Response.json({
+      ok: true,
+      messageId: result.id,
+      threadId: result.threadId,
+      attachments_sent: fetched.length,
+    });
   } catch (error) {
     console.error('sendGmailEmail error:', error);
     return Response.json({ error: error.message }, { status: 500 });

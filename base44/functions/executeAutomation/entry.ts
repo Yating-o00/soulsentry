@@ -305,9 +305,11 @@ function buildRecapMarkdown(date, tasks, aiSummary) {
 }
 
 async function uploadMarkdownReport(base44, fileName, markdown) {
-  const bytes = new TextEncoder().encode(markdown);
-  const blob = new Blob([bytes], { type: 'text/markdown' });
-  const file = new File([blob], fileName, { type: 'text/markdown' });
+  // 加 UTF-8 BOM，确保浏览器/编辑器以 UTF-8 打开 .md，避免中文乱码
+  const BOM = '\uFEFF';
+  const bytes = new TextEncoder().encode(BOM + markdown);
+  const blob = new Blob([bytes], { type: 'text/markdown; charset=utf-8' });
+  const file = new File([blob], fileName, { type: 'text/markdown; charset=utf-8' });
   const resp = await base44.integrations.Core.UploadFile({ file });
   return resp?.file_url || resp?.data?.file_url;
 }
@@ -550,9 +552,10 @@ function renderPptHtml(data) {
 }
 
 async function uploadHtmlFile(base44, fileName, html) {
+  // HTML 已在 <meta charset="utf-8"> 里声明，但 blob/file 也带上 charset 防 server 默认 latin-1
   const bytes = new TextEncoder().encode(html);
-  const blob = new Blob([bytes], { type: 'text/html' });
-  const file = new File([blob], fileName, { type: 'text/html' });
+  const blob = new Blob([bytes], { type: 'text/html; charset=utf-8' });
+  const file = new File([blob], fileName, { type: 'text/html; charset=utf-8' });
   const resp = await base44.integrations.Core.UploadFile({ file });
   return resp?.file_url || resp?.data?.file_url;
 }

@@ -1,0 +1,99 @@
+import React from "react";
+import { Presentation, Download, ExternalLink } from "lucide-react";
+
+// PPT/办公文档结果视图：封面块 + 页码缩略图 + 大纲列表 + 下载
+export default function PptResultView({ data, preview }) {
+  const fileUrl = data?.file_url;
+  const fileName = data?.file_name || "演示文稿.html";
+  const title = data?.title || data?.subject || "演示文稿";
+  const subtitle = data?.subtitle || "";
+  const slides = Array.isArray(data?.slides) ? data.slides : null;
+  const outline = Array.isArray(data?.outline) ? data.outline : null;
+  const pageCount = slides?.length || outline?.length || data?.page_count || 0;
+
+  return (
+    <div className="space-y-2.5">
+      {/* 封面 */}
+      <div className="rounded-xl overflow-hidden border border-slate-200">
+        <div className="aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col items-center justify-center text-white px-4">
+          <Presentation className="w-6 h-6 mb-2 opacity-80" />
+          <div className="text-[15px] font-bold text-center line-clamp-2">{title}</div>
+          {subtitle && <div className="text-[11px] opacity-80 mt-1 text-center line-clamp-1">{subtitle}</div>}
+        </div>
+        {pageCount > 0 && (
+          <div className="bg-white px-3 py-1.5 text-[10.5px] text-slate-500 text-center border-t border-slate-100">
+            共 {pageCount} 页
+          </div>
+        )}
+      </div>
+
+      {/* 缩略图条 */}
+      {pageCount > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+          {Array.from({ length: Math.min(pageCount, 12) }).map((_, i) => (
+            <div
+              key={i}
+              className="w-12 h-8 rounded bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 border border-slate-200"
+            >
+              {i + 1}
+            </div>
+          ))}
+          {pageCount > 12 && (
+            <div className="w-12 h-8 rounded bg-slate-100 flex items-center justify-center text-slate-500 text-[10px] font-semibold flex-shrink-0">
+              +{pageCount - 12}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 大纲 */}
+      {outline && outline.length > 0 && (
+        <div className="rounded-xl bg-white border border-slate-200 p-3">
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">PPT 结构</div>
+          <div className="space-y-1.5">
+            {outline.slice(0, 8).map((o, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <div className="w-5 h-5 rounded bg-[#384877]/8 text-[#384877] text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                  {i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-semibold text-slate-800 truncate">{o.title || o}</div>
+                  {o.desc && <div className="text-[10.5px] text-slate-500 truncate">{o.desc}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 兜底文本 */}
+      {!outline && !slides && preview && (
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-40 overflow-y-auto">
+          <pre className="text-[11.5px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{preview}</pre>
+        </div>
+      )}
+
+      {/* 下载 */}
+      {fileUrl && (
+        <a
+          href={fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          download
+          className="flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 hover:border-violet-400 hover:shadow px-3 py-2.5 transition-all group"
+        >
+          <div className="w-8 h-8 rounded-lg bg-white border border-violet-200 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <Presentation className="w-4 h-4 text-violet-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[12.5px] font-semibold text-violet-900 truncate">{fileName}</div>
+            <div className="text-[10.5px] text-violet-700 flex items-center gap-1">
+              <Download className="w-2.5 h-2.5" /> 点击在新标签页打开 / 下载
+            </div>
+          </div>
+          <ExternalLink className="w-3.5 h-3.5 text-violet-600 flex-shrink-0" />
+        </a>
+      )}
+    </div>
+  );
+}

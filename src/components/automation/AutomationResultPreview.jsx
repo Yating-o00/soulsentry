@@ -1,5 +1,11 @@
 import React from "react";
 import { ArrowRight, Plus, Trash2, Edit3, Download, ExternalLink } from "lucide-react";
+import EmailResultView from "./result/EmailResultView";
+import ResearchResultView from "./result/ResearchResultView";
+import PptResultView from "./result/PptResultView";
+import NoteResultView from "./result/NoteResultView";
+import CalendarResultView from "./result/CalendarResultView";
+import FileResultView from "./result/FileResultView";
 
 const diffIcons = {
   create: { icon: Plus, color: "text-emerald-600", bg: "bg-emerald-50", hover: "hover:bg-emerald-100" },
@@ -10,32 +16,50 @@ const diffIcons = {
 
 // 从 result 中尽可能解析出与 diff target 对应的可下载 URL
 function resolveFileUrl(result, diffItem) {
-  // 1) 优先用 diff 自己携带的 url（未来扩展用）
   if (diffItem?.url) return diffItem.url;
-  // 2) 命中 result.data 中的 file_url（最常见：调研报告/文档/PPT）
   const d = result?.data;
   if (!d) return null;
-  // 文件名匹配：target 中含有 file_name 就把它当下载链接
   if (d.file_url && d.file_name && diffItem.target && diffItem.target.includes(d.file_name)) {
     return d.file_url;
   }
-  // 单文件场景：diff 只有一条 create 且 result.data 只有一个 file_url，直接绑定
   if (d.file_url && Array.isArray(result.diff) && result.diff.length === 1 && diffItem.action === "create") {
     return d.file_url;
   }
   return null;
 }
 
-export default function AutomationResultPreview({ result }) {
+// 根据 result.type / 字段特征推断该用哪个视图
+function pickView(result, automationType) {
+  const t = (automationType || result?.type || "").toLowerCase();
+  const d = result?.data || {};
+  if (t.includes("email") || d.to || d.subject) return "email";
+  if (t.includes("research") || t.includes("web")) return "research";
+  if (t.includes("ppt") || t.includes("slide") || t.includes("office") || Array.isArray(d.slides) || Array.isArray(d.outline)) return "ppt";
+  if (t.includes("calendar") || t.includes("event") || d.start_time || d.reminder_time) return "calendar";
+  if (t.includes("file") || t.includes("organize")) return "file";
+  if (t.includes("note") || t.includes("summary") || Array.isArray(d.tags) || Array.isArray(d.key_points)) return "note";
+  return null;
+}
+
+export default function AutomationResultPreview({ result, automationType }) {
   if (!result) return null;
 
-  // 从 preview 文本兜底抽 URL（防止 data 字段缺失）
+  const view = pickView(result, automationType);
+
+  // ---- 类型化视图分发 ----
+  if (view === "email")    return <EmailResultView    data={result.data} preview={result.preview} />;
+  if (view === "research") return <ResearchResultView data={result.data} preview={result.preview} />;
+  if (view === "ppt")      return <PptResultView      data={result.data} preview={result.preview} />;
+  if (view === "note")     return <NoteResultView     data={result.data} preview={result.preview} />;
+  if (view === "calendar") return <CalendarResultView data={result.data} preview={result.preview} />;
+  if (view === "file")     return <FileResultView     result={result} />;
+
+  // ---- 通用兜底视图：保留原 preview + diff 列表 ----
   const previewUrlMatch = result.preview && result.preview.match(/https?:\/\/[^\s)）"】>]+/);
   const previewFileUrl = previewUrlMatch ? previewUrlMatch[0] : null;
 
   return (
     <div className="space-y-3">
-      {/* 主体预览 */}
       {result.preview && (
         <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-64 overflow-y-auto">
           <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
@@ -44,7 +68,6 @@ export default function AutomationResultPreview({ result }) {
         </div>
       )}
 
-      {/* 变更详情 */}
       {Array.isArray(result.diff) && result.diff.length > 0 && (
         <div>
           <div className="text-xs font-medium text-slate-500 mb-2">变更详情</div>

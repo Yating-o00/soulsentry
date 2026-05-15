@@ -201,7 +201,7 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                 <span className="text-xs font-semibold text-emerald-700">执行结果</span>
               </div>
-              <AutomationResultPreview result={result} />
+              <AutomationResultPreview result={result} automationType={execution.automation_type} />
 
               {/* 邮件草稿：提供发送按钮 */}
               {execution.automation_type === "email_draft" && result.data && !result.data.sent_at && (

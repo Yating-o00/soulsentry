@@ -1,8 +1,9 @@
-import React from "react";
-import { Presentation, Download, ExternalLink } from "lucide-react";
+import React, { useState } from "react";
+import { Presentation, Download, ExternalLink, Play, X, Maximize2 } from "lucide-react";
 
-// PPT/办公文档结果视图：封面块 + 页码缩略图 + 大纲列表 + 下载
+// PPT/办公文档结果视图：封面块 + 在线预览 + 大纲 + 下载
 export default function PptResultView({ data, preview }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "演示文稿.html";
   const title = data?.title || data?.subject || "演示文稿";
@@ -10,22 +11,78 @@ export default function PptResultView({ data, preview }) {
   const slides = Array.isArray(data?.slides) ? data.slides : null;
   const outline = Array.isArray(data?.outline) ? data.outline : null;
   const pageCount = slides?.length || outline?.length || data?.page_count || 0;
+  const canPreview = !!fileUrl && /\.html?($|\?)/i.test(fileUrl);
 
   return (
     <div className="space-y-2.5">
-      {/* 封面 */}
-      <div className="rounded-xl overflow-hidden border border-slate-200">
-        <div className="aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col items-center justify-center text-white px-4">
+      {/* 封面（可点击预览）*/}
+      <div className="rounded-xl overflow-hidden border border-slate-200 relative group">
+        <button
+          type="button"
+          onClick={() => canPreview && setPreviewOpen(true)}
+          disabled={!canPreview}
+          className="w-full aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col items-center justify-center text-white px-4 relative overflow-hidden disabled:cursor-default"
+        >
           <Presentation className="w-6 h-6 mb-2 opacity-80" />
           <div className="text-[15px] font-bold text-center line-clamp-2">{title}</div>
           {subtitle && <div className="text-[11px] opacity-80 mt-1 text-center line-clamp-1">{subtitle}</div>}
-        </div>
+          {canPreview && (
+            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 text-[#1e3a5f] text-[12px] font-semibold shadow-lg">
+                <Play className="w-3.5 h-3.5 fill-current" />
+                在线预览
+              </div>
+            </div>
+          )}
+        </button>
         {pageCount > 0 && (
           <div className="bg-white px-3 py-1.5 text-[10.5px] text-slate-500 text-center border-t border-slate-100">
-            共 {pageCount} 页
+            共 {pageCount} 页 {canPreview && "· 点击封面预览"}
           </div>
         )}
       </div>
+
+      {/* 预览按钮（显式入口）*/}
+      {canPreview && (
+        <button
+          type="button"
+          onClick={() => setPreviewOpen(true)}
+          className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2e3d66] hover:to-[#324f8f] text-white px-3 py-2.5 text-[12.5px] font-semibold shadow-sm hover:shadow transition-all"
+        >
+          <Play className="w-3.5 h-3.5 fill-current" />
+          在线预览演示稿
+        </button>
+      )}
+
+      {/* 预览弹层 */}
+      {previewOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex flex-col" onClick={() => setPreviewOpen(false)}>
+          <div className="flex items-center justify-between px-4 py-2.5 bg-black/40 text-white" onClick={(e) => e.stopPropagation()}>
+            <div className="text-[13px] font-medium truncate">{fileName}</div>
+            <div className="flex items-center gap-1">
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-lg hover:bg-white/15 transition-colors"
+                title="在新标签页打开"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </a>
+              <button onClick={() => setPreviewOpen(false)} className="p-2 rounded-lg hover:bg-white/15 transition-colors" title="关闭">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <iframe
+            src={fileUrl}
+            title={fileName}
+            className="flex-1 w-full bg-white"
+            sandbox="allow-scripts allow-same-origin"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* 缩略图条 */}
       {pageCount > 1 && (

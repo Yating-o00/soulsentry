@@ -1,8 +1,9 @@
 import React from "react";
-import { Mail, User, Tag, AlertTriangle, Paperclip, X } from "lucide-react";
+import { Mail, User, Tag, AlertTriangle, Paperclip, X, Plus } from "lucide-react";
 
 // 邮件类结果视图：收件人/抄送/主题/正文均可编辑；变更通过 onChange 上抛
-export default function EmailResultView({ data, preview, editable = true, onChange }) {
+// availableAttachments: 同任务下其它执行产物（PPT/PDF/调研报告等），用户可一键挂载
+export default function EmailResultView({ data, preview, editable = true, onChange, availableAttachments = [] }) {
   if (!data && !preview) return null;
   const handle = (key) => (e) => {
     if (!onChange) return;
@@ -14,11 +15,24 @@ export default function EmailResultView({ data, preview, editable = true, onChan
   const subject = data?.subject || "";
   const body = data?.body || preview || "";
   const attachments = Array.isArray(data?.attachments) ? data.attachments : [];
+  const attachedUrls = new Set(attachments.map(a => a.file_url));
+  const candidates = (availableAttachments || []).filter(a => a.file_url && !attachedUrls.has(a.file_url));
 
   const removeAttachment = (idx) => {
     if (!onChange) return;
     const next = attachments.filter((_, i) => i !== idx);
     onChange({ ...(data || {}), attachments: next });
+  };
+
+  const addAttachment = (item) => {
+    if (!onChange || !item?.file_url) return;
+    if (attachedUrls.has(item.file_url)) return;
+    onChange({ ...(data || {}), attachments: [...attachments, item] });
+  };
+
+  const addAllCandidates = () => {
+    if (!onChange || candidates.length === 0) return;
+    onChange({ ...(data || {}), attachments: [...attachments, ...candidates] });
   };
 
   return (
@@ -72,6 +86,44 @@ export default function EmailResultView({ data, preview, editable = true, onChan
           </pre>
         )}
       </div>
+
+      {/* 可挂载候选（同任务下其它执行产物） */}
+      {editable && candidates.length > 0 && (
+        <div className="rounded-xl border border-dashed border-[#384877]/30 bg-[#384877]/5 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1 text-[10px] font-semibold text-[#384877] uppercase tracking-wide">
+              <Paperclip className="w-3 h-3" /> 可挂载附件 · 来自本任务的其它产物（{candidates.length}）
+            </div>
+            <button
+              type="button"
+              onClick={addAllCandidates}
+              className="text-[10.5px] font-semibold text-[#384877] hover:text-[#3b5aa2] underline"
+            >
+              全部挂载
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {candidates.map((a, i) => (
+              <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200">
+                <div className="w-7 h-7 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                  <Paperclip className="w-3.5 h-3.5 text-slate-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium text-slate-800 truncate">{a.file_name}</div>
+                  {a.source && <div className="text-[10.5px] text-slate-500 truncate">来源：{a.source}</div>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => addAttachment(a)}
+                  className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#384877] hover:bg-[#3b5aa2] text-white text-[10.5px] font-semibold transition"
+                >
+                  <Plus className="w-3 h-3" /> 挂载
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 附件列表 */}
       {attachments.length > 0 && (

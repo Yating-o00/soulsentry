@@ -12,8 +12,17 @@ export default function PptResultView({ data, preview }) {
   const slides = Array.isArray(data?.slides) ? data.slides : null;
   const outline = Array.isArray(data?.outline) ? data.outline : null;
   const pageCount = slides?.length || outline?.length || data?.page_count || 0;
-  // 只要有 slides 数据就能内置渲染预览（不依赖远程 HTML）
-  const canPreview = !!(slides && slides.length > 0);
+  // 如果没有 slides 但有 outline，自动转换为可预览的 slides（兼容旧数据）
+  const previewSlides = slides && slides.length > 0
+    ? slides
+    : (outline && outline.length > 0
+        ? [{ heading: title }, ...outline.map(o => ({
+            heading: typeof o === 'string' ? o : (o.title || o.heading || ''),
+            body: typeof o === 'string' ? '' : (o.desc || o.body || '')
+          }))]
+        : null);
+  const previewData = previewSlides ? { ...data, slides: previewSlides } : data;
+  const canPreview = !!(previewSlides && previewSlides.length > 0);
 
   return (
     <div className="space-y-2.5">
@@ -60,7 +69,7 @@ export default function PptResultView({ data, preview }) {
       <PptPreviewModal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        data={data}
+        data={previewData}
         fileUrl={fileUrl}
         fileName={fileName}
       />

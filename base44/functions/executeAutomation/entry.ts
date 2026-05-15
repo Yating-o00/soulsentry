@@ -33,7 +33,7 @@ const PLAN_SCHEMA = {
   properties: {
     automation_type: {
       type: "string",
-      enum: ["email_draft", "file_organize", "web_research", "office_doc", "calendar_event", "summary_note", "none"]
+      enum: ["email_draft", "file_organize", "web_research", "office_doc", "ppt_doc", "calendar_event", "summary_note", "none"]
     },
     plan: {
       type: "object",
@@ -82,49 +82,145 @@ async function executeEmailDraft(base44, exec) {
     properties: {
       to: { type: "string", description: "收件人邮箱，若用户未指定则留空" },
       to_name: { type: "string", description: "收件人称呼" },
-      subject: { type: "string" },
-      body: { type: "string", description: "邮件正文，中文，礼貌、专业" }
+      cc: { type: "string", description: "抄送邮箱（可选）" },
+      subject: { type: "string", description: "邮件主题，精炼专业" },
+      body: { type: "string", description: "邮件正文，中文，含问候、正文、署名三部分" },
+      tone: { type: "string", enum: ["formal", "friendly", "concise"], description: "语气：正式/友好/简洁" }
     },
     required: ["subject", "body"]
   };
 
   const data = await callKimi(
     base44,
-    `请根据用户指令生成一封邮件草稿：\n${exec.original_input || exec.task_title}`,
+    `请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}`,
     schema,
-    "你是专业商务邮件助手，生成的邮件需简洁得体、语气恰当。"
+    "你是专业商务邮件助手。要求：1) 主题精炼，10字内最好；2) 正文结构清晰，含问候、正文、署名；3) 根据指令推断语气（正式/友好/简洁）；4) 收件人未指明则留空，由用户在确认时填写。"
   );
+
+  const previewLines = [
+    `📧 主题：${data.subject}`,
+    `收件人：${data.to || '（待用户填写）'}`,
+  ];
+  if (data.cc) previewLines.push(`抄送：${data.cc}`);
+  if (data.tone) previewLines.push(`语气：${data.tone}`);
+  previewLines.push('', data.body, '', '⚠️ 此为草稿，需在弹窗中确认后才会真正发送。');
 
   return {
     type: "email_draft",
-    preview: `收件人: ${data.to || '(待填)'}\n主题: ${data.subject}\n\n${data.body}`,
+    preview: previewLines.join('\n'),
     data
   };
 }
 
 async function executeWebResearch(base44, exec) {
+  const userText = exec.original_input || exec.task_title;
+
+  // 1. 真实联网爬取（Kimi $web_search）
+  let answer = '';
+  let references = [];
+  try {
+    const res = await base44.functions.invoke('kimiWebBrowse', { query: userText, language: 'zh' });
+    answer = res?.data?.answer || '';
+    references = Array.isArray(res?.data?.references) ? res.data.references : [];
+  } catch (e) {
+    // 联网失败时回退到纯知识库
+    answer = '';
+  }
+
+  // 2. 让 AI 基于爬取结果生成结构化深度报告
   const schema = {
     type: "object",
     properties: {
       topic: { type: "string" },
-      summary: { type: "string", description: "Markdown 格式的研究摘要" },
-      key_points: { type: "array", items: { type: "string" } },
-      sources_hint: { type: "string", description: "建议用户后续查阅的方向" }
+      executive_summary: { type: "string", description: "150~300字的核心结论摘要" },
+      sections: {
+        type: "array",
+        description: "3~6 个章节，每节包含 heading 和 markdown body",
+        items: {
+          type: "object",
+          properties: {
+            heading: { type: "string" },
+            body: { type: "string", description: "该章节 Markdown 内容，可含子标题、列表、要点" }
+          },
+          required: ["heading", "body"]
+        }
+      },
+      key_findings: { type: "array", items: { type: "string" } },
+      recommendations: { type: "array", items: { type: "string" } }
     },
-    required: ["summary", "key_points"]
+    required: ["topic", "executive_summary", "sections", "key_findings"]
   };
 
-  const data = await callKimi(
+  const sourcesText = references.length > 0
+    ? references.slice(0, 10).map((r, i) => `[${i + 1}] ${r.title} — ${r.url}`).join('\n')
+    : '（无外部来源，请基于通用知识作答）';
+
+  const research = await callKimi(
     base44,
-    `请围绕以下主题做一次知识梳理与建议：\n${exec.original_input || exec.task_title}`,
+    `调研主题：${userText}\n\n以下是联网搜索得到的原始资料：\n\n${answer || '（搜索未返回内容）'}\n\n参考来源：\n${sourcesText}\n\n请基于以上资料生成一份结构清晰、内容深入的调研报告。每节正文请用 Markdown 编写，必要时引用上面的来源编号。`,
     schema,
-    "你是研究分析师，基于已有知识给出条理清晰、可直接使用的摘要。"
+    "你是资深行业研究分析师，擅长把零散资料整合为深度调研报告。要求：客观、有数据、结构清晰。"
   );
+
+  // 3. 组装完整 Markdown 报告
+  const lines = [];
+  lines.push(`# 调研报告：${research.topic || userText}`);
+  lines.push('');
+  lines.push(`> 生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`);
+  lines.push('');
+  lines.push('## 核心摘要');
+  lines.push('');
+  lines.push(research.executive_summary || '');
+  lines.push('');
+  if (Array.isArray(research.key_findings) && research.key_findings.length > 0) {
+    lines.push('## 关键发现');
+    lines.push('');
+    research.key_findings.forEach((k, i) => lines.push(`${i + 1}. ${k}`));
+    lines.push('');
+  }
+  (research.sections || []).forEach(sec => {
+    lines.push(`## ${sec.heading}`);
+    lines.push('');
+    lines.push(sec.body || '');
+    lines.push('');
+  });
+  if (Array.isArray(research.recommendations) && research.recommendations.length > 0) {
+    lines.push('## 行动建议');
+    lines.push('');
+    research.recommendations.forEach((r, i) => lines.push(`${i + 1}. ${r}`));
+    lines.push('');
+  }
+  if (references.length > 0) {
+    lines.push('## 参考来源');
+    lines.push('');
+    references.slice(0, 10).forEach((r, i) => {
+      lines.push(`${i + 1}. [${r.title || r.url}](${r.url})`);
+    });
+    lines.push('');
+  }
+  lines.push('---');
+  lines.push('*由心栈 SoulSentry 自动生成*');
+
+  const markdown = lines.join('\n');
+  const safeTopic = (research.topic || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+  const fileName = `${new Date().toISOString().slice(0, 10)}_${safeTopic}_调研报告.md`;
+  const fileUrl = await uploadMarkdownReport(base44, fileName, markdown);
 
   return {
     type: "web_research",
-    preview: data.summary,
-    data
+    preview: `📄 已生成《${fileName}》\n\n📥 下载链接：${fileUrl}\n\n${research.executive_summary || ''}\n\n${markdown.slice(0, 600)}${markdown.length > 600 ? '\n…（更多内容见文件）' : ''}`,
+    data: {
+      topic: research.topic,
+      file_name: fileName,
+      file_url: fileUrl,
+      executive_summary: research.executive_summary,
+      key_findings: research.key_findings,
+      recommendations: research.recommendations,
+      sections: research.sections,
+      references,
+      markdown
+    },
+    diff: [{ action: "create", target: fileName, detail: `深度调研报告（${(research.sections || []).length}节，${references.length}条来源）已上传` }]
   };
 }
 
@@ -311,44 +407,210 @@ async function executeSummaryNote(base44, exec) {
 }
 
 async function executeOfficeDoc(base44, exec) {
+  const userText = exec.original_input || exec.task_title;
   const schema = {
     type: "object",
     properties: {
-      doc_type: { type: "string", enum: ["ppt", "word", "excel"] },
+      doc_type: { type: "string", enum: ["word", "excel"] },
       title: { type: "string" },
-      outline: {
+      sections: {
         type: "array",
+        description: "文档章节，每节含完整 Markdown 正文",
         items: {
           type: "object",
           properties: {
-            section: { type: "string" },
-            content: { type: "string" }
-          }
+            heading: { type: "string" },
+            body: { type: "string", description: "完整 Markdown 正文，包含子标题、段落、列表、表格" }
+          },
+          required: ["heading", "body"]
         }
       },
-      note: { type: "string", description: "对用户的额外说明，例如建议补充什么数据" }
+      note: { type: "string", description: "对用户的额外说明" }
     },
-    required: ["doc_type", "title", "outline"]
+    required: ["doc_type", "title", "sections"]
   };
 
   const data = await callKimi(
     base44,
-    `请为以下需求生成办公文档大纲：\n${exec.original_input || exec.task_title}`,
+    `请为以下需求生成一份完整的办公文档内容（不是大纲，而是可直接使用的成稿）：\n${userText}`,
     schema,
-    "你是办公文档专家。请生成结构化、可直接落地的大纲。"
+    "你是办公文档专家。请直接生成完整、可落地的成稿内容（每节包含具体段落、要点、必要时含表格）。"
   );
 
-  const previewLines = [`【${data.doc_type.toUpperCase()}】${data.title}`, ""];
-  data.outline.forEach((s, i) => {
-    previewLines.push(`${i + 1}. ${s.section}`);
-    if (s.content) previewLines.push(`   ${s.content}`);
+  // 组装 Markdown 成稿
+  const lines = [`# ${data.title}`, '', `> 生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, ''];
+  (data.sections || []).forEach(s => {
+    lines.push(`## ${s.heading}`);
+    lines.push('');
+    lines.push(s.body || '');
+    lines.push('');
   });
-  if (data.note) previewLines.push("", `📝 ${data.note}`);
+  if (data.note) {
+    lines.push('---');
+    lines.push(`📝 ${data.note}`);
+  }
+  const markdown = lines.join('\n');
+  const safeTitle = (data.title || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+  const fileName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}.md`;
+  const fileUrl = await uploadMarkdownReport(base44, fileName, markdown);
 
   return {
     type: "office_doc",
-    preview: previewLines.join("\n"),
-    data
+    preview: `📄 已生成《${fileName}》\n\n📥 下载链接：${fileUrl}\n\n${markdown.slice(0, 800)}${markdown.length > 800 ? '\n…（更多内容见文件）' : ''}`,
+    data: { ...data, file_name: fileName, file_url: fileUrl, markdown },
+    diff: [{ action: "create", target: fileName, detail: `${data.doc_type.toUpperCase()} 文档（${(data.sections || []).length} 节）已上传` }]
+  };
+}
+
+// HTML 转义辅助
+function escapeHtml(s = '') {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// 把 PPT 数据渲染为自包含 HTML 演示稿（用户用浏览器直接打开即可全屏播放）
+function renderPptHtml(data) {
+  const title = escapeHtml(data.title || '演示稿');
+  const subtitle = escapeHtml(data.subtitle || '');
+  const slides = Array.isArray(data.slides) ? data.slides : [];
+  const theme = data.theme || 'business'; // business | minimal | tech
+
+  const themeColors = {
+    business: { bg: '#0f172a', fg: '#f8fafc', accent: '#3b82f6', muted: '#94a3b8' },
+    minimal:  { bg: '#ffffff', fg: '#0f172a', accent: '#384877', muted: '#64748b' },
+    tech:     { bg: '#020617', fg: '#e2e8f0', accent: '#22d3ee', muted: '#64748b' },
+  }[theme] || { bg: '#ffffff', fg: '#0f172a', accent: '#384877', muted: '#64748b' };
+
+  const slideHtml = slides.map((s, i) => {
+    const heading = escapeHtml(s.heading || '');
+    const bullets = Array.isArray(s.bullets) ? s.bullets : [];
+    const body = escapeHtml(s.body || '');
+    const isCover = i === 0 && (!bullets.length && !body);
+
+    if (isCover) {
+      return `<section class="slide cover"><h1>${heading || title}</h1>${subtitle ? `<p class="sub">${subtitle}</p>` : ''}<div class="badge">${slides.length} 页 · 心栈 SoulSentry</div></section>`;
+    }
+    const bulletList = bullets.length
+      ? `<ul>${bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`
+      : '';
+    const bodyHtml = body ? `<p class="body">${body}</p>` : '';
+    return `<section class="slide"><div class="num">${i + 1} / ${slides.length}</div><h2>${heading}</h2>${bulletList}${bodyHtml}</section>`;
+  }).join('\n');
+
+  return `<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>${title}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:${themeColors.bg};color:${themeColors.fg};font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+  .deck{height:100vh;overflow:hidden;position:relative}
+  .slide{position:absolute;inset:0;padding:8vw 10vw;display:flex;flex-direction:column;justify-content:center;opacity:0;transition:opacity .4s ease;pointer-events:none}
+  .slide.active{opacity:1;pointer-events:auto}
+  .slide h1{font-size:clamp(36px,5.5vw,72px);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:.4em}
+  .slide h2{font-size:clamp(28px,3.6vw,48px);font-weight:700;color:${themeColors.accent};margin-bottom:.6em;line-height:1.2}
+  .slide.cover{align-items:center;text-align:center}
+  .slide.cover h1{background:linear-gradient(135deg,${themeColors.accent},${themeColors.fg});-webkit-background-clip:text;background-clip:text;color:transparent}
+  .slide .sub{font-size:clamp(16px,1.8vw,24px);color:${themeColors.muted};margin-top:1em;max-width:60ch}
+  .slide ul{list-style:none;font-size:clamp(18px,2vw,28px);line-height:1.7}
+  .slide ul li{padding:.4em 0;padding-left:1.6em;position:relative}
+  .slide ul li::before{content:'';position:absolute;left:0;top:.95em;width:.6em;height:.6em;background:${themeColors.accent};border-radius:50%}
+  .slide .body{font-size:clamp(16px,1.6vw,22px);color:${themeColors.muted};line-height:1.7;margin-top:1em;max-width:70ch;white-space:pre-wrap}
+  .num{position:absolute;top:3vh;right:3vw;font-size:14px;color:${themeColors.muted};letter-spacing:.1em}
+  .badge{margin-top:2em;display:inline-block;padding:.5em 1.2em;border:1px solid ${themeColors.muted}40;border-radius:999px;font-size:13px;color:${themeColors.muted};letter-spacing:.1em}
+  .nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:8px;background:${themeColors.fg}10;padding:8px 14px;border-radius:999px;backdrop-filter:blur(8px);z-index:10}
+  .nav button{background:none;border:none;color:${themeColors.fg};cursor:pointer;font-size:16px;padding:4px 10px;border-radius:6px}
+  .nav button:hover{background:${themeColors.fg}20}
+  .nav .pos{font-size:13px;color:${themeColors.muted};align-self:center;min-width:56px;text-align:center}
+</style>
+</head>
+<body>
+<div class="deck" id="deck">${slideHtml}</div>
+<div class="nav">
+  <button onclick="go(-1)">←</button>
+  <span class="pos" id="pos">1 / ${slides.length}</span>
+  <button onclick="go(1)">→</button>
+  <button onclick="document.documentElement.requestFullscreen()">⛶</button>
+</div>
+<script>
+  let cur=0;const slides=document.querySelectorAll('.slide');const pos=document.getElementById('pos');
+  function show(){slides.forEach((s,i)=>s.classList.toggle('active',i===cur));pos.textContent=(cur+1)+' / '+slides.length;}
+  function go(d){cur=Math.max(0,Math.min(slides.length-1,cur+d));show();}
+  document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))go(1);if(['ArrowLeft','PageUp'].includes(e.key))go(-1);});
+  show();
+</script>
+</body>
+</html>`;
+}
+
+async function uploadHtmlFile(base44, fileName, html) {
+  const bytes = new TextEncoder().encode(html);
+  const blob = new Blob([bytes], { type: 'text/html' });
+  const file = new File([blob], fileName, { type: 'text/html' });
+  const resp = await base44.integrations.Core.UploadFile({ file });
+  return resp?.file_url || resp?.data?.file_url;
+}
+
+async function executePptDoc(base44, exec) {
+  const userText = exec.original_input || exec.task_title;
+  const schema = {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "演示稿主标题" },
+      subtitle: { type: "string", description: "副标题或一句话简介" },
+      theme: { type: "string", enum: ["business", "minimal", "tech"], description: "根据题材自动选择：商业用 business，简约用 minimal，科技用 tech" },
+      slides: {
+        type: "array",
+        description: "10~15 页幻灯片。第 1 页通常为封面（heading=标题，无 bullets）。",
+        items: {
+          type: "object",
+          properties: {
+            heading: { type: "string", description: "页标题" },
+            bullets: { type: "array", items: { type: "string" }, description: "要点列表，3~6 条" },
+            body: { type: "string", description: "可选的补充段落，用于结论/数据/案例页" }
+          },
+          required: ["heading"]
+        }
+      },
+      note: { type: "string", description: "对用户的额外说明" }
+    },
+    required: ["title", "theme", "slides"]
+  };
+
+  const data = await callKimi(
+    base44,
+    `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}\n\n要求：1) 根据题材自动选择合适的主题风格(theme)；2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；3) 每页 bullets 控制在 3~6 条，简洁有力；4) 一定要直接产出可演示的成稿内容，而不是大纲提示。`,
+    schema,
+    "你是顶级演示稿设计师。基于用户输入直接产出完整、有逻辑、可直接演示的幻灯片内容。"
+  );
+
+  // 渲染自包含 HTML 演示稿
+  const html = renderPptHtml(data);
+  const safeTitle = (data.title || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+  const fileName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}.html`;
+  const fileUrl = await uploadHtmlFile(base44, fileName, html);
+
+  // 同步生成可读 preview（前端卡片显示用）
+  const previewLines = [`🎯 《${data.title}》 · 主题：${data.theme}`, ''];
+  if (data.subtitle) previewLines.push(data.subtitle, '');
+  previewLines.push(`📥 下载链接：${fileUrl}`, '', '📑 幻灯片大纲：');
+  (data.slides || []).forEach((s, i) => {
+    previewLines.push(`${i + 1}. ${s.heading}`);
+    (s.bullets || []).slice(0, 3).forEach(b => previewLines.push(`   • ${b}`));
+  });
+  if (data.note) previewLines.push('', `📝 ${data.note}`);
+
+  return {
+    type: "ppt_doc",
+    preview: previewLines.join('\n'),
+    data: { ...data, file_name: fileName, file_url: fileUrl },
+    diff: [{ action: "create", target: fileName, detail: `${(data.slides || []).length} 页演示稿（${data.theme} 主题）已生成，可在浏览器直接全屏播放` }]
   };
 }
 
@@ -563,6 +825,7 @@ const EXECUTORS = {
   web_research: executeWebResearch,
   summary_note: executeSummaryNote,
   office_doc: executeOfficeDoc,
+  ppt_doc: executePptDoc,
   file_organize: executeFileOrganize,
   calendar_event: executeCalendarEvent,
 };

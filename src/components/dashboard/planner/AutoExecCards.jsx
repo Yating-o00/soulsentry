@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Check, ChevronRight, Sparkles, Zap, Plus, FileText, Mail, Globe, FileSpreadsheet, Calendar as CalIcon, StickyNote } from "lucide-react";
+import { Loader2, Check, ChevronRight, Sparkles, Zap, Plus, FileText, Mail, Globe, FileSpreadsheet, Presentation, Calendar as CalIcon, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";

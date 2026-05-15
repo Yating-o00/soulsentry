@@ -13,8 +13,9 @@ import EmailPreviewDialog from "@/components/automation/EmailPreviewDialog";
 function inferAutomationType(title = "", desc = "") {
   const t = `${title} ${desc}`.toLowerCase();
   if (/邮件|email|mail|发信|回邮/.test(t)) return "email_draft";
-  if (/调研|research|查|搜索|网|资讯/.test(t)) return "web_research";
-  if (/ppt|excel|word|文档|报告|方案|表格|演示/.test(t)) return "office_doc";
+  if (/调研|research|查|搜索|网|资讯|分析报告/.test(t)) return "web_research";
+  if (/ppt|演示稿|幻灯片|slide|presentation|做ppt|做 ppt/.test(t)) return "ppt_doc";
+  if (/excel|word|文档|表格|方案/.test(t)) return "office_doc";
   if (/文件|整理|归档|分类|目录/.test(t)) return "file_organize";
   if (/日历|会议|预约|安排|事件/.test(t)) return "calendar_event";
   if (/笔记|总结|心签|note|summary|复盘/.test(t)) return "summary_note";
@@ -26,6 +27,7 @@ const TYPE_META = {
   email_draft:    { icon: Mail,            bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "邮件" },
   web_research:   { icon: Globe,           bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "调研" },
   office_doc:     { icon: FileSpreadsheet, bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "文档" },
+  ppt_doc:        { icon: Presentation,    bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "PPT" },
   file_organize:  { icon: FileText,        bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "文件" },
   calendar_event: { icon: CalIcon,         bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "日历" },
   summary_note:   { icon: StickyNote,      bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "心签" },
@@ -368,8 +370,12 @@ function buildSuggestions(automationType, errorMsg = "") {
       "限定信息源类型（行业报告 / 新闻 / 维基）会更聚焦。",
     ],
     office_doc: [
-      "说明文档结构（如：3 页 PPT、含 3 个章节的 Word）。",
+      "说明文档结构（如：含 3 个章节的 Word、5 列表格 Excel）。",
       "提供目标读者与核心结论，AI 会按对应口吻撰写。",
+    ],
+    ppt_doc: [
+      "说明演示场景（如：路演、内训、季度汇报），AI 会自动选合适主题。",
+      "告知期望页数（默认 8-12 页），以及核心信息架构。",
     ],
     file_organize: [
       "告诉 AI 整理后的目录结构或命名规则。",

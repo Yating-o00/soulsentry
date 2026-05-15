@@ -433,6 +433,32 @@ function ExecCard({ item, onAuthorize, onOpen }) {
         {item.desc}
       </div>
 
+      {/* 已执行：文件下载按钮（如果产物含 URL） */}
+      {isDone && item.result_preview && (() => {
+        const urlMatch = item.result_preview.match(/https?:\/\/[^\s)）"】>]+/);
+        const fileUrl = urlMatch ? urlMatch[0] : null;
+        const fileNameMatch = item.result_preview.match(/《([^》]+)》/);
+        const fileName = fileNameMatch ? fileNameMatch[1] : (fileUrl ? fileUrl.split('/').pop() : null);
+        return fileUrl ? (
+          <a
+            href={fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className="ml-8 mb-2 flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 hover:shadow-sm px-2.5 py-1.5 transition-all group/file"
+          >
+            <div className="w-6 h-6 rounded-md bg-white border border-emerald-200 flex items-center justify-center flex-shrink-0 group-hover/file:scale-110 transition-transform">
+              <FileText className="w-3 h-3 text-emerald-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10.5px] font-semibold text-emerald-800 truncate">{fileName || '点击下载文件'}</div>
+              <div className="text-[9px] text-emerald-600/70 truncate">AI 已生成 · 点击下载</div>
+            </div>
+            <ChevronRight className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+          </a>
+        ) : null;
+      })()}
+
       {/* 已执行：内嵌结果预览（AI 产物） */}
       {isDone && item.result_preview && (
         <div className="ml-8 mb-2 rounded-lg bg-emerald-50/40 border border-emerald-100 px-2.5 py-2 max-h-32 overflow-y-auto">

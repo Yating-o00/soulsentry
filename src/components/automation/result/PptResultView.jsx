@@ -53,18 +53,6 @@ export default function PptResultView({ data, preview }) {
         )}
       </div>
 
-      {/* 预览按钮（显式入口）*/}
-      {canPreview && (
-        <button
-          type="button"
-          onClick={() => setPreviewOpen(true)}
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2e3d66] hover:to-[#324f8f] text-white px-3 py-2.5 text-[12.5px] font-semibold shadow-sm hover:shadow transition-all"
-        >
-          <Play className="w-3.5 h-3.5 fill-current" />
-          在线预览演示稿
-        </button>
-      )}
-
       {/* 预览弹层（内置渲染，不依赖远程文件）*/}
       <PptPreviewModal
         open={previewOpen}

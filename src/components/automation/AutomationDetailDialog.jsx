@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { AUTOMATION_TYPES } from "./automationConfig";
 import AutomationResultPreview from "./AutomationResultPreview";
 
-export default function AutomationDetailDialog({ execution, open, onOpenChange }) {
+export default function AutomationDetailDialog({ execution: executionProp, open, onOpenChange }) {
   const queryClient = useQueryClient();
   const [executing, setExecuting] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
@@ -22,6 +22,20 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
   const [size, setSize] = useState("lg");
   // 同任务下其它已完成自动化产生的可挂载附件候选
   const [availableAttachments, setAvailableAttachments] = useState([]);
+  // 本地副本：调整后能立即覆盖父级 prop，让预览同步更新
+  const [localExecution, setLocalExecution] = useState(executionProp);
+  useEffect(() => { setLocalExecution(executionProp); }, [executionProp]);
+  const execution = localExecution || executionProp;
+
+  // 拉取最新 execution 数据并写回本地，确保预览实时刷新
+  const reloadExecution = async () => {
+    if (!execution?.id) return null;
+    try {
+      const fresh = await base44.entities.TaskExecution.get(execution.id);
+      if (fresh) setLocalExecution(fresh);
+      return fresh;
+    } catch { return null; }
+  };
 
   // 当 execution 变化时（首次打开 / 重新规划后），同步邮件草稿
   useEffect(() => {
@@ -105,6 +119,7 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
         phase: "execute"
       });
       if (res.data?.error) throw new Error(res.data.error);
+      await reloadExecution();
       toast.success("AI 已完成执行");
       refresh();
     } catch (e) {
@@ -139,11 +154,20 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
         automation_result: null,
         error_message: null,
       });
-      const res = await base44.functions.invoke('executeAutomation', {
+      const planRes = await base44.functions.invoke('executeAutomation', {
         execution_id: execution.id,
         phase: "plan"
       });
-      if (res.data?.error) throw new Error(res.data.error);
+      if (planRes.data?.error) throw new Error(planRes.data.error);
+
+      // 重新规划完成后立即执行，让用户直接看到更新后的产物
+      const execRes = await base44.functions.invoke('executeAutomation', {
+        execution_id: execution.id,
+        phase: "execute"
+      });
+      if (execRes.data?.error) throw new Error(execRes.data.error);
+
+      await reloadExecution(); // 关键：拉取最新数据，刷新弹窗内预览
       toast.success("AI 已根据反馈在原内容上修改");
       setAdjustText("");
       refresh();

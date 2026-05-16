@@ -454,7 +454,10 @@ async function uploadMarkdownReport(base44, fileName, markdown) {
 // 把 AI 经常输出的"整张表被压成一行"还原成多行：在分隔行处断行，按列数切分单元格
 function normalizeInlineTables(raw) {
   let s = String(raw || '');
-  s = s.replace(/\s*\|\s*(:?-{2,}:?\s*\|\s*){2,}:?-{2,}:?\s*\|?\s*/g, (m) => `\n${m.trim()}\n`);
+  // 1) 先在"分隔段"前后插换行（分隔段：连续的 | --- | --- | ...）
+  s = s.replace(/(\|\s*:?-{2,}:?\s*)+\|/g, (m) => `\n${m.trim()}\n`);
+  // 2) 把分隔段周围多余空白整理
+  s = s.replace(/\n{2,}/g, '\n');
   const lines = s.split(/\r?\n/);
   const out = [];
   for (let i = 0; i < lines.length; i++) {

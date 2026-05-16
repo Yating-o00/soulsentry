@@ -376,10 +376,17 @@ export default function ResearchResultView({ data, preview, onChange, editable =
         )
       )}
 
-      {/* 下载按钮 */}
-      {fileUrl && (
+      {/* 预览按钮（新标签打开，不触发下载） */}
+      {fileUrl && (() => {
+        const ext = (fileName.split('.').pop() || '').toLowerCase();
+        // 浏览器原生可预览：PDF/图片/HTML/纯文本/MD 直接打开
+        const nativePreview = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'html', 'htm', 'txt', 'md'];
+        const previewHref = nativePreview.includes(ext)
+          ? fileUrl
+          : `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=false`;
+        return (
         <a
-          href={fileUrl}
+          href={previewHref}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 hover:shadow px-3 py-2.5 transition-all group"
@@ -395,7 +402,8 @@ export default function ResearchResultView({ data, preview, onChange, editable =
           </div>
           <ExternalLink className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
         </a>
-      )}
+        );
+      })()}
     </div>
   );
 }

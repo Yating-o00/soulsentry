@@ -8,6 +8,8 @@ function renderInline(text, keyPrefix = "") {
   let normalized = String(text)
     .replace(/&lt;br\s*\/?&gt;/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
+    // 合并被换行/空白拆散的 markdown 图片：![alt]\n(url) → ![alt](url)
+    .replace(/(!\[[^\]]*\])\s+(\()/g, "$1$2")
     .replace(/(?!^)\s*([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮])/g, "\n$1");
   // 按 ![alt](url) 图片切分；图片切出后不再走加粗处理
   const imgRe = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;

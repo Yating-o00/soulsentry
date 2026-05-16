@@ -1,7 +1,9 @@
 import React from "react";
-import { Globe, Download, ExternalLink, FileText } from "lucide-react";
+import { Globe, Download, ExternalLink, FileText, LayoutTemplate } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import TemplatedSection from "./TemplatedSection";
+import { TEMPLATES, extractImagesAndText, autoPickTemplate } from "./researchTemplates";
 // 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
   // 先把字面 <br> / &lt;br&gt; 转成换行，再在 ①②③ 等带圈数字前补换行（让 AI 输出的脏排版自动恢复）
@@ -307,6 +309,17 @@ export default function ResearchResultView({ data, preview, onChange, editable =
   const titleKey = data?.topic !== undefined ? "topic" : (data?.title !== undefined ? "title" : (data?.subject !== undefined ? "subject" : "title"));
   const bodyKey  = data?.executive_summary !== undefined ? "executive_summary" : (data?.content !== undefined ? "content" : (data?.summary !== undefined ? "summary" : "content"));
 
+  // 模板选择:整篇报告共用一个模板,默认按首个章节内容自动推荐
+  const initialTpl = React.useMemo(() => {
+    if (data?.layout_template && TEMPLATES[data.layout_template]) return data.layout_template;
+    const first = sections?.[0];
+    const src = first ? (first.body || first.content || "") : body;
+    const { images, text } = extractImagesAndText(src);
+    return autoPickTemplate(text, images);
+  }, [data?.layout_template, sections, body]);
+  const [template, setTemplate] = React.useState(initialTpl);
+  React.useEffect(() => { setTemplate(initialTpl); }, [initialTpl]);
+
   const update = (patch) => {
     if (!onChange) return;
     onChange({ ...(data || {}), ...patch });
@@ -337,6 +350,30 @@ export default function ResearchResultView({ data, preview, onChange, editable =
         )}
       </div>
 
+      {/* 排版模板切换器 */}
+      {sections && sections.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2">
+          <LayoutTemplate className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+          <span className="text-[10.5px] font-medium text-slate-500">排版模板</span>
+          <div className="flex items-center gap-1 flex-wrap">
+            {Object.entries(TEMPLATES).map(([key, tpl]) => (
+              <button
+                key={key}
+                onClick={() => setTemplate(key)}
+                title={tpl.description}
+                className={`text-[10.5px] px-2 py-0.5 rounded-md border transition-all ${
+                  template === key
+                    ? "bg-[#384877] text-white border-[#384877]"
+                    : "bg-white text-slate-600 border-slate-200 hover:border-[#384877]/40 hover:text-[#384877]"
+                }`}
+              >
+                {tpl.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 章节卡 */}
       {sections && sections.length > 0 ? (
         <div className="space-y-2">
@@ -346,9 +383,9 @@ export default function ResearchResultView({ data, preview, onChange, editable =
             const heading = s[headingKey] || `章节 ${i + 1}`;
             const content = s[contentKey] || "";
             return (
-              <div key={i} className="rounded-lg bg-white border border-slate-200 p-3">
+              <div key={i}>
                 {editable && onChange ? (
-                  <>
+                  <div className="rounded-lg bg-white border border-slate-200 p-3">
                     <Input
                       value={heading}
                       onChange={(e) => updateSection(i, { [headingKey]: e.target.value })}
@@ -359,16 +396,9 @@ export default function ResearchResultView({ data, preview, onChange, editable =
                       onChange={(e) => updateSection(i, { [contentKey]: e.target.value })}
                       className="text-[11.5px] text-slate-600 leading-relaxed min-h-[80px] border-slate-200 font-sans"
                     />
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <div className="text-[12.5px] font-bold text-slate-800 mb-1">{heading}</div>
-                    {content && (
-                      <div className="text-[11.5px] text-slate-600 leading-relaxed">
-                        <MarkdownLite source={content} />
-                      </div>
-                    )}
-                  </>
+                  <TemplatedSection heading={heading} content={content} template={template} />
                 )}
               </div>
             );

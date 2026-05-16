@@ -573,17 +573,31 @@ function mdToInlineHtml(md = '') {
         li++;
       }
       li--;
-      // 单元格内部排版：① 字面 <br> 转真换行；② ①②③④⑤⑥⑦⑧⑨⑩ 等带圈数字前自动断行；③ 多行渲染成<br/>
+      // 单元格内部排版：① 先抽出 markdown 图片；② 字面 <br> 转真换行；③ ①②③ 等带圈数字前自动断行；④ 多行渲染成<br/>
       const renderCell = (c) => {
         let s = String(c);
+        // 先把 HTML 实体形式的 &lt;br&gt; 还原
+        s = s.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
         // 还原字面 <br> / <br/> / <br /> （AI 经常误输出）
         s = s.replace(/<br\s*\/?>/gi, '\n');
-        // 在 ①②③④⑤⑥⑦⑧⑨⑩⑪⑫ 等圈号 / "1) " "1. " 序号前补换行（仅当它不在行首时）
+        // 在 ①②③④⑤⑥⑦⑧⑨⑩⑪⑫ 等圈号前补换行（仅当它不在行首时）
         s = s.replace(/(?<!^|\n)\s*([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮])/g, '\n$1');
+        // 抽取 markdown 图片 ![alt](url) 渲染为 <img>，其余文本走 esc + bold
+        const imgRe = /!\[([^\]]*)\]\((https?:[^\s)]+)\)/g;
+        const renderLine = (line) => {
+          const parts = [];
+          let last = 0; let m;
+          while ((m = imgRe.exec(line)) !== null) {
+            if (m.index > last) parts.push(esc(line.slice(last, m.index)).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'));
+            parts.push(`<img src="${esc(m[2])}" alt="${esc(m[1] || '')}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;border:1px solid #e2e8f0;margin:4px 0;display:block"/>`);
+            last = m.index + m[0].length;
+          }
+          if (last < line.length) parts.push(esc(line.slice(last)).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'));
+          imgRe.lastIndex = 0;
+          return parts.join('');
+        };
         const lines = s.split('\n').map(x => x.trim()).filter(Boolean);
-        return lines
-          .map(line => esc(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'))
-          .join('<br/>');
+        return lines.map(renderLine).join('<br/>');
       };
       out.push('<table class="md-table"><thead><tr>' +
         header.map(h => `<th>${renderCell(h)}</th>`).join('') +

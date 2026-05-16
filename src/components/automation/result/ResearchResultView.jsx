@@ -4,18 +4,23 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 // 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
-  // 先按 ![alt](url) 图片切分；图片切出后不再走加粗处理
+  // 先把字面 <br> / &lt;br&gt; 转成换行，再在 ①②③ 等带圈数字前补换行（让 AI 输出的脏排版自动恢复）
+  let normalized = String(text)
+    .replace(/&lt;br\s*\/?&gt;/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/(?!^)\s*([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮])/g, "\n$1");
+  // 按 ![alt](url) 图片切分；图片切出后不再走加粗处理
   const imgRe = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
   const segments = [];
   let last = 0;
   let m;
-  while ((m = imgRe.exec(String(text))) !== null) {
-    if (m.index > last) segments.push({ type: "text", value: String(text).slice(last, m.index) });
+  while ((m = imgRe.exec(normalized)) !== null) {
+    if (m.index > last) segments.push({ type: "text", value: normalized.slice(last, m.index) });
     segments.push({ type: "img", alt: m[1] || "", url: m[2] });
     last = m.index + m[0].length;
   }
-  if (last < String(text).length) segments.push({ type: "text", value: String(text).slice(last) });
-  if (segments.length === 0) segments.push({ type: "text", value: String(text) });
+  if (last < normalized.length) segments.push({ type: "text", value: normalized.slice(last) });
+  if (segments.length === 0) segments.push({ type: "text", value: normalized });
 
   return segments.map((seg, si) => {
     if (seg.type === "img") {
@@ -30,13 +35,23 @@ function renderInline(text, keyPrefix = "") {
         />
       );
     }
-    // 处理 **加粗**
+    // 处理 **加粗**，并把 \n 渲染成 <br/>
     const parts = seg.value.split(/(\*\*[^*]+\*\*)/g);
     return parts.map((p, i) => {
       if (/^\*\*[^*]+\*\*$/.test(p)) {
         return <strong key={`${keyPrefix}-b-${si}-${i}`} className="font-semibold text-slate-800">{p.slice(2, -2)}</strong>;
       }
-      return <React.Fragment key={`${keyPrefix}-t-${si}-${i}`}>{p}</React.Fragment>;
+      const subLines = p.split("\n");
+      return (
+        <React.Fragment key={`${keyPrefix}-t-${si}-${i}`}>
+          {subLines.map((ln, li) => (
+            <React.Fragment key={li}>
+              {ln}
+              {li < subLines.length - 1 && <br />}
+            </React.Fragment>
+          ))}
+        </React.Fragment>
+      );
     });
   });
 }

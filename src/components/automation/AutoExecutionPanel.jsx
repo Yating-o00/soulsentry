@@ -36,7 +36,7 @@ export default function AutoExecutionPanel() {
   const autoExecutions = executions.filter(e => e.automation_type && e.automation_type !== "none");
   const recentDone = autoExecutions.filter(e => e.execution_status === "completed").slice(0, 3);
 
-  // 1) 让 AI 拆解一句话场景 → 候选清单
+  // 1) 发送：跳过候选清单，直接 plan → execute，结果对话框中查看产物
   const handleAnalyze = async (text) => {
     const content = (text || input).trim();
     if (!content) return;
@@ -44,14 +44,34 @@ export default function AutoExecutionPanel() {
     setCandidates([]);
     setAuthorizedIds(new Set());
     try {
-      const res = await base44.functions.invoke('proposeAutomations', { input: content });
-      if (res.data?.error) throw new Error(res.data.error);
-      const list = (res.data?.candidates || []).map((c, i) => ({ ...c, _id: `cand-${Date.now()}-${i}` }));
-      setCandidates(list);
-      setSceneSummary(res.data?.scene_summary || content);
-      if (list.length === 0) toast.info("AI 暂未识别出可自动执行的子项，可点击 + 自定义添加");
+      const exec = await base44.entities.TaskExecution.create({
+        task_title: content.slice(0, 60),
+        original_input: content,
+        category: "task",
+        execution_status: "parsing",
+        ai_parsed_result: { source: "dashboard_direct", summary: content },
+      });
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      // 立即打开对话框让用户看到规划进度
+      setOpenExec(exec);
+
+      const planRes = await base44.functions.invoke('executeAutomation', {
+        execution_id: exec.id,
+        phase: "plan",
+      });
+      if (planRes.data?.error) throw new Error(planRes.data.error);
+
+      const execRes = await base44.functions.invoke('executeAutomation', {
+        execution_id: exec.id,
+        phase: "execute",
+      });
+      if (execRes.data?.error) throw new Error(execRes.data.error);
+
+      const updated = await base44.entities.TaskExecution.filter({ id: exec.id });
+      if (updated?.[0]) setOpenExec(updated[0]);
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
     } catch (e) {
-      toast.error("AI 解析失败：" + e.message);
+      toast.error("执行失败：" + e.message);
     } finally {
       setSubmitting(false);
     }

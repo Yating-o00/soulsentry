@@ -57,11 +57,13 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
   }, [execution?.id, execution?.automation_result?.data]);
 
   // 保存非邮件类型的内联编辑到后端
-  const handleSaveEdits = async () => {
-    if (!editedData || !execution?.id) return;
+  // 接受可选 dataOverride 参数，避免 React 状态批处理时拿不到最新草稿（"完成"按钮触发保存的关键）
+  const handleSaveEdits = async (dataOverride) => {
+    const target = dataOverride || editedData;
+    if (!target || !execution?.id) return;
     setSavingEdits(true);
     try {
-      const newResult = { ...(execution.automation_result || {}), data: editedData };
+      const newResult = { ...(execution.automation_result || {}), data: target };
       await base44.entities.TaskExecution.update(execution.id, { automation_result: newResult });
       setLocalExecution(prev => prev ? { ...prev, automation_result: newResult } : prev);
       setEditedData(null);
@@ -449,6 +451,11 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                   execution.automation_type === "email_draft"
                     ? setEmailDraft
                     : setEditedData
+                }
+                onSaveEdits={
+                  execution.automation_type === "email_draft"
+                    ? undefined
+                    : () => handleSaveEdits(editedData)
                 }
                 availableAttachments={execution.automation_type === "email_draft" ? availableAttachments : undefined}
               />

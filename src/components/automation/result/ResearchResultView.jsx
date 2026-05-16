@@ -300,7 +300,7 @@ function MarkdownLite({ source }) {
 }
 
 // 调研类结果视图：标题/正文/章节均可编辑 + 下载按钮
-export default function ResearchResultView({ data, preview, onChange, editable = true }) {
+export default function ResearchResultView({ data, preview, onChange, onSave, editable = true }) {
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "调研报告.md";
   const title = data?.topic || data?.title || data?.subject || "调研报告";
@@ -324,6 +324,16 @@ export default function ResearchResultView({ data, preview, onChange, editable =
   // 默认显示排版预览，用户点击"编辑"按钮切换到编辑模式（仅当父组件支持 onChange 时才提供编辑能力）
   const canEdit = editable && !!onChange;
   const [isEditing, setIsEditing] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  // 点"完成"：把当前编辑结果持久化到后端（若父级提供 onSave），然后切回预览
+  const handleDone = async () => {
+    if (onSave) {
+      setSaving(true);
+      try { await onSave(); } finally { setSaving(false); }
+    }
+    setIsEditing(false);
+  };
 
   const update = (patch) => {
     if (!onChange) return;
@@ -347,15 +357,18 @@ export default function ResearchResultView({ data, preview, onChange, editable =
           </div>
           {canEdit && (
             <button
-              onClick={() => setIsEditing(v => !v)}
-              className={`flex items-center gap-1 text-[10.5px] font-medium px-2 py-1 rounded-md border transition-all ${
+              onClick={isEditing ? handleDone : () => setIsEditing(true)}
+              disabled={saving}
+              className={`flex items-center gap-1 text-[10.5px] font-medium px-2 py-1 rounded-md border transition-all disabled:opacity-60 ${
                 isEditing
                   ? "bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600"
                   : "bg-white text-[#384877] border-[#384877]/30 hover:bg-[#384877]/5"
               }`}
-              title={isEditing ? "完成编辑，返回预览" : "编辑内容和图片描述"}
+              title={isEditing ? "保存修改并返回预览" : "编辑内容和图片描述"}
             >
-              {isEditing ? <><Check className="w-3 h-3" /> 完成</> : <><Edit3 className="w-3 h-3" /> 编辑</>}
+              {isEditing
+                ? <><Check className="w-3 h-3" /> {saving ? "保存中..." : "保存"}</>
+                : <><Edit3 className="w-3 h-3" /> 编辑</>}
             </button>
           )}
         </div>

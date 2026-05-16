@@ -545,6 +545,25 @@ function mdToInlineHtml(md = '') {
   // 入口预处理：合并被任意空白/换行/全角空格拆散的 markdown 图片
   // ![alt]<空白>(url) → ![alt](url)，确保后续行解析能识别图片
   let normalized = String(md || '').replace(/(!\[[^\]]*\])[\s\u3000]+(\(https?:[^\s)]+\))/g, '$1$2');
+
+  // 抽取并保护合法的 HTML 块（<table>...</table> / <img .../> / <br>），
+  // 防止它们被 esc 成字面文本（AI 经常误用 HTML 排版图文表格）
+  const htmlPlaceholders = [];
+  const stash = (html) => {
+    const key = `\u0000HTML${htmlPlaceholders.length}\u0000`;
+    htmlPlaceholders.push(html);
+    return key;
+  };
+  // 1) 整段 <table>...</table>
+  normalized = normalized.replace(/<table[\s\S]*?<\/table>/gi, (m) => stash(m));
+  // 2) 独立 <img ... />
+  normalized = normalized.replace(/<img\s[^>]*?>/gi, (m) => {
+    // 给 img 补 loading 和样式
+    const withAttrs = m.replace(/<img\s/i, '<img loading="lazy" style="max-width:100%;height:auto;border-radius:8px;border:1px solid #e2e8f0;margin:8px 0;display:inline-block;vertical-align:middle" ');
+    return stash(withAttrs);
+  });
+  // 3) <br> / <br/>
+  normalized = normalized.replace(/<br\s*\/?>/gi, '\n');
   const lines = normalizeInlineTables(normalized).split('\n');
   const out = [];
   let inUl = false, inOl = false, inP = false;
@@ -661,7 +680,12 @@ function mdToInlineHtml(md = '') {
     }
   }
   closeP(); closeUl(); closeOl();
-  return out.join('\n');
+  let html = out.join('\n');
+  // 还原被保护的原始 HTML 块（table / img / br）
+  html = html.replace(/\u0000HTML(\d+)\u0000/g, (_, i) => htmlPlaceholders[Number(i)] || '');
+  // 给原始 <table> 套上 md-table class 以应用样式（如果还没有 class）
+  html = html.replace(/<table(\s)(?![^>]*class=)/gi, '<table class="md-table"$1').replace(/<table>/gi, '<table class="md-table">');
+  return html;
 }
 
 // 富排版 HTML：图标、层次、彩色高亮、可打印为 PDF
@@ -1041,7 +1065,8 @@ ${attachmentCtx.images.map((im, i) => `${i + 1}. ${im.url}\n   文件名：${im.
 - ③ 四角《莲影》负形 15% 网度暗纹
 - ④ 底边 5mm 压印"2024.10.1-7"
 \`\`\`
-- ![alt](url) 这一行**绝对不能换行/不能加空格**，alt 后必须紧贴 (url)。`;
+- ![alt](url) 这一行**绝对不能换行/不能加空格**，alt 后必须紧贴 (url)。
+- 也禁止用 <table><tr><td><img>...</td></tr></table> 这种 HTML 表格排版，直接用上面示例里的 markdown 图+列表格式即可。`;
 
     const visionRes = await base44.integrations.Core.InvokeLLM({
       prompt: visionPrompt,

@@ -2,6 +2,129 @@ import React from "react";
 import { Globe, Download, ExternalLink, FileText } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+// 轻量 Markdown 渲染器：处理标题 / 加粗 / 列表 / GFM 表格 / 段落，无需额外依赖
+function renderInline(text, keyPrefix = "") {
+  // 处理 **加粗**
+  const parts = String(text).split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) => {
+    if (/^\*\*[^*]+\*\*$/.test(p)) {
+      return <strong key={`${keyPrefix}-b-${i}`} className="font-semibold text-slate-800">{p.slice(2, -2)}</strong>;
+    }
+    return <React.Fragment key={`${keyPrefix}-t-${i}`}>{p}</React.Fragment>;
+  });
+}
+
+function MarkdownLite({ source }) {
+  const text = String(source || "");
+  const lines = text.split(/\r?\n/);
+  const blocks = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // 空行
+    if (!line.trim()) { i++; continue; }
+
+    // GFM 表格：当前行有 |，下一行是分隔行（---|---）
+    const isTableSep = (s) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(s);
+    if (line.includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+      const splitRow = (row) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+      const header = splitRow(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim()) {
+        rows.push(splitRow(lines[i]));
+        i++;
+      }
+      blocks.push(
+        <div key={`tbl-${blocks.length}`} className="overflow-x-auto my-2 rounded-md border border-slate-200">
+          <table className="min-w-full text-[11.5px] border-collapse">
+            <thead className="bg-slate-50">
+              <tr>
+                {header.map((h, hi) => (
+                  <th key={hi} className="px-2.5 py-1.5 text-left font-semibold text-slate-700 border-b border-slate-200 whitespace-nowrap">
+                    {renderInline(h, `th-${hi}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri}>
+                  {r.map((c, ci) => (
+                    <td key={ci} className="px-2.5 py-1.5 text-slate-600 border-b border-slate-100 align-top">
+                      {renderInline(c, `td-${ri}-${ci}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    // 标题
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      const lvl = h[1].length;
+      const cls = lvl <= 1 ? "text-[14px] font-bold text-slate-800 mt-2 mb-1.5"
+                : lvl === 2 ? "text-[13px] font-bold text-slate-800 mt-2 mb-1"
+                : "text-[12.5px] font-semibold text-slate-800 mt-1.5 mb-1";
+      const Tag = `h${Math.min(lvl, 6)}`;
+      blocks.push(<Tag key={`h-${blocks.length}`} className={cls}>{renderInline(h[2], `h-${blocks.length}`)}</Tag>);
+      i++;
+      continue;
+    }
+
+    // 分隔线
+    if (/^\s*---+\s*$/.test(line)) {
+      blocks.push(<hr key={`hr-${blocks.length}`} className="my-2 border-slate-200" />);
+      i++;
+      continue;
+    }
+
+    // 列表（- 或 数字.）
+    const isUl = /^\s*[-*]\s+/.test(line);
+    const isOl = /^\s*\d+\.\s+/.test(line);
+    if (isUl || isOl) {
+      const items = [];
+      const re = isUl ? /^\s*[-*]\s+(.*)$/ : /^\s*\d+\.\s+(.*)$/;
+      while (i < lines.length && (isUl ? /^\s*[-*]\s+/.test(lines[i]) : /^\s*\d+\.\s+/.test(lines[i]))) {
+        const m = lines[i].match(re);
+        items.push(m ? m[1] : lines[i]);
+        i++;
+      }
+      const ListTag = isUl ? "ul" : "ol";
+      blocks.push(
+        <ListTag key={`l-${blocks.length}`} className={`${isUl ? "list-disc" : "list-decimal"} pl-5 my-1 space-y-0.5 text-[11.5px] text-slate-600`}>
+          {items.map((it, idx) => <li key={idx} className="leading-relaxed">{renderInline(it, `li-${blocks.length}-${idx}`)}</li>)}
+        </ListTag>
+      );
+      continue;
+    }
+
+    // 普通段落（合并相邻非空非块行）
+    const paraLines = [];
+    while (i < lines.length && lines[i].trim() && !/^#{1,6}\s+/.test(lines[i]) && !/^\s*[-*]\s+/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i]) && !/^\s*---+\s*$/.test(lines[i])) {
+      // 防止吞掉表格
+      if (lines[i].includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1])) break;
+      paraLines.push(lines[i]);
+      i++;
+    }
+    if (paraLines.length) {
+      blocks.push(
+        <p key={`p-${blocks.length}`} className="text-[11.5px] text-slate-600 leading-relaxed my-1">
+          {renderInline(paraLines.join(" "), `p-${blocks.length}`)}
+        </p>
+      );
+    }
+  }
+
+  return <div>{blocks}</div>;
+}
 
 // 调研类结果视图：标题/正文/章节均可编辑 + 下载按钮
 export default function ResearchResultView({ data, preview, onChange, editable = true }) {
@@ -71,8 +194,8 @@ export default function ResearchResultView({ data, preview, onChange, editable =
                   <>
                     <div className="text-[12.5px] font-bold text-slate-800 mb-1">{heading}</div>
                     {content && (
-                      <div className="text-[11.5px] text-slate-600 leading-relaxed whitespace-pre-wrap">
-                        {content}
+                      <div className="text-[11.5px] text-slate-600 leading-relaxed">
+                        <MarkdownLite source={content} />
                       </div>
                     )}
                   </>
@@ -91,8 +214,8 @@ export default function ResearchResultView({ data, preview, onChange, editable =
           />
         ) : (
           body && (
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-64 overflow-y-auto">
-              <pre className="text-[12px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{body}</pre>
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-[28rem] overflow-y-auto">
+              <MarkdownLite source={body} />
             </div>
           )
         )

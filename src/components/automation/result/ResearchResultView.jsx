@@ -14,8 +14,57 @@ function renderInline(text, keyPrefix = "") {
   });
 }
 
+// 把"单行塞满整张表"的脏数据还原成多行：在分隔行 ` | --- | --- | ` 处断行，并按列宽切分后续单元格
+function normalizeInlineTables(raw) {
+  let s = String(raw || "");
+  // 在分隔片段（包含两个或更多 ---）前后强制换行
+  s = s.replace(/\s*\|\s*(:?-{2,}:?\s*\|\s*){2,}:?-{2,}:?\s*\|?\s*/g, (m) => `\n${m.trim()}\n`);
+  // 按行处理：若某行含分隔模式，则把其前一行（表头）和后续超长行按 `|` 数量切成多行
+  const lines = s.split(/\r?\n/);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i];
+    const sepMatch = /^\s*\|?\s*(:?-{2,}:?\s*\|\s*){1,}:?-{2,}:?\s*\|?\s*$/.test(cur);
+    if (sepMatch) {
+      const colCount = cur.split("|").filter(x => x.trim()).length;
+      // 修正前一行：若它包含多于 colCount 列，截到 colCount
+      if (out.length) {
+        const prev = out[out.length - 1];
+        const prevCells = prev.trim().replace(/^\|/, "").replace(/\|$/, "").split("|");
+        if (prevCells.length > colCount) {
+          out[out.length - 1] = "| " + prevCells.slice(0, colCount).map(c => c.trim()).join(" | ") + " |";
+          // 把多出来的并入下一行待处理
+          const overflow = prevCells.slice(colCount).map(c => c.trim()).join(" | ");
+          if (overflow) lines.splice(i + 1, 0, "| " + overflow + " |");
+        }
+      }
+      out.push(cur);
+      // 处理后续行：按每 colCount 个单元格切一行
+      let j = i + 1;
+      while (j < lines.length && lines[j].includes("|") && lines[j].trim()) {
+        const cells = lines[j].trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+        if (cells.length > colCount) {
+          const chunks = [];
+          for (let k = 0; k < cells.length; k += colCount) {
+            chunks.push("| " + cells.slice(k, k + colCount).join(" | ") + " |");
+          }
+          lines.splice(j, 1, ...chunks);
+        }
+        // 跳过空单元格行
+        if (cells.every(c => !c)) { lines.splice(j, 1); continue; }
+        out.push(lines[j]);
+        j++;
+      }
+      i = j - 1;
+      continue;
+    }
+    out.push(cur);
+  }
+  return out.join("\n");
+}
+
 function MarkdownLite({ source }) {
-  const text = String(source || "");
+  const text = normalizeInlineTables(source);
   const lines = text.split(/\r?\n/);
   const blocks = [];
   let i = 0;

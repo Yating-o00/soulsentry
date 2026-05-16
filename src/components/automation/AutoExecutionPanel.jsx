@@ -190,7 +190,7 @@ export default function AutoExecutionPanel() {
               </div>
               <div>
                 <h3 className="text-sm md:text-base font-semibold text-slate-900">自动执行清单</h3>
-                <p className="text-[11px] text-slate-500">告诉 AI 你的场景，自动拆解出可执行子项</p>
+                <p className="text-[11px] text-slate-500">告诉 AI 你要的成果，直接生成对应内容</p>
               </div>
             </div>
             <Button variant="ghost" size="sm" asChild className="text-xs text-indigo-600 hover:bg-indigo-50">

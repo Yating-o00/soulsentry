@@ -460,17 +460,28 @@ function ExecCard({ item, onAuthorize, onOpen }) {
       })()}
 
       {/* 已执行：内嵌结果预览（AI 产物） */}
-      {isDone && item.result_preview && (
-        <div className="ml-8 mb-2 rounded-lg bg-emerald-50/40 border border-emerald-100 px-2.5 py-2 max-h-32 overflow-y-auto">
-          <div className="flex items-center gap-1 text-[9.5px] font-semibold text-emerald-700 mb-1">
-            <Sparkles className="w-2.5 h-2.5" />
-            AI 执行结果
+      {isDone && item.result_preview && (() => {
+        // 如果 preview 是 HTML 片段（AI 经常直接吐 <div>/<h1>/<p>/<table>），用 HTML 渲染避免标签变字面文本
+        const looksHtml = /<(div|section|article|header|footer|h[1-6]|p|table|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/i.test(item.result_preview);
+        return (
+          <div className="ml-8 mb-2 rounded-lg bg-emerald-50/40 border border-emerald-100 px-2.5 py-2 max-h-32 overflow-y-auto">
+            <div className="flex items-center gap-1 text-[9.5px] font-semibold text-emerald-700 mb-1">
+              <Sparkles className="w-2.5 h-2.5" />
+              AI 执行结果
+            </div>
+            {looksHtml ? (
+              <div
+                className="text-[11px] text-slate-700 leading-[1.5] [&_*]:!text-[11px] [&_h1]:!font-semibold [&_h2]:!font-semibold [&_h3]:!font-semibold [&_p]:my-0.5 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_table]:hidden [&_img]:hidden [&_div]:!block"
+                dangerouslySetInnerHTML={{ __html: item.result_preview }}
+              />
+            ) : (
+              <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans leading-[1.5] line-clamp-5">
+                {item.result_preview}
+              </pre>
+            )}
           </div>
-          <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans leading-[1.5] line-clamp-5">
-            {item.result_preview}
-          </pre>
-        </div>
-      )}
+        );
+      })()}
       {isDone && !item.result_preview && item.execution_id && (
         <div className="ml-8 mb-2 text-[10.5px] text-slate-400 italic">
           正在加载执行结果…

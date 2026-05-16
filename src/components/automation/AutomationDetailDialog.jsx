@@ -30,7 +30,14 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
   const [availableAttachments, setAvailableAttachments] = useState([]);
   // 本地副本：调整后能立即覆盖父级 prop，让预览同步更新
   const [localExecution, setLocalExecution] = useState(executionProp);
-  useEffect(() => { setLocalExecution(executionProp); }, [executionProp]);
+  // 记录本地最后一次"权威更新"时间戳，用于在短窗口内忽略可能过期的父级 prop 推送，
+  // 避免保存/重做后被陈旧的列表缓存 invalidate 回滚
+  const lastLocalUpdateRef = React.useRef(0);
+  useEffect(() => {
+    // 如果 5 秒内本地刚有过权威更新（保存/重做），则忽略 prop 覆盖
+    if (Date.now() - lastLocalUpdateRef.current < 5000) return;
+    setLocalExecution(executionProp);
+  }, [executionProp]);
   const execution = localExecution || executionProp;
 
   // 拉取最新 execution 数据并写回本地，确保预览实时刷新
@@ -38,7 +45,10 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
     if (!execution?.id) return null;
     try {
       const fresh = await base44.entities.TaskExecution.get(execution.id);
-      if (fresh) setLocalExecution(fresh);
+      if (fresh) {
+        lastLocalUpdateRef.current = Date.now();
+        setLocalExecution(fresh);
+      }
       return fresh;
     } catch { return null; }
   };
@@ -65,7 +75,19 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
     try {
       const newResult = { ...(execution.automation_result || {}), data: target };
       await base44.entities.TaskExecution.update(execution.id, { automation_result: newResult });
-      setLocalExecution(prev => prev ? { ...prev, automation_result: newResult } : prev);
+      // 验证：从后端重新拉取，确认数据已落库（避免某些字段被服务端校验掉/合并规则导致丢失）
+      const fresh = await base44.entities.TaskExecution.get(execution.id);
+      const savedData = fresh?.automation_result?.data;
+      // 用"目标字段"的等值检查（只挑 target 里有的 key 比较，避免对 undefined 字段误判）
+      const persisted = savedData && Object.keys(target).every(k => {
+        return JSON.stringify(savedData[k]) === JSON.stringify(target[k]);
+      });
+      if (!persisted) {
+        console.warn("[SaveEdits] 后端落库数据与本地不一致", { target, savedData });
+        throw new Error("保存后服务端未返回预期数据，请刷新后再试");
+      }
+      lastLocalUpdateRef.current = Date.now();
+      setLocalExecution(fresh);
       setEditedData(null);
       toast.success("已保存修改");
       refresh();

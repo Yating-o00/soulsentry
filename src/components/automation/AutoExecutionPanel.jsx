@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Sparkles, Loader2, ChevronRight, Send, ChevronDown, ChevronUp } from "lucide-react";
+import { Zap, Sparkles, Loader2, ChevronRight, Send, ChevronDown, ChevronUp, Paperclip, X as XIcon, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
@@ -20,6 +20,41 @@ export default function AutoExecutionPanel() {
   const [submitting, setSubmitting] = useState(false);
   const [openExec, setOpenExec] = useState(null);
   const [recentExpanded, setRecentExpanded] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState([]); // [{file_name, file_url, file_size, file_type}]
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef(null);
+
+  const handleFilePick = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const uploaded = [];
+      for (const f of files) {
+        const resp = await base44.integrations.Core.UploadFile({ file: f });
+        const url = resp?.file_url || resp?.data?.file_url;
+        if (url) {
+          uploaded.push({
+            file_name: f.name,
+            file_url: url,
+            file_size: f.size,
+            file_type: f.type || f.name.split('.').pop(),
+          });
+        }
+      }
+      setAttachedFiles(prev => [...prev, ...uploaded]);
+      toast.success(`已上传 ${uploaded.length} 个文件`);
+    } catch (err) {
+      toast.error("文件上传失败：" + err.message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachedFile = (idx) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== idx));
+  };
 
   // 候选清单态
   const [candidates, setCandidates] = useState([]);
@@ -51,8 +86,14 @@ export default function AutoExecutionPanel() {
         original_input: content,
         category: "task",
         execution_status: "parsing",
-        ai_parsed_result: { source: "dashboard_direct", summary: content },
+        ai_parsed_result: {
+          source: "dashboard_direct",
+          summary: content,
+          attached_files: attachedFiles,
+        },
       });
+      // 提交后清空已附加文件
+      setAttachedFiles([]);
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       // 立即打开对话框让用户看到规划进度
       setOpenExec(exec);
@@ -154,8 +195,10 @@ export default function AutoExecutionPanel() {
         ai_parsed_result: {
           source: "quick_template",
           summary: template.example,
+          attached_files: attachedFiles,
         },
       });
+      setAttachedFiles([]);
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       // 立即打开结果对话框，用户能看到规划与产物
       setOpenExec(exec);
@@ -203,7 +246,7 @@ export default function AutoExecutionPanel() {
           </div>
 
           {/* 输入区 */}
-          <div className="flex gap-2 mb-3">
+          <div className="flex gap-2 mb-2">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -212,6 +255,24 @@ export default function AutoExecutionPanel() {
               className="text-sm bg-white"
               disabled={submitting}
             />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFilePick}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={submitting || uploading}
+              className="flex-shrink-0 px-3"
+              title="上传参考文件，让 AI 基于文件内容执行"
+            >
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+            </Button>
             <Button
               onClick={() => handleAnalyze()}
               disabled={submitting || !input.trim()}
@@ -220,6 +281,28 @@ export default function AutoExecutionPanel() {
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>
           </div>
+
+          {/* 已附加文件 */}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {attachedFiles.map((f, idx) => (
+                <div
+                  key={idx}
+                  className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-[11px] text-indigo-700 max-w-[200px]"
+                  title={f.file_name}
+                >
+                  <FileText className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{f.file_name}</span>
+                  <button
+                    onClick={() => removeAttachedFile(idx)}
+                    className="w-4 h-4 rounded-full hover:bg-indigo-200 flex items-center justify-center flex-shrink-0"
+                  >
+                    <XIcon className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* 快捷模板 */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">

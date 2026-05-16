@@ -18,14 +18,51 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  *   - calendar_event : 生成日历事件（写入 Task + 触发同步）
  */
 
-async function callKimi(base44, prompt, response_json_schema, system_prompt) {
+async function callKimi(base44, prompt, response_json_schema, system_prompt, file_urls) {
   const res = await base44.functions.invoke('invokeKimi', {
     prompt,
     response_json_schema,
     system_prompt,
     temperature: 0.4,
+    file_urls,
   });
   return res.data;
+}
+
+// 读取用户上传的参考文件，转为可被 LLM 理解的文本上下文
+// 文本/表格/PDF → 用 ExtractDataFromUploadedFile 抽内容；图片 → 收集 URL 走视觉模型
+async function buildAttachmentContext(base44, exec) {
+  const files = exec?.ai_parsed_result?.attached_files;
+  if (!Array.isArray(files) || files.length === 0) {
+    return { text: '', imageUrls: [], hasFiles: false };
+  }
+  const textChunks = [];
+  const imageUrls = [];
+  for (const f of files) {
+    if (!f?.file_url) continue;
+    const isImage = /^image\//i.test(f.file_type || '') || /\.(png|jpe?g|gif|webp)$/i.test(f.file_name || '');
+    if (isImage) {
+      imageUrls.push(f.file_url);
+      textChunks.push(`【图片附件】${f.file_name}`);
+      continue;
+    }
+    // 用 InvokeLLM 把文件读成文本摘要（支持 pdf/csv/xlsx/txt 等）
+    try {
+      const res = await base44.integrations.Core.InvokeLLM({
+        prompt: `请把这个文件的完整内容以纯文本形式抽取出来，保留结构（表格用 Markdown 表格），不要总结，不要省略。如果是名单/列表，逐行输出。`,
+        file_urls: [f.file_url],
+      });
+      const text = typeof res === 'string' ? res : (res?.text || res?.data || JSON.stringify(res));
+      textChunks.push(`【附件：${f.file_name}】\n${String(text).slice(0, 8000)}`);
+    } catch (e) {
+      textChunks.push(`【附件：${f.file_name}】（读取失败：${e.message}）`);
+    }
+  }
+  return {
+    text: textChunks.length ? `\n\n=== 用户上传的参考文件 ===\n${textChunks.join('\n\n')}\n=== 文件结束 ===\n` : '',
+    imageUrls,
+    hasFiles: true,
+  };
 }
 
 const PLAN_SCHEMA = {
@@ -60,11 +97,14 @@ const PLAN_SCHEMA = {
   required: ["automation_type", "plan", "requires_approval"]
 };
 
-async function generatePlan(base44, exec) {
+async function generatePlan(base44, exec, attachmentCtx) {
   const userInput = exec.original_input || exec.task_title;
+  const fileHint = attachmentCtx?.hasFiles
+    ? `\n\n用户随指令上传了参考文件，方案设计时务必考虑如何利用这些文件内容。${attachmentCtx.text}`
+    : '';
   const planRes = await callKimi(
     base44,
-    `用户希望心栈自动帮他完成的事项：${userInput}\n\n请分析这是哪种自动执行类型，并给出清晰的执行方案。\n注意：发送邮件/删除文件等不可逆操作 requires_approval 必须为 true。`,
+    `用户希望心栈自动帮他完成的事项：${userInput}${fileHint}\n\n请分析这是哪种自动执行类型，并给出清晰的执行方案。\n注意：发送邮件/删除文件等不可逆操作 requires_approval 必须为 true。`,
     PLAN_SCHEMA,
     "你是心栈 SoulSentry 的自动执行规划官，负责把用户的自然语言指令转换成结构化执行方案。要简洁、具体、可执行。"
   );
@@ -120,7 +160,7 @@ async function collectEmailAttachments(base44, exec) {
   return attachments;
 }
 
-async function executeEmailDraft(base44, exec) {
+async function executeEmailDraft(base44, exec, attachmentCtx) {
   const schema = {
     type: "object",
     properties: {
@@ -141,9 +181,10 @@ async function executeEmailDraft(base44, exec) {
     : '（无）';
 
   const todayCN = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'long', day: 'numeric' });
+  const userFileBlock = attachmentCtx?.text || '';
   const data = await callKimi(
     base44,
-    `当前日期：${todayCN}（请在邮件落款日期处使用这个真实日期，不要编造其它日期）\n\n该任务下已生成的产物（将随邮件作为附件发送）：\n${attachmentBrief}\n\n请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}\n\n若有附件，请在正文中自然提及"附件"，但不要罗列附件名。`,
+    `当前日期：${todayCN}（请在邮件落款日期处使用这个真实日期，不要编造其它日期）\n\n该任务下已生成的产物（将随邮件作为附件发送）：\n${attachmentBrief}${userFileBlock ? `\n\n用户上传的参考文件（请基于其内容撰写邮件正文，可以引用其中的具体信息）：${userFileBlock}` : ''}\n\n请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}\n\n若有附件，请在正文中自然提及"附件"，但不要罗列附件名。`,
     schema,
     `你是专业商务邮件助手。今日日期：${todayCN}。要求：1) 主题精炼，10字内最好；2) 正文结构清晰，含问候、正文、署名；3) 若需写落款日期，必须使用今日真实日期，禁止编造历史日期；4) 根据指令推断语气（正式/友好/简洁）；5) 收件人未指明则留空，由用户在确认时填写。`
   );
@@ -166,8 +207,9 @@ async function executeEmailDraft(base44, exec) {
   };
 }
 
-async function executeWebResearch(base44, exec) {
+async function executeWebResearch(base44, exec, attachmentCtx) {
   const userText = exec.original_input || exec.task_title;
+  const fileBlock = attachmentCtx?.text || '';
 
   // 1. 真实联网爬取（Kimi $web_search）
   let answer = '';
@@ -211,7 +253,7 @@ async function executeWebResearch(base44, exec) {
 
   const research = await callKimi(
     base44,
-    `调研主题：${userText}\n\n以下是联网搜索得到的原始资料：\n\n${answer || '（搜索未返回内容）'}\n\n参考来源：\n${sourcesText}\n\n请基于以上资料生成一份结构清晰、内容深入的调研报告。每节正文请用 Markdown 编写，必要时引用上面的来源编号。`,
+    `调研主题：${userText}${fileBlock ? `\n\n用户上传的参考文件（这是调研的核心输入，请深入分析其中每一条/每一项）：${fileBlock}` : ''}\n\n以下是联网搜索得到的原始资料：\n\n${answer || '（搜索未返回内容）'}\n\n参考来源：\n${sourcesText}\n\n请基于以上资料${fileBlock ? '（尤其是用户上传的文件）' : ''}生成一份结构清晰、内容深入的调研报告。每节正文请用 Markdown 编写，必要时引用上面的来源编号。`,
     schema,
     "你是资深行业研究分析师，擅长把零散资料整合为深度调研报告。要求：客观、有数据、结构清晰。"
   );
@@ -653,8 +695,9 @@ async function pickOutputFormat(base44, userText, contentKind) {
   }
 }
 
-async function executeSummaryNote(base44, exec) {
+async function executeSummaryNote(base44, exec, attachmentCtx) {
   const userText = exec.original_input || exec.task_title;
+  const fileBlock = attachmentCtx?.text || '';
 
   // === 分支 A：日终复盘 / 日报类——拉真实数据 + 生成 Markdown + 上传 ===
   if (isRecapTask(userText)) {
@@ -727,7 +770,7 @@ async function executeSummaryNote(base44, exec) {
 
   const data = await callKimi(
     base44,
-    `请把以下内容整理成一篇心签（笔记）：\n${userText}`,
+    `请把以下内容整理成一篇心签（笔记）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件内容：${fileBlock}` : ''}`,
     schema,
     "你是用户的思维整理助手，把零散输入提炼成结构清晰、富有启发的心签。"
   );
@@ -747,8 +790,9 @@ async function executeSummaryNote(base44, exec) {
   };
 }
 
-async function executeOfficeDoc(base44, exec) {
+async function executeOfficeDoc(base44, exec, attachmentCtx) {
   const userText = exec.original_input || exec.task_title;
+  const fileBlock = attachmentCtx?.text || '';
   const schema = {
     type: "object",
     properties: {
@@ -773,7 +817,7 @@ async function executeOfficeDoc(base44, exec) {
 
   const data = await callKimi(
     base44,
-    `请为以下需求生成一份完整的办公文档内容（不是大纲，而是可直接使用的成稿）：\n${userText}`,
+    `请为以下需求生成一份完整的办公文档内容（不是大纲，而是可直接使用的成稿）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请深入引用其中的内容、数据、清单）：${fileBlock}` : ''}`,
     schema,
     "你是办公文档专家。请直接生成完整、可落地的成稿内容（每节包含具体段落、要点、必要时含表格）。"
   );
@@ -925,8 +969,9 @@ async function uploadHtmlFile(base44, fileName, html) {
   return resp?.file_url || resp?.data?.file_url;
 }
 
-async function executePptDoc(base44, exec) {
+async function executePptDoc(base44, exec, attachmentCtx) {
   const userText = exec.original_input || exec.task_title;
+  const fileBlock = attachmentCtx?.text || '';
   const schema = {
     type: "object",
     properties: {
@@ -953,7 +998,7 @@ async function executePptDoc(base44, exec) {
 
   const data = await callKimi(
     base44,
-    `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}\n\n要求：1) 根据题材自动选择合适的主题风格(theme)；2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；3) 每页 bullets 控制在 3~6 条，简洁有力；4) 一定要直接产出可演示的成稿内容，而不是大纲提示。`,
+    `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请把其中的关键信息嵌入到相应幻灯片，不要丢失重要项）：${fileBlock}` : ''}\n\n要求：1) 根据题材自动选择合适的主题风格(theme)；2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；3) 每页 bullets 控制在 3~6 条，简洁有力；4) 一定要直接产出可演示的成稿内容，而不是大纲提示。`,
     schema,
     "你是顶级演示稿设计师。基于用户输入直接产出完整、有逻辑、可直接演示的幻灯片内容。"
   );
@@ -1210,9 +1255,12 @@ Deno.serve(async (req) => {
     const exec = await base44.entities.TaskExecution.get(execution_id);
     if (!exec) return Response.json({ error: 'Execution not found' }, { status: 404 });
 
+    // 读取用户上传的附件（plan / execute 都用得到）
+    const attachmentCtx = await buildAttachmentContext(base44, exec);
+
     // === Phase 1: PLAN ===
     if (phase === "plan") {
-      const planRes = await generatePlan(base44, exec);
+      const planRes = await generatePlan(base44, exec, attachmentCtx);
       const steps = (planRes.plan.steps || []).map(s => ({
         step_name: s.name,
         status: "pending",
@@ -1256,7 +1304,7 @@ Deno.serve(async (req) => {
       });
 
       try {
-        const result = await executor(base44, exec);
+        const result = await executor(base44, exec, attachmentCtx);
         const completedSteps = (exec.execution_steps || []).map(s => ({
           ...s,
           status: "completed",

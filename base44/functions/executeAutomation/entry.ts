@@ -1125,11 +1125,10 @@ ${attachmentCtx.images.map((im, i) => `${i + 1}. ${im.url}\n   文件名：${im.
   const safeTitle = (data.title || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
   const baseName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}`;
 
-  // 办公文档统一输出富排版 HTML，避免 markdown 在浏览器中被原样显示导致图片/换行不渲染
-  // （若用户明确要求纯文本/Word，再由 pickOutputFormat 决定）
-  const wantsPlain = /纯文本|plain|txt/i.test(userText);
-  const wantsRtf = /word|\.docx|\.rtf|RTF|粘贴.*Word/i.test(userText);
-  const format = wantsPlain ? 'txt' : (wantsRtf ? 'rtf' : 'html');
+  // 办公文档固定输出富排版 HTML —— 图文并茂、浏览器原生可预览，无需下载
+  // 仅当用户明确要求"纯文本/txt"时才输出 txt
+  const wantsPlain = /纯文本|plain text|\.txt/i.test(userText);
+  const format = wantsPlain ? 'txt' : 'html';
   let content;
   if (format === 'html') {
     content = renderRichHtml({

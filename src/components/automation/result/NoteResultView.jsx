@@ -3,6 +3,31 @@ import { StickyNote, Tag, X, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
+// 把 markdown 文本中的 ![alt](url) 转为图片，其余保留为段落文本
+function renderContentWithImages(text) {
+  const re = /!\[([^\]]*)\]\((https?:[^\s)]+)\)/g;
+  const parts = [];
+  let last = 0;
+  let m;
+  let idx = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) {
+      parts.push(<p key={`t-${idx++}`} className="whitespace-pre-wrap">{text.slice(last, m.index)}</p>);
+    }
+    parts.push(
+      <figure key={`img-${idx++}`} className="my-1.5 text-center">
+        <img src={m[2]} alt={m[1]} className="max-w-full rounded-lg border border-amber-200 shadow-sm mx-auto" loading="lazy" />
+        {m[1] && <figcaption className="text-[10px] text-slate-500 italic mt-0.5">{m[1]}</figcaption>}
+      </figure>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) {
+    parts.push(<p key={`t-${idx++}`} className="whitespace-pre-wrap">{text.slice(last)}</p>);
+  }
+  return parts;
+}
+
 // 笔记/心签类结果视图：标题、要点、正文、标签均可编辑
 export default function NoteResultView({ data, preview, onChange, editable = true }) {
   const title = data?.title || "整理结果";
@@ -82,8 +107,8 @@ export default function NoteResultView({ data, preview, onChange, editable = tru
           />
         ) : (
           content && (
-            <div className="text-[12px] text-slate-700 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
-              {content}
+            <div className="text-[12px] text-slate-700 leading-relaxed max-h-72 overflow-y-auto space-y-1.5">
+              {renderContentWithImages(content)}
             </div>
           )
         )}

@@ -573,10 +573,22 @@ function mdToInlineHtml(md = '') {
         li++;
       }
       li--;
+      // 单元格内部排版：① 字面 <br> 转真换行；② ①②③④⑤⑥⑦⑧⑨⑩ 等带圈数字前自动断行；③ 多行渲染成<br/>
+      const renderCell = (c) => {
+        let s = String(c);
+        // 还原字面 <br> / <br/> / <br /> （AI 经常误输出）
+        s = s.replace(/<br\s*\/?>/gi, '\n');
+        // 在 ①②③④⑤⑥⑦⑧⑨⑩⑪⑫ 等圈号 / "1) " "1. " 序号前补换行（仅当它不在行首时）
+        s = s.replace(/(?<!^|\n)\s*([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮])/g, '\n$1');
+        const lines = s.split('\n').map(x => x.trim()).filter(Boolean);
+        return lines
+          .map(line => esc(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'))
+          .join('<br/>');
+      };
       out.push('<table class="md-table"><thead><tr>' +
-        header.map(h => `<th>${esc(h).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</th>`).join('') +
+        header.map(h => `<th>${renderCell(h)}</th>`).join('') +
         '</tr></thead><tbody>' +
-        rows.map(r => '<tr>' + r.map(c => `<td>${esc(c).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</td>`).join('') + '</tr>').join('') +
+        rows.map(r => '<tr>' + r.map(c => `<td>${renderCell(c)}</td>`).join('') + '</tr>').join('') +
         '</tbody></table>');
       continue;
     }
@@ -682,7 +694,8 @@ function renderRichHtml({ title, subtitle, sections = [], keyFindings = [], reco
   .card .body blockquote{margin:1em 0;padding:.6em 1em;border-left:3px solid ${accent};background:${accent}08;color:#475569;border-radius:0 8px 8px 0}
   .card .body .md-table{width:100%;border-collapse:collapse;margin:1em 0;font-size:14px;overflow:hidden;border-radius:8px;border:1px solid #e2e8f0}
   .card .body .md-table th{background:${accent}10;color:${accent};font-weight:700;text-align:left;padding:10px 14px;border-bottom:2px solid ${accent}30;white-space:nowrap}
-  .card .body .md-table td{padding:9px 14px;border-bottom:1px solid #e2e8f0;color:#334155;vertical-align:top}
+  .card .body .md-table td{padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#334155;vertical-align:top;line-height:1.7;white-space:normal;word-break:break-word}
+  .card .body .md-table td br{content:'';display:block;margin:2px 0}
   .card .body .md-table tr:last-child td{border-bottom:0}
   .card .body .md-table tr:nth-child(even) td{background:#f8fafc}
   .card .body .md-figure{margin:1.2em 0;text-align:center}
@@ -1226,7 +1239,7 @@ async function executePptDoc(base44, exec, attachmentCtx) {
     ? `\n\n=== 用户上传的图片清单（必须按需嵌入到对应幻灯片的 images 字段）===\n${userImages.map((img, i) => `${i + 1}. URL: ${img.url}\n   文件名: ${img.name}\n   内容描述: ${img.description}`).join('\n')}\n务必要求：\n- 必须把上述每张图片至少在一张幻灯片的 images 字段中使用（url 完整复制，禁止编造或简写）。\n- 选择最相关的幻灯片放置（例如『礼品盒样式』图放在样式说明页，『布袋样式』图放在布袋说明页）。\n- 一张幻灯片可放 1~2 张图，配合 caption 文字说明。\n- 含图片的幻灯片 bullets 可以减少，让图片成为主角。\n`
     : '';
 
-  const pptPrompt = `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请把其中的关键信息嵌入到相应幻灯片，不要丢失重要项）：${fileBlock}` : ''}${imageManifest}\n\n要求：1) 根据题材自动选择合适的主题风格(theme)；2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；3) 每页 bullets 控制在 3~6 条，简洁有力；4) 一定要直接产出可演示的成稿内容，而不是大纲提示；5) ${userImages.length > 0 ? `务必把上面列出的 ${userImages.length} 张用户图片嵌入到相应幻灯片的 images 字段（url 完整复制）` : '本次无图片附件'}。`;
+  const pptPrompt = `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请把其中的关键信息嵌入到相应幻灯片，不要丢失重要项）：${fileBlock}` : ''}${imageManifest}\n\n要求：\n1) 根据题材自动选择合适的主题风格(theme)；\n2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；\n3) 每页 bullets 控制在 3~6 条，简洁有力，每条 ≤ 30 个字；\n4) 一定要直接产出可演示的成稿内容，而不是大纲提示；\n5) ${userImages.length > 0 ? `务必把上面列出的 ${userImages.length} 张用户图片嵌入到相应幻灯片的 images 字段（url 完整复制）；图片页应配合 3~6 条 bullets 作为"文字说明对照"，不要把多条说明硬塞进 body 字符串。` : '本次无图片附件'}；\n6) 【关键排版规则】bullets / body / caption 字段都是纯文本，禁止出现 HTML 标签（如 <br>、<br/>、<p>），需要换行就直接拆成 bullets 数组的多个条目；禁止把 "① xx<br>② yy<br>③ zz" 这种带序号 + <br> 的内容塞到单个字符串里——必须拆成 bullets:["① xx","② yy","③ zz"]；\n7) 实拍图配文字说明的页面，优先采用"左图右 bullets"布局（即把图片放 images、说明放 bullets），不要使用 markdown 表格。`;
   const pptSystem = "你是顶级演示稿设计师。基于用户输入直接产出完整、有逻辑、可直接演示的幻灯片内容。" + (userImages.length > 0 ? "⚠️ 用户上传了真实图片，请仔细观察每张图片的实际内容。幻灯片正文 bullets/body 必须严格忠于图片肉眼可见的元素（颜色、材质、可见图案/无图案），禁止编造图片中不存在的工艺规格（如『靛青满版』『45mm 烫金禅心映影篆章』『康熙字典体』『D35 单黑丝印』『280×300mm 尺寸』『莲花压纹』等具体数值/工艺名词，除非图中文字明确写出）。看不出来的就用『建议…』或不写。每张图片至少写入一张幻灯片的 images 字段，url 完整复制。" : "");
   const data = userImages.length > 0
     ? await base44.integrations.Core.InvokeLLM({

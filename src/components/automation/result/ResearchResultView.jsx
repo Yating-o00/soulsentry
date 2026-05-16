@@ -1,5 +1,5 @@
 import React from "react";
-import { Globe, Download, ExternalLink, FileText, LayoutTemplate } from "lucide-react";
+import { Globe, Download, ExternalLink, FileText, LayoutTemplate, Edit3, Eye, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import TemplatedSection from "./TemplatedSection";
@@ -321,6 +321,10 @@ export default function ResearchResultView({ data, preview, onChange, editable =
   const [template, setTemplate] = React.useState(initialTpl);
   React.useEffect(() => { setTemplate(initialTpl); }, [initialTpl]);
 
+  // 默认显示排版预览，用户点击"编辑"按钮切换到编辑模式（仅当父组件支持 onChange 时才提供编辑能力）
+  const canEdit = editable && !!onChange;
+  const [isEditing, setIsEditing] = React.useState(false);
+
   const update = (patch) => {
     if (!onChange) return;
     onChange({ ...(data || {}), ...patch });
@@ -336,11 +340,26 @@ export default function ResearchResultView({ data, preview, onChange, editable =
     <div className="space-y-2.5">
       {/* 报告头 */}
       <div className="rounded-xl bg-gradient-to-br from-[#384877]/8 to-[#3b5aa2]/5 border border-[#384877]/15 p-3">
-        <div className="flex items-center gap-2 mb-1">
-          <Globe className="w-3.5 h-3.5 text-[#384877]" />
-          <span className="text-[10px] font-semibold text-[#384877] uppercase tracking-wider">调研报告</span>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-2">
+            <Globe className="w-3.5 h-3.5 text-[#384877]" />
+            <span className="text-[10px] font-semibold text-[#384877] uppercase tracking-wider">调研报告</span>
+          </div>
+          {canEdit && (
+            <button
+              onClick={() => setIsEditing(v => !v)}
+              className={`flex items-center gap-1 text-[10.5px] font-medium px-2 py-1 rounded-md border transition-all ${
+                isEditing
+                  ? "bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600"
+                  : "bg-white text-[#384877] border-[#384877]/30 hover:bg-[#384877]/5"
+              }`}
+              title={isEditing ? "完成编辑，返回预览" : "编辑内容和图片描述"}
+            >
+              {isEditing ? <><Check className="w-3 h-3" /> 完成</> : <><Edit3 className="w-3 h-3" /> 编辑</>}
+            </button>
+          )}
         </div>
-        {editable && onChange ? (
+        {isEditing ? (
           <Input
             value={title}
             onChange={(e) => update({ [titleKey]: e.target.value })}
@@ -385,18 +404,23 @@ export default function ResearchResultView({ data, preview, onChange, editable =
             const content = s[contentKey] || "";
             return (
               <div key={i}>
-                {editable && onChange ? (
-                  <div className="rounded-lg bg-white border border-slate-200 p-3">
+                {isEditing ? (
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 space-y-1.5">
                     <Input
                       value={heading}
                       onChange={(e) => updateSection(i, { [headingKey]: e.target.value })}
-                      className="text-[12.5px] font-bold text-slate-800 mb-1.5 h-7 border-slate-200"
+                      className="text-[12.5px] font-bold text-slate-800 h-7 border-slate-200"
+                      placeholder="章节标题"
                     />
                     <Textarea
                       value={content}
                       onChange={(e) => updateSection(i, { [contentKey]: e.target.value })}
-                      className="text-[11.5px] text-slate-600 leading-relaxed min-h-[80px] border-slate-200 font-sans"
+                      className="text-[11.5px] text-slate-600 leading-relaxed min-h-[140px] border-slate-200 font-mono"
+                      placeholder="章节内容（支持 Markdown 与 ![描述](图片URL)）"
                     />
+                    <div className="text-[10px] text-slate-400 leading-snug">
+                      💡 修改图片描述：把图片 <code className="bg-slate-100 px-1 rounded">![原描述](url)</code> 中的"原描述"改成新文字即可，保存后预览实时更新。
+                    </div>
                   </div>
                 ) : (
                   <TemplatedSection heading={heading} content={content} template={template} />
@@ -406,12 +430,12 @@ export default function ResearchResultView({ data, preview, onChange, editable =
           })}
         </div>
       ) : (
-        editable && onChange ? (
+        isEditing ? (
           <Textarea
             value={body}
             onChange={(e) => update({ [bodyKey]: e.target.value })}
-            className="text-[12px] text-slate-700 font-sans leading-relaxed min-h-[200px] bg-white border-slate-200"
-            placeholder="报告内容..."
+            className="text-[12px] text-slate-700 font-mono leading-relaxed min-h-[240px] bg-white border-slate-200"
+            placeholder="报告内容（支持 Markdown 与 ![描述](图片URL)）"
           />
         ) : (
           body && (

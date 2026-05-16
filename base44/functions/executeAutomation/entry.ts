@@ -1011,7 +1011,13 @@ function renderPptHtml(data) {
       ? `<ul>${bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`
       : '';
     const bodyHtml = body ? `<p class="body">${body}</p>` : '';
-    return `<section class="slide"><div class="num">${i + 1} / ${slides.length}</div><h2>${heading}</h2>${bulletList}${bodyHtml}</section>`;
+    // 图片：支持 image_url 单图 或 images 数组
+    const imgs = Array.isArray(s.images) ? s.images : (s.image_url ? [{ url: s.image_url, caption: s.image_caption || '' }] : []);
+    const imgHtml = imgs.length
+      ? `<div class="imgs ${imgs.length > 1 ? 'multi' : 'single'}">${imgs.map(im => `<figure><img src="${escapeHtml(im.url)}" alt="${escapeHtml(im.caption || '')}"/>${im.caption ? `<figcaption>${escapeHtml(im.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`
+      : '';
+    const hasImg = imgs.length > 0;
+    return `<section class="slide ${hasImg ? 'has-img' : ''}"><div class="num">${i + 1} / ${slides.length}</div><h2>${heading}</h2><div class="content">${imgHtml}<div class="text">${bulletList}${bodyHtml}</div></div></section>`;
   }).join('\n');
 
   return `<!doctype html>
@@ -1035,6 +1041,16 @@ function renderPptHtml(data) {
   .slide ul li{padding:.4em 0;padding-left:1.6em;position:relative}
   .slide ul li::before{content:'';position:absolute;left:0;top:.95em;width:.6em;height:.6em;background:${themeColors.accent};border-radius:50%}
   .slide .body{font-size:clamp(16px,1.6vw,22px);color:${themeColors.muted};line-height:1.7;margin-top:1em;max-width:70ch;white-space:pre-wrap}
+  .slide .content{display:flex;flex-direction:column;gap:1.5em}
+  .slide.has-img .content{flex-direction:row;align-items:center;gap:3vw}
+  .slide.has-img .content .text{flex:1;min-width:0}
+  .slide.has-img .content .imgs{flex:1.1;display:flex;gap:1em;justify-content:center;align-items:center}
+  .slide.has-img .content .imgs.multi{flex-wrap:wrap}
+  .slide .imgs figure{margin:0;text-align:center;max-width:100%}
+  .slide .imgs img{max-width:100%;max-height:60vh;object-fit:contain;border-radius:12px;box-shadow:0 12px 40px -12px rgba(0,0,0,.4)}
+  .slide .imgs.multi figure{flex:1 1 calc(50% - 1em);max-width:calc(50% - 1em)}
+  .slide .imgs.multi img{max-height:38vh}
+  .slide .imgs figcaption{margin-top:.6em;font-size:clamp(12px,1vw,15px);color:${themeColors.muted};font-style:italic}
   .num{position:absolute;top:3vh;right:3vw;font-size:14px;color:${themeColors.muted};letter-spacing:.1em}
   .badge{margin-top:2em;display:inline-block;padding:.5em 1.2em;border:1px solid ${themeColors.muted}40;border-radius:999px;font-size:13px;color:${themeColors.muted};letter-spacing:.1em}
   .nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:8px;background:${themeColors.fg}10;padding:8px 14px;border-radius:999px;backdrop-filter:blur(8px);z-index:10}
@@ -1088,7 +1104,19 @@ async function executePptDoc(base44, exec, attachmentCtx) {
           properties: {
             heading: { type: "string", description: "页标题" },
             bullets: { type: "array", items: { type: "string" }, description: "要点列表，3~6 条" },
-            body: { type: "string", description: "可选的补充段落，用于结论/数据/案例页" }
+            body: { type: "string", description: "可选的补充段落，用于结论/数据/案例页" },
+            images: {
+              type: "array",
+              description: "本页要展示的图片（必须从用户上传的图片清单中选择 url，禁止编造 URL）。一页 1~2 张为佳。",
+              items: {
+                type: "object",
+                properties: {
+                  url: { type: "string", description: "图片 URL（必须来自用户上传清单）" },
+                  caption: { type: "string", description: "图片说明，如『礼品盒外观』『布袋样式』" }
+                },
+                required: ["url"]
+              }
+            }
           },
           required: ["heading"]
         }

@@ -152,12 +152,32 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
         : '';
       const newInput = `${execution.original_input || execution.task_title}${prevBlock}${attachBlock}\n\n[用户本次调整指令]：${adjustText}`;
 
+      // 关键：把附件写入 ai_parsed_result.attached_files，executeAutomation 才会做视觉识别并把图片嵌入到生成结果中
+      const prevFiles = Array.isArray(execution.ai_parsed_result?.attached_files)
+        ? execution.ai_parsed_result.attached_files
+        : [];
+      const newFiles = adjustAttachments.map(a => ({
+        file_url: a.file_url,
+        file_name: a.file_name,
+        file_type: a.file_type || '',
+      }));
+      const seen = new Set();
+      const mergedFiles = [...prevFiles, ...newFiles].filter(f => {
+        if (!f?.file_url || seen.has(f.file_url)) return false;
+        seen.add(f.file_url);
+        return true;
+      });
+
       await base44.entities.TaskExecution.update(execution.id, {
         original_input: newInput,
         execution_status: "parsing",
         automation_plan: null,
         automation_result: null,
         error_message: null,
+        ai_parsed_result: {
+          ...(execution.ai_parsed_result || {}),
+          attached_files: mergedFiles,
+        },
       });
       const planRes = await base44.functions.invoke('executeAutomation', {
         execution_id: execution.id,
@@ -193,7 +213,7 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
       for (const file of files) {
         const res = await base44.integrations.Core.UploadFile({ file });
         if (res?.file_url) {
-          uploaded.push({ file_name: file.name, file_url: res.file_url });
+          uploaded.push({ file_name: file.name, file_url: res.file_url, file_type: file.type || '' });
         }
       }
       setAdjustAttachments(prev => [...prev, ...uploaded]);

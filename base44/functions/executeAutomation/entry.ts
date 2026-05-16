@@ -451,10 +451,54 @@ async function uploadMarkdownReport(base44, fileName, markdown) {
 // 说明：docx/pdf 由富排版 HTML 替代——浏览器打印即可另存 PDF，Word 可直接打开 .html 转 .docx，
 // 内容上比纯 md 更适合带图标、分层、彩色高亮的复杂排版。
 
-// 极简 Markdown → HTML（仅覆盖标题/列表/粗体/斜体/段落/分隔线）
+// 把 AI 经常输出的"整张表被压成一行"还原成多行：在分隔行处断行，按列数切分单元格
+function normalizeInlineTables(raw) {
+  let s = String(raw || '');
+  s = s.replace(/\s*\|\s*(:?-{2,}:?\s*\|\s*){2,}:?-{2,}:?\s*\|?\s*/g, (m) => `\n${m.trim()}\n`);
+  const lines = s.split(/\r?\n/);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i];
+    const isSep = /^\s*\|?\s*(:?-{2,}:?\s*\|\s*){1,}:?-{2,}:?\s*\|?\s*$/.test(cur);
+    if (isSep) {
+      const colCount = cur.split('|').filter(x => x.trim()).length;
+      if (out.length) {
+        const prev = out[out.length - 1];
+        const prevCells = prev.trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
+        if (prevCells.length > colCount) {
+          out[out.length - 1] = '| ' + prevCells.slice(0, colCount).map(c => c.trim()).join(' | ') + ' |';
+          const overflow = prevCells.slice(colCount).map(c => c.trim()).join(' | ');
+          if (overflow) lines.splice(i + 1, 0, '| ' + overflow + ' |');
+        }
+      }
+      out.push(cur);
+      let j = i + 1;
+      while (j < lines.length && lines[j].includes('|') && lines[j].trim()) {
+        const cells = lines[j].trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+        if (cells.length > colCount) {
+          const chunks = [];
+          for (let k = 0; k < cells.length; k += colCount) {
+            chunks.push('| ' + cells.slice(k, k + colCount).join(' | ') + ' |');
+          }
+          lines.splice(j, 1, ...chunks);
+          continue;
+        }
+        if (cells.every(c => !c)) { lines.splice(j, 1); continue; }
+        out.push(lines[j]);
+        j++;
+      }
+      i = j - 1;
+      continue;
+    }
+    out.push(cur);
+  }
+  return out.join('\n');
+}
+
+// 极简 Markdown → HTML（标题/列表/粗体/斜体/段落/分隔线/GFM 表格）
 function mdToInlineHtml(md = '') {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const lines = String(md).split('\n');
+  const lines = normalizeInlineTables(md).split('\n');
   const out = [];
   let inUl = false, inOl = false, inP = false;
   const closeP = () => { if (inP) { out.push('</p>'); inP = false; } };
@@ -466,8 +510,30 @@ function mdToInlineHtml(md = '') {
     .replace(/`(.+?)`/g, '<code>$1</code>')
     .replace(/\[(.+?)\]\((https?:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
-  for (const raw of lines) {
+  const isTableSep = (s) => /^\s*\|?\s*(:?-{2,}:?\s*\|\s*){1,}:?-{2,}:?\s*\|?\s*$/.test(s);
+  const splitRow = (row) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+
+  for (let li = 0; li < lines.length; li++) {
+    const raw = lines[li];
     const line = raw.trimEnd();
+    // GFM 表格：当前行有 |，下一行是分隔行
+    if (line.includes('|') && li + 1 < lines.length && isTableSep(lines[li + 1])) {
+      closeP(); closeUl(); closeOl();
+      const header = splitRow(line);
+      const rows = [];
+      li += 2;
+      while (li < lines.length && lines[li].includes('|') && lines[li].trim()) {
+        rows.push(splitRow(lines[li]));
+        li++;
+      }
+      li--;
+      out.push('<table class="md-table"><thead><tr>' +
+        header.map(h => `<th>${esc(h).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</th>`).join('') +
+        '</tr></thead><tbody>' +
+        rows.map(r => '<tr>' + r.map(c => `<td>${esc(c).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</td>`).join('') + '</tr>').join('') +
+        '</tbody></table>');
+      continue;
+    }
     if (!line.trim()) { closeP(); closeUl(); closeOl(); continue; }
     let m;
     if ((m = line.match(/^#{1,6}\s+(.+)$/))) {
@@ -545,6 +611,11 @@ function renderRichHtml({ title, subtitle, sections = [], keyFindings = [], reco
   .card .body li{margin:.3em 0}
   .card .body code{background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:.9em;color:${accent}}
   .card .body blockquote{margin:1em 0;padding:.6em 1em;border-left:3px solid ${accent};background:${accent}08;color:#475569;border-radius:0 8px 8px 0}
+  .card .body .md-table{width:100%;border-collapse:collapse;margin:1em 0;font-size:14px;overflow:hidden;border-radius:8px;border:1px solid #e2e8f0}
+  .card .body .md-table th{background:${accent}10;color:${accent};font-weight:700;text-align:left;padding:10px 14px;border-bottom:2px solid ${accent}30;white-space:nowrap}
+  .card .body .md-table td{padding:9px 14px;border-bottom:1px solid #e2e8f0;color:#334155;vertical-align:top}
+  .card .body .md-table tr:last-child td{border-bottom:0}
+  .card .body .md-table tr:nth-child(even) td{background:#f8fafc}
   .card.highlight{background:linear-gradient(135deg,#fff7ed,#ffffff);border-color:#fed7aa}
   .card.highlight .num-list{counter-reset:n;list-style:none;padding:0}
   .card.highlight .num-list li{counter-increment:n;padding:10px 0 10px 44px;position:relative;border-bottom:1px dashed #fde68a}

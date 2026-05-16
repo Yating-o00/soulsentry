@@ -110,6 +110,55 @@ export default function AutoExecutionPanel() {
     handleAuthorize(item);
   };
 
+  // 4) 点击快捷模板：不走 AI 候选拆解，而是把示例填入输入框，
+  //    直接按模板的 automation_type 创建一条执行，结果对话框中可直接编辑/发送
+  const handleQuickTemplate = async (template) => {
+    setInput(template.example);
+    setCandidates([]);
+    setSceneSummary("");
+    const item = {
+      _id: `quick-${Date.now()}`,
+      title: template.label,
+      detail: template.example,
+      automation_type: template.type,
+    };
+    try {
+      const exec = await base44.entities.TaskExecution.create({
+        task_title: template.label,
+        original_input: template.example,
+        category: "task",
+        execution_status: "parsing",
+        automation_type: template.type,
+        ai_parsed_result: {
+          source: "quick_template",
+          summary: template.example,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      // 立即打开结果对话框，用户能看到规划与产物
+      setOpenExec(exec);
+
+      const planRes = await base44.functions.invoke('executeAutomation', {
+        execution_id: exec.id,
+        phase: "plan",
+      });
+      if (planRes.data?.error) throw new Error(planRes.data.error);
+
+      const execRes = await base44.functions.invoke('executeAutomation', {
+        execution_id: exec.id,
+        phase: "execute",
+      });
+      if (execRes.data?.error) throw new Error(execRes.data.error);
+
+      // 拉取最新执行结果，刷新对话框内容
+      const updated = await base44.entities.TaskExecution.filter({ id: exec.id });
+      if (updated?.[0]) setOpenExec(updated[0]);
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    } catch (e) {
+      toast.error("执行失败：" + e.message);
+    }
+  };
+
   return (
     <>
       <Card className="border-none shadow-sm bg-gradient-to-br from-white to-indigo-50/30 overflow-hidden">
@@ -155,9 +204,10 @@ export default function AutoExecutionPanel() {
             {QUICK_AUTOMATION_TEMPLATES.map(t => (
               <button
                 key={t.type}
-                onClick={() => handleAnalyze(t.example)}
+                onClick={() => handleQuickTemplate(t)}
                 disabled={submitting}
                 className="flex-shrink-0 px-2.5 py-1.5 rounded-full bg-white border border-slate-200 text-[11px] text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                title={t.example}
               >
                 {t.emoji} {t.label}
               </button>

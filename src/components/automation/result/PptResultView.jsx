@@ -118,10 +118,23 @@ export default function PptResultView({ data, preview }) {
             className="w-full aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col items-center justify-center text-white px-6 py-6 relative overflow-hidden disabled:cursor-default text-left"
           >
             {isCover ? (
-              <div className="flex flex-col items-center justify-center w-full">
+              <div className="flex flex-col items-center justify-center w-full max-w-full">
                 <Presentation className="w-6 h-6 mb-2 opacity-80" />
-                <div className={`${headingCls} font-bold text-center line-clamp-2`}>{activeHeading}</div>
-                {activeSubtitle && <div className={`${bodyCls} opacity-80 mt-1 text-center line-clamp-1`}>{activeSubtitle}</div>}
+                <div className={`${headingCls} font-bold text-center line-clamp-2 mb-1.5`}>{activeHeading}</div>
+                {activeSubtitle && <div className={`${bodyCls} opacity-80 mb-2 text-center line-clamp-2`}>{activeSubtitle}</div>}
+                {activeBullets.length > 0 && (
+                  <ul className={`space-y-1 ${bodyCls} opacity-90 mt-1 w-full max-w-md`}>
+                    {activeBullets.slice(0, 4).map((b, i) => (
+                      <li key={i} className="flex gap-1.5 items-start justify-start">
+                        <span className="mt-1.5 w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                        <span className="line-clamp-2">{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!activeBullets.length && activeBody && (
+                  <p className={`${bodyCls} opacity-85 line-clamp-4 whitespace-pre-wrap text-center mt-1 max-w-md`}>{activeBody}</p>
+                )}
               </div>
             ) : (
               <div className="w-full max-w-full">

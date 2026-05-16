@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle2, AlertTriangle, Sparkles, Send, RefreshCw, MessageSquarePlus, Mail, X, ArrowRight, Clock, Maximize2, Minimize2 } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, Sparkles, Send, RefreshCw, MessageSquarePlus, Mail, X, ArrowRight, Clock, Maximize2, Minimize2, Paperclip } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -15,6 +15,8 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
   const [executing, setExecuting] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [adjustText, setAdjustText] = useState("");
+  const [adjustAttachments, setAdjustAttachments] = useState([]); // [{file_name,file_url}]
+  const [uploadingAdjust, setUploadingAdjust] = useState(false);
   const [sending, setSending] = useState(false);
   // 邮件类：本地维护可编辑的草稿（收件人/抄送/主题/正文 + 附件），编辑后用于发送
   const [emailDraft, setEmailDraft] = useState(null);
@@ -145,7 +147,10 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
       const prevBlock = prevSnapshot
         ? `\n\n[上次生成的内容 - 请在此基础上做调整，保留未提及的部分]：\n${String(prevSnapshot).slice(0, 6000)}`
         : '';
-      const newInput = `${execution.original_input || execution.task_title}${prevBlock}\n\n[用户本次调整指令]：${adjustText}`;
+      const attachBlock = adjustAttachments.length > 0
+        ? `\n\n[用户提供的参考附件 - 请阅读并基于这些资料调整内容]：\n${adjustAttachments.map(a => `- ${a.file_name}: ${a.file_url}`).join('\n')}`
+        : '';
+      const newInput = `${execution.original_input || execution.task_title}${prevBlock}${attachBlock}\n\n[用户本次调整指令]：${adjustText}`;
 
       await base44.entities.TaskExecution.update(execution.id, {
         original_input: newInput,
@@ -170,6 +175,7 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
       await reloadExecution(); // 关键：拉取最新数据，刷新弹窗内预览
       toast.success("AI 已根据反馈在原内容上修改");
       setAdjustText("");
+      setAdjustAttachments([]);
       refresh();
     } catch (e) {
       toast.error("重新规划失败：" + e.message);
@@ -177,6 +183,51 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
       setAdjusting(false);
     }
   };
+
+  const handleAdjustUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploadingAdjust(true);
+    try {
+      const uploaded = [];
+      for (const file of files) {
+        const res = await base44.integrations.Core.UploadFile({ file });
+        if (res?.file_url) {
+          uploaded.push({ file_name: file.name, file_url: res.file_url });
+        }
+      }
+      setAdjustAttachments(prev => [...prev, ...uploaded]);
+      toast.success(`已上传 ${uploaded.length} 个附件`);
+    } catch (err) {
+      toast.error("上传失败：" + err.message);
+    } finally {
+      setUploadingAdjust(false);
+      e.target.value = ""; // 允许再次选择同一文件
+    }
+  };
+
+  const renderAdjustAttachments = () => (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {adjustAttachments.map((a, i) => (
+        <div key={i} className="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-700 text-[11px] max-w-[180px]">
+          <Paperclip className="w-3 h-3 flex-shrink-0" />
+          <span className="truncate" title={a.file_name}>{a.file_name}</span>
+          <button
+            type="button"
+            onClick={() => setAdjustAttachments(prev => prev.filter((_, idx) => idx !== i))}
+            className="text-slate-400 hover:text-red-500 flex-shrink-0"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ))}
+      <label className="cursor-pointer inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 text-[11px] transition">
+        {uploadingAdjust ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
+        添加附件
+        <input type="file" multiple className="hidden" onChange={handleAdjustUpload} disabled={uploadingAdjust} />
+      </label>
+    </div>
+  );
 
   const handleCancel = async () => {
     await base44.entities.TaskExecution.update(execution.id, {
@@ -400,6 +451,7 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                     placeholder="例如：语气再正式一点 / 范围缩小到本周 / 加上数据图表..."
                     className="text-xs min-h-[60px]"
                   />
+                  {renderAdjustAttachments()}
                   <Button size="sm" variant="outline" className="w-full" onClick={handleAdjust} disabled={adjusting || !adjustText.trim()}>
                     {adjusting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
                     让 AI 重新规划
@@ -423,6 +475,7 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                     placeholder="告诉 AI 哪里需要改进..."
                     className="text-xs min-h-[60px]"
                   />
+                  {renderAdjustAttachments()}
                   <Button size="sm" variant="outline" className="w-full" onClick={handleAdjust} disabled={adjusting || !adjustText.trim()}>
                     {adjusting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
                     让 AI 重做一次

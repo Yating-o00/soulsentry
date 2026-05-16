@@ -569,11 +569,45 @@ function mdToInlineHtml(md = '') {
     return stash(withAttrs);
   });
   // 3) AI 经常直接吐出整段 HTML 文档结构，把以下常见块级/行内标签整段保护起来原样输出
-  //    避免被 esc 转义后渲染成 <h1> 字面文本（乱码）
-  const blockTags = ['div', 'section', 'article', 'header', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'ul', 'ol', 'li', 'span', 'strong', 'em', 'b', 'i', 'u', 'a'];
+  //    避免被 esc 转义后渲染成 <div style=...> 字面文本（乱码）
+  //    关键：支持【同名嵌套】（如 <div>...<div>...</div>...</div>）——
+  //    用一个手写的平衡扫描器，从最外层开始整段抓取，而不是用非贪婪正则（会错配到内层闭合）
+  const blockTags = ['div', 'section', 'article', 'header', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'ul', 'ol', 'li', 'span', 'strong', 'em', 'b', 'i', 'u', 'a', 'figure', 'figcaption'];
+  const stashBalanced = (src, tag) => {
+    const openRe = new RegExp(`<${tag}(\\s[^>]*)?>`, 'gi');
+    const closeRe = new RegExp(`<\\/${tag}\\s*>`, 'gi');
+    let result = '';
+    let i = 0;
+    while (i < src.length) {
+      openRe.lastIndex = i;
+      const openMatch = openRe.exec(src);
+      if (!openMatch) { result += src.slice(i); break; }
+      result += src.slice(i, openMatch.index);
+      // 从 openMatch.index 开始扫描，跟踪 depth 直到归零
+      let depth = 1;
+      let scan = openMatch.index + openMatch[0].length;
+      while (depth > 0 && scan < src.length) {
+        openRe.lastIndex = scan;
+        closeRe.lastIndex = scan;
+        const nextOpen = openRe.exec(src);
+        const nextClose = closeRe.exec(src);
+        if (!nextClose) { scan = src.length; break; }
+        if (nextOpen && nextOpen.index < nextClose.index) {
+          depth++;
+          scan = nextOpen.index + nextOpen[0].length;
+        } else {
+          depth--;
+          scan = nextClose.index + nextClose[0].length;
+        }
+      }
+      const block = src.slice(openMatch.index, scan);
+      result += stash(block);
+      i = scan;
+    }
+    return result;
+  };
   blockTags.forEach(tag => {
-    const re = new RegExp(`<${tag}(\\s[^>]*)?>[\\s\\S]*?<\\/${tag}>`, 'gi');
-    normalized = normalized.replace(re, (m) => stash(m));
+    normalized = stashBalanced(normalized, tag);
   });
   // 4) <br> / <br/>
   normalized = normalized.replace(/<br\s*\/?>/gi, '\n');

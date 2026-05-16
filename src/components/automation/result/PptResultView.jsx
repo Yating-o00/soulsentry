@@ -49,9 +49,11 @@ export default function PptResultView({ data, preview }) {
   const activeBody = activeSlide?.body || "";
   const isCover = activeIdx === 0;
 
-  // 字号档位映射
-  const headingCls = fontScale === "sm" ? "text-[13px]" : fontScale === "lg" ? "text-[20px] md:text-[22px]" : "text-[14px] md:text-[16px]";
-  const bodyCls = fontScale === "sm" ? "text-[10.5px]" : fontScale === "lg" ? "text-[13px] md:text-[15px]" : "text-[11.5px] md:text-[12.5px]";
+  // 字号档位映射 —— 使用容器查询单位 cqw，让字号随预览区域宽度等比缩放
+  const headingScale = fontScale === "sm" ? 3.2 : fontScale === "lg" ? 5.2 : 4.2;
+  const bodyScale = fontScale === "sm" ? 1.9 : fontScale === "lg" ? 2.8 : 2.3;
+  const headingStyle = { fontSize: `clamp(13px, ${headingScale}cqw, 32px)`, lineHeight: 1.25 };
+  const bodyStyle = { fontSize: `clamp(10.5px, ${bodyScale}cqw, 20px)`, lineHeight: 1.5 };
 
   // 退出编辑模式时若切换页码则保留当前编辑
   const updateActiveSlide = (next) => {
@@ -62,7 +64,7 @@ export default function PptResultView({ data, preview }) {
   return (
     <div className="space-y-2.5">
       {/* 封面（点击数字会在此处直接切换内容；点击大屏打开全屏；可进入编辑模式）*/}
-      <div className="rounded-xl overflow-hidden border border-slate-200 relative group">
+      <div className="rounded-xl overflow-hidden border border-slate-200 relative group" style={{ containerType: "inline-size" }}>
         {/* 工具栏 */}
         {canPreview && (
           <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
@@ -119,39 +121,39 @@ export default function PptResultView({ data, preview }) {
           >
             {isCover ? (
               <div className="flex flex-col items-center justify-center w-full max-w-full">
-                <Presentation className="w-6 h-6 mb-2 opacity-80" />
-                <div className={`${headingCls} font-bold text-center line-clamp-2 mb-1.5`}>{activeHeading}</div>
-                {activeSubtitle && <div className={`${bodyCls} opacity-80 mb-2 text-center line-clamp-2`}>{activeSubtitle}</div>}
+                <Presentation className="w-[5cqw] h-[5cqw] min-w-[18px] min-h-[18px] max-w-[36px] max-h-[36px] mb-2 opacity-80" />
+                <div style={headingStyle} className="font-bold text-center line-clamp-2 mb-1.5">{activeHeading}</div>
+                {activeSubtitle && <div style={bodyStyle} className="opacity-80 mb-2 text-center line-clamp-2">{activeSubtitle}</div>}
                 {activeBullets.length > 0 && (
-                  <ul className={`space-y-1 ${bodyCls} opacity-90 mt-1 w-full max-w-md`}>
+                  <ul style={bodyStyle} className="space-y-1 opacity-90 mt-1 w-full max-w-[80%]">
                     {activeBullets.slice(0, 4).map((b, i) => (
                       <li key={i} className="flex gap-1.5 items-start justify-start">
-                        <span className="mt-1.5 w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                        <span className="mt-[0.6em] w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
                         <span className="line-clamp-2">{b}</span>
                       </li>
                     ))}
                   </ul>
                 )}
                 {!activeBullets.length && activeBody && (
-                  <p className={`${bodyCls} opacity-85 line-clamp-4 whitespace-pre-wrap text-center mt-1 max-w-md`}>{activeBody}</p>
+                  <p style={bodyStyle} className="opacity-85 line-clamp-4 whitespace-pre-wrap text-center mt-1 max-w-[80%]">{activeBody}</p>
                 )}
               </div>
             ) : (
               <div className="w-full max-w-full">
-                <div className="text-[10px] tracking-widest opacity-60 mb-1.5">{activeIdx + 1} / {previewSlides.length}</div>
-                <div className={`${headingCls} font-bold mb-2 line-clamp-2`}>{activeHeading}</div>
+                <div style={{ fontSize: "clamp(9px, 1.4cqw, 12px)" }} className="tracking-widest opacity-60 mb-1.5">{activeIdx + 1} / {previewSlides.length}</div>
+                <div style={headingStyle} className="font-bold mb-2 line-clamp-2">{activeHeading}</div>
                 {activeBullets.length > 0 && (
-                  <ul className={`space-y-1 ${bodyCls} opacity-95`}>
+                  <ul style={bodyStyle} className="space-y-1 opacity-95">
                     {activeBullets.slice(0, 5).map((b, i) => (
                       <li key={i} className="flex gap-1.5 items-start">
-                        <span className="mt-1.5 w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                        <span className="mt-[0.6em] w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
                         <span className="line-clamp-2">{b}</span>
                       </li>
                     ))}
                   </ul>
                 )}
                 {!activeBullets.length && activeBody && (
-                  <p className={`${bodyCls} opacity-90 line-clamp-4 whitespace-pre-wrap`}>{activeBody}</p>
+                  <p style={bodyStyle} className="opacity-90 line-clamp-4 whitespace-pre-wrap">{activeBody}</p>
                 )}
               </div>
             )}

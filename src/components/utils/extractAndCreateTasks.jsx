@@ -1,4 +1,5 @@
 import { base44 } from "@/api/base44Client";
+import { invokeAI } from "@/components/utils/aiHelper";
 import { normalizeTaskTime, getTimeContextForAI } from "@/lib/timeCore";
 
 /**
@@ -56,7 +57,7 @@ async function doExtractAndCreate(inputText, contextDateStr) {
   const timeCtx = getTimeContextForAI();
   const contextDate = contextDateStr || timeCtx.today_date;
 
-  const result = await base44.integrations.Core.InvokeLLM({
+  const result = await invokeAI({
     prompt: [
       "从以下用户输入中生成一个父约定及其可选的子执行项。",
       "",
@@ -111,7 +112,7 @@ async function doExtractAndCreate(inputText, contextDateStr) {
       },
       required: ["parent"],
     },
-  });
+  }, "task_breakdown");
 
   const parent = result?.parent;
   if (!parent?.title) return [];

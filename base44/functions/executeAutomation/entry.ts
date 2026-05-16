@@ -342,8 +342,8 @@ async function executeWebResearch(base44, exec, attachmentCtx) {
   const safeTopic = (research.topic || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
   const baseName = `${new Date().toISOString().slice(0, 10)}_${safeTopic}_调研报告`;
 
-  // 智能选择文件格式：调研报告默认偏向 html（图标 + 分层 + 可打印 PDF）
-  const format = await pickOutputFormat(base44, userText, '调研报告');
+  // 调研报告固定输出 html —— 浏览器原生可预览，无需下载
+  const format = 'html';
   let content;
   if (format === 'html') {
     content = renderRichHtml({

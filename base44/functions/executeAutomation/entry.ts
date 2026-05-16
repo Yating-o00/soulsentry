@@ -47,8 +47,15 @@ async function buildAttachmentContext(base44, exec) {
       let description = '';
       try {
         const visionRes = await base44.integrations.Core.InvokeLLM({
-          prompt: `请详细描述这张图片的内容：包含的主要对象、文字、数据、场景、风格。如果是图表/截图，请提取关键数据和结论。输出 2-4 句中文描述，信息密度高。`,
+          prompt: `严格只描述这张图片中【肉眼可见】的内容，禁止任何推测、引申或风格化包装。按以下要点输出 4-6 句中文，信息密度高：
+1) 主体物品的种类、颜色、形状、材质质感（如：白色磁吸翻盖纸盒 / 牛皮纸盒 / 米色帆布袋）；
+2) 盒盖/表面是否有【可见的图案、烫印、纹路、文字】，如果有请描述其具体形状（如：金色花卉与六边形蜂巢线条混合的烫金图案），如果没有就明确写"无可见图案/纯色"；
+3) 盒内或袋上的物品摆放、可见的配件，逐项列出（如：白色封面册子上有线描花朵、棕色筒状物、麻布束口袋、玻璃试管装毛笔等）；
+4) 整体氛围、背景、拍摄角度；
+5) 如画面里出现任何水印或 AI 生成标签（如"豆包AI生成"），请明确指出。
+⚠️ 严禁编造图片里没有出现的元素（不要凭空说"靛青色"、"莲花暗纹"、"烫金篆章"、"康熙字典体"、"D35 单黑丝印"等具体工艺规格，除非图中文字明确写出）。看不清的部分写"看不清"。`,
           file_urls: [f.file_url],
+          model: 'gemini_3_1_pro',
         });
         description = typeof visionRes === 'string' ? visionRes : (visionRes?.text || visionRes?.data || '');
       } catch (e) {
@@ -923,12 +930,40 @@ async function executeOfficeDoc(base44, exec, attachmentCtx) {
     ? `\n\n=== 用户上传的图片清单（必须在相关章节 body 中用 Markdown 图片语法 ![说明](url) 完整嵌入）===\n${userImagesOffice.map((img, i) => `${i + 1}. ![${(img.description || img.name).slice(0, 50)}](${img.url})\n   文件名：${img.name}\n   内容描述：${img.description}`).join('\n')}\n务必要求：\n- 必须把上述每张图片至少在某节 body 中用完整的 ![描述](url) Markdown 语法嵌入，不要省略 url、不要只写文字描述。\n- 按图片实际描述把图片放到对应章节（例如『礼品盒/书型盒样式』图放在书型盒章节，『布袋样式』图放在布袋章节）。\n- 章节正文请根据图片真实内容描述样式，不要编造与图片不符的细节（如图片里没出现的烫金篆章、网度暗纹等不要凭空写）。\n`
     : '';
 
-  const data = await callKimi(
-    base44,
-    `请为以下需求生成一份完整的办公文档内容（不是大纲，而是可直接使用的成稿）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请深入引用其中的内容、数据、清单）：${fileBlock}` : ''}${imageManifestOffice}`,
-    schema,
-    "你是办公文档专家。请直接生成完整、可落地的成稿内容（每节包含具体段落、要点、必要时含表格）。" + ((Array.isArray(attachmentCtx?.images) && attachmentCtx.images.length > 0) ? "用户提供了图片素材，必须把每张图片在正文 body 中以 Markdown 图片语法 ![说明](url) 完整嵌入对应章节，并严格根据图片真实内容描述，禁止编造图片中不存在的样式细节（如图片里没有的烫金篆章、暗纹等不要凭空写出）。" : "")
-  );
+  // 如果用户上传了图片，直接把图片喂给支持视觉的 LLM（让它"边看图边写"），而不是只看二手描述
+  let data;
+  if (Array.isArray(attachmentCtx?.images) && attachmentCtx.images.length > 0) {
+    const imgUrls = attachmentCtx.images.map(im => im.url);
+    const visionPrompt = `你是办公文档专家。请基于【附带的图片】和用户指令，生成一份完整、可落地的办公文档成稿。
+
+用户指令：${userText}
+${fileBlock ? `\n用户上传的参考文件（请深入引用其中的内容、数据、清单）：${fileBlock}` : ''}
+
+附带 ${imgUrls.length} 张图片，URL 清单（必须在对应章节的 body 中用完整 Markdown 图片语法 ![描述](url) 嵌入，按图片描述把图放到对应章节）：
+${attachmentCtx.images.map((im, i) => `${i + 1}. ${im.url}\n   文件名：${im.name}`).join('\n')}
+
+⚠️ 关键要求：
+- 章节正文必须【严格根据图片中肉眼可见的元素】撰写样式描述。
+- 禁止编造图片里不存在的工艺细节（例如：图片是白色磁吸盒，就不要写"靛青满版"；图片没有篆章，就不要写"45mm 烫金禅心映影篆章"；图片没有具体颜色编号/字体名，就不要写"D35 单黑"、"康熙字典体"等）。
+- 看不出来的细节就用"建议..."或"可选..."表述，不要伪装成定稿规格。
+- 每张图片必须在某节 body 中以 ![说明](url) 完整嵌入一次，url 完整复制不要省略。
+- 每节包含具体段落/要点/必要时表格。`;
+
+    const visionRes = await base44.integrations.Core.InvokeLLM({
+      prompt: visionPrompt,
+      response_json_schema: schema,
+      file_urls: imgUrls,
+      model: 'gemini_3_1_pro',
+    });
+    data = typeof visionRes === 'string' ? JSON.parse(visionRes) : visionRes;
+  } else {
+    data = await callKimi(
+      base44,
+      `请为以下需求生成一份完整的办公文档内容（不是大纲，而是可直接使用的成稿）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请深入引用其中的内容、数据、清单）：${fileBlock}` : ''}${imageManifestOffice}`,
+      schema,
+      "你是办公文档专家。请直接生成完整、可落地的成稿内容（每节包含具体段落、要点、必要时含表格）。"
+    );
+  }
 
   // 组装 Markdown 成稿
   const lines = [`# ${data.title}`, '', `> 生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, ''];
@@ -1138,12 +1173,16 @@ async function executePptDoc(base44, exec, attachmentCtx) {
     ? `\n\n=== 用户上传的图片清单（必须按需嵌入到对应幻灯片的 images 字段）===\n${userImages.map((img, i) => `${i + 1}. URL: ${img.url}\n   文件名: ${img.name}\n   内容描述: ${img.description}`).join('\n')}\n务必要求：\n- 必须把上述每张图片至少在一张幻灯片的 images 字段中使用（url 完整复制，禁止编造或简写）。\n- 选择最相关的幻灯片放置（例如『礼品盒样式』图放在样式说明页，『布袋样式』图放在布袋说明页）。\n- 一张幻灯片可放 1~2 张图，配合 caption 文字说明。\n- 含图片的幻灯片 bullets 可以减少，让图片成为主角。\n`
     : '';
 
-  const data = await callKimi(
-    base44,
-    `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请把其中的关键信息嵌入到相应幻灯片，不要丢失重要项）：${fileBlock}` : ''}${imageManifest}\n\n要求：1) 根据题材自动选择合适的主题风格(theme)；2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；3) 每页 bullets 控制在 3~6 条，简洁有力；4) 一定要直接产出可演示的成稿内容，而不是大纲提示；5) ${userImages.length > 0 ? `务必把上面列出的 ${userImages.length} 张用户图片嵌入到相应幻灯片的 images 字段` : '本次无图片附件'}。`,
-    schema,
-    "你是顶级演示稿设计师。基于用户输入直接产出完整、有逻辑、可直接演示的幻灯片内容。" + (userImages.length > 0 ? "用户提供了图片素材，必须把每张图片至少使用一次（写入 images 字段，url 完整复制），配合 caption 文字说明；幻灯片正文必须严格根据图片真实内容描述，禁止编造图片中不存在的样式细节（如图片里没有的烫金篆章、暗纹、滚边等不要凭空写出）。" : "")
-  );
+  const pptPrompt = `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请把其中的关键信息嵌入到相应幻灯片，不要丢失重要项）：${fileBlock}` : ''}${imageManifest}\n\n要求：1) 根据题材自动选择合适的主题风格(theme)；2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；3) 每页 bullets 控制在 3~6 条，简洁有力；4) 一定要直接产出可演示的成稿内容，而不是大纲提示；5) ${userImages.length > 0 ? `务必把上面列出的 ${userImages.length} 张用户图片嵌入到相应幻灯片的 images 字段（url 完整复制）` : '本次无图片附件'}。`;
+  const pptSystem = "你是顶级演示稿设计师。基于用户输入直接产出完整、有逻辑、可直接演示的幻灯片内容。" + (userImages.length > 0 ? "⚠️ 用户上传了真实图片，请仔细观察每张图片的实际内容。幻灯片正文 bullets/body 必须严格忠于图片肉眼可见的元素（颜色、材质、可见图案/无图案），禁止编造图片中不存在的工艺规格（如『靛青满版』『45mm 烫金禅心映影篆章』『康熙字典体』『D35 单黑丝印』『280×300mm 尺寸』『莲花压纹』等具体数值/工艺名词，除非图中文字明确写出）。看不出来的就用『建议…』或不写。每张图片至少写入一张幻灯片的 images 字段，url 完整复制。" : "");
+  const data = userImages.length > 0
+    ? await base44.integrations.Core.InvokeLLM({
+        prompt: `${pptSystem}\n\n${pptPrompt}`,
+        file_urls: userImages.map(im => im.url),
+        response_json_schema: schema,
+        model: 'gemini_3_1_pro',
+      })
+    : await callKimi(base44, pptPrompt, schema, pptSystem);
 
   // 渲染自包含 HTML 演示稿
   const html = renderPptHtml(data);

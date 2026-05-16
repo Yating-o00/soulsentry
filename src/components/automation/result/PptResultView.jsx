@@ -47,6 +47,9 @@ export default function PptResultView({ data, preview }) {
   const activeSubtitle = activeSlide?.subtitle || (activeIdx === 0 ? subtitle : "");
   const activeBullets = Array.isArray(activeSlide?.bullets) ? activeSlide.bullets : [];
   const activeBody = activeSlide?.body || "";
+  const activeImages = Array.isArray(activeSlide?.images)
+    ? activeSlide.images
+    : (activeSlide?.image_url ? [{ url: activeSlide.image_url, caption: activeSlide.image_caption || "" }] : []);
   const isCover = activeIdx === 0;
 
   // 字号档位映射 —— 使用容器查询单位 cqw，让字号随预览区域宽度等比缩放
@@ -142,18 +145,50 @@ export default function PptResultView({ data, preview }) {
               <div className="w-full max-w-full">
                 <div style={{ fontSize: "clamp(9px, 1.4cqw, 12px)" }} className="tracking-widest opacity-60 mb-1.5">{activeIdx + 1} / {previewSlides.length}</div>
                 <div style={headingStyle} className="font-bold mb-2 line-clamp-2">{activeHeading}</div>
-                {activeBullets.length > 0 && (
-                  <ul style={bodyStyle} className="space-y-1 opacity-95">
-                    {activeBullets.slice(0, 5).map((b, i) => (
-                      <li key={i} className="flex gap-1.5 items-start">
-                        <span className="mt-[0.6em] w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
-                        <span className="line-clamp-2">{b}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {!activeBullets.length && activeBody && (
-                  <p style={bodyStyle} className="opacity-90 line-clamp-4 whitespace-pre-wrap">{activeBody}</p>
+                {activeImages.length > 0 ? (
+                  <div className={`flex gap-2 ${activeImages.length > 1 ? 'flex-row' : 'flex-col'} items-start`}>
+                    <div className={`${activeImages.length > 1 ? 'grid grid-cols-2 gap-1.5' : 'flex'} flex-shrink-0`} style={{ width: activeImages.length > 1 ? '50%' : '45%' }}>
+                      {activeImages.slice(0, 4).map((im, i) => (
+                        <figure key={i} className="m-0 rounded overflow-hidden bg-white/10">
+                          <img src={im.url} alt={im.caption || ''} className="w-full h-auto object-cover" loading="lazy" />
+                          {im.caption && (
+                            <figcaption style={{ fontSize: 'clamp(8px, 1cqw, 11px)' }} className="opacity-70 px-1 py-0.5 truncate">{im.caption}</figcaption>
+                          )}
+                        </figure>
+                      ))}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {activeBullets.length > 0 && (
+                        <ul style={bodyStyle} className="space-y-1 opacity-95">
+                          {activeBullets.slice(0, 4).map((b, i) => (
+                            <li key={i} className="flex gap-1.5 items-start">
+                              <span className="mt-[0.6em] w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                              <span className="line-clamp-2">{b}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {!activeBullets.length && activeBody && (
+                        <p style={bodyStyle} className="opacity-90 line-clamp-4 whitespace-pre-wrap">{activeBody}</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {activeBullets.length > 0 && (
+                      <ul style={bodyStyle} className="space-y-1 opacity-95">
+                        {activeBullets.slice(0, 5).map((b, i) => (
+                          <li key={i} className="flex gap-1.5 items-start">
+                            <span className="mt-[0.6em] w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                            <span className="line-clamp-2">{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {!activeBullets.length && activeBody && (
+                      <p style={bodyStyle} className="opacity-90 line-clamp-4 whitespace-pre-wrap">{activeBody}</p>
+                    )}
+                  </>
                 )}
               </div>
             )}

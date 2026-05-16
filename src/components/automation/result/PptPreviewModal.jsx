@@ -40,10 +40,14 @@ export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName
   if (!open) return null;
 
   const slide = slides[cur] || {};
-  const isCover = cur === 0 && !(slide.bullets?.length) && !slide.body;
+  const isCover = cur === 0 && !(slide.bullets?.length) && !slide.body && !(Array.isArray(slide.images) && slide.images.length);
   const heading = slide.heading || "";
   const bullets = Array.isArray(slide.bullets) ? slide.bullets : [];
   const body = slide.body || "";
+  const images = Array.isArray(slide.images)
+    ? slide.images
+    : (slide.image_url ? [{ url: slide.image_url, caption: slide.image_caption || "" }] : []);
+  const hasImages = images.length > 0;
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col">
@@ -94,21 +98,45 @@ export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName
               <h2 className="text-2xl md:text-4xl font-bold mb-4 leading-tight" style={{ color: theme.accent }}>
                 {heading}
               </h2>
-              {bullets.length > 0 && (
-                <ul className="space-y-2 text-base md:text-xl leading-relaxed">
-                  {bullets.map((b, i) => (
-                    <li key={i} className="flex gap-3 items-start">
-                      <span className="mt-2 w-2 h-2 rounded-full flex-shrink-0" style={{ background: theme.accent }} />
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {body && (
-                <p className="mt-4 text-sm md:text-lg leading-relaxed whitespace-pre-wrap" style={{ color: theme.muted }}>
-                  {body}
-                </p>
-              )}
+              <div className={`flex-1 min-h-0 flex ${hasImages ? 'flex-row gap-6 items-center' : 'flex-col'}`}>
+                {hasImages && (
+                  <div className={`flex-1 min-w-0 flex ${images.length > 1 ? 'flex-wrap' : ''} gap-3 items-center justify-center`}>
+                    {images.slice(0, 4).map((im, i) => (
+                      <figure key={i} className="m-0 flex flex-col items-center" style={{ maxWidth: images.length > 1 ? 'calc(50% - 0.75rem)' : '100%' }}>
+                        <img
+                          src={im.url}
+                          alt={im.caption || ''}
+                          className="max-w-full rounded-lg shadow-2xl"
+                          style={{ maxHeight: images.length > 1 ? '38vh' : '60vh', objectFit: 'contain' }}
+                          loading="lazy"
+                        />
+                        {im.caption && (
+                          <figcaption className="mt-2 text-xs md:text-sm italic" style={{ color: theme.muted }}>
+                            {im.caption}
+                          </figcaption>
+                        )}
+                      </figure>
+                    ))}
+                  </div>
+                )}
+                <div className={`${hasImages ? 'flex-1 min-w-0' : ''}`}>
+                  {bullets.length > 0 && (
+                    <ul className="space-y-2 text-base md:text-xl leading-relaxed">
+                      {bullets.map((b, i) => (
+                        <li key={i} className="flex gap-3 items-start">
+                          <span className="mt-2 w-2 h-2 rounded-full flex-shrink-0" style={{ background: theme.accent }} />
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {body && (
+                    <p className="mt-4 text-sm md:text-lg leading-relaxed whitespace-pre-wrap" style={{ color: theme.muted }}>
+                      {body}
+                    </p>
+                  )}
+                </div>
+              </div>
             </>
           )}
         </div>

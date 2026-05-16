@@ -917,11 +917,17 @@ async function executeOfficeDoc(base44, exec, attachmentCtx) {
     required: ["doc_type", "title", "sections"]
   };
 
+  // 把用户上传的图片单独列一份给 AI，强制 body 用 Markdown 图片语法嵌入
+  const userImagesOffice = Array.isArray(attachmentCtx?.images) ? attachmentCtx.images : [];
+  const imageManifestOffice = userImagesOffice.length > 0
+    ? `\n\n=== 用户上传的图片清单（必须在相关章节 body 中用 Markdown 图片语法 ![说明](url) 完整嵌入）===\n${userImagesOffice.map((img, i) => `${i + 1}. ![${(img.description || img.name).slice(0, 50)}](${img.url})\n   文件名：${img.name}\n   内容描述：${img.description}`).join('\n')}\n务必要求：\n- 必须把上述每张图片至少在某节 body 中用完整的 ![描述](url) Markdown 语法嵌入，不要省略 url、不要只写文字描述。\n- 按图片实际描述把图片放到对应章节（例如『礼品盒/书型盒样式』图放在书型盒章节，『布袋样式』图放在布袋章节）。\n- 章节正文请根据图片真实内容描述样式，不要编造与图片不符的细节（如图片里没出现的烫金篆章、网度暗纹等不要凭空写）。\n`
+    : '';
+
   const data = await callKimi(
     base44,
-    `请为以下需求生成一份完整的办公文档内容（不是大纲，而是可直接使用的成稿）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请深入引用其中的内容、数据、清单）：${fileBlock}` : ''}`,
+    `请为以下需求生成一份完整的办公文档内容（不是大纲，而是可直接使用的成稿）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请深入引用其中的内容、数据、清单）：${fileBlock}` : ''}${imageManifestOffice}`,
     schema,
-    "你是办公文档专家。请直接生成完整、可落地的成稿内容（每节包含具体段落、要点、必要时含表格）。"
+    "你是办公文档专家。请直接生成完整、可落地的成稿内容（每节包含具体段落、要点、必要时含表格）。" + ((Array.isArray(attachmentCtx?.images) && attachmentCtx.images.length > 0) ? "用户提供了图片素材，必须把每张图片在正文 body 中以 Markdown 图片语法 ![说明](url) 完整嵌入对应章节，并严格根据图片真实内容描述，禁止编造图片中不存在的样式细节（如图片里没有的烫金篆章、暗纹等不要凭空写出）。" : "")
   );
 
   // 组装 Markdown 成稿
@@ -1136,7 +1142,7 @@ async function executePptDoc(base44, exec, attachmentCtx) {
     base44,
     `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请把其中的关键信息嵌入到相应幻灯片，不要丢失重要项）：${fileBlock}` : ''}${imageManifest}\n\n要求：1) 根据题材自动选择合适的主题风格(theme)；2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；3) 每页 bullets 控制在 3~6 条，简洁有力；4) 一定要直接产出可演示的成稿内容，而不是大纲提示；5) ${userImages.length > 0 ? `务必把上面列出的 ${userImages.length} 张用户图片嵌入到相应幻灯片的 images 字段` : '本次无图片附件'}。`,
     schema,
-    "你是顶级演示稿设计师。基于用户输入直接产出完整、有逻辑、可直接演示的幻灯片内容。" + (userImages.length > 0 ? "用户提供了图片素材，必须把每张图片至少使用一次，并配合上下文说明。" : "")
+    "你是顶级演示稿设计师。基于用户输入直接产出完整、有逻辑、可直接演示的幻灯片内容。" + (userImages.length > 0 ? "用户提供了图片素材，必须把每张图片至少使用一次（写入 images 字段，url 完整复制），配合 caption 文字说明；幻灯片正文必须严格根据图片真实内容描述，禁止编造图片中不存在的样式细节（如图片里没有的烫金篆章、暗纹、滚边等不要凭空写出）。" : "")
   );
 
   // 渲染自包含 HTML 演示稿

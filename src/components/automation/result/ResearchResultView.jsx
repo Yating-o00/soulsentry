@@ -1,13 +1,29 @@
 import React from "react";
 import { Globe, Download, ExternalLink, FileText } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
-// 调研类结果视图：报告样式（标题 + 章节）+ 下载按钮
-export default function ResearchResultView({ data, preview }) {
+// 调研类结果视图：标题/正文/章节均可编辑 + 下载按钮
+export default function ResearchResultView({ data, preview, onChange, editable = true }) {
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "调研报告.md";
   const title = data?.topic || data?.title || data?.subject || "调研报告";
   const sections = Array.isArray(data?.sections) ? data.sections : null;
   const body = data?.executive_summary || data?.content || data?.summary || preview || "";
+
+  const titleKey = data?.topic !== undefined ? "topic" : (data?.title !== undefined ? "title" : (data?.subject !== undefined ? "subject" : "title"));
+  const bodyKey  = data?.executive_summary !== undefined ? "executive_summary" : (data?.content !== undefined ? "content" : (data?.summary !== undefined ? "summary" : "content"));
+
+  const update = (patch) => {
+    if (!onChange) return;
+    onChange({ ...(data || {}), ...patch });
+  };
+
+  const updateSection = (idx, patch) => {
+    if (!onChange || !sections) return;
+    const next = sections.map((s, i) => i === idx ? { ...s, ...patch } : s);
+    onChange({ ...(data || {}), sections: next });
+  };
 
   return (
     <div className="space-y-2.5">
@@ -17,32 +33,68 @@ export default function ResearchResultView({ data, preview }) {
           <Globe className="w-3.5 h-3.5 text-[#384877]" />
           <span className="text-[10px] font-semibold text-[#384877] uppercase tracking-wider">调研报告</span>
         </div>
-        <div className="text-[14px] font-bold text-slate-800 leading-snug">{title}</div>
+        {editable && onChange ? (
+          <Input
+            value={title}
+            onChange={(e) => update({ [titleKey]: e.target.value })}
+            className="text-[14px] font-bold text-slate-800 leading-snug bg-white/60 border-[#384877]/20 h-8"
+          />
+        ) : (
+          <div className="text-[14px] font-bold text-slate-800 leading-snug">{title}</div>
+        )}
       </div>
 
       {/* 章节卡 */}
       {sections && sections.length > 0 ? (
         <div className="space-y-2">
-          {sections.slice(0, 6).map((s, i) => {
-            const heading = s.heading || s.title || `章节 ${i + 1}`;
-            const content = s.body || s.content || "";
+          {sections.map((s, i) => {
+            const headingKey = s.heading !== undefined ? "heading" : "title";
+            const contentKey = s.body !== undefined ? "body" : "content";
+            const heading = s[headingKey] || `章节 ${i + 1}`;
+            const content = s[contentKey] || "";
             return (
               <div key={i} className="rounded-lg bg-white border border-slate-200 p-3">
-                <div className="text-[12.5px] font-bold text-slate-800 mb-1">{heading}</div>
-                {content && (
-                  <div className="text-[11.5px] text-slate-600 leading-relaxed line-clamp-4 whitespace-pre-wrap">
-                    {content}
-                  </div>
+                {editable && onChange ? (
+                  <>
+                    <Input
+                      value={heading}
+                      onChange={(e) => updateSection(i, { [headingKey]: e.target.value })}
+                      className="text-[12.5px] font-bold text-slate-800 mb-1.5 h-7 border-slate-200"
+                    />
+                    <Textarea
+                      value={content}
+                      onChange={(e) => updateSection(i, { [contentKey]: e.target.value })}
+                      className="text-[11.5px] text-slate-600 leading-relaxed min-h-[80px] border-slate-200 font-sans"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="text-[12.5px] font-bold text-slate-800 mb-1">{heading}</div>
+                    {content && (
+                      <div className="text-[11.5px] text-slate-600 leading-relaxed whitespace-pre-wrap">
+                        {content}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             );
           })}
         </div>
       ) : (
-        body && (
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-64 overflow-y-auto">
-            <pre className="text-[12px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{body}</pre>
-          </div>
+        editable && onChange ? (
+          <Textarea
+            value={body}
+            onChange={(e) => update({ [bodyKey]: e.target.value })}
+            className="text-[12px] text-slate-700 font-sans leading-relaxed min-h-[200px] bg-white border-slate-200"
+            placeholder="报告内容..."
+          />
+        ) : (
+          body && (
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-64 overflow-y-auto">
+              <pre className="text-[12px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{body}</pre>
+            </div>
+          )
         )
       )}
 

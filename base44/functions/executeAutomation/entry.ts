@@ -1024,7 +1024,24 @@ ${attachmentCtx.images.map((im, i) => `${i + 1}. ${im.url}\n   文件名：${im.
   · 礼品盒/书型盒打开图 → 只能放在"书型盒""礼品盒"相关章节，不能放在"布袋""手提袋"章节。
   · 布袋/手提袋图 → 只能放在"布袋""手提袋"章节，不能放在"内盒结构""书型盒"章节。
   · 单一物件特写图 → 不能放在多物件总览章节。
-- 每节的文字描述必须与本节嵌入图片的内容一致：图片是布袋就写布袋的纸质/拎手/印花，禁止描述"EVA 内托/卡位"等图中没有的物件。如果某节没有匹配图片，就纯文字描述、不嵌入任何图片。`;
+- 每节的文字描述必须与本节嵌入图片的内容一致：图片是布袋就写布袋的纸质/拎手/印花，禁止描述"EVA 内托/卡位"等图中没有的物件。如果某节没有匹配图片，就纯文字描述、不嵌入任何图片。
+
+【🚫 排版铁律 - body 字段必须遵守】
+- 禁止使用 markdown 表格（| col | col |）来排版"图+文对照"。
+- 禁止使用 HTML 标签（<br>、<p>、<div> 等），需要换行就直接用真正的换行符（\\n）。
+- 图配文的写法：把 ![alt](url) 单独放一行，紧跟其下再用 markdown 无序列表（- xxx）或带圈号的多行（每个 ① ② ③ 各一行）说明，禁止把图片和文字塞进同一个表格单元格。
+- 标准格式示例：
+\`\`\`
+### 3.2 书型盒外盒正面
+
+![书型盒外盒正面](https://example.com/box.png)
+
+- ① 靛青满版
+- ② 中央 45mm 烫金"禅心映影"篆章
+- ③ 四角《莲影》负形 15% 网度暗纹
+- ④ 底边 5mm 压印"2024.10.1-7"
+\`\`\`
+- ![alt](url) 这一行**绝对不能换行/不能加空格**，alt 后必须紧贴 (url)。`;
 
     const visionRes = await base44.integrations.Core.InvokeLLM({
       prompt: visionPrompt,
@@ -1083,8 +1100,11 @@ ${attachmentCtx.images.map((im, i) => `${i + 1}. ${im.url}\n   文件名：${im.
   const safeTitle = (data.title || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
   const baseName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}`;
 
-  // 智能选择格式：办公文档默认偏向 html / rtf，便于复制和排版
-  const format = await pickOutputFormat(base44, userText, '办公文档');
+  // 办公文档统一输出富排版 HTML，避免 markdown 在浏览器中被原样显示导致图片/换行不渲染
+  // （若用户明确要求纯文本/Word，再由 pickOutputFormat 决定）
+  const wantsPlain = /纯文本|plain|txt/i.test(userText);
+  const wantsRtf = /word|\.docx|\.rtf|RTF|粘贴.*Word/i.test(userText);
+  const format = wantsPlain ? 'txt' : (wantsRtf ? 'rtf' : 'html');
   let content;
   if (format === 'html') {
     content = renderRichHtml({

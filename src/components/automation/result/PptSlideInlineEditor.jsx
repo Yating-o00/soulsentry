@@ -83,6 +83,19 @@ export default function PptSlideInlineEditor({ slide, isCover, fontScale, onChan
             rows={3}
             className={`${inputCls} ${bodySize} mt-2 resize-none`}
           />
+
+          {Array.isArray(slide.images) && slide.images.length > 0 && (
+            <div className={`mt-2 grid gap-1.5 ${slide.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {slide.images.map((im, i) => (
+                <figure key={i} className="bg-white/10 rounded-md overflow-hidden border border-white/20">
+                  <img src={im.url} alt={im.caption || ''} className="w-full h-24 object-cover" loading="lazy" />
+                  {im.caption && (
+                    <figcaption className="text-[10px] text-white/80 px-1.5 py-0.5 truncate">{im.caption}</figcaption>
+                  )}
+                </figure>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

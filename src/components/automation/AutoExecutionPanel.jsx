@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Sparkles, Loader2, ChevronRight, Send } from "lucide-react";
+import { Zap, Sparkles, Loader2, ChevronRight, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
@@ -19,6 +19,7 @@ export default function AutoExecutionPanel() {
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [openExec, setOpenExec] = useState(null);
+  const [recentExpanded, setRecentExpanded] = useState(false);
 
   // 候选清单态
   const [candidates, setCandidates] = useState([]);
@@ -34,7 +35,8 @@ export default function AutoExecutionPanel() {
   });
 
   const autoExecutions = executions.filter(e => e.automation_type && e.automation_type !== "none");
-  const recentDone = autoExecutions.filter(e => e.execution_status === "completed").slice(0, 3);
+  const allDone = autoExecutions.filter(e => e.execution_status === "completed");
+  const recentDone = recentExpanded ? allDone : allDone.slice(0, 3);
 
   // 1) 发送：跳过候选清单，直接 plan → execute，结果对话框中查看产物
   const handleAnalyze = async (text) => {
@@ -262,12 +264,26 @@ export default function AutoExecutionPanel() {
           )}
 
           {/* 最近完成 */}
-          {recentDone.length > 0 && (
+          {allDone.length > 0 && (
             <div className="space-y-1.5 mt-4 pt-3 border-t border-slate-100">
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-1">最近完成</div>
-              {recentDone.map(exec => (
-                <ExecRow key={exec.id} exec={exec} onClick={() => setOpenExec(exec)} />
-              ))}
+              <div className="flex items-center justify-between px-1">
+                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                  最近完成 {allDone.length > 3 && <span className="text-slate-400 normal-case ml-1">· {allDone.length}</span>}
+                </div>
+                {allDone.length > 3 && (
+                  <button
+                    onClick={() => setRecentExpanded(v => !v)}
+                    className="flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-700 font-medium"
+                  >
+                    {recentExpanded ? <>收起 <ChevronUp className="w-3 h-3" /></> : <>展开全部 <ChevronDown className="w-3 h-3" /></>}
+                  </button>
+                )}
+              </div>
+              <div className={recentExpanded ? "space-y-1.5 max-h-72 overflow-y-auto pr-1" : "space-y-1.5"}>
+                {recentDone.map(exec => (
+                  <ExecRow key={exec.id} exec={exec} onClick={() => setOpenExec(exec)} />
+                ))}
+              </div>
             </div>
           )}
         </div>

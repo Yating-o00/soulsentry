@@ -34,16 +34,29 @@ async function callKimi(base44, prompt, response_json_schema, system_prompt, fil
 async function buildAttachmentContext(base44, exec) {
   const files = exec?.ai_parsed_result?.attached_files;
   if (!Array.isArray(files) || files.length === 0) {
-    return { text: '', imageUrls: [], hasFiles: false };
+    return { text: '', imageUrls: [], images: [], hasFiles: false };
   }
   const textChunks = [];
   const imageUrls = [];
+  const images = []; // { url, name, description }
   for (const f of files) {
     if (!f?.file_url) continue;
-    const isImage = /^image\//i.test(f.file_type || '') || /\.(png|jpe?g|gif|webp)$/i.test(f.file_name || '');
+    const isImage = /^image\//i.test(f.file_type || '') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.file_name || '');
     if (isImage) {
+      // 用视觉模型为图片生成详细描述，作为内容生成的素材
+      let description = '';
+      try {
+        const visionRes = await base44.integrations.Core.InvokeLLM({
+          prompt: `请详细描述这张图片的内容：包含的主要对象、文字、数据、场景、风格。如果是图表/截图，请提取关键数据和结论。输出 2-4 句中文描述，信息密度高。`,
+          file_urls: [f.file_url],
+        });
+        description = typeof visionRes === 'string' ? visionRes : (visionRes?.text || visionRes?.data || '');
+      } catch (e) {
+        description = `（视觉识别失败：${e.message}）`;
+      }
       imageUrls.push(f.file_url);
-      textChunks.push(`【图片附件】${f.file_name}`);
+      images.push({ url: f.file_url, name: f.file_name || '图片', description: String(description).trim() });
+      textChunks.push(`【图片附件：${f.file_name}】\nURL：${f.file_url}\n内容描述：${description}`);
       continue;
     }
     // 用 InvokeLLM 把文件读成文本摘要（支持 pdf/csv/xlsx/txt 等）
@@ -58,9 +71,15 @@ async function buildAttachmentContext(base44, exec) {
       textChunks.push(`【附件：${f.file_name}】（读取失败：${e.message}）`);
     }
   }
+  // 给 AI 的图片使用说明：要求在正文中以 Markdown 图片语法嵌入
+  const imageGuide = images.length > 0
+    ? `\n\n=== 图片嵌入指引（重要） ===\n用户上传了 ${images.length} 张图片，请在生成的正文中合适位置用 Markdown 图片语法 ![描述](url) 完整嵌入它们，并配上文字说明（如"如图所示..."、"下图展示了..."）。可用图片清单：\n${images.map((img, i) => `${i + 1}. ![${(img.description || img.name).slice(0, 50)}](${img.url})\n   名称：${img.name}\n   内容描述：${img.description}`).join('\n')}\n务必：每张图片至少使用一次完整的 ![描述](url) Markdown 语法，不要省略 url，不要只写文字描述。\n`
+    : '';
+
   return {
-    text: textChunks.length ? `\n\n=== 用户上传的参考文件 ===\n${textChunks.join('\n\n')}\n=== 文件结束 ===\n` : '',
+    text: textChunks.length ? `\n\n=== 用户上传的参考文件 ===\n${textChunks.join('\n\n')}\n=== 文件结束 ===${imageGuide}\n` : '',
     imageUrls,
+    images,
     hasFiles: true,
   };
 }
@@ -511,6 +530,8 @@ function mdToInlineHtml(md = '') {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code>$1</code>')
+    // 图片必须在链接之前匹配
+    .replace(/!\[([^\]]*)\]\((https?:[^\s)]+)\)/g, '<figure class="md-figure"><img src="$2" alt="$1" loading="lazy"/><figcaption>$1</figcaption></figure>')
     .replace(/\[(.+?)\]\((https?:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
   const isTableSep = (s) => /^\s*\|?\s*(:?-{2,}:?\s*\|\s*){1,}:?-{2,}:?\s*\|?\s*$/.test(s);
@@ -557,6 +578,10 @@ function mdToInlineHtml(md = '') {
       closeP(); closeUl();
       if (!inOl) { out.push('<ol>'); inOl = true; }
       out.push(`<li>${inline(m[1])}</li>`);
+    } else if (/^!\[[^\]]*\]\(https?:[^\s)]+\)\s*$/.test(line)) {
+      // 单行图片：作为块级 figure，不要包在 <p> 里
+      closeP(); closeUl(); closeOl();
+      out.push(inline(line));
     } else {
       closeUl(); closeOl();
       if (!inP) { out.push('<p>'); inP = true; }
@@ -619,6 +644,9 @@ function renderRichHtml({ title, subtitle, sections = [], keyFindings = [], reco
   .card .body .md-table td{padding:9px 14px;border-bottom:1px solid #e2e8f0;color:#334155;vertical-align:top}
   .card .body .md-table tr:last-child td{border-bottom:0}
   .card .body .md-table tr:nth-child(even) td{background:#f8fafc}
+  .card .body .md-figure{margin:1.2em 0;text-align:center}
+  .card .body .md-figure img{max-width:100%;height:auto;border-radius:10px;box-shadow:0 4px 20px -8px rgba(15,23,42,.15);border:1px solid #e2e8f0}
+  .card .body .md-figure figcaption{margin-top:8px;font-size:13px;color:#64748b;font-style:italic}
   .card.highlight{background:linear-gradient(135deg,#fff7ed,#ffffff);border-color:#fed7aa}
   .card.highlight .num-list{counter-reset:n;list-style:none;padding:0}
   .card.highlight .num-list li{counter-increment:n;padding:10px 0 10px 44px;position:relative;border-bottom:1px dashed #fde68a}

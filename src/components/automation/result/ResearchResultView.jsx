@@ -112,7 +112,22 @@ function normalizeInlineTables(raw) {
   return out.join("\n");
 }
 
+// 检测内容是否已经是原始 HTML（AI 经常直接吐 <div>/<h1>/<p>/<table> 等标签）
+// 命中则直接用 HTML 渲染，避免被 Markdown 解析器当文本输出
+function looksLikeHtml(s) {
+  if (!s) return false;
+  return /<(div|section|article|header|footer|h[1-6]|p|table|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/i.test(s);
+}
+
 function MarkdownLite({ source }) {
+  if (looksLikeHtml(source)) {
+    return (
+      <div
+        className="md-html prose-sm max-w-none text-[11.5px] text-slate-600 leading-relaxed [&_h1]:text-[14px] [&_h1]:font-bold [&_h1]:text-slate-800 [&_h1]:my-2 [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:text-slate-800 [&_h2]:my-1.5 [&_h3]:text-[12.5px] [&_h3]:font-semibold [&_h3]:text-slate-800 [&_h3]:my-1 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_strong]:font-semibold [&_strong]:text-slate-800 [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-2 [&_blockquote]:text-slate-500 [&_blockquote]:my-1 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-md [&_img]:border [&_img]:border-slate-200 [&_img]:my-1.5 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:text-[11px] [&_th]:bg-slate-50 [&_th]:px-2 [&_th]:py-1 [&_th]:border [&_th]:border-slate-200 [&_th]:text-left [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-slate-200 [&_td]:align-top"
+        dangerouslySetInnerHTML={{ __html: source }}
+      />
+    );
+  }
   const text = normalizeInlineTables(source);
   const lines = text.split(/\r?\n/);
   const blocks = [];

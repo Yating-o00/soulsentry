@@ -1,10 +1,11 @@
 import React from "react";
 import { TEMPLATES, extractImagesAndText } from "./researchTemplates";
 
-// 检测内容是否已经是原始 HTML
+// 检测内容是否已经是原始 HTML（命中即用 HTML 渲染，避免标签被当字面文本）
 function looksLikeHtml(s) {
   if (!s) return false;
-  return /<(div|section|article|header|footer|h[1-6]|p|table|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/i.test(s);
+  const matches = String(s).match(/<\/?(div|section|article|header|footer|h[1-6]|p|table|tr|td|th|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/gi);
+  return !!(matches && matches.length >= 2);
 }
 
 // HTML 直渲染容器:让原始 HTML 标签正常显示,并约束图片/表格不溢出

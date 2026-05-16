@@ -115,10 +115,11 @@ function normalizeInlineTables(raw) {
 }
 
 // 检测内容是否已经是原始 HTML（AI 经常直接吐 <div>/<h1>/<p>/<table> 等标签）
-// 命中则直接用 HTML 渲染，避免被 Markdown 解析器当文本输出
+// 命中即用 HTML 渲染，避免被 Markdown 解析器当字面文本输出
 function looksLikeHtml(s) {
   if (!s) return false;
-  return /<(div|section|article|header|footer|h[1-6]|p|table|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/i.test(s);
+  const matches = String(s).match(/<\/?(div|section|article|header|footer|h[1-6]|p|table|tr|td|th|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/gi);
+  return !!(matches && matches.length >= 2);
 }
 
 function MarkdownLite({ source }) {

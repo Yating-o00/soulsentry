@@ -542,11 +542,17 @@ function normalizeInlineTables(raw) {
 // 极简 Markdown → HTML（标题/列表/粗体/斜体/段落/分隔线/GFM 表格）
 function mdToInlineHtml(md = '') {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  // 兜底：如果整段 body 是 AI 直接吐出的原始 HTML（以标签开头），直接原样返回，不走 markdown 解析
-  // 避免嵌套标签被错误转义成字面 < > 文本（即用户看到的『乱码』）
-  const trimmedStart = String(md || '').trim();
+  const raw = String(md || '');
+  const trimmedStart = raw.trim();
+  // 兜底 1：整段 body 以 HTML 块级标签开头 → 当 HTML 原样返回
   if (/^<(div|section|article|header|footer|h[1-6]|p|table|ul|ol|blockquote|figure|img|span)(\s|>|\/)/i.test(trimmedStart)) {
     return trimmedStart;
+  }
+  // 兜底 2：body 中包含较多 HTML 块级标签（≥3 对）→ AI 显然是用 HTML 写的，直接当 HTML，不走 markdown
+  // 避免 markdown 解析器把 <div style="...">xxx</div> 转义成 &lt;div style="..."&gt; 字面文本（乱码根源）
+  const tagMatches = raw.match(/<\/?(div|section|article|header|footer|h[1-6]|p|table|tr|td|th|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/gi);
+  if (tagMatches && tagMatches.length >= 6) {
+    return raw;
   }
   // 入口预处理：合并被任意空白/换行/全角空格拆散的 markdown 图片
   // ![alt]<空白>(url) → ![alt](url)，确保后续行解析能识别图片

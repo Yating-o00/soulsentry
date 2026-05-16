@@ -2,27 +2,6 @@ import React from "react";
 import { Globe, Download, ExternalLink, FileText } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import ImageTextRow from "./ImageTextRow";
-
-// 把 AI 误输出的 HTML 表格/img 标签清洗为纯 markdown
-function stripHtmlToMd(raw) {
-  let s = String(raw || "");
-  // <img src="URL" ...> → ![](URL)
-  s = s.replace(/<img\b[^>]*?\bsrc=["']([^"']+)["'][^>]*?>/gi, (_m, url) => `\n![](${url})\n`);
-  // <strong>X</strong> / <b>X</b> → **X**
-  s = s.replace(/<\/?(?:strong|b)>/gi, "**");
-  // <br> → 换行
-  s = s.replace(/<br\s*\/?>/gi, "\n");
-  // <td>/<th>/<tr> 闭合 → 换行；其它表格容器移除
-  s = s.replace(/<\/(?:td|th|tr)>/gi, "\n").replace(/<(?:td|th|tr)\b[^>]*>/gi, "\n");
-  s = s.replace(/<\/?(?:table|tbody|thead|tfoot|colgroup|col)\b[^>]*>/gi, "\n");
-  // 删除常见块级标签残留
-  s = s.replace(/<\/?(?:p|div|span|h[1-6])\b[^>]*>/gi, "\n");
-  // 合并过多换行
-  s = s.replace(/\n{3,}/g, "\n\n");
-  return s;
-}
-
 // 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
   // 先把字面 <br> / &lt;br&gt; 转成换行，再在 ①②③ 等带圈数字前补换行（让 AI 输出的脏排版自动恢复）
@@ -134,8 +113,7 @@ function normalizeInlineTables(raw) {
 }
 
 function MarkdownLite({ source }) {
-  // 先清洗 HTML 表格/img 标签，再走表格规整、最后按块解析
-  const text = normalizeInlineTables(stripHtmlToMd(source));
+  const text = normalizeInlineTables(source);
   const lines = text.split(/\r?\n/);
   const blocks = [];
   let i = 0;
@@ -221,56 +199,6 @@ function MarkdownLite({ source }) {
           break;
         } else break;
       }
-
-      // 【图文分栏】：单张图 + 紧跟列表/带圈号说明 → 用 ImageTextRow 渲染左右两栏
-      const isCaptionLine = (s) => /^\s*([-*]|\d+\.)\s+/.test(s) || /^\s*[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]/.test(s);
-      if (imgs.length === 1) {
-        // 跳过空行
-        let k = j;
-        while (k < lines.length && !lines[k].trim()) k++;
-        if (k < lines.length && isCaptionLine(lines[k])) {
-          // 收集连续的"说明行"（列表项或带圈号），直到遇到空行、标题、图片、表格
-          const captionLines = [];
-          while (k < lines.length) {
-            const ln = lines[k];
-            if (!ln.trim()) break;
-            if (/^#{1,6}\s+/.test(ln)) break;
-            if (isStandaloneImageLine(ln)) break;
-            if (ln.includes("|") && k + 1 < lines.length && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(lines[k + 1])) break;
-            captionLines.push(ln);
-            k++;
-          }
-          // 解析说明：列表项 vs 普通行
-          const ulItems = [];
-          const otherLines = [];
-          captionLines.forEach((ln) => {
-            const m = ln.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/);
-            if (m) ulItems.push(m[1]);
-            else otherLines.push(ln);
-          });
-          blocks.push(
-            <ImageTextRow key={`row-${blocks.length}`} image={imgs[0]} caption={imgs[0].alt}>
-              {ulItems.length > 0 && (
-                <ul className="list-disc pl-4 space-y-1 marker:text-slate-400">
-                  {ulItems.map((it, idx) => (
-                    <li key={idx} className="leading-relaxed">{renderInline(it, `row-${blocks.length}-li-${idx}`)}</li>
-                  ))}
-                </ul>
-              )}
-              {otherLines.length > 0 && (
-                <div className={ulItems.length > 0 ? "mt-2 space-y-1" : "space-y-1"}>
-                  {otherLines.map((ln, idx) => (
-                    <div key={idx} className="leading-relaxed">{renderInline(ln, `row-${blocks.length}-p-${idx}`)}</div>
-                  ))}
-                </div>
-              )}
-            </ImageTextRow>
-          );
-          i = k;
-          continue;
-        }
-      }
-
       if (imgs.length === 1) {
         blocks.push(
           <figure key={`img-${blocks.length}`} className="my-2">

@@ -257,16 +257,52 @@ async function executeWebResearch(base44, exec) {
 
   const markdown = lines.join('\n');
   const safeTopic = (research.topic || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
-  const fileName = `${new Date().toISOString().slice(0, 10)}_${safeTopic}_调研报告.md`;
-  const fileUrl = await uploadMarkdownReport(base44, fileName, markdown);
+  const baseName = `${new Date().toISOString().slice(0, 10)}_${safeTopic}_调研报告`;
+
+  // 智能选择文件格式：调研报告默认偏向 html（图标 + 分层 + 可打印 PDF）
+  const format = await pickOutputFormat(base44, userText, '调研报告');
+  let content;
+  if (format === 'html') {
+    content = renderRichHtml({
+      title: `调研报告：${research.topic || userText}`,
+      subtitle: research.executive_summary,
+      sections: research.sections || [],
+      keyFindings: research.key_findings || [],
+      recommendations: research.recommendations || [],
+      references,
+    });
+  } else if (format === 'txt') {
+    content = renderPlainText({
+      title: `调研报告：${research.topic || userText}`,
+      subtitle: research.executive_summary,
+      sections: research.sections || [],
+      keyFindings: research.key_findings || [],
+      recommendations: research.recommendations || [],
+      references,
+    });
+  } else if (format === 'rtf') {
+    content = renderRtf({
+      title: `调研报告：${research.topic || userText}`,
+      subtitle: research.executive_summary,
+      sections: research.sections || [],
+      keyFindings: research.key_findings || [],
+      recommendations: research.recommendations || [],
+    });
+  } else {
+    content = markdown;
+  }
+  const { file_url: fileUrl, file_name: fileName } = await uploadDocFile(base44, baseName, content, format);
+
+  const formatLabel = { md: 'Markdown', txt: '纯文本', html: '富排版 HTML（可打印为 PDF）', rtf: 'RTF（可粘贴到 Word）' }[format];
 
   return {
     type: "web_research",
-    preview: `📄 已生成《${fileName}》\n\n📥 下载链接：${fileUrl}\n\n${research.executive_summary || ''}\n\n${markdown.slice(0, 600)}${markdown.length > 600 ? '\n…（更多内容见文件）' : ''}`,
+    preview: `📄 已生成《${fileName}》\n📐 文件格式：${formatLabel}\n📥 下载链接：${fileUrl}\n\n${research.executive_summary || ''}\n\n${markdown.slice(0, 600)}${markdown.length > 600 ? '\n…（更多内容见文件）' : ''}`,
     data: {
       topic: research.topic,
       file_name: fileName,
       file_url: fileUrl,
+      output_format: format,
       executive_summary: research.executive_summary,
       key_findings: research.key_findings,
       recommendations: research.recommendations,
@@ -274,7 +310,7 @@ async function executeWebResearch(base44, exec) {
       references,
       markdown
     },
-    diff: [{ action: "create", target: fileName, detail: `深度调研报告（${(research.sections || []).length}节，${references.length}条来源）已上传` }]
+    diff: [{ action: "create", target: fileName, detail: `${formatLabel} 调研报告（${(research.sections || []).length}节，${references.length}条来源）已上传` }]
   };
 }
 
@@ -366,6 +402,255 @@ async function uploadMarkdownReport(base44, fileName, markdown) {
   const file = new File([blob], fileName, { type: 'text/markdown; charset=utf-8' });
   const resp = await base44.integrations.Core.UploadFile({ file });
   return resp?.file_url || resp?.data?.file_url;
+}
+
+// ========== 多格式文档输出工具 ==========
+// 支持：md / txt / html / rtf
+// 说明：docx/pdf 由富排版 HTML 替代——浏览器打印即可另存 PDF，Word 可直接打开 .html 转 .docx，
+// 内容上比纯 md 更适合带图标、分层、彩色高亮的复杂排版。
+
+// 极简 Markdown → HTML（仅覆盖标题/列表/粗体/斜体/段落/分隔线）
+function mdToInlineHtml(md = '') {
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const lines = String(md).split('\n');
+  const out = [];
+  let inUl = false, inOl = false, inP = false;
+  const closeP = () => { if (inP) { out.push('</p>'); inP = false; } };
+  const closeUl = () => { if (inUl) { out.push('</ul>'); inUl = false; } };
+  const closeOl = () => { if (inOl) { out.push('</ol>'); inOl = false; } };
+  const inline = (s) => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\[(.+?)\]\((https?:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { closeP(); closeUl(); closeOl(); continue; }
+    let m;
+    if ((m = line.match(/^#{1,6}\s+(.+)$/))) {
+      closeP(); closeUl(); closeOl();
+      const level = line.match(/^#+/)[0].length;
+      out.push(`<h${level}>${inline(m[1])}</h${level}>`);
+    } else if (/^---+$/.test(line)) {
+      closeP(); closeUl(); closeOl();
+      out.push('<hr/>');
+    } else if (/^>\s+/.test(line)) {
+      closeP(); closeUl(); closeOl();
+      out.push(`<blockquote>${inline(line.replace(/^>\s+/, ''))}</blockquote>`);
+    } else if ((m = line.match(/^\s*[-*]\s+(.+)$/))) {
+      closeP(); closeOl();
+      if (!inUl) { out.push('<ul>'); inUl = true; }
+      out.push(`<li>${inline(m[1])}</li>`);
+    } else if ((m = line.match(/^\s*\d+\.\s+(.+)$/))) {
+      closeP(); closeUl();
+      if (!inOl) { out.push('<ol>'); inOl = true; }
+      out.push(`<li>${inline(m[1])}</li>`);
+    } else {
+      closeUl(); closeOl();
+      if (!inP) { out.push('<p>'); inP = true; }
+      out.push(inline(line));
+    }
+  }
+  closeP(); closeUl(); closeOl();
+  return out.join('\n');
+}
+
+// 富排版 HTML：图标、层次、彩色高亮、可打印为 PDF
+function renderRichHtml({ title, subtitle, sections = [], keyFindings = [], recommendations = [], references = [], accent = '#384877' }) {
+  const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const findingBlock = keyFindings.length ? `
+    <section class="card highlight">
+      <h2><span class="icon">⭐</span>关键发现</h2>
+      <ol class="num-list">${keyFindings.map(k => `<li>${esc(k)}</li>`).join('')}</ol>
+    </section>` : '';
+  const recBlock = recommendations.length ? `
+    <section class="card accent">
+      <h2><span class="icon">💡</span>行动建议</h2>
+      <ul class="check-list">${recommendations.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+    </section>` : '';
+  const refBlock = references.length ? `
+    <section class="card muted">
+      <h2><span class="icon">🔗</span>参考来源</h2>
+      <ol>${references.slice(0, 15).map(r => `<li><a href="${esc(r.url)}" target="_blank">${esc(r.title || r.url)}</a></li>`).join('')}</ol>
+    </section>` : '';
+  const sectionHtml = sections.map((s, i) => `
+    <section class="card">
+      <h2><span class="idx">${String(i + 1).padStart(2, '0')}</span>${esc(s.heading)}</h2>
+      <div class="body">${mdToInlineHtml(s.body || '')}</div>
+    </section>`).join('\n');
+
+  return `<!doctype html><html lang="zh"><head><meta charset="utf-8"/>
+<title>${esc(title)}</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;color:#0f172a;background:#f8fafc;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .page{max-width:880px;margin:0 auto;padding:48px 56px}
+  .hero{position:relative;padding:56px 48px;border-radius:24px;background:linear-gradient(135deg,${accent} 0%,${accent}dd 60%,#1e293b 100%);color:#fff;overflow:hidden;margin-bottom:32px;box-shadow:0 20px 60px -20px ${accent}55}
+  .hero::before{content:'';position:absolute;right:-80px;top:-80px;width:280px;height:280px;border-radius:50%;background:rgba(255,255,255,.08)}
+  .hero::after{content:'';position:absolute;left:-40px;bottom:-60px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.05)}
+  .hero h1{position:relative;font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0 0 12px;line-height:1.2}
+  .hero .sub{position:relative;font-size:15px;opacity:.85;max-width:60ch}
+  .hero .meta{position:relative;margin-top:24px;display:flex;gap:12px;flex-wrap:wrap}
+  .hero .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border-radius:999px;font-size:12px;letter-spacing:.05em}
+  .card{background:#fff;border-radius:16px;padding:28px 32px;margin-bottom:20px;box-shadow:0 2px 12px -2px rgba(15,23,42,.06);border:1px solid #e2e8f0}
+  .card h2{margin:0 0 16px;font-size:20px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:10px}
+  .card h2 .icon{font-size:22px}
+  .card h2 .idx{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;background:${accent}15;color:${accent};font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+  .card .body h3{font-size:16px;color:#334155;margin:20px 0 8px}
+  .card .body p{margin:.5em 0;color:#334155}
+  .card .body ul,.card .body ol{padding-left:1.4em;color:#334155}
+  .card .body li{margin:.3em 0}
+  .card .body code{background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:.9em;color:${accent}}
+  .card .body blockquote{margin:1em 0;padding:.6em 1em;border-left:3px solid ${accent};background:${accent}08;color:#475569;border-radius:0 8px 8px 0}
+  .card.highlight{background:linear-gradient(135deg,#fff7ed,#ffffff);border-color:#fed7aa}
+  .card.highlight .num-list{counter-reset:n;list-style:none;padding:0}
+  .card.highlight .num-list li{counter-increment:n;padding:10px 0 10px 44px;position:relative;border-bottom:1px dashed #fde68a}
+  .card.highlight .num-list li:last-child{border-bottom:0}
+  .card.highlight .num-list li::before{content:counter(n);position:absolute;left:0;top:10px;width:32px;height:32px;border-radius:8px;background:#f59e0b;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .card.accent{background:linear-gradient(135deg,${accent}08,#fff);border-color:${accent}40}
+  .card.accent .check-list{list-style:none;padding:0}
+  .card.accent .check-list li{padding:8px 0 8px 30px;position:relative}
+  .card.accent .check-list li::before{content:'✓';position:absolute;left:0;top:8px;width:22px;height:22px;border-radius:50%;background:${accent};color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+  .card.muted{background:#f8fafc}
+  .card.muted ol{margin:0;padding-left:1.4em;font-size:13px}
+  .card.muted a{color:${accent};text-decoration:none;word-break:break-all}
+  .card.muted a:hover{text-decoration:underline}
+  .footer{text-align:center;color:#94a3b8;font-size:12px;padding:24px 0 8px;letter-spacing:.05em}
+  @media print{
+    body{background:#fff}
+    .page{max-width:none;padding:0}
+    .hero{box-shadow:none;border-radius:0;page-break-after:avoid}
+    .card{box-shadow:none;border:1px solid #e2e8f0;page-break-inside:avoid}
+  }
+</style></head>
+<body>
+<div class="page">
+  <header class="hero">
+    <h1>${esc(title)}</h1>
+    ${subtitle ? `<div class="sub">${esc(subtitle)}</div>` : ''}
+    <div class="meta">
+      <span class="chip">📅 ${new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}</span>
+      <span class="chip">📑 ${sections.length} 个章节</span>
+      ${references.length ? `<span class="chip">🔗 ${references.length} 条来源</span>` : ''}
+      <span class="chip">心栈 SoulSentry</span>
+    </div>
+  </header>
+  ${findingBlock}
+  ${sectionHtml}
+  ${recBlock}
+  ${refBlock}
+  <div class="footer">由心栈 SoulSentry 自动生成 · 浏览器打印可另存为 PDF</div>
+</div>
+</body></html>`;
+}
+
+// 纯文本：层次符号 + 缩进，方便复制粘贴到任意位置
+function renderPlainText({ title, subtitle, sections = [], keyFindings = [], recommendations = [], references = [] }) {
+  const lines = [];
+  const sep = '═'.repeat(48);
+  lines.push(sep, `  ${title}`, sep);
+  if (subtitle) lines.push(subtitle, '');
+  lines.push(`📅 ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, '');
+  if (keyFindings.length) {
+    lines.push('━━ ⭐ 关键发现 ━━');
+    keyFindings.forEach((k, i) => lines.push(`  ${i + 1}. ${k}`));
+    lines.push('');
+  }
+  sections.forEach((s, i) => {
+    lines.push(`━━ ${String(i + 1).padStart(2, '0')} · ${s.heading} ━━`);
+    // 去掉简单的 markdown 标记，保留可读性
+    const body = String(s.body || '').replace(/[*_`#>]+/g, '').replace(/^\s*[-*]\s+/gm, '  • ');
+    lines.push(body, '');
+  });
+  if (recommendations.length) {
+    lines.push('━━ 💡 行动建议 ━━');
+    recommendations.forEach(r => lines.push(`  ✓ ${r}`));
+    lines.push('');
+  }
+  if (references.length) {
+    lines.push('━━ 🔗 参考来源 ━━');
+    references.slice(0, 15).forEach((r, i) => lines.push(`  [${i + 1}] ${r.title || r.url}\n      ${r.url}`));
+    lines.push('');
+  }
+  lines.push(sep, '由心栈 SoulSentry 自动生成');
+  return lines.join('\n');
+}
+
+// RTF：保留粗体/标题/列表的最小富文本，可直接粘贴到 Word/邮件
+function renderRtf({ title, subtitle, sections = [], keyFindings = [], recommendations = [] }) {
+  const esc = (s) => String(s || '')
+    .replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}')
+    // 中文 → \uN? 形式
+    .replace(/[\u0080-\uFFFF]/g, (c) => `\\u${c.charCodeAt(0)}?`);
+  const parts = [];
+  parts.push('{\\rtf1\\ansi\\ansicpg936\\deff0{\\fonttbl{\\f0 Microsoft YaHei;}}\\fs22');
+  parts.push(`\\b\\fs36 ${esc(title)}\\b0\\fs22\\par`);
+  if (subtitle) parts.push(`\\i ${esc(subtitle)}\\i0\\par`);
+  parts.push(`\\par`);
+  if (keyFindings.length) {
+    parts.push(`\\b\\fs28 ⭐ 关键发现\\b0\\fs22\\par`);
+    keyFindings.forEach((k, i) => parts.push(`${i + 1}. ${esc(k)}\\par`));
+    parts.push(`\\par`);
+  }
+  sections.forEach((s, i) => {
+    parts.push(`\\b\\fs28 ${i + 1}. ${esc(s.heading)}\\b0\\fs22\\par`);
+    const body = String(s.body || '').replace(/[*_`#>]+/g, '');
+    body.split('\n').forEach(line => parts.push(`${esc(line)}\\par`));
+    parts.push(`\\par`);
+  });
+  if (recommendations.length) {
+    parts.push(`\\b\\fs28 💡 行动建议\\b0\\fs22\\par`);
+    recommendations.forEach(r => parts.push(`\\u8226? ${esc(r)}\\par`));
+  }
+  parts.push('}');
+  return parts.join('');
+}
+
+// 通用上传：根据 format 决定 mime / 扩展名
+async function uploadDocFile(base44, baseName, content, format) {
+  const map = {
+    md:   { ext: 'md',   mime: 'text/markdown; charset=utf-8',  bom: true  },
+    txt:  { ext: 'txt',  mime: 'text/plain; charset=utf-8',     bom: true  },
+    html: { ext: 'html', mime: 'text/html; charset=utf-8',      bom: false },
+    rtf:  { ext: 'rtf',  mime: 'application/rtf',               bom: false },
+  };
+  const cfg = map[format] || map.md;
+  const payload = cfg.bom ? '\uFEFF' + content : content;
+  const bytes = new TextEncoder().encode(payload);
+  const blob = new Blob([bytes], { type: cfg.mime });
+  const fileName = `${baseName}.${cfg.ext}`;
+  const file = new File([blob], fileName, { type: cfg.mime });
+  const resp = await base44.integrations.Core.UploadFile({ file });
+  return { file_url: resp?.file_url || resp?.data?.file_url, file_name: fileName, format };
+}
+
+// 让 AI 决定最适合的输出格式
+async function pickOutputFormat(base44, userText, contentKind) {
+  const schema = {
+    type: "object",
+    properties: {
+      format: { type: "string", enum: ["md", "txt", "html", "rtf"] },
+      reason: { type: "string" }
+    },
+    required: ["format"]
+  };
+  const guide = `候选格式与适用场景：
+- md   : 内容偏文字/代码/列表，技术或开发者向，便于二次编辑
+- txt  : 用户明确要求"纯文本/方便复制粘贴/无格式"，或内容极短
+- html : 内容需要分层标题、彩色高亮、图标、强排版（调研报告/方案/总结/带图标的文档），用户可在浏览器查看并打印为 PDF
+- rtf  : 用户需要粘贴到 Word/邮件并保留粗体/标题/列表，跨办公软件兼容
+默认对于「调研报告 / 方案 / 复盘 / 总结」类内容优先选 html；对于「便签 / 速记 / 简单清单」选 md 或 txt；用户明确要求 Word/排版/打印则 html 或 rtf。`;
+  try {
+    const res = await base44.functions.invoke('invokeKimi', {
+      prompt: `用户指令：${userText}\n内容类型：${contentKind}\n\n${guide}\n\n请挑选最合适的输出格式。`,
+      response_json_schema: schema,
+      temperature: 0.2,
+    });
+    return res.data?.format || 'html';
+  } catch {
+    return 'html';
+  }
 }
 
 async function executeSummaryNote(base44, exec) {
@@ -507,14 +792,40 @@ async function executeOfficeDoc(base44, exec) {
   }
   const markdown = lines.join('\n');
   const safeTitle = (data.title || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
-  const fileName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}.md`;
-  const fileUrl = await uploadMarkdownReport(base44, fileName, markdown);
+  const baseName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}`;
+
+  // 智能选择格式：办公文档默认偏向 html / rtf，便于复制和排版
+  const format = await pickOutputFormat(base44, userText, '办公文档');
+  let content;
+  if (format === 'html') {
+    content = renderRichHtml({
+      title: data.title,
+      subtitle: data.note || '',
+      sections: data.sections || [],
+    });
+  } else if (format === 'txt') {
+    content = renderPlainText({
+      title: data.title,
+      subtitle: data.note || '',
+      sections: data.sections || [],
+    });
+  } else if (format === 'rtf') {
+    content = renderRtf({
+      title: data.title,
+      subtitle: data.note || '',
+      sections: data.sections || [],
+    });
+  } else {
+    content = markdown;
+  }
+  const { file_url: fileUrl, file_name: fileName } = await uploadDocFile(base44, baseName, content, format);
+  const formatLabel = { md: 'Markdown', txt: '纯文本', html: '富排版 HTML（可打印为 PDF）', rtf: 'RTF（可粘贴到 Word）' }[format];
 
   return {
     type: "office_doc",
-    preview: `📄 已生成《${fileName}》\n\n📥 下载链接：${fileUrl}\n\n${markdown.slice(0, 800)}${markdown.length > 800 ? '\n…（更多内容见文件）' : ''}`,
-    data: { ...data, file_name: fileName, file_url: fileUrl, markdown },
-    diff: [{ action: "create", target: fileName, detail: `${data.doc_type.toUpperCase()} 文档（${(data.sections || []).length} 节）已上传` }]
+    preview: `📄 已生成《${fileName}》\n📐 文件格式：${formatLabel}\n📥 下载链接：${fileUrl}\n\n${markdown.slice(0, 800)}${markdown.length > 800 ? '\n…（更多内容见文件）' : ''}`,
+    data: { ...data, file_name: fileName, file_url: fileUrl, output_format: format, markdown },
+    diff: [{ action: "create", target: fileName, detail: `${formatLabel} 文档（${(data.sections || []).length} 节）已上传` }]
   };
 }
 

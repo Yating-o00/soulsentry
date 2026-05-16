@@ -548,10 +548,11 @@ function mdToInlineHtml(md = '') {
   if (/^<(div|section|article|header|footer|h[1-6]|p|table|ul|ol|blockquote|figure|img|span)(\s|>|\/)/i.test(trimmedStart)) {
     return trimmedStart;
   }
-  // 兜底 2：body 中包含较多 HTML 块级标签（≥3 对）→ AI 显然是用 HTML 写的，直接当 HTML，不走 markdown
+  // 兜底 2：body 中只要出现 ≥2 个 HTML 块级标签 → AI 是用 HTML 写的，直接当 HTML，不走 markdown
   // 避免 markdown 解析器把 <div style="...">xxx</div> 转义成 &lt;div style="..."&gt; 字面文本（乱码根源）
+  // 注意阈值要低：第一节常见只有 1 对 <div>...</div> 包一段说明，旧阈值 6 会让它落进 markdown 分支被 esc
   const tagMatches = raw.match(/<\/?(div|section|article|header|footer|h[1-6]|p|table|tr|td|th|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/gi);
-  if (tagMatches && tagMatches.length >= 6) {
+  if (tagMatches && tagMatches.length >= 2) {
     return raw;
   }
   // 入口预处理：合并被任意空白/换行/全角空格拆散的 markdown 图片

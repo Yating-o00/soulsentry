@@ -20,6 +20,10 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
   const [sending, setSending] = useState(false);
   // 邮件类：本地维护可编辑的草稿（收件人/抄送/主题/正文 + 附件），编辑后用于发送
   const [emailDraft, setEmailDraft] = useState(null);
+  // 通用类（research/office_doc/note 等）：预览页内联编辑的本地草稿 + 是否有未保存改动
+  const [editedData, setEditedData] = useState(null);
+  const [savingEdits, setSavingEdits] = useState(false);
+  const hasUnsavedEdits = !!editedData;
   // 弹层尺寸档位：md(默认) / lg / xl
   const [size, setSize] = useState("lg");
   // 同任务下其它已完成自动化产生的可挂载附件候选
@@ -48,7 +52,27 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
     } else {
       setEmailDraft(null);
     }
+    // 重置非邮件类型的内联编辑草稿
+    setEditedData(null);
   }, [execution?.id, execution?.automation_result?.data]);
+
+  // 保存非邮件类型的内联编辑到后端
+  const handleSaveEdits = async () => {
+    if (!editedData || !execution?.id) return;
+    setSavingEdits(true);
+    try {
+      const newResult = { ...(execution.automation_result || {}), data: editedData };
+      await base44.entities.TaskExecution.update(execution.id, { automation_result: newResult });
+      setLocalExecution(prev => prev ? { ...prev, automation_result: newResult } : prev);
+      setEditedData(null);
+      toast.success("已保存修改");
+      refresh();
+    } catch (e) {
+      toast.error("保存失败：" + e.message);
+    } finally {
+      setSavingEdits(false);
+    }
+  };
 
   // 邮件类：拉取候选附件
   // 优先：同 task_id 下其它执行的产物；回退：当前用户最近 50 条已完成执行中的产物
@@ -415,11 +439,35 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                 <span className="text-xs font-semibold text-emerald-700">执行结果</span>
               </div>
               <AutomationResultPreview
-                result={execution.automation_type === "email_draft" && emailDraft ? { ...result, data: emailDraft } : result}
+                result={
+                  execution.automation_type === "email_draft" && emailDraft
+                    ? { ...result, data: emailDraft }
+                    : (editedData ? { ...result, data: editedData } : result)
+                }
                 automationType={execution.automation_type}
-                onDataChange={execution.automation_type === "email_draft" ? setEmailDraft : undefined}
+                onDataChange={
+                  execution.automation_type === "email_draft"
+                    ? setEmailDraft
+                    : setEditedData
+                }
                 availableAttachments={execution.automation_type === "email_draft" ? availableAttachments : undefined}
               />
+
+              {/* 非邮件类型：内联编辑后的保存条 */}
+              {execution.automation_type !== "email_draft" && hasUnsavedEdits && (
+                <div className="mt-3 flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                  <div className="flex-1 text-[12px] text-amber-800">
+                    你已修改内容，记得保存
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-7 text-amber-700 hover:bg-amber-100" onClick={() => setEditedData(null)}>
+                    放弃
+                  </Button>
+                  <Button size="sm" className="h-7 bg-emerald-600 hover:bg-emerald-700" onClick={handleSaveEdits} disabled={savingEdits}>
+                    {savingEdits ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : null}
+                    保存修改
+                  </Button>
+                </div>
+              )}
 
               {/* 邮件草稿：提供发送按钮 */}
               {execution.automation_type === "email_draft" && emailDraft && !emailDraft.sent_at && (

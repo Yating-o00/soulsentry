@@ -2,16 +2,48 @@ import React from "react";
 import { Globe, Download, ExternalLink, FileText } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-// 轻量 Markdown 渲染器：处理标题 / 加粗 / 列表 / GFM 表格 / 段落，无需额外依赖
+// 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
-  // 处理 **加粗**
-  const parts = String(text).split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) => {
-    if (/^\*\*[^*]+\*\*$/.test(p)) {
-      return <strong key={`${keyPrefix}-b-${i}`} className="font-semibold text-slate-800">{p.slice(2, -2)}</strong>;
+  // 先按 ![alt](url) 图片切分；图片切出后不再走加粗处理
+  const imgRe = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+  const segments = [];
+  let last = 0;
+  let m;
+  while ((m = imgRe.exec(String(text))) !== null) {
+    if (m.index > last) segments.push({ type: "text", value: String(text).slice(last, m.index) });
+    segments.push({ type: "img", alt: m[1] || "", url: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < String(text).length) segments.push({ type: "text", value: String(text).slice(last) });
+  if (segments.length === 0) segments.push({ type: "text", value: String(text) });
+
+  return segments.map((seg, si) => {
+    if (seg.type === "img") {
+      return (
+        <img
+          key={`${keyPrefix}-img-${si}`}
+          src={seg.url}
+          alt={seg.alt}
+          loading="lazy"
+          className="inline-block max-w-full h-auto rounded-md border border-slate-200 my-1.5 align-middle"
+          style={{ maxHeight: 260 }}
+        />
+      );
     }
-    return <React.Fragment key={`${keyPrefix}-t-${i}`}>{p}</React.Fragment>;
+    // 处理 **加粗**
+    const parts = seg.value.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((p, i) => {
+      if (/^\*\*[^*]+\*\*$/.test(p)) {
+        return <strong key={`${keyPrefix}-b-${si}-${i}`} className="font-semibold text-slate-800">{p.slice(2, -2)}</strong>;
+      }
+      return <React.Fragment key={`${keyPrefix}-t-${si}-${i}`}>{p}</React.Fragment>;
+    });
   });
+}
+
+// 判断一行是否是"独立成行的图片"（前后可能有空白）
+function isStandaloneImageLine(s) {
+  return /^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)\s*$/.test(s);
 }
 
 // 把"单行塞满整张表"的脏数据还原成多行：在分隔行 ` | --- | --- | ` 处断行，并按列宽切分后续单元格
@@ -135,6 +167,29 @@ function MarkdownLite({ source }) {
       continue;
     }
 
+    // 独立成行的图片：渲染为大图块
+    if (isStandaloneImageLine(line)) {
+      const im = line.match(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/);
+      if (im) {
+        blocks.push(
+          <figure key={`img-${blocks.length}`} className="my-2">
+            <img
+              src={im[2]}
+              alt={im[1] || ""}
+              loading="lazy"
+              className="w-full max-w-full h-auto rounded-lg border border-slate-200 shadow-sm"
+              style={{ maxHeight: 420, objectFit: "contain", background: "#fff" }}
+            />
+            {im[1] && (
+              <figcaption className="mt-1 text-[10.5px] text-slate-500 italic text-center">{im[1]}</figcaption>
+            )}
+          </figure>
+        );
+        i++;
+        continue;
+      }
+    }
+
     // 列表（- 或 数字.）
     const isUl = /^\s*[-*]\s+/.test(line);
     const isOl = /^\s*\d+\.\s+/.test(line);
@@ -160,6 +215,8 @@ function MarkdownLite({ source }) {
     while (i < lines.length && lines[i].trim() && !/^#{1,6}\s+/.test(lines[i]) && !/^\s*[-*]\s+/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i]) && !/^\s*---+\s*$/.test(lines[i])) {
       // 防止吞掉表格
       if (lines[i].includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1])) break;
+      // 防止吞掉独立成行的图片
+      if (isStandaloneImageLine(lines[i])) break;
       paraLines.push(lines[i]);
       i++;
     }

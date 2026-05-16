@@ -235,26 +235,36 @@ export default function PptResultView({ data, preview }) {
         </div>
       )}
 
-      {/* 下载 */}
+      {/* 预览 + 下载（标题点击预览，按钮点击下载）*/}
       {fileUrl && (
-        <a
-          href={fileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          download
-          className="flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 hover:border-violet-400 hover:shadow px-3 py-2.5 transition-all group"
-        >
-          <div className="w-8 h-8 rounded-lg bg-white border border-violet-200 flex items-center justify-center group-hover:scale-110 transition-transform">
-            <Presentation className="w-4 h-4 text-violet-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-semibold text-violet-900 truncate">{fileName}</div>
-            <div className="text-[10.5px] text-violet-700 flex items-center gap-1">
-              <Download className="w-2.5 h-2.5" /> 点击在新标签页打开 / 下载
+        <div className="flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 hover:border-violet-400 hover:shadow px-3 py-2.5 transition-all">
+          <a
+            href={fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 flex-1 min-w-0 group"
+            title="点击在新标签页预览"
+          >
+            <div className="w-8 h-8 rounded-lg bg-white border border-violet-200 flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+              <Presentation className="w-4 h-4 text-violet-600" />
             </div>
-          </div>
-          <ExternalLink className="w-3.5 h-3.5 text-violet-600 flex-shrink-0" />
-        </a>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12.5px] font-semibold text-violet-900 truncate group-hover:underline">{fileName}</div>
+              <div className="text-[10.5px] text-violet-700 flex items-center gap-1">
+                <ExternalLink className="w-2.5 h-2.5" /> 点击标题预览
+              </div>
+            </div>
+          </a>
+          <a
+            href={fileUrl}
+            download={fileName}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-violet-300 hover:bg-violet-600 hover:border-violet-600 hover:text-white text-violet-700 text-[11.5px] font-semibold transition-all flex-shrink-0"
+            title="下载文件"
+          >
+            <Download className="w-3.5 h-3.5" />
+            下载
+          </a>
+        </div>
       )}
     </div>
   );

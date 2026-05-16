@@ -562,7 +562,14 @@ function mdToInlineHtml(md = '') {
     const withAttrs = m.replace(/<img\s/i, '<img loading="lazy" style="max-width:100%;height:auto;border-radius:8px;border:1px solid #e2e8f0;margin:8px 0;display:inline-block;vertical-align:middle" ');
     return stash(withAttrs);
   });
-  // 3) <br> / <br/>
+  // 3) AI 经常直接吐出整段 HTML 文档结构，把以下常见块级/行内标签整段保护起来原样输出
+  //    避免被 esc 转义后渲染成 <h1> 字面文本（乱码）
+  const blockTags = ['div', 'section', 'article', 'header', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'ul', 'ol', 'li', 'span', 'strong', 'em', 'b', 'i', 'u', 'a'];
+  blockTags.forEach(tag => {
+    const re = new RegExp(`<${tag}(\\s[^>]*)?>[\\s\\S]*?<\\/${tag}>`, 'gi');
+    normalized = normalized.replace(re, (m) => stash(m));
+  });
+  // 4) <br> / <br/>
   normalized = normalized.replace(/<br\s*\/?>/gi, '\n');
   const lines = normalizeInlineTables(normalized).split('\n');
   const out = [];

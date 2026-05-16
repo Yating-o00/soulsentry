@@ -36,48 +36,63 @@ async function buildAttachmentContext(base44, exec) {
   if (!Array.isArray(files) || files.length === 0) {
     return { text: '', imageUrls: [], images: [], hasFiles: false };
   }
-  const textChunks = [];
-  const imageUrls = [];
-  const images = []; // { url, name, description }
+  // 区分图片 vs 普通文件，分别并发处理（避免多张图片串行超时）
+  const imageFiles = [];
+  const docFiles = [];
   for (const f of files) {
     if (!f?.file_url) continue;
     const isImage = /^image\//i.test(f.file_type || '') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.file_name || '');
-    if (isImage) {
-      // 用视觉模型为图片生成详细描述，作为内容生成的素材
-      let description = '';
-      try {
-        const visionRes = await base44.integrations.Core.InvokeLLM({
-          prompt: `严格只描述这张图片中【肉眼可见】的内容，禁止任何推测、引申或风格化包装。按以下要点输出 4-6 句中文，信息密度高：
-1) 主体物品的种类、颜色、形状、材质质感（如：白色磁吸翻盖纸盒 / 牛皮纸盒 / 米色帆布袋）；
-2) 盒盖/表面是否有【可见的图案、烫印、纹路、文字】，如果有请描述其具体形状（如：金色花卉与六边形蜂巢线条混合的烫金图案），如果没有就明确写"无可见图案/纯色"；
-3) 盒内或袋上的物品摆放、可见的配件，逐项列出（如：白色封面册子上有线描花朵、棕色筒状物、麻布束口袋、玻璃试管装毛笔等）；
+    (isImage ? imageFiles : docFiles).push(f);
+  }
+
+  // 并发：图片视觉识别
+  const imgResults = await Promise.all(imageFiles.map(async (f) => {
+    try {
+      const visionRes = await base44.integrations.Core.InvokeLLM({
+        prompt: `严格只描述这张图片中【肉眼可见】的内容，禁止任何推测、引申或风格化包装。按以下要点输出 4-6 句中文，信息密度高：
+1) 主体物品的种类、颜色、形状、材质质感；
+2) 表面是否有【可见的图案、烫印、纹路、文字】，有就描述具体形状，没有就写"无可见图案/纯色"；
+3) 可见的配件、物品摆放，逐项列出；
 4) 整体氛围、背景、拍摄角度；
-5) 如画面里出现任何水印或 AI 生成标签（如"豆包AI生成"），请明确指出。
-⚠️ 严禁编造图片里没有出现的元素（不要凭空说"靛青色"、"莲花暗纹"、"烫金篆章"、"康熙字典体"、"D35 单黑丝印"等具体工艺规格，除非图中文字明确写出）。看不清的部分写"看不清"。`,
-          file_urls: [f.file_url],
-          model: 'gemini_3_1_pro',
-        });
-        description = typeof visionRes === 'string' ? visionRes : (visionRes?.text || visionRes?.data || '');
-      } catch (e) {
-        description = `（视觉识别失败：${e.message}）`;
-      }
-      imageUrls.push(f.file_url);
-      images.push({ url: f.file_url, name: f.file_name || '图片', description: String(description).trim() });
-      textChunks.push(`【图片附件：${f.file_name}】\nURL：${f.file_url}\n内容描述：${description}`);
-      continue;
+5) 画面里出现任何水印或 AI 生成标签请明确指出。
+⚠️ 严禁编造图片里没出现的元素（不要凭空说"靛青色"、"莲花暗纹"、"烫金篆章"、"康熙字典体"、"D35 单黑丝印"等具体工艺规格，除非图中文字明确写出）。看不清的部分写"看不清"。`,
+        file_urls: [f.file_url],
+        model: 'gemini_3_1_pro',
+      });
+      const desc = typeof visionRes === 'string' ? visionRes : (visionRes?.text || visionRes?.data || '');
+      return { f, description: String(desc).trim() };
+    } catch (e) {
+      return { f, description: `(视觉识别失败:${e.message})` };
     }
-    // 用 InvokeLLM 把文件读成文本摘要（支持 pdf/csv/xlsx/txt 等）
+  }));
+
+  // 并发：文档抽取
+  const docResults = await Promise.all(docFiles.map(async (f) => {
     try {
       const res = await base44.integrations.Core.InvokeLLM({
         prompt: `请把这个文件的完整内容以纯文本形式抽取出来，保留结构（表格用 Markdown 表格），不要总结，不要省略。如果是名单/列表，逐行输出。`,
         file_urls: [f.file_url],
       });
       const text = typeof res === 'string' ? res : (res?.text || res?.data || JSON.stringify(res));
-      textChunks.push(`【附件：${f.file_name}】\n${String(text).slice(0, 8000)}`);
+      return { f, text: String(text).slice(0, 8000) };
     } catch (e) {
-      textChunks.push(`【附件：${f.file_name}】（读取失败：${e.message}）`);
+      return { f, text: `(读取失败:${e.message})` };
     }
+  }));
+
+  const textChunks = [];
+  const imageUrls = [];
+  const images = [];
+  for (const { f, description } of imgResults) {
+    imageUrls.push(f.file_url);
+    images.push({ url: f.file_url, name: f.file_name || '图片', description });
+    textChunks.push(`【图片附件:${f.file_name}】\nURL:${f.file_url}\n内容描述:${description}`);
   }
+  for (const { f, text } of docResults) {
+    textChunks.push(`【附件:${f.file_name}】\n${text}`);
+  }
+
+
   // 给 AI 的图片使用说明：要求在正文中以 Markdown 图片语法嵌入
   const imageGuide = images.length > 0
     ? `\n\n=== 图片嵌入指引（重要） ===\n用户上传了 ${images.length} 张图片，请在生成的正文中合适位置用 Markdown 图片语法 ![描述](url) 完整嵌入它们，并配上文字说明（如"如图所示..."、"下图展示了..."）。可用图片清单：\n${images.map((img, i) => `${i + 1}. ![${(img.description || img.name).slice(0, 50)}](${img.url})\n   名称：${img.name}\n   内容描述：${img.description}`).join('\n')}\n务必：每张图片至少使用一次完整的 ![描述](url) Markdown 语法，不要省略 url，不要只写文字描述。\n`
@@ -586,9 +601,28 @@ function mdToInlineHtml(md = '') {
       if (!inOl) { out.push('<ol>'); inOl = true; }
       out.push(`<li>${inline(m[1])}</li>`);
     } else if (/^!\[[^\]]*\]\(https?:[^\s)]+\)\s*$/.test(line)) {
-      // 单行图片：作为块级 figure，不要包在 <p> 里
+      // 单行图片：收集连续的图片行，2~3 张并排（Grid），单张则块级 figure
       closeP(); closeUl(); closeOl();
-      out.push(inline(line));
+      const imgs = [line];
+      while (li + 1 < lines.length) {
+        const next = lines[li + 1].trimEnd();
+        if (/^!\[[^\]]*\]\(https?:[^\s)]+\)\s*$/.test(next)) {
+          imgs.push(next);
+          li++;
+        } else if (!next.trim()) {
+          // 跳过空行继续收集
+          const peek = lines[li + 2]?.trimEnd();
+          if (peek && /^!\[[^\]]*\]\(https?:[^\s)]+\)\s*$/.test(peek)) {
+            imgs.push(peek);
+            li += 2;
+          } else break;
+        } else break;
+      }
+      if (imgs.length === 1) {
+        out.push(inline(imgs[0]));
+      } else {
+        out.push(`<div class="md-figure-grid cols-${Math.min(imgs.length, 3)}">${imgs.map(s => inline(s)).join('')}</div>`);
+      }
     } else {
       closeUl(); closeOl();
       if (!inP) { out.push('<p>'); inP = true; }
@@ -654,6 +688,12 @@ function renderRichHtml({ title, subtitle, sections = [], keyFindings = [], reco
   .card .body .md-figure{margin:1.2em 0;text-align:center}
   .card .body .md-figure img{max-width:100%;height:auto;border-radius:10px;box-shadow:0 4px 20px -8px rgba(15,23,42,.15);border:1px solid #e2e8f0}
   .card .body .md-figure figcaption{margin-top:8px;font-size:13px;color:#64748b;font-style:italic}
+  .card .body .md-figure-grid{display:grid;gap:14px;margin:1.2em 0}
+  .card .body .md-figure-grid.cols-2{grid-template-columns:repeat(2,1fr)}
+  .card .body .md-figure-grid.cols-3{grid-template-columns:repeat(3,1fr)}
+  .card .body .md-figure-grid .md-figure{margin:0}
+  .card .body .md-figure-grid .md-figure img{aspect-ratio:4/3;object-fit:cover;width:100%}
+  @media (max-width:640px){.card .body .md-figure-grid.cols-2,.card .body .md-figure-grid.cols-3{grid-template-columns:1fr}}
   .card.highlight{background:linear-gradient(135deg,#fff7ed,#ffffff);border-color:#fed7aa}
   .card.highlight .num-list{counter-reset:n;list-style:none;padding:0}
   .card.highlight .num-list li{counter-increment:n;padding:10px 0 10px 44px;position:relative;border-bottom:1px dashed #fde68a}
@@ -965,6 +1005,19 @@ ${attachmentCtx.images.map((im, i) => `${i + 1}. ${im.url}\n   文件名：${im.
     );
   }
 
+  // 兜底：如果 AI 没把图片用 ![](url) 嵌进任何 body，自动追加一个"附录图片"章节，避免图片缺失
+  if (userImagesOffice.length > 0) {
+    const allBody = (data.sections || []).map(s => s.body || '').join('\n');
+    const missing = userImagesOffice.filter(im => !allBody.includes(im.url));
+    if (missing.length > 0) {
+      const figs = missing.map((im, i) => `![${(im.description || im.name || `图${i + 1}`).slice(0, 60)}](${im.url})`).join('\n\n');
+      data.sections = [
+        ...(data.sections || []),
+        { heading: '附：相关图片', body: `以下为本任务上传的参考图片，按用户提供顺序展示。\n\n${figs}` }
+      ];
+    }
+  }
+
   // 组装 Markdown 成稿
   const lines = [`# ${data.title}`, '', `> 生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, ''];
   (data.sections || []).forEach(s => {
@@ -1183,6 +1236,27 @@ async function executePptDoc(base44, exec, attachmentCtx) {
         model: 'gemini_3_1_pro',
       })
     : await callKimi(base44, pptPrompt, schema, pptSystem);
+
+  // 兜底：若 AI 没把图片放进任何幻灯片 images，自动在结尾追加一张图集页，避免图片缺失
+  if (userImages.length > 0) {
+    const usedUrls = new Set();
+    (data.slides || []).forEach(s => {
+      const imgs = Array.isArray(s.images) ? s.images : [];
+      imgs.forEach(im => { if (im?.url) usedUrls.add(im.url); });
+    });
+    const missing = userImages.filter(im => !usedUrls.has(im.url));
+    if (missing.length > 0) {
+      data.slides = [
+        ...(data.slides || []),
+        {
+          heading: '相关图片一览',
+          bullets: [],
+          body: '以下为本任务参考图片',
+          images: missing.map(im => ({ url: im.url, caption: (im.name || '').slice(0, 30) })),
+        }
+      ];
+    }
+  }
 
   // 渲染自包含 HTML 演示稿
   const html = renderPptHtml(data);

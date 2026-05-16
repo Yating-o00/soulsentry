@@ -224,7 +224,7 @@ export default function AutoExecutionPanel() {
             {QUICK_AUTOMATION_TEMPLATES.map(t => (
               <button
                 key={t.type}
-                onClick={() => handleQuickTemplate(t)}
+                onClick={() => setInput(t.example)}
                 disabled={submitting}
                 className="flex-shrink-0 px-2.5 py-1.5 rounded-full bg-white border border-slate-200 text-[11px] text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
                 title={t.example}

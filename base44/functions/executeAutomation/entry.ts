@@ -542,7 +542,10 @@ function normalizeInlineTables(raw) {
 // 极简 Markdown → HTML（标题/列表/粗体/斜体/段落/分隔线/GFM 表格）
 function mdToInlineHtml(md = '') {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const lines = normalizeInlineTables(md).split('\n');
+  // 入口预处理：合并被任意空白/换行/全角空格拆散的 markdown 图片
+  // ![alt]<空白>(url) → ![alt](url)，确保后续行解析能识别图片
+  let normalized = String(md || '').replace(/(!\[[^\]]*\])[\s\u3000]+(\(https?:[^\s)]+\))/g, '$1$2');
+  const lines = normalizeInlineTables(normalized).split('\n');
   const out = [];
   let inUl = false, inOl = false, inP = false;
   const closeP = () => { if (inP) { out.push('</p>'); inP = false; } };
@@ -1037,6 +1040,18 @@ ${attachmentCtx.images.map((im, i) => `${i + 1}. ${im.url}\n   文件名：${im.
       schema,
       "你是办公文档专家。请直接生成完整、可落地的成稿内容（每节包含具体段落、要点、必要时含表格）。"
     );
+  }
+
+  // 规范化每节 body 里的图片 markdown，避免被空白/换行拆散导致网页里图片渲染失败
+  if (Array.isArray(data.sections)) {
+    data.sections = data.sections.map(s => ({
+      ...s,
+      body: String(s.body || '')
+        // ![alt]<任意空白>(url) → ![alt](url)
+        .replace(/(!\[[^\]]*\])[\s\u3000]+(\(https?:[^\s)]+\))/g, '$1$2')
+        // 表格单元格里如果图片紧跟在 | 后但 alt 文本含括号导致未闭合的情况兜底
+        .replace(/!\[([^\]\n]*)\]\s*\n+\s*\((https?:[^\s)]+)\)/g, '![$1]($2)')
+    }));
   }
 
   // 兜底：如果 AI 没把图片用 ![](url) 嵌进任何 body，自动追加一个"附录图片"章节，避免图片缺失

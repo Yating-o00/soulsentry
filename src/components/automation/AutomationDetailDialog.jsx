@@ -118,7 +118,20 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
     if (!adjustText.trim()) return;
     setAdjusting(true);
     try {
-      const newInput = `${execution.original_input || execution.task_title}\n\n[用户调整]：${adjustText}`;
+      // 把"上一次的产物"作为上下文带给 AI，让它在已有内容上做增量修改而不是从头重做
+      const prevResult = execution.automation_result;
+      const prevSnapshot = prevResult
+        ? (prevResult.data?.markdown
+            || prevResult.data?.body
+            || prevResult.data?.content
+            || prevResult.preview
+            || '')
+        : '';
+      const prevBlock = prevSnapshot
+        ? `\n\n[上次生成的内容 - 请在此基础上做调整，保留未提及的部分]：\n${String(prevSnapshot).slice(0, 6000)}`
+        : '';
+      const newInput = `${execution.original_input || execution.task_title}${prevBlock}\n\n[用户本次调整指令]：${adjustText}`;
+
       await base44.entities.TaskExecution.update(execution.id, {
         original_input: newInput,
         execution_status: "parsing",
@@ -131,7 +144,7 @@ export default function AutomationDetailDialog({ execution, open, onOpenChange }
         phase: "plan"
       });
       if (res.data?.error) throw new Error(res.data.error);
-      toast.success("AI 已根据反馈重新规划");
+      toast.success("AI 已根据反馈在原内容上修改");
       setAdjustText("");
       refresh();
     } catch (e) {

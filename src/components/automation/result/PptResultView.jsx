@@ -235,14 +235,27 @@ export default function PptResultView({ data, preview }) {
         </div>
       )}
 
-      {/* 预览 + 下载（标题点击预览，按钮点击下载）*/}
+      {/* 预览 + 下载（标题点击在新标签内联预览，按钮点击下载）*/}
       {fileUrl && (
         <div className="flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 hover:border-violet-400 hover:shadow px-3 py-2.5 transition-all">
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2.5 flex-1 min-w-0 group"
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await fetch(fileUrl);
+                const blob = await res.blob();
+                // 强制 inline 渲染（绕过对象存储的 Content-Disposition: attachment）
+                const mime = /\.html?$/i.test(fileName) ? "text/html"
+                          : /\.txt$/i.test(fileName) ? "text/plain"
+                          : (blob.type || "text/html");
+                const url = URL.createObjectURL(new Blob([blob], { type: mime }));
+                window.open(url, "_blank");
+                setTimeout(() => URL.revokeObjectURL(url), 60_000);
+              } catch {
+                window.open(fileUrl, "_blank");
+              }
+            }}
+            className="flex items-center gap-2.5 flex-1 min-w-0 group text-left"
             title="点击在新标签页预览"
           >
             <div className="w-8 h-8 rounded-lg bg-white border border-violet-200 flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
@@ -254,7 +267,7 @@ export default function PptResultView({ data, preview }) {
                 <ExternalLink className="w-2.5 h-2.5" /> 点击标题预览
               </div>
             </div>
-          </a>
+          </button>
           <a
             href={fileUrl}
             download={fileName}

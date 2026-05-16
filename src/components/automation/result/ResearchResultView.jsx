@@ -380,7 +380,6 @@ export default function ResearchResultView({ data, preview, onChange, editable =
           href={fileUrl}
           target="_blank"
           rel="noopener noreferrer"
-          download
           className="flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 hover:shadow px-3 py-2.5 transition-all group"
         >
           <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -389,7 +388,7 @@ export default function ResearchResultView({ data, preview, onChange, editable =
           <div className="flex-1 min-w-0">
             <div className="text-[12.5px] font-semibold text-emerald-900 truncate">{fileName}</div>
             <div className="text-[10.5px] text-emerald-700 flex items-center gap-1">
-              <Download className="w-2.5 h-2.5" /> 完整报告 · 点击下载
+              <ExternalLink className="w-2.5 h-2.5" /> 完整报告 · 点击在新标签预览
             </div>
           </div>
           <ExternalLink className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />

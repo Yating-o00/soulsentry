@@ -33,8 +33,10 @@ function pickView(result, automationType) {
   const t = (automationType || result?.type || "").toLowerCase();
   const d = result?.data || {};
   if (t.includes("email") || d.to || d.subject) return "email";
+  // office_doc：有 sections（章节式 Markdown 文档），无 slides → 走 research 视图（支持 Markdown 图片渲染）
+  if (t.includes("office") && Array.isArray(d.sections) && !Array.isArray(d.slides)) return "research";
   if (t.includes("research") || t.includes("web")) return "research";
-  if (t.includes("ppt") || t.includes("slide") || t.includes("office") || Array.isArray(d.slides) || Array.isArray(d.outline)) return "ppt";
+  if (t.includes("ppt") || t.includes("slide") || Array.isArray(d.slides) || Array.isArray(d.outline)) return "ppt";
   if (t.includes("calendar") || t.includes("event") || d.start_time || d.reminder_time) return "calendar";
   if (t.includes("file") || t.includes("organize")) return "file";
   if (t.includes("note") || t.includes("summary") || Array.isArray(d.tags) || Array.isArray(d.key_points)) return "note";

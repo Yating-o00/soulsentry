@@ -167,27 +167,59 @@ function MarkdownLite({ source }) {
       continue;
     }
 
-    // 独立成行的图片：渲染为大图块
+    // 独立成行的图片：收集相邻图片行；2~3 张并排展示，单张铺满
     if (isStandaloneImageLine(line)) {
-      const im = line.match(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/);
-      if (im) {
+      const imgs = [];
+      let j = i;
+      while (j < lines.length) {
+        if (isStandaloneImageLine(lines[j])) {
+          const m = lines[j].match(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/);
+          if (m) imgs.push({ alt: m[1] || "", url: m[2] });
+          j++;
+        } else if (!lines[j].trim()) {
+          // 允许空行间隔
+          if (isStandaloneImageLine(lines[j + 1] || "")) { j++; continue; }
+          break;
+        } else break;
+      }
+      if (imgs.length === 1) {
         blocks.push(
           <figure key={`img-${blocks.length}`} className="my-2">
             <img
-              src={im[2]}
-              alt={im[1] || ""}
+              src={imgs[0].url}
+              alt={imgs[0].alt}
               loading="lazy"
               className="w-full max-w-full h-auto rounded-lg border border-slate-200 shadow-sm"
               style={{ maxHeight: 420, objectFit: "contain", background: "#fff" }}
             />
-            {im[1] && (
-              <figcaption className="mt-1 text-[10.5px] text-slate-500 italic text-center">{im[1]}</figcaption>
+            {imgs[0].alt && (
+              <figcaption className="mt-1 text-[10.5px] text-slate-500 italic text-center">{imgs[0].alt}</figcaption>
             )}
           </figure>
         );
-        i++;
-        continue;
+      } else {
+        const cols = Math.min(imgs.length, 3);
+        blocks.push(
+          <div key={`imgs-${blocks.length}`} className="my-2 grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+            {imgs.map((im, idx) => (
+              <figure key={idx} className="m-0">
+                <img
+                  src={im.url}
+                  alt={im.alt}
+                  loading="lazy"
+                  className="w-full h-auto rounded-lg border border-slate-200 shadow-sm"
+                  style={{ aspectRatio: "4 / 3", objectFit: "cover", background: "#fff" }}
+                />
+                {im.alt && (
+                  <figcaption className="mt-1 text-[10px] text-slate-500 italic text-center line-clamp-1">{im.alt}</figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+        );
       }
+      i = j;
+      continue;
     }
 
     // 列表（- 或 数字.）

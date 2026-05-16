@@ -1,6 +1,22 @@
 import React from "react";
 import { TEMPLATES, extractImagesAndText } from "./researchTemplates";
 
+// 检测内容是否已经是原始 HTML
+function looksLikeHtml(s) {
+  if (!s) return false;
+  return /<(div|section|article|header|footer|h[1-6]|p|table|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/i.test(s);
+}
+
+// HTML 直渲染容器:让原始 HTML 标签正常显示,并约束图片/表格不溢出
+function HtmlBlock({ source }) {
+  return (
+    <div
+      className="md-html text-[11.5px] text-slate-600 leading-relaxed [&_h1]:text-[14px] [&_h1]:font-bold [&_h1]:text-slate-800 [&_h1]:my-2 [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:text-slate-800 [&_h2]:my-1.5 [&_h3]:text-[12.5px] [&_h3]:font-semibold [&_h3]:text-slate-800 [&_h3]:my-1 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_strong]:font-semibold [&_strong]:text-slate-800 [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-2 [&_blockquote]:text-slate-500 [&_blockquote]:my-1 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-md [&_img]:border [&_img]:border-slate-200 [&_img]:my-1.5 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:text-[11px] [&_th]:bg-slate-50 [&_th]:px-2 [&_th]:py-1 [&_th]:border [&_th]:border-slate-200 [&_th]:text-left [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-slate-200 [&_td]:align-top overflow-x-auto break-words"
+      dangerouslySetInnerHTML={{ __html: source }}
+    />
+  );
+}
+
 // 渲染纯文字部分(把已被剥离的纯文本按行渲染,保留段落和加粗)
 function PlainText({ source, size = "sm" }) {
   if (!source) return null;
@@ -57,7 +73,8 @@ function ImageBlock({ img, ratio = "4/3", maxH = 320, rounded = "rounded-lg" }) 
 
 // 主组件：按模板渲染一个章节(标题 + 内容 + 图片自动布局)
 export default function TemplatedSection({ heading, content, template = "classic" }) {
-  const { images, text } = extractImagesAndText(content);
+  const isHtml = looksLikeHtml(content);
+  const { images, text } = isHtml ? { images: [], text: "" } : extractImagesAndText(content);
   const tpl = TEMPLATES[template] ? template : "classic";
 
   return (
@@ -68,8 +85,11 @@ export default function TemplatedSection({ heading, content, template = "classic
         </div>
       )}
 
+      {/* 原始 HTML 内容:直接渲染,跳过模板布局(避免标签被当文本) */}
+      {isHtml && <HtmlBlock source={content} />}
+
       {/* 经典:文字在上,图片在下居中 */}
-      {tpl === "classic" && (
+      {!isHtml && tpl === "classic" && (
         <div className="space-y-2">
           <PlainText source={text} />
           {images.length > 0 && (
@@ -83,7 +103,7 @@ export default function TemplatedSection({ heading, content, template = "classic
       )}
 
       {/* 杂志:左文右图(图片<=2张) */}
-      {tpl === "magazine" && (
+      {!isHtml && tpl === "magazine" && (
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-start">
           <div className="sm:col-span-3 min-w-0">
             <PlainText source={text} size="lg" />
@@ -97,7 +117,7 @@ export default function TemplatedSection({ heading, content, template = "classic
       )}
 
       {/* 画廊:图片网格在上,文字说明在下 */}
-      {tpl === "gallery" && (
+      {!isHtml && tpl === "gallery" && (
         <div className="space-y-2.5">
           {images.length > 0 && (
             <div
@@ -114,7 +134,7 @@ export default function TemplatedSection({ heading, content, template = "classic
       )}
 
       {/* 卡片:图文配对成纵向卡片(每段配一张图) */}
-      {tpl === "card" && (
+      {!isHtml && tpl === "card" && (
         <div className="space-y-2.5">
           {(() => {
             // 把 text 按段落切分,与 images 一一配对
@@ -143,7 +163,7 @@ export default function TemplatedSection({ heading, content, template = "classic
       )}
 
       {/* 极简:纯文字 */}
-      {tpl === "minimal" && (
+      {!isHtml && tpl === "minimal" && (
         <div>
           <PlainText source={text || ""} size="lg" />
           {images.length > 0 && (

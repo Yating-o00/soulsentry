@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,14 +30,26 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
   const [availableAttachments, setAvailableAttachments] = useState([]);
   // 本地副本：调整后能立即覆盖父级 prop，让预览同步更新
   const [localExecution, setLocalExecution] = useState(executionProp);
-  // 记录本地最后一次"权威更新"时间戳，用于在短窗口内忽略可能过期的父级 prop 推送，
-  // 避免保存/重做后被陈旧的列表缓存 invalidate 回滚
-  const lastLocalUpdateRef = React.useRef(0);
+  // 编辑锁：只要用户有未保存草稿（editedData 非空），就完全锁定本地数据，
+  // 不允许父组件 4 秒一次的列表重拉把已编辑内容覆盖回旧版（防止"保存后回滚"的根因）
+  const hasDraftRef = React.useRef(false);
+  // 包装 setEditedData：每次用户编辑都同步打开"编辑锁"，防止父组件列表轮询覆盖本地数据
+  const updateEditedData = React.useCallback((next) => {
+    hasDraftRef.current = !!next;
+    setEditedData(next);
+  }, []);
   useEffect(() => {
-    // 如果 5 秒内本地刚有过权威更新（保存/重做），则忽略 prop 覆盖
-    if (Date.now() - lastLocalUpdateRef.current < 5000) return;
+    // 仅在弹窗切换到不同 execution（id 变了）时无条件同步；
+    // 同一条 execution 期间，如果用户正在编辑，则保留本地副本
+    const currentId = localExecution?.id;
+    const nextId = executionProp?.id;
+    if (currentId !== nextId) {
+      setLocalExecution(executionProp);
+      return;
+    }
+    if (hasDraftRef.current) return; // 有未保存编辑 → 不覆盖
     setLocalExecution(executionProp);
-  }, [executionProp]);
+  }, [executionProp, localExecution?.id]);
   const execution = localExecution || executionProp;
 
   // 拉取最新 execution 数据并写回本地，确保预览实时刷新
@@ -45,26 +57,24 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
     if (!execution?.id) return null;
     try {
       const fresh = await base44.entities.TaskExecution.get(execution.id);
-      if (fresh) {
-        lastLocalUpdateRef.current = Date.now();
-        setLocalExecution(fresh);
-      }
+      if (fresh) setLocalExecution(fresh);
       return fresh;
     } catch { return null; }
   };
 
-  // 当 execution 变化时（首次打开 / 重新规划后），同步邮件草稿
+  // 当切换到不同 execution 时（id 变化）重置本地草稿与邮件状态。
+  // 注意：依赖项只用 execution?.id —— 否则父组件 4 秒一次的列表重拉会让 automation_result.data
+  // 引用变化，从而把用户正在编辑的内容（editedData）静默清空，造成"保存后回滚"的假象。
   useEffect(() => {
     if (execution?.automation_type === "email_draft") {
       const initial = execution.automation_result?.data || null;
-      // 兼容历史草稿：未带 attachments 字段时初始化为空数组
       setEmailDraft(initial ? { attachments: [], ...initial } : null);
     } else {
       setEmailDraft(null);
     }
-    // 重置非邮件类型的内联编辑草稿
     setEditedData(null);
-  }, [execution?.id, execution?.automation_result?.data]);
+    hasDraftRef.current = false;
+  }, [execution?.id]);
 
   // 保存非邮件类型的内联编辑到后端
   // 接受可选 dataOverride 参数，避免 React 状态批处理时拿不到最新草稿（"完成"按钮触发保存的关键）
@@ -86,7 +96,8 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
         console.warn("[SaveEdits] 后端落库数据与本地不一致", { target, savedData });
         throw new Error("保存后服务端未返回预期数据，请刷新后再试");
       }
-      lastLocalUpdateRef.current = Date.now();
+      // 保存成功后关闭编辑锁，并用 fresh 覆盖本地副本
+      hasDraftRef.current = false;
       setLocalExecution(fresh);
       setEditedData(null);
       toast.success("已保存修改");
@@ -472,7 +483,7 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                 onDataChange={
                   execution.automation_type === "email_draft"
                     ? setEmailDraft
-                    : setEditedData
+                    : updateEditedData
                 }
                 onSaveEdits={
                   execution.automation_type === "email_draft"
@@ -488,10 +499,10 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                   <div className="flex-1 text-[12px] text-amber-800">
                     你已修改内容，记得保存
                   </div>
-                  <Button size="sm" variant="ghost" className="h-7 text-amber-700 hover:bg-amber-100" onClick={() => setEditedData(null)}>
+                  <Button size="sm" variant="ghost" className="h-7 text-amber-700 hover:bg-amber-100" onClick={() => updateEditedData(null)}>
                     放弃
                   </Button>
-                  <Button size="sm" className="h-7 bg-emerald-600 hover:bg-emerald-700" onClick={handleSaveEdits} disabled={savingEdits}>
+                  <Button size="sm" className="h-7 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleSaveEdits(editedData)} disabled={savingEdits}>
                     {savingEdits ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : null}
                     保存修改
                   </Button>

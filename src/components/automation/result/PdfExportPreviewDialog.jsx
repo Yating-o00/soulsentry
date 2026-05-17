@@ -127,22 +127,39 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       const pageH = pdf.internal.pageSize.getHeight();
       const contentW = pageW - margin * 2;
       const contentH = pageH - margin * 2;
-      const imgH = (canvas.height * contentW) / canvas.width;
 
-      let remaining = imgH;
-      let position = 0;
-      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      // 每页对应的源图像素高度(按宽度等比例换算)
+      const pxPerMm = canvas.width / contentW;
+      const pagePxH = Math.floor(contentH * pxPerMm);
+      const totalPx = canvas.height;
 
-      // 单页装得下
-      if (imgH <= contentH) {
+      // 单页能装下:直接整张贴
+      if (totalPx <= pagePxH) {
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        const imgH = (canvas.height * contentW) / canvas.width;
         pdf.addImage(imgData, "JPEG", margin, margin, contentW, imgH);
       } else {
-        // 多页:每页用偏移位置裁切
-        while (remaining > 0) {
-          pdf.addImage(imgData, "JPEG", margin, margin - position, contentW, imgH);
-          remaining -= contentH;
-          position += contentH;
-          if (remaining > 0) pdf.addPage();
+        // 多页:每页用一个临时 canvas 裁出对应像素区,避免文字被横切
+        let offsetPx = 0;
+        let pageIdx = 0;
+        const pageCanvas = document.createElement("canvas");
+        const pageCtx = pageCanvas.getContext("2d");
+
+        while (offsetPx < totalPx) {
+          const sliceH = Math.min(pagePxH, totalPx - offsetPx);
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sliceH;
+          pageCtx.fillStyle = "#ffffff";
+          pageCtx.fillRect(0, 0, canvas.width, sliceH);
+          pageCtx.drawImage(canvas, 0, offsetPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+          const sliceData = pageCanvas.toDataURL("image/jpeg", 0.95);
+          const sliceMmH = (sliceH * contentW) / canvas.width;
+          if (pageIdx > 0) pdf.addPage();
+          pdf.addImage(sliceData, "JPEG", margin, margin, contentW, sliceMmH);
+
+          offsetPx += sliceH;
+          pageIdx += 1;
         }
       }
 

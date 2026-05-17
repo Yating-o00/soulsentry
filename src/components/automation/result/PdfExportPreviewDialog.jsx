@@ -304,14 +304,14 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
             {/* 底部操作 */}
             <div className="p-3 border-t border-slate-200 space-y-2 flex-shrink-0">
               <Button
-                onClick={handlePrint}
-                disabled={printing || fetchLoading || !!fetchError || !htmlContent}
+                onClick={handleDownload}
+                disabled={downloading}
                 className="w-full bg-rose-500 hover:bg-rose-600 text-white gap-1.5"
               >
-                {printing ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> 准备打印…</>
+                {downloading ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> 下载中…</>
                 ) : (
-                  <><Printer className="w-4 h-4" /> 另存为 PDF</>
+                  <><Download className="w-4 h-4" /> 另存为 PDF</>
                 )}
               </Button>
               <Button

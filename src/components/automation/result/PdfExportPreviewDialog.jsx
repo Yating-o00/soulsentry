@@ -296,8 +296,8 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
               </button>
 
               <div className="text-[10.5px] text-slate-400 leading-relaxed bg-slate-50 rounded p-2 border border-slate-100">
-                💡 <span className="font-semibold text-slate-600">「另存为 PDF」</span>会唤起浏览器打印对话框,在「目标」里选择「另存为 PDF」即可,当前微调会自动应用到输出。
-                <br />📥 <span className="font-semibold text-slate-600">「下载源文件」</span>直接保存原始 HTML 报告到本地。
+                💡 点击 <span className="font-semibold text-slate-600">「另存为 PDF」</span> 会弹出系统打印面板,「目标」选 <span className="font-semibold text-slate-600">另存为 PDF</span> 后点保存即可下载到本地,当前的方向/边距会自动应用。
+                <br />📥 <span className="font-semibold text-slate-600">「下载源文件」</span> 直接保存原始 HTML 报告。
               </div>
             </div>
 

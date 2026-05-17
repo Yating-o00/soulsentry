@@ -29,12 +29,12 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
     }
   }, [open, fileUrl]);
 
-  // 15 秒还没加载完 → 显示超时提示(用户可选择重试 / 新标签打开 / 直接下载)
+  // 8 秒还没加载完 → 显示轻量备选方案(重试 / 新标签打开 / 直接下载),iframe 继续在背后加载
   useEffect(() => {
     if (!open || !iframeLoading) return;
     const timer = setTimeout(() => {
       setLoadTimeout(true);
-    }, 15000);
+    }, 8000);
     return () => clearTimeout(timer);
   }, [open, iframeLoading, iframeKey]);
 
@@ -274,7 +274,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
             <div className="p-3 border-t border-slate-200 space-y-2 flex-shrink-0">
               <Button
                 onClick={handlePrint}
-                disabled={(iframeLoading && !loadTimeout) || printing}
+                disabled={printing}
                 className="w-full bg-rose-500 hover:bg-rose-600 text-white gap-1.5"
               >
                 {printing ? (

@@ -106,14 +106,41 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
   };
 
   // 把 iframe 内容用 html2canvas 截图,再用 jsPDF 按 A4 分页生成 .pdf 直接下载
+  // 关键:在 iframe DOM 内收集所有块级元素的「安全断点」(元素之间的空白行),分页时只在这些位置断开,避免裁切文字/图片
   const handleSaveAsPdf = async () => {
     const iframe = iframeRef.current;
     if (!iframe?.contentDocument?.body) return;
     setPrinting(true);
     try {
-      const body = iframe.contentDocument.body;
+      const doc = iframe.contentDocument;
+      const body = doc.body;
+
+      // 1) 收集"安全断点"像素列表(相对于 body 顶部),这些位置之间是空白,不会切到元素
+      const collectBreakpoints = () => {
+        const breakpoints = new Set([0]);
+        // 选取所有可能携带内容的块级元素 + 图片
+        const nodes = doc.querySelectorAll(
+          "p, li, h1, h2, h3, h4, h5, h6, img, table, tr, blockquote, pre, figure, section, article, div"
+        );
+        nodes.forEach((el) => {
+          // 只考虑实际可见、有高度的元素
+          const rect = el.getBoundingClientRect();
+          if (rect.height === 0 || rect.width === 0) return;
+          const top = el.offsetTop;
+          const bottom = top + el.offsetHeight;
+          // 元素的上下边界都是潜在的安全断点
+          if (top >= 0) breakpoints.add(top);
+          if (bottom >= 0) breakpoints.add(bottom);
+        });
+        breakpoints.add(body.scrollHeight);
+        return Array.from(breakpoints).sort((a, b) => a - b);
+      };
+
+      const breakpointsCss = collectBreakpoints(); // CSS px(相对 body)
+
+      const scale = 2;
       const canvas = await html2canvas(body, {
-        scale: 2,
+        scale,
         useCORS: true,
         allowTaint: true,
         backgroundColor: "#ffffff",
@@ -128,25 +155,42 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       const contentW = pageW - margin * 2;
       const contentH = pageH - margin * 2;
 
-      // 每页对应的源图像素高度(按宽度等比例换算)
       const pxPerMm = canvas.width / contentW;
       const pagePxH = Math.floor(contentH * pxPerMm);
       const totalPx = canvas.height;
 
-      // 单页能装下:直接整张贴
+      // 把 CSS 像素断点换算为 canvas 像素断点
+      const breakpointsPx = breakpointsCss
+        .map((y) => Math.round(y * scale))
+        .filter((y) => y >= 0 && y <= totalPx);
+
+      // 单页能装下:直接贴
       if (totalPx <= pagePxH) {
         const imgData = canvas.toDataURL("image/jpeg", 0.95);
         const imgH = (canvas.height * contentW) / canvas.width;
         pdf.addImage(imgData, "JPEG", margin, margin, contentW, imgH);
       } else {
-        // 多页:每页用一个临时 canvas 裁出对应像素区,避免文字被横切
-        let offsetPx = 0;
-        let pageIdx = 0;
+        // 多页:从当前 offset 起,在 [offset, offset+pagePxH] 范围内找最大的安全断点
         const pageCanvas = document.createElement("canvas");
         const pageCtx = pageCanvas.getContext("2d");
+        let offsetPx = 0;
+        let pageIdx = 0;
 
         while (offsetPx < totalPx) {
-          const sliceH = Math.min(pagePxH, totalPx - offsetPx);
+          const maxEnd = Math.min(offsetPx + pagePxH, totalPx);
+          // 在断点中找 (offset, maxEnd] 区间内最大的一个
+          let cutAt = -1;
+          for (let i = breakpointsPx.length - 1; i >= 0; i--) {
+            const bp = breakpointsPx[i];
+            if (bp > offsetPx && bp <= maxEnd) {
+              cutAt = bp;
+              break;
+            }
+          }
+          // 如果没找到安全断点(单个元素就比一页还大,例如大图),只能硬切到 maxEnd
+          if (cutAt <= offsetPx) cutAt = maxEnd;
+
+          const sliceH = cutAt - offsetPx;
           pageCanvas.width = canvas.width;
           pageCanvas.height = sliceH;
           pageCtx.fillStyle = "#ffffff";
@@ -156,9 +200,10 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
           const sliceData = pageCanvas.toDataURL("image/jpeg", 0.95);
           const sliceMmH = (sliceH * contentW) / canvas.width;
           if (pageIdx > 0) pdf.addPage();
+          // 顶部对齐(不垂直居中),保持阅读连贯
           pdf.addImage(sliceData, "JPEG", margin, margin, contentW, sliceMmH);
 
-          offsetPx += sliceH;
+          offsetPx = cutAt;
           pageIdx += 1;
         }
       }

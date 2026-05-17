@@ -196,36 +196,21 @@ export default function TemplatedSection({ heading, content, template = "classic
         </div>
       )}
 
-      {/* 卡片:图文配对成纵向卡片(每段配一张图) */}
+      {/* 卡片:每个 segment 单独成卡,图与紧邻文字成对 */}
       {tpl === "card" && (
         <div className="space-y-2.5">
-          {(() => {
-            // HTML 模式:把 cleanHtml 按 </p>/<br> 等大块切分,与 images 配对;Markdown 模式按段落切
-            const paras = isHtml
-              ? String(htmlText || "").split(/<\/p>|<\/h[1-6]>|<hr\s*\/?>/i).map(p => p.trim()).filter(Boolean).map(p => p + (/<p|<h[1-6]/i.test(p) ? "" : ""))
-              : String(text).split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
-            const rows = Math.max(paras.length, images.length);
-            const out = [];
-            for (let i = 0; i < rows; i++) {
-              const p = paras[i];
-              const im = images[i];
-              out.push(
-                <div key={i} className="rounded-md bg-slate-50/60 border border-slate-100 p-2.5 grid grid-cols-1 sm:grid-cols-5 gap-2.5 items-center">
-                  {im ? (
-                    <div className="sm:col-span-2 min-w-0">
-                      <ImageBlock img={im} ratio="4/3" maxH={160} rounded="rounded-md" />
-                    </div>
-                  ) : null}
-                  <div className={`min-w-0 ${im ? "sm:col-span-3" : "sm:col-span-5"}`}>
-                    {isHtml
-                      ? <HtmlBlock source={p || ""} />
-                      : <PlainText source={p || ""} />}
-                  </div>
+          {pairedBlocks.map((seg, i) => (
+            <div key={i} className="rounded-md bg-slate-50/60 border border-slate-100 p-2.5 grid grid-cols-1 sm:grid-cols-5 gap-2.5 items-center">
+              {seg.image ? (
+                <div className="sm:col-span-2 min-w-0">
+                  <ImageBlock img={seg.image} ratio="4/3" maxH={160} rounded="rounded-md" />
                 </div>
-              );
-            }
-            return out;
-          })()}
+              ) : null}
+              <div className={`min-w-0 ${seg.image ? "sm:col-span-3" : "sm:col-span-5"}`}>
+                {renderText(seg.text)}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

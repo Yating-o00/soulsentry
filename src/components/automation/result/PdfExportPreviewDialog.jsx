@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Printer, ZoomIn, ZoomOut, RotateCcw, FileText, Loader2 } from "lucide-react";
+import { Printer, ZoomIn, ZoomOut, RotateCcw, FileText, Loader2, Download, ExternalLink, AlertTriangle } from "lucide-react";
 
 // PDF 导出前的可视化预览 + 微调
 // 设计:左侧 A4 模拟纸面 iframe 直接加载 HTML 报告;右侧调节面板(纸张方向/边距/缩放)
@@ -12,7 +12,10 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
   const [margin, setMargin] = useState(14); // mm,统一四边
   const [zoom, setZoom] = useState(100); // 屏幕预览缩放比 %,不影响打印
   const [iframeLoading, setIframeLoading] = useState(true);
+  const [loadTimeout, setLoadTimeout] = useState(false); // 超过 15s 还没 load
   const [printing, setPrinting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0); // 用于强制刷新 iframe
 
   // 每次打开重置参数
   useEffect(() => {
@@ -21,8 +24,19 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       setMargin(14);
       setZoom(100);
       setIframeLoading(true);
+      setLoadTimeout(false);
+      setIframeKey(k => k + 1);
     }
   }, [open, fileUrl]);
+
+  // 15 秒还没加载完 → 显示超时提示(用户可选择重试 / 新标签打开 / 直接下载)
+  useEffect(() => {
+    if (!open || !iframeLoading) return;
+    const timer = setTimeout(() => {
+      setLoadTimeout(true);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [open, iframeLoading, iframeKey]);
 
   // A4 屏幕预览尺寸(mm 等比换算成 px,1mm ≈ 3.78px)
   const A4 = orientation === "portrait"
@@ -31,7 +45,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
   const previewW = Math.round(A4.w * 3.78 * (zoom / 100));
   const previewH = Math.round(A4.h * 3.78 * (zoom / 100));
 
-  // 把当前微调注入 iframe 的 head,然后调它的 window.print()
+  // 把当前微调注入 iframe 的 head,然后调它的 window.print() —— 用户在系统打印对话框选"另存为 PDF"
   const handlePrint = () => {
     const iframe = iframeRef.current;
     if (!iframe?.contentDocument || !iframe?.contentWindow) {
@@ -43,7 +57,6 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
     setPrinting(true);
     try {
       const doc = iframe.contentDocument;
-      // 移除上次注入的 override,避免叠加
       doc.getElementById("__pdf_export_override__")?.remove();
       const style = doc.createElement("style");
       style.id = "__pdf_export_override__";
@@ -53,7 +66,6 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
         }
       `;
       doc.head.appendChild(style);
-      // 等样式生效再打印
       setTimeout(() => {
         try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { /* ignore */ }
         setPrinting(false);
@@ -63,6 +75,35 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       const win = window.open(fileUrl, "_blank");
       if (win) setTimeout(() => { try { win.focus(); win.print(); } catch { /* ignore */ } }, 1800);
     }
+  };
+
+  // 直接下载原始 HTML 文件到本地(用 fetch + blob 强制触发下载,不让浏览器在新标签打开)
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(fileUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName || "report.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch {
+      // 兜底:直接打开链接
+      window.open(fileUrl, "_blank");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // 重试加载 iframe
+  const handleRetry = () => {
+    setIframeLoading(true);
+    setLoadTimeout(false);
+    setIframeKey(k => k + 1);
   };
 
   return (
@@ -83,9 +124,45 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
               className="bg-white shadow-xl border border-slate-300 relative transition-all duration-200"
               style={{ width: previewW, height: previewH, flexShrink: 0 }}
             >
-              {iframeLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+              {iframeLoading && !loadTimeout && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-10 gap-2">
                   <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+                  <div className="text-[11.5px] text-slate-500">正在加载预览…</div>
+                  <div className="text-[10.5px] text-slate-400">如长时间未加载,15 秒后将显示备选方案</div>
+                </div>
+              )}
+              {loadTimeout && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-20 gap-3 px-6 text-center">
+                  <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-slate-700">预览加载超时</div>
+                  <div className="text-[11.5px] text-slate-500 leading-relaxed max-w-[280px]">
+                    报告文件较大或网络较慢。你可以继续等待 / 重试,或直接在新标签打开预览,也可以跳过预览直接下载。
+                  </div>
+                  <div className="flex flex-col gap-1.5 w-full max-w-[220px] mt-1">
+                    <Button onClick={handleRetry} size="sm" variant="outline" className="text-[12px] gap-1.5">
+                      <RotateCcw className="w-3.5 h-3.5" /> 重试
+                    </Button>
+                    <Button
+                      onClick={() => window.open(fileUrl, "_blank")}
+                      size="sm"
+                      variant="outline"
+                      className="text-[12px] gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> 在新标签打开
+                    </Button>
+                    <Button
+                      onClick={handleDownload}
+                      size="sm"
+                      disabled={downloading}
+                      className="text-[12px] gap-1.5 bg-rose-500 hover:bg-rose-600 text-white"
+                    >
+                      {downloading
+                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 下载中…</>
+                        : <><Download className="w-3.5 h-3.5" /> 直接下载</>}
+                    </Button>
+                  </div>
                 </div>
               )}
               {/* 边距虚线指示 */}
@@ -99,10 +176,11 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
                 }}
               />
               <iframe
+                key={iframeKey}
                 ref={iframeRef}
                 src={fileUrl}
                 title="PDF 预览"
-                onLoad={() => setIframeLoading(false)}
+                onLoad={() => { setIframeLoading(false); setLoadTimeout(false); }}
                 className="w-full h-full border-0 bg-white"
               />
             </div>
@@ -187,9 +265,8 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
               </button>
 
               <div className="text-[10.5px] text-slate-400 leading-relaxed bg-slate-50 rounded p-2 border border-slate-100">
-                💡 点击「另存为 PDF」后,在浏览器打印对话框的目标里选择
-                <span className="font-semibold text-slate-600">「另存为 PDF」</span>
-                即可下载。当前微调会自动应用到打印输出。
+                💡 <span className="font-semibold text-slate-600">「另存为 PDF」</span>会唤起浏览器打印对话框,在「目标」里选择「另存为 PDF」即可,当前微调会自动应用到输出。
+                <br />📥 <span className="font-semibold text-slate-600">「下载源文件」</span>直接保存原始 HTML 报告到本地。
               </div>
             </div>
 
@@ -197,7 +274,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
             <div className="p-3 border-t border-slate-200 space-y-2 flex-shrink-0">
               <Button
                 onClick={handlePrint}
-                disabled={iframeLoading || printing}
+                disabled={(iframeLoading && !loadTimeout) || printing}
                 className="w-full bg-rose-500 hover:bg-rose-600 text-white gap-1.5"
               >
                 {printing ? (
@@ -207,9 +284,21 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
                 )}
               </Button>
               <Button
+                onClick={handleDownload}
+                disabled={downloading}
                 variant="outline"
+                className="w-full gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+              >
+                {downloading ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> 下载中…</>
+                ) : (
+                  <><Download className="w-4 h-4" /> 下载源文件</>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={onClose}
-                className="w-full text-[12px]"
+                className="w-full text-[12px] text-slate-500"
               >
                 取消
               </Button>

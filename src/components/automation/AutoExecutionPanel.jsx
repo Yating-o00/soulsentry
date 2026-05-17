@@ -13,6 +13,14 @@ import { createPageUrl } from "@/utils";
 import { AUTOMATION_TYPES, QUICK_AUTOMATION_TEMPLATES } from "./automationConfig";
 import AutomationDetailDialog from "./AutomationDetailDialog";
 import AutomationCandidateGrid from "./AutomationCandidateGrid";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
+import { AUTOMATION_EXECUTE_COSTS } from "@/components/credits/creditConfig";
+
+// 把后端 402 INSUFFICIENT_CREDITS 错误转成弹充值卡
+function isInsufficientCreditsError(res) {
+  return res?.data?.code === 'INSUFFICIENT_CREDITS' || res?.status === 402;
+}
 
 export default function AutoExecutionPanel() {
   const queryClient = useQueryClient();
@@ -23,6 +31,38 @@ export default function AutoExecutionPanel() {
   const [attachedFiles, setAttachedFiles] = useState([]); // [{file_name, file_url, file_size, file_type}]
   const [uploading, setUploading] = useState(false);
   const fileInputRef = React.useRef(null);
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog, refreshCredits } = useAICreditGate();
+  const [creditsDialog, setCreditsDialog] = React.useState({ open: false, cost: 0, balance: 0, featureName: '' });
+
+  // 统一执行：plan → execute，识别 402 INSUFFICIENT_CREDITS 弹充值卡
+  // 返回 true 表示完整跑完；false 表示中途因点数不足/失败终止
+  const runPlanThenExecute = async (executionId) => {
+    const planRes = await base44.functions.invoke('executeAutomation', { execution_id: executionId, phase: "plan" });
+    if (isInsufficientCreditsError(planRes)) {
+      setCreditsDialog({
+        open: true,
+        cost: planRes.data.required || AUTOMATION_EXECUTE_COSTS.plan,
+        balance: planRes.data.balance ?? 0,
+        featureName: '自动执行 · 方案规划',
+      });
+      return false;
+    }
+    if (planRes.data?.error) throw new Error(planRes.data.error);
+
+    const execRes = await base44.functions.invoke('executeAutomation', { execution_id: executionId, phase: "execute" });
+    if (isInsufficientCreditsError(execRes)) {
+      setCreditsDialog({
+        open: true,
+        cost: execRes.data.required || AUTOMATION_EXECUTE_COSTS.default,
+        balance: execRes.data.balance ?? 0,
+        featureName: '自动执行',
+      });
+      return false;
+    }
+    if (execRes.data?.error) throw new Error(execRes.data.error);
+    refreshCredits();
+    return true;
+  };
 
   const handleFilePick = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -77,6 +117,9 @@ export default function AutoExecutionPanel() {
   const handleAnalyze = async (text) => {
     const content = (text || input).trim();
     if (!content) return;
+    // 预校验余额（≥1 点）
+    const allowed = await gate("automation_plan");
+    if (!allowed) return;
     setSubmitting(true);
     setCandidates([]);
     setAuthorizedIds(new Set());
@@ -98,17 +141,7 @@ export default function AutoExecutionPanel() {
       // 立即打开对话框让用户看到规划进度
       setOpenExec(exec);
 
-      const planRes = await base44.functions.invoke('executeAutomation', {
-        execution_id: exec.id,
-        phase: "plan",
-      });
-      if (planRes.data?.error) throw new Error(planRes.data.error);
-
-      const execRes = await base44.functions.invoke('executeAutomation', {
-        execution_id: exec.id,
-        phase: "execute",
-      });
-      if (execRes.data?.error) throw new Error(execRes.data.error);
+      await runPlanThenExecute(exec.id);
 
       const updated = await base44.entities.TaskExecution.filter({ id: exec.id });
       if (updated?.[0]) setOpenExec(updated[0]);
@@ -123,6 +156,8 @@ export default function AutoExecutionPanel() {
   // 2) 用户对单条子项点击"授权执行" → 创建 TaskExecution + 触发 executeAutomation
   const handleAuthorize = async (candidate) => {
     const id = candidate._id;
+    const allowed = await gate("automation_plan");
+    if (!allowed) return;
     setAuthorizingIds(prev => new Set(prev).add(id));
     try {
       const exec = await base44.entities.TaskExecution.create({
@@ -140,21 +175,12 @@ export default function AutoExecutionPanel() {
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
 
       // 规划 → 执行（一次性走完，让用户在结果对话框中查看产物）
-      const planRes = await base44.functions.invoke('executeAutomation', {
-        execution_id: exec.id,
-        phase: "plan",
-      });
-      if (planRes.data?.error) throw new Error(planRes.data.error);
-
-      const execRes = await base44.functions.invoke('executeAutomation', {
-        execution_id: exec.id,
-        phase: "execute",
-      });
-      if (execRes.data?.error) throw new Error(execRes.data.error);
-
+      const ok = await runPlanThenExecute(exec.id);
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-      setAuthorizedIds(prev => new Set(prev).add(id));
-      toast.success(`已完成：${candidate.title}`, { icon: "✅" });
+      if (ok) {
+        setAuthorizedIds(prev => new Set(prev).add(id));
+        toast.success(`已完成：${candidate.title}`, { icon: "✅" });
+      }
     } catch (e) {
       toast.error("执行失败：" + e.message);
     } finally {
@@ -179,12 +205,8 @@ export default function AutoExecutionPanel() {
     setInput(template.example);
     setCandidates([]);
     setSceneSummary("");
-    const item = {
-      _id: `quick-${Date.now()}`,
-      title: template.label,
-      detail: template.example,
-      automation_type: template.type,
-    };
+    const allowed = await gate("automation_plan");
+    if (!allowed) return;
     try {
       const exec = await base44.entities.TaskExecution.create({
         task_title: template.label,
@@ -203,17 +225,7 @@ export default function AutoExecutionPanel() {
       // 立即打开结果对话框，用户能看到规划与产物
       setOpenExec(exec);
 
-      const planRes = await base44.functions.invoke('executeAutomation', {
-        execution_id: exec.id,
-        phase: "plan",
-      });
-      if (planRes.data?.error) throw new Error(planRes.data.error);
-
-      const execRes = await base44.functions.invoke('executeAutomation', {
-        execution_id: exec.id,
-        phase: "execute",
-      });
-      if (execRes.data?.error) throw new Error(execRes.data.error);
+      await runPlanThenExecute(exec.id);
 
       // 拉取最新执行结果，刷新对话框内容
       const updated = await base44.entities.TaskExecution.filter({ id: exec.id });
@@ -235,7 +247,7 @@ export default function AutoExecutionPanel() {
               </div>
               <div>
                 <h3 className="text-sm md:text-base font-semibold text-slate-900">添加自动执行项</h3>
-                <p className="text-[11px] text-slate-500">告诉 AI 你要的成果，直接生成对应内容</p>
+                <p className="text-[11px] text-slate-500">告诉 AI 你要的成果，直接生成对应内容 · 按次消耗 AI 点数</p>
               </div>
             </div>
             <Button variant="ghost" size="sm" asChild className="text-xs text-indigo-600 hover:bg-indigo-50">
@@ -376,6 +388,24 @@ export default function AutoExecutionPanel() {
         execution={openExec}
         open={!!openExec}
         onOpenChange={(o) => !o && setOpenExec(null)}
+      />
+
+      {/* 前置 gate（余额 < 1 点）触发的弹窗 */}
+      <InsufficientCreditsDialog
+        open={showInsufficientDialog}
+        onOpenChange={(o) => !o && dismissDialog()}
+        cost={insufficientProps.cost}
+        balance={insufficientProps.balance}
+        featureName={insufficientProps.featureName}
+      />
+
+      {/* 后端 402 返回的具体不足金额（plan/execute 单价）触发的弹窗 */}
+      <InsufficientCreditsDialog
+        open={creditsDialog.open}
+        onOpenChange={(o) => !o && setCreditsDialog(prev => ({ ...prev, open: false }))}
+        cost={creditsDialog.cost}
+        balance={creditsDialog.balance}
+        featureName={creditsDialog.featureName}
       />
     </>
   );

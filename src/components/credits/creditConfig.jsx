@@ -58,7 +58,68 @@ export const AI_FEATURES = {
     multiplier: 5.0,
     estimated: "约 50-100 点/次",
     description: "基于实际 token 用量动态计费"
+  },
+  automation_plan: {
+    name: "自动执行 · 方案规划",
+    multiplier: 0,
+    estimated: "5 点/次",
+    description: "固定计费：AI 解析指令并生成执行方案"
+  },
+  automation_email_draft: {
+    name: "自动执行 · 邮件草稿",
+    multiplier: 0,
+    estimated: "15 点/次",
+    description: "固定计费：AI 起草专业邮件"
+  },
+  automation_summary_note: {
+    name: "自动执行 · 总结心签 / 复盘",
+    multiplier: 0,
+    estimated: "20 点/次",
+    description: "固定计费：AI 生成总结/日终复盘"
+  },
+  automation_calendar_event: {
+    name: "自动执行 · 日历事件",
+    multiplier: 0,
+    estimated: "20 点/次",
+    description: "固定计费：AI 解析时间并创建日历事件"
+  },
+  automation_file_organize: {
+    name: "自动执行 · 文件整理",
+    multiplier: 0,
+    estimated: "20 点/次",
+    description: "固定计费：AI 整理文件并归档"
+  },
+  automation_office_doc: {
+    name: "自动执行 · 办公文档",
+    multiplier: 0,
+    estimated: "50 点/次",
+    description: "固定计费：AI 生成 Word/HTML 长文档"
+  },
+  automation_web_research: {
+    name: "自动执行 · 联网调研",
+    multiplier: 0,
+    estimated: "60 点/次",
+    description: "固定计费：联网搜索 + 深度调研报告"
+  },
+  automation_ppt_doc: {
+    name: "自动执行 · 演示稿",
+    multiplier: 0,
+    estimated: "80 点/次",
+    description: "固定计费：AI 生成多页 PPT（含视觉解析）"
   }
+};
+
+// 自动执行类型 → 固定扣费点数（执行成功后才扣，失败/取消不扣）
+export const AUTOMATION_EXECUTE_COSTS = {
+  plan: 5,
+  email_draft: 15,
+  summary_note: 20,
+  calendar_event: 20,
+  file_organize: 20,
+  office_doc: 50,
+  web_research: 60,
+  ppt_doc: 80,
+  default: 20,
 };
 
 // 点数包配置

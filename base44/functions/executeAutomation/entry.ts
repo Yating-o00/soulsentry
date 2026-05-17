@@ -29,6 +29,56 @@ async function callKimi(base44, prompt, response_json_schema, system_prompt, fil
   return res.data;
 }
 
+// ========== AI 点数计费（固定单价，与 components/credits/creditConfig 保持一致）==========
+const AUTOMATION_EXECUTE_COSTS = {
+  plan: 5,
+  email_draft: 15,
+  summary_note: 20,
+  calendar_event: 20,
+  file_organize: 20,
+  office_doc: 50,
+  web_research: 60,
+  ppt_doc: 80,
+  default: 20,
+};
+
+function getAutomationCost(key) {
+  return AUTOMATION_EXECUTE_COSTS[key] ?? AUTOMATION_EXECUTE_COSTS.default;
+}
+
+// 余额校验：不足则抛出标准化错误（前端可识别 INSUFFICIENT_CREDITS）
+async function ensureCredits(base44, user, requiredCredits) {
+  const balance = user?.ai_credits ?? 0;
+  if (balance < requiredCredits) {
+    const err = new Error(`AI 点数不足，需要 ${requiredCredits} 点，当前余额 ${balance} 点`);
+    err.code = 'INSUFFICIENT_CREDITS';
+    err.required = requiredCredits;
+    err.balance = balance;
+    throw err;
+  }
+}
+
+// 成功后扣费 + 写流水（失败/取消不扣费）
+async function chargeCredits(base44, userId, cost, featureKey, description) {
+  try {
+    const fresh = await base44.asServiceRole.entities.User.get(userId);
+    const current = fresh?.ai_credits ?? 0;
+    const newBalance = Math.max(0, current - cost);
+    await base44.asServiceRole.entities.User.update(userId, { ai_credits: newBalance });
+    await base44.asServiceRole.entities.AICreditTransaction.create({
+      type: 'consume',
+      amount: -cost,
+      balance_after: newBalance,
+      feature: featureKey,
+      description: description || `自动执行消耗 ${cost} 点`,
+    });
+    return newBalance;
+  } catch (e) {
+    console.warn('[executeAutomation] chargeCredits failed:', e?.message || e);
+    return null;
+  }
+}
+
 // 读取用户上传的参考文件，转为可被 LLM 理解的文本上下文
 // 文本/表格/PDF → 用 ExtractDataFromUploadedFile 抽内容；图片 → 收集 URL 走视觉模型
 async function buildAttachmentContext(base44, exec) {
@@ -1662,6 +1712,22 @@ Deno.serve(async (req) => {
 
     // === Phase 1: PLAN ===
     if (phase === "plan") {
+      // 余额校验：方案规划阶段需要 plan 点数
+      const planCost = getAutomationCost('plan');
+      try {
+        await ensureCredits(base44, user, planCost);
+      } catch (e) {
+        if (e.code === 'INSUFFICIENT_CREDITS') {
+          return Response.json({
+            error: 'INSUFFICIENT_CREDITS',
+            message: e.message,
+            required: e.required,
+            balance: e.balance,
+          }, { status: 402 });
+        }
+        throw e;
+      }
+
       const planRes = await generatePlan(base44, exec, attachmentCtx);
       const steps = (planRes.plan.steps || []).map(s => ({
         step_name: s.name,
@@ -1678,7 +1744,11 @@ Deno.serve(async (req) => {
         execution_status: nextStatus,
       });
 
-      return Response.json({ success: true, phase: "plan", execution: updated });
+      // 成功后扣 plan 点数
+      await chargeCredits(base44, user.id, planCost, 'automation_plan',
+        `自动执行方案规划（${planRes.automation_type}）消耗 ${planCost} 点`);
+
+      return Response.json({ success: true, phase: "plan", execution: updated, charged: planCost });
     }
 
     // === Phase 2: EXECUTE ===
@@ -1692,6 +1762,22 @@ Deno.serve(async (req) => {
           error_message: `不支持的自动执行类型：${autoType}`,
         });
         return Response.json({ error: `Unsupported automation_type: ${autoType}` }, { status: 400 });
+      }
+
+      // 余额校验：根据类型确定单价（失败/取消不扣，成功才扣）
+      const execCost = getAutomationCost(autoType);
+      try {
+        await ensureCredits(base44, user, execCost);
+      } catch (e) {
+        if (e.code === 'INSUFFICIENT_CREDITS') {
+          return Response.json({
+            error: 'INSUFFICIENT_CREDITS',
+            message: e.message,
+            required: e.required,
+            balance: e.balance,
+          }, { status: 402 });
+        }
+        throw e;
       }
 
       // 标记 executing
@@ -1720,7 +1806,11 @@ Deno.serve(async (req) => {
           execution_steps: completedSteps,
         });
 
-        return Response.json({ success: true, phase: "execute", execution: updated, result });
+        // 执行成功后扣费
+        await chargeCredits(base44, user.id, execCost, `automation_${autoType}`,
+          `自动执行「${exec.task_title || autoType}」消耗 ${execCost} 点`);
+
+        return Response.json({ success: true, phase: "execute", execution: updated, result, charged: execCost });
       } catch (e) {
         await base44.entities.TaskExecution.update(execution_id, {
           execution_status: "failed",

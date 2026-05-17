@@ -32,17 +32,27 @@ export const TEMPLATES = {
 
 // 从 markdown 文本中抽取所有 ![alt](url) 图片,并返回剥离图片后的纯文本
 export function extractImagesAndText(raw) {
-  if (!raw) return { images: [], text: "" };
+  if (!raw) return { images: [], text: "", segments: [] };
   const imgRe = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
   const images = [];
+  // segments: 按图片在原文中出现的位置切片,得到 [{text, image?}, ...]
+  // 用于卡片/杂志模式,确保图片与其紧邻的文字保持正确顺序
+  const segments = [];
+  const src = String(raw);
+  let last = 0;
   let m;
-  let stripped = String(raw);
-  while ((m = imgRe.exec(raw)) !== null) {
-    images.push({ alt: m[1] || "", url: m[2] });
+  while ((m = imgRe.exec(src)) !== null) {
+    const img = { alt: m[1] || "", url: m[2] };
+    images.push(img);
+    const before = src.slice(last, m.index).replace(/\n{3,}/g, "\n\n").trim();
+    segments.push({ text: before, image: img });
+    last = m.index + m[0].length;
   }
-  // 删掉所有图片占位,保留纯文字
-  stripped = stripped.replace(imgRe, "").replace(/\n{3,}/g, "\n\n").trim();
-  return { images, text: stripped };
+  const tail = src.slice(last).replace(/\n{3,}/g, "\n\n").trim();
+  if (tail || segments.length === 0) segments.push({ text: tail, image: null });
+
+  const stripped = src.replace(imgRe, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { images, text: stripped, segments };
 }
 
 // 根据内容特征自动推荐模板

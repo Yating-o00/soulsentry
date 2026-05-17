@@ -9,22 +9,40 @@ function looksLikeHtml(s) {
 }
 
 // 从 HTML 字符串里抽出 <img> 列表,并返回剥掉 <img>/<figure> 后的"纯 HTML 文本"
+// 同时返回 segments:按图片在原文出现的位置切片,确保图片与其紧邻文字保持顺序
 function extractImagesFromHtml(html) {
-  if (!html) return { images: [], cleanHtml: "" };
+  if (!html) return { images: [], cleanHtml: "", segments: [] };
+  // 把 <figure>...</figure> 先归一化:抽出其中的 src/alt,替换为单一 <img> 标签,避免重复
+  let normalized = String(html).replace(/<figure\b[^>]*>([\s\S]*?)<\/figure>/gi, (_, inner) => {
+    const srcM = inner.match(/<img\b[^>]*?src=["']([^"']+)["'][^>]*?>/i);
+    const altM = inner.match(/<img\b[^>]*?alt=["']([^"']*)["'][^>]*?>/i)
+              || inner.match(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/i);
+    if (!srcM) return "";
+    const alt = altM ? String(altM[1]).replace(/<[^>]+>/g, "").trim() : "";
+    return `<img src="${srcM[1]}" alt="${alt.replace(/"/g, "&quot;")}">`;
+  });
+
   const images = [];
-  const imgRe = /<img\b[^>]*?src=["']([^"']+)["'][^>]*?(?:alt=["']([^"']*)["'])?[^>]*?>/gi;
+  const segments = [];
+  const imgRe = /<img\b[^>]*?>/gi;
+  let last = 0;
   let m;
-  while ((m = imgRe.exec(html)) !== null) {
-    // 再扫一遍取 alt(因为上面那条正则在 src 之后才匹配 alt,顺序可能反)
+  while ((m = imgRe.exec(normalized)) !== null) {
     const tag = m[0];
+    const srcMatch = tag.match(/src=["']([^"']+)["']/i);
     const altMatch = tag.match(/alt=["']([^"']*)["']/i);
-    images.push({ url: m[1], alt: altMatch ? altMatch[1] : "" });
+    if (!srcMatch) continue;
+    const img = { url: srcMatch[1], alt: altMatch ? altMatch[1] : "" };
+    images.push(img);
+    const before = normalized.slice(last, m.index).trim();
+    segments.push({ text: before, image: img });
+    last = m.index + tag.length;
   }
-  // 去掉 <figure>...</figure> 整块(常包含 img + figcaption)和裸 <img>
-  const cleanHtml = html
-    .replace(/<figure\b[^>]*>[\s\S]*?<\/figure>/gi, "")
-    .replace(/<img\b[^>]*?>/gi, "");
-  return { images, cleanHtml };
+  const tail = normalized.slice(last).trim();
+  if (tail || segments.length === 0) segments.push({ text: tail, image: null });
+
+  const cleanHtml = normalized.replace(imgRe, "");
+  return { images, cleanHtml, segments };
 }
 
 // HTML 直渲染容器:让原始 HTML 标签正常显示,并约束图片/表格不溢出
@@ -96,20 +114,30 @@ export default function TemplatedSection({ heading, content, template = "classic
   const isHtml = looksLikeHtml(content);
   // HTML 内容:抽出图片走模板,纯 HTML 文本(已剥图)替代 PlainText 渲染
   // Markdown 内容:走原有 extractImagesAndText
-  const { images, text, htmlText } = React.useMemo(() => {
+  const { images, text, htmlText, segments } = React.useMemo(() => {
     if (isHtml) {
-      const { images: imgs, cleanHtml } = extractImagesFromHtml(content);
-      return { images: imgs, text: "", htmlText: cleanHtml };
+      const { images: imgs, cleanHtml, segments: segs } = extractImagesFromHtml(content);
+      return { images: imgs, text: "", htmlText: cleanHtml, segments: segs };
     }
     const ext = extractImagesAndText(content);
-    return { images: ext.images, text: ext.text, htmlText: null };
+    return { images: ext.images, text: ext.text, htmlText: null, segments: ext.segments || [] };
   }, [content, isHtml]);
+
+  // 渲染单段文本(根据 isHtml 自动选择)
+  const renderText = (src, size) =>
+    isHtml ? <HtmlBlock source={src || ""} /> : <PlainText source={src || ""} size={size} />;
 
   const tpl = TEMPLATES[template] ? template : "classic";
 
   // 文字渲染器:HTML 模式用 HtmlBlock,Markdown 模式用 PlainText
   const TextRender = ({ src, size }) =>
     isHtml ? <HtmlBlock source={src ?? htmlText} /> : <PlainText source={src ?? text} size={size} />;
+
+  // 把 segments 合并成"文-图-文-图"块序列,用于杂志/卡片模式按出现顺序渲染
+  const pairedBlocks = React.useMemo(() => {
+    const segs = (segments && segments.length ? segments : [{ text: isHtml ? htmlText : text, image: null }]);
+    return segs.filter(s => (s.text && s.text.replace(/<[^>]+>/g, "").trim()) || s.image);
+  }, [segments, isHtml, htmlText, text]);
 
   return (
     <div className="rounded-lg bg-white border border-slate-200 p-3 overflow-hidden">
@@ -133,17 +161,21 @@ export default function TemplatedSection({ heading, content, template = "classic
         </div>
       )}
 
-      {/* 杂志:左文右图(图片<=2张) */}
+      {/* 杂志:按段落顺序,图文交替,左图右文,保证图与紧邻文字一致 */}
       {tpl === "magazine" && (
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-start">
-          <div className="sm:col-span-3 min-w-0">
-            <TextRender size="lg" />
-          </div>
-          <div className="sm:col-span-2 min-w-0 space-y-2">
-            {images.slice(0, 2).map((im, i) => (
-              <ImageBlock key={i} img={im} ratio="4/3" maxH={220} />
-            ))}
-          </div>
+        <div className="space-y-3">
+          {pairedBlocks.map((seg, i) => (
+            <div key={i} className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-start">
+              {seg.image ? (
+                <div className="sm:col-span-2 min-w-0">
+                  <ImageBlock img={seg.image} ratio="4/3" maxH={220} />
+                </div>
+              ) : null}
+              <div className={`min-w-0 ${seg.image ? "sm:col-span-3" : "sm:col-span-5"}`}>
+                {renderText(seg.text, "lg")}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

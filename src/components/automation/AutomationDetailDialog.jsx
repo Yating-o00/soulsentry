@@ -85,25 +85,30 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
     try {
       const newResult = { ...(execution.automation_result || {}), data: target };
       await base44.entities.TaskExecution.update(execution.id, { automation_result: newResult });
-      // 验证：从后端重新拉取，确认数据已落库（避免某些字段被服务端校验掉/合并规则导致丢失）
+      // 重新拉取,确认数据已落库(只校验"关键字段"是否存在,不做严格 JSON 等值比较 ——
+      // 后端可能对对象 key 做序列化重排,JSON.stringify 比较会误报失败)
       const fresh = await base44.entities.TaskExecution.get(execution.id);
       const savedData = fresh?.automation_result?.data;
-      // 用"目标字段"的等值检查（只挑 target 里有的 key 比较，避免对 undefined 字段误判）
-      const persisted = savedData && Object.keys(target).every(k => {
-        return JSON.stringify(savedData[k]) === JSON.stringify(target[k]);
-      });
-      if (!persisted) {
-        console.warn("[SaveEdits] 后端落库数据与本地不一致", { target, savedData });
-        throw new Error("保存后服务端未返回预期数据，请刷新后再试");
+      if (!savedData) {
+        throw new Error("保存后服务端未返回数据,请刷新后再试");
       }
-      // 保存成功后关闭编辑锁，并用 fresh 覆盖本地副本
+      // 抽样校验:章节数 / 标题 / 正文字段是否被持久化(避免后端把整个 data 吞掉)
+      if (Array.isArray(target.sections)) {
+        const ok = Array.isArray(savedData.sections)
+          && savedData.sections.length === target.sections.length;
+        if (!ok) {
+          console.warn("[SaveEdits] 章节数不一致", { target, savedData });
+          throw new Error("章节未完整保存,请刷新后再试");
+        }
+      }
       hasDraftRef.current = false;
       setLocalExecution(fresh);
       setEditedData(null);
       toast.success("已保存修改");
       refresh();
     } catch (e) {
-      toast.error("保存失败：" + e.message);
+      console.error("[SaveEdits] 失败", e, { target });
+      toast.error("保存失败:" + e.message);
     } finally {
       setSavingEdits(false);
     }

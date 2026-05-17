@@ -234,7 +234,7 @@ export default function AutoExecutionPanel() {
                 <Zap className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h3 className="text-sm md:text-base font-semibold text-slate-900">自动执行清单</h3>
+                <h3 className="text-sm md:text-base font-semibold text-slate-900">添加自动执行项</h3>
                 <p className="text-[11px] text-slate-500">告诉 AI 你要的成果，直接生成对应内容</p>
               </div>
             </div>

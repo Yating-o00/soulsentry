@@ -869,10 +869,37 @@ function renderRichHtml({ title, subtitle, sections = [], keyFindings = [], reco
   .card.muted a:hover{text-decoration:underline}
   .footer{text-align:center;color:#94a3b8;font-size:12px;padding:24px 0 8px;letter-spacing:.05em}
   @media print{
-    body{background:#fff}
-    .page{max-width:none;padding:0}
-    .hero{box-shadow:none;border-radius:0;page-break-after:avoid}
-    .card{box-shadow:none;border:1px solid #e2e8f0;page-break-inside:avoid}
+    /* 让浏览器按 A4 纵向打印，并自上而下统一边距，避免不同打印机默认页边距导致左右偏移 */
+    @page{size:A4 portrait;margin:14mm 12mm}
+    html,body{background:#fff !important;width:100%;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+    /* 容器去掉外边距/最大宽度，让内容铺满 A4 可打印区域 */
+    .page{max-width:none;width:100%;margin:0;padding:0}
+    /* 封面区不分页切断 */
+    .hero{box-shadow:none;border-radius:12px;padding:24px 28px;margin-bottom:14px;page-break-after:avoid;break-after:avoid}
+    .hero h1{font-size:24px;margin-bottom:8px}
+    .hero .sub{font-size:12px}
+    .hero .chip{font-size:10px;padding:4px 10px}
+    /* 卡片：去阴影、收紧内边距、整卡不被切断 */
+    .card{box-shadow:none !important;border:1px solid #e2e8f0;padding:16px 18px;margin-bottom:12px;border-radius:10px;page-break-inside:avoid;break-inside:avoid}
+    .card h2{font-size:15px;margin-bottom:10px}
+    .card h2 .idx{width:26px;height:26px;font-size:11px;border-radius:6px}
+    .card .body{font-size:11.5px;line-height:1.55}
+    .card .body h3{font-size:13px;margin:10px 0 4px}
+    .card .body p,.card .body li{font-size:11.5px;line-height:1.55}
+    /* 表格：禁止跨页切单元格,允许长内容换行避免横向溢出 */
+    .card .body .md-table{font-size:10.5px;page-break-inside:auto;break-inside:auto;table-layout:fixed;width:100%}
+    .card .body .md-table th,.card .body .md-table td{padding:6px 8px;word-break:break-word;white-space:normal}
+    .card .body .md-table tr{page-break-inside:avoid;break-inside:avoid}
+    .card .body .md-table thead{display:table-header-group}
+    /* 图片：限制最大高度,避免单张图把一整页吃掉 */
+    .card .body img,.card .body .md-figure img{max-width:100% !important;max-height:80mm;height:auto;page-break-inside:avoid;break-inside:avoid}
+    .card .body .md-figure{page-break-inside:avoid;break-inside:avoid}
+    .card .body .md-figure-grid{page-break-inside:avoid;break-inside:avoid}
+    .card .body .md-figure-grid .md-figure img{max-height:55mm}
+    /* 列表/段落避免单行孤行 */
+    .card .body p,.card .body li{orphans:3;widows:3}
+    /* 隐藏屏幕态的页脚说明（PDF 已自带页码） */
+    .footer{font-size:10px;color:#94a3b8;padding:8px 0}
   }
 </style></head>
 <body>

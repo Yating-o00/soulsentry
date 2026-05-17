@@ -6,6 +6,7 @@ import TemplatedSection from "./TemplatedSection";
 import TemplateThumbnail from "./TemplateThumbnail";
 import PdfExportPreviewDialog from "./PdfExportPreviewDialog";
 import { TEMPLATES, extractImagesAndText, autoPickTemplate } from "./researchTemplates";
+import { buildResearchHtml } from "./buildResearchHtml";
 // 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
   // 先把字面 <br> / &lt;br&gt; 转成换行，再在 ①②③ 等带圈数字前补换行（让 AI 输出的脏排版自动恢复）
@@ -471,55 +472,67 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
         )
       )}
 
-      {/* 预览 / 打印为 PDF（HTML 报告专属）*/}
-      {fileUrl && (() => {
+      {/* 预览 / 打印为 PDF —— 始终基于"当前编辑中的 title + sections"实时生成,
+          这样用户改完方案后,PDF 预览与下载的内容立即同步,不再读旧的 file_url 文件 */}
+      {((sections && sections.length > 0) || body || fileUrl) && (() => {
         const ext = (fileName.split('.').pop() || '').toLowerCase();
-        // 浏览器原生可预览：PDF/图片/HTML/纯文本/MD 直接打开
         const nativePreview = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'html', 'htm', 'txt', 'md'];
-        const previewHref = nativePreview.includes(ext)
-          ? fileUrl
-          : `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=false`;
-        // 仅 HTML 报告自带 @page A4 打印样式 —— 才显示"导出 PDF"按钮(打开可视化预览对话框)
-        const canPrintAsPdf = ext === 'html' || ext === 'htm';
+        const previewHref = fileUrl
+          ? (nativePreview.includes(ext) ? fileUrl : `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=false`)
+          : null;
+        // 实时拼接当前内容为 HTML(用于预览 iframe + PDF 导出 + 下载源文件)
+        const liveHtml = buildResearchHtml({ title, sections, body });
+        const pdfFileName = (fileName && /\.(html?|md|txt)$/i.test(fileName))
+          ? fileName.replace(/\.[^/.]+$/, ".html")
+          : `${(title || "调研报告").replace(/[\\/:*?"<>|]/g, "_")}.html`;
         return (
         <>
         <div className="flex items-stretch gap-2">
-          <a
-            href={previewHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2.5 flex-1 min-w-0 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 hover:shadow px-3 py-2.5 transition-all group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
-              <FileText className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12.5px] font-semibold text-emerald-900 truncate">{fileName}</div>
-              <div className="text-[10.5px] text-emerald-700 flex items-center gap-1">
-                <ExternalLink className="w-2.5 h-2.5" /> 完整报告 · 点击在新标签预览
+          {previewHref ? (
+            <a
+              href={previewHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 flex-1 min-w-0 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 hover:shadow px-3 py-2.5 transition-all group"
+            >
+              <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+                <FileText className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold text-emerald-900 truncate">{fileName}</div>
+                <div className="text-[10.5px] text-emerald-700 flex items-center gap-1">
+                  <ExternalLink className="w-2.5 h-2.5" /> 原始报告 · 点击在新标签预览
+                </div>
+              </div>
+            </a>
+          ) : (
+            <div className="flex items-center gap-2.5 flex-1 min-w-0 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-4 h-4 text-slate-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold text-slate-800 truncate">{title || "调研报告"}</div>
+                <div className="text-[10.5px] text-slate-500">实时内容 · 点击右侧导出当前版本</div>
               </div>
             </div>
-          </a>
-          {canPrintAsPdf && (
-            <button
-              type="button"
-              onClick={() => setPdfPreviewOpen(true)}
-              title="打开 PDF 排版预览,可微调纸张方向/边距后再导出"
-              className="flex flex-col items-center justify-center gap-0.5 px-3 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-400 hover:shadow text-rose-600 transition-all flex-shrink-0"
-            >
-              <Printer className="w-4 h-4" />
-              <span className="text-[10px] font-semibold leading-none">导出 PDF</span>
-            </button>
           )}
+          <button
+            type="button"
+            onClick={() => setPdfPreviewOpen(true)}
+            title="预览当前修改后的内容,可微调后下载 PDF"
+            className="flex flex-col items-center justify-center gap-0.5 px-3 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-400 hover:shadow text-rose-600 transition-all flex-shrink-0"
+          >
+            <Printer className="w-4 h-4" />
+            <span className="text-[10px] font-semibold leading-none">导出 PDF</span>
+          </button>
         </div>
-        {canPrintAsPdf && (
-          <PdfExportPreviewDialog
-            open={pdfPreviewOpen}
-            onClose={() => setPdfPreviewOpen(false)}
-            fileUrl={fileUrl}
-            fileName={fileName}
-          />
-        )}
+        <PdfExportPreviewDialog
+          open={pdfPreviewOpen}
+          onClose={() => setPdfPreviewOpen(false)}
+          fileUrl={fileUrl}
+          fileName={pdfFileName}
+          inlineHtml={liveHtml}
+        />
         </>
         );
       })()}

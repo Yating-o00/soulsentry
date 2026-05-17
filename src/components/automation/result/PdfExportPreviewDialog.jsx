@@ -8,7 +8,7 @@ import html2canvas from "html2canvas";
 // PDF 导出前的可视化预览 + 微调
 // 关键改造:用 fetch 把 HTML 抓到本地 → 用 srcDoc 注入 iframe(绕过 X-Frame-Options / 跨域 print 限制)
 // 这样无论 base44 文件域名是否同源、是否设置 frame-deny,iframe 都能正常渲染并触发打印
-export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileName }) {
+export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileName, inlineHtml }) {
   const iframeRef = useRef(null);
   const [orientation, setOrientation] = useState("portrait");
   const [margin, setMargin] = useState(14);
@@ -33,8 +33,16 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
   }, [open, fileUrl]);
 
   // fetch HTML → srcDoc(绕过跨域 + iframe 限制)
+  // 如果上层直接传了 inlineHtml(用户已经编辑过的内容),优先用它,跳过 fetch
   useEffect(() => {
-    if (!open || !fileUrl) return;
+    if (!open) return;
+    if (inlineHtml) {
+      setHtmlContent(inlineHtml);
+      setFetchLoading(false);
+      setFetchError(null);
+      return;
+    }
+    if (!fileUrl) return;
     let cancelled = false;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
@@ -68,7 +76,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       controller.abort();
       clearTimeout(timeoutId);
     };
-  }, [open, fileUrl, fetchKey]);
+  }, [open, fileUrl, fetchKey, inlineHtml]);
 
   // A4 屏幕预览尺寸(mm 等比换算成 px,1mm ≈ 3.78px)
   const A4 = orientation === "portrait"
@@ -440,8 +448,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
               </button>
 
               <div className="text-[10.5px] text-slate-400 leading-relaxed bg-slate-50 rounded p-2 border border-slate-100">
-                💡 点击 <span className="font-semibold text-slate-600">「另存为 PDF」</span> 直接生成 .pdf 文件并下载,当前的方向/边距自动应用,无需任何对话框。
-                <br />📥 <span className="font-semibold text-slate-600">「下载源文件」</span> 保存原始 HTML 报告。
+                💡 点击 <span className="font-semibold text-slate-600">「另存为 PDF」</span> 直接按当前预览生成 .pdf 文件并下载,你的编辑内容、纸张方向与边距都会同步生效。
               </div>
             </div>
 
@@ -456,18 +463,6 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
                   <><Loader2 className="w-4 h-4 animate-spin" /> 生成 PDF 中…</>
                 ) : (
                   <><Download className="w-4 h-4" /> 另存为 PDF</>
-                )}
-              </Button>
-              <Button
-                onClick={handleDownload}
-                disabled={downloading}
-                variant="outline"
-                className="w-full gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-              >
-                {downloading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> 下载中…</>
-                ) : (
-                  <><Download className="w-4 h-4" /> 下载源文件</>
                 )}
               </Button>
               <Button

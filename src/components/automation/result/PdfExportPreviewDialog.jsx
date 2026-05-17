@@ -187,29 +187,110 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
             usedMm = 0;
           }
 
-          // 元素本身就 > 整页(超大图/超长表):必须切块装多页,但只发生在不可拆元素上
+          // 元素本身就 > 整页:需要切块
           if (blockMmH > contentH) {
-            // 把这张大 canvas 按 contentH 切片(只对超大单元素,无文字断字风险因为是图/表)
-            const sliceMaxPx = Math.floor((contentH * c.width) / contentW);
-            let yPx = 0;
-            while (yPx < c.height) {
-              if (usedMm > 0) {
-                pdf.addPage();
-                pageIdx += 1;
-                usedMm = 0;
+            const tagLower = el.tagName?.toLowerCase();
+            const isUncuttable = ["img", "table", "svg", "video", "canvas", "figure", "hr"].includes(tagLower);
+
+            if (isUncuttable) {
+              // 不可拆元素(超大图/表):按页高硬切,文字风险=0
+              const sliceMaxPx = Math.floor((contentH * c.width) / contentW);
+              let yPx = 0;
+              while (yPx < c.height) {
+                if (usedMm > 0) {
+                  pdf.addPage();
+                  pageIdx += 1;
+                  usedMm = 0;
+                }
+                const sliceH = Math.min(sliceMaxPx, c.height - yPx);
+                const tmp = document.createElement("canvas");
+                tmp.width = c.width;
+                tmp.height = sliceH;
+                const ctx = tmp.getContext("2d");
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, c.width, sliceH);
+                ctx.drawImage(c, 0, yPx, c.width, sliceH, 0, 0, c.width, sliceH);
+                const sliceMmH = (sliceH * contentW) / c.width;
+                pdf.addImage(tmp.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin + usedMm, contentW, sliceMmH);
+                usedMm += sliceMmH;
+                yPx += sliceH;
               }
-              const sliceH = Math.min(sliceMaxPx, c.height - yPx);
-              const tmp = document.createElement("canvas");
-              tmp.width = c.width;
-              tmp.height = sliceH;
-              const ctx = tmp.getContext("2d");
-              ctx.fillStyle = "#ffffff";
-              ctx.fillRect(0, 0, c.width, sliceH);
-              ctx.drawImage(c, 0, yPx, c.width, sliceH, 0, 0, c.width, sliceH);
-              const sliceMmH = (sliceH * contentW) / c.width;
-              pdf.addImage(tmp.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin + usedMm, contentW, sliceMmH);
-              usedMm += sliceMmH;
-              yPx += sliceH;
+            } else {
+              // 含文字的超长元素:用元素内的"文本行盒"作为禁切区,只在行间隙断开
+              const elRect = el.getBoundingClientRect();
+              const forbidden = []; // 相对元素顶部的禁切区(px,在源 DOM 坐标下)
+              const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+                acceptNode: (n) => {
+                  if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                  const p = n.parentElement;
+                  if (!p) return NodeFilter.FILTER_REJECT;
+                  const tg = p.tagName.toLowerCase();
+                  if (tg === "script" || tg === "style" || tg === "noscript") return NodeFilter.FILTER_REJECT;
+                  return NodeFilter.FILTER_ACCEPT;
+                }
+              });
+              const range = doc.createRange();
+              let tn;
+              while ((tn = walker.nextNode())) {
+                try {
+                  range.selectNodeContents(tn);
+                  const rects = range.getClientRects();
+                  for (let i = 0; i < rects.length; i++) {
+                    const r = rects[i];
+                    if (r.height === 0) continue;
+                    forbidden.push({
+                      top: Math.floor((r.top - elRect.top) * scale) - 1,
+                      bottom: Math.ceil((r.bottom - elRect.top) * scale) + 1,
+                    });
+                  }
+                } catch { /* ignore */ }
+              }
+              forbidden.sort((a, b) => a.top - b.top);
+
+              const isSafe = (y) => {
+                // 二分找 top <= y 的最后一个
+                let lo = 0, hi = forbidden.length - 1, idx = -1;
+                while (lo <= hi) {
+                  const mid = (lo + hi) >> 1;
+                  if (forbidden[mid].top <= y) { idx = mid; lo = mid + 1; }
+                  else hi = mid - 1;
+                }
+                if (idx < 0) return true;
+                return y >= forbidden[idx].bottom;
+              };
+
+              const sliceMaxPx = Math.floor((contentH * c.width) / contentW);
+              let yPx = 0;
+              while (yPx < c.height) {
+                if (usedMm > 0) {
+                  pdf.addPage();
+                  pageIdx += 1;
+                  usedMm = 0;
+                }
+                const maxEnd = Math.min(yPx + sliceMaxPx, c.height);
+                let cutAt = -1;
+                if (maxEnd >= c.height) {
+                  cutAt = c.height;
+                } else {
+                  // 从 maxEnd 向上扫,找第一个不在禁区内的 y
+                  for (let y = maxEnd; y > yPx; y--) {
+                    if (isSafe(y)) { cutAt = y; break; }
+                  }
+                  if (cutAt < 0) cutAt = maxEnd; // 兜底
+                }
+                const sliceH = cutAt - yPx;
+                const tmp = document.createElement("canvas");
+                tmp.width = c.width;
+                tmp.height = sliceH;
+                const ctx = tmp.getContext("2d");
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, c.width, sliceH);
+                ctx.drawImage(c, 0, yPx, c.width, sliceH, 0, 0, c.width, sliceH);
+                const sliceMmH = (sliceH * contentW) / c.width;
+                pdf.addImage(tmp.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin + usedMm, contentW, sliceMmH);
+                usedMm += sliceMmH;
+                yPx = cutAt;
+              }
             }
           } else {
             // 正常元素:贴到当前 y 位置

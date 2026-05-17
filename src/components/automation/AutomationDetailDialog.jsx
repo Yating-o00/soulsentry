@@ -84,11 +84,20 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
     setSavingEdits(true);
     try {
       const newResult = { ...(execution.automation_result || {}), data: target };
+      console.log("[SaveEdits] 即将写入", {
+        executionId: execution.id,
+        sectionsCount: Array.isArray(target.sections) ? target.sections.length : 0,
+        firstSectionPreview: target.sections?.[0]?.body?.slice(0, 80) || target.sections?.[0]?.content?.slice(0, 80),
+      });
       await base44.entities.TaskExecution.update(execution.id, { automation_result: newResult });
       // 重新拉取,确认数据已落库(只校验"关键字段"是否存在,不做严格 JSON 等值比较 ——
       // 后端可能对对象 key 做序列化重排,JSON.stringify 比较会误报失败)
       const fresh = await base44.entities.TaskExecution.get(execution.id);
       const savedData = fresh?.automation_result?.data;
+      console.log("[SaveEdits] 后端实际落库", {
+        sectionsCount: Array.isArray(savedData?.sections) ? savedData.sections.length : 0,
+        firstSectionPreview: savedData?.sections?.[0]?.body?.slice(0, 80) || savedData?.sections?.[0]?.content?.slice(0, 80),
+      });
       if (!savedData) {
         throw new Error("保存后服务端未返回数据,请刷新后再试");
       }

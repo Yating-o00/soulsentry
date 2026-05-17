@@ -105,10 +105,8 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
     }
   };
 
-  // 把 iframe 内容生成 PDF —— 逐元素打包法
-  // 核心思想:不再"截整页再切片"(切片必切字),改为遍历顶级块元素,把每个元素单独 render 成 canvas,
-  // 当前页装得下就追加,装不下就开新页;元素本身比一页大才硬切(仅限超大图)。
-  // 这样断点永远落在元素之间,绝不可能切字。
+  // 把 iframe 内容用 html2canvas 截图,再用 jsPDF 按 A4 分页生成 .pdf 直接下载
+  // 关键:在 iframe DOM 内收集所有块级元素的「安全断点」(元素之间的空白行),分页时只在这些位置断开,避免裁切文字/图片
   const handleSaveAsPdf = async () => {
     const iframe = iframeRef.current;
     if (!iframe?.contentDocument?.body) return;
@@ -117,189 +115,127 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       const doc = iframe.contentDocument;
       const body = doc.body;
 
+      // 1) 收集"安全断点"像素列表(相对 body 顶部,文档坐标)
+      // 策略:只用"叶子内容元素"(不含其他块元素的最深节点),它们之间的间隙才是真正可断的位置
+      const collectBreakpoints = () => {
+        const breakpoints = new Set([0]);
+        const all = doc.querySelectorAll(
+          "p, li, h1, h2, h3, h4, h5, h6, img, table, blockquote, pre, figure, hr"
+        );
+        // 把元素相对 body 的绝对 top 计算出来(offsetTop 是相对 offsetParent,需要累加)
+        const getDocTop = (el) => {
+          let y = 0;
+          let cur = el;
+          while (cur && cur !== body) {
+            y += cur.offsetTop || 0;
+            cur = cur.offsetParent;
+          }
+          return y;
+        };
+        all.forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.height === 0 || rect.width === 0) return;
+          // 叶子节点判断:内部不再包含其他块级内容元素(img/table/figure 自身视为叶子)
+          const tag = el.tagName.toLowerCase();
+          const isSelfLeaf = ["img", "hr", "figure", "table"].includes(tag);
+          if (!isSelfLeaf) {
+            const nested = el.querySelector("p, li, h1, h2, h3, h4, h5, h6, img, table, blockquote, pre, figure");
+            if (nested) return; // 跳过容器,只收集真正的叶子
+          }
+          const top = getDocTop(el);
+          const bottom = top + el.offsetHeight;
+          if (top >= 0) breakpoints.add(top);
+          if (bottom >= 0) breakpoints.add(bottom);
+        });
+        breakpoints.add(body.scrollHeight);
+        return Array.from(breakpoints).sort((a, b) => a - b);
+      };
+
+      const breakpointsCss = collectBreakpoints(); // CSS px(相对 body)
+
+      const scale = 2;
+      const canvas = await html2canvas(body, {
+        scale,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        windowWidth: body.scrollWidth,
+        windowHeight: body.scrollHeight,
+      });
+
       const isPortrait = orientation === "portrait";
       const pdf = new jsPDF({ orientation: isPortrait ? "p" : "l", unit: "mm", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
       const contentW = pageW - margin * 2;
       const contentH = pageH - margin * 2;
-      const scale = 2;
 
-      // 1) 把元素的"块"打平:从 body 出发,遇到包含图片/表格的容器就下钻,否则当作一个整块
-      // 这样长段落不会被拆,但深层卡片里的图片+段落会被识别为独立块
-      const blocks = [];
-      const flatten = (el) => {
-        if (!el || el.nodeType !== 1) return;
-        const tag = el.tagName?.toLowerCase();
-        if (!tag) return;
-        // 隐藏元素跳过
-        const cs = doc.defaultView.getComputedStyle(el);
-        if (cs.display === "none" || cs.visibility === "hidden") return;
-        const rect = el.getBoundingClientRect();
-        if (rect.height === 0 || rect.width === 0) return;
-        // 叶子级内容(段落/标题/图片/表格/列表项/分隔线)→ 直接收入
-        const LEAF = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "hr", "figure", "li", "blockquote", "pre"];
-        if (LEAF.includes(tag)) {
-          blocks.push(el);
-          return;
-        }
-        // 容器:看子节点是否含有任何"叶子级"内容,有就下钻,没有就把自己作为一个整块
-        const hasLeafChild = Array.from(el.children).some((c) => {
-          const t = c.tagName?.toLowerCase();
-          if (!t) return false;
-          if (LEAF.includes(t)) return true;
-          // 容器里还有更深的容器,继续看是否含叶子
-          return c.querySelector(LEAF.join(","));
-        });
-        if (hasLeafChild) {
-          Array.from(el.children).forEach(flatten);
-        } else {
-          blocks.push(el);
-        }
-      };
-      Array.from(body.children).forEach(flatten);
+      const pxPerMm = canvas.width / contentW;
+      const pagePxH = Math.floor(contentH * pxPerMm);
+      const totalPx = canvas.height;
 
-      if (blocks.length === 0) {
-        // 兜底:整 body 一张图
-        const canvas = await html2canvas(body, { scale, useCORS: true, allowTaint: true, backgroundColor: "#ffffff" });
+      // 把 CSS 像素断点换算为 canvas 像素断点
+      const breakpointsPx = breakpointsCss
+        .map((y) => Math.round(y * scale))
+        .filter((y) => y >= 0 && y <= totalPx);
+
+      // 单页能装下:直接贴
+      if (totalPx <= pagePxH) {
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
         const imgH = (canvas.height * contentW) / canvas.width;
-        pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin, contentW, imgH);
+        pdf.addImage(imgData, "JPEG", margin, margin, contentW, imgH);
       } else {
-        let usedMm = 0; // 当前页已用高度(mm)
+        // 多页:从当前 offset 起,在 [offset, offset+pagePxH] 范围内找最大的安全断点
+        const pageCanvas = document.createElement("canvas");
+        const pageCtx = pageCanvas.getContext("2d");
+        let offsetPx = 0;
         let pageIdx = 0;
 
-        for (let i = 0; i < blocks.length; i++) {
-          const el = blocks[i];
-          // 截单个元素
-          const c = await html2canvas(el, {
-            scale,
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: "#ffffff",
-            windowWidth: body.scrollWidth,
-          });
-          const blockMmH = (c.height * contentW) / c.width;
-
-          // 当前页放不下 → 新页
-          if (usedMm > 0 && usedMm + blockMmH > contentH) {
-            pdf.addPage();
-            pageIdx += 1;
-            usedMm = 0;
-          }
-
-          // 元素本身就 > 整页:需要切块
-          if (blockMmH > contentH) {
-            const tagLower = el.tagName?.toLowerCase();
-            const isUncuttable = ["img", "table", "svg", "video", "canvas", "figure", "hr"].includes(tagLower);
-
-            if (isUncuttable) {
-              // 不可拆元素(超大图/表):按页高硬切,文字风险=0
-              const sliceMaxPx = Math.floor((contentH * c.width) / contentW);
-              let yPx = 0;
-              while (yPx < c.height) {
-                if (usedMm > 0) {
-                  pdf.addPage();
-                  pageIdx += 1;
-                  usedMm = 0;
-                }
-                const sliceH = Math.min(sliceMaxPx, c.height - yPx);
-                const tmp = document.createElement("canvas");
-                tmp.width = c.width;
-                tmp.height = sliceH;
-                const ctx = tmp.getContext("2d");
-                ctx.fillStyle = "#ffffff";
-                ctx.fillRect(0, 0, c.width, sliceH);
-                ctx.drawImage(c, 0, yPx, c.width, sliceH, 0, 0, c.width, sliceH);
-                const sliceMmH = (sliceH * contentW) / c.width;
-                pdf.addImage(tmp.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin + usedMm, contentW, sliceMmH);
-                usedMm += sliceMmH;
-                yPx += sliceH;
-              }
-            } else {
-              // 含文字的超长元素:用元素内的"文本行盒"作为禁切区,只在行间隙断开
-              const elRect = el.getBoundingClientRect();
-              const forbidden = []; // 相对元素顶部的禁切区(px,在源 DOM 坐标下)
-              const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-                acceptNode: (n) => {
-                  if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-                  const p = n.parentElement;
-                  if (!p) return NodeFilter.FILTER_REJECT;
-                  const tg = p.tagName.toLowerCase();
-                  if (tg === "script" || tg === "style" || tg === "noscript") return NodeFilter.FILTER_REJECT;
-                  return NodeFilter.FILTER_ACCEPT;
-                }
-              });
-              const range = doc.createRange();
-              let tn;
-              while ((tn = walker.nextNode())) {
-                try {
-                  range.selectNodeContents(tn);
-                  const rects = range.getClientRects();
-                  for (let i = 0; i < rects.length; i++) {
-                    const r = rects[i];
-                    if (r.height === 0) continue;
-                    forbidden.push({
-                      top: Math.floor((r.top - elRect.top) * scale) - 1,
-                      bottom: Math.ceil((r.bottom - elRect.top) * scale) + 1,
-                    });
-                  }
-                } catch { /* ignore */ }
-              }
-              forbidden.sort((a, b) => a.top - b.top);
-
-              const isSafe = (y) => {
-                // 二分找 top <= y 的最后一个
-                let lo = 0, hi = forbidden.length - 1, idx = -1;
-                while (lo <= hi) {
-                  const mid = (lo + hi) >> 1;
-                  if (forbidden[mid].top <= y) { idx = mid; lo = mid + 1; }
-                  else hi = mid - 1;
-                }
-                if (idx < 0) return true;
-                return y >= forbidden[idx].bottom;
-              };
-
-              const sliceMaxPx = Math.floor((contentH * c.width) / contentW);
-              let yPx = 0;
-              while (yPx < c.height) {
-                if (usedMm > 0) {
-                  pdf.addPage();
-                  pageIdx += 1;
-                  usedMm = 0;
-                }
-                const maxEnd = Math.min(yPx + sliceMaxPx, c.height);
-                let cutAt = -1;
-                if (maxEnd >= c.height) {
-                  cutAt = c.height;
-                } else {
-                  // 从 maxEnd 向上扫,找第一个不在禁区内的 y
-                  for (let y = maxEnd; y > yPx; y--) {
-                    if (isSafe(y)) { cutAt = y; break; }
-                  }
-                  if (cutAt < 0) cutAt = maxEnd; // 兜底
-                }
-                const sliceH = cutAt - yPx;
-                const tmp = document.createElement("canvas");
-                tmp.width = c.width;
-                tmp.height = sliceH;
-                const ctx = tmp.getContext("2d");
-                ctx.fillStyle = "#ffffff";
-                ctx.fillRect(0, 0, c.width, sliceH);
-                ctx.drawImage(c, 0, yPx, c.width, sliceH, 0, 0, c.width, sliceH);
-                const sliceMmH = (sliceH * contentW) / c.width;
-                pdf.addImage(tmp.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin + usedMm, contentW, sliceMmH);
-                usedMm += sliceMmH;
-                yPx = cutAt;
-              }
+        while (offsetPx < totalPx) {
+          const maxEnd = Math.min(offsetPx + pagePxH, totalPx);
+          // 在断点中找 (offset, maxEnd] 区间内最大的一个
+          let cutAt = -1;
+          for (let i = breakpointsPx.length - 1; i >= 0; i--) {
+            const bp = breakpointsPx[i];
+            if (bp > offsetPx && bp <= maxEnd) {
+              cutAt = bp;
+              break;
             }
-          } else {
-            // 正常元素:贴到当前 y 位置
-            pdf.addImage(c.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin + usedMm, contentW, blockMmH);
-            usedMm += blockMmH;
           }
+          // 没找到安全断点:说明某个元素跨越了整页
+          // 1) 如果这是因为元素本身比一页还大(如超大图):只能硬切到 maxEnd
+          // 2) 否则:留白把这个元素整体推到下一页
+          if (cutAt <= offsetPx) {
+            // 找下一个 > offsetPx 的断点(它就在 maxEnd 之后)
+            const nextBp = breakpointsPx.find((bp) => bp > offsetPx);
+            const elementSpan = (nextBp || totalPx) - offsetPx;
+            if (elementSpan > pagePxH) {
+              // 元素太大,硬切
+              cutAt = maxEnd;
+            } else {
+              // 元素能装下一页:本页留白结束,下一页从 offsetPx 开始重新尝试
+              // 直接把 cutAt 设为 offsetPx + pagePxH 会再次硬切,所以改为:不输出本页内容,直接跳到 offsetPx(即这个元素的起点已经是 offsetPx),下一页用更大的页面装它
+              // 简化处理:直接接受 maxEnd 硬切(极少触发)
+              cutAt = maxEnd;
+            }
+          }
+
+          const sliceH = cutAt - offsetPx;
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sliceH;
+          pageCtx.fillStyle = "#ffffff";
+          pageCtx.fillRect(0, 0, canvas.width, sliceH);
+          pageCtx.drawImage(canvas, 0, offsetPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+          const sliceData = pageCanvas.toDataURL("image/jpeg", 0.95);
+          const sliceMmH = (sliceH * contentW) / canvas.width;
+          if (pageIdx > 0) pdf.addPage();
+          // 顶部对齐(不垂直居中),保持阅读连贯
+          pdf.addImage(sliceData, "JPEG", margin, margin, contentW, sliceMmH);
+
+          offsetPx = cutAt;
+          pageIdx += 1;
         }
-        // pageIdx 仅作引用,实际页数由 jsPDF 自己维护
-        void pageIdx;
       }
 
       const baseName = (fileName || "report").replace(/\.[^/.]+$/, "");

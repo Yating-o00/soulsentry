@@ -116,37 +116,53 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       const body = doc.body;
 
       // 1) 收集"安全断点"像素列表(相对 body 顶部,文档坐标)
-      // 策略:只用"叶子内容元素"(不含其他块元素的最深节点),它们之间的间隙才是真正可断的位置
+      // 策略:遍历所有文本节点,用 Range 拿到每一"行"的盒子,把每行的 bottom(=下一行的 top) 作为断点
+      // 这样断点密度 = 文档总行数,理论上不可能切到任何一行文字
+      // 同时把图片/表格的上下边界也加进去
       const collectBreakpoints = () => {
         const breakpoints = new Set([0]);
-        const all = doc.querySelectorAll(
-          "p, li, h1, h2, h3, h4, h5, h6, img, table, blockquote, pre, figure, hr"
-        );
-        // 把元素相对 body 的绝对 top 计算出来(offsetTop 是相对 offsetParent,需要累加)
-        const getDocTop = (el) => {
-          let y = 0;
-          let cur = el;
-          while (cur && cur !== body) {
-            y += cur.offsetTop || 0;
-            cur = cur.offsetParent;
+        const bodyRect = body.getBoundingClientRect();
+
+        // a) 收集所有文本节点的逐行 rect
+        const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+          acceptNode: (n) => {
+            if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+            // 跳过 script/style 内文本
+            const p = n.parentElement;
+            if (!p) return NodeFilter.FILTER_REJECT;
+            const tag = p.tagName.toLowerCase();
+            if (tag === "script" || tag === "style" || tag === "noscript") return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
           }
-          return y;
-        };
-        all.forEach((el) => {
-          const rect = el.getBoundingClientRect();
-          if (rect.height === 0 || rect.width === 0) return;
-          // 叶子节点判断:内部不再包含其他块级内容元素(img/table/figure 自身视为叶子)
-          const tag = el.tagName.toLowerCase();
-          const isSelfLeaf = ["img", "hr", "figure", "table"].includes(tag);
-          if (!isSelfLeaf) {
-            const nested = el.querySelector("p, li, h1, h2, h3, h4, h5, h6, img, table, blockquote, pre, figure");
-            if (nested) return; // 跳过容器,只收集真正的叶子
-          }
-          const top = getDocTop(el);
-          const bottom = top + el.offsetHeight;
-          if (top >= 0) breakpoints.add(top);
-          if (bottom >= 0) breakpoints.add(bottom);
         });
+        const range = doc.createRange();
+        let textNode;
+        while ((textNode = walker.nextNode())) {
+          try {
+            range.selectNodeContents(textNode);
+            const rects = range.getClientRects();
+            for (let i = 0; i < rects.length; i++) {
+              const r = rects[i];
+              if (r.height === 0) continue;
+              // 行的上下边界都是安全断点(相对 body 顶部)
+              const top = r.top - bodyRect.top;
+              const bottom = r.bottom - bodyRect.top;
+              if (top >= 0) breakpoints.add(Math.floor(top));
+              if (bottom >= 0) breakpoints.add(Math.ceil(bottom));
+            }
+          } catch { /* ignore */ }
+        }
+
+        // b) 不可分割元素(img / table / hr)的上下边界
+        body.querySelectorAll("img, table, hr, figure, svg, video, canvas").forEach((el) => {
+          const r = el.getBoundingClientRect();
+          if (r.height === 0 || r.width === 0) return;
+          const top = r.top - bodyRect.top;
+          const bottom = r.bottom - bodyRect.top;
+          if (top >= 0) breakpoints.add(Math.floor(top));
+          if (bottom >= 0) breakpoints.add(Math.ceil(bottom));
+        });
+
         breakpoints.add(body.scrollHeight);
         return Array.from(breakpoints).sort((a, b) => a - b);
       };

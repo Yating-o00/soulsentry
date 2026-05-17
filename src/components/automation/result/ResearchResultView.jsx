@@ -1,5 +1,5 @@
 import React from "react";
-import { Globe, Download, ExternalLink, FileText, LayoutTemplate, Edit3, Eye, Check } from "lucide-react";
+import { Globe, Download, ExternalLink, FileText, LayoutTemplate, Edit3, Eye, Check, Printer } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import TemplatedSection from "./TemplatedSection";
@@ -469,7 +469,7 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
         )
       )}
 
-      {/* 预览按钮（新标签打开，不触发下载） */}
+      {/* 预览 / 打印为 PDF（HTML 报告专属）*/}
       {fileUrl && (() => {
         const ext = (fileName.split('.').pop() || '').toLowerCase();
         // 浏览器原生可预览：PDF/图片/HTML/纯文本/MD 直接打开
@@ -477,24 +477,52 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
         const previewHref = nativePreview.includes(ext)
           ? fileUrl
           : `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=false`;
+        // 仅 HTML 报告自带 @page A4 打印样式 —— 才显示"另存为 PDF"按钮
+        const canPrintAsPdf = ext === 'html' || ext === 'htm';
+        // 打开新窗口加载报告,加载完后自动唤起浏览器打印对话框,用户选"另存为 PDF"即可
+        const printAsPdf = (e) => {
+          e.preventDefault();
+          const win = window.open(fileUrl, '_blank');
+          if (!win) return;
+          const trigger = () => { try { win.focus(); win.print(); } catch { /* ignore */ } };
+          // 同源时监听 load;跨域时回退到延时
+          try {
+            win.addEventListener('load', trigger, { once: true });
+            setTimeout(trigger, 1800);
+          } catch {
+            setTimeout(trigger, 1800);
+          }
+        };
         return (
-        <a
-          href={previewHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 hover:shadow px-3 py-2.5 transition-all group"
-        >
-          <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center group-hover:scale-110 transition-transform">
-            <FileText className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-semibold text-emerald-900 truncate">{fileName}</div>
-            <div className="text-[10.5px] text-emerald-700 flex items-center gap-1">
-              <ExternalLink className="w-2.5 h-2.5" /> 完整报告 · 点击在新标签预览
+        <div className="flex items-stretch gap-2">
+          <a
+            href={previewHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 flex-1 min-w-0 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 hover:shadow px-3 py-2.5 transition-all group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+              <FileText className="w-4 h-4 text-emerald-600" />
             </div>
-          </div>
-          <ExternalLink className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-        </a>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12.5px] font-semibold text-emerald-900 truncate">{fileName}</div>
+              <div className="text-[10.5px] text-emerald-700 flex items-center gap-1">
+                <ExternalLink className="w-2.5 h-2.5" /> 完整报告 · 点击在新标签预览
+              </div>
+            </div>
+          </a>
+          {canPrintAsPdf && (
+            <button
+              type="button"
+              onClick={printAsPdf}
+              title="在新标签打开报告并唤起打印对话框,选择「另存为 PDF」即可导出"
+              className="flex flex-col items-center justify-center gap-0.5 px-3 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-400 hover:shadow text-rose-600 transition-all flex-shrink-0"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="text-[10px] font-semibold leading-none">导出 PDF</span>
+            </button>
+          )}
+        </div>
         );
       })()}
     </div>

@@ -3,6 +3,7 @@ import { Globe, Download, ExternalLink, FileText, LayoutTemplate, Edit3, Eye, Ch
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import TemplatedSection from "./TemplatedSection";
+import TemplateThumbnail from "./TemplateThumbnail";
 import { TEMPLATES, extractImagesAndText, autoPickTemplate } from "./researchTemplates";
 // 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
@@ -383,26 +384,36 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
         )}
       </div>
 
-      {/* 排版模板切换器 */}
+      {/* 排版模板切换器 —— 用迷你示意图直观展示版式差异 */}
       {sections && sections.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2">
-          <LayoutTemplate className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-          <span className="text-[10.5px] font-medium text-slate-500">排版模板</span>
-          <div className="flex items-center gap-1 flex-wrap">
-            {Object.entries(TEMPLATES).map(([key, tpl]) => (
-              <button
-                key={key}
-                onClick={() => setTemplate(key)}
-                title={tpl.description}
-                className={`text-[10.5px] px-2 py-0.5 rounded-md border transition-all ${
-                  template === key
-                    ? "bg-[#384877] text-white border-[#384877]"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-[#384877]/40 hover:text-[#384877]"
-                }`}
-              >
-                {tpl.name}
-              </button>
-            ))}
+        <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2">
+          <div className="flex items-center gap-1.5 mb-2">
+            <LayoutTemplate className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+            <span className="text-[10.5px] font-medium text-slate-500">选择排版方案</span>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+            {Object.entries(TEMPLATES).map(([key, tpl]) => {
+              const isActive = template === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setTemplate(key)}
+                  title={tpl.description}
+                  className={`group flex flex-col items-center gap-1 px-1.5 py-1.5 rounded-md border transition-all ${
+                    isActive
+                      ? "bg-[#384877] border-[#384877] shadow-sm"
+                      : "bg-white border-slate-200 hover:border-[#384877]/50 hover:bg-[#384877]/5"
+                  }`}
+                >
+                  <TemplateThumbnail template={key} active={isActive} />
+                  <span className={`text-[10px] font-medium leading-none ${
+                    isActive ? "text-white" : "text-slate-600 group-hover:text-[#384877]"
+                  }`}>
+                    {tpl.name}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

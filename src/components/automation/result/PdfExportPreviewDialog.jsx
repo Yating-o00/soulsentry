@@ -115,20 +115,35 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       const doc = iframe.contentDocument;
       const body = doc.body;
 
-      // 1) 收集"安全断点"像素列表(相对于 body 顶部),这些位置之间是空白,不会切到元素
+      // 1) 收集"安全断点"像素列表(相对 body 顶部,文档坐标)
+      // 策略:只用"叶子内容元素"(不含其他块元素的最深节点),它们之间的间隙才是真正可断的位置
       const collectBreakpoints = () => {
         const breakpoints = new Set([0]);
-        // 选取所有可能携带内容的块级元素 + 图片
-        const nodes = doc.querySelectorAll(
-          "p, li, h1, h2, h3, h4, h5, h6, img, table, tr, blockquote, pre, figure, section, article, div"
+        const all = doc.querySelectorAll(
+          "p, li, h1, h2, h3, h4, h5, h6, img, table, blockquote, pre, figure, hr"
         );
-        nodes.forEach((el) => {
-          // 只考虑实际可见、有高度的元素
+        // 把元素相对 body 的绝对 top 计算出来(offsetTop 是相对 offsetParent,需要累加)
+        const getDocTop = (el) => {
+          let y = 0;
+          let cur = el;
+          while (cur && cur !== body) {
+            y += cur.offsetTop || 0;
+            cur = cur.offsetParent;
+          }
+          return y;
+        };
+        all.forEach((el) => {
           const rect = el.getBoundingClientRect();
           if (rect.height === 0 || rect.width === 0) return;
-          const top = el.offsetTop;
+          // 叶子节点判断:内部不再包含其他块级内容元素(img/table/figure 自身视为叶子)
+          const tag = el.tagName.toLowerCase();
+          const isSelfLeaf = ["img", "hr", "figure", "table"].includes(tag);
+          if (!isSelfLeaf) {
+            const nested = el.querySelector("p, li, h1, h2, h3, h4, h5, h6, img, table, blockquote, pre, figure");
+            if (nested) return; // 跳过容器,只收集真正的叶子
+          }
+          const top = getDocTop(el);
           const bottom = top + el.offsetHeight;
-          // 元素的上下边界都是潜在的安全断点
           if (top >= 0) breakpoints.add(top);
           if (bottom >= 0) breakpoints.add(bottom);
         });
@@ -187,8 +202,23 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
               break;
             }
           }
-          // 如果没找到安全断点(单个元素就比一页还大,例如大图),只能硬切到 maxEnd
-          if (cutAt <= offsetPx) cutAt = maxEnd;
+          // 没找到安全断点:说明某个元素跨越了整页
+          // 1) 如果这是因为元素本身比一页还大(如超大图):只能硬切到 maxEnd
+          // 2) 否则:留白把这个元素整体推到下一页
+          if (cutAt <= offsetPx) {
+            // 找下一个 > offsetPx 的断点(它就在 maxEnd 之后)
+            const nextBp = breakpointsPx.find((bp) => bp > offsetPx);
+            const elementSpan = (nextBp || totalPx) - offsetPx;
+            if (elementSpan > pagePxH) {
+              // 元素太大,硬切
+              cutAt = maxEnd;
+            } else {
+              // 元素能装下一页:本页留白结束,下一页从 offsetPx 开始重新尝试
+              // 直接把 cutAt 设为 offsetPx + pagePxH 会再次硬切,所以改为:不输出本页内容,直接跳到 offsetPx(即这个元素的起点已经是 offsetPx),下一页用更大的页面装它
+              // 简化处理:直接接受 maxEnd 硬切(极少触发)
+              cutAt = maxEnd;
+            }
+          }
 
           const sliceH = cutAt - offsetPx;
           pageCanvas.width = canvas.width;

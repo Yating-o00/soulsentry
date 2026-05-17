@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer, ZoomIn, ZoomOut, RotateCcw, FileText, Loader2, Download, ExternalLink, AlertTriangle } from "lucide-react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 // PDF 导出前的可视化预览 + 微调
 // 关键改造:用 fetch 把 HTML 抓到本地 → 用 srcDoc 注入 iframe(绕过 X-Frame-Options / 跨域 print 限制)
@@ -100,6 +102,56 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       setPrinting(false);
       const win = window.open(fileUrl, "_blank");
       if (win) setTimeout(() => { try { win.focus(); win.print(); } catch { /* ignore */ } }, 1800);
+    }
+  };
+
+  // 把 iframe 内容用 html2canvas 截图,再用 jsPDF 按 A4 分页生成 .pdf 直接下载
+  const handleSaveAsPdf = async () => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentDocument?.body) return;
+    setPrinting(true);
+    try {
+      const body = iframe.contentDocument.body;
+      const canvas = await html2canvas(body, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        windowWidth: body.scrollWidth,
+        windowHeight: body.scrollHeight,
+      });
+
+      const isPortrait = orientation === "portrait";
+      const pdf = new jsPDF({ orientation: isPortrait ? "p" : "l", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const contentW = pageW - margin * 2;
+      const contentH = pageH - margin * 2;
+      const imgH = (canvas.height * contentW) / canvas.width;
+
+      let remaining = imgH;
+      let position = 0;
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+
+      // 单页装得下
+      if (imgH <= contentH) {
+        pdf.addImage(imgData, "JPEG", margin, margin, contentW, imgH);
+      } else {
+        // 多页:每页用偏移位置裁切
+        while (remaining > 0) {
+          pdf.addImage(imgData, "JPEG", margin, margin - position, contentW, imgH);
+          remaining -= contentH;
+          position += contentH;
+          if (remaining > 0) pdf.addPage();
+        }
+      }
+
+      const baseName = (fileName || "report").replace(/\.[^/.]+$/, "");
+      pdf.save(`${baseName}.pdf`);
+    } catch (e) {
+      console.error("PDF 生成失败", e);
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -296,20 +348,20 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
               </button>
 
               <div className="text-[10.5px] text-slate-400 leading-relaxed bg-slate-50 rounded p-2 border border-slate-100">
-                💡 点击 <span className="font-semibold text-slate-600">「另存为 PDF」</span> 会弹出系统打印面板,「目标」选 <span className="font-semibold text-slate-600">另存为 PDF</span> 后点保存即可下载到本地,当前的方向/边距会自动应用。
-                <br />📥 <span className="font-semibold text-slate-600">「下载源文件」</span> 直接保存原始 HTML 报告。
+                💡 点击 <span className="font-semibold text-slate-600">「另存为 PDF」</span> 直接生成 .pdf 文件并下载,当前的方向/边距自动应用,无需任何对话框。
+                <br />📥 <span className="font-semibold text-slate-600">「下载源文件」</span> 保存原始 HTML 报告。
               </div>
             </div>
 
             {/* 底部操作 */}
             <div className="p-3 border-t border-slate-200 space-y-2 flex-shrink-0">
               <Button
-                onClick={handleDownload}
-                disabled={downloading}
+                onClick={handleSaveAsPdf}
+                disabled={printing || fetchLoading || !!fetchError || !htmlContent}
                 className="w-full bg-rose-500 hover:bg-rose-600 text-white gap-1.5"
               >
-                {downloading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> 下载中…</>
+                {printing ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> 生成 PDF 中…</>
                 ) : (
                   <><Download className="w-4 h-4" /> 另存为 PDF</>
                 )}

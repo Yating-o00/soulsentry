@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import TemplatedSection from "./TemplatedSection";
 import TemplateThumbnail from "./TemplateThumbnail";
+import PdfExportPreviewDialog from "./PdfExportPreviewDialog";
 import { TEMPLATES, extractImagesAndText, autoPickTemplate } from "./researchTemplates";
 // 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
@@ -326,6 +327,7 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
   const canEdit = editable && !!onChange;
   const [isEditing, setIsEditing] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false);
 
   // 点"完成"：把当前编辑结果持久化到后端（若父级提供 onSave），然后切回预览
   const handleDone = async () => {
@@ -477,23 +479,10 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
         const previewHref = nativePreview.includes(ext)
           ? fileUrl
           : `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=false`;
-        // 仅 HTML 报告自带 @page A4 打印样式 —— 才显示"另存为 PDF"按钮
+        // 仅 HTML 报告自带 @page A4 打印样式 —— 才显示"导出 PDF"按钮(打开可视化预览对话框)
         const canPrintAsPdf = ext === 'html' || ext === 'htm';
-        // 打开新窗口加载报告,加载完后自动唤起浏览器打印对话框,用户选"另存为 PDF"即可
-        const printAsPdf = (e) => {
-          e.preventDefault();
-          const win = window.open(fileUrl, '_blank');
-          if (!win) return;
-          const trigger = () => { try { win.focus(); win.print(); } catch { /* ignore */ } };
-          // 同源时监听 load;跨域时回退到延时
-          try {
-            win.addEventListener('load', trigger, { once: true });
-            setTimeout(trigger, 1800);
-          } catch {
-            setTimeout(trigger, 1800);
-          }
-        };
         return (
+        <>
         <div className="flex items-stretch gap-2">
           <a
             href={previewHref}
@@ -514,8 +503,8 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
           {canPrintAsPdf && (
             <button
               type="button"
-              onClick={printAsPdf}
-              title="在新标签打开报告并唤起打印对话框,选择「另存为 PDF」即可导出"
+              onClick={() => setPdfPreviewOpen(true)}
+              title="打开 PDF 排版预览,可微调纸张方向/边距后再导出"
               className="flex flex-col items-center justify-center gap-0.5 px-3 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-400 hover:shadow text-rose-600 transition-all flex-shrink-0"
             >
               <Printer className="w-4 h-4" />
@@ -523,6 +512,15 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
             </button>
           )}
         </div>
+        {canPrintAsPdf && (
+          <PdfExportPreviewDialog
+            open={pdfPreviewOpen}
+            onClose={() => setPdfPreviewOpen(false)}
+            fileUrl={fileUrl}
+            fileName={fileName}
+          />
+        )}
+        </>
         );
       })()}
     </div>

@@ -8,25 +8,6 @@ function looksLikeHtml(s) {
   return !!(matches && matches.length >= 2);
 }
 
-// 从 HTML 字符串里抽出 <img> 列表,并返回剥掉 <img>/<figure> 后的"纯 HTML 文本"
-function extractImagesFromHtml(html) {
-  if (!html) return { images: [], cleanHtml: "" };
-  const images = [];
-  const imgRe = /<img\b[^>]*?src=["']([^"']+)["'][^>]*?(?:alt=["']([^"']*)["'])?[^>]*?>/gi;
-  let m;
-  while ((m = imgRe.exec(html)) !== null) {
-    // 再扫一遍取 alt(因为上面那条正则在 src 之后才匹配 alt,顺序可能反)
-    const tag = m[0];
-    const altMatch = tag.match(/alt=["']([^"']*)["']/i);
-    images.push({ url: m[1], alt: altMatch ? altMatch[1] : "" });
-  }
-  // 去掉 <figure>...</figure> 整块(常包含 img + figcaption)和裸 <img>
-  const cleanHtml = html
-    .replace(/<figure\b[^>]*>[\s\S]*?<\/figure>/gi, "")
-    .replace(/<img\b[^>]*?>/gi, "");
-  return { images, cleanHtml };
-}
-
 // HTML 直渲染容器:让原始 HTML 标签正常显示,并约束图片/表格不溢出
 function HtmlBlock({ source }) {
   return (
@@ -94,22 +75,8 @@ function ImageBlock({ img, ratio = "4/3", maxH = 320, rounded = "rounded-lg" }) 
 // 主组件：按模板渲染一个章节(标题 + 内容 + 图片自动布局)
 export default function TemplatedSection({ heading, content, template = "classic" }) {
   const isHtml = looksLikeHtml(content);
-  // HTML 内容:抽出图片走模板,纯 HTML 文本(已剥图)替代 PlainText 渲染
-  // Markdown 内容:走原有 extractImagesAndText
-  const { images, text, htmlText } = React.useMemo(() => {
-    if (isHtml) {
-      const { images: imgs, cleanHtml } = extractImagesFromHtml(content);
-      return { images: imgs, text: "", htmlText: cleanHtml };
-    }
-    const ext = extractImagesAndText(content);
-    return { images: ext.images, text: ext.text, htmlText: null };
-  }, [content, isHtml]);
-
+  const { images, text } = isHtml ? { images: [], text: "" } : extractImagesAndText(content);
   const tpl = TEMPLATES[template] ? template : "classic";
-
-  // 文字渲染器:HTML 模式用 HtmlBlock,Markdown 模式用 PlainText
-  const TextRender = ({ src, size }) =>
-    isHtml ? <HtmlBlock source={src ?? htmlText} /> : <PlainText source={src ?? text} size={size} />;
 
   return (
     <div className="rounded-lg bg-white border border-slate-200 p-3 overflow-hidden">
@@ -119,10 +86,13 @@ export default function TemplatedSection({ heading, content, template = "classic
         </div>
       )}
 
+      {/* 原始 HTML 内容:直接渲染,跳过模板布局(避免标签被当文本) */}
+      {isHtml && <HtmlBlock source={content} />}
+
       {/* 经典:文字在上,图片在下居中 */}
-      {tpl === "classic" && (
+      {!isHtml && tpl === "classic" && (
         <div className="space-y-2">
-          <TextRender />
+          <PlainText source={text} />
           {images.length > 0 && (
             <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: `repeat(${Math.min(images.length, 2)}, minmax(0, 1fr))` }}>
               {images.map((im, i) => (
@@ -134,10 +104,10 @@ export default function TemplatedSection({ heading, content, template = "classic
       )}
 
       {/* 杂志:左文右图(图片<=2张) */}
-      {tpl === "magazine" && (
+      {!isHtml && tpl === "magazine" && (
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-start">
           <div className="sm:col-span-3 min-w-0">
-            <TextRender size="lg" />
+            <PlainText source={text} size="lg" />
           </div>
           <div className="sm:col-span-2 min-w-0 space-y-2">
             {images.slice(0, 2).map((im, i) => (
@@ -148,7 +118,7 @@ export default function TemplatedSection({ heading, content, template = "classic
       )}
 
       {/* 画廊:图片网格在上,文字说明在下 */}
-      {tpl === "gallery" && (
+      {!isHtml && tpl === "gallery" && (
         <div className="space-y-2.5">
           {images.length > 0 && (
             <div
@@ -160,18 +130,16 @@ export default function TemplatedSection({ heading, content, template = "classic
               ))}
             </div>
           )}
-          <TextRender />
+          <PlainText source={text} />
         </div>
       )}
 
       {/* 卡片:图文配对成纵向卡片(每段配一张图) */}
-      {tpl === "card" && (
+      {!isHtml && tpl === "card" && (
         <div className="space-y-2.5">
           {(() => {
-            // HTML 模式:把 cleanHtml 按 </p>/<br> 等大块切分,与 images 配对;Markdown 模式按段落切
-            const paras = isHtml
-              ? String(htmlText || "").split(/<\/p>|<\/h[1-6]>|<hr\s*\/?>/i).map(p => p.trim()).filter(Boolean).map(p => p + (/<p|<h[1-6]/i.test(p) ? "" : ""))
-              : String(text).split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+            // 把 text 按段落切分,与 images 一一配对
+            const paras = String(text).split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
             const rows = Math.max(paras.length, images.length);
             const out = [];
             for (let i = 0; i < rows; i++) {
@@ -185,9 +153,7 @@ export default function TemplatedSection({ heading, content, template = "classic
                     </div>
                   ) : null}
                   <div className={`min-w-0 ${im ? "sm:col-span-3" : "sm:col-span-5"}`}>
-                    {isHtml
-                      ? <HtmlBlock source={p || ""} />
-                      : <PlainText source={p || ""} />}
+                    <PlainText source={p || ""} />
                   </div>
                 </div>
               );
@@ -198,9 +164,9 @@ export default function TemplatedSection({ heading, content, template = "classic
       )}
 
       {/* 极简:纯文字 */}
-      {tpl === "minimal" && (
+      {!isHtml && tpl === "minimal" && (
         <div>
-          <TextRender size="lg" />
+          <PlainText source={text || ""} size="lg" />
           {images.length > 0 && (
             <div className="mt-2">
               <ImageBlock img={images[0]} ratio="16/9" maxH={240} />

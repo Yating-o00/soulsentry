@@ -384,31 +384,30 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
         )}
       </div>
 
-      {/* 排版模板切换器 —— 用迷你示意图直观展示版式差异 */}
+      {/* 排版模板切换器 —— 缩略图直观展示每种版式 */}
       {sections && sections.length > 0 && (
-        <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2">
-          <div className="flex items-center gap-1.5 mb-2">
+        <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-2 space-y-1.5">
+          <div className="flex items-center gap-1.5">
             <LayoutTemplate className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-            <span className="text-[10.5px] font-medium text-slate-500">选择排版方案</span>
+            <span className="text-[10.5px] font-medium text-slate-500">排版模板</span>
+            <span className="text-[10px] text-slate-400">· 点击切换</span>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-5 gap-1.5">
             {Object.entries(TEMPLATES).map(([key, tpl]) => {
-              const isActive = template === key;
+              const active = template === key;
               return (
                 <button
                   key={key}
                   onClick={() => setTemplate(key)}
                   title={tpl.description}
-                  className={`group flex flex-col items-center gap-1 px-1.5 py-1.5 rounded-md border transition-all ${
-                    isActive
-                      ? "bg-[#384877] border-[#384877] shadow-sm"
-                      : "bg-white border-slate-200 hover:border-[#384877]/50 hover:bg-[#384877]/5"
+                  className={`flex flex-col items-center gap-1 px-1.5 py-1.5 rounded-md border transition-all ${
+                    active
+                      ? "bg-[#384877] text-white border-[#384877] shadow-sm"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-[#384877]/50 hover:bg-[#384877]/5"
                   }`}
                 >
-                  <TemplateThumbnail template={key} active={isActive} />
-                  <span className={`text-[10px] font-medium leading-none ${
-                    isActive ? "text-white" : "text-slate-600 group-hover:text-[#384877]"
-                  }`}>
+                  <TemplateThumbnail template={key} active={active} />
+                  <span className={`text-[10px] font-medium leading-none ${active ? "text-white" : "text-slate-700"}`}>
                     {tpl.name}
                   </span>
                 </button>

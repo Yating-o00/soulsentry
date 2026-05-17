@@ -4,18 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Printer, ZoomIn, ZoomOut, RotateCcw, FileText, Loader2, Download, ExternalLink, AlertTriangle } from "lucide-react";
 
 // PDF 导出前的可视化预览 + 微调
-// 设计:左侧 A4 模拟纸面 iframe 直接加载 HTML 报告;右侧调节面板(纸张方向/边距/缩放)
-// 确认后注入临时 <style> 覆写 @page 与缩放,再唤起 iframe.contentWindow.print()
+// 关键改造:用 fetch 把 HTML 抓到本地 → 用 srcDoc 注入 iframe(绕过 X-Frame-Options / 跨域 print 限制)
+// 这样无论 base44 文件域名是否同源、是否设置 frame-deny,iframe 都能正常渲染并触发打印
 export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileName }) {
   const iframeRef = useRef(null);
-  const [orientation, setOrientation] = useState("portrait"); // portrait | landscape
-  const [margin, setMargin] = useState(14); // mm,统一四边
-  const [zoom, setZoom] = useState(100); // 屏幕预览缩放比 %,不影响打印
-  const [iframeLoading, setIframeLoading] = useState(true);
-  const [loadTimeout, setLoadTimeout] = useState(false); // 超过 15s 还没 load
+  const [orientation, setOrientation] = useState("portrait");
+  const [margin, setMargin] = useState(14);
+  const [zoom, setZoom] = useState(100);
+  const [htmlContent, setHtmlContent] = useState(""); // fetch 回来的 HTML 源码
+  const [fetchLoading, setFetchLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [printing, setPrinting] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [iframeKey, setIframeKey] = useState(0); // 用于强制刷新 iframe
+  const [fetchKey, setFetchKey] = useState(0);
 
   // 每次打开重置参数
   useEffect(() => {
@@ -23,20 +24,49 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       setOrientation("portrait");
       setMargin(14);
       setZoom(100);
-      setIframeLoading(true);
-      setLoadTimeout(false);
-      setIframeKey(k => k + 1);
+      setHtmlContent("");
+      setFetchError(null);
+      setFetchLoading(true);
     }
   }, [open, fileUrl]);
 
-  // 8 秒还没加载完 → 显示轻量备选方案(重试 / 新标签打开 / 直接下载),iframe 继续在背后加载
+  // fetch HTML → srcDoc(绕过跨域 + iframe 限制)
   useEffect(() => {
-    if (!open || !iframeLoading) return;
-    const timer = setTimeout(() => {
-      setLoadTimeout(true);
-    }, 8000);
-    return () => clearTimeout(timer);
-  }, [open, iframeLoading, iframeKey]);
+    if (!open || !fileUrl) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    setFetchLoading(true);
+    setFetchError(null);
+
+    fetch(fileUrl, { signal: controller.signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      })
+      .then(text => {
+        if (cancelled) return;
+        // 在 head 注入 <base> 让相对路径资源仍能正确加载
+        const baseTag = `<base href="${fileUrl}">`;
+        const injected = /<head[^>]*>/i.test(text)
+          ? text.replace(/<head[^>]*>/i, m => `${m}${baseTag}`)
+          : `<head>${baseTag}</head>${text}`;
+        setHtmlContent(injected);
+        setFetchLoading(false);
+      })
+      .catch(e => {
+        if (cancelled) return;
+        setFetchError(e.name === 'AbortError' ? '加载超时' : (e.message || '加载失败'));
+        setFetchLoading(false);
+      })
+      .finally(() => clearTimeout(timeoutId));
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [open, fileUrl, fetchKey]);
 
   // A4 屏幕预览尺寸(mm 等比换算成 px,1mm ≈ 3.78px)
   const A4 = orientation === "portrait"
@@ -45,11 +75,11 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
   const previewW = Math.round(A4.w * 3.78 * (zoom / 100));
   const previewH = Math.round(A4.h * 3.78 * (zoom / 100));
 
-  // 把当前微调注入 iframe 的 head,然后调它的 window.print() —— 用户在系统打印对话框选"另存为 PDF"
+  // 在 srcDoc iframe 内注入 @page 规则,然后调它的 window.print() —— 用户在系统打印对话框选"另存为 PDF"
   const handlePrint = () => {
     const iframe = iframeRef.current;
     if (!iframe?.contentDocument || !iframe?.contentWindow) {
-      // 跨域兜底:新标签打开 + 延时 print
+      // 兜底:新标签打开原 URL + 延时 print
       const win = window.open(fileUrl, "_blank");
       if (win) setTimeout(() => { try { win.focus(); win.print(); } catch { /* ignore */ } }, 1800);
       return;
@@ -60,11 +90,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       doc.getElementById("__pdf_export_override__")?.remove();
       const style = doc.createElement("style");
       style.id = "__pdf_export_override__";
-      style.textContent = `
-        @media print {
-          @page { size: A4 ${orientation}; margin: ${margin}mm; }
-        }
-      `;
+      style.textContent = `@media print { @page { size: A4 ${orientation}; margin: ${margin}mm; } }`;
       doc.head.appendChild(style);
       setTimeout(() => {
         try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { /* ignore */ }
@@ -77,12 +103,17 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
     }
   };
 
-  // 直接下载原始 HTML 文件到本地(用 fetch + blob 强制触发下载,不让浏览器在新标签打开)
+  // 直接下载原始 HTML 文件到本地
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const res = await fetch(fileUrl);
-      const blob = await res.blob();
+      let blob;
+      if (htmlContent) {
+        blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+      } else {
+        const res = await fetch(fileUrl);
+        blob = await res.blob();
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -92,18 +123,14 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1500);
     } catch {
-      // 兜底:直接打开链接
       window.open(fileUrl, "_blank");
     } finally {
       setDownloading(false);
     }
   };
 
-  // 重试加载 iframe
   const handleRetry = () => {
-    setIframeLoading(true);
-    setLoadTimeout(false);
-    setIframeKey(k => k + 1);
+    setFetchKey(k => k + 1);
   };
 
   return (
@@ -124,21 +151,22 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
               className="bg-white shadow-xl border border-slate-300 relative transition-all duration-200"
               style={{ width: previewW, height: previewH, flexShrink: 0 }}
             >
-              {iframeLoading && !loadTimeout && (
+              {fetchLoading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-10 gap-2">
                   <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
                   <div className="text-[11.5px] text-slate-500">正在加载预览…</div>
-                  <div className="text-[10.5px] text-slate-400">如长时间未加载,15 秒后将显示备选方案</div>
                 </div>
               )}
-              {loadTimeout && (
+              {fetchError && !fetchLoading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-20 gap-3 px-6 text-center">
                   <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center">
                     <AlertTriangle className="w-5 h-5 text-amber-500" />
                   </div>
-                  <div className="text-[13px] font-semibold text-slate-700">预览加载超时</div>
+                  <div className="text-[13px] font-semibold text-slate-700">预览加载失败</div>
                   <div className="text-[11.5px] text-slate-500 leading-relaxed max-w-[280px]">
-                    报告文件较大或网络较慢。你可以继续等待 / 重试,或直接在新标签打开预览,也可以跳过预览直接下载。
+                    {fetchError === '加载超时'
+                      ? '报告文件较大或网络较慢。你可以重试,或直接在新标签打开,也可以跳过预览直接下载。'
+                      : `加载报错:${fetchError}。建议重试或在新标签打开。`}
                   </div>
                   <div className="flex flex-col gap-1.5 w-full max-w-[220px] mt-1">
                     <Button onClick={handleRetry} size="sm" variant="outline" className="text-[12px] gap-1.5">
@@ -166,23 +194,26 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
                 </div>
               )}
               {/* 边距虚线指示 */}
-              <div
-                className="absolute border border-dashed border-rose-300/60 pointer-events-none z-[5]"
-                style={{
-                  top: `${margin * 3.78 * (zoom / 100)}px`,
-                  left: `${margin * 3.78 * (zoom / 100)}px`,
-                  right: `${margin * 3.78 * (zoom / 100)}px`,
-                  bottom: `${margin * 3.78 * (zoom / 100)}px`,
-                }}
-              />
-              <iframe
-                key={iframeKey}
-                ref={iframeRef}
-                src={fileUrl}
-                title="PDF 预览"
-                onLoad={() => { setIframeLoading(false); setLoadTimeout(false); }}
-                className="w-full h-full border-0 bg-white"
-              />
+              {!fetchError && (
+                <div
+                  className="absolute border border-dashed border-rose-300/60 pointer-events-none z-[5]"
+                  style={{
+                    top: `${margin * 3.78 * (zoom / 100)}px`,
+                    left: `${margin * 3.78 * (zoom / 100)}px`,
+                    right: `${margin * 3.78 * (zoom / 100)}px`,
+                    bottom: `${margin * 3.78 * (zoom / 100)}px`,
+                  }}
+                />
+              )}
+              {htmlContent && !fetchError && (
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={htmlContent}
+                  title="PDF 预览"
+                  sandbox="allow-same-origin allow-modals allow-popups allow-scripts"
+                  className="w-full h-full border-0 bg-white"
+                />
+              )}
             </div>
           </div>
 
@@ -274,7 +305,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
             <div className="p-3 border-t border-slate-200 space-y-2 flex-shrink-0">
               <Button
                 onClick={handlePrint}
-                disabled={printing}
+                disabled={printing || fetchLoading || !!fetchError || !htmlContent}
                 className="w-full bg-rose-500 hover:bg-rose-600 text-white gap-1.5"
               >
                 {printing ? (

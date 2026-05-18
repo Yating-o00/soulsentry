@@ -52,16 +52,11 @@ export default function DeviceStrategyMap({ devices = [] }) {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-full text-xs text-emerald-600 border border-emerald-100">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                在线 {onlineCount}
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-full text-xs text-slate-500 border border-slate-100">
-                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
-                待机 {standbyCount}
-              </span>
-            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-full text-xs text-emerald-600 border border-emerald-100">
+              <Cloud className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+              云端在线
+            </span>
           </div>
         );
       })()}

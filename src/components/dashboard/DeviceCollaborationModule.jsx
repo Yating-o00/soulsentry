@@ -1,16 +1,64 @@
 import React from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, parseISO, isToday, startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { motion } from "framer-motion";
 import { Cpu } from "lucide-react";
 import DeviceStrategyMap from "./planner/DeviceStrategyMap";
 
 /**
  * 全设备智能协同 — 独立模块
- * 从当日 DailyPlan 读取 devices 数据（由 SmartDailyPlanner 写入），
- * 作为 Dashboard 顶层模块单独展示。无数据时不渲染。
+ * 提醒来源：
+ *  1) 当日 DailyPlan.devices 策略（智能日程规划生成）
+ *  2) 当日需要提醒的 Task 约定（注入手机设备）
+ *  3) 当日活动的 Note 心签（注入工作站设备）
+ * 无任何提醒时不渲染。
  */
+
+function timeFromISO(iso) {
+  try {
+    return format(parseISO(iso), "HH:mm");
+  } catch {
+    return "";
+  }
+}
+
+function priorityFromTask(t) {
+  if (t.priority === "urgent" || t.priority === "high") return "high";
+  if (t.priority === "low") return "low";
+  return "medium";
+}
+
+function isTaskTodayActive(t) {
+  if (!t || t.deleted_at || t.status === "completed" || t.status === "cancelled") return false;
+  if (!t.reminder_time) return false;
+  const start = parseISO(t.reminder_time);
+  const end = t.end_time ? parseISO(t.end_time) : start;
+  return isWithinInterval(new Date(), { start: startOfDay(start), end: endOfDay(end) });
+}
+
+function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies) {
+  const map = new Map();
+  for (const d of baseDevices || []) {
+    map.set(d.id, { ...d, strategies: [...(d.strategies || [])] });
+  }
+  if (taskStrategies.length > 0) {
+    const phone = map.get("phone") || { id: "phone", name: "手机", strategies: [] };
+    phone.strategies = [...(phone.strategies || []), ...taskStrategies];
+    map.set("phone", phone);
+  }
+  if (noteStrategies.length > 0) {
+    const pc = map.get("pc") || { id: "pc", name: "工作站", strategies: [] };
+    pc.strategies = [...(pc.strategies || []), ...noteStrategies];
+    map.set("pc", pc);
+  }
+  // sort each device strategies by time
+  for (const d of map.values()) {
+    d.strategies.sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
+  }
+  return Array.from(map.values());
+}
+
 export default function DeviceCollaborationModule() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
 
@@ -20,10 +68,66 @@ export default function DeviceCollaborationModule() {
     staleTime: 2 * 60 * 1000,
   });
 
-  const dayPlan = planQueryData?.[0] || null;
-  const devices = dayPlan?.plan_json?.devices || [];
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => base44.entities.Task.list('-reminder_time'),
+    initialData: [],
+    staleTime: 2 * 60 * 1000,
+  });
 
-  if (devices.length === 0) return null;
+  const { data: allNotes = [] } = useQuery({
+    queryKey: ['notes'],
+    queryFn: () => base44.entities.Note.list('-created_date', 100),
+    initialData: [],
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const dayPlan = planQueryData?.[0] || null;
+  const baseDevices = dayPlan?.plan_json?.devices || [];
+
+  // 当日需要提醒的 Task → 手机策略
+  const taskStrategies = React.useMemo(() => {
+    return (allTasks || [])
+      .filter(isTaskTodayActive)
+      .map((t) => ({
+        time: timeFromISO(t.reminder_time),
+        content: t.title,
+        method: "推送提醒",
+        priority: priorityFromTask(t),
+        source: "task",
+      }));
+  }, [allTasks]);
+
+  // 当日活动的 Note 心签 → 工作站策略
+  const noteStrategies = React.useMemo(() => {
+    return (allNotes || [])
+      .filter((n) => {
+        if (!n || n.deleted_at) return false;
+        const ref = n.last_active_at || n.updated_date || n.created_date;
+        if (!ref) return false;
+        try { return isToday(parseISO(ref)); } catch { return false; }
+      })
+      .slice(0, 8)
+      .map((n) => {
+        const ref = n.last_active_at || n.updated_date || n.created_date;
+        const text = n.plain_text || (n.content || "").replace(/<[^>]+>/g, "").trim();
+        return {
+          time: timeFromISO(ref),
+          content: text ? (text.length > 60 ? text.slice(0, 60) + "…" : text) : "心签更新",
+          method: "心签速记",
+          priority: n.is_pinned ? "high" : "low",
+          source: "note",
+        };
+      });
+  }, [allNotes]);
+
+  const devices = React.useMemo(
+    () => mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies),
+    [baseDevices, taskStrategies, noteStrategies]
+  );
+
+  const hasAny = devices.some((d) => d.strategies && d.strategies.length > 0);
+  if (!hasAny) return null;
 
   return (
     <motion.div

@@ -212,14 +212,13 @@ export default function LifeTaskCard({
       return { text: `已推迟·剩${remain}`, color: 'text-amber-600 font-medium' };
     }
 
-    // 过期态：推迟后又错过 / 普通任务过期 → 显示「已过期 X」，反映过期了多久
+    // 过期态：只显示距离时长，不显示"推迟后过期"前缀
     if (diffMs < 0) {
       let over;
       if (diffMinutes < 60) over = `${diffMinutes}分钟`;
       else if (diffHours < 24) over = `${diffHours}小时`;
       else over = `${Math.abs(diffDays)}天`;
-      const prefix = isSnoozed ? '推迟后过期' : '已过期';
-      return { text: `${prefix}·${over}`, color: 'text-red-500 font-bold' };
+      return { text: `已过期·${over}`, color: 'text-red-500 font-bold' };
     }
 
     // 未来时间：今天 / 明天 / 剩X天

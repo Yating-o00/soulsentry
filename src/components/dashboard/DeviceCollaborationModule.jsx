@@ -37,6 +37,94 @@ function isTaskTodayActive(t) {
   return isWithinInterval(new Date(), { start: startOfDay(start), end: endOfDay(end) });
 }
 
+// NLP：识别 title 里没有具体时间点的模糊表达，返回语义时间标签
+function detectFuzzyTimeLabel(title) {
+  if (!title) return null;
+  const s = String(title);
+  // 已含具体时间点（08:00 / 8点 / 上午9点 / 晚上8点半）→ 不是模糊
+  if (/\d{1,2}\s*[:：]\s*\d{2}/.test(s)) return null;
+  if (/[上下中]午\s*\d{1,2}\s*[点时]/.test(s)) return null;
+  if (/(早上|晚上|中午|凌晨|傍晚)\s*\d{1,2}\s*[点时]/.test(s)) return null;
+  if (/\d{1,2}\s*[点时]/.test(s)) return null;
+  // 纯日期+无时间点 → 用日期词作为语义标签
+  if (/今晚|今夜/.test(s)) return "今晚";
+  if (/今早|今天早上|今天上午/.test(s)) return "今早";
+  if (/今天下午|今下午/.test(s)) return "今天下午";
+  if (/今天|今日/.test(s)) return "今日";
+  if (/明早|明天早上|明天上午/.test(s)) return "明早";
+  if (/明晚|明天晚上/.test(s)) return "明晚";
+  if (/明天|明日/.test(s)) return "明日";
+  if (/后天/.test(s)) return "后天";
+  if (/这周末|本周末|周末/.test(s)) return "周末";
+  if (/下周/.test(s)) return "下周";
+  if (/这周|本周/.test(s)) return "本周";
+  return null;
+}
+
+// 决定一条 task 在协同卡片里显示的时间字段
+function resolveTaskTimeField(t) {
+  const fuzzy = detectFuzzyTimeLabel(t.title);
+  // 如果 title 是模糊表达，且系统标记为 time_is_suggested（AI 猜的时间，非用户给的）→ 用语义标签
+  if (fuzzy && t.time_is_suggested) return fuzzy;
+  // 否则按 reminder_time 显示具体时间点
+  return timeFromISO(t.reminder_time);
+}
+
+// 同时间合并内容 + 同内容合并时间（取最早），保持时间排序
+function consolidateStrategies(strategies) {
+  const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
+  const priorityWeight = { high: 3, medium: 2, low: 1 };
+  const pickPriority = (a, b) =>
+    (priorityWeight[a] || 0) >= (priorityWeight[b] || 0) ? a : b;
+
+  // Step 1: 同内容合并 — 只保留最早时间
+  const byContent = new Map();
+  for (const s of strategies) {
+    const k = norm(s.content);
+    if (!k) continue;
+    const prev = byContent.get(k);
+    if (!prev) {
+      byContent.set(k, { ...s });
+    } else {
+      // 取最早时间
+      const earlier = String(s.time || "") < String(prev.time || "") ? s.time : prev.time;
+      byContent.set(k, {
+        ...prev,
+        time: earlier,
+        priority: pickPriority(prev.priority, s.priority),
+      });
+    }
+  }
+  const dedupedByContent = Array.from(byContent.values());
+
+  // Step 2: 同时间合并内容 — 内容用 " · " 拼接
+  const byTime = new Map();
+  for (const s of dedupedByContent) {
+    const k = norm(s.time);
+    if (!k) {
+      // 没时间字段的单独放
+      byTime.set(`__notime_${byTime.size}__`, s);
+      continue;
+    }
+    const prev = byTime.get(k);
+    if (!prev) {
+      byTime.set(k, { ...s });
+    } else {
+      const merged = `${prev.content} · ${s.content}`;
+      byTime.set(k, {
+        ...prev,
+        content: merged,
+        priority: pickPriority(prev.priority, s.priority),
+        method: prev.method === s.method ? prev.method : "多端提醒",
+      });
+    }
+  }
+
+  return Array.from(byTime.values()).sort((a, b) =>
+    String(a.time || "").localeCompare(String(b.time || ""))
+  );
+}
+
 function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies) {
   const map = new Map();
   for (const d of baseDevices || []) {
@@ -52,17 +140,8 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies) 
     pc.strategies = [...(pc.strategies || []), ...noteStrategies];
     map.set("pc", pc);
   }
-  // dedupe by (time + normalized content) and sort by time per device
-  const normKey = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
   for (const d of map.values()) {
-    const seen = new Set();
-    d.strategies = (d.strategies || []).filter((s) => {
-      const key = `${normKey(s.time)}|${normKey(s.content)}`;
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    d.strategies.sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
+    d.strategies = consolidateStrategies(d.strategies || []);
   }
   return Array.from(map.values());
 }
@@ -93,12 +172,12 @@ export default function DeviceCollaborationModule() {
   const dayPlan = planQueryData?.[0] || null;
   const baseDevices = dayPlan?.plan_json?.devices || [];
 
-  // 当日需要提醒的 Task → 手机策略
+  // 当日需要提醒的 Task → 手机策略（NLP 识别模糊时间）
   const taskStrategies = React.useMemo(() => {
     return (allTasks || [])
       .filter(isTaskTodayActive)
       .map((t) => ({
-        time: timeFromISO(t.reminder_time),
+        time: resolveTaskTimeField(t),
         content: t.title,
         method: "推送提醒",
         priority: priorityFromTask(t),

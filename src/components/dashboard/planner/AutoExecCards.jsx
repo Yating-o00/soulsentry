@@ -161,6 +161,7 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
     }
 
     updateItem(item._id, { status: "running" });
+    toast.loading(`AI 正在执行：${item.title}`, { id: `exec-${item._id}`, duration: 60000 });
     const input = overrideInput || item.desc || item.title;
     try {
       const exec = await base44.entities.TaskExecution.create({
@@ -195,6 +196,7 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
         const d = finalExec.automation_result.data;
         // 草稿已生成但尚未发送 → 状态保持 ready，UI 显示「待发送」由预览窗推进
         updateItem(item._id, { status: "ready", execution_id: exec.id, result_preview: preview });
+        toast.success("邮件草稿已生成，请确认发送", { id: `exec-${item._id}` });
         setEmailDraft({
           item: { ...item, execution_id: exec.id },
           executionId: exec.id,
@@ -204,6 +206,7 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
       }
 
       updateItem(item._id, { status: "done", result_preview: preview });
+      toast.success(`已完成：${item.title}`, { id: `exec-${item._id}` });
       setFeedback({
         mode: "success",
         item: { ...item, execution_id: exec.id },
@@ -212,6 +215,7 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
     } catch (e) {
       updateItem(item._id, { status: "failed" });
       const msg = e?.message || "未知错误";
+      toast.error(`执行失败：${msg}`, { id: `exec-${item._id}` });
       setFeedback({
         mode: "failed",
         item,

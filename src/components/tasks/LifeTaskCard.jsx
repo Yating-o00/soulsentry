@@ -182,12 +182,23 @@ export default function LifeTaskCard({
   // 3. Get Time/Status Text
   const getTimeStatus = () => {
     if (completed) return { text: '已完成', color: 'text-stone-400 font-medium' };
-    
-    // Determine the target date (deadline or reminder)
-    const targetDateStr = task.end_time || task.reminder_time;
+
+    // 推迟优先：如果任务被推迟（snoozed），用 snooze_until / reminder_time 作为新参考时间
+    // 否则按 end_time（截止）→ reminder_time 顺序判断
+    const isSnoozed = task.status === 'snoozed' || !!task.snooze_until;
+    const targetDateStr = isSnoozed
+      ? (task.snooze_until || task.reminder_time || task.end_time)
+      : (task.end_time || task.reminder_time);
     if (!targetDateStr) return { text: '', color: 'text-stone-300' };
 
     const targetDate = new Date(targetDateStr);
+
+    // 推迟到未来时间 → 显示"已推迟"，不再标"已过期"
+    if (isSnoozed && targetDate.getTime() > Date.now()) {
+      if (isToday(targetDate)) return { text: '已推迟·今天', color: 'text-amber-600 font-medium' };
+      if (isTomorrow(targetDate)) return { text: '已推迟·明天', color: 'text-amber-600 font-medium' };
+      return { text: `已推迟·${format(targetDate, 'MM-dd')}`, color: 'text-amber-600 font-medium' };
+    }
     
     if (isToday(targetDate)) return { text: '今天', color: 'text-green-600 font-bold' };
     if (isTomorrow(targetDate)) return { text: '明天', color: 'text-stone-500 font-medium' };

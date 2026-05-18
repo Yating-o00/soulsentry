@@ -489,7 +489,41 @@ export default function SmartDailyPlanner() {
       }
 
       const originalInput = dayPlan?.original_input || "";
-      const replanInput = `【已有规划原始描述】\n${originalInput || "(无)"}\n\n【用户的修改意见 - 请基于已有规划整体重新调整】\n${feedback}`;
+
+      // 落地反馈闭环：把最近 24h 内"未消费"的延期日志带进 AI 重排，作为优先考量
+      let deferralContext = "";
+      let consumableLogs = [];
+      try {
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const logs = await base44.entities.TaskDeferralLog.filter(
+          { carry_to_next_plan: true },
+          "-created_date",
+          20
+        );
+        consumableLogs = (logs || []).filter(l => !l.consumed_in_replan_at && l.created_date >= since);
+        if (consumableLogs.length > 0) {
+          const REASON_LABEL = {
+            device_not_ready: "设备/条件未就绪",
+            time_conflict: "时间被占用",
+            energy_low: "精力不足",
+            external_blocker: "外部阻塞",
+            forgot: "忘记了",
+            scope_changed: "范围变更",
+            other: "其它",
+          };
+          deferralContext = "\n\n【最近未按时落地的事项 - 请在重排中优先安排，并避开同类原因】\n" +
+            consumableLogs.map(l => {
+              const r = REASON_LABEL[l.reason_category] || l.reason_category;
+              const miss = l.missing_prerequisite ? `（缺：${l.missing_prerequisite}）` : "";
+              const note = l.reason_note ? ` - ${l.reason_note}` : "";
+              return `• 「${l.task_title || '任务'}」原因：${r}${miss}${note}`;
+            }).join("\n");
+        }
+      } catch (e) {
+        console.warn("[Replan] load deferral logs failed", e);
+      }
+
+      const replanInput = `【已有规划原始描述】\n${originalInput || "(无)"}\n\n【用户的修改意见 - 请基于已有规划整体重新调整】\n${feedback}${deferralContext}`;
 
       const { data } = await base44.functions.invoke('analyzeIntent', {
         input: replanInput,
@@ -547,7 +581,20 @@ export default function SmartDailyPlanner() {
         queryClient.setQueryData(['dailyPlan', selectedDateStr], [created]);
       }
       queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
-      toast.success("已根据你的意见重新规划", { icon: "✨" });
+
+      // 标记本次已消费的延期日志，避免下次重排重复影响
+      if (consumableLogs.length > 0) {
+        const nowIso = new Date().toISOString();
+        await Promise.all(
+          consumableLogs.map(l =>
+            base44.entities.TaskDeferralLog.update(l.id, { consumed_in_replan_at: nowIso })
+              .catch(e => console.warn("mark deferral consumed failed", e))
+          )
+        );
+        toast.success(`已根据你的意见重新规划（含 ${consumableLogs.length} 条未完成事项）`, { icon: "✨" });
+      } else {
+        toast.success("已根据你的意见重新规划", { icon: "✨" });
+      }
 
       const conflicts = detectTimeConflicts(newPlanJson.focus_blocks || []);
       if (conflicts.length > 0) {

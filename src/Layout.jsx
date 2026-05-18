@@ -14,6 +14,7 @@ import GlobalTextTranslator from "@/components/GlobalTextTranslator";
 import GeofenceTracker from "./components/location/GeofenceTracker";
 import SentinelGeoWatcher from "./components/location/SentinelGeoWatcher";
 import OnTheWayReminderHost from "./components/location/OnTheWayReminderHost";
+import OverdueFeedbackHost from "./components/feedback/OverdueFeedbackHost";
 import { base44 } from "@/api/base44Client";
 import { getCachedUser } from "@/lib/userCache";
 import {
@@ -356,6 +357,7 @@ function LayoutContent({ children }) {
         <GeofenceTracker />
         <SentinelGeoWatcher />
         <OnTheWayReminderHost />
+        <OverdueFeedbackHost />
 
         {/* 离线状态提示 */}
         {!isOnline && (

@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
+import TimelineItemReviser from "./TimelineItemReviser";
 
 const typeEmoji = {
   meeting:  "📋",
@@ -38,14 +39,16 @@ const formatTime = (raw) => {
   return raw;
 };
 
-export default function ContextTimeline({ blocks = [] }) {
-  const list = (blocks || []).slice().sort((a, b) => {
-    // Sort by date first, then by time
-    const dateA = a.date || '';
-    const dateB = b.date || '';
-    if (dateA !== dateB) return dateA.localeCompare(dateB);
-    return (a.time || '').localeCompare(b.time || '');
-  });
+export default function ContextTimeline({ blocks = [], onReviseItem }) {
+  // 保留原始索引，"改一下"回调时回写到父组件原数组的对应位置
+  const list = (blocks || [])
+    .map((b, originalIndex) => ({ ...b, __idx: originalIndex }))
+    .sort((a, b) => {
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      return (a.time || '').localeCompare(b.time || '');
+    });
 
   if (list.length === 0) return null;
 
@@ -92,6 +95,14 @@ export default function ContextTimeline({ blocks = [] }) {
                       <span className="text-[10px] font-medium text-[#384877]/70 bg-[#384877]/8 px-2 py-0.5 rounded-full border border-[#384877]/10">
                         {label}
                       </span>
+                    )}
+                    {onReviseItem && (
+                      <div className="ml-auto">
+                        <TimelineItemReviser
+                          block={b}
+                          onApply={(newBlock) => onReviseItem(b.__idx, newBlock)}
+                        />
+                      </div>
                     )}
                   </div>
                   {b.description && (

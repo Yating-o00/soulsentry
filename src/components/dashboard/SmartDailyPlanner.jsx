@@ -409,6 +409,29 @@ export default function SmartDailyPlanner() {
     }
   };
 
+  // 时间线条目"改一下"：用 AI 重生成后的新条目替换原条目（同时更新 analysis 和 dayPlan）
+  const handleReviseTimelineItem = useCallback(async (originalIndex, newBlock) => {
+    // 1) 更新 analysis（当前会话内）
+    if (analysis?.timeline) {
+      const updatedTimeline = [...analysis.timeline];
+      if (updatedTimeline[originalIndex]) {
+        updatedTimeline[originalIndex] = { ...updatedTimeline[originalIndex], ...newBlock };
+        setAnalysis(prev => ({ ...prev, timeline: updatedTimeline }));
+      }
+    }
+    // 2) 持久化到 DailyPlan.focus_blocks
+    if (existingPlanId && dayPlan?.plan_json) {
+      const blocks = [...(dayPlan.plan_json.focus_blocks || [])];
+      if (blocks[originalIndex]) {
+        blocks[originalIndex] = { ...blocks[originalIndex], ...newBlock };
+        const newPlanJson = { ...dayPlan.plan_json, focus_blocks: blocks };
+        updateDayPlanCache(prev => ({ ...prev, plan_json: newPlanJson }));
+        await base44.entities.DailyPlan.update(existingPlanId, { plan_json: newPlanJson })
+          .catch(e => console.warn("persist revised block failed", e));
+      }
+    }
+  }, [analysis, existingPlanId, dayPlan, updateDayPlanCache]);
+
   const handleDelete = async () => {
     if (!existingPlanId) return;
     try {
@@ -725,7 +748,10 @@ export default function SmartDailyPlanner() {
         {analysis?.timeline?.length > 0 && viewMode === "timeline" && (() => {
           const dayBlocks = analysis.timeline.filter(t => !t.date || t.date === selectedDateStr);
           return dayBlocks.length > 0 ? (
-            <ContextTimeline blocks={dayBlocks.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))} />
+            <ContextTimeline
+              blocks={dayBlocks.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))}
+              onReviseItem={handleReviseTimelineItem}
+            />
           ) : null;
         })()}
 
@@ -763,7 +789,10 @@ export default function SmartDailyPlanner() {
             ) : (
               <>
                 {dayPlan.plan_json?.focus_blocks?.length > 0 && (
-                  <ContextTimeline blocks={dayPlan.plan_json.focus_blocks} />
+                  <ContextTimeline
+                    blocks={dayPlan.plan_json.focus_blocks}
+                    onReviseItem={handleReviseTimelineItem}
+                  />
                 )}
                 {dayPlan.plan_json?.key_tasks?.length > 0 && (
                   <AutoExecCards

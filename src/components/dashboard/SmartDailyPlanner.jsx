@@ -409,6 +409,81 @@ export default function SmartDailyPlanner() {
     }
   };
 
+  // 整体重新规划：基于现有规划 + 用户修改意见，让 AI 重排当日方案，并替换持久化数据
+  const handleReplan = useCallback(async ({ feedback }) => {
+    if (!feedback || !feedback.trim()) return;
+    const allowed = await gate("schedule_optimize", "智能日程规划");
+    if (!allowed) return;
+
+    setIsProcessing(true);
+    setSyncStatus(null);
+    toast.success("正在按你的意见重新规划…", { icon: "🔄" });
+
+    try {
+      // 组装现有方案
+      let existingPlan = null;
+      if (analysis) {
+        existingPlan = {
+          timeline: analysis.timeline || [],
+          devices: analysis.devices || [],
+          automations: analysis.automations || [],
+        };
+      } else if (dayPlan?.plan_json) {
+        const dp = dayPlan.plan_json;
+        existingPlan = {
+          timeline: (dp.focus_blocks || []).map(b => ({ time: b.time, title: b.title, description: b.description, type: b.type || 'focus', date: selectedDateStr })),
+          devices: [],
+          automations: (dp.key_tasks || []).map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'active' : 'ready' })),
+        };
+      }
+
+      const originalInput = dayPlan?.original_input || "";
+      const replanInput = `【已有规划原始描述】\n${originalInput || "(无)"}\n\n【用户的修改意见 - 请基于已有规划整体重新调整】\n${feedback}`;
+
+      const { data } = await base44.functions.invoke('analyzeIntent', {
+        input: replanInput,
+        date: selectedDateStr,
+        existingPlan,
+        mode: 'replan',
+      });
+
+      const newPlanJson = {
+        key_tasks: (data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' })),
+        focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' })),
+      };
+
+      setAnalysis(data);
+
+      const planRecord = {
+        plan_date: selectedDateStr,
+        original_input: [originalInput, `[修改意见] ${feedback}`].filter(Boolean).join('\n'),
+        theme: data.parsed?.intents?.[0] || dayPlan?.theme || '',
+        summary: dayPlan?.summary || '',
+        plan_json: newPlanJson,
+        is_active: true,
+      };
+
+      if (existingPlanId) {
+        await base44.entities.DailyPlan.update(existingPlanId, planRecord);
+      } else {
+        await base44.entities.DailyPlan.create(planRecord);
+      }
+      queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
+      toast.success("已根据你的意见重新规划", { icon: "✨" });
+
+      const conflicts = detectTimeConflicts(newPlanJson.focus_blocks || []);
+      if (conflicts.length > 0) {
+        setConflictData({ conflicts, allBlocks: newPlanJson.focus_blocks || [] });
+      }
+    } catch (err) {
+      console.error("Replan failed", err);
+      toast.error(err?.response?.data?.error || err?.message || '重新规划失败，请重试');
+      throw err;
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [analysis, dayPlan, existingPlanId, selectedDateStr, queryClient, gate]);
+
   const handleDelete = async () => {
     if (!existingPlanId) return;
     try {
@@ -731,6 +806,7 @@ export default function SmartDailyPlanner() {
           return (
             <ContextTimeline
               blocks={dayBlocksWithIdx.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus', __origIdx: t.__origIdx }))}
+              onReplan={handleReplan}
               onReviseItem={(_localIdx, newBlock) => {
                 // _localIdx 是过滤后数组的位置，用 __origIdx 回到 analysis.timeline 的真实索引
                 const origIdx = dayBlocksWithIdx[_localIdx]?.__origIdx;
@@ -793,6 +869,7 @@ export default function SmartDailyPlanner() {
                 {dayPlan.plan_json?.focus_blocks?.length > 0 && (
                   <ContextTimeline
                     blocks={dayPlan.plan_json.focus_blocks}
+                    onReplan={handleReplan}
                     onReviseItem={(idx, newBlock) => {
                       if (!existingPlanId) return;
                       const focus = [...(dayPlan.plan_json.focus_blocks || [])];

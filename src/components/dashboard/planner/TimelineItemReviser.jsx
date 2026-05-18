@@ -1,19 +1,22 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wand2, Loader2, X, Send } from "lucide-react";
+import { Wand2, Loader2, X, Send, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
+import { cn } from "@/lib/utils";
 
 /**
  * 单条时间线条目的"提修改意见"弹窗
- * 用户输入意见 → 调用 InvokeLLM 让 AI 基于原条目 + 用户意见输出新条目
- * 父组件通过 onApply(newBlock) 接收并持久化
+ * 两种模式：
+ *   - "single"：只改这一条（调用 InvokeLLM 重写该条）
+ *   - "replan"：基于这条 + 用户意见，让父组件触发整体重新规划（onReplan 回调）
  */
-export default function TimelineItemReviser({ block, onApply }) {
+export default function TimelineItemReviser({ block, onApply, onReplan }) {
   const [open, setOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [mode, setMode] = useState("single"); // single | replan
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -21,8 +24,18 @@ export default function TimelineItemReviser({ block, onApply }) {
     if (!txt || loading) return;
     setLoading(true);
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `你是日程规划助手。用户对下面这条时间线条目提出修改意见，请基于原条目和意见生成新的条目。
+      if (mode === "replan") {
+        // 交给父组件做整体重规划（父组件会调用 analyzeIntent 并替换当日方案）
+        if (typeof onReplan !== "function") {
+          toast.error("当前不支持整体重新规划");
+        } else {
+          await onReplan({ feedback: txt, anchorBlock: block });
+          setOpen(false);
+          setFeedback("");
+        }
+      } else {
+        const result = await base44.integrations.Core.InvokeLLM({
+          prompt: `你是日程规划助手。用户对下面这条时间线条目提出修改意见，请基于原条目和意见生成新的条目。
 
 【原条目】
 时间: ${block.time || "(无)"}
@@ -39,31 +52,32 @@ ${txt}
 - type 可选: meeting / focus / break / personal / travel / reminder
 - 描述要具体、可执行，1-2 句话
 - 返回 JSON 即可，不要解释`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            time: { type: "string" },
-            title: { type: "string" },
-            description: { type: "string" },
-            type: { type: "string" },
+          response_json_schema: {
+            type: "object",
+            properties: {
+              time: { type: "string" },
+              title: { type: "string" },
+              description: { type: "string" },
+              type: { type: "string" },
+            },
+            required: ["title"],
           },
-          required: ["title"],
-        },
-      });
+        });
 
-      const newBlock = {
-        ...block,
-        time: result.time || block.time,
-        title: result.title || block.title,
-        description: result.description || block.description,
-        type: result.type || block.type,
-      };
-      onApply(newBlock);
-      toast.success("已根据你的意见更新", { icon: "✨" });
-      setOpen(false);
-      setFeedback("");
+        const newBlock = {
+          ...block,
+          time: result.time || block.time,
+          title: result.title || block.title,
+          description: result.description || block.description,
+          type: result.type || block.type,
+        };
+        onApply(newBlock);
+        toast.success("已根据你的意见更新", { icon: "✨" });
+        setOpen(false);
+        setFeedback("");
+      }
     } catch (e) {
-      toast.error("重新生成失败: " + (e?.message || "未知错误"));
+      toast.error("处理失败: " + (e?.message || "未知错误"));
     } finally {
       setLoading(false);
     }
@@ -86,24 +100,54 @@ ${txt}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden mt-2"
+            className="overflow-hidden mt-2 w-full"
           >
             <div className="rounded-xl border border-[#384877]/20 bg-gradient-to-br from-[#384877]/5 to-white p-2.5">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <Wand2 className="w-3 h-3 text-[#384877]" />
-                <span className="text-[11px] font-semibold text-[#384877]">告诉 AI 怎么改</span>
+              {/* Mode tabs */}
+              <div className="flex items-center gap-1 mb-2">
+                <button
+                  onClick={() => setMode("single")}
+                  className={cn(
+                    "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                    mode === "single"
+                      ? "bg-[#384877] text-white"
+                      : "bg-white text-slate-500 hover:text-[#384877] border border-slate-200"
+                  )}
+                >
+                  <Wand2 className="w-3 h-3" />
+                  仅改这条
+                </button>
+                {typeof onReplan === "function" && (
+                  <button
+                    onClick={() => setMode("replan")}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                      mode === "replan"
+                        ? "bg-[#384877] text-white"
+                        : "bg-white text-slate-500 hover:text-[#384877] border border-slate-200"
+                    )}
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    整体重新规划
+                  </button>
+                )}
                 <button
                   onClick={() => { setOpen(false); setFeedback(""); }}
-                  className="ml-auto text-slate-400 hover:text-slate-600"
+                  className="ml-auto text-slate-400 hover:text-slate-600 p-0.5"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
+
               <Textarea
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
-                placeholder="例如：改到下午 3 点 / 标题改成季度复盘会 / 加上要带的资料……"
-                className="min-h-[56px] text-xs border-slate-200 bg-white resize-none focus-visible:ring-1 focus-visible:ring-[#384877]"
+                placeholder={
+                  mode === "replan"
+                    ? "告诉 AI 整体怎么调整，比如：今天精力不够，把下午会议都推到明天，上午多留专注时间……"
+                    : "例如：改到下午 3 点 / 标题改成季度复盘会 / 加上要带的资料……"
+                }
+                className="min-h-[64px] text-xs border-slate-200 bg-white resize-none focus-visible:ring-1 focus-visible:ring-[#384877]"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) {
@@ -112,7 +156,10 @@ ${txt}
                   }
                 }}
               />
-              <div className="flex justify-end gap-1.5 mt-1.5">
+              <div className="flex items-center justify-between gap-1.5 mt-1.5">
+                <span className="text-[10px] text-slate-400">
+                  {mode === "replan" ? "将基于现有规划 + 你的意见整体重排" : "只更新当前这一条"}
+                </span>
                 <Button
                   size="sm"
                   onClick={handleSubmit}
@@ -120,9 +167,9 @@ ${txt}
                   className="h-7 px-3 text-[11px] bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-md"
                 >
                   {loading ? (
-                    <><Loader2 className="w-3 h-3 mr-1 animate-spin" />重新生成中…</>
+                    <><Loader2 className="w-3 h-3 mr-1 animate-spin" />{mode === "replan" ? "重新规划中…" : "重新生成中…"}</>
                   ) : (
-                    <><Send className="w-3 h-3 mr-1" />重新生成</>
+                    <><Send className="w-3 h-3 mr-1" />{mode === "replan" ? "整体重排" : "重新生成"}</>
                   )}
                 </Button>
               </div>

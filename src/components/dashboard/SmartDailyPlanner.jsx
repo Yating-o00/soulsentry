@@ -40,6 +40,7 @@ import { detectTimeConflicts } from "@/components/planner/detectConflicts";
 import ConflictDialog from "@/components/planner/ConflictDialog";
 import { detectEmailIntent } from "@/components/gmail/detectEmailIntent";
 import EmailSendConfirmDialog from "@/components/gmail/EmailSendConfirmDialog";
+import EnrichPlanButton from "./planner/EnrichPlanButton";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -943,6 +944,20 @@ export default function SmartDailyPlanner() {
               />
             ) : (
               <>
+                {/* 补全按钮：当时间线或设备协同缺失但有 key_tasks 时显示 */}
+                {(dayPlan.plan_json?.key_tasks?.length > 0) && (!dayPlan.plan_json?.focus_blocks?.length || !dayPlan.plan_json?.devices?.length) && (
+                  <EnrichPlanButton
+                    dayPlan={dayPlan}
+                    planId={existingPlanId}
+                    dateStr={selectedDateStr}
+                    needTimeline={!dayPlan.plan_json?.focus_blocks?.length}
+                    needDevices={!dayPlan.plan_json?.devices?.length}
+                    onEnriched={(newPlanJson) => {
+                      updateDayPlanCache(prev => ({ ...prev, plan_json: newPlanJson }));
+                      queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
+                    }}
+                  />
+                )}
                 {dayPlan.plan_json?.focus_blocks?.length > 0 && (
                   <ContextTimeline
                     blocks={dayPlan.plan_json.focus_blocks}

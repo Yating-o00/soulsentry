@@ -330,11 +330,10 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
   const [saving, setSaving] = React.useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false);
 
-  // 用当前编辑状态(title + sections / body)实时合成可打印 HTML —— 保证 PDF 预览/导出始终是最新内容
-  const printableHtml = React.useMemo(() => {
-    if (!pdfPreviewOpen) return ""; // 不打开就不浪费计算
-    return buildPrintableHtml({ title, sections, body });
-  }, [pdfPreviewOpen, title, sections, body]);
+  // 让 PDF 预览对话框按需用任意主题重新生成 HTML —— 切换风格无需重新打开对话框
+  const buildHtmlForTheme = React.useCallback((theme) => {
+    return buildPrintableHtml({ title, sections, body, theme });
+  }, [title, sections, body]);
 
   // 点"完成"：把当前编辑结果持久化到后端（若父级提供 onSave），然后切回预览
   const handleDone = async () => {
@@ -525,7 +524,7 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
             onClose={() => setPdfPreviewOpen(false)}
             fileUrl={fileUrl}
             fileName={fileName}
-            inlineHtml={printableHtml}
+            buildHtmlForTheme={buildHtmlForTheme}
           />
         )}
         </>

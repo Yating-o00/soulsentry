@@ -1,14 +1,17 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Printer, ZoomIn, ZoomOut, RotateCcw, FileText, Loader2, Download, ExternalLink, AlertTriangle } from "lucide-react";
+import { Printer, ZoomIn, ZoomOut, RotateCcw, FileText, Loader2, Download, ExternalLink, AlertTriangle, Palette } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { PDF_THEMES, PDF_THEME_KEYS } from "./pdfThemes";
 
 // PDF 导出前的可视化预览 + 微调
 // 关键改造:用 fetch 把 HTML 抓到本地 → 用 srcDoc 注入 iframe(绕过 X-Frame-Options / 跨域 print 限制)
 // 这样无论 base44 文件域名是否同源、是否设置 frame-deny,iframe 都能正常渲染并触发打印
-export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileName, inlineHtml }) {
+// 支持 buildHtmlForTheme(theme) 回调 —— 用户切换预设排版风格时实时重新生成内容
+export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileName, inlineHtml, buildHtmlForTheme }) {
+  const [theme, setTheme] = useState("business");
   const iframeRef = useRef(null);
   const [orientation, setOrientation] = useState("portrait");
   const [margin, setMargin] = useState(14);
@@ -26,6 +29,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       setOrientation("portrait");
       setMargin(14);
       setZoom(100);
+      setTheme("business");
       setHtmlContent("");
       setFetchError(null);
       setFetchLoading(true);
@@ -33,9 +37,15 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
   }, [open, fileUrl]);
 
   // fetch HTML → srcDoc(绕过跨域 + iframe 限制)
-  // 如果上层直接传了 inlineHtml(用户已经编辑过的内容),优先用它,跳过 fetch
+  // 优先级:buildHtmlForTheme(支持切换主题) > inlineHtml > fileUrl fetch
   useEffect(() => {
     if (!open) return;
+    if (typeof buildHtmlForTheme === "function") {
+      setHtmlContent(buildHtmlForTheme(theme));
+      setFetchLoading(false);
+      setFetchError(null);
+      return;
+    }
     if (inlineHtml) {
       setHtmlContent(inlineHtml);
       setFetchLoading(false);
@@ -76,7 +86,7 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
       controller.abort();
       clearTimeout(timeoutId);
     };
-  }, [open, fileUrl, fetchKey, inlineHtml]);
+  }, [open, fileUrl, fetchKey, inlineHtml, buildHtmlForTheme, theme]);
 
   // A4 屏幕预览尺寸(mm 等比换算成 px,1mm ≈ 3.78px)
   const A4 = orientation === "portrait"
@@ -372,6 +382,36 @@ export default function PdfExportPreviewDialog({ open, onClose, fileUrl, fileNam
           {/* 右:微调面板 */}
           <div className="w-64 border-l border-slate-200 bg-white flex flex-col flex-shrink-0">
             <div className="p-4 space-y-5 overflow-y-auto flex-1">
+              {/* 预设排版风格 —— 一键切换整体视觉样式 */}
+              {typeof buildHtmlForTheme === "function" && (
+                <Field label={<span className="flex items-center gap-1"><Palette className="w-3 h-3" /> 排版风格</span>}>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {PDF_THEME_KEYS.map((key) => {
+                      const t = PDF_THEMES[key];
+                      const active = theme === key;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setTheme(key)}
+                          className={`text-left px-2 py-1.5 rounded-md border transition ${
+                            active
+                              ? "bg-rose-50 border-rose-400 ring-1 ring-rose-300"
+                              : "bg-white border-slate-200 hover:border-rose-300"
+                          }`}
+                        >
+                          <div className={`text-[11.5px] font-semibold leading-tight ${active ? "text-rose-700" : "text-slate-700"}`}>
+                            {t.label}
+                          </div>
+                          <div className={`text-[9.5px] leading-tight mt-0.5 ${active ? "text-rose-500" : "text-slate-400"}`}>
+                            {t.desc}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+              )}
+
               {/* 方向 */}
               <Field label="纸张方向">
                 <div className="grid grid-cols-2 gap-1.5">

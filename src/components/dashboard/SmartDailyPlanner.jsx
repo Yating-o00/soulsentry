@@ -220,6 +220,7 @@ export default function SmartDailyPlanner() {
           plan_json: {
             key_tasks: dedupeTasks([...(dayPlan?.plan_json?.key_tasks || []), ...(data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' }))]),
             focus_blocks: dedupeBlocks([...(dayPlan?.plan_json?.focus_blocks || []), ...(data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' }))]),
+            devices: (data.devices && data.devices.length > 0) ? data.devices : (dayPlan?.plan_json?.devices || []),
           },
           is_active: true,
         };
@@ -305,6 +306,7 @@ export default function SmartDailyPlanner() {
           plan_json: {
             key_tasks: (data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' })),
             focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === targetDate).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' })),
+            devices: data.devices || [],
           },
           is_active: true,
         };
@@ -313,6 +315,7 @@ export default function SmartDailyPlanner() {
           const tp = targetPlans[0];
           targetPlanRecord.plan_json.key_tasks = dedupeTasks([...(tp.plan_json?.key_tasks || []), ...targetPlanRecord.plan_json.key_tasks]);
           targetPlanRecord.plan_json.focus_blocks = dedupeBlocks([...(tp.plan_json?.focus_blocks || []), ...targetPlanRecord.plan_json.focus_blocks]);
+          targetPlanRecord.plan_json.devices = (targetPlanRecord.plan_json.devices && targetPlanRecord.plan_json.devices.length > 0) ? targetPlanRecord.plan_json.devices : (tp.plan_json?.devices || []);
           targetPlanRecord.original_input = [tp.original_input, capturedInput].filter(Boolean).join('\n');
           await base44.entities.DailyPlan.update(tp.id, targetPlanRecord);
         } else {
@@ -450,6 +453,7 @@ export default function SmartDailyPlanner() {
       const newPlanJson = {
         key_tasks: (data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' })),
         focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' })),
+        devices: (data.devices && data.devices.length > 0) ? data.devices : (dayPlan?.plan_json?.devices || []),
       };
 
       setAnalysis(data);
@@ -880,6 +884,9 @@ export default function SmartDailyPlanner() {
                       base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist revise failed', e));
                     }}
                   />
+                )}
+                {dayPlan.plan_json?.devices?.length > 0 && (
+                  <DeviceStrategyMap devices={dayPlan.plan_json.devices} />
                 )}
                 {dayPlan.plan_json?.key_tasks?.length > 0 && (
                   <AutoExecCards

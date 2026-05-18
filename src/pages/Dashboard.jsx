@@ -46,6 +46,7 @@ import DailyBriefing from "../components/dashboard/DailyBriefing";
 import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
 import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
+import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -438,6 +439,9 @@ export default function Dashboard() {
       >
         <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
       </motion.div>
+
+      {/* 全设备智能协同 - 独立模块，放在时空感知守护最下方 */}
+      <DeviceCollaborationModule />
       </TabsContent>
 
       <TabsContent value="calendar" className="space-y-4 md:space-y-6">

@@ -929,11 +929,6 @@ export default function SmartDailyPlanner() {
           />
         )}
 
-        {/* Device Strategy Map (from analysis) - at the bottom */}
-        {analysis?.devices?.length > 0 && viewMode === "timeline" && (
-          <DeviceStrategyMap devices={analysis.devices} />
-        )}
-
         {/* Fallback: show saved dayPlan data when no fresh analysis */}
         {!analysis && dayPlan && (
           <div className="space-y-5">
@@ -1006,11 +1001,7 @@ export default function SmartDailyPlanner() {
                     }}
                   />
                 )}
-                {/* 全设备智能协同：放在最下面 */}
-                {dayPlan.plan_json?.devices?.length > 0 && (
-                  <DeviceStrategyMap devices={dayPlan.plan_json.devices} />
-                )}
-                {/* 当时间线或设备协同缺失时，提供一键补全入口（放在协同卡之后兜底） */}
+                {/* 当时间线或设备协同缺失时，提供一键补全入口 */}
                 {((dayPlan.plan_json?.focus_blocks?.length || 0) === 0 || (dayPlan.plan_json?.devices?.length || 0) === 0) && (
                   <EnrichPlanButton
                     dayPlan={dayPlan}

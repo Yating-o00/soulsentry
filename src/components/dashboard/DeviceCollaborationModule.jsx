@@ -52,8 +52,16 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies) 
     pc.strategies = [...(pc.strategies || []), ...noteStrategies];
     map.set("pc", pc);
   }
-  // sort each device strategies by time
+  // dedupe by (time + normalized content) and sort by time per device
+  const normKey = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
   for (const d of map.values()) {
+    const seen = new Set();
+    d.strategies = (d.strategies || []).filter((s) => {
+      const key = `${normKey(s.time)}|${normKey(s.content)}`;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     d.strategies.sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
   }
   return Array.from(map.values());

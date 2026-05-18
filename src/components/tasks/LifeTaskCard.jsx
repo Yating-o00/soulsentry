@@ -469,8 +469,10 @@ export default function LifeTaskCard({
                     {/* AI Memory Insight */}
                     <TaskMemoryInsight task={task} />
 
-                    {/* Long-horizon Plan Progress (周/月/季/年 约定) */}
-                    <HorizonProgressBadge task={task} subtasks={subtasks} />
+                    {/* Long-horizon Plan Progress (周/月/季/年 约定) - Work tasks only, above status bar */}
+                    {task.category === 'work' && (
+                        <HorizonProgressBadge task={task} subtasks={subtasks} />
+                    )}
 
                      {/* Detailed Context Info Line (Non-Work Tasks or Supplemental) */}
                     {task.category !== 'work' && (
@@ -547,6 +549,11 @@ export default function LifeTaskCard({
                                  </span>
                              )}
                         </div>
+                    )}
+
+                    {/* Long-horizon Plan Progress (周/月/季/年 约定) - Non-work tasks: below time row */}
+                    {task.category !== 'work' && (
+                        <HorizonProgressBadge task={task} subtasks={subtasks} />
                     )}
                 </div>
 

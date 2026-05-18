@@ -41,6 +41,7 @@ import ConflictDialog from "@/components/planner/ConflictDialog";
 import { detectEmailIntent } from "@/components/gmail/detectEmailIntent";
 import EmailSendConfirmDialog from "@/components/gmail/EmailSendConfirmDialog";
 import EnrichPlanButton from "./planner/EnrichPlanButton";
+import ReplanComposer from "./planner/ReplanComposer";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -1025,14 +1026,14 @@ export default function SmartDailyPlanner() {
               </>
             )}
 
-            {/* Append CTA */}
+            {/* 整体重新规划 / 追加内容 */}
             {!showInput && (
-              <button
-                onClick={() => setShowInput(true)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 text-xs text-slate-400 hover:text-[#384877] border border-dashed border-slate-200 rounded-xl hover:border-[#384877]/30 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> 追加新内容到规划
-              </button>
+              <ReplanComposer
+                disabled={isProcessing}
+                onSubmit={async ({ feedback }) => {
+                  await handleReplan({ feedback });
+                }}
+              />
             )}
           </div>
         )}

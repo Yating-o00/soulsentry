@@ -409,29 +409,6 @@ export default function SmartDailyPlanner() {
     }
   };
 
-  // 时间线条目"改一下"：用 AI 重生成后的新条目替换原条目（同时更新 analysis 和 dayPlan）
-  const handleReviseTimelineItem = useCallback(async (originalIndex, newBlock) => {
-    // 1) 更新 analysis（当前会话内）
-    if (analysis?.timeline) {
-      const updatedTimeline = [...analysis.timeline];
-      if (updatedTimeline[originalIndex]) {
-        updatedTimeline[originalIndex] = { ...updatedTimeline[originalIndex], ...newBlock };
-        setAnalysis(prev => ({ ...prev, timeline: updatedTimeline }));
-      }
-    }
-    // 2) 持久化到 DailyPlan.focus_blocks
-    if (existingPlanId && dayPlan?.plan_json) {
-      const blocks = [...(dayPlan.plan_json.focus_blocks || [])];
-      if (blocks[originalIndex]) {
-        blocks[originalIndex] = { ...blocks[originalIndex], ...newBlock };
-        const newPlanJson = { ...dayPlan.plan_json, focus_blocks: blocks };
-        updateDayPlanCache(prev => ({ ...prev, plan_json: newPlanJson }));
-        await base44.entities.DailyPlan.update(existingPlanId, { plan_json: newPlanJson })
-          .catch(e => console.warn("persist revised block failed", e));
-      }
-    }
-  }, [analysis, existingPlanId, dayPlan, updateDayPlanCache]);
-
   const handleDelete = async () => {
     if (!existingPlanId) return;
     try {
@@ -746,13 +723,38 @@ export default function SmartDailyPlanner() {
       <div ref={resultsRef} className="px-6 pb-6 space-y-5">
         {/* Context Timeline (from analysis) - only current date entries */}
         {analysis?.timeline?.length > 0 && viewMode === "timeline" && (() => {
-          const dayBlocks = analysis.timeline.filter(t => !t.date || t.date === selectedDateStr);
-          return dayBlocks.length > 0 ? (
+          // 用原始索引让"改一下"能定位到 analysis.timeline 的真实条目
+          const dayBlocksWithIdx = analysis.timeline
+            .map((t, i) => ({ ...t, __origIdx: i }))
+            .filter(t => !t.date || t.date === selectedDateStr);
+          if (dayBlocksWithIdx.length === 0) return null;
+          return (
             <ContextTimeline
-              blocks={dayBlocks.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus' }))}
-              onReviseItem={handleReviseTimelineItem}
+              blocks={dayBlocksWithIdx.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus', __origIdx: t.__origIdx }))}
+              onReviseItem={(_localIdx, newBlock) => {
+                // _localIdx 是过滤后数组的位置，用 __origIdx 回到 analysis.timeline 的真实索引
+                const origIdx = dayBlocksWithIdx[_localIdx]?.__origIdx;
+                if (origIdx == null) return;
+                setAnalysis(prev => {
+                  if (!prev) return prev;
+                  const next = [...(prev.timeline || [])];
+                  next[origIdx] = { ...next[origIdx], ...newBlock };
+                  return { ...prev, timeline: next };
+                });
+                // 同步持久化到 DailyPlan
+                if (existingPlanId && dayPlan?.plan_json) {
+                  const focus = [...(dayPlan.plan_json.focus_blocks || [])];
+                  const matchIdx = focus.findIndex(f => normKey(f.time) === normKey(dayBlocksWithIdx[_localIdx].time) && normKey(f.title) === normKey(dayBlocksWithIdx[_localIdx].title));
+                  if (matchIdx >= 0) {
+                    focus[matchIdx] = { ...focus[matchIdx], time: newBlock.time, title: newBlock.title, description: newBlock.description, type: newBlock.type };
+                    const planJson = { ...dayPlan.plan_json, focus_blocks: focus };
+                    updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
+                    base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist revise failed', e));
+                  }
+                }
+              }}
             />
-          ) : null;
+          );
         })()}
 
         {/* Auto Exec Cards (from analysis) */}
@@ -791,7 +793,15 @@ export default function SmartDailyPlanner() {
                 {dayPlan.plan_json?.focus_blocks?.length > 0 && (
                   <ContextTimeline
                     blocks={dayPlan.plan_json.focus_blocks}
-                    onReviseItem={handleReviseTimelineItem}
+                    onReviseItem={(idx, newBlock) => {
+                      if (!existingPlanId) return;
+                      const focus = [...(dayPlan.plan_json.focus_blocks || [])];
+                      if (!focus[idx]) return;
+                      focus[idx] = { ...focus[idx], time: newBlock.time, title: newBlock.title, description: newBlock.description, type: newBlock.type };
+                      const planJson = { ...dayPlan.plan_json, focus_blocks: focus };
+                      updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
+                      base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist revise failed', e));
+                    }}
                   />
                 )}
                 {dayPlan.plan_json?.key_tasks?.length > 0 && (

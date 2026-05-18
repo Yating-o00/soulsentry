@@ -450,13 +450,35 @@ export default function SmartDailyPlanner() {
         mode: 'replan',
       });
 
+      // 时间线条目：后端可能不返回 date 字段，replan 场景下统一视为当日条目
+      const newFocusBlocks = (data.timeline || []).map(t => ({
+        time: t.time,
+        title: t.title,
+        description: t.description || '',
+        type: t.type || 'focus',
+      }));
+      const newKeyTasks = (data.automations || []).map(a => ({
+        title: a.title,
+        description: a.desc || '',
+        status: 'pending',
+        priority: 'medium',
+        category: 'other',
+      }));
+      const newDevices = (data.devices && data.devices.length > 0) ? data.devices : (dayPlan?.plan_json?.devices || []);
+
       const newPlanJson = {
-        key_tasks: (data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' })),
-        focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' })),
-        devices: (data.devices && data.devices.length > 0) ? data.devices : (dayPlan?.plan_json?.devices || []),
+        key_tasks: newKeyTasks,
+        focus_blocks: newFocusBlocks,
+        devices: newDevices,
       };
 
-      setAnalysis(data);
+      // 关键修复：把 timeline 条目都打上当日 date，避免渲染时被日期过滤掉
+      setAnalysis({
+        ...data,
+        timeline: (data.timeline || []).map(t => ({ ...t, date: t.date || selectedDateStr })),
+        automations: data.automations || [],
+        devices: newDevices,
+      });
 
       const planRecord = {
         plan_date: selectedDateStr,
@@ -467,10 +489,14 @@ export default function SmartDailyPlanner() {
         is_active: true,
       };
 
+      // 乐观更新缓存，避免 invalidate 后短暂为空
+      updateDayPlanCache(prev => ({ ...prev, ...planRecord }));
+
       if (existingPlanId) {
         await base44.entities.DailyPlan.update(existingPlanId, planRecord);
       } else {
-        await base44.entities.DailyPlan.create(planRecord);
+        const created = await base44.entities.DailyPlan.create(planRecord);
+        queryClient.setQueryData(['dailyPlan', selectedDateStr], [created]);
       }
       queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
       toast.success("已根据你的意见重新规划", { icon: "✨" });

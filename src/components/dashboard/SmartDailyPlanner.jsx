@@ -975,23 +975,6 @@ export default function SmartDailyPlanner() {
                     }}
                   />
                 )}
-                {/* 当时间线或设备协同缺失时，提供一键补全入口 */}
-                {((dayPlan.plan_json?.focus_blocks?.length || 0) === 0 || (dayPlan.plan_json?.devices?.length || 0) === 0) && (
-                  <EnrichPlanButton
-                    dayPlan={dayPlan}
-                    planId={existingPlanId}
-                    dateStr={selectedDateStr}
-                    needTimeline={(dayPlan.plan_json?.focus_blocks?.length || 0) === 0}
-                    needDevices={(dayPlan.plan_json?.devices?.length || 0) === 0}
-                    onEnriched={(newPlanJson) => {
-                      updateDayPlanCache(prev => ({ ...prev, plan_json: newPlanJson }));
-                      queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
-                    }}
-                  />
-                )}
-                {dayPlan.plan_json?.devices?.length > 0 && (
-                  <DeviceStrategyMap devices={dayPlan.plan_json.devices} />
-                )}
                 {dayPlan.plan_json?.key_tasks?.length > 0 && (
                   <AutoExecCards
                     tasks={dayPlan.plan_json.key_tasks.map(t => ({
@@ -1020,6 +1003,24 @@ export default function SmartDailyPlanner() {
                       planJson.key_tasks = tasks;
                       updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
                       await base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist key_task status failed', e));
+                    }}
+                  />
+                )}
+                {/* 全设备智能协同：放在最下面 */}
+                {dayPlan.plan_json?.devices?.length > 0 && (
+                  <DeviceStrategyMap devices={dayPlan.plan_json.devices} />
+                )}
+                {/* 当时间线或设备协同缺失时，提供一键补全入口（放在协同卡之后兜底） */}
+                {((dayPlan.plan_json?.focus_blocks?.length || 0) === 0 || (dayPlan.plan_json?.devices?.length || 0) === 0) && (
+                  <EnrichPlanButton
+                    dayPlan={dayPlan}
+                    planId={existingPlanId}
+                    dateStr={selectedDateStr}
+                    needTimeline={(dayPlan.plan_json?.focus_blocks?.length || 0) === 0}
+                    needDevices={(dayPlan.plan_json?.devices?.length || 0) === 0}
+                    onEnriched={(newPlanJson) => {
+                      updateDayPlanCache(prev => ({ ...prev, plan_json: newPlanJson }));
+                      queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
                     }}
                   />
                 )}

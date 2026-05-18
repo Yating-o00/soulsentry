@@ -549,16 +549,61 @@
         "yearly"
       ],
       "default": "none",
-      "description": "\u957f\u5468\u671f\u89c4\u5212\uff1anone=\u666e\u901a\u4efb\u52a1\uff1bweekly/monthly/quarterly/yearly=\u957f\u671f\u7ea6\u5b9a\uff0c\u6309\u5bf9\u5e94\u5468\u671f\u5206\u5e03\u63d0\u9192\u800c\u975e\u6bcf\u65e5\u6253\u6270"
+      "description": "\u957f\u5468\u671f\u7ea6\u5b9a\u7c7b\u578b\uff1a\u5468/\u6708/\u5b63\u5ea6/\u5e74\u3002\u8bbe\u7f6e\u540e\u7cfb\u7edf\u4f1a\u81ea\u52a8\u5c06\u4efb\u52a1\u62c6\u5206\u4e3a\u5206\u5e03\u5f0f\u63d0\u9192\uff0c\u800c\u975e\u6bcf\u5929\u63d0\u9192"
     },
-    "horizon_distributed_at": {
+    "long_term_summary": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u4e0a\u6b21\u4e3a\u8be5\u957f\u671f\u7ea6\u5b9a\u5206\u5e03\u751f\u6210\u5b50\u63d0\u9192\u7684\u65f6\u95f4\uff0c\u907f\u514d\u91cd\u590d\u751f\u6210"
+      "description": "AI \u4e3a\u957f\u5468\u671f\u7ea6\u5b9a\u751f\u6210\u7684\u7b80\u6d01\u6458\u8981\uff08\u4e00\u53e5\u8bdd\uff0c\u7528\u4e8e\u901a\u77e5\u548c\u5361\u7247\u5c55\u793a\uff09"
     },
-    "horizon_summary": {
-      "type": "string",
-      "description": "AI\u751f\u6210\u7684\u957f\u671f\u7ea6\u5b9a\u7b80\u6d01\u6458\u8981\uff08\u7528\u4e8e\u901a\u77e5\u5361\u7247/\u8fdb\u5ea6\u9762\u677f\u7684\u7cbe\u7b80\u5c55\u793a\uff09"
+    "long_term_plan": {
+      "type": "object",
+      "description": "AI \u4e3a\u957f\u5468\u671f\u7ea6\u5b9a\u751f\u6210\u7684\u5206\u5e03\u5f0f\u63d0\u9192\u8ba1\u5212",
+      "properties": {
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "\u751f\u6210\u65f6\u95f4"
+        },
+        "horizon": {
+          "type": "string",
+          "description": "\u5bf9\u5e94\u5468\u671f"
+        },
+        "checkpoints": {
+          "type": "array",
+          "description": "\u5206\u5e03\u5f0f\u68c0\u67e5\u70b9\u5217\u8868",
+          "items": {
+            "type": "object",
+            "properties": {
+              "scheduled_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "\u63d0\u9192\u89e6\u53d1\u65f6\u95f4"
+              },
+              "title": {
+                "type": "string",
+                "description": "\u8be5\u68c0\u67e5\u70b9\u7684\u7b80\u6d01\u6807\u9898"
+              },
+              "summary": {
+                "type": "string",
+                "description": "\u8be5\u68c0\u67e5\u70b9\u7684\u7b80\u6d01\u6458\u8981"
+              },
+              "subtask_id": {
+                "type": "string",
+                "description": "\u5bf9\u5e94\u751f\u6210\u7684\u5b50\u4efb\u52a1 ID\uff08\u5982\u5df2\u751f\u6210\uff09"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "done",
+                  "skipped"
+                ],
+                "default": "pending"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "required": [

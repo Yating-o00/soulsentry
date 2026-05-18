@@ -22,6 +22,7 @@ import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 import SnoozePopover from "@/components/tasks/SnoozePopover";
 import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
+import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
 import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
 
 export default function LifeTaskCard({ 
@@ -461,6 +462,9 @@ export default function LifeTaskCard({
                             )}
                         </div>
                     )}
+
+                    {/* Long-term horizon: progress + concise summary */}
+                    <LongTermProgressBar task={task} subtasks={subtasks} />
 
                     {/* AI Memory Insight */}
                     <TaskMemoryInsight task={task} />

@@ -357,7 +357,7 @@ function LayoutContent({ children }) {
         <GeofenceTracker />
         <SentinelGeoWatcher />
         <OnTheWayReminderHost />
-        <OverdueFeedbackHost />
+        {/* <OverdueFeedbackHost />  暂时禁用：避免反馈窗口打扰用户 */}
 
         {/* 离线状态提示 */}
         {!isOnline && (

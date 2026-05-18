@@ -330,9 +330,9 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
   const [saving, setSaving] = React.useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false);
 
-  // 让 PDF 预览对话框按需用任意主题重新生成 HTML —— 切换风格无需重新打开对话框
-  const buildHtmlForTheme = React.useCallback((theme) => {
-    return buildPrintableHtml({ title, sections, body, theme });
+  // 让 PDF 预览对话框按需用任意风格重新生成 HTML —— 切换风格无需重新打开对话框
+  const buildHtmlForStyle = React.useCallback((styleId) => {
+    return buildPrintableHtml({ title, sections, body, styleId });
   }, [title, sections, body]);
 
   // 点"完成"：把当前编辑结果持久化到后端（若父级提供 onSave），然后切回预览
@@ -524,7 +524,7 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
             onClose={() => setPdfPreviewOpen(false)}
             fileUrl={fileUrl}
             fileName={fileName}
-            buildHtmlForTheme={buildHtmlForTheme}
+            buildHtml={buildHtmlForStyle}
           />
         )}
         </>

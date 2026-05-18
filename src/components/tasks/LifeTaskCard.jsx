@@ -192,30 +192,45 @@ export default function LifeTaskCard({
     if (!targetDateStr) return { text: '', color: 'text-stone-300' };
 
     const targetDate = new Date(targetDateStr);
-
-    // 推迟到未来时间 → 显示"已推迟"，不再标"已过期"
-    if (isSnoozed && targetDate.getTime() > Date.now()) {
-      if (isToday(targetDate)) return { text: '已推迟·今天', color: 'text-amber-600 font-medium' };
-      if (isTomorrow(targetDate)) return { text: '已推迟·明天', color: 'text-amber-600 font-medium' };
-      return { text: `已推迟·${format(targetDate, 'MM-dd')}`, color: 'text-amber-600 font-medium' };
-    }
-    
-    if (isToday(targetDate)) return { text: '今天', color: 'text-green-600 font-bold' };
-    if (isTomorrow(targetDate)) return { text: '明天', color: 'text-stone-500 font-medium' };
-    
     const now = new Date();
-    // Reset hours to compare dates only
-    const target = new Date(targetDate);
-    target.setHours(0,0,0,0);
-    const current = new Date();
-    current.setHours(0,0,0,0);
-    
-    const diffTime = target - current;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffMs = targetDate.getTime() - now.getTime();
+    const absMs = Math.abs(diffMs);
+    const diffMinutes = Math.round(absMs / (1000 * 60));
+    const diffHours = Math.round(absMs / (1000 * 60 * 60));
 
-    if (diffDays < 0) return { text: '已过期', color: 'text-red-500 font-bold' };
+    // 按"日历日"差异（忽略时分秒），用于"剩X天 / 过期X天"
+    const targetDay = new Date(targetDate); targetDay.setHours(0, 0, 0, 0);
+    const currentDay = new Date(now); currentDay.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((targetDay - currentDay) / (1000 * 60 * 60 * 24));
+
+    // 推迟后仍在未来 → 显示「已推迟·剩X」，动态反映距离新时间还差多久
+    if (isSnoozed && diffMs > 0) {
+      let remain;
+      if (diffMinutes < 60) remain = `${diffMinutes}分钟`;
+      else if (diffHours < 24) remain = `${diffHours}小时`;
+      else remain = `${diffDays}天`;
+      return { text: `已推迟·剩${remain}`, color: 'text-amber-600 font-medium' };
+    }
+
+    // 过期态：推迟后又错过 / 普通任务过期 → 显示「已过期 X」，反映过期了多久
+    if (diffMs < 0) {
+      let over;
+      if (diffMinutes < 60) over = `${diffMinutes}分钟`;
+      else if (diffHours < 24) over = `${diffHours}小时`;
+      else over = `${Math.abs(diffDays)}天`;
+      const prefix = isSnoozed ? '推迟后过期' : '已过期';
+      return { text: `${prefix}·${over}`, color: 'text-red-500 font-bold' };
+    }
+
+    // 未来时间：今天 / 明天 / 剩X天
+    if (isToday(targetDate)) {
+      if (diffMinutes < 60) return { text: `${diffMinutes}分钟后`, color: 'text-green-600 font-bold' };
+      if (diffHours < 24) return { text: `${diffHours}小时后`, color: 'text-green-600 font-bold' };
+      return { text: '今天', color: 'text-green-600 font-bold' };
+    }
+    if (isTomorrow(targetDate)) return { text: '明天', color: 'text-stone-500 font-medium' };
     if (diffDays <= 3) return { text: `剩${diffDays}天`, color: 'text-amber-500 font-bold' };
-    
+
     return { text: format(targetDate, 'MM-dd'), color: 'text-stone-400' };
   };
 

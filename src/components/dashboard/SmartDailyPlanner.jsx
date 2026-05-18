@@ -19,7 +19,8 @@ import {
   Send,
   ChevronLeft,
   ChevronRight,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Undo2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -128,6 +129,9 @@ export default function SmartDailyPlanner() {
   const resultsRef = useRef(null);
   const lastSubmittedRef = useRef(""); // 防止重复提交同一内容
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
+  // 撤销快照：保存上一次修改前的 plan_json 与 analysis（用于一键回退）
+  const [undoSnapshot, setUndoSnapshot] = useState(null); // { planJson, analysis, label, ts }
+  const [isUndoing, setIsUndoing] = useState(false);
 
   // Load daily plan from DB using react-query for caching
   const { data: planQueryData, isLoading } = useQuery({
@@ -373,6 +377,45 @@ export default function SmartDailyPlanner() {
     }
   };
 
+  // 在修改前保存当前 plan_json + analysis 快照
+  const captureSnapshot = useCallback((label) => {
+    const planJson = dayPlan?.plan_json ? JSON.parse(JSON.stringify(dayPlan.plan_json)) : null;
+    const analysisSnap = analysis ? JSON.parse(JSON.stringify(analysis)) : null;
+    if (!planJson && !analysisSnap) return;
+    setUndoSnapshot({ planJson, analysis: analysisSnap, label, ts: Date.now() });
+  }, [dayPlan, analysis]);
+
+  // 执行撤销：把 plan_json 回滚到快照，并同步到数据库
+  const handleUndo = useCallback(async () => {
+    if (!undoSnapshot || isUndoing) return;
+    setIsUndoing(true);
+    try {
+      const snap = undoSnapshot;
+      // 恢复 analysis 视图
+      setAnalysis(snap.analysis || null);
+      // 恢复 dayPlan 缓存
+      if (snap.planJson) {
+        queryClient.setQueryData(['dailyPlan', selectedDateStr], (old) => {
+          if (!old || !old[0]) return old;
+          return [{ ...old[0], plan_json: snap.planJson }];
+        });
+        if (existingPlanId) {
+          await base44.entities.DailyPlan.update(existingPlanId, { plan_json: snap.planJson });
+        }
+      }
+      setUndoSnapshot(null);
+      toast.success("已撤销，恢复到上一版", { icon: "↩️" });
+    } catch (err) {
+      console.error("Undo failed", err);
+      toast.error("撤销失败，请重试");
+    } finally {
+      setIsUndoing(false);
+    }
+  }, [undoSnapshot, isUndoing, existingPlanId, selectedDateStr, queryClient]);
+
+  // 切换日期时清掉快照（避免误撤销别的日子）
+  useEffect(() => { setUndoSnapshot(null); }, [selectedDateStr]);
+
   // Helper to update dayPlan in cache optimistically
   const updateDayPlanCache = useCallback((updater) => {
     queryClient.setQueryData(['dailyPlan', selectedDateStr], (old) => {
@@ -417,6 +460,9 @@ export default function SmartDailyPlanner() {
     if (!feedback || !feedback.trim()) return;
     const allowed = await gate("schedule_optimize", "智能日程规划");
     if (!allowed) return;
+
+    // 保存撤销快照
+    captureSnapshot("整体重新规划");
 
     setIsProcessing(true);
     setSyncStatus(null);
@@ -824,6 +870,41 @@ export default function SmartDailyPlanner() {
         </div>
       )}
 
+      {/* 撤销提示条：上一次修改后可用 */}
+      <AnimatePresence>
+        {undoSnapshot && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="mx-5 md:mx-6 mt-3 flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-amber-50/80 border border-amber-200/80"
+          >
+            <div className="flex items-center gap-2 text-[12px] text-amber-800 min-w-0">
+              <Undo2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">「{undoSnapshot.label}」已应用，可一键撤销</span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isUndoing}
+                onClick={handleUndo}
+                className="h-7 px-3 text-[11px] rounded-lg border-amber-300 text-amber-800 hover:bg-amber-100"
+              >
+                {isUndoing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Undo2 className="w-3 h-3 mr-1" />}
+                撤销
+              </Button>
+              <button
+                onClick={() => setUndoSnapshot(null)}
+                className="h-7 px-2 text-[11px] text-amber-700/70 hover:text-amber-900"
+              >
+                关闭
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Results from AI analysis */}
       <div ref={resultsRef} className="px-6 pb-6 space-y-5">
         {/* Context Timeline (from analysis) - only current date entries */}
@@ -841,6 +922,7 @@ export default function SmartDailyPlanner() {
                 // _localIdx 是过滤后数组的位置，用 __origIdx 回到 analysis.timeline 的真实索引
                 const origIdx = dayBlocksWithIdx[_localIdx]?.__origIdx;
                 if (origIdx == null) return;
+                captureSnapshot("单条修改");
                 setAnalysis(prev => {
                   if (!prev) return prev;
                   const next = [...(prev.timeline || [])];
@@ -902,6 +984,7 @@ export default function SmartDailyPlanner() {
                     onReplan={handleReplan}
                     onReviseItem={(idx, newBlock) => {
                       if (!existingPlanId) return;
+                      captureSnapshot("单条修改");
                       const focus = [...(dayPlan.plan_json.focus_blocks || [])];
                       if (!focus[idx]) return;
                       focus[idx] = { ...focus[idx], time: newBlock.time, title: newBlock.title, description: newBlock.description, type: newBlock.type };

@@ -34,23 +34,37 @@ export default function DeviceStrategyMap({ devices = [] }) {
 
   return (
     <section className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md">
-            <Zap className="w-4 h-4 text-white" />
+      {/* Header — 设备在线情况 */}
+      {(() => {
+        const total = devices.length;
+        const onlineCount = devices.filter((d) => d.strategies && d.strategies.length > 0).length;
+        const standbyCount = total - onlineCount;
+        return (
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+                <Cloud className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[#0a0a0f]">设备在线情况</h3>
+                <p className="text-xs text-[#0a0a0f]/40">
+                  共 {total} 台 · 在线 {onlineCount} · 待机 {standbyCount}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-full text-xs text-emerald-600 border border-emerald-100">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                在线 {onlineCount}
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-full text-xs text-slate-500 border border-slate-100">
+                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
+                待机 {standbyCount}
+              </span>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-bold text-[#0a0a0f]">全设备智能协同</h3>
-            <p className="text-xs text-[#0a0a0f]/40">基于情境的分发策略</p>
-          </div>
-        </div>
-        <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-xs text-slate-500 border border-slate-200 shadow-sm">
-          <Cloud className="w-3.5 h-3.5 text-emerald-500" />
-          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-          云端同步正常
-        </span>
-      </div>
+        );
+      })()}
 
       {/* Device Grid - horizontal scroll on mobile, grid on desktop */}
       <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide md:grid md:grid-cols-3 lg:grid-cols-6 md:gap-3 md:overflow-visible md:pb-0">

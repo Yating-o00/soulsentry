@@ -870,41 +870,6 @@ export default function SmartDailyPlanner() {
         </div>
       )}
 
-      {/* 撤销提示条：上一次修改后可用 */}
-      <AnimatePresence>
-        {undoSnapshot && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            className="mx-5 md:mx-6 mt-3 flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-amber-50/80 border border-amber-200/80"
-          >
-            <div className="flex items-center gap-2 text-[12px] text-amber-800 min-w-0">
-              <Undo2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">「{undoSnapshot.label}」已应用，可一键撤销</span>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isUndoing}
-                onClick={handleUndo}
-                className="h-7 px-3 text-[11px] rounded-lg border-amber-300 text-amber-800 hover:bg-amber-100"
-              >
-                {isUndoing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Undo2 className="w-3 h-3 mr-1" />}
-                撤销
-              </Button>
-              <button
-                onClick={() => setUndoSnapshot(null)}
-                className="h-7 px-2 text-[11px] text-amber-700/70 hover:text-amber-900"
-              >
-                关闭
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Results from AI analysis */}
       <div ref={resultsRef} className="px-6 pb-6 space-y-5">
         {/* Context Timeline (from analysis) - only current date entries */}
@@ -1106,6 +1071,38 @@ export default function SmartDailyPlanner() {
       onOpenChange={setShowEmailDialog}
       suggestion={emailSuggestion}
     />
+    {/* 撤销浮层：上次修改后可一键回退到旧版本 */}
+    <AnimatePresence>
+      {undoSnapshot && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 16 }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+        >
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-slate-900/95 text-white shadow-2xl backdrop-blur-xl border border-white/10">
+            <span className="text-xs text-slate-300">
+              已{undoSnapshot.label}
+            </span>
+            <button
+              onClick={handleUndo}
+              disabled={isUndoing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-medium transition-colors disabled:opacity-50"
+            >
+              {isUndoing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
+              撤销
+            </button>
+            <button
+              onClick={() => setUndoSnapshot(null)}
+              className="text-slate-400 hover:text-white text-xs px-1"
+              title="关闭"
+            >
+              ✕
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
     </>
   );
 }

@@ -105,7 +105,11 @@ export function buildPrintableHtml({ title, sections, body, styleId }) {
   if (Array.isArray(sections) && sections.length > 0) {
     const firstBody = sections[0].body || sections[0].content || "";
     subtitle = String(firstBody)
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<[^>]+>/g, " ")             // 剥掉所有 HTML 标签,避免源码显示在封面副标题
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // 移除 markdown 图片
+      .replace(/&nbsp;/gi, " ")
       .replace(/[#*`>_-]+/g, " ")
       .replace(/\s+/g, " ")
       .trim()

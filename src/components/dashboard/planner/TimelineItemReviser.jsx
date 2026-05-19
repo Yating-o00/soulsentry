@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wand2, Loader2, X, Send, RefreshCw } from "lucide-react";
+import { Wand2, Loader2, X, Send, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -12,8 +12,10 @@ import { cn } from "@/lib/utils";
  * 两种模式：
  *   - "single"：只改这一条（调用 InvokeLLM 重写该条）
  *   - "replan"：基于这条 + 用户意见，让父组件触发整体重新规划（onReplan 回调）
+ * 删除：单独的"删除"按钮（带二次确认），通过 onDelete 回调上抛
  */
-export default function TimelineItemReviser({ block, onApply, onReplan }) {
+export default function TimelineItemReviser({ block, onApply, onReplan, onDelete }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [open, setOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [mode, setMode] = useState("single"); // single | replan
@@ -83,16 +85,51 @@ ${txt}
     }
   };
 
+  const handleDelete = () => {
+    if (typeof onDelete !== "function") return;
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      // 3 秒内不点确认就自动还原
+      setTimeout(() => setConfirmDelete(false), 3000);
+      return;
+    }
+    try {
+      onDelete();
+      toast.success("已删除", { icon: "🗑️" });
+    } catch (e) {
+      toast.error("删除失败: " + (e?.message || "未知错误"));
+    } finally {
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10.5px] text-[#384877]/60 hover:text-[#384877] hover:bg-[#384877]/8 px-1.5 py-0.5 rounded-md"
-        title="对这条提修改意见"
-      >
-        <Wand2 className="w-3 h-3" />
-        改一下
-      </button>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1 text-[10.5px] text-[#384877]/60 hover:text-[#384877] hover:bg-[#384877]/8 px-1.5 py-0.5 rounded-md"
+          title="对这条提修改意见"
+        >
+          <Wand2 className="w-3 h-3" />
+          改一下
+        </button>
+        {typeof onDelete === "function" && (
+          <button
+            onClick={handleDelete}
+            className={cn(
+              "flex items-center gap-1 text-[10.5px] px-1.5 py-0.5 rounded-md transition-colors",
+              confirmDelete
+                ? "bg-rose-500 text-white hover:bg-rose-600"
+                : "text-rose-500/70 hover:text-rose-600 hover:bg-rose-50"
+            )}
+            title={confirmDelete ? "再次点击确认删除" : "删除这条"}
+          >
+            <Trash2 className="w-3 h-3" />
+            {confirmDelete ? "确认删除" : "删除"}
+          </button>
+        )}
+      </div>
 
       <AnimatePresence>
         {open && (

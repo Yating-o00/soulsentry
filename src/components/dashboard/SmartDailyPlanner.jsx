@@ -983,6 +983,29 @@ export default function SmartDailyPlanner() {
             <ContextTimeline
               blocks={dayBlocksWithIdx.map(t => ({ time: t.time, title: t.title, description: t.description, type: t.type || 'focus', __origIdx: t.__origIdx }))}
               onReplan={handleReplan}
+              onDeleteItem={(_localIdx) => {
+                const origIdx = dayBlocksWithIdx[_localIdx]?.__origIdx;
+                if (origIdx == null) return;
+                captureSnapshot("删除条目");
+                setAnalysis(prev => {
+                  if (!prev) return prev;
+                  const next = [...(prev.timeline || [])];
+                  next.splice(origIdx, 1);
+                  return { ...prev, timeline: next };
+                });
+                // 同步持久化：按 time+title 在 dayPlan.focus_blocks 找到并删除
+                if (existingPlanId && dayPlan?.plan_json) {
+                  const target = dayBlocksWithIdx[_localIdx];
+                  const focus = [...(dayPlan.plan_json.focus_blocks || [])];
+                  const matchIdx = focus.findIndex(f => normKey(f.time) === normKey(target.time) && normKey(f.title) === normKey(target.title));
+                  if (matchIdx >= 0) {
+                    focus.splice(matchIdx, 1);
+                    const planJson = { ...dayPlan.plan_json, focus_blocks: focus };
+                    updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
+                    base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist delete failed', e));
+                  }
+                }
+              }}
               onReviseItem={(_localIdx, newBlock) => {
                 // _localIdx 是过滤后数组的位置，用 __origIdx 回到 analysis.timeline 的真实索引
                 const origIdx = dayBlocksWithIdx[_localIdx]?.__origIdx;
@@ -1063,6 +1086,18 @@ export default function SmartDailyPlanner() {
                     <ContextTimeline
                       blocks={dayBlocksWithIdx}
                       onReplan={handleReplan}
+                      onDeleteItem={(localIdx) => {
+                        if (!existingPlanId) return;
+                        const origIdx = dayBlocksWithIdx[localIdx]?.__origIdx;
+                        if (origIdx == null) return;
+                        captureSnapshot("删除条目");
+                        const focus = [...(dayPlan.plan_json?.focus_blocks || [])];
+                        if (!focus[origIdx]) return;
+                        focus.splice(origIdx, 1);
+                        const planJson = { ...dayPlan.plan_json, focus_blocks: focus };
+                        updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
+                        base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist delete failed', e));
+                      }}
                       onReviseItem={(localIdx, newBlock) => {
                         if (!existingPlanId) return;
                         const origIdx = dayBlocksWithIdx[localIdx]?.__origIdx;

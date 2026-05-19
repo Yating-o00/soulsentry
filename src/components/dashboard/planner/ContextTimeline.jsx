@@ -38,7 +38,7 @@ const formatTime = (raw) => {
   return raw;
 };
 
-export default function ContextTimeline({ blocks = [], onReviseItem, onReplan }) {
+export default function ContextTimeline({ blocks = [], onReviseItem, onReplan, onDeleteItem }) {
   // 保留原始索引，"改一下"回调时回写到父组件原数组的对应位置
   const list = (blocks || [])
     .map((b, originalIndex) => ({ ...b, __idx: originalIndex }))
@@ -101,6 +101,7 @@ export default function ContextTimeline({ blocks = [], onReviseItem, onReplan })
                           block={b}
                           onApply={(newBlock) => onReviseItem(b.__idx, newBlock)}
                           onReplan={onReplan}
+                          onDelete={onDeleteItem ? () => onDeleteItem(b.__idx) : undefined}
                         />
                       </div>
                     )}

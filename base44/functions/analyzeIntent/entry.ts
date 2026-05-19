@@ -275,10 +275,44 @@ Deno.serve(async (req) => {
       return t;
     });
 
+    // 多日表达兜底：识别用户输入里的"N天/N日/一周"等持续型表达
+    // 若 AI 没有按 N 天分布（所有条目都落在同一天），按时间顺序把条目均分到 N 天
+    const detectMultiDaySpan = (text) => {
+      if (!text) return 0;
+      const s = String(text);
+      // 优先匹配明确的"N天/N日"
+      const m1 = s.match(/(\d+)\s*天(?:内|里|内完成|搞定|解决)?/);
+      if (m1) { const n = parseInt(m1[1], 10); if (n >= 2 && n <= 14) return n; }
+      const cnMap = { 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+      const m2 = s.match(/([两二三四五六七八九十])\s*天(?:内|里|内完成|搞定|解决)?/);
+      if (m2 && cnMap[m2[1]]) return cnMap[m2[1]];
+      if (/一周|本周内|这周内|7\s*天|七\s*天/.test(s)) return 7;
+      return 0;
+    };
+
+    const spanDays = detectMultiDaySpan(input);
+    let timelineFinal = timelineFixed;
+    if (spanDays >= 2 && timelineFixed.length > 0) {
+      const uniqueDates = new Set(timelineFixed.map(t => t.date).filter(Boolean));
+      // 若 AI 只用了 1 个日期但用户明确说了 N 天，按时间顺序均分
+      if (uniqueDates.size < Math.min(spanDays, 3)) {
+        const sorted = [...timelineFixed].sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+        const perDay = Math.max(1, Math.ceil(sorted.length / spanDays));
+        timelineFinal = sorted.map((t, idx) => {
+          const dayIdx = Math.min(spanDays - 1, Math.floor(idx / perDay));
+          const newDate = addDays(dayIdx);
+          // 给 title 加上 DayN 前缀（如果没有）
+          const hasDayPrefix = /Day\s*\d|第\s*[一二两三四五六七八九十\d]\s*[天日]/.test(t.title || '');
+          const newTitle = hasDayPrefix ? t.title : `Day${dayIdx + 1}：${t.title}`;
+          return { ...t, date: newDate, title: newTitle };
+        });
+      }
+    }
+
     return Response.json({
       steps: ai.steps || [],
       resolved_date: ai.resolved_date || contextDate,
-      timeline: timelineFixed,
+      timeline: timelineFinal,
       devices,
       automations: ai.automations || [],
       parsed: ai.parsed || {},

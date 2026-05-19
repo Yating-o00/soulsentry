@@ -941,7 +941,8 @@ export default function SmartDailyPlanner() {
         {analysis?.timeline?.length > 0 && viewMode === "timeline" && (() => {
           // 用原始索引让"改一下"能定位到 analysis.timeline 的真实条目
           // 启发式：若 AI 没给 date 字段，根据 title 里 DayN 推断（baseDate=selectedDateStr，即 Day1 当日）
-          const inferred = inferDatesForBlocks(analysis.timeline, selectedDateStr);
+          // 同时把 original_input 传入用于"N天均分"脏数据兜底
+          const inferred = inferDatesForBlocks(analysis.timeline, selectedDateStr, dayPlan?.original_input);
           const dayBlocksWithIdx = inferred
             .map((t, i) => ({ ...t, __origIdx: i }))
             .filter(t => t.date === selectedDateStr);
@@ -988,7 +989,7 @@ export default function SmartDailyPlanner() {
         {/* Kanban view for analysis results */}
         {analysis && viewMode === "kanban" && (
           <KanbanBoard
-            focusBlocks={inferDatesForBlocks(analysis.timeline || [], selectedDateStr).filter(t => t.date === selectedDateStr)}
+            focusBlocks={inferDatesForBlocks(analysis.timeline || [], selectedDateStr, dayPlan?.original_input).filter(t => t.date === selectedDateStr)}
             keyTasks={analysis.automations || []}
             onStatusChange={handleKanbanStatusChange}
           />
@@ -999,7 +1000,7 @@ export default function SmartDailyPlanner() {
           <div className="space-y-5">
             {viewMode === "kanban" ? (
               <KanbanBoard
-                focusBlocks={inferDatesForBlocks(dayPlan.plan_json?.focus_blocks || [], dayPlan.plan_date || selectedDateStr).filter(b => b.date === selectedDateStr)}
+                focusBlocks={inferDatesForBlocks(dayPlan.plan_json?.focus_blocks || [], dayPlan.plan_date || selectedDateStr, dayPlan.original_input).filter(b => b.date === selectedDateStr)}
                 keyTasks={dayPlan.plan_json?.key_tasks || []}
                 onStatusChange={handleKanbanStatusChange}
               />
@@ -1024,7 +1025,8 @@ export default function SmartDailyPlanner() {
                   // baseDate = dayPlan.plan_date（Day1 所在日）
                   const rawBlocks = dayPlan.plan_json?.focus_blocks || [];
                   const planDate = dayPlan.plan_date || selectedDateStr;
-                  const inferred = inferDatesForBlocks(rawBlocks, planDate);
+                  // 传入 original_input 以便对"N天/三天"等多日工期做均分兜底（修复历史脏数据）
+                  const inferred = inferDatesForBlocks(rawBlocks, planDate, dayPlan.original_input);
                   const dayBlocksWithIdx = inferred
                     .map((b, i) => ({ ...b, __origIdx: i }))
                     .filter(b => b.date === selectedDateStr);

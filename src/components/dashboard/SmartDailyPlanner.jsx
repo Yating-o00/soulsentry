@@ -43,6 +43,7 @@ import EmailSendConfirmDialog from "@/components/gmail/EmailSendConfirmDialog";
 import EnrichPlanButton from "./planner/EnrichPlanButton";
 import ReplanComposer from "./planner/ReplanComposer";
 import { persistExtraDaysFromTimeline } from "@/components/utils/persistMultiDayPlan";
+import { inferDatesForBlocks } from "@/components/utils/inferBlockDate";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -939,9 +940,11 @@ export default function SmartDailyPlanner() {
         {/* Context Timeline (from analysis) - only current date entries */}
         {analysis?.timeline?.length > 0 && viewMode === "timeline" && (() => {
           // 用原始索引让"改一下"能定位到 analysis.timeline 的真实条目
-          const dayBlocksWithIdx = analysis.timeline
+          // 启发式：若 AI 没给 date 字段，根据 title 里 DayN 推断（baseDate=selectedDateStr，即 Day1 当日）
+          const inferred = inferDatesForBlocks(analysis.timeline, selectedDateStr);
+          const dayBlocksWithIdx = inferred
             .map((t, i) => ({ ...t, __origIdx: i }))
-            .filter(t => !t.date || t.date === selectedDateStr);
+            .filter(t => t.date === selectedDateStr);
           if (dayBlocksWithIdx.length === 0) return null;
           return (
             <ContextTimeline
@@ -985,7 +988,7 @@ export default function SmartDailyPlanner() {
         {/* Kanban view for analysis results */}
         {analysis && viewMode === "kanban" && (
           <KanbanBoard
-            focusBlocks={(analysis.timeline || []).filter(t => !t.date || t.date === selectedDateStr)}
+            focusBlocks={inferDatesForBlocks(analysis.timeline || [], selectedDateStr).filter(t => t.date === selectedDateStr)}
             keyTasks={analysis.automations || []}
             onStatusChange={handleKanbanStatusChange}
           />
@@ -996,7 +999,7 @@ export default function SmartDailyPlanner() {
           <div className="space-y-5">
             {viewMode === "kanban" ? (
               <KanbanBoard
-                focusBlocks={(dayPlan.plan_json?.focus_blocks || []).filter(b => !b.date || b.date === selectedDateStr)}
+                focusBlocks={inferDatesForBlocks(dayPlan.plan_json?.focus_blocks || [], dayPlan.plan_date || selectedDateStr).filter(b => b.date === selectedDateStr)}
                 keyTasks={dayPlan.plan_json?.key_tasks || []}
                 onStatusChange={handleKanbanStatusChange}
               />
@@ -1017,11 +1020,14 @@ export default function SmartDailyPlanner() {
                   />
                 )}
                 {(() => {
-                  // 严格按 date 过滤：只显示属于当前选定日期的条目（无 date 字段视为当日，兼容旧数据）
-                  const allBlocks = dayPlan.plan_json?.focus_blocks || [];
-                  const dayBlocksWithIdx = allBlocks
+                  // 严格按 date 过滤：先用启发式（title 中的 DayN）为旧数据补齐 date
+                  // baseDate = dayPlan.plan_date（Day1 所在日）
+                  const rawBlocks = dayPlan.plan_json?.focus_blocks || [];
+                  const planDate = dayPlan.plan_date || selectedDateStr;
+                  const inferred = inferDatesForBlocks(rawBlocks, planDate);
+                  const dayBlocksWithIdx = inferred
                     .map((b, i) => ({ ...b, __origIdx: i }))
-                    .filter(b => !b.date || b.date === selectedDateStr);
+                    .filter(b => b.date === selectedDateStr);
                   if (dayBlocksWithIdx.length === 0) return null;
                   return (
                     <ContextTimeline
@@ -1032,7 +1038,7 @@ export default function SmartDailyPlanner() {
                         const origIdx = dayBlocksWithIdx[localIdx]?.__origIdx;
                         if (origIdx == null) return;
                         captureSnapshot("单条修改");
-                        const focus = [...allBlocks];
+                        const focus = [...rawBlocks];
                         if (!focus[origIdx]) return;
                         focus[origIdx] = { ...focus[origIdx], time: newBlock.time, title: newBlock.title, description: newBlock.description, type: newBlock.type };
                         const planJson = { ...dayPlan.plan_json, focus_blocks: focus };

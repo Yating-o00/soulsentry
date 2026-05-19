@@ -1,4 +1,5 @@
 import { base44 } from "@/api/base44Client";
+import { inferDatesForBlocks } from "./inferBlockDate";
 
 /**
  * 当 AI 返回的 timeline / automations 跨多天时（条目带 date 字段），
@@ -21,9 +22,12 @@ export async function persistExtraDaysFromTimeline({
 }) {
   if (!Array.isArray(timeline) || timeline.length === 0) return [];
 
+  // 启发式：若 AI 没给 date 字段，根据 title 里的 DayN 推断（Day1 = selectedDateStr）
+  const inferred = inferDatesForBlocks(timeline, selectedDateStr);
+
   // 按 date 分组（仅保留非当日且日期合法的条目）
   const groups = new Map(); // date -> blocks[]
-  for (const t of timeline) {
+  for (const t of inferred) {
     const d = t?.date;
     if (!d || d === selectedDateStr) continue;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
@@ -33,6 +37,7 @@ export async function persistExtraDaysFromTimeline({
       title: t.title,
       description: t.description || "",
       type: t.type || "focus",
+      date: d,
     });
   }
   if (groups.size === 0) return [];

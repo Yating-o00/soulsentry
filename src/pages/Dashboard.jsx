@@ -430,7 +430,10 @@ export default function Dashboard() {
         <AutoExecutionPanel />
       </motion.div>
 
-      {/* Main Content: SoulSentry Hub */}
+      {/* 全设备智能协同 - 独立模块 */}
+      <DeviceCollaborationModule />
+
+      {/* Main Content: SoulSentry Hub - 放在页面最下方 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -439,9 +442,6 @@ export default function Dashboard() {
       >
         <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
       </motion.div>
-
-      {/* 全设备智能协同 - 独立模块，放在时空感知守护最下方 */}
-      <DeviceCollaborationModule />
       </TabsContent>
 
       <TabsContent value="calendar" className="space-y-4 md:space-y-6">

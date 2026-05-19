@@ -43,7 +43,7 @@ import EmailSendConfirmDialog from "@/components/gmail/EmailSendConfirmDialog";
 import EnrichPlanButton from "./planner/EnrichPlanButton";
 import ReplanComposer from "./planner/ReplanComposer";
 import { persistExtraDaysFromTimeline } from "@/components/utils/persistMultiDayPlan";
-import { inferDatesForBlocks } from "@/components/utils/inferBlockDate";
+import { inferDatesForBlocks, detectSpanDaysFromInput } from "@/components/utils/inferBlockDate";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -433,6 +433,76 @@ export default function SmartDailyPlanner() {
 
   // 切换日期时清掉快照（避免误撤销别的日子）
   useEffect(() => { setUndoSnapshot(null); }, [selectedDateStr]);
+
+  // 旧脏数据一次性自愈：当 dayPlan.original_input 含"N天/三天"等多日表达，
+  // 但所有 focus_blocks 都集中在 plan_date 同一天时，按时间顺序均分到 N 天，
+  // 并把跨日条目同步写入对应 DailyPlan，让 5-21/5-22 也能看到。
+  useEffect(() => {
+    if (!dayPlan || !existingPlanId) return;
+    const rawBlocks = dayPlan.plan_json?.focus_blocks || [];
+    if (rawBlocks.length < 2) return;
+    const originalInput = dayPlan.original_input || "";
+    const spanDays = detectSpanDaysFromInput(originalInput);
+    if (spanDays < 2) return;
+    // 检查所有 block 是否已分布到多天
+    const uniqueDates = new Set(rawBlocks.map(b => b?.date).filter(Boolean));
+    const allOnBaseDate = rawBlocks.every(b => !b?.date || b.date === dayPlan.plan_date);
+    if (!allOnBaseDate || uniqueDates.size > 1) return;
+    // 标记位避免无限循环
+    const healKey = `healed_${existingPlanId}`;
+    if (sessionStorage.getItem(healKey)) return;
+    sessionStorage.setItem(healKey, "1");
+
+    const inferred = inferDatesForBlocks(rawBlocks, dayPlan.plan_date, originalInput);
+    // 按 date 分组
+    const byDate = {};
+    inferred.forEach(b => {
+      const d = b?.date || dayPlan.plan_date;
+      if (!byDate[d]) byDate[d] = [];
+      byDate[d].push(b);
+    });
+    // 当前日（plan_date）的条目更新到自己；其它日期写入/合并对应 DailyPlan
+    const currentDateBlocks = byDate[dayPlan.plan_date] || [];
+    const otherDates = Object.keys(byDate).filter(d => d !== dayPlan.plan_date);
+
+    (async () => {
+      try {
+        // 更新当前 DailyPlan 的 focus_blocks（仅保留属于自己日期的）
+        const newPlanJson = { ...dayPlan.plan_json, focus_blocks: currentDateBlocks };
+        await base44.entities.DailyPlan.update(existingPlanId, { plan_json: newPlanJson });
+        updateDayPlanCache(prev => ({ ...prev, plan_json: newPlanJson }));
+
+        // 写入/合并其他日期的 DailyPlan
+        for (const d of otherDates) {
+          const existing = await base44.entities.DailyPlan.filter({ plan_date: d });
+          if (existing && existing.length > 0) {
+            const tp = existing[0];
+            const merged = dedupeBlocks([...(tp.plan_json?.focus_blocks || []), ...byDate[d]]);
+            await base44.entities.DailyPlan.update(tp.id, {
+              plan_json: { ...(tp.plan_json || {}), focus_blocks: merged },
+            });
+          } else {
+            await base44.entities.DailyPlan.create({
+              plan_date: d,
+              original_input: originalInput,
+              theme: dayPlan.theme || "",
+              summary: "",
+              plan_json: { key_tasks: [], focus_blocks: byDate[d], devices: [] },
+              is_active: true,
+            });
+          }
+          queryClient.invalidateQueries({ queryKey: ['dailyPlan', d] });
+        }
+        if (otherDates.length > 0) {
+          toast.success(`已把多日规划分发到 ${otherDates.length + 1} 天`, { icon: "📅" });
+        }
+      } catch (e) {
+        console.warn("[Heal] multi-day redistribute failed", e);
+        sessionStorage.removeItem(healKey);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayPlan?.id, existingPlanId]);
 
   // Helper to update dayPlan in cache optimistically
   const updateDayPlanCache = useCallback((updater) => {
@@ -1000,7 +1070,7 @@ export default function SmartDailyPlanner() {
           <div className="space-y-5">
             {viewMode === "kanban" ? (
               <KanbanBoard
-                focusBlocks={inferDatesForBlocks(dayPlan.plan_json?.focus_blocks || [], dayPlan.plan_date || selectedDateStr, dayPlan.original_input).filter(b => b.date === selectedDateStr)}
+                focusBlocks={inferDatesForBlocks(dayPlan.plan_json?.focus_blocks || [], dayPlan.plan_date || selectedDateStr, dayPlan?.original_input).filter(b => b.date === selectedDateStr)}
                 keyTasks={dayPlan.plan_json?.key_tasks || []}
                 onStatusChange={handleKanbanStatusChange}
               />
@@ -1025,8 +1095,7 @@ export default function SmartDailyPlanner() {
                   // baseDate = dayPlan.plan_date（Day1 所在日）
                   const rawBlocks = dayPlan.plan_json?.focus_blocks || [];
                   const planDate = dayPlan.plan_date || selectedDateStr;
-                  // 传入 original_input 以便对"N天/三天"等多日工期做均分兜底（修复历史脏数据）
-                  const inferred = inferDatesForBlocks(rawBlocks, planDate, dayPlan.original_input);
+                  const inferred = inferDatesForBlocks(rawBlocks, planDate, dayPlan?.original_input);
                   const dayBlocksWithIdx = inferred
                     .map((b, i) => ({ ...b, __origIdx: i }))
                     .filter(b => b.date === selectedDateStr);

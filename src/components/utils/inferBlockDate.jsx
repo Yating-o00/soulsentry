@@ -62,6 +62,16 @@ export function detectSpanDaysFromInput(originalInput) {
  * @param {string} [originalInput] - 用户原始输入（用于识别多日工期）
  * @returns {Array} 新数组（不修改原数据）
  */
+// 从 title 中移除错误/统一的 "DayN:" 前缀，准备重新打标
+function stripDayPrefix(title) {
+  if (!title) return "";
+  return String(title)
+    .replace(/^\s*Day\s*\d+\s*[:：]?\s*/i, "")
+    .replace(/^\s*D\s*\d+\s*[:：]?\s*/i, "")
+    .replace(/^\s*第\s*[一二两三四五六七八九十\d]+\s*[天日]\s*[:：]?\s*/, "")
+    .trim();
+}
+
 export function inferDatesForBlocks(blocks, baseDateStr, originalInput) {
   if (!Array.isArray(blocks) || !baseDateStr) return blocks || [];
   let baseDate;
@@ -71,46 +81,62 @@ export function inferDatesForBlocks(blocks, baseDateStr, originalInput) {
     return blocks;
   }
 
-  // 第一遍：title 中 DayN 权威优先
-  const firstPass = blocks.map(b => {
-    if (!b) return b;
-    const dayIdx = extractDayIndex(b.title);
-    if (dayIdx && dayIdx >= 1) {
-      const d = addDays(baseDate, dayIdx - 1);
-      return { ...b, date: format(d, "yyyy-MM-dd") };
-    }
-    if (b.date) return b;
-    return { ...b, date: baseDateStr };
-  });
-
-  // 旧脏数据兜底：识别多日工期 + 所有条目集中在同一天 → 按顺序均分
   const spanDays = detectSpanDaysFromInput(originalInput);
-  if (spanDays >= 2) {
-    const uniqueDates = new Set(firstPass.map(b => b?.date).filter(Boolean));
-    if (uniqueDates.size === 1 && firstPass.length >= 2) {
-      // 按 time 升序排（time 缺失的排最后），然后均分
-      const indexed = firstPass.map((b, i) => ({ b, i }));
-      indexed.sort((x, y) => {
-        const tx = String(x.b?.time || "99:99");
-        const ty = String(y.b?.time || "99:99");
-        return tx.localeCompare(ty);
-      });
-      const total = indexed.length;
-      const perDay = Math.max(1, Math.ceil(total / spanDays));
-      // 输出按原索引位置回填，保持稳定
-      const result = new Array(total);
-      indexed.forEach((entry, orderIdx) => {
-        const dayIdx = Math.min(spanDays - 1, Math.floor(orderIdx / perDay));
-        const d = addDays(baseDate, dayIdx);
-        const newDate = format(d, "yyyy-MM-dd");
-        const title = entry.b?.title || "";
-        const hasDayPrefix = /Day\s*\d|第\s*[一二两三四五六七八九十\d]\s*[天日]/.test(title);
-        const newTitle = hasDayPrefix ? title : `Day${dayIdx + 1}:${title}`;
-        result[entry.i] = { ...entry.b, date: newDate, title: newTitle };
-      });
-      return result;
+
+  // 提取每条 block 的 DayN（来自 title）
+  const dayIndices = blocks.map(b => extractDayIndex(b?.title));
+  const validDays = dayIndices.filter(d => d != null);
+
+  // 关键脏数据检测：当存在多日工期，但 title 里的 DayN 全部相同（例如全是 Day1），
+  // 说明 LLM 把多日规划全打成了一天，此时 DayN 标记完全不可信，直接按时间均分。
+  const allSameDay = validDays.length >= 2 && new Set(validDays).size === 1;
+  const forceRebalance = spanDays >= 2 && (allSameDay || (validDays.length === 0 && blocks.length >= 2));
+
+  if (!forceRebalance) {
+    // 正常路径：title 中 DayN 权威优先
+    const firstPass = blocks.map((b, i) => {
+      if (!b) return b;
+      const dayIdx = dayIndices[i];
+      if (dayIdx && dayIdx >= 1) {
+        const d = addDays(baseDate, dayIdx - 1);
+        return { ...b, date: format(d, "yyyy-MM-dd") };
+      }
+      if (b.date) return b;
+      return { ...b, date: baseDateStr };
+    });
+
+    // 兜底：识别多日工期 + 所有条目集中在同一天 → 按顺序均分
+    if (spanDays >= 2) {
+      const uniqueDates = new Set(firstPass.map(b => b?.date).filter(Boolean));
+      if (uniqueDates.size === 1 && firstPass.length >= 2) {
+        return rebalanceAcrossDays(firstPass, baseDate, spanDays);
+      }
     }
+
+    return firstPass;
   }
 
-  return firstPass;
+  // 强制重排：按时间均分到 spanDays，并清理错误的 DayN 前缀后重新打标
+  return rebalanceAcrossDays(blocks, baseDate, spanDays);
+}
+
+function rebalanceAcrossDays(blocks, baseDate, spanDays) {
+  const indexed = blocks.map((b, i) => ({ b, i }));
+  indexed.sort((x, y) => {
+    const tx = String(x.b?.time || "99:99");
+    const ty = String(y.b?.time || "99:99");
+    return tx.localeCompare(ty);
+  });
+  const total = indexed.length;
+  const perDay = Math.max(1, Math.ceil(total / spanDays));
+  const result = new Array(total);
+  indexed.forEach((entry, orderIdx) => {
+    const dayIdx = Math.min(spanDays - 1, Math.floor(orderIdx / perDay));
+    const d = addDays(baseDate, dayIdx);
+    const newDate = format(d, "yyyy-MM-dd");
+    const cleanTitle = stripDayPrefix(entry.b?.title || "");
+    const newTitle = cleanTitle ? `Day${dayIdx + 1}: ${cleanTitle}` : `Day${dayIdx + 1}`;
+    result[entry.i] = { ...entry.b, date: newDate, title: newTitle };
+  });
+  return result;
 }

@@ -434,26 +434,37 @@ export default function SmartDailyPlanner() {
   // 切换日期时清掉快照（避免误撤销别的日子）
   useEffect(() => { setUndoSnapshot(null); }, [selectedDateStr]);
 
+  // Helper to update dayPlan in cache optimistically（提前定义，给自愈 useEffect 使用）
+  const updateDayPlanCache = useCallback((updater) => {
+    queryClient.setQueryData(['dailyPlan', selectedDateStr], (old) => {
+      if (!old || !old[0]) return old;
+      const updated = updater(old[0]);
+      return [updated];
+    });
+  }, [queryClient, selectedDateStr]);
+
   // 旧脏数据一次性自愈：当 dayPlan.original_input 含"N天/三天"等多日表达，
-  // 但所有 focus_blocks 都集中在 plan_date 同一天时，按时间顺序均分到 N 天，
-  // 并把跨日条目同步写入对应 DailyPlan，让 5-21/5-22 也能看到。
+  // 经 inferDatesForBlocks 推断后跨越多天时，把每天对应的条目持久化到各自 DailyPlan，
+  // 并把不属于本 dayPlan.plan_date 的条目从本记录中移除（避免脏数据反复显示）。
   useEffect(() => {
     if (!dayPlan || !existingPlanId) return;
     const rawBlocks = dayPlan.plan_json?.focus_blocks || [];
-    if (rawBlocks.length < 2) return;
+    if (rawBlocks.length < 1) return;
     const originalInput = dayPlan.original_input || "";
     const spanDays = detectSpanDaysFromInput(originalInput);
     if (spanDays < 2) return;
-    // 检查所有 block 是否已分布到多天
-    const uniqueDates = new Set(rawBlocks.map(b => b?.date).filter(Boolean));
-    const allOnBaseDate = rawBlocks.every(b => !b?.date || b.date === dayPlan.plan_date);
-    if (!allOnBaseDate || uniqueDates.size > 1) return;
-    // 标记位避免无限循环
-    const healKey = `healed_${existingPlanId}`;
-    if (sessionStorage.getItem(healKey)) return;
-    sessionStorage.setItem(healKey, "1");
 
     const inferred = inferDatesForBlocks(rawBlocks, dayPlan.plan_date, originalInput);
+    const inferredDates = new Set(inferred.map(b => b?.date).filter(Boolean));
+    // 推断结果未跨日 → 不需要修复
+    if (inferredDates.size < 2) return;
+    const needsHeal = inferred.some(b => b?.date && b.date !== dayPlan.plan_date);
+    if (!needsHeal) return;
+
+    // 标记位避免无限循环（v2 版本：包含强制重排后的脏数据修复）
+    const healKey = `healed_${existingPlanId}_v2`;
+    if (sessionStorage.getItem(healKey)) return;
+    sessionStorage.setItem(healKey, "1");
     // 按 date 分组
     const byDate = {};
     inferred.forEach(b => {
@@ -477,7 +488,14 @@ export default function SmartDailyPlanner() {
           const existing = await base44.entities.DailyPlan.filter({ plan_date: d });
           if (existing && existing.length > 0) {
             const tp = existing[0];
-            const merged = dedupeBlocks([...(tp.plan_json?.focus_blocks || []), ...byDate[d]]);
+            // 合并前先清洗目标日已有的脏数据（同样的 N 天规则）
+            const tpInferred = inferDatesForBlocks(
+              tp.plan_json?.focus_blocks || [],
+              tp.plan_date || d,
+              tp.original_input || originalInput
+            );
+            const tpOwnBlocks = tpInferred.filter(b => b?.date === d);
+            const merged = dedupeBlocks([...tpOwnBlocks, ...byDate[d]]);
             await base44.entities.DailyPlan.update(tp.id, {
               plan_json: { ...(tp.plan_json || {}), focus_blocks: merged },
             });
@@ -503,15 +521,6 @@ export default function SmartDailyPlanner() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayPlan?.id, existingPlanId]);
-
-  // Helper to update dayPlan in cache optimistically
-  const updateDayPlanCache = useCallback((updater) => {
-    queryClient.setQueryData(['dailyPlan', selectedDateStr], (old) => {
-      if (!old || !old[0]) return old;
-      const updated = updater(old[0]);
-      return [updated];
-    });
-  }, [queryClient, selectedDateStr]);
 
   // Kanban drag status change handler
   const handleKanbanStatusChange = async (source, sourceIndex, newStatus) => {

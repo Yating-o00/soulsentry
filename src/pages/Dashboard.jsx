@@ -47,6 +47,7 @@ import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
 import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
+import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -429,6 +430,9 @@ export default function Dashboard() {
       >
         <AutoExecutionPanel />
       </motion.div>
+
+      {/* 时空感知守护 - 独立模块 */}
+      <SpatioTemporalGuardModule />
 
       {/* 全设备智能协同 - 独立模块 */}
       <DeviceCollaborationModule />

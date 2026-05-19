@@ -152,9 +152,10 @@ Deno.serve(async (req) => {
 - 跨年表达如"明年1月3日"：年份 = 当前年+1，日期取该年1月3日
 
 【多日任务展开规则 - 极其重要，必须严格遵守】
-当用户说"用 N 天 / 这 N 天 / 接下来 N 天 / N 天内完成 X / 三天搞定 / 一周内完成"等持续型表达：
-- 必须把任务拆解成 Day1、Day2 … DayN，每天至少生成 1-3 个 timeline 条目；
-- 🚨 关键规则：每个 Day 的 timeline 条目，date 字段必须是**不同的日期**：
+当用户说"用 N 天 / 这 N 天 / 接下来 N 天 / N 天内完成 X / 三天搞定 / 一周内完成"等持续型表达时，
+你必须像项目经理一样把任务拆成 N 个工作日，按递进顺序安排（前期→中期→后期/收尾）。
+
+▎日期映射表（必须按此映射，不得偏离）：
   · Day1 的 date = "${contextDate}"
   · Day2 的 date = "${addDays(1)}"
   · Day3 的 date = "${addDays(2)}"
@@ -162,18 +163,30 @@ Deno.serve(async (req) => {
   · Day5 的 date = "${addDays(4)}"
   · Day6 的 date = "${addDays(5)}"
   · Day7 的 date = "${addDays(6)}"
-- 🚨 严禁把 Day2/Day3 的 date 也写成 "${contextDate}"（这是最常见的错误，绝对不允许）；
-- 每个条目的 title 前缀必须带"Day1：/Day2：/Day3："让用户辨识；
-- resolved_date 取 Day1 的日期（即 "${contextDate}"）；
-- 不允许只输出 Day1 而省略后续天；
-- 输出示例（用户输入"用三天时间完成 X"，contextDate="${contextDate}"）：
+
+▎条目数量与覆盖（硬性要求，违反就是错误输出）：
+  ① 必须为 Day1 到 DayN 每一天都生成 1-3 个 timeline 条目，一天都不能漏；
+  ② N 天意味着输出至少 N 个不同的 date 值；若用户说"三天"，输出的 timeline 里 date 必须同时出现 ${contextDate}、${addDays(1)}、${addDays(2)} 三个值；
+  ③ 子任务（哪怕用户在输入里同时列了好几个子项，如"包括A、B、C"）也要按工期合理摊到不同日，不要把所有子任务都堆在 Day1；
+  ④ 每条 title 必须以 "Day1：" / "Day2：" / "Day3：" 等明确前缀开头（中文冒号），便于前端辨识；
+  ⑤ resolved_date 取 Day1 的日期 = "${contextDate}"。
+
+▎🚨 绝对禁止（这些是过去常出错的点，必须避免）：
+  ✗ 禁止把所有条目的 date 都写成 "${contextDate}"，哪怕标题写了 Day2/Day3；
+  ✗ 禁止只输出 Day1 的条目而省略 Day2/Day3；
+  ✗ 禁止把 Day2/Day3 的事项用"追加""并行"等方式塞进 Day1 当天；
+  ✗ 禁止标题里没有 "DayN：" 前缀就生成多日条目。
+
+▎正确输出示例（用户输入"用三天时间解决文创定制问题，包括帆布袋、水杯、胸针"，contextDate="${contextDate}"）：
   timeline:[
-    {date:"${contextDate}", time:"09:00", title:"Day1：需求梳理", ...},
-    {date:"${contextDate}", time:"15:00", title:"Day1：初稿设计", ...},
-    {date:"${addDays(1)}", time:"09:00", title:"Day2：评审与修改", ...},
-    {date:"${addDays(1)}", time:"15:00", title:"Day2：定稿", ...},
-    {date:"${addDays(2)}", time:"09:00", title:"Day3：交付与跟进", ...}
+    {date:"${contextDate}",  time:"09:00", title:"Day1：帆布袋需求梳理与初稿", description:"...", type:"focus"},
+    {date:"${contextDate}",  time:"15:00", title:"Day1：胸针设计启动", description:"...", type:"focus"},
+    {date:"${addDays(1)}",   time:"09:00", title:"Day2：水杯外观与包装设计", description:"...", type:"focus"},
+    {date:"${addDays(1)}",   time:"14:00", title:"Day2：三件产品初稿汇总评审", description:"...", type:"focus"},
+    {date:"${addDays(2)}",   time:"09:00", title:"Day3：定稿与厂商对接", description:"...", type:"focus"},
+    {date:"${addDays(2)}",   time:"15:00", title:"Day3：交付确认与跟进", description:"...", type:"focus"}
   ]
+注意上面示例里 date 出现了 3 个不同值，这是必须的特征。
 
 【第一步：时间实体提取与日期归属 - 强制流程】
 ① 先在输入里定位所有时间词片段（日期词+时段词+时刻词），逐一查锚点表取值，严禁自行算日期；
@@ -234,10 +247,38 @@ Deno.serve(async (req) => {
     const knownIds = new Set(['phone','watch','glasses','car','home','pc']);
     const devices = (ai.devices || []).filter(d => knownIds.has(d.id));
 
+    // 兜底：若 AI 在 title 里写了 DayN 但 date 却都堆在 contextDate，按 DayN 重新映射到正确日期
+    const extractDayN = (title) => {
+      if (!title) return null;
+      const s = String(title);
+      const patterns = [/Day\s*([1-9]\d?)/i, /\bD([1-9]\d?)\b/i, /第\s*([1-9]\d?)\s*[天日]/];
+      for (const re of patterns) {
+        const m = s.match(re);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n >= 1 && n <= 30) return n;
+        }
+      }
+      const cnMap = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+      const cn = s.match(/第\s*([一二两三四五六七八九十])\s*[天日]/);
+      if (cn && cnMap[cn[1]]) return cnMap[cn[1]];
+      return null;
+    };
+    const timelineFixed = (ai.timeline || []).map(t => {
+      const dayN = extractDayN(t?.title);
+      if (dayN && dayN >= 1) {
+        const correctDate = addDays(dayN - 1);
+        if (t.date !== correctDate) {
+          return { ...t, date: correctDate };
+        }
+      }
+      return t;
+    });
+
     return Response.json({
       steps: ai.steps || [],
       resolved_date: ai.resolved_date || contextDate,
-      timeline: ai.timeline || [],
+      timeline: timelineFixed,
       devices,
       automations: ai.automations || [],
       parsed: ai.parsed || {},

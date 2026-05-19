@@ -42,6 +42,7 @@ import { detectEmailIntent } from "@/components/gmail/detectEmailIntent";
 import EmailSendConfirmDialog from "@/components/gmail/EmailSendConfirmDialog";
 import EnrichPlanButton from "./planner/EnrichPlanButton";
 import ReplanComposer from "./planner/ReplanComposer";
+import { persistExtraDaysFromTimeline } from "@/components/utils/persistMultiDayPlan";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -238,6 +239,20 @@ export default function SmartDailyPlanner() {
         }
         queryClient.invalidateQueries({ queryKey: ['dailyPlan', selectedDateStr] });
         toast.success("日程规划已生成", { icon: "📋" });
+
+        // 跨日分发：AI 返回的 timeline 若含有"非当日"的条目（如"用三天时间…"会带 Day2/Day3 的 date），
+        // 把它们写入各自日期的 DailyPlan，避免被丢弃
+        persistExtraDaysFromTimeline({
+          timeline: data.timeline || [],
+          automations: data.automations || [],
+          selectedDateStr,
+          originalInput: capturedInput,
+        }).then(extraDates => {
+          if (extraDates.length > 0) {
+            extraDates.forEach(d => queryClient.invalidateQueries({ queryKey: ['dailyPlan', d] }));
+            toast.success(`已同步到其它 ${extraDates.length} 天：${extraDates.join('、')}`, { icon: '📅' });
+          }
+        }).catch(e => console.warn("multi-day persist failed", e));
 
         // 同步执行动态到通知页面（包含规划上下文）
         createExecutionRecord({

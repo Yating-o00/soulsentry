@@ -151,13 +151,29 @@ Deno.serve(async (req) => {
 - "下下周X" → 下周X 对应日期再 +7
 - 跨年表达如"明年1月3日"：年份 = 当前年+1，日期取该年1月3日
 
-【多日任务展开规则 - 重要】
-当用户说"用 N 天时间做 X / 这 N 天 / 接下来 N 天 / N 天内完成 X"等持续型表达：
+【多日任务展开规则 - 极其重要，必须严格遵守】
+当用户说"用 N 天 / 这 N 天 / 接下来 N 天 / N 天内完成 X / 三天搞定 / 一周内完成"等持续型表达：
 - 必须把任务拆解成 Day1、Day2 … DayN，每天至少生成 1-3 个 timeline 条目；
-- Day1 的 date = ${contextDate}，Day2 = ${addDays(1)}，Day3 = ${addDays(2)}，依此类推（必须使用上方"今/明/后天"锚点表的预计算值，不要自己算）；
-- 每个条目的 title 前缀建议带"Day1：/Day2：/Day3："以便用户辨识；
-- resolved_date 取 Day1 的日期（即 ${contextDate}）；
-- 不允许只输出 Day1 而省略后续天的安排。
+- 🚨 关键规则：每个 Day 的 timeline 条目，date 字段必须是**不同的日期**：
+  · Day1 的 date = "${contextDate}"
+  · Day2 的 date = "${addDays(1)}"
+  · Day3 的 date = "${addDays(2)}"
+  · Day4 的 date = "${addDays(3)}"
+  · Day5 的 date = "${addDays(4)}"
+  · Day6 的 date = "${addDays(5)}"
+  · Day7 的 date = "${addDays(6)}"
+- 🚨 严禁把 Day2/Day3 的 date 也写成 "${contextDate}"（这是最常见的错误，绝对不允许）；
+- 每个条目的 title 前缀必须带"Day1：/Day2：/Day3："让用户辨识；
+- resolved_date 取 Day1 的日期（即 "${contextDate}"）；
+- 不允许只输出 Day1 而省略后续天；
+- 输出示例（用户输入"用三天时间完成 X"，contextDate="${contextDate}"）：
+  timeline:[
+    {date:"${contextDate}", time:"09:00", title:"Day1：需求梳理", ...},
+    {date:"${contextDate}", time:"15:00", title:"Day1：初稿设计", ...},
+    {date:"${addDays(1)}", time:"09:00", title:"Day2：评审与修改", ...},
+    {date:"${addDays(1)}", time:"15:00", title:"Day2：定稿", ...},
+    {date:"${addDays(2)}", time:"09:00", title:"Day3：交付与跟进", ...}
+  ]
 
 【第一步：时间实体提取与日期归属 - 强制流程】
 ① 先在输入里定位所有时间词片段（日期词+时段词+时刻词），逐一查锚点表取值，严禁自行算日期；

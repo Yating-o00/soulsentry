@@ -226,7 +226,7 @@ export default function SmartDailyPlanner() {
           summary: '',
           plan_json: {
             key_tasks: dedupeTasks([...(dayPlan?.plan_json?.key_tasks || []), ...(data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' }))]),
-            focus_blocks: dedupeBlocks([...(dayPlan?.plan_json?.focus_blocks || []), ...(data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' }))]),
+            focus_blocks: dedupeBlocks([...(dayPlan?.plan_json?.focus_blocks || []), ...(data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus', date: t.date || selectedDateStr }))]),
             devices: (data.devices && data.devices.length > 0) ? data.devices : (dayPlan?.plan_json?.devices || []),
           },
           is_active: true,
@@ -326,7 +326,7 @@ export default function SmartDailyPlanner() {
           summary: '',
           plan_json: {
             key_tasks: (data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' })),
-            focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === targetDate).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus' })),
+            focus_blocks: (data.timeline || []).filter(t => !t.date || t.date === targetDate).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus', date: t.date || targetDate })),
             devices: data.devices || [],
           },
           is_active: true,
@@ -996,7 +996,7 @@ export default function SmartDailyPlanner() {
           <div className="space-y-5">
             {viewMode === "kanban" ? (
               <KanbanBoard
-                focusBlocks={dayPlan.plan_json?.focus_blocks || []}
+                focusBlocks={(dayPlan.plan_json?.focus_blocks || []).filter(b => !b.date || b.date === selectedDateStr)}
                 keyTasks={dayPlan.plan_json?.key_tasks || []}
                 onStatusChange={handleKanbanStatusChange}
               />
@@ -1016,22 +1016,32 @@ export default function SmartDailyPlanner() {
                     }}
                   />
                 )}
-                {dayPlan.plan_json?.focus_blocks?.length > 0 && (
-                  <ContextTimeline
-                    blocks={dayPlan.plan_json.focus_blocks}
-                    onReplan={handleReplan}
-                    onReviseItem={(idx, newBlock) => {
-                      if (!existingPlanId) return;
-                      captureSnapshot("单条修改");
-                      const focus = [...(dayPlan.plan_json.focus_blocks || [])];
-                      if (!focus[idx]) return;
-                      focus[idx] = { ...focus[idx], time: newBlock.time, title: newBlock.title, description: newBlock.description, type: newBlock.type };
-                      const planJson = { ...dayPlan.plan_json, focus_blocks: focus };
-                      updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
-                      base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist revise failed', e));
-                    }}
-                  />
-                )}
+                {(() => {
+                  // 严格按 date 过滤：只显示属于当前选定日期的条目（无 date 字段视为当日，兼容旧数据）
+                  const allBlocks = dayPlan.plan_json?.focus_blocks || [];
+                  const dayBlocksWithIdx = allBlocks
+                    .map((b, i) => ({ ...b, __origIdx: i }))
+                    .filter(b => !b.date || b.date === selectedDateStr);
+                  if (dayBlocksWithIdx.length === 0) return null;
+                  return (
+                    <ContextTimeline
+                      blocks={dayBlocksWithIdx}
+                      onReplan={handleReplan}
+                      onReviseItem={(localIdx, newBlock) => {
+                        if (!existingPlanId) return;
+                        const origIdx = dayBlocksWithIdx[localIdx]?.__origIdx;
+                        if (origIdx == null) return;
+                        captureSnapshot("单条修改");
+                        const focus = [...allBlocks];
+                        if (!focus[origIdx]) return;
+                        focus[origIdx] = { ...focus[origIdx], time: newBlock.time, title: newBlock.title, description: newBlock.description, type: newBlock.type };
+                        const planJson = { ...dayPlan.plan_json, focus_blocks: focus };
+                        updateDayPlanCache(prev => ({ ...prev, plan_json: planJson }));
+                        base44.entities.DailyPlan.update(existingPlanId, { plan_json: planJson }).catch(e => console.warn('persist revise failed', e));
+                      }}
+                    />
+                  );
+                })()}
                 {dayPlan.plan_json?.key_tasks?.length > 0 && (
                   <AutoExecCards
                     tasks={dayPlan.plan_json.key_tasks.map(t => ({

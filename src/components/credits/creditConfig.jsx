@@ -124,10 +124,10 @@ export const AUTOMATION_EXECUTE_COSTS = {
 
 // 点数包配置
 export const CREDIT_PACKS = [
-  { id: "starter", name: "体验包", credits: 500, price: 5, priceDisplay: "¥5", tag: null },
-  { id: "standard", name: "标准包", credits: 2000, price: 15, priceDisplay: "¥15", tag: "热门", savings: "25%" },
-  { id: "premium", name: "专业包", credits: 5000, price: 30, priceDisplay: "¥30", tag: "超值", savings: "40%" },
-  { id: "ultimate", name: "旗舰包", credits: 15000, price: 75, priceDisplay: "¥75", tag: "最划算", savings: "50%" },
+  { id: "starter", name: "体验包", credits: 50, price: 5, priceDisplay: "¥5", tag: null },
+  { id: "standard", name: "标准包", credits: 200, price: 15, priceDisplay: "¥15", tag: "热门", savings: "25%" },
+  { id: "premium", name: "专业包", credits: 500, price: 30, priceDisplay: "¥30", tag: "超值", savings: "40%" },
+  { id: "ultimate", name: "旗舰包", credits: 1500, price: 75, priceDisplay: "¥75", tag: "最划算", savings: "50%" },
 ];
 
 // 订阅计划配置

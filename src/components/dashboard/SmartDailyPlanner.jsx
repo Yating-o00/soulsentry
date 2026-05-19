@@ -45,6 +45,7 @@ import ReplanComposer from "./planner/ReplanComposer";
 import { persistExtraDaysFromTimeline } from "@/components/utils/persistMultiDayPlan";
 import { inferDatesForBlocks, detectSpanDaysFromInput } from "@/components/utils/inferBlockDate";
 import { detectMultiDayContext, fixDayPrefixForBlocks } from "@/components/utils/aggregateMultiDayPlans";
+import CleanupDirtyPlansButton from "./planner/CleanupDirtyPlansButton";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -719,6 +720,7 @@ export default function SmartDailyPlanner() {
             )}
             {dayPlan && (
               <>
+                <CleanupDirtyPlansButton dayPlan={dayPlan} selectedDateStr={selectedDateStr} />
                 <Button
                   variant="ghost"
                   size="icon"

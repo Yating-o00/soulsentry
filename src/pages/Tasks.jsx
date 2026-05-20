@@ -201,12 +201,12 @@ export default function Tasks() {
       const dueDiff = dueRefTs !== null ? dueRefTs - now.getTime() : null;
 
       if (isLongTerm) {
-        // 长周期约定:仅当真正截止时间(end_time)在 24h 内才进"即将截止",否则归"固定安排"
+        // 长周期约定:仅当真正截止时间(end_time)在 24h 内才进"即将截止",否则只归"固定安排"
+        // 不放入 candidates,避免被打分后挪到"现在能做"或"智能建议"导致固定安排为空
         if (dueDiff !== null && dueDiff <= oneDayMs) {
           dueSoon.push(task);
         } else {
           fixedSchedule.push(task);
-          candidates.push(task);
         }
       } else if (reminderTs !== null && diff !== null && diff <= oneDayMs) {
         dueSoon.push(task);

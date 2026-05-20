@@ -189,16 +189,25 @@ export default function Tasks() {
 
     roots.forEach((task) => {
       const reminderTs = task.reminder_time ? new Date(task.reminder_time).getTime() : null;
+      const endTs = task.end_time ? new Date(task.end_time).getTime() : null;
       const diff = reminderTs !== null ? reminderTs - now.getTime() : null;
       const isRepeating = task.repeat_rule && task.repeat_rule !== 'none';
-      // 长周期约定(周/月/季/年)始终视为"固定安排",不应进入"即将截止"
-      const isLongTerm = task.planning_horizon && task.planning_horizon !== 'none';
-      // 长周期约定:用 end_time 判断真正截止;否则用 reminder_time
-      const endTs = task.end_time ? new Date(task.end_time).getTime() : null;
+      // 长周期约定判定:planning_horizon 标记 或 end_time 比 reminder_time 晚 >1 天(跨多日的持续性约定)
+      const hasHorizonField = task.planning_horizon && task.planning_horizon !== 'none';
+      const hasLongSpan = reminderTs !== null && endTs !== null && (endTs - reminderTs) > oneDayMs;
+      const isLongTerm = hasHorizonField || hasLongSpan;
+      // 长周期约定:用 end_time 距今判断是否即将截止;短任务:用 reminder_time
+      const dueRefTs = isLongTerm && endTs !== null ? endTs : reminderTs;
+      const dueDiff = dueRefTs !== null ? dueRefTs - now.getTime() : null;
 
       if (isLongTerm) {
-        fixedSchedule.push(task);
-        candidates.push(task);
+        // 长周期约定:仅当真正截止时间(end_time)在 24h 内才进"即将截止",否则归"固定安排"
+        if (dueDiff !== null && dueDiff <= oneDayMs) {
+          dueSoon.push(task);
+        } else {
+          fixedSchedule.push(task);
+          candidates.push(task);
+        }
       } else if (reminderTs !== null && diff !== null && diff <= oneDayMs) {
         dueSoon.push(task);
       } else if (isRepeating || (reminderTs !== null && diff > oneDayMs)) {

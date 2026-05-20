@@ -191,8 +191,15 @@ export default function Tasks() {
       const reminderTs = task.reminder_time ? new Date(task.reminder_time).getTime() : null;
       const diff = reminderTs !== null ? reminderTs - now.getTime() : null;
       const isRepeating = task.repeat_rule && task.repeat_rule !== 'none';
+      // 长周期约定(周/月/季/年)始终视为"固定安排",不应进入"即将截止"
+      const isLongTerm = task.planning_horizon && task.planning_horizon !== 'none';
+      // 长周期约定:用 end_time 判断真正截止;否则用 reminder_time
+      const endTs = task.end_time ? new Date(task.end_time).getTime() : null;
 
-      if (reminderTs !== null && diff !== null && diff <= oneDayMs) {
+      if (isLongTerm) {
+        fixedSchedule.push(task);
+        candidates.push(task);
+      } else if (reminderTs !== null && diff !== null && diff <= oneDayMs) {
         dueSoon.push(task);
       } else if (isRepeating || (reminderTs !== null && diff > oneDayMs)) {
         // 仍归入"固定安排",但同时也作为候选参与"现在能做"评估

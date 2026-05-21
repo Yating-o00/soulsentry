@@ -1,63 +1,67 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, ExternalLink, Maximize2 } from "lucide-react";
+import React, { useEffect, useState, useRef } from "react";
+import { X, ExternalLink, Loader2 } from "lucide-react";
 
-// 直接用 slides 数据在浏览器内渲染 PPT 预览，不依赖远程文件
-const THEMES = {
-  business: { bg: "#0f172a", fg: "#f8fafc", accent: "#3b82f6", muted: "#94a3b8" },
-  minimal:  { bg: "#ffffff", fg: "#0f172a", accent: "#384877", muted: "#64748b" },
-  tech:     { bg: "#020617", fg: "#e2e8f0", accent: "#22d3ee", muted: "#64748b" },
-};
+// 全屏预览：直接 iframe 渲染后端生成的 HTML 演示稿
+// —— 这样所有 layout 模板（cover/agenda/stats/timeline/cards/comparison 等）都能正确显示，
+//    前端无需再实现一份模板代码，且和"下载/打开"看到的一致。
+export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName }) {
+  const fileUrlRef = data?.file_url || fileUrl;
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+  const iframeRef = useRef(null);
 
-export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName, initialSlide = 0 }) {
-  const slides = Array.isArray(data?.slides) ? data.slides : [];
-  const theme = THEMES[data?.theme] || THEMES.minimal;
-  const title = data?.title || "演示文稿";
-  const subtitle = data?.subtitle || "";
-  const [cur, setCur] = useState(0);
-
-  const go = useCallback((d) => {
-    setCur((c) => Math.max(0, Math.min(slides.length - 1, c + d)));
-  }, [slides.length]);
-
-  // 打开时 / initialSlide 变化时同步当前页码
+  // 拉取 HTML 内容，转 blob:// 以绕过对象存储的 attachment 头，强制内联渲染
   useEffect(() => {
-    if (!open) return;
-    setCur(Math.max(0, Math.min(slides.length - 1, initialSlide || 0)));
-  }, [open, initialSlide, slides.length]);
-
-  // 键盘控制
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose();
-      else if (["ArrowRight", "PageDown", " "].includes(e.key)) go(1);
-      else if (["ArrowLeft", "PageUp"].includes(e.key)) go(-1);
+    if (!open || !fileUrlRef) return;
+    let cancelled = false;
+    let createdUrl = null;
+    setLoading(true);
+    setErr(null);
+    fetch(fileUrlRef)
+      .then(r => r.blob())
+      .then(b => {
+        if (cancelled) return;
+        createdUrl = URL.createObjectURL(new Blob([b], { type: "text/html; charset=utf-8" }));
+        setBlobUrl(createdUrl);
+        setLoading(false);
+      })
+      .catch(e => {
+        if (cancelled) return;
+        setErr(e.message || "加载失败");
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
+  }, [open, fileUrlRef]);
+
+  // ESC 关闭
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose, go]);
+  }, [open, onClose]);
 
   if (!open) return null;
 
-  const slide = slides[cur] || {};
-  const isCover = cur === 0 && !(slide.bullets?.length) && !slide.body && !(Array.isArray(slide.images) && slide.images.length);
-  const heading = slide.heading || "";
-  const bullets = Array.isArray(slide.bullets) ? slide.bullets : [];
-  const body = slide.body || "";
-  const images = Array.isArray(slide.images)
-    ? slide.images
-    : (slide.image_url ? [{ url: slide.image_url, caption: slide.image_caption || "" }] : []);
-  const hasImages = images.length > 0;
-
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col">
+    <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col">
       {/* 顶部栏 */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-black/50 text-white">
-        <div className="text-[13px] font-medium truncate">{fileName || title}</div>
+      <div className="flex items-center justify-between px-4 py-2.5 bg-black/60 text-white flex-shrink-0">
+        <div className="text-[13px] font-medium truncate">{fileName || data?.title || "演示文稿"}</div>
         <div className="flex items-center gap-1">
-          {fileUrl && (
-            <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-white/15" title="在新标签页打开">
-              <Maximize2 className="w-4 h-4" />
+          {fileUrlRef && (
+            <a
+              href={fileUrlRef}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-lg hover:bg-white/15 text-xs flex items-center gap-1.5"
+              title="在新标签页打开"
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> 新标签打开
             </a>
           )}
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/15" title="关闭 (Esc)">
@@ -66,102 +70,31 @@ export default function PptPreviewModal({ open, onClose, data, fileUrl, fileName
         </div>
       </div>
 
-      {/* 幻灯片 */}
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div
-          className="w-full max-w-5xl aspect-[16/9] rounded-xl shadow-2xl flex flex-col justify-center px-[8%] py-[6%] relative overflow-hidden"
-          style={{ background: theme.bg, color: theme.fg }}
-        >
-          <div className="absolute top-4 right-5 text-xs tracking-widest" style={{ color: theme.muted }}>
-            {cur + 1} / {slides.length}
+      {/* iframe 直接渲染后端 HTML —— 所有 layout 模板都能正确显示 */}
+      <div className="flex-1 relative bg-black">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center text-white/70 gap-2 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" /> 加载演示稿…
           </div>
-          {isCover ? (
-            <div className="text-center">
-              <h1
-                className="text-3xl md:text-5xl font-extrabold leading-tight mb-3"
-                style={{ background: `linear-gradient(135deg, ${theme.accent}, ${theme.fg})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
-              >
-                {heading || title}
-              </h1>
-              {(subtitle || slide.subtitle) && (
-                <p className="text-sm md:text-lg" style={{ color: theme.muted }}>{subtitle || slide.subtitle}</p>
-              )}
-              <div
-                className="inline-block mt-6 px-4 py-1 rounded-full text-xs tracking-widest"
-                style={{ border: `1px solid ${theme.muted}40`, color: theme.muted }}
-              >
-                {slides.length} 页 · 心栈 SoulSentry
-              </div>
-            </div>
-          ) : (
-            <>
-              <h2 className="text-2xl md:text-4xl font-bold mb-4 leading-tight" style={{ color: theme.accent }}>
-                {heading}
-              </h2>
-              <div className={`flex-1 min-h-0 flex ${hasImages ? 'flex-row gap-6 items-center' : 'flex-col'}`}>
-                {hasImages && (
-                  <div className={`flex-1 min-w-0 flex ${images.length > 1 ? 'flex-wrap' : ''} gap-3 items-center justify-center`}>
-                    {images.slice(0, 4).map((im, i) => (
-                      <figure key={i} className="m-0 flex flex-col items-center" style={{ maxWidth: images.length > 1 ? 'calc(50% - 0.75rem)' : '100%' }}>
-                        <img
-                          src={im.url}
-                          alt={im.caption || ''}
-                          className="max-w-full rounded-lg shadow-2xl"
-                          style={{ maxHeight: images.length > 1 ? '38vh' : '60vh', objectFit: 'contain' }}
-                          loading="lazy"
-                        />
-                        {im.caption && (
-                          <figcaption className="mt-2 text-xs md:text-sm italic" style={{ color: theme.muted }}>
-                            {im.caption}
-                          </figcaption>
-                        )}
-                      </figure>
-                    ))}
-                  </div>
-                )}
-                <div className={`${hasImages ? 'flex-1 min-w-0' : ''}`}>
-                  {bullets.length > 0 && (
-                    <ul className="space-y-2 text-base md:text-xl leading-relaxed">
-                      {bullets.map((b, i) => (
-                        <li key={i} className="flex gap-3 items-start">
-                          <span className="mt-2 w-2 h-2 rounded-full flex-shrink-0" style={{ background: theme.accent }} />
-                          <span>{b}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {body && (
-                    <p className="mt-4 text-sm md:text-lg leading-relaxed whitespace-pre-wrap" style={{ color: theme.muted }}>
-                      {body}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* 底部控制条 */}
-      <div className="flex items-center justify-center gap-3 pb-5 pt-2 text-white">
-        <button onClick={() => go(-1)} disabled={cur === 0} className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed">
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <div className="text-sm text-white/70 min-w-[80px] text-center tabular-nums">
-          {cur + 1} / {slides.length}
-        </div>
-        <button onClick={() => go(1)} disabled={cur >= slides.length - 1} className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed">
-          <ChevronRight className="w-5 h-5" />
-        </button>
-        {fileUrl && (
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-3 px-3 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs flex items-center gap-1.5"
-          >
-            <ExternalLink className="w-3.5 h-3.5" /> 全屏模式
-          </a>
+        )}
+        {err && !loading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 gap-3 text-sm">
+            <div>预览加载失败：{err}</div>
+            {fileUrlRef && (
+              <a href={fileUrlRef} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs flex items-center gap-1.5">
+                <ExternalLink className="w-3.5 h-3.5" /> 在新标签页打开
+              </a>
+            )}
+          </div>
+        )}
+        {blobUrl && !err && (
+          <iframe
+            ref={iframeRef}
+            src={blobUrl}
+            title="ppt-preview"
+            className="w-full h-full border-0 bg-white"
+            sandbox="allow-same-origin allow-scripts"
+          />
         )}
       </div>
     </div>

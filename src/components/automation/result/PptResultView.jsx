@@ -80,6 +80,25 @@ export default function PptResultView({ data, preview }) {
     : (activeSlide?.image_url ? [{ url: activeSlide.image_url, caption: activeSlide.image_caption || "" }] : []);
   const isCover = activeIdx === 0;
 
+  // 主题预览样式 —— 与后端 renderPpt 的 themePalette 保持视觉一致
+  const themePreview = {
+    business: {
+      bg: "linear-gradient(135deg,#1e3a8a 0%,#3b0764 100%)",
+      fg: "#ffffff", muted: "rgba(255,255,255,0.8)", dot: "rgba(255,255,255,0.85)",
+    },
+    minimal: {
+      bg: "linear-gradient(135deg,#fafafa 0%,#e5e5e5 100%)",
+      fg: "#0a0a0a", muted: "rgba(10,10,10,0.7)", dot: "#dc2626",
+    },
+    tech: {
+      bg: "linear-gradient(135deg,#022c43 0%,#0c4a6e 50%,#164e63 100%)",
+      fg: "#e2e8f0", muted: "rgba(226,232,240,0.78)", dot: "#22d3ee",
+    },
+  }[theme] || {
+    bg: "linear-gradient(135deg,#1e3a5f 0%,#3b5998 100%)",
+    fg: "#ffffff", muted: "rgba(255,255,255,0.8)", dot: "rgba(255,255,255,0.85)",
+  };
+
   // 字号档位映射 —— 使用容器查询单位 cqw，让字号随预览区域宽度等比缩放
   const headingScale = fontScale === "sm" ? 3.2 : fontScale === "lg" ? 5.2 : 4.2;
   const bodyScale = fontScale === "sm" ? 1.9 : fontScale === "lg" ? 2.8 : 2.3;
@@ -162,7 +181,10 @@ export default function PptResultView({ data, preview }) {
 
         {/* 大屏 */}
         {editing ? (
-          <div className="w-full aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col justify-center px-6 py-6 overflow-y-auto">
+          <div
+            className="w-full aspect-[16/9] flex flex-col justify-center px-6 py-6 overflow-y-auto"
+            style={{ background: themePreview.bg, color: themePreview.fg }}
+          >
             {!isCover && (
               <div className="text-[10px] tracking-widest text-white/60 mb-1.5">{activeIdx + 1} / {previewSlides.length}</div>
             )}
@@ -179,7 +201,8 @@ export default function PptResultView({ data, preview }) {
             type="button"
             onClick={() => openAt(activeIdx)}
             disabled={!canPreview}
-            className="w-full aspect-[16/9] bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] flex flex-col items-center justify-center text-white px-6 py-6 relative overflow-hidden disabled:cursor-default text-left"
+            className="w-full aspect-[16/9] flex flex-col items-center justify-center px-6 py-6 relative overflow-hidden disabled:cursor-default text-left"
+            style={{ background: themePreview.bg, color: themePreview.fg }}
           >
             {isCover ? (
               <div className="flex flex-col items-center justify-center w-full max-w-full">
@@ -294,11 +317,12 @@ export default function PptResultView({ data, preview }) {
                 onDoubleClick={() => openAt(i)}
                 disabled={!canPreview}
                 title={`第 ${i + 1} 页（双击全屏）`}
-                className={`w-12 h-8 rounded flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0 border transition-all active:scale-95 ${
+                className={`w-12 h-8 rounded flex items-center justify-center text-[10px] font-semibold flex-shrink-0 border transition-all active:scale-95 ${
                   isActive
-                    ? "bg-gradient-to-br from-[#3b5998] to-[#5b7fc7] ring-2 ring-[#3b5998] border-white shadow-md scale-105"
-                    : "bg-gradient-to-br from-[#1e3a5f] to-[#3b5998] border-slate-200 hover:scale-110 hover:shadow-md hover:ring-2 hover:ring-[#3b5998]/40"
+                    ? "ring-2 ring-[#384877] border-white shadow-md scale-105"
+                    : "border-slate-200 hover:scale-110 hover:shadow-md"
                 } disabled:cursor-default`}
+                style={{ background: themePreview.bg, color: themePreview.fg }}
               >
                 {i + 1}
               </button>

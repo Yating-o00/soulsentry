@@ -14,8 +14,11 @@ export default function PptResultView({ data, preview }) {
   const [editing, setEditing] = useState(false);
   const [fontScale, setFontScale] = useState("md"); // sm / md / lg
   const [editedSlides, setEditedSlides] = useState(null); // 用户本地编辑后的 slides
-  const fileUrl = data?.file_url;
-  const fileName = data?.file_name || "演示文稿.html";
+  const [theme, setTheme] = useState(data?.theme || "business");
+  const [renderedFile, setRenderedFile] = useState(null); // { file_url, file_name } —— 用户切换后重新渲染的 URL
+  const [rerendering, setRerendering] = useState(false);
+  const fileUrl = renderedFile?.file_url || data?.file_url;
+  const fileName = renderedFile?.file_name || data?.file_name || "演示文稿.html";
   const title = data?.title || data?.subject || "演示文稿";
   const subtitle = data?.subtitle || "";
   const slides = Array.isArray(data?.slides) ? data.slides : null;
@@ -32,8 +35,30 @@ export default function PptResultView({ data, preview }) {
         : null);
   // 优先使用用户已编辑版本
   const previewSlides = editedSlides || baseSlides;
-  const previewData = previewSlides ? { ...data, slides: previewSlides } : data;
+  const previewData = previewSlides ? { ...data, theme, slides: previewSlides } : data;
   const canPreview = !!(previewSlides && previewSlides.length > 0);
+
+  // 调用后端 renderPpt 重新生成 HTML 并替换 fileUrl —— 用于风格/版式切换后刷新预览
+  const rerender = async (nextData) => {
+    if (!nextData || !Array.isArray(nextData.slides) || nextData.slides.length === 0) return;
+    setRerendering(true);
+    try {
+      const res = await base44.functions.invoke("renderPpt", { data: nextData });
+      if (res?.data?.file_url) {
+        setRenderedFile({ file_url: res.data.file_url, file_name: res.data.file_name });
+      }
+    } catch (e) {
+      toast.error("重新渲染失败：" + (e?.message || "未知错误"));
+    } finally {
+      setRerendering(false);
+    }
+  };
+
+  const handleThemeChange = (next) => {
+    if (next === theme) return;
+    setTheme(next);
+    rerender({ ...previewData, theme: next });
+  };
 
   const openAt = (idx) => {
     if (!canPreview) return;
@@ -61,14 +86,45 @@ export default function PptResultView({ data, preview }) {
   const headingStyle = { fontSize: `clamp(13px, ${headingScale}cqw, 32px)`, lineHeight: 1.25 };
   const bodyStyle = { fontSize: `clamp(10.5px, ${bodyScale}cqw, 20px)`, lineHeight: 1.5 };
 
-  // 退出编辑模式时若切换页码则保留当前编辑
+  // 退出编辑模式时若切换页码则保留当前编辑（普通编辑不触发重渲染，仅更新本地）
   const updateActiveSlide = (next) => {
     const base = previewSlides.map((s, i) => (i === activeIdx ? next : s));
     setEditedSlides(base);
+    // 若 layout 改变了，触发重新渲染
+    if (next?.layout && next.layout !== (activeSlide?.layout)) {
+      rerender({ ...previewData, slides: base });
+    }
   };
 
   return (
     <div className="space-y-2.5">
+      {/* 风格切换条 */}
+      {canPreview && (
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white border border-slate-200">
+          <Palette className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+          <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">整体风格</span>
+          <div className="flex items-center gap-1 flex-1 overflow-x-auto scrollbar-hide">
+            {PPT_THEMES.map((th) => (
+              <button
+                key={th.id}
+                type="button"
+                onClick={() => handleThemeChange(th.id)}
+                disabled={rerendering}
+                title={th.desc}
+                className={`text-[10.5px] px-2 py-1 rounded-full font-semibold whitespace-nowrap transition flex-shrink-0 ${
+                  theme === th.id
+                    ? "bg-[#384877] text-white shadow"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                } disabled:opacity-50`}
+              >
+                {th.label}
+              </button>
+            ))}
+          </div>
+          {rerendering && <Loader2 className="w-3.5 h-3.5 text-[#384877] animate-spin flex-shrink-0" />}
+        </div>
+      )}
+
       {/* 封面（点击数字会在此处直接切换内容；点击大屏打开全屏；可进入编辑模式）*/}
       <div className="rounded-xl overflow-hidden border border-slate-200 relative group" style={{ containerType: "inline-size" }}>
         {/* 工具栏 */}

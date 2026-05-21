@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import GeoAwarenessCard from "@/components/smart/GeoAwarenessCard";
 import ForgettingRescueCard from "@/components/smart/ForgettingRescueCard";
@@ -9,12 +9,17 @@ import { Shield } from "lucide-react";
 /**
  * 时空感知守护面板 - 聚合地理感知 + 遗忘拯救两类真实数据卡片
  */
+// 模块级缓存：同一会话内 5 分钟内复用结果，避免来回切页面时重复打后端导致 429
+const GUARD_CACHE = { ts: 0, data: null, assoc: null };
+const GUARD_TTL_MS = 5 * 60 * 1000;
+
 export default function SentinelGuardPanel() {
-  const [data, setData] = useState(null);
-  const [assoc, setAssoc] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(GUARD_CACHE.data);
+  const [assoc, setAssoc] = useState(GUARD_CACHE.assoc);
+  const [loading, setLoading] = useState(!GUARD_CACHE.data);
   const [coords, setCoords] = useState(null);
   const [dismissed, setDismissed] = useState({ geo: false, forget: false });
+  const fetchedRef = useRef(false); // 同一组件实例只发一次
 
   // 获取定位（静默降级）
   useEffect(() => {
@@ -27,24 +32,55 @@ export default function SentinelGuardPanel() {
   }, []);
 
   const fetchGuard = useCallback(async () => {
+    // 命中模块缓存就直接复用，不再请求
+    if (Date.now() - GUARD_CACHE.ts < GUARD_TTL_MS && GUARD_CACHE.data) {
+      setData(GUARD_CACHE.data);
+      setAssoc(GUARD_CACHE.assoc);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [guardRes, assocRes] = await Promise.all([
         base44.functions.invoke('getSentinelGuard', coords || {}),
         base44.functions.invoke('getAssociationRecommendations', coords || {})
       ]);
-      setData(guardRes?.data || null);
-      setAssoc(assocRes?.data || null);
+      const g = guardRes?.data || null;
+      const a = assocRes?.data || null;
+      GUARD_CACHE.ts = Date.now();
+      GUARD_CACHE.data = g;
+      GUARD_CACHE.assoc = a;
+      setData(g);
+      setAssoc(a);
     } catch (e) {
-      console.warn('[sentinel-guard] 拉取失败', e);
+      // 429 时拉长 TTL，避免快速重试雪崩
+      const status = e?.response?.status;
+      if (status === 429 || /rate limit/i.test(e?.message || '')) {
+        GUARD_CACHE.ts = Date.now(); // 视为刚刚拉过，5min 内不再重试
+        console.warn('[sentinel-guard] 命中限流，5 分钟内不再重试');
+      } else {
+        console.warn('[sentinel-guard] 拉取失败', e);
+      }
     } finally {
       setLoading(false);
     }
   }, [coords]);
 
   useEffect(() => {
-    fetchGuard();
-  }, [fetchGuard]);
+    // 仅在 coords 首次确定后发一次；如果一直没拿到 coords，也在 1.5s 后用空坐标兜底发一次
+    if (fetchedRef.current) return;
+    if (coords) {
+      fetchedRef.current = true;
+      fetchGuard();
+      return;
+    }
+    const fallback = setTimeout(() => {
+      if (fetchedRef.current) return;
+      fetchedRef.current = true;
+      fetchGuard();
+    }, 1500);
+    return () => clearTimeout(fallback);
+  }, [coords, fetchGuard]);
 
   const handleSnooze = (type) => {
     setDismissed((prev) => ({ ...prev, [type]: true }));

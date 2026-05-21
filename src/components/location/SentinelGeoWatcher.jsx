@@ -12,8 +12,10 @@ import { MapPin, AlertTriangle, Bell } from 'lucide-react';
  *
  * 与已有 GeofenceTracker（SavedLocation 维度）并行工作，互不干扰。
  */
-const MIN_MOVE_M = 40;
-const DEFAULT_INTERVAL_MS = 90 * 1000; // 90s
+const MIN_MOVE_M = 80;                       // 移动 80m 以内视为静止，不上报
+const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;    // 5 分钟轮询一次（避免 429）
+const STARTUP_DELAY_MS = 20 * 1000;           // 启动 20s 后再发首次
+const RATE_LIMIT_COOLDOWN_MS = 10 * 60 * 1000; // 命中 429 后暂停 10 分钟
 
 function distance(a, b) {
   if (!a || !b) return Infinity;
@@ -38,11 +40,14 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
   const lastSentRef = useRef(null);
   const timerRef = useRef(null);
   const inflightRef = useRef(false);
+  const cooldownUntilRef = useRef(0); // 429 退避截止时间戳
 
   useEffect(() => {
     if (!navigator?.geolocation) return;
 
     const tick = () => {
+      // 命中过 429？暂停到冷却结束
+      if (Date.now() < cooldownUntilRef.current) return;
       if (inflightRef.current) return;
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
@@ -76,7 +81,14 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
               });
             });
           } catch (e) {
-            console.warn('[SentinelGeoWatcher] trigger failed:', e?.message);
+            // 命中限流则进入冷却，避免持续打 base44
+            const status = e?.response?.status;
+            if (status === 429 || /rate limit/i.test(e?.message || '')) {
+              cooldownUntilRef.current = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+              console.warn('[SentinelGeoWatcher] 命中限流，暂停 10 分钟');
+            } else {
+              console.warn('[SentinelGeoWatcher] trigger failed:', e?.message);
+            }
           } finally {
             inflightRef.current = false;
           }
@@ -88,8 +100,8 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
       );
     };
 
-    // 启动后先跑一次，然后按间隔轮询
-    const startup = setTimeout(tick, 5000);
+    // 启动后先延迟一段时间再跑首次，避免与页面初始加载的并发请求堆叠
+    const startup = setTimeout(tick, STARTUP_DELAY_MS);
     timerRef.current = setInterval(tick, intervalMs);
 
     return () => {

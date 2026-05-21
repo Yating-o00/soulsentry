@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Presentation, Download, ExternalLink, Play, Pencil, Check, Type, Palette, Loader2 } from "lucide-react";
+import { Presentation, Download, ExternalLink, Play, Pencil, Check, Type, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import PptPreviewModal from "./PptPreviewModal";
 import PptSlideInlineEditor from "./PptSlideInlineEditor";
-import { PPT_THEMES } from "./pptLayouts";
+import PptThemeCompareCard from "./PptThemeCompareCard";
 
 // PPT/办公文档结果视图：封面块 + 在线预览 + 大纲 + 下载
 export default function PptResultView({ data, preview }) {
@@ -117,30 +117,21 @@ export default function PptResultView({ data, preview }) {
 
   return (
     <div className="space-y-2.5">
-      {/* 风格切换条 */}
+      {/* 风格对比卡 —— 三种风格并排迷你呈现当前页，点击应用 */}
       {canPreview && (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white border border-slate-200">
-          <Palette className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <span className="text-[11px] text-slate-500 font-medium flex-shrink-0">整体风格</span>
-          <div className="flex items-center gap-1 flex-1 overflow-x-auto scrollbar-hide">
-            {PPT_THEMES.map((th) => (
-              <button
-                key={th.id}
-                type="button"
-                onClick={() => handleThemeChange(th.id)}
-                disabled={rerendering}
-                title={th.desc}
-                className={`text-[10.5px] px-2 py-1 rounded-full font-semibold whitespace-nowrap transition flex-shrink-0 ${
-                  theme === th.id
-                    ? "bg-[#384877] text-white shadow"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                } disabled:opacity-50`}
-              >
-                {th.label}
-              </button>
-            ))}
-          </div>
-          {rerendering && <Loader2 className="w-3.5 h-3.5 text-[#384877] animate-spin flex-shrink-0" />}
+        <div className="relative">
+          <PptThemeCompareCard
+            activeSlide={activeSlide}
+            currentTheme={theme}
+            onSelect={handleThemeChange}
+            disabled={rerendering}
+          />
+          {rerendering && (
+            <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] text-[#384877] bg-white/90 rounded-full px-2 py-0.5 shadow-sm">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              切换中
+            </div>
+          )}
         </div>
       )}
 

@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle2, AlertTriangle, Sparkles, Send, RefreshCw, MessageSquarePlus, Mail, X, ArrowRight, Clock, Maximize2, Minimize2, Paperclip } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, Sparkles, Send, RefreshCw, MessageSquarePlus, Mail, X, ArrowRight, Clock, Maximize2, Minimize2, Paperclip, ChevronDown } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -562,11 +562,13 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                   确认并执行
                 </Button>
               </div>
-              <details className="text-xs">
-                <summary className="cursor-pointer text-slate-500 hover:text-slate-700 flex items-center gap-1">
-                  <MessageSquarePlus className="w-3 h-3" />方案不太对？告诉 AI 怎么调整
+              <details className="group text-xs rounded-xl border border-slate-200/70 bg-slate-50/40 hover:bg-slate-50 transition-colors overflow-hidden [&[open]]:bg-white [&[open]]:border-slate-200 [&[open]]:shadow-sm">
+                <summary className="cursor-pointer select-none list-none px-3 py-2 flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors">
+                  <MessageSquarePlus className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                  <span className="font-medium">方案不太对？告诉 AI 怎么调整</span>
+                  <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-400 transition-transform duration-200 group-open:rotate-180" />
                 </summary>
-                <div className="mt-2 space-y-2">
+                <div className="px-3 pb-3 pt-1 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
                   <Textarea
                     value={adjustText}
                     onChange={(e) => setAdjustText(e.target.value)}
@@ -586,11 +588,13 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
           {/* 已完成：调整反馈 */}
           {status === "completed" && (
             <div className="space-y-3 pt-2 border-t border-slate-100">
-              <details className="text-xs">
-                <summary className="cursor-pointer text-slate-500 hover:text-slate-700 flex items-center gap-1">
-                  <MessageSquarePlus className="w-3 h-3" />不满意？继续沟通调整
+              <details className="group text-xs rounded-xl border border-slate-200/70 bg-slate-50/40 hover:bg-slate-50 transition-colors overflow-hidden [&[open]]:bg-white [&[open]]:border-slate-200 [&[open]]:shadow-sm">
+                <summary className="cursor-pointer select-none list-none px-3 py-2 flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors">
+                  <MessageSquarePlus className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                  <span className="font-medium">不满意？继续沟通调整</span>
+                  <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-400 transition-transform duration-200 group-open:rotate-180" />
                 </summary>
-                <div className="mt-2 space-y-2">
+                <div className="px-3 pb-3 pt-1 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
                   <Textarea
                     value={adjustText}
                     onChange={(e) => setAdjustText(e.target.value)}

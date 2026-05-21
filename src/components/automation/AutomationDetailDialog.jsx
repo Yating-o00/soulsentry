@@ -494,6 +494,7 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                     : (editedData ? { ...result, data: editedData } : result)
                 }
                 automationType={execution.automation_type}
+                executionId={execution.id}
                 onDataChange={
                   execution.automation_type === "email_draft"
                     ? setEmailDraft

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Presentation, Download, ExternalLink, Play, Pencil, Check, X, Type } from "lucide-react";
+import { Presentation, Download, ExternalLink, Play, Pencil, Check, Type, Palette, Loader2 } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import { toast } from "sonner";
 import PptPreviewModal from "./PptPreviewModal";
 import PptSlideInlineEditor from "./PptSlideInlineEditor";
+import { PPT_THEMES } from "./pptLayouts";
 
 // PPT/办公文档结果视图：封面块 + 在线预览 + 大纲 + 下载
 export default function PptResultView({ data, preview }) {

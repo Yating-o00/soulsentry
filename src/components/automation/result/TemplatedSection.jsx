@@ -1,5 +1,6 @@
 import React from "react";
 import { TEMPLATES, extractImagesAndText } from "./researchTemplates";
+import MarkdownLite from "./MarkdownLite";
 
 // 检测内容是否已经是原始 HTML（命中即用 HTML 渲染，避免标签被当字面文本）
 function looksLikeHtml(s) {
@@ -18,37 +19,11 @@ function HtmlBlock({ source }) {
   );
 }
 
-// 渲染纯文字部分(把已被剥离的纯文本按行渲染,保留段落和加粗)
-function PlainText({ source, size = "sm" }) {
+// 渲染章节正文:直接走 MarkdownLite,支持 GFM 表格 / 列表 / 标题 / 图片 / 加粗 / 段落
+// (之前的 PlainText 不识别表格,会把 `| --- |` 原样输出)
+function PlainText({ source }) {
   if (!source) return null;
-  const cls = size === "lg"
-    ? "text-[12.5px] text-slate-700 leading-relaxed"
-    : "text-[11.5px] text-slate-600 leading-relaxed";
-  const paragraphs = String(source).split(/\n{2,}/).filter(p => p.trim());
-  return (
-    <>
-      {paragraphs.map((p, pi) => {
-        const lines = p.split("\n");
-        return (
-          <p key={pi} className={`${cls} my-1`}>
-            {lines.map((ln, li) => {
-              const parts = ln.split(/(\*\*[^*]+\*\*)/g);
-              return (
-                <React.Fragment key={li}>
-                  {parts.map((seg, si) =>
-                    /^\*\*[^*]+\*\*$/.test(seg)
-                      ? <strong key={si} className="font-semibold text-slate-800">{seg.slice(2, -2)}</strong>
-                      : <React.Fragment key={si}>{seg}</React.Fragment>
-                  )}
-                  {li < lines.length - 1 && <br />}
-                </React.Fragment>
-              );
-            })}
-          </p>
-        );
-      })}
-    </>
-  );
+  return <MarkdownLite source={source} />;
 }
 
 // 单张图片(适应容器,不溢出/不变形)

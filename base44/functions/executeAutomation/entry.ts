@@ -1303,7 +1303,7 @@ function escapeHtml(s = '') {
     .replace(/'/g, '&#39;');
 }
 
-// 把 PPT 数据渲染为自包含 HTML 演示稿（高端排版：渐变封面 / 大序号 / 引言 / 数据卡 / 装饰元素）
+// PPT 模板分发器：根据每页 layout 字段选择对应版式渲染
 function renderPptHtml(data) {
   const title = escapeHtml(data.title || '演示稿');
   const subtitle = escapeHtml(data.subtitle || '');
@@ -1336,169 +1336,53 @@ function renderPptHtml(data) {
   };
   const t = themePalette[theme] || themePalette.minimal;
 
-  const isCoverSlide = (s, i) => i === 0 && (!Array.isArray(s.bullets) || s.bullets.length === 0) && !s.body && !(Array.isArray(s.images) && s.images.length);
-
-  const renderImgs = (imgs) => {
-    if (!imgs.length) return '';
-    return `<div class="imgs ${imgs.length > 1 ? 'multi' : 'single'}">${imgs.map(im => `<figure><img src="${escapeHtml(im.url)}" alt="${escapeHtml(im.caption || '')}"/>${im.caption ? `<figcaption>${escapeHtml(im.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`;
+  const esc = escapeHtml;
+  const D = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
+  const N = (i) => String(i).padStart(2, '0');
+  const imgsHtml = (imgs) => imgs.length ? `<div class="imgs ${imgs.length>1?'multi':'single'}">${imgs.map(im=>`<figure><img src="${esc(im.url)}" alt="${esc(im.caption||'')}"/>${im.caption?`<figcaption>${esc(im.caption)}</figcaption>`:''}</figure>`).join('')}</div>` : '';
+  const ulHtml = (bs, cls='') => bs.length ? `<ul class="${cls}">${bs.map(b=>`<li><span class="dot"></span><span class="li-text">${esc(b)}</span></li>`).join('')}</ul>` : '';
+  const cardsHtml = (bs) => {
+    const items = bs.map((b,k)=>{const x=esc(b);const m=x.match(/^([^：:。.]{2,16})[：:](.+)$/);return m?`<div class="card"><div class="card-num">${N(k+1)}</div><div class="card-title">${m[1]}</div><div class="card-desc">${m[2]}</div></div>`:`<div class="card"><div class="card-num">${N(k+1)}</div><div class="card-title">${x}</div></div>`;}).join('');
+    return `<div class="card-grid cols-${bs.length<=4?2:3}">${items}</div>`;
   };
-
-  const slideHtml = slides.map((s, i) => {
-    const heading = escapeHtml(s.heading || '');
-    const bullets = Array.isArray(s.bullets) ? s.bullets : [];
-    const body = escapeHtml(s.body || '');
-    const imgs = Array.isArray(s.images) ? s.images : (s.image_url ? [{ url: s.image_url, caption: s.image_caption || '' }] : []);
-    const pageNum = String(i + 1).padStart(2, '0');
-    const totalNum = String(slides.length).padStart(2, '0');
-
-    // 1) 封面页：大渐变 hero
-    if (isCoverSlide(s, i)) {
-      return `<section class="slide cover"><div class="deco-circle a"></div><div class="deco-circle b"></div><div class="cover-inner"><div class="kicker">PRESENTATION</div><h1>${heading || title}</h1>${subtitle ? `<p class="sub">${subtitle}</p>` : ''}<div class="meta-row"><span class="chip">📑 ${slides.length} 页</span><span class="chip">心栈 SoulSentry</span><span class="chip">${new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}</span></div></div></section>`;
-    }
-
-    // 2) 纯图片画廊页（无 bullets 无 body 但有图）
-    if (imgs.length && !bullets.length && !body) {
-      return `<section class="slide gallery"><div class="page-corner"><span class="big-num">${pageNum}</span><span class="total">/ ${totalNum}</span></div><h2><span class="bar"></span>${heading}</h2>${renderImgs(imgs)}</section>`;
-    }
-
-    // 3) 图文并排页
-    if (imgs.length) {
-      const bulletList = bullets.length
-        ? `<ul>${bullets.map(b => `<li><span class="dot"></span><span class="li-text">${escapeHtml(b)}</span></li>`).join('')}</ul>`
-        : '';
-      const bodyHtml = body ? `<p class="body">${body}</p>` : '';
-      return `<section class="slide has-img"><div class="page-corner"><span class="big-num">${pageNum}</span><span class="total">/ ${totalNum}</span></div><h2><span class="bar"></span>${heading}</h2><div class="content"><div class="imgs-col">${renderImgs(imgs)}</div><div class="text-col">${bulletList}${bodyHtml}</div></div></section>`;
-    }
-
-    // 4) 数据/引言页（body 长度长但 bullets 少）→ 用引言块强调
-    if (body && bullets.length === 0) {
-      return `<section class="slide quote"><div class="page-corner"><span class="big-num">${pageNum}</span><span class="total">/ ${totalNum}</span></div><h2><span class="bar"></span>${heading}</h2><blockquote class="quote-block"><span class="qmark">"</span><p>${body}</p></blockquote></section>`;
-    }
-
-    // 5) 纯 bullets 页：根据条数决定单列 / 双列卡片网格
-    const bulletList = bullets.length;
-    const useGrid = bulletList >= 4;
-    if (useGrid) {
-      const cards = bullets.map((b, idx) => {
-        const txt = escapeHtml(b);
-        // 拆分"主标题：描述"形式
-        const m = txt.match(/^([^：:。.]{2,16})[：:](.+)$/);
-        if (m) {
-          return `<div class="card"><div class="card-num">${String(idx + 1).padStart(2, '0')}</div><div class="card-title">${m[1]}</div><div class="card-desc">${m[2]}</div></div>`;
-        }
-        return `<div class="card"><div class="card-num">${String(idx + 1).padStart(2, '0')}</div><div class="card-title">${txt}</div></div>`;
-      }).join('');
-      return `<section class="slide grid-slide"><div class="page-corner"><span class="big-num">${pageNum}</span><span class="total">/ ${totalNum}</span></div><h2><span class="bar"></span>${heading}</h2><div class="card-grid cols-${bulletList <= 4 ? 2 : 3}">${cards}</div>${body ? `<p class="body">${body}</p>` : ''}</section>`;
-    }
-
-    const list = bullets.length
-      ? `<ul class="big-bullets">${bullets.map(b => `<li><span class="dot"></span><span class="li-text">${escapeHtml(b)}</span></li>`).join('')}</ul>`
-      : '';
-    const bodyHtml = body ? `<p class="body">${body}</p>` : '';
-    return `<section class="slide"><div class="page-corner"><span class="big-num">${pageNum}</span><span class="total">/ ${totalNum}</span></div><h2><span class="bar"></span>${heading}</h2>${list}${bodyHtml}</section>`;
+  const head = (h) => `<h2><span class="bar"></span>${h}</h2>`;
+  const corner = (i,tt) => `<div class="page-corner"><span class="big-num">${N(i+1)}</span><span class="total">/ ${N(tt)}</span></div>`;
+  const pick = (s,i) => {
+    if (s.layout) return s.layout;
+    if (i===0 && !(s.bullets||[]).length && !s.body && !(s.images||[]).length) return 'cover';
+    if (i===slides.length-1 && /thank|致谢|感谢|结束|the end/i.test(s.heading||'')) return 'closing';
+    if (Array.isArray(s.stats)&&s.stats.length) return 'stats';
+    if (Array.isArray(s.timeline)&&s.timeline.length) return 'timeline';
+    if (s.comparison&&(s.comparison.left_items||s.comparison.right_items)) return 'comparison';
+    const nImg=(s.images||[]).length||(s.image_url?1:0);
+    if (nImg && !(s.bullets||[]).length && !s.body) return 'image-full';
+    if (nImg) return 'image-left';
+    if (s.body && !(s.bullets||[]).length) return 'quote';
+    if ((s.bullets||[]).length>=4) return 'cards';
+    return 'two-column';
+  };
+  const slideHtml = slides.map((s,i)=>{
+    const h=esc(s.heading||''), bs=Array.isArray(s.bullets)?s.bullets:[], body=esc(s.body||'');
+    const imgs=Array.isArray(s.images)?s.images:(s.image_url?[{url:s.image_url,caption:s.image_caption||''}]:[]);
+    const tt=slides.length, c=corner(i,tt), L=pick(s,i);
+    if (L==='cover') return `<section class="slide cover"><div class="deco-circle a"></div><div class="deco-circle b"></div><div class="cover-inner"><div class="kicker">PRESENTATION</div><h1>${h||title}</h1>${subtitle?`<p class="sub">${subtitle}</p>`:''}<div class="meta-row"><span class="chip">📑 ${tt} 页</span><span class="chip">心栈 SoulSentry</span><span class="chip">${D}</span></div></div></section>`;
+    if (L==='agenda') return `<section class="slide agenda">${c}${head(h||'目录')}<ol class="agenda-list">${bs.map((b,k)=>`<li><span class="ag-num">${N(k+1)}</span><span class="ag-text">${esc(b)}</span></li>`).join('')}</ol></section>`;
+    if (L==='section-divider') return `<section class="slide section-divider"><div class="sd-num">${N(i+1)}</div><h1 class="sd-title">${h}</h1>${body?`<p class="sd-sub">${body}</p>`:''}<div class="sd-line"></div></section>`;
+    if (L==='closing') return `<section class="slide closing"><div class="deco-circle a"></div><div class="deco-circle b"></div><div class="closing-inner"><h1>${h||'Thank You'}</h1>${body?`<p class="closing-sub">${body}</p>`:''}<div class="closing-line"></div><p class="closing-foot">心栈 SoulSentry · ${D}</p></div></section>`;
+    if (L==='stats') { const st=Array.isArray(s.stats)?s.stats:[]; return `<section class="slide stats-slide">${c}${head(h)}<div class="stat-grid cols-${Math.min(st.length||1,4)}">${st.map(x=>`<div class="stat"><div class="stat-value">${esc(x.value||'')}</div><div class="stat-label">${esc(x.label||'')}</div></div>`).join('')}</div>${body?`<p class="body">${body}</p>`:''}</section>`; }
+    if (L==='timeline') { const tl=Array.isArray(s.timeline)?s.timeline:[]; return `<section class="slide timeline-slide">${c}${head(h)}<div class="tl-track">${tl.map((x,k)=>`<div class="tl-node"><div class="tl-dot">${k+1}</div><div class="tl-time">${esc(x.time||'')}</div><div class="tl-title">${esc(x.title||'')}</div>${x.desc?`<div class="tl-desc">${esc(x.desc)}</div>`:''}</div>`).join('')}</div></section>`; }
+    if (L==='comparison') { const cm=s.comparison||{}; const li=(arr)=>(arr||[]).map(x=>`<li>${esc(x)}</li>`).join(''); return `<section class="slide compare-slide">${c}${head(h)}<div class="cmp-grid"><div class="cmp-col cmp-left"><div class="cmp-head">${esc(cm.left_title||'A')}</div><ul>${li(cm.left_items)}</ul></div><div class="cmp-vs">VS</div><div class="cmp-col cmp-right"><div class="cmp-head">${esc(cm.right_title||'B')}</div><ul>${li(cm.right_items)}</ul></div></div></section>`; }
+    if (L==='quote') return `<section class="slide quote">${c}${head(h)}<blockquote class="quote-block"><span class="qmark">"</span><p>${body||bs.join('，')}</p></blockquote></section>`;
+    if (L==='image-full' && imgs.length) return `<section class="slide image-full">${c}<div class="full-img-wrap"><img src="${esc(imgs[0].url)}" alt="${esc(imgs[0].caption||'')}"/></div><div class="full-overlay"><h2 class="full-title">${h}</h2>${body?`<p class="full-sub">${body}</p>`:''}</div></section>`;
+    if ((L==='image-left'||L==='image-right') && imgs.length) { const rev=L==='image-right'?' reverse':''; return `<section class="slide has-img${rev}">${c}${head(h)}<div class="content"><div class="imgs-col">${imgsHtml(imgs)}</div><div class="text-col">${ulHtml(bs)}${body?`<p class="body">${body}</p>`:''}</div></div></section>`; }
+    if (L==='cards') return `<section class="slide grid-slide">${c}${head(h)}${cardsHtml(bs)}${body?`<p class="body">${body}</p>`:''}</section>`;
+    if (L==='two-column' && bs.length>=2) { const hf=Math.ceil(bs.length/2); return `<section class="slide two-col">${c}${head(h)}<div class="two-col-grid"><div class="col">${ulHtml(bs.slice(0,hf))}</div><div class="col">${ulHtml(bs.slice(hf))}</div></div>${body?`<p class="body">${body}</p>`:''}</section>`; }
+    return `<section class="slide">${c}${head(h)}${ulHtml(bs,'big-bullets')}${body?`<p class="body">${body}</p>`:''}</section>`;
   }).join('\n');
 
-  return `<!doctype html>
-<html lang="zh">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>${title}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%;background:${t.bg};color:${t.fg};font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei','Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
-  .deck{height:100vh;overflow:hidden;position:relative;background:${t.bodyGrad}}
-  .slide{position:absolute;inset:0;padding:7vh 8vw;display:flex;flex-direction:column;justify-content:center;opacity:0;transition:opacity .5s ease, transform .5s ease;pointer-events:none;transform:translateY(8px)}
-  .slide.active{opacity:1;pointer-events:auto;transform:translateY(0)}
+  const css = `*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;background:${t.bg};color:${t.fg};font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei','Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:.01em}.deck{height:100vh;overflow:hidden;position:relative;background:${t.bodyGrad}}.slide{position:absolute;inset:0;padding:7vh 8vw;display:flex;flex-direction:column;justify-content:center;opacity:0;transition:opacity .5s ease,transform .5s ease;pointer-events:none;transform:translateY(8px)}.slide.active{opacity:1;pointer-events:auto;transform:translateY(0)}.slide h2{font-size:clamp(28px,3.4vw,46px);font-weight:700;color:${t.fg};margin-bottom:1em;line-height:1.15;display:flex;align-items:center;gap:.6em;letter-spacing:-.01em}.slide h2 .bar{display:inline-block;width:6px;height:1.1em;background:linear-gradient(180deg,${t.accent},${t.accent2});border-radius:3px;flex-shrink:0}.page-corner{position:absolute;top:5vh;right:6vw;display:flex;align-items:baseline;gap:4px;font-variant-numeric:tabular-nums}.page-corner .big-num{font-size:clamp(28px,3vw,42px);font-weight:800;background:linear-gradient(135deg,${t.accent},${t.accent2});-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.04em}.page-corner .total{font-size:14px;color:${t.muted}}.slide.cover,.slide.closing{padding:0;align-items:stretch;justify-content:stretch}.slide.cover .cover-inner,.slide.closing .closing-inner{flex:1;display:flex;flex-direction:column;justify-content:center;padding:8vh 10vw;background:${t.heroGrad};color:#fff;position:relative;overflow:hidden}.slide.closing .closing-inner{align-items:center;text-align:center}.slide.cover .deco-circle,.slide.closing .deco-circle{position:absolute;border-radius:50%;pointer-events:none}.slide.cover .deco-circle.a,.slide.closing .deco-circle.a{top:-15vh;right:-10vw;width:50vh;height:50vh;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.18),transparent 70%)}.slide.cover .deco-circle.b,.slide.closing .deco-circle.b{bottom:-20vh;left:-5vw;width:40vh;height:40vh;background:radial-gradient(circle at 70% 70%,rgba(255,255,255,.1),transparent 70%)}.slide.cover .kicker{font-size:13px;letter-spacing:.4em;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:1.5em;position:relative}.slide.cover h1{font-size:clamp(40px,6.5vw,84px);font-weight:800;letter-spacing:-.03em;line-height:1.05;color:#fff;margin-bottom:.4em;position:relative;max-width:18ch}.slide.cover .sub{font-size:clamp(16px,1.8vw,22px);color:rgba(255,255,255,.85);max-width:55ch;line-height:1.6;position:relative;font-weight:300}.slide.cover .meta-row{margin-top:3em;display:flex;gap:10px;flex-wrap:wrap;position:relative}.slide.cover .chip{display:inline-flex;align-items:center;padding:7px 16px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.18);border-radius:999px;font-size:12px;letter-spacing:.08em;color:rgba(255,255,255,.9)}.slide.closing h1{font-size:clamp(60px,8vw,120px);font-weight:800;letter-spacing:-.04em;line-height:1;color:#fff;position:relative}.slide.closing .closing-sub{font-size:clamp(16px,1.8vw,22px);color:rgba(255,255,255,.85);margin-top:1.2em;max-width:50ch;line-height:1.6;position:relative}.slide.closing .closing-line{width:80px;height:5px;border-radius:3px;background:rgba(255,255,255,.6);margin-top:2.5em;position:relative}.slide.closing .closing-foot{margin-top:1.5em;font-size:12px;letter-spacing:.2em;color:rgba(255,255,255,.6);position:relative}.slide ul{list-style:none;font-size:clamp(17px,1.7vw,22px);line-height:1.5;margin-top:.4em;max-width:80ch}.slide ul li{padding:.6em 0;display:flex;align-items:flex-start;gap:.9em;border-bottom:1px solid ${t.cardBorder};color:${t.fg};font-weight:400}.slide ul li:last-child{border-bottom:none}.slide ul li .dot{width:8px;height:8px;background:linear-gradient(135deg,${t.accent},${t.accent2});border-radius:3px;flex-shrink:0;margin-top:.7em;transform:rotate(45deg)}.slide ul li .li-text{flex:1}.slide ul.big-bullets{font-size:clamp(18px,1.9vw,26px)}.slide ul.big-bullets li{padding:.85em 0}.slide .body{font-size:clamp(15px,1.5vw,20px);color:${t.muted};line-height:1.75;margin-top:1.2em;max-width:75ch;white-space:pre-wrap}.slide.quote .quote-block{position:relative;padding:1.5em 0 1.5em 4vw;max-width:80ch}.slide.quote .qmark{position:absolute;left:0;top:-.2em;font-size:clamp(80px,10vw,160px);line-height:1;background:linear-gradient(135deg,${t.accent},${t.accent2});-webkit-background-clip:text;background-clip:text;color:transparent;font-family:Georgia,serif;font-weight:700;opacity:.6}.slide.quote .quote-block p{font-size:clamp(20px,2.4vw,32px);line-height:1.5;color:${t.fg};font-weight:300}.card-grid{display:grid;gap:1.2em;margin-top:.6em}.card-grid.cols-2{grid-template-columns:repeat(2,1fr)}.card-grid.cols-3{grid-template-columns:repeat(3,1fr)}.card-grid .card{padding:1.4em 1.6em;background:${t.cardBg};border:1px solid ${t.cardBorder};border-radius:14px;position:relative;display:flex;flex-direction:column;gap:.5em}.card-grid .card::before{content:'';position:absolute;left:0;top:1.4em;bottom:1.4em;width:3px;background:linear-gradient(180deg,${t.accent},${t.accent2});border-radius:0 2px 2px 0;opacity:.85}.card-grid .card-num{font-size:13px;font-weight:700;color:${t.accent};letter-spacing:.15em;font-variant-numeric:tabular-nums}.card-grid .card-title{font-size:clamp(16px,1.5vw,20px);font-weight:600;color:${t.fg};line-height:1.4}.card-grid .card-desc{font-size:clamp(13px,1.2vw,16px);color:${t.muted};line-height:1.6}.slide.has-img .content{display:flex;flex-direction:row;align-items:center;gap:4vw}.slide.has-img.reverse .content{flex-direction:row-reverse}.slide.has-img .imgs-col{flex:1.15;min-width:0}.slide.has-img .text-col{flex:1;min-width:0}.slide .imgs{display:flex;gap:1.2em;justify-content:center;align-items:center;flex-wrap:wrap}.slide .imgs figure{margin:0;text-align:center;max-width:100%;flex:1}.slide .imgs img{max-width:100%;max-height:60vh;object-fit:contain;border-radius:14px;box-shadow:0 20px 50px -16px rgba(0,0,0,.5),0 0 0 1px ${t.cardBorder}}.slide .imgs.multi figure{flex:1 1 calc(50% - 1.2em);max-width:calc(50% - 1.2em)}.slide .imgs.multi img{max-height:42vh}.slide .imgs figcaption{margin-top:.7em;font-size:clamp(12px,1vw,14px);color:${t.muted};font-weight:500;letter-spacing:.02em}.slide.agenda .agenda-list{list-style:none;display:grid;grid-template-columns:repeat(2,1fr);gap:1em 2em;font-size:clamp(17px,1.7vw,22px);max-width:none;margin-top:.4em}.slide.agenda .agenda-list li{display:flex;align-items:center;gap:1em;padding:.7em 0;border-bottom:1px solid ${t.cardBorder};color:${t.fg}}.slide.agenda .ag-num{font-size:clamp(22px,2.2vw,30px);font-weight:800;background:linear-gradient(135deg,${t.accent},${t.accent2});-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.04em;min-width:2.2em}.slide.agenda .ag-text{flex:1}.slide.section-divider{align-items:flex-start;justify-content:center;padding:7vh 10vw}.slide.section-divider .sd-num{font-size:clamp(80px,12vw,180px);font-weight:900;background:linear-gradient(135deg,${t.accent},${t.accent2});-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.06em;line-height:1;opacity:.92;margin-bottom:.2em}.slide.section-divider .sd-title{font-size:clamp(40px,5.5vw,68px);font-weight:700;color:${t.fg};line-height:1.1;letter-spacing:-.02em;max-width:22ch}.slide.section-divider .sd-sub{font-size:clamp(16px,1.6vw,22px);color:${t.muted};margin-top:1em;max-width:60ch;line-height:1.6}.slide.section-divider .sd-line{width:80px;height:5px;border-radius:3px;background:linear-gradient(90deg,${t.accent},${t.accent2});margin-top:2em}.stat-grid{display:grid;gap:2em;margin-top:1em}.stat-grid.cols-2{grid-template-columns:repeat(2,1fr)}.stat-grid.cols-3{grid-template-columns:repeat(3,1fr)}.stat-grid.cols-4{grid-template-columns:repeat(4,1fr)}.stat-grid .stat{padding:1.5em;background:${t.cardBg};border:1px solid ${t.cardBorder};border-radius:18px;text-align:center}.stat-grid .stat-value{font-size:clamp(36px,5vw,72px);font-weight:800;background:linear-gradient(135deg,${t.accent},${t.accent2});-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.03em;line-height:1.1}.stat-grid .stat-label{font-size:clamp(13px,1.2vw,16px);color:${t.muted};margin-top:.6em;font-weight:500;letter-spacing:.03em}.tl-track{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1.2em;margin-top:1em;position:relative}.tl-track::before{content:'';position:absolute;top:18px;left:6%;right:6%;height:2px;background:linear-gradient(90deg,${t.accent},${t.accent2});opacity:.4;z-index:0}.tl-node{position:relative;padding-top:46px;text-align:center;z-index:1}.tl-dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,${t.accent},${t.accent2});color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;box-shadow:0 0 0 4px ${t.bg}}.tl-time{font-size:13px;color:${t.accent};font-weight:700;letter-spacing:.1em;margin-bottom:.3em}.tl-title{font-size:clamp(15px,1.4vw,18px);font-weight:600;color:${t.fg};line-height:1.3}.tl-desc{font-size:clamp(12px,1.1vw,14px);color:${t.muted};margin-top:.4em;line-height:1.5}.cmp-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:2em;align-items:center;margin-top:1em}.cmp-col{padding:1.6em;background:${t.cardBg};border:1px solid ${t.cardBorder};border-radius:18px}.cmp-col.cmp-left{border-top:3px solid ${t.accent}}.cmp-col.cmp-right{border-top:3px solid ${t.accent2}}.cmp-head{font-size:clamp(18px,1.8vw,24px);font-weight:700;color:${t.fg};margin-bottom:.8em;padding-bottom:.6em;border-bottom:1px solid ${t.cardBorder}}.cmp-col ul{list-style:none;font-size:clamp(14px,1.3vw,17px);margin:0}.cmp-col ul li{padding:.5em 0;color:${t.fg};border-bottom:1px dashed ${t.cardBorder};line-height:1.5}.cmp-col ul li:last-child{border-bottom:none}.cmp-col ul li::before{content:'●';color:${t.accent};margin-right:.6em;font-size:.7em}.cmp-vs{font-size:clamp(24px,2.4vw,32px);font-weight:800;color:${t.muted};letter-spacing:.1em}.slide.two-col .two-col-grid{display:grid;grid-template-columns:1fr 1fr;gap:3em;margin-top:.4em}.slide.two-col .two-col-grid ul{margin-top:0}.slide.image-full{padding:0;align-items:stretch;justify-content:stretch;overflow:hidden}.slide.image-full .full-img-wrap{position:absolute;inset:0}.slide.image-full .full-img-wrap img{width:100%;height:100%;object-fit:cover}.slide.image-full .full-overlay{position:absolute;left:0;right:0;bottom:0;padding:6vh 8vw;background:linear-gradient(180deg,transparent,rgba(0,0,0,.7));color:#fff}.slide.image-full .full-title{font-size:clamp(32px,4vw,56px);font-weight:800;color:#fff;margin-bottom:.3em;line-height:1.15;display:block}.slide.image-full .full-sub{font-size:clamp(15px,1.6vw,20px);color:rgba(255,255,255,.85);max-width:60ch;line-height:1.6}.nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:${t.cardBg};padding:8px;border:1px solid ${t.cardBorder};border-radius:999px;backdrop-filter:blur(12px);z-index:10;box-shadow:0 10px 30px -10px rgba(0,0,0,.4)}.nav button{background:none;border:none;color:${t.fg};cursor:pointer;font-size:14px;padding:6px 12px;border-radius:999px;transition:background .2s}.nav button:hover{background:${t.cardBorder}}.nav .pos{font-size:12px;color:${t.muted};align-self:center;min-width:50px;text-align:center;font-variant-numeric:tabular-nums;font-weight:500}@media(max-width:900px){.slide.has-img .content,.slide.has-img.reverse .content{flex-direction:column}.card-grid.cols-3,.stat-grid.cols-3,.stat-grid.cols-4,.slide.two-col .two-col-grid,.slide.agenda .agenda-list{grid-template-columns:1fr}.cmp-grid{grid-template-columns:1fr;gap:1em}}`;
 
-  /* ===== 通用标题：左侧装饰条 + 大标题 ===== */
-  .slide h2{font-size:clamp(28px,3.4vw,46px);font-weight:700;color:${t.fg};margin-bottom:1.2em;line-height:1.15;display:flex;align-items:center;gap:.6em;letter-spacing:-.01em}
-  .slide h2 .bar{display:inline-block;width:6px;height:1.1em;background:linear-gradient(180deg,${t.accent} 0%,${t.accent2} 100%);border-radius:3px;flex-shrink:0}
-
-  /* ===== 页码：右上角大数字 ===== */
-  .page-corner{position:absolute;top:5vh;right:6vw;display:flex;align-items:baseline;gap:4px;font-variant-numeric:tabular-nums}
-  .page-corner .big-num{font-size:clamp(28px,3vw,42px);font-weight:800;background:linear-gradient(135deg,${t.accent} 0%,${t.accent2} 100%);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.04em}
-  .page-corner .total{font-size:14px;color:${t.muted}}
-
-  /* ===== 封面 ===== */
-  .slide.cover{padding:0;align-items:stretch;justify-content:stretch}
-  .slide.cover .cover-inner{flex:1;display:flex;flex-direction:column;justify-content:center;padding:8vh 10vw;background:${t.heroGrad};color:#fff;position:relative;overflow:hidden}
-  .slide.cover .deco-circle{position:absolute;border-radius:50%;pointer-events:none}
-  .slide.cover .deco-circle.a{top:-15vh;right:-10vw;width:50vh;height:50vh;background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.18), transparent 70%)}
-  .slide.cover .deco-circle.b{bottom:-20vh;left:-5vw;width:40vh;height:40vh;background:radial-gradient(circle at 70% 70%, rgba(255,255,255,.10), transparent 70%)}
-  .slide.cover .kicker{font-size:13px;letter-spacing:.4em;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:1.5em;position:relative}
-  .slide.cover h1{font-size:clamp(40px,6.5vw,84px);font-weight:800;letter-spacing:-.03em;line-height:1.05;color:#fff;margin-bottom:.4em;position:relative;max-width:18ch}
-  .slide.cover .sub{font-size:clamp(16px,1.8vw,22px);color:rgba(255,255,255,.85);max-width:55ch;line-height:1.6;position:relative;font-weight:300}
-  .slide.cover .meta-row{margin-top:3em;display:flex;gap:10px;flex-wrap:wrap;position:relative}
-  .slide.cover .chip{display:inline-flex;align-items:center;padding:7px 16px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.18);border-radius:999px;font-size:12px;letter-spacing:.08em;color:rgba(255,255,255,.9)}
-
-  /* ===== Bullets：圆角圆点 + 现代字号 ===== */
-  .slide ul{list-style:none;font-size:clamp(17px,1.7vw,22px);line-height:1.5;margin-top:.4em;max-width:80ch}
-  .slide ul li{padding:.6em 0;display:flex;align-items:flex-start;gap:.9em;border-bottom:1px solid ${t.cardBorder};color:${t.fg};font-weight:400}
-  .slide ul li:last-child{border-bottom:none}
-  .slide ul li .dot{width:8px;height:8px;background:linear-gradient(135deg,${t.accent},${t.accent2});border-radius:3px;flex-shrink:0;margin-top:.7em;transform:rotate(45deg)}
-  .slide ul li .li-text{flex:1}
-  .slide ul.big-bullets{font-size:clamp(18px,1.9vw,26px)}
-  .slide ul.big-bullets li{padding:.85em 0}
-
-  /* ===== 正文 / 引言 ===== */
-  .slide .body{font-size:clamp(15px,1.5vw,20px);color:${t.muted};line-height:1.75;margin-top:1.2em;max-width:75ch;white-space:pre-wrap}
-  .slide.quote .quote-block{position:relative;padding:1.5em 0 1.5em 4vw;max-width:80ch}
-  .slide.quote .qmark{position:absolute;left:0;top:-0.2em;font-size:clamp(80px,10vw,160px);line-height:1;background:linear-gradient(135deg,${t.accent},${t.accent2});-webkit-background-clip:text;background-clip:text;color:transparent;font-family:Georgia,serif;font-weight:700;opacity:.6}
-  .slide.quote .quote-block p{font-size:clamp(20px,2.4vw,32px);line-height:1.5;color:${t.fg};font-weight:300;letter-spacing:-.005em}
-
-  /* ===== 卡片网格 ===== */
-  .card-grid{display:grid;gap:1.2em;margin-top:.6em}
-  .card-grid.cols-2{grid-template-columns:repeat(2,1fr)}
-  .card-grid.cols-3{grid-template-columns:repeat(3,1fr)}
-  .card-grid .card{padding:1.4em 1.6em;background:${t.cardBg};border:1px solid ${t.cardBorder};border-radius:14px;position:relative;transition:transform .3s ease;display:flex;flex-direction:column;gap:.5em}
-  .card-grid .card::before{content:'';position:absolute;left:0;top:1.4em;bottom:1.4em;width:3px;background:linear-gradient(180deg,${t.accent},${t.accent2});border-radius:0 2px 2px 0;opacity:.85}
-  .card-grid .card-num{font-size:13px;font-weight:700;color:${t.accent};letter-spacing:.15em;font-variant-numeric:tabular-nums}
-  .card-grid .card-title{font-size:clamp(16px,1.5vw,20px);font-weight:600;color:${t.fg};line-height:1.4}
-  .card-grid .card-desc{font-size:clamp(13px,1.2vw,16px);color:${t.muted};line-height:1.6}
-
-  /* ===== 图文并排 ===== */
-  .slide.has-img .content{display:flex;flex-direction:row;align-items:center;gap:4vw}
-  .slide.has-img .imgs-col{flex:1.15;min-width:0}
-  .slide.has-img .text-col{flex:1;min-width:0}
-  .slide .imgs{display:flex;gap:1.2em;justify-content:center;align-items:center;flex-wrap:wrap}
-  .slide .imgs figure{margin:0;text-align:center;max-width:100%;flex:1}
-  .slide .imgs img{max-width:100%;max-height:60vh;object-fit:contain;border-radius:14px;box-shadow:0 20px 50px -16px rgba(0,0,0,.5),0 0 0 1px ${t.cardBorder}}
-  .slide .imgs.multi figure{flex:1 1 calc(50% - 1.2em);max-width:calc(50% - 1.2em)}
-  .slide .imgs.multi img{max-height:42vh}
-  .slide .imgs figcaption{margin-top:.7em;font-size:clamp(12px,1vw,14px);color:${t.muted};font-style:normal;font-weight:500;letter-spacing:.02em}
-  .slide.gallery .imgs img{max-height:65vh}
-
-  /* ===== 导航条 ===== */
-  .nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:${t.cardBg};padding:8px;border:1px solid ${t.cardBorder};border-radius:999px;backdrop-filter:blur(12px);z-index:10;box-shadow:0 10px 30px -10px rgba(0,0,0,.4)}
-  .nav button{background:none;border:none;color:${t.fg};cursor:pointer;font-size:14px;padding:6px 12px;border-radius:999px;transition:background .2s}
-  .nav button:hover{background:${t.cardBorder}}
-  .nav .pos{font-size:12px;color:${t.muted};align-self:center;min-width:50px;text-align:center;font-variant-numeric:tabular-nums;font-weight:500}
-
-  /* 响应式：窄屏堆叠 */
-  @media (max-width: 900px){
-    .slide.has-img .content{flex-direction:column}
-    .card-grid.cols-3{grid-template-columns:1fr 1fr}
-  }
-</style>
-</head>
-<body>
-<div class="deck" id="deck">${slideHtml}</div>
-<div class="nav">
-  <button onclick="go(-1)" title="上一页">←</button>
-  <span class="pos" id="pos">1 / ${slides.length}</span>
-  <button onclick="go(1)" title="下一页">→</button>
-  <button onclick="document.documentElement.requestFullscreen()" title="全屏">⛶</button>
-</div>
-<script>
-  let cur=0;const slides=document.querySelectorAll('.slide');const pos=document.getElementById('pos');
-  function show(){slides.forEach((s,i)=>s.classList.toggle('active',i===cur));pos.textContent=(cur+1)+' / '+slides.length;}
-  function go(d){cur=Math.max(0,Math.min(slides.length-1,cur+d));show();}
-  document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))go(1);if(['ArrowLeft','PageUp'].includes(e.key))go(-1);});
-  show();
-</script>
-</body>
-</html>`;
+  return `<!doctype html><html lang="zh"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${title}</title><style>${css}</style></head><body><div class="deck" id="deck">${slideHtml}</div><div class="nav"><button onclick="go(-1)" title="上一页">←</button><span class="pos" id="pos">1 / ${slides.length}</span><button onclick="go(1)" title="下一页">→</button><button onclick="document.documentElement.requestFullscreen()" title="全屏">⛶</button></div><script>let cur=0;const slides=document.querySelectorAll('.slide');const pos=document.getElementById('pos');function show(){slides.forEach((s,i)=>s.classList.toggle('active',i===cur));pos.textContent=(cur+1)+' / '+slides.length;}function go(d){cur=Math.max(0,Math.min(slides.length-1,cur+d));show();}document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))go(1);if(['ArrowLeft','PageUp'].includes(e.key))go(-1);});show();</script></body></html>`;
 }
 
 async function uploadHtmlFile(base44, fileName, html) {
@@ -1526,8 +1410,48 @@ async function executePptDoc(base44, exec, attachmentCtx) {
           type: "object",
           properties: {
             heading: { type: "string", description: "页标题" },
+            layout: {
+              type: "string",
+              enum: ["cover", "agenda", "section-divider", "two-column", "image-left", "image-right", "image-full", "quote", "stats", "cards", "timeline", "comparison", "closing"],
+              description: "页面版式模板：cover=封面 / agenda=目录 / section-divider=章节分隔 / two-column=左右双列文字 / image-left=左图右文 / image-right=右图左文 / image-full=整页大图 / quote=引言金句 / stats=数据大数字 / cards=要点卡片网格 / timeline=时间线 / comparison=对比表 / closing=结束致谢。请根据本页内容自动挑选最贴切的版式。",
+            },
             bullets: { type: "array", items: { type: "string" }, description: "要点列表，3~6 条" },
             body: { type: "string", description: "可选的补充段落，用于结论/数据/案例页" },
+            stats: {
+              type: "array",
+              description: "当 layout=stats 时使用：3~4 个关键数据，每个含数值和说明",
+              items: {
+                type: "object",
+                properties: {
+                  value: { type: "string", description: "大数字，如 87% / 1.2M / 24" },
+                  label: { type: "string", description: "对应说明" }
+                },
+                required: ["value", "label"]
+              }
+            },
+            timeline: {
+              type: "array",
+              description: "当 layout=timeline 时使用：3~5 个时间节点",
+              items: {
+                type: "object",
+                properties: {
+                  time: { type: "string", description: "时间或阶段标记，如 Q1 / 2024 / 第一步" },
+                  title: { type: "string", description: "该节点的小标题" },
+                  desc: { type: "string", description: "一句话说明" }
+                },
+                required: ["time", "title"]
+              }
+            },
+            comparison: {
+              type: "object",
+              description: "当 layout=comparison 时使用：A / B 两列对比",
+              properties: {
+                left_title: { type: "string" },
+                right_title: { type: "string" },
+                left_items: { type: "array", items: { type: "string" } },
+                right_items: { type: "array", items: { type: "string" } }
+              }
+            },
             images: {
               type: "array",
               description: "本页要展示的图片（必须从用户上传的图片清单中选择 url，禁止编造 URL）。一页 1~2 张为佳。",
@@ -1555,7 +1479,7 @@ async function executePptDoc(base44, exec, attachmentCtx) {
     ? `\n\n=== 用户上传的图片清单（必须按需嵌入到对应幻灯片的 images 字段）===\n${userImages.map((img, i) => `${i + 1}. URL: ${img.url}\n   文件名: ${img.name}\n   内容描述: ${img.description}`).join('\n')}\n务必要求：\n- 必须把上述每张图片至少在一张幻灯片的 images 字段中使用（url 完整复制，禁止编造或简写）。\n- 选择最相关的幻灯片放置（例如『礼品盒样式』图放在样式说明页，『布袋样式』图放在布袋说明页）。\n- 一张幻灯片可放 1~2 张图，配合 caption 文字说明。\n- 含图片的幻灯片 bullets 可以减少，让图片成为主角。\n`
     : '';
 
-  const pptPrompt = `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请把其中的关键信息嵌入到相应幻灯片，不要丢失重要项）：${fileBlock}` : ''}${imageManifest}\n\n要求：\n1) 根据题材自动选择合适的主题风格(theme)；\n2) 至少 8 页，包含封面、目录/概览、3~5 个核心论点页、案例/数据页、结论页；\n3) 每页 bullets 控制在 3~6 条，简洁有力，每条 ≤ 30 个字；\n4) 一定要直接产出可演示的成稿内容，而不是大纲提示；\n5) ${userImages.length > 0 ? `务必把上面列出的 ${userImages.length} 张用户图片嵌入到相应幻灯片的 images 字段（url 完整复制）；图片页应配合 3~6 条 bullets 作为"文字说明对照"，不要把多条说明硬塞进 body 字符串。` : '本次无图片附件'}；\n6) 【关键排版规则】bullets / body / caption 字段都是纯文本，禁止出现 HTML 标签（如 <br>、<br/>、<p>），需要换行就直接拆成 bullets 数组的多个条目；禁止把 "① xx<br>② yy<br>③ zz" 这种带序号 + <br> 的内容塞到单个字符串里——必须拆成 bullets:["① xx","② yy","③ zz"]；\n7) 实拍图配文字说明的页面，优先采用"左图右 bullets"布局（即把图片放 images、说明放 bullets），不要使用 markdown 表格。`;
+  const pptPrompt = `请为以下需求生成一份完整的演示稿（PPT）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件（请把其中的关键信息嵌入到相应幻灯片，不要丢失重要项）：${fileBlock}` : ''}${imageManifest}\n\n要求：\n1) 根据题材自动选择合适的主题风格(theme)；\n2) 至少 8 页，必须包含：① 封面 ② 目录/Agenda ③ 3~5 个核心论点页 ④ 至少 1 个数据/对比/时间线页 ⑤ 结束致谢页；\n3) 每页 bullets 控制在 3~6 条，简洁有力，每条 ≤ 30 个字；\n4) 一定要直接产出可演示的成稿内容，而不是大纲提示；\n5) ${userImages.length > 0 ? `务必把上面列出的 ${userImages.length} 张用户图片嵌入到相应幻灯片的 images 字段（url 完整复制）；图片页应配合 3~6 条 bullets 作为"文字说明对照"，不要把多条说明硬塞进 body 字符串。` : '本次无图片附件'}；\n6) 【关键排版规则】bullets / body / caption 字段都是纯文本，禁止出现 HTML 标签（如 <br>、<br/>、<p>），需要换行就直接拆成 bullets 数组的多个条目；禁止把 "① xx<br>② yy<br>③ zz" 这种带序号 + <br> 的内容塞到单个字符串里——必须拆成 bullets:["① xx","② yy","③ zz"]；\n7) 实拍图配文字说明的页面，优先采用"左图右 bullets"布局（即把图片放 images、说明放 bullets），不要使用 markdown 表格；\n\n8) 【★ 版式模板要求 ★】必须为每一页指定 layout 字段，从以下模板中挑选最贴切的一种，使整份演示稿"图文并茂、版式多变"，避免每页都长得一样：\n   - cover：仅首页使用（heading + subtitle）；\n   - agenda：第 2 页推荐使用，bullets 列出全篇章节；\n   - section-divider：大章节之间的分隔页，只有大标题 + 一句概述（body），无 bullets；\n   - two-column：纯文字双栏，bullets 4~6 条会自动分两列；\n   - image-left / image-right：图文页（图片放 images，说明放 bullets），有图就用其中之一；\n   - image-full：整张大图为主、heading 浮于上方（极少使用，仅用于强冲击的画面）；\n   - quote：金句/关键观点页（heading + body，body 写一段不超 60 字的金句），无 bullets；\n   - stats：数据页（必须填 stats 数组，3~4 个大数字）；\n   - cards：要点卡片网格（4~6 条 bullets 会自动渲染成带编号卡片）；\n   - timeline：时间线/步骤页（必须填 timeline 数组，3~5 个节点）；\n   - comparison：对比页（必须填 comparison 对象：left_title / right_title / left_items / right_items），用于「方案 A vs 方案 B」「优点 vs 缺点」等场景；\n   - closing：最后一页致谢/Call to Action（heading 写"Thank You"或"开始行动"，body 写联系方式或一句行动号召）；\n   ⚠️ 不要所有页都用 cards 或都用 two-column——要根据每页内容挑最合适的，做到节奏感强、视觉不重复。`;
   const pptSystem = "你是顶级演示稿设计师。基于用户输入直接产出完整、有逻辑、可直接演示的幻灯片内容。" + (userImages.length > 0 ? "⚠️ 用户上传了真实图片，请仔细观察每张图片的实际内容。幻灯片正文 bullets/body 必须严格忠于图片肉眼可见的元素（颜色、材质、可见图案/无图案），禁止编造图片中不存在的工艺规格（如『靛青满版』『45mm 烫金禅心映影篆章』『康熙字典体』『D35 单黑丝印』『280×300mm 尺寸』『莲花压纹』等具体数值/工艺名词，除非图中文字明确写出）。看不出来的就用『建议…』或不写。每张图片至少写入一张幻灯片的 images 字段，url 完整复制。" : "");
   const data = userImages.length > 0
     ? await base44.integrations.Core.InvokeLLM({

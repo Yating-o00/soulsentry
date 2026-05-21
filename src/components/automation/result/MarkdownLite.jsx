@@ -1,17 +1,12 @@
 import React from "react";
 
-// 轻量 Markdown 渲染器:处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落,无需额外依赖
-// 用于 ResearchResultView 与 TemplatedSection 等需要把 AI 输出的 Markdown 直接展示的场景
-
+// 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
-  // 先把字面 <br> / &lt;br&gt; 转成换行,再在 ①②③ 等带圈数字前补换行(让 AI 输出的脏排版自动恢复)
   let normalized = String(text)
     .replace(/&lt;br\s*\/?&gt;/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
-    // 合并被换行/空白拆散的 markdown 图片:![alt]\n(url) → ![alt](url)
     .replace(/(!\[[^\]]*\])\s+(\()/g, "$1$2")
     .replace(/(?!^)\s*([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮])/g, "\n$1");
-  // 按 ![alt](url) 图片切分;图片切出后不再走加粗处理
   const imgRe = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
   const segments = [];
   let last = 0;
@@ -61,7 +56,7 @@ function isStandaloneImageLine(s) {
   return /^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)\s*$/.test(s);
 }
 
-// 把"单行塞满整张表"的脏数据还原成多行:在分隔行 ` | --- | --- | ` 处断行,并按列宽切分后续单元格
+// 把"单行塞满整张表"的脏数据还原成多行
 function normalizeInlineTables(raw) {
   let s = String(raw || "");
   s = s.replace(/\s*\|\s*(:?-{2,}:?\s*\|\s*){2,}:?-{2,}:?\s*\|?\s*/g, (m) => `\n${m.trim()}\n`);
@@ -104,10 +99,23 @@ function normalizeInlineTables(raw) {
   return out.join("\n");
 }
 
-function looksLikeHtml(s) {
+export function looksLikeHtml(s) {
   if (!s) return false;
   const matches = String(s).match(/<\/?(div|section|article|header|footer|h[1-6]|p|table|tr|td|th|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/gi);
   return !!(matches && matches.length >= 2);
+}
+
+// 检测是否包含 Markdown 表格（含 | --- | 分隔行）
+export function hasMarkdownTable(s) {
+  if (!s) return false;
+  const text = normalizeInlineTables(s);
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (lines[i].includes("|") && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(lines[i + 1])) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export default function MarkdownLite({ source }) {
@@ -128,7 +136,6 @@ export default function MarkdownLite({ source }) {
     const line = lines[i];
     if (!line.trim()) { i++; continue; }
 
-    // GFM 表格
     const isTableSep = (s) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(s);
     if (line.includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1])) {
       const splitRow = (row) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
@@ -153,7 +160,7 @@ export default function MarkdownLite({ source }) {
             </thead>
             <tbody>
               {rows.map((r, ri) => (
-                <tr key={ri}>
+                <tr key={ri} className="even:bg-slate-50/40">
                   {r.map((c, ci) => (
                     <td key={ci} className="px-2.5 py-1.5 text-slate-600 border-b border-slate-100 align-top">
                       {renderInline(c, `td-${ri}-${ci}`)}
@@ -168,7 +175,6 @@ export default function MarkdownLite({ source }) {
       continue;
     }
 
-    // 标题
     const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
       const lvl = h[1].length;
@@ -181,14 +187,12 @@ export default function MarkdownLite({ source }) {
       continue;
     }
 
-    // 分隔线
     if (/^\s*---+\s*$/.test(line)) {
       blocks.push(<hr key={`hr-${blocks.length}`} className="my-2 border-slate-200" />);
       i++;
       continue;
     }
 
-    // 独立成行的图片
     if (isStandaloneImageLine(line)) {
       const imgs = [];
       let j = i;
@@ -242,7 +246,6 @@ export default function MarkdownLite({ source }) {
       continue;
     }
 
-    // 列表
     const isUl = /^\s*[-*]\s+/.test(line);
     const isOl = /^\s*\d+\.\s+/.test(line);
     if (isUl || isOl) {
@@ -262,7 +265,6 @@ export default function MarkdownLite({ source }) {
       continue;
     }
 
-    // 普通段落
     const paraLines = [];
     while (i < lines.length && lines[i].trim() && !/^#{1,6}\s+/.test(lines[i]) && !/^\s*[-*]\s+/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i]) && !/^\s*---+\s*$/.test(lines[i])) {
       if (lines[i].includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1])) break;

@@ -129,6 +129,7 @@ export default function AutoExecutionPanel() {
         original_input: content,
         category: "task",
         execution_status: "parsing",
+        automation_type: "summary_note", // 默认占位，executeAutomation 会在 plan 阶段按实际意图覆盖
         ai_parsed_result: {
           source: "dashboard_direct",
           summary: content,

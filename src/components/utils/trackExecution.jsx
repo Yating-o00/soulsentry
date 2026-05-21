@@ -12,6 +12,14 @@ const SOURCE_CONFIG = {
   calendar_month: { label: "月规划", emoji: "📆", color: "violet" },
 };
 
+// 来源 → 默认的 automation_type，避免落库时为空导致前端显示「未识别」
+const SOURCE_DEFAULT_AUTOMATION_TYPE = {
+  note: "summary_note",
+  calendar_day: "calendar_event",
+  calendar_week: "calendar_event",
+  calendar_month: "calendar_event",
+};
+
 export { SOURCE_CONFIG };
 
 /**
@@ -124,6 +132,7 @@ export async function createExecutionRecord({ title, originalInput, source, cate
     category: category || "task",
     execution_status: "completed",
     completed_at: now,
+    automation_type: SOURCE_DEFAULT_AUTOMATION_TYPE[source] || "summary_note",
     ai_parsed_result: aiParsedResult,
     execution_steps: steps,
   });
@@ -143,6 +152,7 @@ export async function createPendingExecution({ title, originalInput, source, cat
     original_input: originalInput || title || "",
     category: category || "task",
     execution_status: "parsing",
+    automation_type: SOURCE_DEFAULT_AUTOMATION_TYPE[source] || "summary_note",
     ai_parsed_result: {
       source: source,
       source_label: cfg.label,

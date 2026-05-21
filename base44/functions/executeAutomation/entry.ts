@@ -1304,39 +1304,50 @@ function escapeHtml(s = '') {
 }
 
 // 把 PPT 数据渲染为自包含 HTML 演示稿（用户用浏览器直接打开即可全屏播放）
+// 高端排版：渐变封面 + 装饰几何 + 序号大字号 + 卡片化 bullets + 引用条 + 图文左右分栏
 function renderPptHtml(data) {
   const title = escapeHtml(data.title || '演示稿');
   const subtitle = escapeHtml(data.subtitle || '');
   const slides = Array.isArray(data.slides) ? data.slides : [];
-  const theme = data.theme || 'business'; // business | minimal | tech
+  const theme = data.theme || 'business';
 
-  const themeColors = {
-    business: { bg: '#0f172a', fg: '#f8fafc', accent: '#3b82f6', muted: '#94a3b8' },
-    minimal:  { bg: '#ffffff', fg: '#0f172a', accent: '#384877', muted: '#64748b' },
-    tech:     { bg: '#020617', fg: '#e2e8f0', accent: '#22d3ee', muted: '#64748b' },
-  }[theme] || { bg: '#ffffff', fg: '#0f172a', accent: '#384877', muted: '#64748b' };
+  // 三主题：现代商务（深蓝）/ 简约白（浅）/ 科技青（暗）
+  const themePresets = {
+    business: { bg: '#0b1224', fg: '#f8fafc', accent: '#60a5fa', accent2: '#a78bfa', muted: '#94a3b8', cardBg: 'rgba(255,255,255,0.04)', cardBd: 'rgba(255,255,255,0.08)' },
+    minimal:  { bg: '#fafafa', fg: '#0f172a', accent: '#384877', accent2: '#dc2626', muted: '#64748b', cardBg: '#ffffff',                cardBd: '#e2e8f0' },
+    tech:     { bg: '#020617', fg: '#e2e8f0', accent: '#22d3ee', accent2: '#a855f7', muted: '#64748b', cardBg: 'rgba(34,211,238,0.04)',  cardBd: 'rgba(34,211,238,0.18)' },
+  };
+  const C = themePresets[theme] || themePresets.minimal;
 
-  const slideHtml = slides.map((s, i) => {
+  // 是否是封面页（第 1 页且无 bullets/body）
+  const renderSlide = (s, i) => {
     const heading = escapeHtml(s.heading || '');
     const bullets = Array.isArray(s.bullets) ? s.bullets : [];
     const body = escapeHtml(s.body || '');
-    const isCover = i === 0 && (!bullets.length && !body);
-
-    if (isCover) {
-      return `<section class="slide cover"><h1>${heading || title}</h1>${subtitle ? `<p class="sub">${subtitle}</p>` : ''}<div class="badge">${slides.length} 页 · 心栈 SoulSentry</div></section>`;
-    }
-    const bulletList = bullets.length
-      ? `<ul>${bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`
-      : '';
-    const bodyHtml = body ? `<p class="body">${body}</p>` : '';
-    // 图片：支持 image_url 单图 或 images 数组
     const imgs = Array.isArray(s.images) ? s.images : (s.image_url ? [{ url: s.image_url, caption: s.image_caption || '' }] : []);
-    const imgHtml = imgs.length
-      ? `<div class="imgs ${imgs.length > 1 ? 'multi' : 'single'}">${imgs.map(im => `<figure><img src="${escapeHtml(im.url)}" alt="${escapeHtml(im.caption || '')}"/>${im.caption ? `<figcaption>${escapeHtml(im.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`
-      : '';
+    const isCover = i === 0 && !bullets.length && !body && !imgs.length;
+
+    // 封面：大标题 + 副标题 + 装饰几何 + 元信息
+    if (isCover) {
+      return `<section class="slide cover"><div class="orb orb1"></div><div class="orb orb2"></div><div class="meta-top"><span class="dot"></span> 心栈 SoulSentry · 演示稿</div><h1 class="cover-title">${heading || title}</h1>${subtitle ? `<p class="cover-sub">${subtitle}</p>` : ''}<div class="cover-foot"><span class="chip">${new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}</span><span class="chip">${slides.length} 页</span></div></section>`;
+    }
+
     const hasImg = imgs.length > 0;
-    return `<section class="slide ${hasImg ? 'has-img' : ''}"><div class="num">${i + 1} / ${slides.length}</div><h2>${heading}</h2><div class="content">${imgHtml}<div class="text">${bulletList}${bodyHtml}</div></div></section>`;
-  }).join('\n');
+    const bulletHtml = bullets.length
+      ? `<ul class="bullet-cards">${bullets.map((b, idx) => `<li><span class="bullet-num">${String(idx + 1).padStart(2, '0')}</span><span class="bullet-text">${escapeHtml(b)}</span></li>`).join('')}</ul>`
+      : '';
+    const bodyHtml = body ? `<div class="body-quote"><span class="quote-mark">"</span>${body}</div>` : '';
+    const imgHtml = hasImg
+      ? `<div class="imgs ${imgs.length > 1 ? 'multi' : 'single'} cols-${Math.min(imgs.length, 2)}">${imgs.map(im => `<figure><img src="${escapeHtml(im.url)}" alt="${escapeHtml(im.caption || '')}"/>${im.caption ? `<figcaption>${escapeHtml(im.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`
+      : '';
+
+    // 头部条：左侧大序号 + 装饰条 + 标题
+    const headerHtml = `<header class="slide-head"><div class="idx-block"><div class="idx-num">${String(i).padStart(2, '0')}</div><div class="idx-bar"></div></div><h2>${heading}</h2></header>`;
+
+    return `<section class="slide content-slide ${hasImg ? 'has-img' : ''}"><div class="page-num">${i + 1} / ${slides.length}</div>${headerHtml}<div class="content">${imgHtml}<div class="text">${bulletHtml}${bodyHtml}</div></div></section>`;
+  };
+
+  const slideHtml = slides.map(renderSlide).join('\n');
 
   return `<!doctype html>
 <html lang="zh">
@@ -1346,50 +1357,88 @@ function renderPptHtml(data) {
 <title>${title}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%;background:${themeColors.bg};color:${themeColors.fg};font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased}
+  html,body{height:100%;background:${C.bg};color:${C.fg};font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:'tnum'}
   .deck{height:100vh;overflow:hidden;position:relative}
-  .slide{position:absolute;inset:0;padding:8vw 10vw;display:flex;flex-direction:column;justify-content:center;opacity:0;transition:opacity .4s ease;pointer-events:none}
-  .slide.active{opacity:1;pointer-events:auto}
-  .slide h1{font-size:clamp(36px,5.5vw,72px);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:.4em}
-  .slide h2{font-size:clamp(28px,3.6vw,48px);font-weight:700;color:${themeColors.accent};margin-bottom:.6em;line-height:1.2}
-  .slide.cover{align-items:center;text-align:center}
-  .slide.cover h1{background:linear-gradient(135deg,${themeColors.accent},${themeColors.fg});-webkit-background-clip:text;background-clip:text;color:transparent}
-  .slide .sub{font-size:clamp(16px,1.8vw,24px);color:${themeColors.muted};margin-top:1em;max-width:60ch}
-  .slide ul{list-style:none;font-size:clamp(18px,2vw,28px);line-height:1.7}
-  .slide ul li{padding:.4em 0;padding-left:1.6em;position:relative}
-  .slide ul li::before{content:'';position:absolute;left:0;top:.95em;width:.6em;height:.6em;background:${themeColors.accent};border-radius:50%}
-  .slide .body{font-size:clamp(16px,1.6vw,22px);color:${themeColors.muted};line-height:1.7;margin-top:1em;max-width:70ch;white-space:pre-wrap}
-  .slide .content{display:flex;flex-direction:column;gap:1.5em}
-  .slide.has-img .content{flex-direction:row;align-items:center;gap:3vw}
+  .slide{position:absolute;inset:0;padding:7vh 9vw;display:flex;flex-direction:column;opacity:0;transition:opacity .45s ease,transform .45s ease;pointer-events:none;transform:translateY(20px)}
+  .slide.active{opacity:1;pointer-events:auto;transform:translateY(0)}
+
+  /* ========= 封面 ========= */
+  .slide.cover{justify-content:center;align-items:flex-start;background:linear-gradient(135deg,${C.bg} 0%,${C.bg} 60%,${C.accent}22 100%);overflow:hidden}
+  .slide.cover .meta-top{position:absolute;top:5vh;left:9vw;font-size:13px;letter-spacing:.18em;color:${C.muted};text-transform:uppercase;display:flex;align-items:center;gap:8px}
+  .slide.cover .meta-top .dot{width:8px;height:8px;border-radius:50%;background:${C.accent};box-shadow:0 0 12px ${C.accent}}
+  .cover-title{font-size:clamp(48px,7vw,96px);font-weight:900;letter-spacing:-.035em;line-height:1.05;max-width:18ch;background:linear-gradient(135deg,${C.fg} 0%,${C.accent} 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cover-sub{margin-top:1.2em;font-size:clamp(18px,2.2vw,28px);color:${C.muted};max-width:42ch;font-weight:400;line-height:1.5}
+  .cover-foot{position:absolute;bottom:5vh;left:9vw;display:flex;gap:10px}
+  .cover-foot .chip{padding:8px 18px;border:1px solid ${C.muted}44;border-radius:999px;font-size:13px;color:${C.muted};letter-spacing:.05em;backdrop-filter:blur(4px)}
+  /* 装饰几何 */
+  .orb{position:absolute;border-radius:50%;filter:blur(60px);pointer-events:none}
+  .orb1{width:520px;height:520px;background:${C.accent};opacity:.18;right:-120px;top:-80px}
+  .orb2{width:380px;height:380px;background:${C.accent2};opacity:.15;left:-80px;bottom:-100px}
+
+  /* ========= 内容页：序号 + 标题 ========= */
+  .slide.content-slide{justify-content:flex-start}
+  .slide-head{display:flex;align-items:flex-start;gap:24px;margin-bottom:3.6vh}
+  .idx-block{display:flex;flex-direction:column;align-items:center;gap:8px;flex-shrink:0}
+  .idx-num{font-size:clamp(40px,4.4vw,64px);font-weight:800;color:${C.accent};line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+  .idx-bar{width:3px;height:48px;background:linear-gradient(180deg,${C.accent},transparent);border-radius:2px}
+  .slide h2{font-size:clamp(28px,3.6vw,46px);font-weight:800;color:${C.fg};line-height:1.2;letter-spacing:-.02em;padding-top:8px;max-width:24ch}
+
+  /* ========= bullets 卡片化 ========= */
+  .bullet-cards{list-style:none;display:flex;flex-direction:column;gap:14px;margin:0}
+  .bullet-cards li{display:flex;align-items:flex-start;gap:18px;padding:16px 22px;background:${C.cardBg};border:1px solid ${C.cardBd};border-radius:14px;font-size:clamp(15px,1.5vw,20px);line-height:1.55;color:${C.fg};transition:transform .2s,border-color .2s}
+  .bullet-cards li:hover{transform:translateX(4px);border-color:${C.accent}66}
+  .bullet-num{flex-shrink:0;width:30px;height:30px;border-radius:8px;background:${C.accent}22;color:${C.accent};font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+  .bullet-text{flex:1;min-width:0}
+
+  /* ========= body 引用条 ========= */
+  .body-quote{margin-top:18px;padding:16px 22px 16px 30px;border-left:4px solid ${C.accent};background:${C.cardBg};border-radius:0 12px 12px 0;font-size:clamp(15px,1.4vw,20px);line-height:1.7;color:${C.muted};position:relative;white-space:pre-wrap}
+  .body-quote .quote-mark{position:absolute;left:8px;top:4px;font-size:36px;color:${C.accent};opacity:.4;font-family:Georgia,serif;line-height:1}
+
+  /* ========= 图文分栏 ========= */
+  .slide .content{display:flex;flex-direction:column;gap:24px;flex:1;min-height:0}
+  .slide.has-img .content{flex-direction:row;align-items:flex-start;gap:4vw}
   .slide.has-img .content .text{flex:1;min-width:0}
-  .slide.has-img .content .imgs{flex:1.1;display:flex;gap:1em;justify-content:center;align-items:center}
-  .slide.has-img .content .imgs.multi{flex-wrap:wrap}
-  .slide .imgs figure{margin:0;text-align:center;max-width:100%}
-  .slide .imgs img{max-width:100%;max-height:60vh;object-fit:contain;border-radius:12px;box-shadow:0 12px 40px -12px rgba(0,0,0,.4)}
-  .slide .imgs.multi figure{flex:1 1 calc(50% - 1em);max-width:calc(50% - 1em)}
-  .slide .imgs.multi img{max-height:38vh}
-  .slide .imgs figcaption{margin-top:.6em;font-size:clamp(12px,1vw,15px);color:${themeColors.muted};font-style:italic}
-  .num{position:absolute;top:3vh;right:3vw;font-size:14px;color:${themeColors.muted};letter-spacing:.1em}
-  .badge{margin-top:2em;display:inline-block;padding:.5em 1.2em;border:1px solid ${themeColors.muted}40;border-radius:999px;font-size:13px;color:${themeColors.muted};letter-spacing:.1em}
-  .nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:8px;background:${themeColors.fg}10;padding:8px 14px;border-radius:999px;backdrop-filter:blur(8px);z-index:10}
-  .nav button{background:none;border:none;color:${themeColors.fg};cursor:pointer;font-size:16px;padding:4px 10px;border-radius:6px}
-  .nav button:hover{background:${themeColors.fg}20}
-  .nav .pos{font-size:13px;color:${themeColors.muted};align-self:center;min-width:56px;text-align:center}
+  .slide.has-img .content .imgs{flex:1.05;display:grid;gap:14px;align-content:start}
+  .slide .imgs.cols-2{grid-template-columns:1fr 1fr}
+  .slide .imgs figure{margin:0;text-align:center}
+  .slide .imgs img{max-width:100%;width:100%;max-height:62vh;object-fit:cover;border-radius:14px;box-shadow:0 20px 60px -20px rgba(0,0,0,.4);border:1px solid ${C.cardBd}}
+  .slide .imgs.multi img{max-height:34vh}
+  .slide .imgs figcaption{margin-top:8px;font-size:clamp(11px,.95vw,13px);color:${C.muted};font-style:italic}
+
+  /* ========= 页码 ========= */
+  .page-num{position:absolute;top:4vh;right:5vw;font-size:12px;color:${C.muted};letter-spacing:.2em;font-variant-numeric:tabular-nums}
+
+  /* ========= 导航 ========= */
+  .nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:${C.cardBg};padding:8px 12px;border-radius:999px;backdrop-filter:blur(12px);border:1px solid ${C.cardBd};z-index:20;box-shadow:0 8px 32px rgba(0,0,0,.2)}
+  .nav button{background:none;border:none;color:${C.fg};cursor:pointer;font-size:15px;padding:6px 12px;border-radius:8px;transition:background .2s}
+  .nav button:hover{background:${C.accent}22}
+  .nav .pos{font-size:12px;color:${C.muted};align-self:center;min-width:48px;text-align:center;letter-spacing:.1em;font-variant-numeric:tabular-nums}
+
+  /* 进度条 */
+  .progress{position:fixed;top:0;left:0;height:3px;background:${C.accent};z-index:30;transition:width .35s ease;box-shadow:0 0 8px ${C.accent}}
+
+  @media (max-width:640px){
+    .slide{padding:8vh 6vw}
+    .slide-head{gap:12px;margin-bottom:2vh}
+    .bullet-cards li{padding:12px 14px;gap:12px}
+    .slide.has-img .content{flex-direction:column}
+  }
 </style>
 </head>
 <body>
+<div class="progress" id="progress"></div>
 <div class="deck" id="deck">${slideHtml}</div>
 <div class="nav">
-  <button onclick="go(-1)">←</button>
+  <button onclick="go(-1)" title="上一页">←</button>
   <span class="pos" id="pos">1 / ${slides.length}</span>
-  <button onclick="go(1)">→</button>
-  <button onclick="document.documentElement.requestFullscreen()">⛶</button>
+  <button onclick="go(1)" title="下一页">→</button>
+  <button onclick="document.documentElement.requestFullscreen()" title="全屏">⛶</button>
 </div>
 <script>
-  let cur=0;const slides=document.querySelectorAll('.slide');const pos=document.getElementById('pos');
-  function show(){slides.forEach((s,i)=>s.classList.toggle('active',i===cur));pos.textContent=(cur+1)+' / '+slides.length;}
+  let cur=0;const slides=document.querySelectorAll('.slide');const pos=document.getElementById('pos');const prog=document.getElementById('progress');
+  function show(){slides.forEach((s,i)=>s.classList.toggle('active',i===cur));pos.textContent=(cur+1)+' / '+slides.length;prog.style.width=((cur+1)/slides.length*100)+'%';}
   function go(d){cur=Math.max(0,Math.min(slides.length-1,cur+d));show();}
-  document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))go(1);if(['ArrowLeft','PageUp'].includes(e.key))go(-1);});
+  document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))go(1);if(['ArrowLeft','PageUp'].includes(e.key))go(-1);if(e.key==='Home')cur=0,show();if(e.key==='End')cur=slides.length-1,show();});
   show();
 </script>
 </body>

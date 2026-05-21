@@ -27,9 +27,10 @@ export { SOURCE_CONFIG };
  * @param {Array}  [params.planContext.timelineItems] - 时间线条目
  * @param {Array}  [params.planContext.automationItems] - 自动执行清单
  * @param {Array}  [params.planContext.syncTargets] - 同步目标 ["tasks","notes","calendar"]
+ * @param {Array}  [params.attachedFiles] - 用户上传的附件 [{file_url, file_name, file_type}]，将写入 ai_parsed_result.attached_files 供自动执行后端解析
  * @returns {Promise<object>}
  */
-export async function createExecutionRecord({ title, originalInput, source, category, taskId, planContext }) {
+export async function createExecutionRecord({ title, originalInput, source, category, taskId, planContext, attachedFiles }) {
   const now = new Date().toISOString();
   const cfg = SOURCE_CONFIG[source] || { label: source, emoji: "⚡", color: "slate" };
 
@@ -102,6 +103,18 @@ export async function createExecutionRecord({ title, originalInput, source, cate
       status: it.status || "READY",
       desc: it.desc || it.description || "",
     }));
+  }
+
+  // 关键：把用户上传的附件原始 URL 落库，供 executeAutomation 的 buildAttachmentContext 解析
+  // 没有这一步，后端永远拿到空数组 → AI 会"未识别附件内容"
+  if (Array.isArray(attachedFiles) && attachedFiles.length > 0) {
+    aiParsedResult.attached_files = attachedFiles
+      .filter(f => f && f.file_url)
+      .map(f => ({
+        file_url: f.file_url,
+        file_name: f.file_name || '',
+        file_type: f.file_type || '',
+      }));
   }
 
   const execution = await base44.entities.TaskExecution.create({

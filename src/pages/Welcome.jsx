@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, Image as ImagePlus, X, Brain, MapPin, Zap, Check, Users, Clock } from "lucide-react";
+import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, Image as ImagePlus, X, Brain, MapPin, Zap, Check, Users, Clock, Paperclip, FileText } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -22,10 +22,14 @@ export default function Welcome({ onComplete }) {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  // 任意格式附件（PDF / Word / Excel / PPT 等），上传后会把 URL 写入 execution.ai_parsed_result.attached_files
+  // 让 executeAutomation 的 buildAttachmentContext 能真正读取内容（解决"未识别附件"）
+  const [docFiles, setDocFiles] = useState([]); // [{file_url, file_name, file_type, uploading}]
   const [emailSuggestion, setEmailSuggestion] = useState(null);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const recognitionRef = useRef(null);
   const imageInputRef = useRef(null);
+  const docInputRef = useRef(null);
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -57,6 +61,38 @@ export default function Welcome({ onComplete }) {
     if (imageInputRef.current) {
       imageInputRef.current.value = '';
     }
+  };
+
+  // 上传任意格式附件（PDF/Word/Excel/PPT/纯文本 等）
+  const handleDocSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    // 先占位显示，再异步上传
+    const placeholders = files.map(f => ({ file_name: f.name, file_type: f.type, file_url: '', uploading: true }));
+    setDocFiles(prev => [...prev, ...placeholders]);
+    const uploaded = [];
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`「${file.name}」超过 20MB，已跳过`);
+        continue;
+      }
+      try {
+        const res = await base44.integrations.Core.UploadFile({ file });
+        if (res?.file_url) {
+          uploaded.push({ file_name: file.name, file_type: file.type, file_url: res.file_url });
+        }
+      } catch (err) {
+        toast.error(`上传「${file.name}」失败`);
+      }
+    }
+    // 用真实上传结果替换占位
+    setDocFiles(prev => [...prev.filter(p => !p.uploading), ...uploaded]);
+    if (docInputRef.current) docInputRef.current.value = '';
+    if (uploaded.length > 0) toast.success(`已附加 ${uploaded.length} 个文件`);
+  };
+
+  const removeDoc = (idx) => {
+    setDocFiles(prev => prev.filter((_, i) => i !== idx));
   };
 
   const startVoiceInput = () => {
@@ -140,12 +176,14 @@ export default function Welcome({ onComplete }) {
 
     try {
       let textToAnalyze = input;
-      
+      let uploadedImageRef = null; // 用于把图片也收入 allAttachedFiles
+
       // Handle Image OCR if present
       if (imageFile) {
          setIsUploadingImage(true);
          try {
            const uploadResult = await base44.integrations.Core.UploadFile({ file: imageFile });
+           uploadedImageRef = { file_url: uploadResult.file_url, file_name: imageFile.name, file_type: imageFile.type };
            const ocrResponse = await base44.integrations.Core.InvokeLLM({
              prompt: "提取图片中的文字内容。",
              file_urls: [uploadResult.file_url],
@@ -209,7 +247,14 @@ export default function Welcome({ onComplete }) {
         }
       }).catch(e => console.warn("Email intent detection skipped:", e));
 
-      // 同步执行动态到通知页面（包含规划上下文和语义分析）
+      // 收集用户上传的全部附件（图片 + 文档），让后端自动执行能读取内容
+      const allAttachedFiles = [];
+      if (uploadedImageRef) allAttachedFiles.push(uploadedImageRef);
+      docFiles.filter(f => f.file_url && !f.uploading).forEach(f => {
+        allAttachedFiles.push({ file_url: f.file_url, file_name: f.file_name, file_type: f.file_type });
+      });
+
+      // 同步执行动态到通知页面（包含规划上下文和语义分析 + 附件）
       createExecutionRecord({
         title: semanticHint?.refined_title || textToAnalyze.slice(0, 60),
         originalInput: textToAnalyze,
@@ -223,6 +268,7 @@ export default function Welcome({ onComplete }) {
           people: semanticHint?.people?.map(p => p.name) || [],
           locations: semanticHint?.locations?.map(l => l.name) || [],
         },
+        attachedFiles: allAttachedFiles,
       }).catch(e => console.warn("Execution tracking failed:", e));
 
       clearInterval(stepInterval);
@@ -320,6 +366,25 @@ export default function Welcome({ onComplete }) {
                       onChange={handleImageSelect}
                       className="hidden"
                     />
+                    <input
+                      ref={docInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,.json"
+                      onChange={handleDocSelect}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => docInputRef.current && docInputRef.current.click()}
+                      disabled={isProcessing}
+                      className="w-10 h-10 rounded-full flex items-center justify-center
+                                 transition-all duration-300 bg-slate-100 hover:bg-slate-200 text-slate-600
+                                 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="上传附件（PDF / Word / Excel / PPT）"
+                    >
+                      <Paperclip className="w-5 h-5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => imageInputRef.current && imageInputRef.current.click()}
@@ -365,6 +430,27 @@ export default function Welcome({ onComplete }) {
                         </button>
                       </div>
                       <span className="text-xs text-slate-500">已添加图片</span>
+                    </div>
+                  )}
+
+                  {/* 文档附件列表 */}
+                  {docFiles.length > 0 && (
+                    <div className="absolute left-4 bottom-4 right-4 flex flex-wrap gap-2 max-h-20 overflow-y-auto">
+                      {docFiles.map((f, i) => (
+                        <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-xs text-slate-700 border border-slate-200">
+                          {f.uploading ? <Loader2 className="w-3 h-3 animate-spin text-slate-400" /> : <FileText className="w-3 h-3 text-[#384877]" />}
+                          <span className="max-w-[140px] truncate">{f.file_name}</span>
+                          {!f.uploading && (
+                            <button
+                              type="button"
+                              onClick={() => removeDoc(i)}
+                              className="ml-0.5 w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
 

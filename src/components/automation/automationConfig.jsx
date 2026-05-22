@@ -51,10 +51,10 @@ export const AUTOMATION_TYPES = {
   },
   none: {
     label: "PPT报告",
-    emoji: "⚡",
-    icon: Zap,
-    color: "bg-slate-50 text-slate-500 border-slate-200",
-    iconBg: "bg-slate-100 text-slate-500",
+    emoji: "📊",
+    icon: FileText,
+    color: "bg-purple-50 text-purple-600 border-purple-200",
+    iconBg: "bg-purple-100 text-purple-600",
     description: "",
   },
 };

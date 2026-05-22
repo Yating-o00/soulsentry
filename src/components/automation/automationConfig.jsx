@@ -50,7 +50,7 @@ export const AUTOMATION_TYPES = {
     description: "把零散思绪整理成心签",
   },
   none: {
-    label: "未识别",
+    label: "PPT报告",
     emoji: "⚡",
     icon: Zap,
     color: "bg-slate-50 text-slate-500 border-slate-200",

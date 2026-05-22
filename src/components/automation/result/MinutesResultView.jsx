@@ -72,7 +72,7 @@ export default function MinutesResultView({ data, preview }) {
                 <div className="flex-shrink-0 px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium h-fit">
                   {t.time || `节点 ${i + 1}`}
                 </div>
-                <div className="text-slate-700 leading-relaxed">{t.content || t.label || ""}</div>
+                <div className="text-slate-700 leading-relaxed">{itemToText(t.content || t.label || t)}</div>
               </div>
             ))}
           </div>
@@ -141,9 +141,32 @@ export default function MinutesResultView({ data, preview }) {
   );
 }
 
+// 把 items 里混入的对象/数组安全转成字符串，避免 React 渲染对象崩溃
+function itemToText(it) {
+  if (it == null) return "";
+  if (typeof it === "string") return it;
+  if (typeof it === "number" || typeof it === "boolean") return String(it);
+  if (Array.isArray(it)) return it.map(itemToText).join("；");
+  if (typeof it === "object") {
+    // 常见结构：{type,text} / {type,title,points} / {type,question,answer}
+    if (it.question || it.answer) {
+      return `Q：${it.question || ""}${it.answer ? "  A：" + it.answer : ""}`;
+    }
+    if (it.title || it.points) {
+      const pts = Array.isArray(it.points) ? it.points.map(itemToText).join("；") : "";
+      return [it.title, pts].filter(Boolean).join("：");
+    }
+    if (it.text) return String(it.text);
+    if (it.content) return String(it.content);
+    if (it.label) return String(it.label);
+    try { return JSON.stringify(it); } catch { return ""; }
+  }
+  return String(it);
+}
+
 function SectionBlock({ index, section }) {
   const type = section.type || "point";
-  const items = Array.isArray(section.items) ? section.items : [];
+  const items = (Array.isArray(section.items) ? section.items : []).map(itemToText).filter(Boolean);
 
   if (type === "callout") {
     return (
@@ -223,7 +246,7 @@ function InsightCard({ label, items, color }) {
       <div className="text-[10.5px] font-semibold uppercase tracking-wider mb-1.5 opacity-80">{label}</div>
       <ul className="space-y-0.5">
         {list.slice(0, 6).map((it, i) => (
-          <li key={i} className="text-[12px] leading-relaxed">• {it}</li>
+          <li key={i} className="text-[12px] leading-relaxed">• {itemToText(it)}</li>
         ))}
       </ul>
     </div>

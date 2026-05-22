@@ -5,7 +5,6 @@ import { FileText, Download, ExternalLink, Users, Calendar, Hash } from "lucide-
 export default function MinutesResultView({ data, preview }) {
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "会议纪要.html";
-  const html = data?.html || "";
   const title = data?.title || "会议纪要";
   const meta = data?.meta || {};
   const sections = Array.isArray(data?.sections) ? data.sections : [];
@@ -48,8 +47,8 @@ export default function MinutesResultView({ data, preview }) {
         )}
       </div>
 
-      {/* HTML 内嵌预览（优先 srcDoc，避开存储 CDN 的跨域/沙箱限制） */}
-      {(html || fileUrl) && (
+      {/* HTML 内嵌预览：直接用 file_url，避免 entity 字段过大导致 html 丢失 */}
+      {fileUrl && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200">
             <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
@@ -81,7 +80,7 @@ export default function MinutesResultView({ data, preview }) {
             </div>
           </div>
           <iframe
-            {...(html ? { srcDoc: html } : { src: fileUrl })}
+            src={fileUrl}
             title={fileName}
             sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             className="w-full bg-white"
@@ -91,7 +90,7 @@ export default function MinutesResultView({ data, preview }) {
       )}
 
       {/* 兜底：没文件 URL 时显示 preview 文本 */}
-      {!fileUrl && !html && preview && (
+      {!fileUrl && preview && (
         <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-64 overflow-y-auto">
           <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{preview}</pre>
         </div>

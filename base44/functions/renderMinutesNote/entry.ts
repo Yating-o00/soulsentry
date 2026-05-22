@@ -266,7 +266,6 @@ ${truncated || '（用户未提供附件，仅给出指令）'}
       tags: data.tags || [],
       file_url,
       file_name,
-      html, // 前端 srcDoc 直接预览
       plain_preview: plainPreview,
       note_id: note.id,
     });

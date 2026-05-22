@@ -1,36 +1,21 @@
-// 纯渲染函数：接收 PPT data（含 title/subtitle/theme/slides 及每张 slide 的 layout 字段），
-// 渲染成自包含 HTML 上传到对象存储，返回 file_url。
-// 用途：用户在前端切换主题/单页版式后，调本函数重新生成 HTML，无需重跑 AI、不消耗 PPT 点数。
-
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+// HTML 转义
 function escapeHtml(s = '') {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// 把 PPT 数据渲染为自包含 HTML 演示稿
 function renderPptHtml(data) {
   const title = escapeHtml(data.title || '演示稿');
   const subtitle = escapeHtml(data.subtitle || '');
   const slides = Array.isArray(data.slides) ? data.slides : [];
   const theme = data.theme || 'business';
+
   const themePalette = {
-    business: {
-      bg: '#0b1120', fg: '#f1f5f9', accent: '#60a5fa', accent2: '#a78bfa', muted: '#94a3b8',
-      heroGrad: 'linear-gradient(135deg,#1e3a8a 0%,#3b0764 100%)',
-      bodyGrad: 'radial-gradient(ellipse at 80% -10%, rgba(96,165,250,.15) 0%, transparent 55%), radial-gradient(ellipse at 0% 100%, rgba(167,139,250,.12) 0%, transparent 50%), #0b1120',
-      cardBg: 'rgba(148,163,184,.06)', cardBorder: 'rgba(148,163,184,.18)',
-    },
-    minimal: {
-      bg: '#fafafa', fg: '#0a0a0a', accent: '#0a0a0a', accent2: '#dc2626', muted: '#525252',
-      heroGrad: 'linear-gradient(135deg,#fafafa 0%,#e5e5e5 100%)', bodyGrad: '#fafafa',
-      cardBg: 'rgba(0,0,0,.03)', cardBorder: 'rgba(0,0,0,.08)',
-    },
-    tech: {
-      bg: '#030712', fg: '#e2e8f0', accent: '#22d3ee', accent2: '#a3e635', muted: '#64748b',
-      heroGrad: 'linear-gradient(135deg,#022c43 0%,#0c4a6e 50%,#164e63 100%)',
-      bodyGrad: 'radial-gradient(ellipse at 20% 0%, rgba(34,211,238,.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(163,230,53,.08) 0%, transparent 55%), #030712',
-      cardBg: 'rgba(34,211,238,.05)', cardBorder: 'rgba(34,211,238,.18)',
-    },
+    business: { bg: '#0b1120', fg: '#f1f5f9', accent: '#60a5fa', accent2: '#a78bfa', muted: '#94a3b8', heroGrad: 'linear-gradient(135deg,#1e3a8a 0%,#3b0764 100%)', bodyGrad: 'radial-gradient(ellipse at 80% -10%, rgba(96,165,250,.15) 0%, transparent 55%), radial-gradient(ellipse at 0% 100%, rgba(167,139,250,.12) 0%, transparent 50%), #0b1120', cardBg: 'rgba(148,163,184,.06)', cardBorder: 'rgba(148,163,184,.18)' },
+    minimal: { bg: '#fafafa', fg: '#0a0a0a', accent: '#0a0a0a', accent2: '#dc2626', muted: '#525252', heroGrad: 'linear-gradient(135deg,#fafafa 0%,#e5e5e5 100%)', bodyGrad: '#fafafa', cardBg: 'rgba(0,0,0,.03)', cardBorder: 'rgba(0,0,0,.08)' },
+    tech: { bg: '#030712', fg: '#e2e8f0', accent: '#22d3ee', accent2: '#a3e635', muted: '#64748b', heroGrad: 'linear-gradient(135deg,#022c43 0%,#0c4a6e 50%,#164e63 100%)', bodyGrad: 'radial-gradient(ellipse at 20% 0%, rgba(34,211,238,.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(163,230,53,.08) 0%, transparent 55%), #030712', cardBg: 'rgba(34,211,238,.05)', cardBorder: 'rgba(34,211,238,.18)' },
   };
   const t = themePalette[theme] || themePalette.minimal;
 
@@ -67,7 +52,7 @@ function renderPptHtml(data) {
     const corner = `<div class="page-corner"><span class="big-num">${pageNum}</span><span class="total">/ ${totalNum}</span></div>`;
     const tBar = `<h2><span class="bar"></span>${heading}</h2>`;
 
-    if (layout === 'cover') return `<section class="slide cover"><div class="deco-circle a"></div><div class="deco-circle b"></div><div class="cover-inner"><div class="kicker">PRESENTATION</div><h1>${heading || title}</h1>${subtitle || s.subtitle ? `<p class="sub">${escapeHtml(s.subtitle || data.subtitle || '')}</p>` : ''}<div class="meta-row"><span class="chip">📑 ${slides.length} 页</span><span class="chip">心栈 SoulSentry</span><span class="chip">${new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}</span></div></div></section>`;
+    if (layout === 'cover') return `<section class="slide cover"><div class="deco-circle a"></div><div class="deco-circle b"></div><div class="cover-inner"><div class="kicker">PRESENTATION</div><h1>${heading || title}</h1>${subtitle ? `<p class="sub">${subtitle}</p>` : ''}<div class="meta-row"><span class="chip">📑 ${slides.length} 页</span><span class="chip">心栈 SoulSentry</span><span class="chip">${new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}</span></div></div></section>`;
     if (layout === 'agenda') {
       const items = bullets.length ? bullets : slides.slice(1).map(x => x.heading).filter(Boolean);
       return `<section class="slide agenda">${corner}${tBar}<ol class="agenda-list">${items.map((b, idx) => `<li><span class="ag-num">${String(idx + 1).padStart(2, '0')}</span><span class="ag-text">${escapeHtml(b)}</span></li>`).join('')}</ol></section>`;
@@ -79,17 +64,13 @@ function renderPptHtml(data) {
       return `<section class="slide stats">${corner}${tBar}<div class="stats-grid cols-${Math.min(stats.length, 4)}">${stats.map(st => `<div class="stat-cell"><div class="stat-value">${escapeHtml(st.value || '')}</div><div class="stat-label">${escapeHtml(st.label || '')}</div></div>`).join('')}</div>${body ? `<p class="body">${body}</p>` : ''}</section>`;
     }
     if (layout === 'timeline') {
-      const items = Array.isArray(s.timeline) && s.timeline.length ? s.timeline : bullets.map((b, idx) => ({ time: `Step ${idx + 1}`, title: b }));
+      const items = Array.isArray(s.timeline) ? s.timeline : [];
       return `<section class="slide timeline">${corner}${tBar}<div class="tl-track">${items.map((it, idx) => `<div class="tl-node"><div class="tl-dot">${String(idx + 1).padStart(2, '0')}</div><div class="tl-card"><div class="tl-time">${escapeHtml(it.time || '')}</div><div class="tl-title">${escapeHtml(it.title || '')}</div>${it.desc ? `<div class="tl-desc">${escapeHtml(it.desc)}</div>` : ''}</div></div>`).join('')}</div></section>`;
     }
     if (layout === 'comparison') {
       const c = s.comparison || {};
-      const halfA = bullets.slice(0, Math.ceil(bullets.length / 2));
-      const halfB = bullets.slice(Math.ceil(bullets.length / 2));
-      const leftItems = (c.left_items && c.left_items.length) ? c.left_items : halfA;
-      const rightItems = (c.right_items && c.right_items.length) ? c.right_items : halfB;
-      const left = leftItems.map(x => `<li>${escapeHtml(x)}</li>`).join('');
-      const right = rightItems.map(x => `<li>${escapeHtml(x)}</li>`).join('');
+      const left = (c.left_items || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
+      const right = (c.right_items || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
       return `<section class="slide comparison">${corner}${tBar}<div class="cmp-grid"><div class="cmp-col cmp-left"><div class="cmp-title">${escapeHtml(c.left_title || 'A')}</div><ul>${left}</ul></div><div class="cmp-divider"></div><div class="cmp-col cmp-right"><div class="cmp-title">${escapeHtml(c.right_title || 'B')}</div><ul>${right}</ul></div></div></section>`;
     }
     if (layout === 'image-full' && imgs.length) return `<section class="slide image-full">${corner}<div class="if-bg" style="background-image:url('${escapeHtml(imgs[0].url)}')"></div><div class="if-overlay"></div><div class="if-text"><h2 class="if-h2">${heading}</h2>${imgs[0].caption ? `<p class="if-cap">${escapeHtml(imgs[0].caption)}</p>` : ''}${body ? `<p class="if-body">${body}</p>` : ''}</div></section>`;
@@ -116,7 +97,8 @@ function renderPptHtml(data) {
     return `<section class="slide">${corner}${tBar}${renderBullets(bullets, 'big-bullets')}${body ? `<p class="body">${body}</p>` : ''}</section>`;
   }).join('\n');
 
-  return `<!doctype html><html lang="zh"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${title}</title>
+  return `<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${title}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:${t.bg};color:${t.fg};font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei','Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
@@ -158,7 +140,6 @@ html,body{height:100%;background:${t.bg};color:${t.fg};font-family:-apple-system
 .card-grid .card-title{font-size:clamp(16px,1.5vw,20px);font-weight:600;color:${t.fg};line-height:1.4}
 .card-grid .card-desc{font-size:clamp(13px,1.2vw,16px);color:${t.muted};line-height:1.6}
 .slide.has-img .content{display:flex;flex-direction:row;align-items:center;gap:4vw}
-.slide.has-img.dir-reverse .content{flex-direction:row-reverse}
 .slide.has-img .imgs-col{flex:1.15;min-width:0}
 .slide.has-img .text-col{flex:1;min-width:0}
 .slide .imgs{display:flex;gap:1.2em;justify-content:center;align-items:center;flex-wrap:wrap}
@@ -168,9 +149,10 @@ html,body{height:100%;background:${t.bg};color:${t.fg};font-family:-apple-system
 .slide .imgs.multi img{max-height:42vh}
 .slide .imgs figcaption{margin-top:.7em;font-size:clamp(12px,1vw,14px);color:${t.muted};font-weight:500;letter-spacing:.02em}
 .nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:${t.cardBg};padding:8px;border:1px solid ${t.cardBorder};border-radius:999px;backdrop-filter:blur(12px);z-index:10;box-shadow:0 10px 30px -10px rgba(0,0,0,.4)}
-.nav button{background:none;border:none;color:${t.fg};cursor:pointer;font-size:14px;padding:6px 12px;border-radius:999px;transition:background .2s}
+.nav button{background:none;border:none;color:${t.fg};cursor:pointer;font-size:14px;padding:6px 12px;border-radius:999px}
 .nav button:hover{background:${t.cardBorder}}
 .nav .pos{font-size:12px;color:${t.muted};align-self:center;min-width:50px;text-align:center;font-variant-numeric:tabular-nums;font-weight:500}
+.slide.has-img.dir-reverse .content{flex-direction:row-reverse}
 .slide.agenda .agenda-list{list-style:none;display:flex;flex-direction:column;gap:.8em;max-width:78ch;font-size:clamp(17px,1.7vw,22px)}
 .slide.agenda .agenda-list li{display:flex;align-items:center;gap:1em;padding:.8em 1.2em;background:${t.cardBg};border:1px solid ${t.cardBorder};border-radius:12px;color:${t.fg}}
 .slide.agenda .ag-num{display:inline-flex;align-items:center;justify-content:center;width:2.2em;height:2.2em;background:linear-gradient(135deg,${t.accent},${t.accent2});color:#fff;border-radius:8px;font-size:.7em;font-weight:800;font-variant-numeric:tabular-nums;flex-shrink:0}
@@ -220,23 +202,17 @@ html,body{height:100%;background:${t.bg};color:${t.fg};font-family:-apple-system
 .slide.closing .sub{font-size:clamp(16px,1.8vw,22px);color:rgba(255,255,255,.85);max-width:55ch;line-height:1.6;position:relative;font-weight:300}
 .slide.closing .meta-row{margin-top:3em;display:flex;gap:10px;flex-wrap:wrap;position:relative}
 .slide.closing .chip{display:inline-flex;align-items:center;padding:7px 16px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:999px;font-size:12px;color:rgba(255,255,255,.9)}
-@media (max-width:900px){
-  .slide.has-img .content,.slide.has-img.dir-reverse .content{flex-direction:column}
-  .card-grid.cols-3,.slide.stats .stats-grid.cols-4,.slide.stats .stats-grid.cols-3,.two-col{grid-template-columns:1fr 1fr}
-  .slide.comparison .cmp-grid{grid-template-columns:1fr;gap:1em}
-  .slide.comparison .cmp-divider{display:none}
+@media (max-width: 900px){
+.slide.has-img .content,.slide.has-img.dir-reverse .content{flex-direction:column}
+.card-grid.cols-3,.slide.stats .stats-grid.cols-4,.slide.stats .stats-grid.cols-3,.two-col{grid-template-columns:1fr 1fr}
+.slide.comparison .cmp-grid{grid-template-columns:1fr;gap:1em}
+.slide.comparison .cmp-divider{display:none}
 }
-</style></head>
-<body>
+</style></head><body>
 <div class="deck" id="deck">${slideHtml}</div>
 <div class="nav"><button onclick="go(-1)">←</button><span class="pos" id="pos">1 / ${slides.length}</span><button onclick="go(1)">→</button><button onclick="document.documentElement.requestFullscreen()">⛶</button></div>
-<script>
-let cur=0;const slides=document.querySelectorAll('.slide');const pos=document.getElementById('pos');
-function show(){slides.forEach((s,i)=>s.classList.toggle('active',i===cur));pos.textContent=(cur+1)+' / '+slides.length;}
-function go(d){cur=Math.max(0,Math.min(slides.length-1,cur+d));show();}
-document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))go(1);if(['ArrowLeft','PageUp'].includes(e.key))go(-1);});
-show();
-</script></body></html>`;
+<script>let cur=0;const slides=document.querySelectorAll('.slide');const pos=document.getElementById('pos');function show(){slides.forEach((s,i)=>s.classList.toggle('active',i===cur));pos.textContent=(cur+1)+' / '+slides.length;}function go(d){cur=Math.max(0,Math.min(slides.length-1,cur+d));show();}document.addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))go(1);if(['ArrowLeft','PageUp'].includes(e.key))go(-1);});show();</script>
+</body></html>`;
 }
 
 Deno.serve(async (req) => {
@@ -246,21 +222,18 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { data, file_base_name } = await req.json();
-    if (!data || !Array.isArray(data.slides)) {
-      return Response.json({ error: 'data.slides required' }, { status: 400 });
-    }
+    if (!data) return Response.json({ error: 'data required' }, { status: 400 });
 
     const html = renderPptHtml(data);
-    const safeTitle = (data.title || file_base_name || '演示稿').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
-    const fileName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}.html`;
     const bytes = new TextEncoder().encode(html);
     const blob = new Blob([bytes], { type: 'text/html; charset=utf-8' });
+    const fileName = `${(file_base_name || (data.title || 'ppt')).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)}.html`;
     const file = new File([blob], fileName, { type: 'text/html; charset=utf-8' });
     const resp = await base44.integrations.Core.UploadFile({ file });
-    const file_url = resp?.file_url || resp?.data?.file_url;
+    const fileUrl = resp?.file_url || resp?.data?.file_url;
 
-    return Response.json({ file_url, file_name: fileName });
-  } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ file_url: fileUrl, file_name: fileName });
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: 500 });
   }
 });

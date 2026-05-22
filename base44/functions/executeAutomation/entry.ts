@@ -116,9 +116,13 @@ async function buildAttachmentContext(base44, exec) {
     }
   }));
 
-  // 并发：文档抽取 —— 优先用 ExtractDataFromUploadedFile（专为 Word/Excel/PDF/CSV 设计），失败再走 LLM 视觉模型兜底
+  // 并发：文档抽取 —— 三级兜底：① ExtractDataFromUploadedFile（Word/Excel/PDF/CSV）；② Kimi（原生文件理解，对老 Office 格式更稳）；③ Gemini 视觉模型；任一成功即用。
+  // 关键：每一层都用 try/catch 包住，确保单文件失败不会把整次 plan 阶段崩成 500。
   const docResults = await Promise.all(docFiles.map(async (f) => {
     let text = '';
+    const errors = [];
+
+    // ① 平台原生文件抽取
     try {
       const ext = await base44.integrations.Core.ExtractDataFromUploadedFile({
         file_url: f.file_url,
@@ -127,8 +131,26 @@ async function buildAttachmentContext(base44, exec) {
       if (ext?.status === 'success') {
         const raw = ext.output?.raw_text || (typeof ext.output === 'string' ? ext.output : '');
         if (raw && String(raw).trim().length > 10) text = String(raw);
+      } else if (ext?.details) {
+        errors.push(`Extract: ${ext.details}`);
       }
-    } catch (_) { /* 走兜底 */ }
+    } catch (e) { errors.push(`Extract: ${e?.message || e}`); }
+
+    // ② Kimi 原生文件理解（对 .doc/.docx/.pdf 兼容性更好）
+    if (!text) {
+      try {
+        const kimiRes = await base44.functions.invoke('invokeKimi', {
+          prompt: `请把这个文件的完整内容以纯文本形式抽取出来，保留结构（表格用 Markdown 表格），不要总结，不要省略。如果是会议纪要/名单/列表，逐行输出。`,
+          file_urls: [f.file_url],
+          temperature: 0.1,
+        });
+        const raw = kimiRes?.data;
+        const t = typeof raw === 'string' ? raw : (raw?.text || raw?.content || raw?.raw_text || '');
+        if (t && String(t).trim().length > 10) text = String(t);
+      } catch (e) { errors.push(`Kimi: ${e?.message || e}`); }
+    }
+
+    // ③ Gemini 视觉模型兜底（能读扫描件/图片型 PDF）
     if (!text) {
       try {
         const res = await base44.integrations.Core.InvokeLLM({
@@ -137,9 +159,11 @@ async function buildAttachmentContext(base44, exec) {
           model: 'gemini_3_1_pro',
         });
         text = typeof res === 'string' ? res : (res?.text || res?.data || '');
-      } catch (e) {
-        text = `(读取失败:${e.message || '附件无法解析'})`;
-      }
+      } catch (e) { errors.push(`Gemini: ${e?.message || e}`); }
+    }
+
+    if (!text) {
+      text = `(附件「${f.file_name}」无法解析。错误：${errors.join(' | ') || '未知'}；建议用户改用 .txt 或复制内容到任务描述中)`;
     }
     return { f, text: String(text).slice(0, 8000) };
   }));

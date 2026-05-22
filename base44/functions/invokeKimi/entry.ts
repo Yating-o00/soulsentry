@@ -51,13 +51,58 @@ Deno.serve(async (req) => {
       systemContent += `\n\n请严格按以下 JSON Schema 返回结果，不要输出任何额外文字：\n${JSON.stringify(response_json_schema)}`;
     }
 
-    // Build user message (vision-capable if file_urls present)
-    const hasImages = Array.isArray(file_urls) && file_urls.length > 0;
+    // 分类 file_urls：图片走视觉模型；文档（pdf/word/excel/txt/md/csv）走 Kimi 文件抽取
+    const isImage = (u = '') => /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u);
+    const imageUrls = Array.isArray(file_urls) ? file_urls.filter(isImage) : [];
+    const docUrls = Array.isArray(file_urls) ? file_urls.filter(u => !isImage(u)) : [];
+    const hasImages = imageUrls.length > 0;
+    const hasDocs = docUrls.length > 0;
+
+    // 对文档：用 Kimi 官方 /v1/files 接口上传 → 拿到已抽取的文本，再注入到 system prompt
+    let extractedDocText = '';
+    if (hasDocs) {
+      const extractedChunks = await Promise.all(docUrls.map(async (url) => {
+        try {
+          const fileResp = await fetch(url);
+          if (!fileResp.ok) return `(下载失败:${url})`;
+          const blob = await fileResp.blob();
+          const filename = decodeURIComponent((url.split('?')[0].split('/').pop() || 'file')).slice(0, 80);
+          const form = new FormData();
+          form.append('file', blob, filename);
+          form.append('purpose', 'file-extract');
+          const upResp = await fetch('https://api.moonshot.ai/v1/files', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${apiKey.trim()}` },
+            body: form,
+          });
+          if (!upResp.ok) return `(Kimi 上传失败 ${upResp.status}:${await upResp.text()})`;
+          const upJson = await upResp.json();
+          const fileId = upJson?.id;
+          if (!fileId) return `(无 file_id)`;
+          const contentResp = await fetch(`https://api.moonshot.ai/v1/files/${fileId}/content`, {
+            headers: { Authorization: `Bearer ${apiKey.trim()}` },
+          });
+          if (!contentResp.ok) return `(抽取失败 ${contentResp.status})`;
+          const ctype = contentResp.headers.get('content-type') || '';
+          if (ctype.includes('application/json')) {
+            const j = await contentResp.json();
+            return String(j?.content || j?.text || JSON.stringify(j)).slice(0, 20000);
+          }
+          return (await contentResp.text()).slice(0, 20000);
+        } catch (e) {
+          return `(异常:${e?.message || e})`;
+        }
+      }));
+      extractedDocText = extractedChunks.map((t, i) => `=== 附件 ${i + 1} ===\n${t}`).join('\n\n');
+      systemContent += `\n\n以下是用户上传的附件原文，请基于这些内容回答用户的问题：\n${extractedDocText}`;
+    }
+
+    // Build user message
     let userContent;
     if (hasImages) {
       userContent = [
         { type: "text", text: prompt },
-        ...file_urls.map((url) => ({ type: "image_url", image_url: { url } }))
+        ...imageUrls.map((url) => ({ type: "image_url", image_url: { url } }))
       ];
     } else {
       userContent = prompt;

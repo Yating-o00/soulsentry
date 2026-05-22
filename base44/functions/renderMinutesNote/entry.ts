@@ -3,37 +3,22 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 /**
  * 整理笔记 / 会议纪要专用渲染器
  *
- * 调用方：executeAutomation 的 summary_note 分支会在识别到「会议/纪要/笔记整理/参会人/Q：」等
- * 特征时通过 base44.functions.invoke('renderMinutesNote', ...) 调用本函数。
- *
  * 输入：
  *  - user_text   : string 用户原始指令
- *  - file_block  : string 已抽取的附件文本（buildAttachmentContext 拼好的）
+ *  - file_block  : string 已抽取的附件纯文本（executeAutomation.buildAttachmentContext 拼好的）
  *
- * 输出：
- *  {
- *    title, meta:{time,location,attendees[]}, sections:[{title,items[]}], timeline[],
- *    insights:{people[],tech[],time[],actions[]}, tags[],
- *    file_url, file_name, html, plain_preview, note_id
- *  }
- *
- * 渲染特性（对齐用户提供的参考稿）：
- *  1) 智能头部表格（时间/地点/参会人）
- *  2) 章节"一、二、三"层级 + 子标题
- *  3) Q&A 自动配对成卡片
- *  4) 关键数据（数字+单位、日期、百分比）<mark> 黄色背景高亮
- *  5) 时间线节点
- *  6) "导致 / 因此 / 结论 / 瓶颈" 类的长段引用框（callout）
- *  7) AI 识别洞察面板：人员 / 术语 / 时间 / 行动项
+ * 关键设计：
+ *  - 不再接收 file_urls。file_block 已经是经过 InvokeLLM 抽取的真实文本，
+ *    Kimi 是文本模型，硬塞 file_urls 反而会被当 image_url 处理，文档（Word/PDF）读不出来。
+ *  - Prompt 把原文置于最顶部，并以"唯一事实来源"约束，禁止套用任何示例。
  */
 
-async function callKimi(base44, prompt, response_json_schema, system_prompt, file_urls) {
+async function callKimi(base44, prompt, response_json_schema, system_prompt) {
   const res = await base44.functions.invoke('invokeKimi', {
     prompt,
     response_json_schema,
     system_prompt,
     temperature: 0.2,
-    file_urls,
   });
   return res.data;
 }
@@ -148,18 +133,18 @@ async function uploadHtml(base44, baseName, html) {
 const MINUTES_SCHEMA = {
   type: "object",
   properties: {
-    title: { type: "string", description: "会议/笔记标题，从原文/指令推断" },
+    title: { type: "string", description: "会议/笔记标题，必须取自原文标题或忠实概括原文议题" },
     meta: {
       type: "object",
       properties: {
-        time: { type: "string", description: "时间，原文写什么保留什么" },
-        location: { type: "string", description: "地点" },
-        attendees: { type: "array", items: { type: "string" }, description: "参会人，每项是一个人名，禁止把一长串塞进一项" }
+        time: { type: "string", description: "时间，原文写什么保留什么；原文没有就留空字符串" },
+        location: { type: "string", description: "地点；原文没有就留空字符串" },
+        attendees: { type: "array", items: { type: "string" }, description: "参会人，每项是一个人名；原文没有就给空数组" }
       }
     },
     sections: {
       type: "array",
-      description: "正文章节，按原文 '一、二、三...' 切分；items 混合 sub/qa/point/callout",
+      description: "正文章节，按原文实际出现的小节切分；items 混合 sub/qa/point/callout",
       items: {
         type: "object",
         properties: {
@@ -169,7 +154,7 @@ const MINUTES_SCHEMA = {
             items: {
               type: "object",
               properties: {
-                type: { type: "string", enum: ["sub", "qa", "point", "callout"], description: "sub=子小节(带 points)；qa=问答(Q+answer 段落)；point=普通要点；callout=出现 导致/因此/结论/瓶颈 等判断性长段的引用框" },
+                type: { type: "string", enum: ["sub", "qa", "point", "callout"] },
                 title: { type: "string" },
                 points: { type: "array", items: { type: "string" } },
                 question: { type: "string" },
@@ -185,7 +170,7 @@ const MINUTES_SCHEMA = {
     },
     timeline: {
       type: "array",
-      description: "时间线节点（如 2023下半年/2024年/Q1 等规划节点）",
+      description: "时间线节点；只填原文中真实出现的，内容必须取自原文",
       items: { type: "object", properties: { date: { type: "string" }, content: { type: "string" } }, required: ["date", "content"] }
     },
     insights: {
@@ -208,37 +193,55 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { user_text = '', file_block = '', file_urls = [] } = await req.json();
+    const { user_text = '', file_block = '' } = await req.json();
 
-    // 必须有真实素材：附件或用户指令里本身就含会议内容
-    const hasFiles = Array.isArray(file_urls) && file_urls.length > 0;
-    const hasFileBlock = (file_block || '').trim().length > 50;
-    const hasInlineContent = (user_text || '').trim().length > 80;
-    if (!hasFiles && !hasFileBlock && !hasInlineContent) {
+    // 必须有真实素材
+    const sourceText = String(file_block || '').trim();
+    const inlineText = String(user_text || '').trim();
+    const hasFileBlock = sourceText.length > 50;
+    const hasInlineContent = inlineText.length > 80;
+    if (!hasFileBlock && !hasInlineContent) {
       return Response.json({
         error: 'NO_SOURCE_CONTENT',
         message: '没有读到任何附件或原文内容，无法整理会议纪要。请上传会议记录文件，或在指令中粘贴完整原文后重试。',
       }, { status: 400 });
     }
 
+    // 防止把"读取失败"骨架当真原文
+    if (hasFileBlock && /\(读取失败|视觉识别失败/.test(sourceText) && sourceText.length < 300 && !hasInlineContent) {
+      return Response.json({
+        error: 'ATTACHMENT_UNREADABLE',
+        message: '附件无法被读取（可能是加密 PDF 或不支持的格式）。请尝试导出为 .docx 或 .txt 后重试。',
+      }, { status: 400 });
+    }
+
+    // 截断保护（kimi-k2-turbo-preview 长上下文足够）
+    const MAX = 20000;
+    const truncated = sourceText.length > MAX ? sourceText.slice(0, MAX) + '\n\n…（原文过长，已截断）' : sourceText;
+
     const data = await callKimi(
       base44,
-      `请把【附件/原文】整理成结构化【会议纪要】。绝对铁律：
-0) 【严禁编造】你必须严格基于附件/原文中真实出现的文字进行整理；任何人名、公司名、时间、地点、数据、技术术语、时间线节点，如果原文里没有，绝对不能写出来；宁可写"未提及"也不要补全。
-1) meta.time/location/attendees 仅在原文里出现时才填；attendees 必须是数组，每项一个人；
-2) sections 按原文里出现的"一、二、三..."切分；子小节用 type:"sub"；"Q：xxx"紧跟回答时合并成 type:"qa"；
-3) 长段判断性结论（含"导致/因此/结论/瓶颈"）→ type:"callout"；其他普通要点 → type:"point"；
-4) 时间线（如"2023下半年""2024年Q1"等规划节点）单独抽到 timeline 数组，content 必须取自原文；
-5) insights 必须填齐 people/tech/time/actions 四类（每项必须能在原文找到对应出处），无内容则给空数组；
-6) title 直接用原文标题或概括原文议题，禁止套用其它案例。
+      `=== 待整理的会议原文（这是你唯一的事实来源）===
+${truncated || '（用户未提供附件，仅给出指令）'}
+=== 原文结束 ===
 
-用户指令：${user_text}
-${file_block ? `\n=== 已抽取的附件文本 ===\n${file_block}` : ''}
-${hasFiles ? `\n=== 同时附带了 ${file_urls.length} 个原始附件（已通过 file_urls 传给你），请直接读取它们的真实内容 ===` : ''}`,
+用户的整理指令：${inlineText || '（无）'}
+
+【绝对铁律】
+0) 严禁编造：人名、公司名、时间、地点、数据、技术术语、时间线节点，原文里没有就绝对不能写。
+1) 禁止套用任何示例模版（例如"2023年H2产品规划评审""张晨/李思/王骁""GMV 42.3亿""履约时效29.6小时"等都属示例，除非原文里真出现这些字，否则一律不许写）。
+2) meta.time/location/attendees 仅在原文里能找到时才填；否则留空字符串/空数组。attendees 必须是数组，每项一个人。
+3) sections 按原文里实际出现的"一、二、三..."或自然小节切分；子小节用 type:"sub"；"Q：xxx"紧跟回答时合并成 type:"qa"；长段判断性结论（含"导致/因此/结论/瓶颈"）→ type:"callout"；其他普通要点 → type:"point"。
+4) timeline 只填原文真实出现的时间节点，content 必须取自原文。
+5) insights 四类（people/tech/time/actions）每项必须能在原文找到对应出处，无内容给空数组。
+6) title 直接用原文里的标题或忠实概括原文议题。`,
       MINUTES_SCHEMA,
-      "你是专业会议纪要整理官。严格忠于原文/附件、绝不编造、按规定 schema 输出结构化数据。若原文为空或不足以支撑某字段，对应字段留空字符串/空数组，绝不要补全虚构内容。",
-      hasFiles ? file_urls : undefined
+      "你是专业会议纪要整理官。严格忠于上方提供的【会议原文】，绝不编造、绝不套用任何示例模版。原文里没有的内容，对应字段就留空。"
     );
+
+    if (data?._parse_error) {
+      return Response.json({ error: 'AI_PARSE_FAILED', message: 'AI 输出无法解析为结构化纪要，请重试或精简附件后重试。', raw: data?._raw }, { status: 500 });
+    }
 
     const html = renderMinutesHtml(data);
     const safeTitle = String(data.title || user_text || '会议纪要').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
@@ -263,7 +266,7 @@ ${hasFiles ? `\n=== 同时附带了 ${file_urls.length} 个原始附件（已通
       tags: data.tags || [],
       file_url,
       file_name,
-      html, // 直接给前端 srcDoc 渲染，避开存储跨域
+      html, // 前端 srcDoc 直接预览
       plain_preview: plainPreview,
       note_id: note.id,
     });

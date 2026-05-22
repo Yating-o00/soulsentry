@@ -34,28 +34,37 @@ export default function NotificationManager() {
   const queryClient = useQueryClient();
   const persistentIntervals = useRef({});
 
+  // 全部加 retry: 1 + 静默错误，避免预览沙箱偶发 Network Error 抛 unhandled rejection
+  const swallow = (fn) => async () => {
+    try { return await fn(); } catch (e) { console.warn('[NotificationManager] query failed:', e?.message); return []; }
+  };
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list(),
-    staleTime: 5 * 60 * 1000, // 5分钟内不重新请求
+    queryFn: swallow(() => base44.entities.Task.list()),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
-  // 获取最近的用户行为，用于动态调整提醒
   const { data: recentBehaviors = [] } = useQuery({
     queryKey: ['recentBehaviors'],
-    queryFn: () => base44.entities.UserBehavior.list('-created_date', 20),
-    staleTime: 10 * 60 * 1000, // 10分钟内不重新请求
+    queryFn: swallow(() => base44.entities.UserBehavior.list('-created_date', 20)),
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
   });
 
   const { data: rules = [] } = useQuery({
     queryKey: ['notificationRules'],
-    queryFn: () => base44.entities.NotificationRule.list(),
+    queryFn: swallow(() => base44.entities.NotificationRule.list()),
     initialData: [],
+    retry: 1,
   });
 
   const { data: currentUser } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: async () => {
+      try { return await base44.auth.me(); } catch (e) { console.warn('[NotificationManager] auth.me failed:', e?.message); return null; }
+    },
+    retry: 1,
   });
 
   const updateTaskMutation = useMutation({

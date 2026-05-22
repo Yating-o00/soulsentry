@@ -471,60 +471,27 @@ async function fetchTodayCompletedTasks(base44) {
 
 function buildRecapMarkdown(date, tasks, aiSummary) {
   const dateStr = date.toISOString().slice(0, 10);
-  const lines = [];
-  lines.push(`# ${dateStr} 日终复盘报告`);
-  lines.push('');
-  lines.push(`> 生成时间：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`);
-  lines.push('');
-  lines.push(`## 📊 完成项统计`);
-  lines.push('');
-  lines.push(`- 当日已完成任务：**${tasks.length}** 项`);
-
-  const byCategory = {};
-  const byPriority = {};
-  tasks.forEach(t => {
-    byCategory[t.category || 'other'] = (byCategory[t.category || 'other'] || 0) + 1;
-    byPriority[t.priority || 'medium'] = (byPriority[t.priority || 'medium'] || 0) + 1;
+  const L = [`# ${dateStr} 日终复盘报告`, '', `> 生成时间：${date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, '', `## 📊 完成项统计`, '', `- 当日已完成任务：**${tasks.length}** 项`];
+  const byCat = {}, byPri = {};
+  tasks.forEach(t => { byCat[t.category || 'other'] = (byCat[t.category || 'other'] || 0) + 1; byPri[t.priority || 'medium'] = (byPri[t.priority || 'medium'] || 0) + 1; });
+  if (Object.keys(byCat).length) L.push(`- 按分类：${Object.entries(byCat).map(([k, v]) => `${k}(${v})`).join(' · ')}`);
+  if (Object.keys(byPri).length) L.push(`- 按优先级：${Object.entries(byPri).map(([k, v]) => `${k}(${v})`).join(' · ')}`);
+  L.push('', `## ✅ 完成事项明细`, '');
+  if (!tasks.length) L.push('_今日暂无已完成任务。_');
+  else tasks.forEach((t, i) => {
+    const time = t.completed_at ? new Date(t.completed_at).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit' }) : '-';
+    L.push(`${i + 1}. **${t.title}** _(${time} · ${t.category || 'personal'} · ${t.priority || 'medium'})_`);
+    if (t.description) L.push(`   - ${t.description.replace(/\n/g, ' ')}`);
   });
-  if (Object.keys(byCategory).length) {
-    lines.push(`- 按分类：${Object.entries(byCategory).map(([k, v]) => `${k}(${v})`).join(' · ')}`);
-  }
-  if (Object.keys(byPriority).length) {
-    lines.push(`- 按优先级：${Object.entries(byPriority).map(([k, v]) => `${k}(${v})`).join(' · ')}`);
-  }
-  lines.push('');
-
-  lines.push(`## ✅ 完成事项明细`);
-  lines.push('');
-  if (tasks.length === 0) {
-    lines.push('_今日暂无已完成任务。_');
-  } else {
-    tasks.forEach((t, i) => {
-      const time = t.completed_at ? new Date(t.completed_at).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit' }) : '-';
-      lines.push(`${i + 1}. **${t.title}** _(${time} · ${t.category || 'personal'} · ${t.priority || 'medium'})_`);
-      if (t.description) lines.push(`   - ${t.description.replace(/\n/g, ' ')}`);
-    });
-  }
-  lines.push('');
-
-  if (aiSummary) {
-    lines.push(`## 💡 AI 复盘洞察`);
-    lines.push('');
-    lines.push(aiSummary);
-    lines.push('');
-  }
-
-  lines.push(`---`);
-  lines.push(`*由心栈 SoulSentry 自动生成*`);
-  return lines.join('\n');
+  L.push('');
+  if (aiSummary) L.push(`## 💡 AI 复盘洞察`, '', aiSummary, '');
+  L.push(`---`, `*由心栈 SoulSentry 自动生成*`);
+  return L.join('\n');
 }
 
 async function uploadMarkdownReport(base44, fileName, markdown) {
-  // 加 UTF-8 BOM，确保浏览器/编辑器以 UTF-8 打开 .md，避免中文乱码
-  const BOM = '\uFEFF';
-  const bytes = new TextEncoder().encode(BOM + markdown);
-  const blob = new Blob([bytes], { type: 'text/markdown; charset=utf-8' });
-  const file = new File([blob], fileName, { type: 'text/markdown; charset=utf-8' });
+  const bytes = new TextEncoder().encode('\uFEFF' + markdown);
+  const file = new File([new Blob([bytes], { type: 'text/markdown; charset=utf-8' })], fileName, { type: 'text/markdown; charset=utf-8' });
   const resp = await base44.integrations.Core.UploadFile({ file });
   return resp?.file_url || resp?.data?.file_url;
 }
@@ -915,36 +882,15 @@ function renderRichHtml({ title, subtitle, sections = [], keyFindings = [], reco
 </body></html>`;
 }
 
-// 纯文本：层次符号 + 缩进，方便复制粘贴到任意位置
 function renderPlainText({ title, subtitle, sections = [], keyFindings = [], recommendations = [], references = [] }) {
-  const lines = [];
-  const sep = '═'.repeat(48);
-  lines.push(sep, `  ${title}`, sep);
-  if (subtitle) lines.push(subtitle, '');
-  lines.push(`📅 ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, '');
-  if (keyFindings.length) {
-    lines.push('━━ ⭐ 关键发现 ━━');
-    keyFindings.forEach((k, i) => lines.push(`  ${i + 1}. ${k}`));
-    lines.push('');
-  }
-  sections.forEach((s, i) => {
-    lines.push(`━━ ${String(i + 1).padStart(2, '0')} · ${s.heading} ━━`);
-    // 去掉简单的 markdown 标记，保留可读性
-    const body = String(s.body || '').replace(/[*_`#>]+/g, '').replace(/^\s*[-*]\s+/gm, '  • ');
-    lines.push(body, '');
-  });
-  if (recommendations.length) {
-    lines.push('━━ 💡 行动建议 ━━');
-    recommendations.forEach(r => lines.push(`  ✓ ${r}`));
-    lines.push('');
-  }
-  if (references.length) {
-    lines.push('━━ 🔗 参考来源 ━━');
-    references.slice(0, 15).forEach((r, i) => lines.push(`  [${i + 1}] ${r.title || r.url}\n      ${r.url}`));
-    lines.push('');
-  }
-  lines.push(sep, '由心栈 SoulSentry 自动生成');
-  return lines.join('\n');
+  const sep = '═'.repeat(48); const L = [sep, `  ${title}`, sep];
+  if (subtitle) L.push(subtitle, '');
+  L.push(`📅 ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, '');
+  if (keyFindings.length) { L.push('━━ ⭐ 关键发现 ━━'); keyFindings.forEach((k, i) => L.push(`  ${i + 1}. ${k}`)); L.push(''); }
+  sections.forEach((s, i) => { L.push(`━━ ${String(i + 1).padStart(2, '0')} · ${s.heading} ━━`); L.push(String(s.body || '').replace(/[*_`#>]+/g, '').replace(/^\s*[-*]\s+/gm, '  • '), ''); });
+  if (recommendations.length) { L.push('━━ 💡 行动建议 ━━'); recommendations.forEach(r => L.push(`  ✓ ${r}`)); L.push(''); }
+  if (references.length) { L.push('━━ 🔗 参考来源 ━━'); references.slice(0, 15).forEach((r, i) => L.push(`  [${i + 1}] ${r.title || r.url}\n      ${r.url}`)); L.push(''); }
+  L.push(sep, '由心栈 SoulSentry 自动生成'); return L.join('\n');
 }
 
 // 通用上传：根据 format 决定 mime / 扩展名（md/txt/html 三种，rtf 已弃用）
@@ -1026,35 +972,77 @@ async function executeSummaryNote(base44, exec, attachmentCtx) {
     };
   }
 
-  // === 分支 B：普通总结心签（保持原有行为）===
+  // === 分支 B：普通总结 —— 短→心签，长→Word 风格文档 ===
   const schema = {
     type: "object",
     properties: {
       title: { type: "string" },
-      content: { type: "string", description: "Markdown 格式心签内容" },
+      length_estimate: { type: "string", enum: ["short", "long"], description: "短(<=400字单一主题)走心签；长文/多章节/含会议要点-结论-行动-风险分区/含表格走 long" },
+      content: { type: "string", description: "短文 Markdown（length_estimate=short 时填）" },
+      subtitle: { type: "string", description: "长文一句话副标题（可选）" },
+      sections: {
+        type: "array",
+        description: "长文章节（length_estimate=long 时填）",
+        items: { type: "object", properties: { heading: { type: "string" }, body: { type: "string" } }, required: ["heading", "body"] }
+      },
       tags: { type: "array", items: { type: "string" } }
     },
-    required: ["title", "content"]
+    required: ["title", "length_estimate", "tags"]
   };
+
+  const hasAttachments = !!attachmentCtx?.hasFiles;
+  const wantsDoc = /word|文档|文件|长文|报告|结构化|条理|分区|分明/i.test(userText);
+  const hint = (hasAttachments || wantsDoc)
+    ? `\n判断指引：用户${hasAttachments ? '上传了参考文件' : '希望生成文档'}，请优先 long（结构化章节），完整覆盖关键内容。`
+    : '';
 
   const data = await callKimi(
     base44,
-    `请把以下内容整理成一篇心签（笔记）：\n${userText}${fileBlock ? `\n\n用户上传的参考文件内容：${fileBlock}` : ''}`,
+    `请把以下内容整理成条理分明的总结。${hasAttachments ? '务必先完整阅读上传文件，基于真实内容整理（不遗漏人名/时间/数据/清单），不编造未出现的信息。' : ''}${hint}
+
+用户指令：${userText}${fileBlock ? `\n\n用户上传的参考文件（核心输入）：${fileBlock}` : ''}
+
+要求：1) 判断 length_estimate；2) 若 long：3~8 节，body 用 Markdown（子标题/列表/必要时表格/emoji 分区）；3) 若 short：仅写 content (≤400字)；4) tags 给 2~5 个。`,
     schema,
-    "你是用户的思维整理助手，把零散输入提炼成结构清晰、富有启发的心签。"
+    "你是用户的思维整理助手。当用户提供附件时，必须基于附件真实内容生成结构化总结。"
   );
 
+  const isLong = data.length_estimate === "long" && Array.isArray(data.sections) && data.sections.length > 0;
+
+  if (isLong) {
+    const html = renderRichHtml({ title: data.title, subtitle: data.subtitle || '', sections: data.sections });
+    const safeTitle = String(data.title || userText).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+    const baseName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}`;
+    const { file_url: fileUrl, file_name: fileName } = await uploadDocFile(base44, baseName, html, 'html');
+    const previewMd = data.sections.map(s => `## ${s.heading}\n\n${s.body || ''}`).join('\n\n');
+    const note = await base44.entities.Note.create({
+      content: `<h2>${data.title}</h2><div><a href="${fileUrl}" target="_blank">📄 打开完整文档：${fileName}</a></div><div>${previewMd.slice(0, 1200).replace(/\n/g, '<br/>')}${previewMd.length > 1200 ? '<br/>…（更多见文档）' : ''}</div>`,
+      plain_text: `${data.title}\n\n${previewMd}`,
+      tags: data.tags || [],
+      color: "yellow"
+    });
+    return {
+      type: "summary_note",
+      preview: `📄 已生成《${fileName}》\n📐 富排版 HTML（可打印为 PDF / Word 打开转 docx）\n📥 ${fileUrl}\n\n${data.subtitle || ''}\n\n${previewMd.slice(0, 600)}${previewMd.length > 600 ? '\n…（更多见文件）' : ''}`,
+      data: { title: data.title, subtitle: data.subtitle || '', sections: data.sections, file_name: fileName, file_url: fileUrl, output_format: 'html', note_id: note.id, tags: data.tags || [] },
+      diff: [
+        { action: "create", target: fileName, detail: `结构化文档（${data.sections.length} 节）已上传` },
+        { action: "create", target: `心签索引：${data.title}`, detail: "已归档到心签库" }
+      ]
+    };
+  }
+
+  const shortContent = data.content || '';
   const note = await base44.entities.Note.create({
-    content: `<h2>${data.title}</h2><div>${data.content.replace(/\n/g, '<br/>')}</div>`,
-    plain_text: `${data.title}\n\n${data.content}`,
+    content: `<h2>${data.title}</h2><div>${shortContent.replace(/\n/g, '<br/>')}</div>`,
+    plain_text: `${data.title}\n\n${shortContent}`,
     tags: data.tags || [],
     color: "yellow"
   });
-
   return {
     type: "summary_note",
-    preview: `${data.title}\n\n${data.content}`,
-    data: { ...data, note_id: note.id },
+    preview: `${data.title}\n\n${shortContent}`,
+    data: { title: data.title, content: shortContent, tags: data.tags || [], note_id: note.id },
     diff: [{ action: "create", target: `心签：${data.title}`, detail: "已创建到心签库" }]
   };
 }

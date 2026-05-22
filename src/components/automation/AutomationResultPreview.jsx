@@ -4,6 +4,7 @@ import EmailResultView from "./result/EmailResultView";
 import ResearchResultView from "./result/ResearchResultView";
 import PptResultView from "./result/PptResultView";
 import NoteResultView from "./result/NoteResultView";
+import MinutesResultView from "./result/MinutesResultView";
 import CalendarResultView from "./result/CalendarResultView";
 import FileResultView from "./result/FileResultView";
 
@@ -39,6 +40,8 @@ function pickView(result, automationType) {
   if (t.includes("ppt") || t.includes("slide") || Array.isArray(d.slides) || Array.isArray(d.outline)) return "ppt";
   if (t.includes("calendar") || t.includes("event") || d.start_time || d.reminder_time) return "calendar";
   if (t.includes("file") || t.includes("organize")) return "file";
+  // 会议纪要专用预览：variant=minutes 或 sections 是 items 结构（带 type 字段）
+  if (d.variant === "minutes" || (Array.isArray(d.sections) && d.sections[0]?.items && d.file_url)) return "minutes";
   if (t.includes("note") || t.includes("summary") || Array.isArray(d.tags) || Array.isArray(d.key_points)) return "note";
   return null;
 }
@@ -52,6 +55,7 @@ export default function AutomationResultPreview({ result, automationType, onData
   if (view === "email")    return <EmailResultView    data={result.data} preview={result.preview} onChange={onDataChange} availableAttachments={availableAttachments} />;
   if (view === "research") return <ResearchResultView data={result.data} preview={result.preview} onChange={onDataChange} onSave={onSaveEdits} />;
   if (view === "ppt")      return <PptResultView      data={result.data} preview={result.preview} executionId={executionId} />;
+  if (view === "minutes")  return <MinutesResultView  data={result.data} preview={result.preview} />;
   if (view === "note")     return <NoteResultView     data={result.data} preview={result.preview} onChange={onDataChange} />;
   if (view === "calendar") return <CalendarResultView data={result.data} preview={result.preview} />;
   if (view === "file")     return <FileResultView     result={result} />;

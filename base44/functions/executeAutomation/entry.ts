@@ -925,9 +925,14 @@ async function executeSummaryNote(base44, exec, attachmentCtx) {
 
   // === 分支 0：会议纪要 / 智能笔记整理 —— 走专用渲染器（独立 backend function）===
   if (isMinutesTask(userText, attachmentCtx)) {
+    // 把原始附件的 file_urls 直传给渲染器，让 Kimi 真正读文件而非凭空编造
+    const fileUrls = Array.isArray(exec?.ai_parsed_result?.attached_files)
+      ? exec.ai_parsed_result.attached_files.map(f => f?.file_url).filter(Boolean)
+      : [];
     const res = await base44.functions.invoke('renderMinutesNote', {
       user_text: userText,
       file_block: fileBlock,
+      file_urls: fileUrls,
     });
     const d = res?.data || {};
     if (d && d.file_url) {

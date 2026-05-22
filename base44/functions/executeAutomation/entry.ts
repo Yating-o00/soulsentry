@@ -910,9 +910,39 @@ async function uploadDocFile(base44, baseName, content, format) {
   return { file_url: resp?.file_url || resp?.data?.file_url, file_name: fileName, format };
 }
 
+// 是否走"会议纪要 / 智能笔记整理"分支：关键词命中或附件里出现 Q:/参会人/会议
+function isMinutesTask(userText, attachmentCtx) {
+  const t = String(userText || '');
+  if (/会议|纪要|参会|minutes|笔记整理|整理笔记|结构化笔记|访谈/i.test(t)) return true;
+  const ftxt = String(attachmentCtx?.text || '');
+  if (/参会人[：:]|出席[：:]|(^|\n)Q[：:]/m.test(ftxt)) return true;
+  return false;
+}
+
 async function executeSummaryNote(base44, exec, attachmentCtx) {
   const userText = exec.original_input || exec.task_title;
   const fileBlock = attachmentCtx?.text || '';
+
+  // === 分支 0：会议纪要 / 智能笔记整理 —— 走专用渲染器（独立 backend function）===
+  if (isMinutesTask(userText, attachmentCtx)) {
+    const res = await base44.functions.invoke('renderMinutesNote', {
+      user_text: userText,
+      file_block: fileBlock,
+    });
+    const d = res?.data || {};
+    if (d && d.file_url) {
+      return {
+        type: "summary_note",
+        preview: `📝 已生成《${d.file_name}》\n👥 参会人：${(d.meta?.attendees || []).slice(0, 6).join('、') || '未识别'}\n📑 ${(d.sections || []).length} 个章节 · ${(d.timeline || []).length} 个时间节点\n📥 ${d.file_url}\n\n${d.plain_preview || ''}`,
+        data: { ...d, output_format: 'html', variant: 'minutes' },
+        diff: [
+          { action: "create", target: d.file_name, detail: `会议纪要（${(d.sections || []).length} 节）已生成` },
+          { action: "create", target: `心签索引：${d.title}`, detail: "已归档到心签库" },
+        ],
+      };
+    }
+    // 失败兜底：继续走分支 B
+  }
 
   // === 分支 A：日终复盘 / 日报类——拉真实数据 + 生成 Markdown + 上传 ===
   if (isRecapTask(userText)) {
@@ -1225,29 +1255,10 @@ function renderPptHtml(data) {
   const slides = Array.isArray(data.slides) ? data.slides : [];
   const theme = data.theme || 'business'; // business | minimal | tech
 
-  // 升级配色：每个主题都带一对渐变色 + 柔和背景渐变 + 高亮强调色
   const themePalette = {
-    business: {
-      bg: '#0b1120', fg: '#f1f5f9', accent: '#60a5fa', accent2: '#a78bfa', muted: '#94a3b8',
-      heroGrad: 'linear-gradient(135deg,#1e3a8a 0%,#3b0764 100%)',
-      bodyGrad: 'radial-gradient(ellipse at 80% -10%, rgba(96,165,250,.15) 0%, transparent 55%), radial-gradient(ellipse at 0% 100%, rgba(167,139,250,.12) 0%, transparent 50%), #0b1120',
-      cardBg: 'rgba(148,163,184,.06)',
-      cardBorder: 'rgba(148,163,184,.18)',
-    },
-    minimal: {
-      bg: '#fafafa', fg: '#0a0a0a', accent: '#0a0a0a', accent2: '#dc2626', muted: '#525252',
-      heroGrad: 'linear-gradient(135deg,#fafafa 0%,#e5e5e5 100%)',
-      bodyGrad: '#fafafa',
-      cardBg: 'rgba(0,0,0,.03)',
-      cardBorder: 'rgba(0,0,0,.08)',
-    },
-    tech: {
-      bg: '#030712', fg: '#e2e8f0', accent: '#22d3ee', accent2: '#a3e635', muted: '#64748b',
-      heroGrad: 'linear-gradient(135deg,#022c43 0%,#0c4a6e 50%,#164e63 100%)',
-      bodyGrad: 'radial-gradient(ellipse at 20% 0%, rgba(34,211,238,.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(163,230,53,.08) 0%, transparent 55%), #030712',
-      cardBg: 'rgba(34,211,238,.05)',
-      cardBorder: 'rgba(34,211,238,.18)',
-    },
+    business: { bg: '#0b1120', fg: '#f1f5f9', accent: '#60a5fa', accent2: '#a78bfa', muted: '#94a3b8', heroGrad: 'linear-gradient(135deg,#1e3a8a 0%,#3b0764 100%)', bodyGrad: 'radial-gradient(ellipse at 80% -10%, rgba(96,165,250,.15) 0%, transparent 55%), radial-gradient(ellipse at 0% 100%, rgba(167,139,250,.12) 0%, transparent 50%), #0b1120', cardBg: 'rgba(148,163,184,.06)', cardBorder: 'rgba(148,163,184,.18)' },
+    minimal: { bg: '#fafafa', fg: '#0a0a0a', accent: '#0a0a0a', accent2: '#dc2626', muted: '#525252', heroGrad: 'linear-gradient(135deg,#fafafa 0%,#e5e5e5 100%)', bodyGrad: '#fafafa', cardBg: 'rgba(0,0,0,.03)', cardBorder: 'rgba(0,0,0,.08)' },
+    tech: { bg: '#030712', fg: '#e2e8f0', accent: '#22d3ee', accent2: '#a3e635', muted: '#64748b', heroGrad: 'linear-gradient(135deg,#022c43 0%,#0c4a6e 50%,#164e63 100%)', bodyGrad: 'radial-gradient(ellipse at 20% 0%, rgba(34,211,238,.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(163,230,53,.08) 0%, transparent 55%), #030712', cardBg: 'rgba(34,211,238,.05)', cardBorder: 'rgba(34,211,238,.18)' },
   };
   const t = themePalette[theme] || themePalette.minimal;
 

@@ -263,6 +263,7 @@ ${hasFiles ? `\n=== 同时附带了 ${file_urls.length} 个原始附件（已通
       tags: data.tags || [],
       file_url,
       file_name,
+      html, // 直接给前端 srcDoc 渲染，避开存储跨域
       plain_preview: plainPreview,
       note_id: note.id,
     });

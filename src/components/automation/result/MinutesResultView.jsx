@@ -5,6 +5,7 @@ import { FileText, Download, ExternalLink, Users, Calendar, Hash } from "lucide-
 export default function MinutesResultView({ data, preview }) {
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "会议纪要.html";
+  const html = data?.html || "";
   const title = data?.title || "会议纪要";
   const meta = data?.meta || {};
   const sections = Array.isArray(data?.sections) ? data.sections : [];
@@ -47,8 +48,8 @@ export default function MinutesResultView({ data, preview }) {
         )}
       </div>
 
-      {/* HTML 内嵌预览（沙箱 iframe） */}
-      {fileUrl && (
+      {/* HTML 内嵌预览（优先 srcDoc，避开存储 CDN 的跨域/沙箱限制） */}
+      {(html || fileUrl) && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200">
             <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
@@ -56,37 +57,41 @@ export default function MinutesResultView({ data, preview }) {
               <span className="font-medium truncate">{fileName}</span>
             </div>
             <div className="flex items-center gap-1">
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-[10.5px] text-slate-700"
-                title="新窗口打开"
-              >
-                <ExternalLink className="w-2.5 h-2.5" /> 打开
-              </a>
-              <a
-                href={fileUrl}
-                download={fileName}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[10.5px]"
-                title="下载文件"
-              >
-                <Download className="w-2.5 h-2.5" /> 下载
-              </a>
+              {fileUrl && (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-[10.5px] text-slate-700"
+                  title="新窗口打开"
+                >
+                  <ExternalLink className="w-2.5 h-2.5" /> 打开
+                </a>
+              )}
+              {fileUrl && (
+                <a
+                  href={fileUrl}
+                  download={fileName}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[10.5px]"
+                  title="下载文件"
+                >
+                  <Download className="w-2.5 h-2.5" /> 下载
+                </a>
+              )}
             </div>
           </div>
           <iframe
-            src={fileUrl}
+            {...(html ? { srcDoc: html } : { src: fileUrl })}
             title={fileName}
-            sandbox="allow-same-origin allow-popups"
+            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             className="w-full bg-white"
-            style={{ height: 520, border: 0 }}
+            style={{ height: 600, border: 0 }}
           />
         </div>
       )}
 
       {/* 兜底：没文件 URL 时显示 preview 文本 */}
-      {!fileUrl && preview && (
+      {!fileUrl && !html && preview && (
         <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-64 overflow-y-auto">
           <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{preview}</pre>
         </div>

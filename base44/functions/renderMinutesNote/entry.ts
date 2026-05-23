@@ -46,7 +46,9 @@ function renderMinutesHtml(d, accent = '#2563eb') {
     const num = cnNums[idx] || (idx + 1);
     const itemsHtml = (sec.items || []).map((it, j) => {
       if (it.type === 'sub') {
-        const pts = (it.points || []).map(p => `<li>${hl(p)}</li>`).join('');
+        // 兼容 AI 把内容写到 text 而非 points 的情况
+        const ptsArr = Array.isArray(it.points) && it.points.length ? it.points : (it.text ? [it.text] : []);
+        const pts = ptsArr.map(p => `<li>${hl(p)}</li>`).join('');
         return `<div class="sub-title">${idx + 1}.${j + 1} ${esc(it.title || '')}</div>${pts ? `<ul>${pts}</ul>` : ''}`;
       }
       if (it.type === 'qa') {
@@ -57,7 +59,10 @@ function renderMinutesHtml(d, accent = '#2563eb') {
       if (it.type === 'callout') {
         return `<blockquote class="callout">${hl(it.text || '')}</blockquote>`;
       }
-      return `<ul><li>${hl(it.text || '')}</li></ul>`;
+      // point 分支：兼容 AI 把要点放在 points 数组中的情况（schema 允许 points 字段）
+      const ptArr = Array.isArray(it.points) && it.points.length ? it.points : (it.text ? [it.text] : []);
+      if (!ptArr.length) return '';
+      return `<ul>${ptArr.map(p => `<li>${hl(p)}</li>`).join('')}</ul>`;
     }).join('');
     return `<section class="sec"><h2>${num}、${esc(sec.title || '')}</h2>${itemsHtml}</section>`;
   };

@@ -19,14 +19,31 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 async function callKimi(base44, prompt, response_json_schema, system_prompt, file_urls) {
-  const res = await base44.functions.invoke('invokeKimi', {
-    prompt,
-    response_json_schema,
-    system_prompt,
-    temperature: 0.4,
-    file_urls,
-  });
-  return res.data;
+  let res;
+  try {
+    res = await base44.functions.invoke('invokeKimi', {
+      prompt,
+      response_json_schema,
+      system_prompt,
+      temperature: 0.4,
+      file_urls,
+    });
+  } catch (e) {
+    // axios 抛出时把后端 response.data 里真实的错误信息提取出来，
+    // 否则前端只会看到 "Request failed with status code 400" 这种无用串
+    const apiErr = e?.response?.data?.error || e?.response?.data?.message;
+    const status = e?.response?.status;
+    if (apiErr) {
+      throw new Error(`AI 调用失败（HTTP ${status}）：${apiErr}`);
+    }
+    throw e;
+  }
+  const data = res?.data || {};
+  // invokeKimi 即使 HTTP 200 也可能在 body 里携带 error 字段（如 DOC_EXTRACT_FAILED）
+  if (data?.error && !data?._doc_extract_failed) {
+    throw new Error(`AI 调用失败：${data.error}${data.message ? ' — ' + data.message : ''}`);
+  }
+  return data;
 }
 
 // ========== AI 点数计费（固定单价，与 components/credits/creditConfig 保持一致）==========
@@ -377,7 +394,8 @@ async function executeWebResearch(base44, exec, attachmentCtx) {
   const userText = exec.original_input || exec.task_title;
   const fileBlock = attachmentCtx?.text || '';
 
-  // 1. 真实联网爬取（Kimi $web_search）
+  // 1. 真实联网爬取（Kimi $web_search）—— 失败时静默回退到纯知识库，
+  //    但把真实错误记录到日志，避免出现"Request failed with status code 400"这种泛化错误被一路冒泡
   let answer = '';
   let references = [];
   try {
@@ -385,7 +403,8 @@ async function executeWebResearch(base44, exec, attachmentCtx) {
     answer = res?.data?.answer || '';
     references = Array.isArray(res?.data?.references) ? res.data.references : [];
   } catch (e) {
-    // 联网失败时回退到纯知识库
+    const apiErr = e?.response?.data?.error || e?.message || 'unknown';
+    console.warn('[executeWebResearch] kimiWebBrowse failed, fallback to knowledge-only:', apiErr);
     answer = '';
   }
 
@@ -1867,16 +1886,25 @@ Deno.serve(async (req) => {
 
         return Response.json({ success: true, phase: "execute", execution: updated, result, charged: execCost });
       } catch (e) {
+        // 兜底解包：axios 抛出时尽量挖出真实后端错误，避免前端只显示
+        // "Request failed with status code 400" 这种没营养的字符串
+        const apiErr = e?.response?.data?.error || e?.response?.data?.message;
+        const status = e?.response?.status;
+        const realMsg = apiErr
+          ? `${apiErr}${status ? `（HTTP ${status}）` : ''}`
+          : (e?.message || '执行失败');
         await base44.entities.TaskExecution.update(execution_id, {
           execution_status: "failed",
-          error_message: e.message,
+          error_message: realMsg,
         });
-        return Response.json({ error: e.message }, { status: 500 });
+        return Response.json({ error: realMsg }, { status: 500 });
       }
     }
 
     return Response.json({ error: 'Invalid phase' }, { status: 400 });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    const apiErr = error?.response?.data?.error || error?.response?.data?.message;
+    const realMsg = apiErr || error?.message || '未知错误';
+    return Response.json({ error: realMsg }, { status: 500 });
   }
 });

@@ -12,13 +12,12 @@ const SOURCE_CONFIG = {
   calendar_month: { label: "月规划", emoji: "📆", color: "violet" },
 };
 
-// 来源 → 默认的 automation_type，避免落库时为空导致前端显示「未识别」
-const SOURCE_DEFAULT_AUTOMATION_TYPE = {
-  note: "summary_note",
-  calendar_day: "calendar_event",
-  calendar_week: "calendar_event",
-  calendar_month: "calendar_event",
-};
+// 来源 → 默认的 automation_type
+// ⚠️ 这里创建的是"埋点记录"（用户在某个入口创建了内容时的时间线追踪），
+// 不是真正跑过 executeAutomation 的自动执行产物。
+// 因此默认 "none"，前端 AutomationResultPreview 会跳过它，不会渲染空白结果卡。
+// 只有真正经过 executeAutomation 跑出来的记录才会有 email_draft / summary_note / ppt_doc 等有效类型。
+const SOURCE_DEFAULT_AUTOMATION_TYPE = {};
 
 export { SOURCE_CONFIG };
 
@@ -132,7 +131,7 @@ export async function createExecutionRecord({ title, originalInput, source, cate
     category: category || "task",
     execution_status: "completed",
     completed_at: now,
-    automation_type: SOURCE_DEFAULT_AUTOMATION_TYPE[source] || "summary_note",
+    automation_type: SOURCE_DEFAULT_AUTOMATION_TYPE[source] || "none",
     ai_parsed_result: aiParsedResult,
     execution_steps: steps,
   });
@@ -152,7 +151,7 @@ export async function createPendingExecution({ title, originalInput, source, cat
     original_input: originalInput || title || "",
     category: category || "task",
     execution_status: "parsing",
-    automation_type: SOURCE_DEFAULT_AUTOMATION_TYPE[source] || "summary_note",
+    automation_type: SOURCE_DEFAULT_AUTOMATION_TYPE[source] || "none",
     ai_parsed_result: {
       source: source,
       source_label: cfg.label,

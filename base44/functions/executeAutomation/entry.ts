@@ -233,9 +233,9 @@ async function generatePlan(base44, exec, attachmentCtx) {
     : '';
   const planRes = await callKimi(
     base44,
-    `用户希望心栈自动帮他完成的事项：${userInput}${fileHint}\n\n请分析这是哪种自动执行类型，并给出清晰的执行方案。\n注意：发送邮件/删除文件等不可逆操作 requires_approval 必须为 true。`,
+    `用户希望心栈自动帮他完成的事项：${userInput}${fileHint}\n\n请分析这是哪种自动执行类型，并给出清晰的执行方案。\n\n【automation_type 选择铁律】\n- summary_note：基于附件内容生成会议纪要/笔记/总结/复盘/读书笔记/访谈记录等"内容产出型"任务（有附件 + 要产出文档默认走这里）。\n- office_doc：生成提案、方案、合同、报告、说明书等结构化办公文档。\n- ppt_doc：生成演示稿/幻灯片/PPT。\n- web_research：联网调研/搜集资料/对比分析。\n- email_draft：写邮件/发邮件（requires_approval=true）。\n- file_organize：**只**用于"对现有文件批量重命名/归档分类"——例如"把我所有发票按月份归档"。⚠️ 当用户带着附件要求"整理成XX/写成XX/转换成XX"时，这是【内容生产】不是【文件整理】，必须选 summary_note 或 office_doc，禁止选 file_organize。\n- calendar_event：创建日历事件/约定。\n\n注意：发送邮件/删除文件等不可逆操作 requires_approval 必须为 true。`,
     PLAN_SCHEMA,
-    "你是心栈 SoulSentry 的自动执行规划官，负责把用户的自然语言指令转换成结构化执行方案。要简洁、具体、可执行。"
+    "你是心栈 SoulSentry 的自动执行规划官，负责把用户的自然语言指令转换成结构化执行方案。要简洁、具体、可执行。严格遵守 automation_type 选择铁律：带附件要求生成纪要/总结/笔记的，一律选 summary_note，不要选 file_organize。"
   );
 
   if (planRes._parse_error || !planRes.automation_type) {

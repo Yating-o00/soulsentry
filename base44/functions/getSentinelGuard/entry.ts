@@ -117,8 +117,16 @@ Deno.serve(async (req) => {
       };
       const related = (CATEGORY_MAP[hitLocation.location_type] || []);
 
+      // 父约定已完成/已取消的，其子任务不再纳入地理感知规划
+      const completedParentsForGeo = await base44.entities.Task.filter({
+        created_by: user.email,
+        status: { $in: ['completed', 'cancelled'] }
+      }, '-updated_date', 200);
+      const completedParentIdsGeo = new Set((completedParentsForGeo || []).map((t) => t.id));
+
       const relevantTasks = (allActive || [])
         .filter((t) => !t.deleted_at)
+        .filter((t) => !t.parent_task_id || !completedParentIdsGeo.has(t.parent_task_id))
         .map((t) => {
           let score = 0;
           if (t.reminder_time) {
@@ -166,8 +174,16 @@ Deno.serve(async (req) => {
       status: { $in: ['pending', 'in_progress', 'snoozed'] }
     }, '-created_date', 80);
 
+    // 父约定已完成/已取消的，其子任务不再纳入规划
+    const completedParents = await base44.entities.Task.filter({
+      created_by: user.email,
+      status: { $in: ['completed', 'cancelled'] }
+    }, '-updated_date', 200);
+    const completedParentIds = new Set((completedParents || []).map((t) => t.id));
+
     const silentTasks = (allTasks || [])
       .filter((t) => !t.deleted_at)
+      .filter((t) => !t.parent_task_id || !completedParentIds.has(t.parent_task_id))
       .map((t) => {
         const refDate = t.reminder_time || t.created_date;
         const days = daysBetween(refDate);

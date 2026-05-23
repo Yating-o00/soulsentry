@@ -12,8 +12,8 @@ import { Shield, RefreshCw } from "lucide-react";
 // 模块级缓存：同一会话内 5 分钟内复用结果，避免来回切页面时重复打后端导致 429
 const GUARD_CACHE = { ts: 0, data: null, assoc: null };
 const GUARD_TTL_MS = 5 * 60 * 1000;
-// 单次请求最长 15 秒，超时则放弃 loading 状态，让用户看到结果（即使是空）或可重试
-const REQUEST_TIMEOUT_MS = 15000;
+// 单次请求最长 30 秒（后端 cold start + AI 推理可能耗时 6-15s，留足余量避免误判超时）
+const REQUEST_TIMEOUT_MS = 30000;
 
 export default function SentinelGuardPanel() {
   const [data, setData] = useState(GUARD_CACHE.data);
@@ -62,10 +62,16 @@ export default function SentinelGuardPanel() {
       const g = guardRes.status === 'fulfilled' ? (guardRes.value?.data || null) : null;
       const a = assocRes.status === 'fulfilled' ? (assocRes.value?.data || null) : null;
 
-      // 两个都失败才算整体出错
-      if (guardRes.status === 'rejected' && assocRes.status === 'rejected') {
-        const msg = guardRes.reason?.message || '';
-        if (/rate limit/i.test(msg) || guardRes.reason?.response?.status === 429) {
+      // 只有两个都失败、且都不是限流时才显示错误；任一成功即写入缓存并正常展示
+      const guardFailed = guardRes.status === 'rejected';
+      const assocFailed = assocRes.status === 'rejected';
+      if (guardFailed && assocFailed) {
+        const guardMsg = guardRes.reason?.message || '';
+        const assocMsg = assocRes.reason?.message || '';
+        const isRateLimit =
+          /rate limit/i.test(guardMsg) || guardRes.reason?.response?.status === 429 ||
+          /rate limit/i.test(assocMsg) || assocRes.reason?.response?.status === 429;
+        if (isRateLimit) {
           GUARD_CACHE.ts = Date.now();
           console.warn('[sentinel-guard] 命中限流，5 分钟内不再重试');
         } else {
@@ -76,6 +82,8 @@ export default function SentinelGuardPanel() {
         GUARD_CACHE.ts = Date.now();
         GUARD_CACHE.data = g;
         GUARD_CACHE.assoc = a;
+        if (guardFailed) console.warn('[sentinel-guard] guard 失败但 assoc 成功', guardRes.reason);
+        if (assocFailed) console.warn('[sentinel-guard] assoc 失败但 guard 成功', assocRes.reason);
       }
       setData(g);
       setAssoc(a);

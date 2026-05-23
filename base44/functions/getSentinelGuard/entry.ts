@@ -117,16 +117,21 @@ Deno.serve(async (req) => {
       };
       const related = (CATEGORY_MAP[hitLocation.location_type] || []);
 
-      // 父约定已完成/已取消的，其子任务不再纳入地理感知规划
-      const completedParentsForGeo = await base44.entities.Task.filter({
-        created_by: user.email,
-        status: { $in: ['completed', 'cancelled'] }
-      }, '-updated_date', 200);
-      const completedParentIdsGeo = new Set((completedParentsForGeo || []).map((t) => t.id));
+      // 父约定已完成/已取消/已删除（含硬删除查不到）的，其子任务不再纳入地理感知规划
+      const parentIdsGeo = [...new Set((allActive || []).map((t) => t.parent_task_id).filter(Boolean))];
+      const aliveParentsGeo = parentIdsGeo.length > 0
+        ? await base44.entities.Task.filter({ id: { $in: parentIdsGeo } })
+        : [];
+      const aliveParentIdSetGeo = new Set(
+        (aliveParentsGeo || [])
+          .filter((p) => !p.deleted_at && p.status !== 'completed' && p.status !== 'cancelled')
+          .map((p) => p.id)
+      );
+      const isParentClosedGeo = (t) => t.parent_task_id && !aliveParentIdSetGeo.has(t.parent_task_id);
 
       const relevantTasks = (allActive || [])
         .filter((t) => !t.deleted_at)
-        .filter((t) => !t.parent_task_id || !completedParentIdsGeo.has(t.parent_task_id))
+        .filter((t) => !isParentClosedGeo(t))
         .map((t) => {
           let score = 0;
           if (t.reminder_time) {
@@ -174,16 +179,21 @@ Deno.serve(async (req) => {
       status: { $in: ['pending', 'in_progress', 'snoozed'] }
     }, '-created_date', 80);
 
-    // 父约定已完成/已取消的，其子任务不再纳入规划
-    const completedParents = await base44.entities.Task.filter({
-      created_by: user.email,
-      status: { $in: ['completed', 'cancelled'] }
-    }, '-updated_date', 200);
-    const completedParentIds = new Set((completedParents || []).map((t) => t.id));
+    // 父约定已完成/已取消/已删除（含硬删除查不到）的，其子任务不再纳入规划
+    const parentIds = [...new Set((allTasks || []).map((t) => t.parent_task_id).filter(Boolean))];
+    const aliveParents = parentIds.length > 0
+      ? await base44.entities.Task.filter({ id: { $in: parentIds } })
+      : [];
+    const aliveParentIdSet = new Set(
+      (aliveParents || [])
+        .filter((p) => !p.deleted_at && p.status !== 'completed' && p.status !== 'cancelled')
+        .map((p) => p.id)
+    );
+    const isParentClosed = (t) => t.parent_task_id && !aliveParentIdSet.has(t.parent_task_id);
 
     const silentTasks = (allTasks || [])
       .filter((t) => !t.deleted_at)
-      .filter((t) => !t.parent_task_id || !completedParentIds.has(t.parent_task_id))
+      .filter((t) => !isParentClosed(t))
       .map((t) => {
         const refDate = t.reminder_time || t.created_date;
         const days = daysBetween(refDate);

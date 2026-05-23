@@ -15,6 +15,7 @@ import GeofenceTracker from "./components/location/GeofenceTracker";
 import SentinelGeoWatcher from "./components/location/SentinelGeoWatcher";
 import OnTheWayReminderHost from "./components/location/OnTheWayReminderHost";
 import OverdueFeedbackHost from "./components/feedback/OverdueFeedbackHost";
+import DeviceHeartbeat from "./components/devices/DeviceHeartbeat";
 import { base44 } from "@/api/base44Client";
 import { getCachedUser } from "@/lib/userCache";
 import {
@@ -357,6 +358,7 @@ function LayoutContent({ children }) {
         <GeofenceTracker />
         <SentinelGeoWatcher />
         <OnTheWayReminderHost />
+        <DeviceHeartbeat />
         {/* <OverdueFeedbackHost />  暂时禁用：避免反馈窗口打扰用户 */}
 
         {/* 离线状态提示 */}

@@ -5,6 +5,8 @@ import { format, parseISO, isToday, startOfDay, endOfDay, isWithinInterval } fro
 import { motion } from "framer-motion";
 import { Cpu } from "lucide-react";
 import DeviceStrategyMap from "./planner/DeviceStrategyMap";
+import ConnectedDevicesPanel from "@/components/devices/ConnectedDevicesPanel";
+import { listMyDevices } from "@/lib/deviceRegistry";
 
 /**
  * 全设备智能协同 — 独立模块
@@ -125,11 +127,30 @@ function consolidateStrategies(strategies) {
   );
 }
 
-function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies) {
+function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices) {
   const map = new Map();
   for (const d of baseDevices || []) {
     map.set(d.id, { ...d, strategies: [...(d.strategies || [])] });
   }
+
+  // 用真实已连接设备覆盖：以 device_type 作为 key 映射到 phone/pc
+  const realByType = {};
+  for (const rd of realDevices || []) {
+    const key = rd.device_type === "phone" ? "phone" : rd.device_type === "pc" ? "pc" : null;
+    if (key && !realByType[key]) realByType[key] = rd;
+  }
+  for (const key of Object.keys(realByType)) {
+    const rd = realByType[key];
+    const prev = map.get(key) || { id: key, strategies: [] };
+    map.set(key, {
+      ...prev,
+      id: key,
+      name: rd.name || prev.name || (key === "phone" ? "手机" : "电脑"),
+      online: !!rd.is_online,
+      isReal: true,
+    });
+  }
+
   if (taskStrategies.length > 0) {
     const phone = map.get("phone") || { id: "phone", name: "手机", strategies: [] };
     phone.strategies = [...(phone.strategies || []), ...taskStrategies];
@@ -167,6 +188,14 @@ export default function DeviceCollaborationModule() {
     queryFn: () => base44.entities.Note.list('-created_date', 100),
     initialData: [],
     staleTime: 2 * 60 * 1000,
+  });
+
+  const { data: realDevices = [] } = useQuery({
+    queryKey: ['my-devices'],
+    queryFn: () => listMyDevices(),
+    initialData: [],
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   });
 
   const dayPlan = planQueryData?.[0] || null;
@@ -209,12 +238,13 @@ export default function DeviceCollaborationModule() {
   }, [allNotes]);
 
   const devices = React.useMemo(
-    () => mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies),
-    [baseDevices, taskStrategies, noteStrategies]
+    () => mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices),
+    [baseDevices, taskStrategies, noteStrategies, realDevices]
   );
 
-  const hasAny = devices.some((d) => d.strategies && d.strategies.length > 0);
-  if (!hasAny) return null;
+  const hasAnyStrategy = devices.some((d) => d.strategies && d.strategies.length > 0);
+  const hasAnyRealDevice = (realDevices || []).length > 0;
+  if (!hasAnyStrategy && !hasAnyRealDevice) return null;
 
   return (
     <motion.div
@@ -234,8 +264,9 @@ export default function DeviceCollaborationModule() {
           </div>
         </div>
       </div>
-      <div className="px-5 md:px-6 py-5">
-        <DeviceStrategyMap devices={devices} />
+      <div className="px-5 md:px-6 py-5 space-y-5">
+        <ConnectedDevicesPanel />
+        {hasAnyStrategy && <DeviceStrategyMap devices={devices} />}
       </div>
     </motion.div>
   );

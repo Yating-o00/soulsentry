@@ -17,6 +17,7 @@ import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
 import { useQuery } from "@tanstack/react-query";
 import ProductInsights from "@/components/memory/ProductInsights";
 import AlertChannelSettings from "@/components/account/AlertChannelSettings";
+import PWAInstallGuide from "@/components/account/PWAInstallGuide";
 
 export default function Account() {
   const [user, setUser] = useState(null);
@@ -432,6 +433,15 @@ export default function Account() {
       </motion.div>
 
       <CreditHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+
+      {/* PWA 安装引导 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.17 }}
+      >
+        <PWAInstallGuide />
+      </motion.div>
 
       {/* 预警通道设置 */}
       <motion.div

@@ -1647,28 +1647,96 @@ async function executeCalendarEvent(base44, exec) {
     required: ["title", "reminder_time"]
   };
 
+  // ① 先用专业的 parseNaturalTime 服务精准解析时间（带北京时区 + 日期锚点 + 时段映射）
+  //    避免 Kimi 在 executeAutomation 内自己推算时出现"下午两点 → 22:00"这种偏差
+  const userInput = exec.original_input || exec.task_title;
+  let parsedTime = null;
+  try {
+    const ptRes = await base44.functions.invoke('parseNaturalTime', { input: userInput });
+    parsedTime = ptRes?.data || null;
+  } catch (e) {
+    console.warn('[executeCalendarEvent] parseNaturalTime failed:', e?.message || e);
+  }
+
+  // ② AI 仅负责提取标题/描述/优先级/分类，时间字段一律用 parseNaturalTime 的结果
   const data = await callKimi(
     base44,
-    `请把以下指令解析为日历事件（当前时间：${new Date().toISOString()}）：\n${exec.original_input || exec.task_title}`,
-    schema,
-    "你是日程助手，准确解析时间表达。"
+    `请把以下指令解析为日历事件的【标题/描述/优先级/分类】（时间不用你解析，已由专门服务处理）：\n${userInput}`,
+    {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "事件标题，简短精炼，不要包含时间表述" },
+        description: { type: "string", description: "事件描述/备注，可为空" },
+        priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+        category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] }
+      },
+      required: ["title"]
+    },
+    "你是日程助手。只负责提取事件的标题/描述/优先级/分类，不要输出时间字段。"
   );
 
+  const reminder_time = parsedTime?.reminder_time || null;
+  const end_time = parsedTime?.end_time || null;
+  const is_all_day = !!parsedTime?.is_all_day;
+
+  if (!reminder_time) {
+    throw new Error(`未能从指令中识别出有效时间："${userInput}"。请补充具体的日期/时间后重试。`);
+  }
+
+  // ③ 创建 Task（约定列表）—— 开启 Google Calendar 同步
   const task = await base44.entities.Task.create({
-    title: data.title,
+    title: data.title || parsedTime?.title_hint || userInput.slice(0, 30),
     description: data.description || "",
-    reminder_time: data.reminder_time,
-    end_time: data.end_time,
+    reminder_time,
+    end_time,
+    is_all_day,
     priority: data.priority || "medium",
-    category: "personal",
-    status: "pending"
+    category: data.category || "personal",
+    status: "pending",
+    gcal_sync_enabled: true,
+  });
+
+  // ④ 把 task_id 回写到 TaskExecution，让 UI 能识别"已关联到约定列表"
+  try {
+    await base44.entities.TaskExecution.update(exec.id, { task_id: task.id });
+  } catch (e) {
+    console.warn('[executeCalendarEvent] write back task_id failed:', e?.message || e);
+  }
+
+  // ⑤ 尝试同步到 Google Calendar（已授权时才生效，失败不阻塞主流程）
+  let gcalSyncStatus = '';
+  try {
+    const syncRes = await base44.functions.invoke('syncTaskToGoogleCalendar', { task_id: task.id });
+    if (syncRes?.data?.event_id || syncRes?.data?.success) {
+      gcalSyncStatus = '\n✅ 已同步至 Google Calendar';
+    }
+  } catch (e) {
+    console.warn('[executeCalendarEvent] gcal sync failed:', e?.message || e);
+  }
+
+  // 北京时区可读时间
+  const displayTime = new Date(reminder_time).toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
   });
 
   return {
     type: "calendar_event",
-    preview: `📅 ${data.title}\n时间：${data.reminder_time}\n${data.description || ''}`,
-    data: { ...data, task_id: task.id },
-    diff: [{ action: "create", target: `约定：${data.title}`, detail: `已添加到日历` }]
+    preview: `📅 ${data.title}\n时间：${displayTime}${is_all_day ? '（全天）' : ''}\n${data.description || ''}${gcalSyncStatus}\n\n✅ 已添加到「约定列表」`,
+    data: {
+      ...data,
+      title: data.title,
+      reminder_time,
+      end_time,
+      is_all_day,
+      task_id: task.id,
+      parsed_confidence: parsedTime?.confidence,
+    },
+    diff: [
+      { action: "create", target: `约定：${data.title}`, detail: `已添加到约定列表，时间 ${displayTime}` },
+      ...(gcalSyncStatus ? [{ action: "create", target: `Google Calendar：${data.title}`, detail: '已同步至 Google 日历' }] : []),
+    ]
   };
 }
 

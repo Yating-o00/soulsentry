@@ -171,6 +171,9 @@ export default function AutoExecutionPanel() {
           source: "dashboard",
           summary: candidate.detail || candidate.title,
           scene: sceneSummary,
+          // 关键：把当前已上传的附件透传给后端，否则 buildAttachmentContext 拿到的是空数组，
+          // 导致 renderMinutesNote 收到空 file_block，生成"0 章节"空骨架
+          attached_files: attachedFiles,
         },
       });
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });

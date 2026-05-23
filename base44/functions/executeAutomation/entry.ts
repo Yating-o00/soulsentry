@@ -83,9 +83,11 @@ async function chargeCredits(base44, userId, cost, featureKey, description) {
 // 文本/表格/PDF → 用 ExtractDataFromUploadedFile 抽内容；图片 → 收集 URL 走视觉模型
 async function buildAttachmentContext(base44, exec) {
   const files = exec?.ai_parsed_result?.attached_files;
+  console.log(`[buildAttachmentContext] exec=${exec?.id} attached_files count=${Array.isArray(files) ? files.length : 'N/A'}`);
   if (!Array.isArray(files) || files.length === 0) {
     return { text: '', imageUrls: [], images: [], hasFiles: false };
   }
+  console.log(`[buildAttachmentContext] files:`, files.map(f => ({ name: f?.file_name, type: f?.file_type, url: f?.file_url?.slice(0, 80) })));
   // 区分图片 vs 普通文件，分别并发处理（避免多张图片串行超时）
   const imageFiles = [];
   const docFiles = [];
@@ -171,8 +173,14 @@ async function buildAttachmentContext(base44, exec) {
           temperature: 0.1,
         });
         const raw = kimiRes?.data;
-        const t = typeof raw === 'string' ? raw : (raw?.text || raw?.content || raw?.raw_text || '');
-        if (t && String(t).trim().length > 10) text = String(t);
+        // 关键：如果 invokeKimi 返回 _doc_extract_failed，说明 Kimi 自己也没拿到文件正文，
+        // 此时 .text 字段是模型"我无法访问"之类的客套话，绝不能当真，直接跳过进入下一级兜底
+        if (raw?._doc_extract_failed || raw?.error === 'DOC_EXTRACT_FAILED') {
+          errors.push(`Kimi: doc_extract_failed (${(raw?.details || []).join('; ').slice(0, 200)})`);
+        } else {
+          const t = typeof raw === 'string' ? raw : (raw?.text || raw?.content || raw?.raw_text || '');
+          if (t && String(t).trim().length > 10) text = String(t);
+        }
       } catch (e) { errors.push(`Kimi: ${e?.message || e}`); }
     }
 
@@ -189,7 +197,10 @@ async function buildAttachmentContext(base44, exec) {
     }
 
     if (!text) {
+      console.warn(`[buildAttachmentContext] doc extract failed for "${f.file_name}":`, errors);
       text = `(附件「${f.file_name}」无法解析。错误：${errors.join(' | ') || '未知'}；建议用户改用 .txt 或复制内容到任务描述中)`;
+    } else {
+      console.log(`[buildAttachmentContext] doc "${f.file_name}" extracted ${String(text).length} chars`);
     }
     return { f, text: String(text).slice(0, 8000) };
   }));
@@ -989,6 +1000,7 @@ async function executeSummaryNote(base44, exec, attachmentCtx) {
 
   // === 分支 0：会议纪要 / 智能笔记整理 —— 走专用渲染器（独立 backend function）===
   if (isMinutesTask(userText, attachmentCtx)) {
+    console.log(`[executeSummaryNote] enter minutes branch, fileBlock len=${fileBlock.length}, hasFiles=${!!attachmentCtx?.hasFiles}`);
     // fileBlock 已经是 buildAttachmentContext 通过 InvokeLLM 抽取出的真实纯文本，
     // 直接喂给 renderMinutesNote 即可。不要传 file_urls：Kimi 是文本模型，
     // 接到 file_urls 会被当 image_url 处理，反而读不到 Word/PDF 正文，导致编造。
@@ -997,7 +1009,8 @@ async function executeSummaryNote(base44, exec, attachmentCtx) {
       file_block: fileBlock,
     });
     const d = res?.data || {};
-    if (d && d.file_url) {
+    console.log(`[executeSummaryNote] renderMinutesNote status=${res?.status}, has file_url=${!!d?.file_url}, sections=${(d?.sections || []).length}, error=${d?.error || 'none'}`);
+    if (d && d.file_url && Array.isArray(d.sections) && d.sections.length > 0) {
       return {
         type: "summary_note",
         preview: `📝 已生成《${d.file_name}》\n👥 参会人：${(d.meta?.attendees || []).slice(0, 6).join('、') || '未识别'}\n📑 ${(d.sections || []).length} 个章节 · ${(d.timeline || []).length} 个时间节点\n📥 ${d.file_url}\n\n${d.plain_preview || ''}`,
@@ -1008,7 +1021,13 @@ async function executeSummaryNote(base44, exec, attachmentCtx) {
         ],
       };
     }
-    // 失败兜底：继续走分支 B
+    // renderMinutesNote 失败 —— 直接报错，不再静默生成空骨架
+    const errCode = d?.error || 'UNKNOWN';
+    const errMsg = d?.message || 'AI 未能从附件中提取到有效内容';
+    const fileHint = attachmentCtx?.hasFiles
+      ? `（已读取 ${(attachmentCtx.text || '').length} 字符的附件内容，但 AI 解析为空）`
+      : `（未读取到任何附件——请确认上传的文件是否在「📎」按钮里成功添加）`;
+    throw new Error(`会议纪要整理失败：${errMsg}${fileHint}。错误码：${errCode}`);
   }
 
   // === 分支 A：日终复盘 / 日报类——拉真实数据 + 生成 Markdown + 上传 ===

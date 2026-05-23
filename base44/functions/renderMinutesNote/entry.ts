@@ -250,6 +250,17 @@ ${truncated || '（用户未提供附件，仅给出指令）'}
       return Response.json({ error: 'AI_PARSE_FAILED', message: 'AI 输出无法解析为结构化纪要，请重试或精简附件后重试。', raw: data?._raw }, { status: 500 });
     }
 
+    // 关键守门：若 AI 返回空 sections，绝不生成空骨架文件，直接报错让上游显示真实失败原因
+    const sectionCount = Array.isArray(data?.sections) ? data.sections.length : 0;
+    if (sectionCount === 0) {
+      console.warn('[renderMinutesNote] empty sections from AI, returning error. fileBlock len=', truncated.length, 'preview=', truncated.slice(0, 300));
+      return Response.json({
+        error: 'EMPTY_SECTIONS',
+        message: '附件内容已读取但 AI 未能从中识别出任何可整理的章节/对话/要点。可能原因：1) 附件实际是空文档或纯图片扫描件；2) 附件内容与"会议纪要/访谈"格式不符。请检查附件内容后重试，或将原文直接粘贴在指令中。',
+        debug: { source_length: truncated.length, source_preview: truncated.slice(0, 200) },
+      }, { status: 422 });
+    }
+
     const html = renderMinutesHtml(data);
     const safeTitle = String(data.title || user_text || '会议纪要').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
     const baseName = `${new Date().toISOString().slice(0, 10)}_${safeTitle}_纪要`;

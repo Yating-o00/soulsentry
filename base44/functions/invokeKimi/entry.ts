@@ -83,12 +83,15 @@ Deno.serve(async (req) => {
 
     // 对文档：用 Kimi 官方 /v1/files 接口上传 → 拿到已抽取的文本，再注入到 system prompt
     let extractedDocText = '';
+    let docExtractStats = { total: docUrls.length, success: 0, failed: 0, details: [] };
     if (hasDocs) {
-      const extractedChunks = await Promise.all(docUrls.map(async (url) => {
+      const extractedChunks = await Promise.all(docUrls.map(async (url, idx) => {
+        const tag = `doc${idx + 1}`;
         try {
           const fileResp = await fetch(url);
-          if (!fileResp.ok) return `(下载失败:${url})`;
+          if (!fileResp.ok) { docExtractStats.failed++; docExtractStats.details.push(`${tag}: download_${fileResp.status}`); return { ok: false, text: `(下载失败 HTTP ${fileResp.status}: ${url})` }; }
           const blob = await fileResp.blob();
+          if (!blob || blob.size < 10) { docExtractStats.failed++; docExtractStats.details.push(`${tag}: empty_blob`); return { ok: false, text: `(下载到空文件: ${url})` }; }
           const filename = decodeURIComponent((url.split('?')[0].split('/').pop() || 'file')).slice(0, 80);
           const form = new FormData();
           form.append('file', blob, filename);
@@ -98,25 +101,45 @@ Deno.serve(async (req) => {
             headers: { Authorization: `Bearer ${apiKey.trim()}` },
             body: form,
           });
-          if (!upResp.ok) return `(Kimi 上传失败 ${upResp.status}:${await upResp.text()})`;
+          if (!upResp.ok) { docExtractStats.failed++; const errBody = await upResp.text(); docExtractStats.details.push(`${tag}: kimi_upload_${upResp.status}`); return { ok: false, text: `(Kimi 上传失败 ${upResp.status}: ${errBody.slice(0, 200)})` }; }
           const upJson = await upResp.json();
           const fileId = upJson?.id;
-          if (!fileId) return `(无 file_id)`;
+          if (!fileId) { docExtractStats.failed++; docExtractStats.details.push(`${tag}: no_file_id`); return { ok: false, text: `(无 file_id)` }; }
           const contentResp = await fetch(`https://api.moonshot.ai/v1/files/${fileId}/content`, {
             headers: { Authorization: `Bearer ${apiKey.trim()}` },
           });
-          if (!contentResp.ok) return `(抽取失败 ${contentResp.status})`;
+          if (!contentResp.ok) { docExtractStats.failed++; docExtractStats.details.push(`${tag}: extract_${contentResp.status}`); return { ok: false, text: `(抽取失败 ${contentResp.status})` }; }
           const ctype = contentResp.headers.get('content-type') || '';
+          let extracted = '';
           if (ctype.includes('application/json')) {
             const j = await contentResp.json();
-            return String(j?.content || j?.text || JSON.stringify(j)).slice(0, 20000);
+            extracted = String(j?.content || j?.text || JSON.stringify(j));
+          } else {
+            extracted = await contentResp.text();
           }
-          return (await contentResp.text()).slice(0, 20000);
+          extracted = extracted.slice(0, 20000);
+          if (extracted.trim().length < 10) { docExtractStats.failed++; docExtractStats.details.push(`${tag}: extracted_empty`); return { ok: false, text: `(抽取出空内容，可能是加密或图片型 PDF: ${filename})` }; }
+          docExtractStats.success++;
+          docExtractStats.details.push(`${tag}: ok_${extracted.length}chars`);
+          return { ok: true, text: extracted };
         } catch (e) {
-          return `(异常:${e?.message || e})`;
+          docExtractStats.failed++;
+          docExtractStats.details.push(`${tag}: exception_${e?.message?.slice(0, 50) || 'unknown'}`);
+          return { ok: false, text: `(异常:${e?.message || e})` };
         }
       }));
-      extractedDocText = extractedChunks.map((t, i) => `=== 附件 ${i + 1} ===\n${t}`).join('\n\n');
+      console.log('[invokeKimi] doc extract stats:', JSON.stringify(docExtractStats));
+      // 关键守门：如果【所有】文档都抽取失败，直接报错，不让 LLM 用"我无法访问"的客套话伪装成功
+      const allFailed = extractedChunks.every(c => !c.ok);
+      if (allFailed && docUrls.length > 0) {
+        return Response.json({
+          error: 'DOC_EXTRACT_FAILED',
+          message: '附件无法被读取',
+          details: docExtractStats.details,
+          _doc_extract_failed: true,
+        }, { status: 422 });
+      }
+      extractedDocText = extractedChunks.map((c, i) => `=== 附件 ${i + 1} ${c.ok ? '' : '(抽取失败)'} ===\n${c.text}`).join('\n\n');
       systemContent += `\n\n以下是用户上传的附件原文，请基于这些内容回答用户的问题：\n${extractedDocText}`;
     }
 

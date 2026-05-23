@@ -96,14 +96,29 @@ export default function MinutesResultView({ data, preview }) {
               <span className="font-medium truncate">{fileName}</span>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={async () => {
+                  // 后端给文件加了 Content-Disposition: attachment，直接 <a target=_blank> 会被浏览器当下载处理。
+                  // 改为前端 fetch 文件 → 转 blob URL → 用 inline 方式在新标签页预览。
+                  try {
+                    const resp = await fetch(fileUrl);
+                    const blob = await resp.blob();
+                    // 强制 text/html，避免下载
+                    const htmlBlob = new Blob([await blob.text()], { type: 'text/html; charset=utf-8' });
+                    const blobUrl = URL.createObjectURL(htmlBlob);
+                    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                    // 60秒后回收
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                  } catch (e) {
+                    // 兜底：直接打开
+                    window.open(fileUrl, '_blank', 'noopener,noreferrer');
+                  }
+                }}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-[10.5px] text-slate-700"
               >
                 <ExternalLink className="w-2.5 h-2.5" /> 打开
-              </a>
+              </button>
               <a
                 href={fileUrl}
                 download={fileName}

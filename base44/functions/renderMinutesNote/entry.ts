@@ -219,24 +219,31 @@ Deno.serve(async (req) => {
     const MAX = 20000;
     const truncated = sourceText.length > MAX ? sourceText.slice(0, MAX) + '\n\n…（原文过长，已截断）' : sourceText;
 
+    // 检测是否包含图片 OCR 段——若有，提示 Kimi 把 OCR 文字当作原文整理
+    const hasImageOcr = /【图片附件:|【第一部分：文字 OCR】|内容描述:/.test(sourceText);
+    const ocrHint = hasImageOcr
+      ? `\n\n⚠️ 注意：上方原文中包含【图片附件】段——里面的「第一部分：文字 OCR」是从图片中识别出来的对话/文字内容，是真实的原文素材，请把它当作访谈/会议的实际记录来整理（说话人、对话、问答都在里面）。第二部分"外观描述"仅作辅助参考，不要单独作为纪要正文。`
+      : '';
+
     const data = await callKimi(
       base44,
-      `=== 待整理的会议原文（这是你唯一的事实来源）===
+      `=== 待整理的会议/访谈原文（这是你唯一的事实来源）===
 ${truncated || '（用户未提供附件，仅给出指令）'}
-=== 原文结束 ===
+=== 原文结束 ===${ocrHint}
 
 用户的整理指令：${inlineText || '（无）'}
 
 【绝对铁律】
 0) 严禁编造：人名、公司名、时间、地点、数据、技术术语、时间线节点，原文里没有就绝对不能写。
 1) 禁止套用任何示例模版（例如"2023年H2产品规划评审""张晨/李思/王骁""GMV 42.3亿""履约时效29.6小时"等都属示例，除非原文里真出现这些字，否则一律不许写）。
-2) meta.time/location/attendees 仅在原文里能找到时才填；否则留空字符串/空数组。attendees 必须是数组，每项一个人。
-3) sections 按原文里实际出现的"一、二、三..."或自然小节切分；子小节用 type:"sub"；"Q：xxx"紧跟回答时合并成 type:"qa"；长段判断性结论（含"导致/因此/结论/瓶颈"）→ type:"callout"；其他普通要点 → type:"point"。
-4) timeline 只填原文真实出现的时间节点，content 必须取自原文。
-5) insights 四类（people/tech/time/actions）每项必须能在原文找到对应出处，无内容给空数组。
-6) title 直接用原文里的标题或忠实概括原文议题。`,
+2) meta.time/location/attendees 仅在原文里能找到时才填；否则留空字符串/空数组。attendees 必须是数组，每项一个人。**如果原文是访谈/对话记录，attendees 填出现的说话人/角色名**。
+3) sections 按原文里实际出现的主题、话题、问答切分。【必须】至少产出 1 个 section，绝对不允许返回空数组；如果原文是访谈对话，按话题/问答自然切分成 2~6 节，每节包含若干 type:"qa" 或 type:"point" items；不要因为原文是"截图 OCR"就放弃整理。
+4) 子小节用 type:"sub"；"Q：xxx"紧跟回答时合并成 type:"qa"；长段判断性结论（含"导致/因此/结论/瓶颈"）→ type:"callout"；其他普通要点 → type:"point"。
+5) timeline 只填原文真实出现的时间节点，content 必须取自原文；没有就给空数组。
+6) insights 四类（people/tech/time/actions）每项必须能在原文找到对应出处，无内容给空数组。
+7) title 直接用原文里的标题或忠实概括原文议题（不要写"未识别"或"会议纪要"这种泛标题，要具体概括内容主题）。`,
       MINUTES_SCHEMA,
-      "你是专业会议纪要整理官。严格忠于上方提供的【会议原文】，绝不编造、绝不套用任何示例模版。原文里没有的内容，对应字段就留空。"
+      "你是专业会议纪要/访谈记录整理官。严格忠于上方提供的【会议原文】，绝不编造、绝不套用任何示例模版。原文里没有的内容，对应字段就留空。但只要原文里有任何对话、要点、话题，必须组织成至少 1 个 section 输出，不允许返回空 sections。"
     );
 
     if (data?._parse_error) {

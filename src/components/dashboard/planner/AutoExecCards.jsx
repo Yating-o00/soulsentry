@@ -86,19 +86,34 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
   const [feedback, setFeedback] = useState(null); // { mode, item, resultPreview?, errorMessage?, suggestions? }
   const [emailDraft, setEmailDraft] = useState(null); // { item, draft:{to,subject,body}, executionId }
 
-  // 把 props 同步进 state（保持父组件传入的最新清单），但保留本地已授权状态
+  // 把 props 同步进 state（保持父组件传入的最新清单），但保留本地已推进的执行状态
+  // 关键：如果本地已经执行过（running/done/failed），不能被 props 里的 ready 覆盖；
+  // 同样本地已有的 execution_id / result_preview 也要保留，避免「执行完又被刷新回未执行」
   React.useEffect(() => {
-    const list = (tasks || []).slice(0, 6).map((t, i) => ({
-      _id: `plan-${i}-${(t.title || "").slice(0, 12)}`,
-      _idx: i, // 原始索引，用于回写父组件 plan_json.key_tasks
-      title: t.title || `自动项 ${i + 1}`,
-      desc: t.desc || t.description || "根据规划自动派生",
-      status: normalizeStatus(t.status),
-      automation_type: inferAutomationType(t.title, t.desc || t.description),
-      execution_id: t.execution_id || null,
-      result_preview: t.result_preview || null,
-    }));
-    setItems(list);
+    setItems(prev => {
+      const prevById = new Map(prev.map(p => [p._id, p]));
+      return (tasks || []).slice(0, 6).map((t, i) => {
+        const _id = `plan-${i}-${(t.title || "").slice(0, 12)}`;
+        const local = prevById.get(_id);
+        const propStatus = normalizeStatus(t.status);
+        // 本地状态比 props 更"靠后"时优先用本地的
+        const ranks = { ready: 0, pending: 1, running: 2, failed: 3, done: 4 };
+        const mergedStatus = local && ranks[local.status] >= ranks[propStatus]
+          ? local.status
+          : propStatus;
+        return {
+          _id,
+          _idx: i,
+          title: t.title || `自动项 ${i + 1}`,
+          desc: t.desc || t.description || "根据规划自动派生",
+          status: mergedStatus,
+          automation_type: inferAutomationType(t.title, t.desc || t.description),
+          // 优先用本地已写入的 execution_id / result_preview（执行过的状态不被刷掉）
+          execution_id: local?.execution_id || t.execution_id || null,
+          result_preview: local?.result_preview || t.result_preview || null,
+        };
+      });
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(tasks)]);
 

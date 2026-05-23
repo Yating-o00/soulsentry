@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
     const sourceText = String(file_block || '').trim();
     const inlineText = String(user_text || '').trim();
     const hasFileBlock = sourceText.length > 50;
-    const hasInlineContent = inlineText.length > 80;
+    const hasInlineContent = inlineText.length > 10;
     if (!hasFileBlock && !hasInlineContent) {
       return Response.json({
         error: 'NO_SOURCE_CONTENT',
@@ -207,8 +207,8 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    // 防止把"读取失败"骨架当真原文
-    if (hasFileBlock && /\(读取失败|视觉识别失败/.test(sourceText) && sourceText.length < 300 && !hasInlineContent) {
+    // 防止把"完全读取失败"骨架当真原文（注意：图片视觉描述也是合法素材，不能误杀）
+    if (hasFileBlock && /\(读取失败|视觉识别失败|附件「.*」无法解析/.test(sourceText) && sourceText.length < 200 && !hasInlineContent) {
       return Response.json({
         error: 'ATTACHMENT_UNREADABLE',
         message: '附件无法被读取（可能是加密 PDF 或不支持的格式）。请尝试导出为 .docx 或 .txt 后重试。',

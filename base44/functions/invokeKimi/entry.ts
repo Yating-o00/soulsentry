@@ -53,8 +53,31 @@ Deno.serve(async (req) => {
 
     // 分类 file_urls：图片走视觉模型；文档（pdf/word/excel/txt/md/csv）走 Kimi 文件抽取
     const isImage = (u = '') => /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u);
-    const imageUrls = Array.isArray(file_urls) ? file_urls.filter(isImage) : [];
+    const rawImageUrls = Array.isArray(file_urls) ? file_urls.filter(isImage) : [];
     const docUrls = Array.isArray(file_urls) ? file_urls.filter(u => !isImage(u)) : [];
+
+    // Kimi vision 对部分 CDN 直链支持不稳定（会报 "unsupported image url"），
+    // 因此先把每张图片下载下来转成 base64 data URL，再喂给模型，确保稳定。
+    const imageUrls = [];
+    if (rawImageUrls.length > 0) {
+      await Promise.all(rawImageUrls.map(async (u) => {
+        try {
+          const r = await fetch(u);
+          if (!r.ok) return;
+          const buf = new Uint8Array(await r.arrayBuffer());
+          // base64 编码
+          let bin = '';
+          for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+          const b64 = btoa(bin);
+          const ct = r.headers.get('content-type') || (
+            /\.png(\?|#|$)/i.test(u) ? 'image/png' :
+            /\.gif(\?|#|$)/i.test(u) ? 'image/gif' :
+            /\.webp(\?|#|$)/i.test(u) ? 'image/webp' : 'image/jpeg'
+          );
+          imageUrls.push(`data:${ct};base64,${b64}`);
+        } catch (_) { /* skip this image */ }
+      }));
+    }
     const hasImages = imageUrls.length > 0;
     const hasDocs = docUrls.length > 0;
 
@@ -108,7 +131,12 @@ Deno.serve(async (req) => {
       userContent = prompt;
     }
 
-    // Select model: vision model if images, else default long-context turbo
+    // 选择模型：
+    // - 有图片 → 视觉模型 (moonshot-v1-32k-vision-preview)
+    // - 无图片 → 默认长上下文 turbo
+    // 注意：moonshot vision 模型不支持 response_format=json_object（会 400）。
+    // 因此当同时需要 JSON 输出 + 图片时，仍使用 vision 模型但去掉 response_format，
+    // 通过 system prompt 中的 schema 约束让模型输出 JSON，再在外层 parse 兜底。
     const selectedModel = model || (hasImages ? "moonshot-v1-32k-vision-preview" : "kimi-k2-turbo-preview");
 
     const body = {
@@ -119,7 +147,8 @@ Deno.serve(async (req) => {
       ],
       temperature
     };
-    if (wantsJson) {
+    // 只有非 vision 模型才发 response_format，避免 Kimi vision 报错
+    if (wantsJson && !hasImages) {
       body.response_format = { type: "json_object" };
     }
 

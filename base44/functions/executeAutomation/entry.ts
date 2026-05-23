@@ -95,25 +95,41 @@ async function buildAttachmentContext(base44, exec) {
     (isImage ? imageFiles : docFiles).push(f);
   }
 
-  // 并发：图片视觉识别
+  // 并发：图片视觉识别 —— 优先用 Kimi vision，失败再回退到 Gemini
   const imgResults = await Promise.all(imageFiles.map(async (f) => {
-    try {
-      const visionRes = await base44.integrations.Core.InvokeLLM({
-        prompt: `严格只描述这张图片中【肉眼可见】的内容，禁止任何推测、引申或风格化包装。按以下要点输出 4-6 句中文，信息密度高：
+    const visionPrompt = `严格只描述这张图片中【肉眼可见】的内容，禁止任何推测、引申或风格化包装。按以下要点输出 4-6 句中文，信息密度高：
 1) 主体物品的种类、颜色、形状、材质质感；
 2) 表面是否有【可见的图案、烫印、纹路、文字】，有就描述具体形状，没有就写"无可见图案/纯色"；
 3) 可见的配件、物品摆放，逐项列出；
 4) 整体氛围、背景、拍摄角度；
 5) 画面里出现任何水印或 AI 生成标签请明确指出。
-⚠️ 严禁编造图片里没出现的元素（不要凭空说"靛青色"、"莲花暗纹"、"烫金篆章"、"康熙字典体"、"D35 单黑丝印"等具体工艺规格，除非图中文字明确写出）。看不清的部分写"看不清"。`,
+⚠️ 严禁编造图片里没出现的元素。看不清的部分写"看不清"。`;
+    let description = '';
+    // ① Kimi vision（首选）
+    try {
+      const kimiRes = await base44.functions.invoke('invokeKimi', {
+        prompt: visionPrompt,
         file_urls: [f.file_url],
-        model: 'gemini_3_1_pro',
+        temperature: 0.1,
       });
-      const desc = typeof visionRes === 'string' ? visionRes : (visionRes?.text || visionRes?.data || '');
-      return { f, description: String(desc).trim() };
-    } catch (e) {
-      return { f, description: `(视觉识别失败:${e.message})` };
+      const t = kimiRes?.data?.text || kimiRes?.data?.content || '';
+      if (t && String(t).trim().length > 10) description = String(t).trim();
+    } catch (_) { /* fallthrough */ }
+    // ② Gemini 兜底
+    if (!description) {
+      try {
+        const visionRes = await base44.integrations.Core.InvokeLLM({
+          prompt: visionPrompt,
+          file_urls: [f.file_url],
+          model: 'gemini_3_1_pro',
+        });
+        const desc = typeof visionRes === 'string' ? visionRes : (visionRes?.text || visionRes?.data || '');
+        description = String(desc).trim();
+      } catch (e) {
+        description = `(视觉识别失败:${e.message})`;
+      }
     }
+    return { f, description };
   }));
 
   // 并发：文档抽取 —— 三级兜底：① ExtractDataFromUploadedFile（Word/Excel/PDF/CSV）；② Kimi（原生文件理解，对老 Office 格式更稳）；③ Gemini 视觉模型；任一成功即用。

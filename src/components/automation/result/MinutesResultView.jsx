@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { FileText, Download, ExternalLink, Users, Calendar, Hash, Clock, ChevronDown, ChevronRight, AlertCircle, CheckCircle2, MessageCircle } from "lucide-react";
+import React from "react";
+import { FileText, Download, ExternalLink, Users, Calendar, Hash, Clock, AlertCircle, CheckCircle2, MessageCircle } from "lucide-react";
 
 // 会议纪要结果视图：直接渲染结构化内容（sections/timeline/insights），不再依赖 iframe
 export default function MinutesResultView({ data, preview }) {
@@ -11,8 +11,6 @@ export default function MinutesResultView({ data, preview }) {
   const timeline = Array.isArray(data?.timeline) ? data.timeline : [];
   const insights = data?.insights || {};
   const tags = Array.isArray(data?.tags) ? data.tags : [];
-
-  const [showRawFile, setShowRawFile] = useState(false);
 
   return (
     <div className="space-y-3">
@@ -89,19 +87,15 @@ export default function MinutesResultView({ data, preview }) {
         </div>
       ) : null}
 
-      {/* 文件操作条：下载 / 新窗口打开 / 可选 iframe 预览 */}
+      {/* 文件操作条：下载 / 新窗口打开（结构化内容已在上方完整渲染，此处不再嵌入预览） */}
       {fileUrl && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
-            <button
-              onClick={() => setShowRawFile(v => !v)}
-              className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 hover:text-slate-900"
-            >
-              {showRawFile ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              <FileText className="w-3 h-3" />
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <div className="flex items-center justify-between px-3 py-2">
+            <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 min-w-0">
+              <FileText className="w-3 h-3 flex-shrink-0" />
               <span className="font-medium truncate">{fileName}</span>
-            </button>
-            <div className="flex items-center gap-1">
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
               <a
                 href={fileUrl}
                 target="_blank"
@@ -119,15 +113,6 @@ export default function MinutesResultView({ data, preview }) {
               </a>
             </div>
           </div>
-          {showRawFile && (
-            <iframe
-              src={fileUrl}
-              title={fileName}
-              sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-              className="w-full bg-white"
-              style={{ height: 600, border: 0 }}
-            />
-          )}
         </div>
       )}
 

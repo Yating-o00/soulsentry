@@ -139,12 +139,60 @@ export async function markOffline() {
   }
 }
 
+/**
+ * 同一台真实设备去重：按 platform + browser + screen_size + device_type 作为硬件指纹合并
+ * 保留 last_seen_at 最新的一条，其余作为重复记录清理掉
+ */
+async function dedupeDevices(list) {
+  if (!Array.isArray(list) || list.length <= 1) return list;
+
+  const groups = new Map();
+  for (const d of list) {
+    const key = [
+      d.device_type || "?",
+      d.platform || "?",
+      d.browser || "?",
+      d.screen_size || "?",
+    ].join("|");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(d);
+  }
+
+  const survivors = [];
+  const toDelete = [];
+
+  for (const arr of groups.values()) {
+    if (arr.length === 1) {
+      survivors.push(arr[0]);
+      continue;
+    }
+    // 按 last_seen_at 倒序，最新的留下
+    arr.sort((a, b) => {
+      const ta = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+      const tb = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+      return tb - ta;
+    });
+    survivors.push(arr[0]);
+    for (let i = 1; i < arr.length; i++) toDelete.push(arr[i].id);
+  }
+
+  // 异步清理重复记录，不阻塞主流程
+  if (toDelete.length > 0) {
+    Promise.all(
+      toDelete.map((id) => base44.entities.Device.delete(id).catch(() => null))
+    ).catch(() => {});
+  }
+
+  return survivors;
+}
+
 /** 拉取当前用户所有设备，并按"最近心跳"判定在线状态 */
 export async function listMyDevices() {
   const list = await base44.entities.Device.list("-last_seen_at", 50);
+  const deduped = await dedupeDevices(list || []);
   const now = Date.now();
   const currentId = getOrCreateDeviceId();
-  return (list || []).map((d) => {
+  return deduped.map((d) => {
     const t = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
     const online = now - t < ONLINE_THRESHOLD_MS;
     return { ...d, is_online: online, is_current: d.device_id === currentId };

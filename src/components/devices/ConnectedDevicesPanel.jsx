@@ -153,6 +153,21 @@ export default function ConnectedDevicesPanel() {
     }
   };
 
+  const handleTestConnection = async () => {
+    try {
+      const authed = await base44.auth.isAuthenticated();
+      if (!authed) {
+        toast.error("未登录，请先登录账号");
+        return;
+      }
+      await registerCurrentDevice();
+      toast.success("本机已上线，正在刷新…");
+      setTimeout(refresh, 500);
+    } catch (e) {
+      toast.error("测试失败：" + (e?.message || "未知错误"));
+    }
+  };
+
   const handleRename = async (device, newName) => {
     try {
       await base44.entities.Device.update(device.id, { name: newName });
@@ -181,9 +196,20 @@ export default function ConnectedDevicesPanel() {
             </p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={refresh} title="刷新">
-          <RefreshCw className="w-4 h-4 text-slate-500" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={handleTestConnection}
+            title="把当前这台设备登记上线"
+          >
+            测试连接
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={refresh} title="刷新">
+            <RefreshCw className="w-4 h-4 text-slate-500" />
+          </Button>
+        </div>
       </div>
 
       {!loading && !hasCurrent && (

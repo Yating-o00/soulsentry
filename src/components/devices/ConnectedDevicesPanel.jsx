@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Smartphone, Monitor, Tablet, Watch, Speaker, RefreshCw, Pencil, Check, X, Wifi, WifiOff, Apple, Laptop, Chrome } from "lucide-react";
+import { Smartphone, Monitor, Tablet, Watch, Speaker, RefreshCw, Pencil, Check, X, Wifi, WifiOff } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { listMyDevices, registerCurrentDevice } from "@/lib/deviceRegistry";
+import { resolveDeviceBrand } from "./DeviceBrandIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDistanceToNow } from "date-fns";
@@ -18,45 +19,7 @@ const TYPE_META = {
   other: { icon: Monitor, label: "其他", desc: "辅助设备" },
 };
 
-// 根据具体平台/浏览器推断更精细的图标和品牌色
-// 优先级:具体品牌 > 设备类型默认值
-function resolveDeviceVisual(device) {
-  const platform = (device.platform || "").toLowerCase();
-  const ua = (device.user_agent || "").toLowerCase();
-  const browser = (device.browser || "").toLowerCase();
-  const type = device.device_type;
 
-  // iOS 设备(iPhone / iPad)
-  if (platform.includes("ios") || ua.includes("iphone")) {
-    return { icon: Apple, label: "iPhone", brandColor: "#0a0a0a" };
-  }
-  if (ua.includes("ipad") || (type === "tablet" && platform.includes("ios"))) {
-    return { icon: Apple, label: "iPad", brandColor: "#0a0a0a" };
-  }
-  // macOS
-  if (platform.includes("mac") || platform.includes("darwin")) {
-    return { icon: Laptop, label: "Mac", brandColor: "#374151" };
-  }
-  // Android
-  if (platform.includes("android") || ua.includes("android")) {
-    return { icon: Smartphone, label: "Android", brandColor: "#10b981" };
-  }
-  // Windows
-  if (platform.includes("win")) {
-    return { icon: Monitor, label: "Windows", brandColor: "#2563eb" };
-  }
-  // Linux
-  if (platform.includes("linux")) {
-    return { icon: Monitor, label: "Linux", brandColor: "#f59e0b" };
-  }
-  // ChromeOS / Chrome 浏览器为主的设备
-  if (platform.includes("cros") || (type === "pc" && browser.includes("chrome"))) {
-    return { icon: Chrome, label: "Chrome", brandColor: "#2563eb" };
-  }
-  // 回退到设备类型默认
-  const meta = TYPE_META[type] || TYPE_META.other;
-  return { icon: meta.icon, label: meta.label, brandColor: "#384877" };
-}
 
 const ROLE_META = {
   primary: "主控",
@@ -68,10 +31,11 @@ const ROLE_META = {
 
 function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 }) {
   const meta = TYPE_META[device.device_type] || TYPE_META.other;
-  const visual = resolveDeviceVisual(device);
-  const Icon = visual.icon;
+  const brand = resolveDeviceBrand(device);
+  const Icon = brand.Icon;
+  const visual = { brandColor: brand.brandColor, label: brand.label };
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(device.name || visual.label || meta.label);
+  const [draft, setDraft] = useState(device.name || brand.label || meta.label);
 
   const save = async (e) => {
     e?.stopPropagation?.();
@@ -111,7 +75,7 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
               : { backgroundColor: `${visual.brandColor}14`, color: visual.brandColor }
           }
         >
-          <Icon className="w-5 h-5" />
+          <Icon className="w-5 h-5" width={20} height={20} />
           {/* 在线状态点（叠在图标右下） */}
           <span
             className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-white ${

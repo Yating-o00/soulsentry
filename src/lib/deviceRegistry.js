@@ -19,7 +19,7 @@ function getOrCreateDeviceId() {
 }
 
 /** UA 识别设备类型 */
-function detectDeviceInfo() {
+export function detectDeviceInfo() {
   const ua = navigator.userAgent || "";
   const lower = ua.toLowerCase();
 
@@ -239,16 +239,33 @@ async function dedupeDevices(list) {
   return survivors;
 }
 
-/** 拉取当前用户所有设备，并按"最近心跳"判定在线状态 */
+/** 拉取当前用户所有设备，并按"最近心跳"判定在线状态。
+ *  对"当前设备"用本地实时检测结果覆盖核心字段(device_type/platform/browser/user_agent),
+ *  避免数据库中还未来得及更新的旧值(如旧记录里的电脑/macOS)被错误地渲染出来。
+ */
 export async function listMyDevices() {
   const list = await base44.entities.Device.list("-last_seen_at", 50);
   const deduped = await dedupeDevices(list || []);
   const now = Date.now();
   const currentId = getOrCreateDeviceId();
+  const localInfo = detectDeviceInfo();
   return deduped.map((d) => {
     const t = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
     const online = now - t < ONLINE_THRESHOLD_MS;
-    return { ...d, is_online: online, is_current: d.device_id === currentId };
+    const isCurrent = d.device_id === currentId;
+    if (isCurrent) {
+      return {
+        ...d,
+        device_type: localInfo.device_type,
+        platform: localInfo.platform,
+        browser: localInfo.browser,
+        user_agent: localInfo.user_agent,
+        screen_size: localInfo.screen_size || d.screen_size,
+        is_online: true,
+        is_current: true,
+      };
+    }
+    return { ...d, is_online: online, is_current: false };
   });
 }
 

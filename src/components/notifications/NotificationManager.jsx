@@ -281,6 +281,8 @@ export default function NotificationManager() {
       </div>
     ), {
       duration: task.persistent_reminder ? Infinity : 10000,
+      unstyled: true,
+      classNames: { toast: '!bg-transparent !border-0 !shadow-none !p-0' },
     });
 
     // 仅针对非重复/非每日提醒的约定更新数据库状态

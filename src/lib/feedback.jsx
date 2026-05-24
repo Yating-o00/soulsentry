@@ -24,7 +24,13 @@ export const success = (message, opts = {}) => {
         </button>
       </div>
     ),
-    { position: "bottom-right", duration, ...rest }
+    {
+      position: "bottom-right",
+      duration,
+      unstyled: true,
+      classNames: { toast: '!bg-transparent !border-0 !shadow-none !p-0' },
+      ...rest,
+    }
   );
 };
 
@@ -140,7 +146,12 @@ export const executionChainDone = (chainTitle) => {
         </button>
       </div>
     ),
-    { position: "bottom-right", duration: 3500 }
+    {
+      position: "bottom-right",
+      duration: 3500,
+      unstyled: true,
+      classNames: { toast: '!bg-transparent !border-0 !shadow-none !p-0' },
+    }
   );
 };
 

@@ -12,8 +12,8 @@ import { Shield, RefreshCw } from "lucide-react";
 // 模块级缓存：同一会话内 5 分钟内复用结果，避免来回切页面时重复打后端导致 429
 const GUARD_CACHE = { ts: 0, data: null, assoc: null };
 const GUARD_TTL_MS = 5 * 60 * 1000;
-// 单次请求最长 30 秒（后端 cold start + AI 推理可能耗时 6-15s，留足余量避免误判超时）
-const REQUEST_TIMEOUT_MS = 30000;
+// 单次请求最长 12 秒：超时则静默回退，不再让用户长时间盯着 loading
+const REQUEST_TIMEOUT_MS = 12000;
 
 export default function SentinelGuardPanel() {
   const [data, setData] = useState(GUARD_CACHE.data);
@@ -38,11 +38,11 @@ export default function SentinelGuardPanel() {
     let coords = {};
     if ('geolocation' in navigator) {
       coords = await new Promise((resolve) => {
-        const t = setTimeout(() => resolve({}), 2000);
+        const t = setTimeout(() => resolve({}), 1200);
         navigator.geolocation.getCurrentPosition(
           (pos) => { clearTimeout(t); resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }); },
           () => { clearTimeout(t); resolve({}); },
-          { enableHighAccuracy: false, timeout: 2000, maximumAge: 120000 }
+          { enableHighAccuracy: false, timeout: 1200, maximumAge: 300000 }
         );
       });
     }
@@ -124,23 +124,7 @@ export default function SentinelGuardPanel() {
     );
   }
 
-  if (errored) {
-    return (
-      <div className="py-8 text-center bg-rose-50/60 rounded-2xl border border-dashed border-rose-200">
-        <Shield className="w-8 h-8 mx-auto mb-2 text-rose-300" />
-        <p className="text-rose-600 text-sm font-medium mb-2">分析暂时未完成</p>
-        <button
-          onClick={() => { fetchedRef.current = true; fetchGuard(true); }}
-          className="inline-flex items-center gap-1.5 text-xs text-[#384877] hover:underline"
-        >
-          <RefreshCw className="w-3 h-3" />
-          重新分析
-        </button>
-      </div>
-    );
-  }
-
-  if (!hasGeo && !hasForget && !hasAssoc) {
+  if (errored || (!hasGeo && !hasForget && !hasAssoc)) {
     return (
       <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
         <Shield className="w-8 h-8 mx-auto mb-2 text-slate-300" />

@@ -30,8 +30,9 @@ const ROLE_META = {
 };
 
 function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 }) {
-  const meta = TYPE_META[device.device_type] || TYPE_META.other;
   const brand = resolveDeviceBrand(device);
+  // 用 brand.deviceType(由 UA 实时判定)取元信息,绕开数据库可能残留的旧 device_type
+  const meta = TYPE_META[brand.deviceType] || TYPE_META[device.device_type] || TYPE_META.other;
   const Icon = brand.Icon;
   const visual = { brandColor: brand.brandColor, label: brand.label };
   const [editing, setEditing] = useState(false);

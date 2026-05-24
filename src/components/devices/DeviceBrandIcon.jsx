@@ -32,60 +32,69 @@ const ChromeLogo = (props) => (
   </svg>
 );
 
-// 根据 device 推断图标 + 标签 + 颜色
-// 策略：先按设备形态（手机/电脑/平板/手表/音箱）锁定图标轮廓，
-// 再用平台/UA 细分（iPhone vs Android、Mac vs Windows 等）以表达品牌。
+// 根据 device 推断图标 + 标签 + 颜色 + 真实设备形态
+// 策略：UA / platform 字段优先于数据库里残留的 device_type,避免旧脏数据干扰。
+// 返回的 deviceType 由 UA/平台实时判定,可直接用于 UI 类型展示。
 export function resolveDeviceBrand(device) {
   const platform = (device.platform || "").toLowerCase();
   const ua = (device.user_agent || "").toLowerCase();
-  const type = device.device_type;
+  const dbType = device.device_type;
 
-  // 手表：始终显示手表图标
-  if (type === "watch") {
-    return { Icon: Watch, label: "手表", brandColor: "#384877" };
+  // 先用 UA 实时判定真实形态(忽略数据库 device_type 防止脏数据)
+  let detectedType = dbType;
+  if (ua.includes("iphone")) detectedType = "phone";
+  else if (ua.includes("ipad")) detectedType = "tablet";
+  else if (ua.includes("android")) detectedType = ua.includes("mobile") ? "phone" : "tablet";
+  else if (ua.includes("watch")) detectedType = "watch";
+  else if (platform.includes("ios") && !ua.includes("ipad")) detectedType = "phone";
+  else if (platform.includes("mac") || platform.includes("win") || platform.includes("linux") || platform.includes("cros")) detectedType = "pc";
+
+  // 手表
+  if (detectedType === "watch") {
+    return { Icon: Watch, label: "手表", brandColor: "#384877", deviceType: "watch" };
   }
-  // 音箱：始终显示音箱图标
-  if (type === "speaker") {
-    return { Icon: Speaker, label: "音箱", brandColor: "#384877" };
+  // 音箱
+  if (detectedType === "speaker") {
+    return { Icon: Speaker, label: "音箱", brandColor: "#384877", deviceType: "speaker" };
   }
-  // 平板：iPad 用 Apple logo，其它用平板形态图标
-  if (type === "tablet" || ua.includes("ipad")) {
+  // 平板
+  if (detectedType === "tablet") {
     if (ua.includes("ipad") || platform.includes("ios")) {
-      return { Icon: AppleLogo, label: "iPad", brandColor: "#0a0a0a" };
+      return { Icon: AppleLogo, label: "iPad", brandColor: "#0a0a0a", deviceType: "tablet" };
     }
-    return { Icon: Tablet, label: "平板", brandColor: "#384877" };
+    return { Icon: Tablet, label: "平板", brandColor: "#384877", deviceType: "tablet" };
   }
-  // 手机：iPhone → Apple，Android → Android，其它 → 通用手机
-  if (type === "phone") {
+  // 手机
+  if (detectedType === "phone") {
     if (platform.includes("ios") || ua.includes("iphone")) {
-      return { Icon: AppleLogo, label: "iPhone", brandColor: "#0a0a0a" };
+      return { Icon: AppleLogo, label: "iPhone", brandColor: "#0a0a0a", deviceType: "phone" };
     }
     if (platform.includes("android") || ua.includes("android")) {
-      return { Icon: AndroidLogo, label: "Android", brandColor: "#10b981" };
+      return { Icon: AndroidLogo, label: "Android", brandColor: "#10b981", deviceType: "phone" };
     }
-    return { Icon: Smartphone, label: "手机", brandColor: "#384877" };
+    return { Icon: Smartphone, label: "手机", brandColor: "#384877", deviceType: "phone" };
   }
-  // 电脑：Mac → Apple，Windows → Windows，Linux → Linux，ChromeOS → Chrome
-  if (type === "pc") {
+  // 电脑
+  if (detectedType === "pc") {
     if (platform.includes("mac") || platform.includes("darwin")) {
-      return { Icon: AppleLogo, label: "Mac", brandColor: "#374151" };
+      return { Icon: AppleLogo, label: "Mac", brandColor: "#374151", deviceType: "pc" };
     }
     if (platform.includes("win")) {
-      return { Icon: WindowsLogo, label: "Windows", brandColor: "#2563eb" };
+      return { Icon: WindowsLogo, label: "Windows", brandColor: "#2563eb", deviceType: "pc" };
     }
     if (platform.includes("linux")) {
-      return { Icon: LinuxLogo, label: "Linux", brandColor: "#f59e0b" };
+      return { Icon: LinuxLogo, label: "Linux", brandColor: "#f59e0b", deviceType: "pc" };
     }
     if (platform.includes("cros")) {
-      return { Icon: ChromeLogo, label: "Chrome OS", brandColor: "#2563eb" };
+      return { Icon: ChromeLogo, label: "Chrome OS", brandColor: "#2563eb", deviceType: "pc" };
     }
-    return { Icon: Monitor, label: "电脑", brandColor: "#384877" };
+    return { Icon: Monitor, label: "电脑", brandColor: "#384877", deviceType: "pc" };
   }
 
-  // other 或未知：用 UA 兜底猜一次形态
-  if (ua.includes("iphone")) return { Icon: AppleLogo, label: "iPhone", brandColor: "#0a0a0a" };
-  if (ua.includes("android")) return { Icon: AndroidLogo, label: "Android", brandColor: "#10b981" };
-  if (platform.includes("mac")) return { Icon: AppleLogo, label: "Mac", brandColor: "#374151" };
-  if (platform.includes("win")) return { Icon: WindowsLogo, label: "Windows", brandColor: "#2563eb" };
-  return { Icon: Laptop, label: "设备", brandColor: "#384877" };
+  // 完全未知：用 UA 兜底
+  if (ua.includes("iphone")) return { Icon: AppleLogo, label: "iPhone", brandColor: "#0a0a0a", deviceType: "phone" };
+  if (ua.includes("android")) return { Icon: AndroidLogo, label: "Android", brandColor: "#10b981", deviceType: "phone" };
+  if (platform.includes("mac")) return { Icon: AppleLogo, label: "Mac", brandColor: "#374151", deviceType: "pc" };
+  if (platform.includes("win")) return { Icon: WindowsLogo, label: "Windows", brandColor: "#2563eb", deviceType: "pc" };
+  return { Icon: Laptop, label: "设备", brandColor: "#384877", deviceType: "other" };
 }

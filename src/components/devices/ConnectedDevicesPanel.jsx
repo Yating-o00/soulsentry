@@ -50,6 +50,17 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
           : "border-slate-200 hover:border-slate-300"
       }`}
     >
+      {strategyCount > 0 && !editing && (
+        <span
+          className={`absolute top-2.5 right-2.5 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
+            isSelected
+              ? "bg-[#384877] text-white"
+              : "bg-[#384877]/10 text-[#384877]"
+          }`}
+        >
+          {strategyCount} 策略
+        </span>
+      )}
       <div className="flex items-start gap-3">
         <div
           className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
@@ -86,7 +97,7 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
+            <div className={`flex items-center gap-1.5 ${strategyCount > 0 ? "pr-16" : ""}`}>
               <h4 className="font-semibold text-slate-900 text-sm truncate">
                 {device.name || meta.label}
               </h4>
@@ -95,16 +106,11 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
                   e.stopPropagation();
                   setEditing(true);
                 }}
-                className="text-slate-300 hover:text-slate-600 transition-colors"
+                className="text-slate-300 hover:text-slate-600 transition-colors shrink-0"
                 title="重命名"
               >
                 <Pencil className="w-3 h-3" />
               </button>
-              {strategyCount > 0 && (
-                <span className="ml-auto text-[10px] font-semibold text-[#384877] bg-[#384877]/10 px-1.5 py-0.5 rounded-full">
-                  {strategyCount} 策略
-                </span>
-              )}
             </div>
           )}
           <p className="text-xs text-slate-400 mt-0.5 truncate">

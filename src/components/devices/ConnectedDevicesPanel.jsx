@@ -18,6 +18,14 @@ const TYPE_META = {
   other: { icon: Monitor, label: "其他", desc: "辅助设备" },
 };
 
+const ROLE_META = {
+  primary: "主控",
+  deep_work: "深度工作",
+  voice_hub: "语音中枢",
+  wearable: "贴身",
+  secondary: "辅助",
+};
+
 function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 }) {
   const meta = TYPE_META[device.device_type] || TYPE_META.other;
   const Icon = meta.icon;
@@ -50,6 +58,14 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
           : "border-white/70 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.15)] hover:shadow-[0_12px_40px_-12px_rgba(56,72,119,0.22)]"
       }`}
     >
+      {/* 右上角策略徽章（独立浮标，不挤压标题区） */}
+      {!editing && strategyCount > 0 && (
+        <div className="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold text-white bg-gradient-to-r from-[#384877] via-[#6b6aae] to-[#a98ec4] shadow-[0_4px_12px_-2px_rgba(107,106,174,0.45)]">
+          <span>{strategyCount}</span>
+          <span className="opacity-90">策略</span>
+        </div>
+      )}
+
       <div className="flex items-start gap-4">
         <div
           className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-md ${
@@ -60,7 +76,7 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
         >
           <Icon className="w-6 h-6" />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className={`min-w-0 flex-1 ${!editing && strategyCount > 0 ? "pr-14" : ""}`}>
           {editing ? (
             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
               <Input
@@ -86,41 +102,49 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <h4 className="font-semibold text-slate-900 text-[15px] truncate min-w-0">
+            <div className="flex items-start gap-1.5">
+              <h4 className="font-semibold text-slate-900 text-[15px] leading-snug break-words min-w-0 flex-1">
                 {device.name || meta.label}
               </h4>
-              {strategyCount > 0 ? (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditing(true);
-                  }}
-                  className="group/badge inline-flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold text-white bg-gradient-to-r from-[#384877] via-[#6b6aae] to-[#a98ec4] shadow-[0_4px_12px_-2px_rgba(107,106,174,0.45)] hover:shadow-[0_6px_16px_-2px_rgba(107,106,174,0.6)] transition-shadow"
-                  title="重命名"
-                >
-                  <Pencil className="w-3 h-3 opacity-90" />
-                  <span>{strategyCount} 策略</span>
-                </button>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditing(true);
-                  }}
-                  className="text-slate-300 hover:text-slate-600 transition-colors shrink-0"
-                  title="重命名"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(true);
+                }}
+                className="text-slate-300 hover:text-[#384877] transition-colors shrink-0 mt-1"
+                title="重命名"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
-          <p className="text-xs text-slate-500 mt-1 truncate">
+
+          {/* 设备类型 + 角色 */}
+          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-500">
+            <span className="font-medium text-slate-600">{meta.label}</span>
+            {device.role && ROLE_META[device.role] && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span>{ROLE_META[device.role]}</span>
+              </>
+            )}
+          </div>
+
+          {/* 平台 / 浏览器 */}
+          <p className="text-xs text-slate-500 mt-1.5 break-words">
             {device.platform || meta.desc}
             {device.browser ? ` · ${device.browser}` : ""}
           </p>
-          <div className="flex items-center gap-2 mt-3">
+
+          {/* 屏幕分辨率（如有） */}
+          {device.screen_size && (
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              屏幕 {device.screen_size}
+            </p>
+          )}
+
+          {/* 状态徽章行 */}
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
             {device.is_online ? (
               <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-700">
                 <span className="relative flex w-2 h-2">
@@ -137,11 +161,13 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
             )}
             {device.is_current && (
               <span className="text-[10px] font-semibold text-[#384877] bg-white/70 backdrop-blur-sm border border-[#384877]/15 px-2 py-0.5 rounded-full">
-                当前
+                当前设备
               </span>
             )}
           </div>
-          {device.last_seen_at && !device.is_current && (
+
+          {/* 活跃时间（始终显示） */}
+          {device.last_seen_at && (
             <p className="text-[11px] text-slate-500 mt-2">
               最近活跃 {formatDistanceToNow(new Date(device.last_seen_at), { addSuffix: true, locale: zhCN })}
             </p>

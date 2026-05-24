@@ -139,7 +139,7 @@ export async function registerCurrentDevice() {
   return created;
 }
 
-/** 单次心跳：把 last_seen_at 推到最新 */
+/** 单次心跳：把 last_seen_at 推到最新；若检测到设备类型/平台与旧记录不一致则一并纠正 */
 export async function heartbeat() {
   const device_id = getOrCreateDeviceId();
   const existing = await base44.entities.Device.filter({ device_id });
@@ -147,11 +147,36 @@ export async function heartbeat() {
     return registerCurrentDevice();
   }
   const dev = existing[0];
-  await base44.entities.Device.update(dev.id, {
+  const info = detectDeviceInfo();
+  const patch = {
     is_online: true,
     last_seen_at: new Date().toISOString(),
-  });
-  return dev;
+  };
+  // 如果旧记录的核心硬件标识与当前检测不一致(例如之前误判为电脑/macOS,现在识别出是手机/iOS),自动纠正
+  if (
+    dev.device_type !== info.device_type ||
+    dev.platform !== info.platform ||
+    dev.browser !== info.browser
+  ) {
+    patch.device_type = info.device_type;
+    patch.role = info.role;
+    patch.platform = info.platform;
+    patch.browser = info.browser;
+    patch.user_agent = info.user_agent;
+    patch.screen_size = info.screen_size;
+    patch.capabilities = info.capabilities;
+
+    // 若 name 仍是旧默认名(电脑/Mac 等),同步更新为新形态默认名
+    const oldDefaults = ["电脑", "手机", "平板", "手表", "音箱", "其他", "设备"];
+    const isUntouchedName =
+      !dev.name ||
+      oldDefaults.some(
+        (d) => dev.name === d || dev.name.startsWith(`${d}(`) || dev.name.startsWith(`${d}（`)
+      );
+    if (isUntouchedName) patch.name = info.defaultName;
+  }
+  await base44.entities.Device.update(dev.id, patch);
+  return { ...dev, ...patch };
 }
 
 /** 标记本机离线（页面隐藏/关闭时调用） */

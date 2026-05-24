@@ -7,6 +7,7 @@ import NoteResultView from "./result/NoteResultView";
 import MinutesResultView from "./result/MinutesResultView";
 import CalendarResultView from "./result/CalendarResultView";
 import FileResultView from "./result/FileResultView";
+import LedgerResultView from "./result/LedgerResultView";
 
 const diffIcons = {
   create: { icon: Plus, color: "text-emerald-600", bg: "bg-emerald-50", hover: "hover:bg-emerald-100" },
@@ -33,6 +34,8 @@ function resolveFileUrl(result, diffItem) {
 function pickView(result, automationType) {
   const t = (automationType || result?.type || "").toLowerCase();
   const d = result?.data || {};
+  // 整理账本（必须放在 email/research 等之前，因为 d.entries 是它独有的特征）
+  if (t.includes("ledger") || Array.isArray(d.entries)) return "ledger";
   if (t.includes("email") || d.to || d.subject) return "email";
   // office_doc：有 sections（章节式 Markdown 文档），无 slides → 走 research 视图（支持 Markdown 图片渲染）
   if (t.includes("office") && Array.isArray(d.sections) && !Array.isArray(d.slides)) return "research";
@@ -59,6 +62,7 @@ export default function AutomationResultPreview({ result, automationType, onData
   if (view === "note")     return <NoteResultView     data={result.data} preview={result.preview} onChange={onDataChange} />;
   if (view === "calendar") return <CalendarResultView data={result.data} preview={result.preview} />;
   if (view === "file")     return <FileResultView     result={result} />;
+  if (view === "ledger")   return <LedgerResultView   data={result.data} preview={result.preview} />;
 
   // ---- 通用兜底视图：保留原 preview + diff 列表 ----
   const previewUrlMatch = result.preview && result.preview.match(/https?:\/\/[^\s)）"】>]+/);

@@ -253,7 +253,7 @@ const PLAN_SCHEMA = {
   properties: {
     automation_type: {
       type: "string",
-      enum: ["email_draft", "file_organize", "web_research", "office_doc", "ppt_doc", "calendar_event", "summary_note", "none"]
+      enum: ["email_draft", "file_organize", "web_research", "office_doc", "ppt_doc", "calendar_event", "summary_note", "ledger_organize", "none"]
     },
     plan: {
       type: "object",
@@ -287,7 +287,7 @@ async function generatePlan(base44, exec, attachmentCtx) {
     : '';
   const planRes = await callKimi(
     base44,
-    `用户希望心栈自动帮他完成的事项：${userInput}${fileHint}\n\n请分析这是哪种自动执行类型，并给出清晰的执行方案。\n\n【automation_type 选择铁律】\n- summary_note：基于附件内容生成会议纪要/笔记/总结/复盘/读书笔记/访谈记录等"内容产出型"任务（有附件 + 要产出文档默认走这里）。\n- office_doc：生成提案、方案、合同、报告、说明书等结构化办公文档。\n- ppt_doc：生成演示稿/幻灯片/PPT。\n- web_research：联网调研/搜集资料/对比分析。\n- email_draft：写邮件/发邮件（requires_approval=true）。\n- file_organize：**只**用于"对现有文件批量重命名/归档分类"——例如"把我所有发票按月份归档"。⚠️ 当用户带着附件要求"整理成XX/写成XX/转换成XX"时，这是【内容生产】不是【文件整理】，必须选 summary_note 或 office_doc，禁止选 file_organize。\n- calendar_event：创建日历事件/约定。\n\n注意：发送邮件/删除文件等不可逆操作 requires_approval 必须为 true。`,
+    `用户希望心栈自动帮他完成的事项：${userInput}${fileHint}\n\n请分析这是哪种自动执行类型，并给出清晰的执行方案。\n\n【automation_type 选择铁律】\n- summary_note：基于附件内容生成会议纪要/笔记/总结/复盘/读书笔记/访谈记录等"内容产出型"任务（有附件 + 要产出文档默认走这里）。\n- office_doc：生成提案、方案、合同、报告、说明书等结构化办公文档。\n- ppt_doc：生成演示稿/幻灯片/PPT。\n- web_research：联网调研/搜集资料/对比分析。\n- email_draft：写邮件/发邮件（requires_approval=true）。\n- file_organize：**只**用于"对现有文件批量重命名/归档分类"——例如"把我所有发票按月份归档"。⚠️ 当用户带着附件要求"整理成XX/写成XX/转换成XX"时，这是【内容生产】不是【文件整理】，必须选 summary_note 或 office_doc，禁止选 file_organize。\n- ledger_organize：把混乱的记账文本（语音转写、聊天碎片、银行流水、随手记账）整理成结构化账本。任何同时包含【金额数字（如 12 / 9.9 / ¥58 / 块/元）】和【消费/收入描述（如 早饭/咖啡/工资/转给）】的指令，都应该选这个，而不是 summary_note。\n- calendar_event：创建日历事件/约定。\n\n注意：发送邮件/删除文件等不可逆操作 requires_approval 必须为 true。`,
     PLAN_SCHEMA,
     "你是心栈 SoulSentry 的自动执行规划官，负责把用户的自然语言指令转换成结构化执行方案。要简洁、具体、可执行。严格遵守 automation_type 选择铁律：带附件要求生成纪要/总结/笔记的，一律选 summary_note，不要选 file_organize。"
   );
@@ -1759,6 +1759,38 @@ async function executeCalendarEvent(base44, exec) {
   };
 }
 
+// 整理账本（具体实现在独立的 organizeLedger 函数中，此处只做转调）
+async function executeLedgerOrganize(base44, exec, attachmentCtx) {
+  const userText = exec.original_input || exec.task_title;
+  const fileBlock = attachmentCtx?.text || '';
+  const res = await base44.functions.invoke('organizeLedger', {
+    user_text: userText,
+    file_block: fileBlock,
+  });
+  const d = res?.data || {};
+  if (d?.error || !Array.isArray(d.entries)) {
+    throw new Error(`整理账本失败：${d?.message || d?.error || '未能从输入中识别账目'}`);
+  }
+  const entries = d.entries;
+  const stats = d.stats || { total_income: 0, total_expense: 0 };
+  const totalInc = Number(stats.total_income) || 0;
+  const totalExp = Number(stats.total_expense) || 0;
+  const balance = totalInc - totalExp;
+  const previewLines = [
+    `💰 已识别 ${entries.length} 笔账目`,
+    `📈 收入 ¥${totalInc.toFixed(2)} · 📉 支出 ¥${totalExp.toFixed(2)} · 结余 ${balance >= 0 ? '+' : ''}¥${balance.toFixed(2)}`,
+  ];
+  if (Array.isArray(stats.alerts) && stats.alerts.length) {
+    previewLines.push('', '💡 ' + stats.alerts.slice(0, 3).join(' · '));
+  }
+  return {
+    type: "ledger_organize",
+    preview: previewLines.join('\n'),
+    data: { entries, stats, balance },
+    diff: [{ action: "create", target: `账本：${entries.length} 笔账目`, detail: `收入 ¥${totalInc.toFixed(2)} / 支出 ¥${totalExp.toFixed(2)}` }],
+  };
+}
+
 const EXECUTORS = {
   email_draft: executeEmailDraft,
   web_research: executeWebResearch,
@@ -1767,6 +1799,7 @@ const EXECUTORS = {
   ppt_doc: executePptDoc,
   file_organize: executeFileOrganize,
   calendar_event: executeCalendarEvent,
+  ledger_organize: executeLedgerOrganize,
 };
 
 Deno.serve(async (req) => {

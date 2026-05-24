@@ -106,6 +106,12 @@ export const AI_FEATURES = {
     multiplier: 0,
     estimated: "80 点/次",
     description: "固定计费：AI 生成多页 PPT（含视觉解析）"
+  },
+  automation_ledger_organize: {
+    name: "自动执行 · 整理账本",
+    multiplier: 0,
+    estimated: "20 点/次",
+    description: "固定计费：AI 从混乱文本中识别账目并分类"
   }
 };
 
@@ -116,6 +122,7 @@ export const AUTOMATION_EXECUTE_COSTS = {
   summary_note: 20,
   calendar_event: 20,
   file_organize: 20,
+  ledger_organize: 20,
   office_doc: 50,
   web_research: 60,
   ppt_doc: 80,

@@ -1,4 +1,4 @@
-import { Mail, FolderTree, Globe, FileText, Calendar, StickyNote, Zap } from "lucide-react";
+import { Mail, FolderTree, Globe, FileText, Calendar, StickyNote, Zap, Wallet } from "lucide-react";
 
 export const AUTOMATION_TYPES = {
   email_draft: {
@@ -49,6 +49,14 @@ export const AUTOMATION_TYPES = {
     iconBg: "bg-amber-100 text-amber-600",
     description: "把零散思绪整理成心签",
   },
+  ledger_organize: {
+    label: "整理账本",
+    emoji: "💰",
+    icon: Wallet,
+    color: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    iconBg: "bg-emerald-100 text-emerald-600",
+    description: "把混乱的记账内容整理成结构化账本",
+  },
   none: {
     label: "PPT报告",
     emoji: "📊",
@@ -66,4 +74,5 @@ export const QUICK_AUTOMATION_TEMPLATES = [
   { type: "summary_note", emoji: "📝", label: "整理笔记", example: "把刚才会议要点整理成心签" },
   { type: "calendar_event", emoji: "📅", label: "加约定", example: "下周三下午两点产品评审会" },
   { type: "file_organize", emoji: "📁", label: "整理文件", example: "把下载文件夹按类型分类" },
+  { type: "ledger_organize", emoji: "💰", label: "整理账本", example: "今天早饭12 地铁4 中午58 咖啡9.9 晚上超市186 昨天房租2500" },
 ];

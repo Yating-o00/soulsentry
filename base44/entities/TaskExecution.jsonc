@@ -139,10 +139,11 @@
         "web_research",
         "office_doc",
         "calendar_event",
-        "summary_note"
+        "summary_note",
+        "ledger_organize"
       ],
       "default": "none",
-      "description": "\u81ea\u52a8\u6267\u884c\u7c7b\u578b\uff1a\u90ae\u4ef6\u8349\u7a3f/\u6587\u4ef6\u6574\u7406/\u7f51\u9875\u8c03\u7814/\u529e\u516c\u6587\u6863/\u65e5\u5386\u4e8b\u4ef6/\u603b\u7ed3\u5fc3\u7b7e"
+      "description": "\u81ea\u52a8\u6267\u884c\u7c7b\u578b\uff1a\u90ae\u4ef6\u8349\u7a3f/\u6587\u4ef6\u6574\u7406/\u7f51\u9875\u8c03\u7814/\u529e\u516c\u6587\u6863/\u65e5\u5386\u4e8b\u4ef6/\u603b\u7ed3\u5fc3\u7b7e/\u6574\u7406\u8d26\u672c"
     },
     "automation_plan": {
       "type": "object",

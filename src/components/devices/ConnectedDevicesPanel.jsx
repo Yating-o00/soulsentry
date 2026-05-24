@@ -42,31 +42,20 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={handleCardClick}
-      className={`relative rounded-2xl p-4 border transition-all bg-white cursor-pointer ${
+      className={`relative rounded-3xl p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 bg-white/60 ${
         isSelected
-          ? "border-[#384877] shadow-[0_4px_20px_rgba(56,72,119,0.18)] ring-2 ring-[#384877]/15"
+          ? "border-[#384877]/60 shadow-[0_20px_60px_-15px_rgba(56,72,119,0.35),0_0_0_4px_rgba(91,109,174,0.12)]"
           : device.is_current
-          ? "border-[#384877]/40 hover:border-[#384877]"
-          : "border-slate-200 hover:border-slate-300"
+          ? "border-white/80 shadow-[0_10px_40px_-12px_rgba(56,72,119,0.25)] hover:shadow-[0_15px_50px_-12px_rgba(56,72,119,0.32)]"
+          : "border-white/70 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.15)] hover:shadow-[0_12px_40px_-12px_rgba(56,72,119,0.22)]"
       }`}
     >
-      {strategyCount > 0 && !editing && (
-        <span
-          className={`absolute top-2.5 right-2.5 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
-            isSelected
-              ? "bg-[#384877] text-white"
-              : "bg-[#384877]/10 text-[#384877]"
-          }`}
-        >
-          {strategyCount} 策略
-        </span>
-      )}
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-4">
         <div
-          className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-            device.is_current
-              ? "bg-gradient-to-br from-[#384877] to-[#5b6dae] text-white shadow-lg shadow-[#384877]/30"
-              : "bg-slate-100 text-slate-500"
+          className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-md ${
+            device.is_current || isSelected
+              ? "bg-gradient-to-br from-[#384877] via-[#4a5a96] to-[#5b6dae] text-white shadow-[0_8px_24px_-6px_rgba(56,72,119,0.55)]"
+              : "bg-gradient-to-br from-white/80 to-slate-100/80 text-[#384877] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_4px_12px_-4px_rgba(15,23,42,0.1)]"
           }`}
         >
           <Icon className="w-6 h-6" />
@@ -97,46 +86,63 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
               </Button>
             </div>
           ) : (
-            <div className={`flex items-center gap-1.5 ${strategyCount > 0 ? "pr-16" : ""}`}>
-              <h4 className="font-semibold text-slate-900 text-sm truncate">
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold text-slate-900 text-[15px] truncate min-w-0">
                 {device.name || meta.label}
               </h4>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(true);
-                }}
-                className="text-slate-300 hover:text-slate-600 transition-colors shrink-0"
-                title="重命名"
-              >
-                <Pencil className="w-3 h-3" />
-              </button>
+              {strategyCount > 0 ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditing(true);
+                  }}
+                  className="group/badge inline-flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold text-white bg-gradient-to-r from-[#384877] via-[#6b6aae] to-[#a98ec4] shadow-[0_4px_12px_-2px_rgba(107,106,174,0.45)] hover:shadow-[0_6px_16px_-2px_rgba(107,106,174,0.6)] transition-shadow"
+                  title="重命名"
+                >
+                  <Pencil className="w-3 h-3 opacity-90" />
+                  <span>{strategyCount} 策略</span>
+                </button>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditing(true);
+                  }}
+                  className="text-slate-300 hover:text-slate-600 transition-colors shrink-0"
+                  title="重命名"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
-          <p className="text-xs text-slate-400 mt-0.5 truncate">
+          <p className="text-xs text-slate-500 mt-1 truncate">
             {device.platform || meta.desc}
             {device.browser ? ` · ${device.browser}` : ""}
           </p>
-          <div className="flex items-center gap-1.5 mt-2">
+          <div className="flex items-center gap-2 mt-3">
             {device.is_online ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                <Wifi className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-700">
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60"></span>
+                  <span className="relative rounded-full w-2 h-2 bg-emerald-500"></span>
+                </span>
                 在线
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                <WifiOff className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-slate-300"></span>
                 离线
               </span>
             )}
             {device.is_current && (
-              <span className="text-[11px] font-medium text-[#384877] bg-[#384877]/10 px-2 py-0.5 rounded-full">
-                当前设备
+              <span className="text-[10px] font-semibold text-[#384877] bg-white/70 backdrop-blur-sm border border-[#384877]/15 px-2 py-0.5 rounded-full">
+                当前
               </span>
             )}
           </div>
           {device.last_seen_at && !device.is_current && (
-            <p className="text-[10px] text-slate-400 mt-1.5">
+            <p className="text-[11px] text-slate-500 mt-2">
               最近活跃 {formatDistanceToNow(new Date(device.last_seen_at), { addSuffix: true, locale: zhCN })}
             </p>
           )}

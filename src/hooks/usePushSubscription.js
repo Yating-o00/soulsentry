@@ -19,15 +19,46 @@ export function usePushSubscription({ onChange } = {}) {
       && 'PushManager' in window
       && 'Notification' in window;
     setSupported(ok);
-    if (ok) setPermission(Notification.permission);
+    if (!ok) return;
 
-    if (ok) {
-      registerPWA();
-      navigator.serviceWorker.ready.then(async (reg) => {
+    setPermission(Notification.permission);
+    registerPWA();
+
+    const refreshState = async () => {
+      try {
+        setPermission(Notification.permission);
+        const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
         setSubscribed(!!sub);
-      }).catch(() => {});
+      } catch {}
+    };
+
+    refreshState();
+
+    // 监听权限变化（用户在浏览器站点设置里改了权限）
+    let permStatus = null;
+    if (navigator.permissions?.query) {
+      navigator.permissions
+        .query({ name: 'notifications' })
+        .then((status) => {
+          permStatus = status;
+          status.onchange = () => refreshState();
+        })
+        .catch(() => {});
     }
+
+    // 页面重新可见时刷新一次（用户从浏览器设置返回）
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshState();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', refreshState);
+
+    return () => {
+      if (permStatus) permStatus.onchange = null;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', refreshState);
+    };
   }, []);
 
   const subscribe = useCallback(async () => {

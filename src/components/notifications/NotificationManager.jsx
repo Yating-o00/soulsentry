@@ -6,6 +6,39 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Bell, Clock, X } from "lucide-react";
 
+// 跨页面/跨 mount 持久化的"已通知"状态（避免移动端切换路由时重复弹窗）
+// key 形如 notified-<taskId>-<type>-<YYYY-MM-DD>，过期自动清理
+const NOTIFIED_STORAGE_KEY = 'ss_notified_keys_v1';
+const NOTIFIED_TTL_MS = 36 * 60 * 60 * 1000; // 36 小时后自动失效
+
+const loadNotifiedMap = () => {
+  try {
+    const raw = localStorage.getItem(NOTIFIED_STORAGE_KEY);
+    if (!raw) return {};
+    const map = JSON.parse(raw);
+    const now = Date.now();
+    let dirty = false;
+    Object.keys(map).forEach(k => {
+      if (!map[k] || now - map[k] > NOTIFIED_TTL_MS) { delete map[k]; dirty = true; }
+    });
+    if (dirty) localStorage.setItem(NOTIFIED_STORAGE_KEY, JSON.stringify(map));
+    return map;
+  } catch { return {}; }
+};
+
+const isNotified = (key) => {
+  const map = loadNotifiedMap();
+  return !!map[key];
+};
+
+const markNotified = (key) => {
+  try {
+    const map = loadNotifiedMap();
+    map[key] = Date.now();
+    localStorage.setItem(NOTIFIED_STORAGE_KEY, JSON.stringify(map));
+  } catch {}
+};
+
 const NOTIFICATION_SOUNDS = {
   default: "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
   gentle: "https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3",
@@ -349,9 +382,11 @@ export default function NotificationManager() {
 
       if (task.snooze_until) {
           // Snoozed logic (override normal schedule)
-          if (isPast(reminderTime) && !checkedTasks.current.has(task.id)) {
+          const snoozeKey = `${task.id}-snooze-${task.snooze_until}`;
+          if (isPast(reminderTime) && !checkedTasks.current.has(snoozeKey) && !isNotified(snoozeKey)) {
              sendNotification(task, false);
-             checkedTasks.current.add(task.id);
+             checkedTasks.current.add(snoozeKey);
+             markNotified(snoozeKey);
           }
       } else if (isMultiDay) {
           // Multi-day logic: Remind daily at the specific time
@@ -377,25 +412,24 @@ export default function NotificationManager() {
              // 3. Not before the global start time
              if (isPast(targetTime) && (!task.end_time || isBefore(now, end)) && !isBefore(now, start)) {
                  const uniqueKey = `${task.id}-daily-${format(now, 'yyyy-MM-dd')}`;
-                 const hasNotifiedToday = typeof window !== 'undefined' && localStorage.getItem(`notified-${uniqueKey}`);
 
-                 if (!hasNotifiedToday && !checkedTasks.current.has(uniqueKey)) {
+                 if (!isNotified(uniqueKey) && !checkedTasks.current.has(uniqueKey)) {
                      // Tag task object temporarily to prevent DB update in sendNotification
                      const taskWithFlag = { ...task, is_daily_recurring_instance: true };
                      sendNotification(taskWithFlag, false);
-                     
+
                      checkedTasks.current.add(uniqueKey);
-                     if (typeof window !== 'undefined') {
-                         localStorage.setItem(`notified-${uniqueKey}`, 'true');
-                     }
+                     markNotified(uniqueKey);
                  }
              }
           }
       } else {
-          // Single day logic (Original)
-          if (isPast(reminderTime) && !task.reminder_sent && !checkedTasks.current.has(task.id)) {
+          // Single day logic (Original) — 用持久化 key 防止跨页面重复提醒
+          const singleKey = `${task.id}-single-${format(reminderTime, 'yyyy-MM-dd-HH-mm')}`;
+          if (isPast(reminderTime) && !task.reminder_sent && !checkedTasks.current.has(singleKey) && !isNotified(singleKey)) {
             sendNotification(task, false);
-            checkedTasks.current.add(task.id);
+            checkedTasks.current.add(singleKey);
+            markNotified(singleKey);
 
             // 如果是持续提醒，设置定时器
             if (task.persistent_reminder) {
@@ -427,11 +461,11 @@ export default function NotificationManager() {
           const advanceTime = new Date(reminderTime.getTime() - minutes * 60000);
           const checkKey = `${task.id}-advance-${minutes}-${point.type || 'strategy'}`;
           
-          if (isPast(advanceTime) && !checkedTasks.current.has(checkKey)) {
+          if (isPast(advanceTime) && !checkedTasks.current.has(checkKey) && !isNotified(checkKey)) {
             const minutesUntil = differenceInMinutes(reminderTime, now);
             // 允许稍微过期的检查（比如最近1分钟内），避免错过
             if (minutesUntil <= minutes && minutesUntil > minutes - 5) {
-              
+
               if (point.type === 'standard') {
                   sendNotification(task, true);
               } else {
@@ -443,6 +477,7 @@ export default function NotificationManager() {
                   });
               }
               checkedTasks.current.add(checkKey);
+              markNotified(checkKey);
             }
           }
         });
@@ -459,7 +494,7 @@ export default function NotificationManager() {
             const proactiveKey = `${task.id}-proactive-nag`;
 
             // 如果超过24小时未处理，且没有被此逻辑触发过
-            if (hoursOverdue > 24 && !checkedTasks.current.has(proactiveKey)) {
+            if (hoursOverdue > 24 && !checkedTasks.current.has(proactiveKey) && !isNotified(proactiveKey)) {
                 // 检查用户最近是否活跃但忽略了此约定
                 const recentActivity = recentBehaviors.length > 0;
                 
@@ -470,7 +505,8 @@ export default function NotificationManager() {
                         title: `⚠️ 遗漏约定关注：${task.title}`
                     });
                     checkedTasks.current.add(proactiveKey);
-                    
+                    markNotified(proactiveKey);
+
                     // 记录AI主动干预
                     logBehaviorMutation.mutate({
                         event_type: "ai_proactive_remind",

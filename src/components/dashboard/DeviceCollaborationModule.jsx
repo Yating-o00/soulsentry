@@ -7,6 +7,7 @@ import { Cpu } from "lucide-react";
 import DeviceStrategyPanel from "./planner/DeviceStrategyPanel";
 import ConnectedDevicesPanel from "@/components/devices/ConnectedDevicesPanel";
 import { listMyDevices } from "@/lib/deviceRegistry";
+import { resolveDeviceBrand } from "@/components/devices/DeviceBrandIcon";
 
 /**
  * 全设备智能协同 — 独立模块
@@ -411,12 +412,18 @@ export default function DeviceCollaborationModule() {
     || (realDevices || [])[0]
     || null;
 
+  // 关键:用 UA 实时判定出的形态作为真相,绕开数据库里可能错误的 device_type
+  // 否则数据库里一台被错标的"手机"会一直拿到 pc 的策略,看上去所有设备策略一样
+  const effectiveSelectedType = effectiveSelected
+    ? normalizeTypeKey(resolveDeviceBrand(effectiveSelected).deviceType || effectiveSelected.device_type)
+    : null;
+
   const hasAnyStrategy = devices.some((d) => d.strategies && d.strategies.length > 0);
   const hasAnyRealDevice = (realDevices || []).length > 0;
   if (!hasAnyStrategy && !hasAnyRealDevice) return null;
 
-  const selectedStrategies = effectiveSelected
-    ? (strategiesByType[normalizeTypeKey(effectiveSelected.device_type)] || [])
+  const selectedStrategies = effectiveSelectedType
+    ? (strategiesByType[effectiveSelectedType] || [])
     : [];
 
   return (
@@ -445,7 +452,7 @@ export default function DeviceCollaborationModule() {
         />
         {effectiveSelected && (
           <DeviceStrategyPanel
-            deviceType={effectiveSelected.device_type}
+            deviceType={effectiveSelectedType}
             deviceName={effectiveSelected.name}
             strategies={selectedStrategies}
           />

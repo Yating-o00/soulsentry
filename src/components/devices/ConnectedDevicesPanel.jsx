@@ -343,16 +343,20 @@ export default function ConnectedDevicesPanel({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
-        {devices.map((d) => (
-          <DeviceCard
-            key={d.id}
-            device={d}
-            onRename={handleRename}
-            isSelected={activeId === d.id}
-            onSelect={handleSelect}
-            strategyCount={strategiesByType?.[d.device_type]?.length || 0}
-          />
-        ))}
+        {devices.map((d) => {
+          // 用 UA 实时判定的形态取策略数,避免数据库 device_type 脏数据
+          const realType = resolveDeviceBrand(d).deviceType || d.device_type;
+          return (
+            <DeviceCard
+              key={d.id}
+              device={d}
+              onRename={handleRename}
+              isSelected={activeId === d.id}
+              onSelect={handleSelect}
+              strategyCount={strategiesByType?.[realType]?.length || 0}
+            />
+          );
+        })}
       </div>
 
       {devices.length > 0 && (

@@ -1,6 +1,6 @@
 import React from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { format, parseISO, isToday, startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { motion } from "framer-motion";
 import { Cpu } from "lucide-react";
@@ -180,29 +180,34 @@ export default function DeviceCollaborationModule() {
   const { data: planQueryData } = useQuery({
     queryKey: ['dailyPlan', todayStr],
     queryFn: () => base44.entities.DailyPlan.filter({ plan_date: todayStr }),
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
+  // 仅取最近 50 条带 reminder_time 的任务,避免拉全部历史任务
   const { data: allTasks = [] } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list('-reminder_time'),
+    queryKey: ['tasks-collab-today'],
+    queryFn: () => base44.entities.Task.list('-reminder_time', 50),
     initialData: [],
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const { data: allNotes = [] } = useQuery({
-    queryKey: ['notes'],
-    queryFn: () => base44.entities.Note.list('-created_date', 100),
+    queryKey: ['notes-collab-today'],
+    queryFn: () => base44.entities.Note.list('-updated_date', 30),
     initialData: [],
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
-  const { data: realDevices = [] } = useQuery({
+  const { data: realDevices = [], refetch: refetchDevices, isLoading: devicesLoading } = useQuery({
     queryKey: ['my-devices'],
     queryFn: () => listMyDevices(),
     initialData: [],
-    staleTime: 30 * 1000,
-    refetchInterval: 30 * 1000,
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const dayPlan = planQueryData?.[0] || null;
@@ -308,6 +313,9 @@ export default function DeviceCollaborationModule() {
           selectedDeviceId={effectiveSelected?.id}
           onSelectDevice={setSelectedDevice}
           strategiesByType={strategiesByType}
+          devices={realDevices}
+          loading={devicesLoading}
+          onRefresh={refetchDevices}
         />
         {effectiveSelected && (
           <DeviceStrategyPanel

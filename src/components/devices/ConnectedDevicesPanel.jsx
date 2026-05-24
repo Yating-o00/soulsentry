@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Smartphone, Monitor, Tablet, Watch, Speaker, RefreshCw, Pencil, Check, X, Wifi, WifiOff } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { listMyDevices, registerCurrentDevice } from "@/lib/deviceRegistry";
+import { registerCurrentDevice } from "@/lib/deviceRegistry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDistanceToNow } from "date-fns";
@@ -144,21 +144,11 @@ export default function ConnectedDevicesPanel({
   selectedDeviceId,
   onSelectDevice,
   strategiesByType = {},
+  devices = [],
+  loading = false,
+  onRefresh,
 }) {
-  const [devices, setDevices] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [internalSelected, setInternalSelected] = useState(null);
-
-  const refresh = async () => {
-    try {
-      const list = await listMyDevices();
-      setDevices(list);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // 默认选中当前设备
   useEffect(() => {
@@ -174,17 +164,11 @@ export default function ConnectedDevicesPanel({
     onSelectDevice?.(device);
   };
 
-  useEffect(() => {
-    refresh();
-    const t = setInterval(refresh, 30 * 1000);
-    return () => clearInterval(t);
-  }, []);
-
   const handleConnectCurrent = async () => {
     try {
       await registerCurrentDevice();
       toast.success("本机已连接");
-      refresh();
+      onRefresh?.();
     } catch (e) {
       toast.error("连接失败：" + (e?.message || ""));
     }
@@ -199,7 +183,7 @@ export default function ConnectedDevicesPanel({
       }
       await registerCurrentDevice();
       toast.success("本机已上线，正在刷新…");
-      setTimeout(refresh, 500);
+      setTimeout(() => onRefresh?.(), 500);
     } catch (e) {
       toast.error("测试失败：" + (e?.message || "未知错误"));
     }
@@ -209,7 +193,7 @@ export default function ConnectedDevicesPanel({
     try {
       await base44.entities.Device.update(device.id, { name: newName });
       toast.success("已更新设备名");
-      refresh();
+      onRefresh?.();
     } catch (e) {
       toast.error("重命名失败");
     }
@@ -243,7 +227,7 @@ export default function ConnectedDevicesPanel({
           >
             测试连接
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={refresh} title="刷新">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onRefresh?.()} title="刷新">
             <RefreshCw className="w-4 h-4 text-slate-500" />
           </Button>
         </div>

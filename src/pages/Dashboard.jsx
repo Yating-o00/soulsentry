@@ -48,6 +48,7 @@ import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
+import EnableBackgroundPushBanner from "@/components/account/EnableBackgroundPushBanner";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -297,6 +298,7 @@ export default function Dashboard() {
   return (
     <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto min-h-screen">
       <NotificationManager />
+      <EnableBackgroundPushBanner />
       
       <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
         {/* Header Section */}

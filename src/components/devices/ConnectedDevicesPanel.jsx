@@ -18,16 +18,22 @@ const TYPE_META = {
   other: { icon: Monitor, label: "其他", desc: "辅助设备" },
 };
 
-function DeviceCard({ device, onRename }) {
+function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 }) {
   const meta = TYPE_META[device.device_type] || TYPE_META.other;
   const Icon = meta.icon;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(device.name || meta.label);
 
-  const save = async () => {
+  const save = async (e) => {
+    e?.stopPropagation?.();
     const newName = (draft || "").trim() || meta.label;
     await onRename(device, newName);
     setEditing(false);
+  };
+
+  const handleCardClick = () => {
+    if (editing) return;
+    onSelect?.(device);
   };
 
   return (
@@ -35,9 +41,12 @@ function DeviceCard({ device, onRename }) {
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`relative rounded-2xl p-4 border transition-all bg-white ${
-        device.is_current
+      onClick={handleCardClick}
+      className={`relative rounded-2xl p-4 border transition-all bg-white cursor-pointer ${
+        isSelected
           ? "border-[#384877] shadow-[0_4px_20px_rgba(56,72,119,0.18)] ring-2 ring-[#384877]/15"
+          : device.is_current
+          ? "border-[#384877]/40 hover:border-[#384877]"
           : "border-slate-200 hover:border-slate-300"
       }`}
     >
@@ -53,7 +62,7 @@ function DeviceCard({ device, onRename }) {
         </div>
         <div className="min-w-0 flex-1">
           {editing ? (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
               <Input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -67,7 +76,8 @@ function DeviceCard({ device, onRename }) {
                 size="icon"
                 variant="ghost"
                 className="h-7 w-7"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setDraft(device.name || meta.label);
                   setEditing(false);
                 }}
@@ -81,12 +91,20 @@ function DeviceCard({ device, onRename }) {
                 {device.name || meta.label}
               </h4>
               <button
-                onClick={() => setEditing(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(true);
+                }}
                 className="text-slate-300 hover:text-slate-600 transition-colors"
                 title="重命名"
               >
                 <Pencil className="w-3 h-3" />
               </button>
+              {strategyCount > 0 && (
+                <span className="ml-auto text-[10px] font-semibold text-[#384877] bg-[#384877]/10 px-1.5 py-0.5 rounded-full">
+                  {strategyCount} 策略
+                </span>
+              )}
             </div>
           )}
           <p className="text-xs text-slate-400 mt-0.5 truncate">
@@ -122,9 +140,14 @@ function DeviceCard({ device, onRename }) {
   );
 }
 
-export default function ConnectedDevicesPanel() {
+export default function ConnectedDevicesPanel({
+  selectedDeviceId,
+  onSelectDevice,
+  strategiesByType = {},
+}) {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [internalSelected, setInternalSelected] = useState(null);
 
   const refresh = async () => {
     try {
@@ -135,6 +158,20 @@ export default function ConnectedDevicesPanel() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 默认选中当前设备
+  useEffect(() => {
+    if (selectedDeviceId === undefined && !internalSelected && devices.length > 0) {
+      const current = devices.find((d) => d.is_current) || devices[0];
+      if (current) setInternalSelected(current.id);
+    }
+  }, [devices, selectedDeviceId, internalSelected]);
+
+  const activeId = selectedDeviceId ?? internalSelected;
+  const handleSelect = (device) => {
+    if (selectedDeviceId === undefined) setInternalSelected(device.id);
+    onSelectDevice?.(device);
   };
 
   useEffect(() => {
@@ -229,7 +266,14 @@ export default function ConnectedDevicesPanel() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {devices.map((d) => (
-          <DeviceCard key={d.id} device={d} onRename={handleRename} />
+          <DeviceCard
+            key={d.id}
+            device={d}
+            onRename={handleRename}
+            isSelected={activeId === d.id}
+            onSelect={handleSelect}
+            strategyCount={strategiesByType?.[d.device_type]?.length || 0}
+          />
         ))}
       </div>
 

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format, parseISO, isToday, startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { motion } from "framer-motion";
 import { Cpu } from "lucide-react";
-import DeviceStrategyMap from "./planner/DeviceStrategyMap";
+import DeviceStrategyPanel from "./planner/DeviceStrategyPanel";
 import ConnectedDevicesPanel from "@/components/devices/ConnectedDevicesPanel";
 import { listMyDevices } from "@/lib/deviceRegistry";
 
@@ -242,9 +242,31 @@ export default function DeviceCollaborationModule() {
     [baseDevices, taskStrategies, noteStrategies, realDevices]
   );
 
+  // 按 device_type 聚合策略,便于真实设备卡片显示策略数与时间轴
+  const strategiesByType = React.useMemo(() => {
+    const map = {};
+    for (const d of devices) {
+      if (!d.strategies || d.strategies.length === 0) continue;
+      // d.id 可能是 'phone' / 'pc' / 'tablet' 等 type key
+      map[d.id] = d.strategies;
+    }
+    return map;
+  }, [devices]);
+
+  const [selectedDevice, setSelectedDevice] = React.useState(null);
+  // 默认选当前设备
+  const effectiveSelected = selectedDevice
+    || (realDevices || []).find((d) => d.is_current)
+    || (realDevices || [])[0]
+    || null;
+
   const hasAnyStrategy = devices.some((d) => d.strategies && d.strategies.length > 0);
   const hasAnyRealDevice = (realDevices || []).length > 0;
   if (!hasAnyStrategy && !hasAnyRealDevice) return null;
+
+  const selectedStrategies = effectiveSelected
+    ? (strategiesByType[effectiveSelected.device_type] || [])
+    : [];
 
   return (
     <motion.div
@@ -260,13 +282,23 @@ export default function DeviceCollaborationModule() {
           </div>
           <div className="min-w-0">
             <h3 className="font-bold text-slate-900 text-[15px] leading-tight">全设备智能协同</h3>
-            <p className="text-xs text-slate-400 mt-0.5">AI 自动调度多端设备分发策略</p>
+            <p className="text-xs text-slate-400 mt-0.5">点击下方设备查看分配到该终端的策略</p>
           </div>
         </div>
       </div>
       <div className="px-5 md:px-6 py-5 space-y-5">
-        <ConnectedDevicesPanel />
-        {hasAnyStrategy && <DeviceStrategyMap devices={devices} />}
+        <ConnectedDevicesPanel
+          selectedDeviceId={effectiveSelected?.id}
+          onSelectDevice={setSelectedDevice}
+          strategiesByType={strategiesByType}
+        />
+        {effectiveSelected && (
+          <DeviceStrategyPanel
+            deviceType={effectiveSelected.device_type}
+            deviceName={effectiveSelected.name}
+            strategies={selectedStrategies}
+          />
+        )}
       </div>
     </motion.div>
   );

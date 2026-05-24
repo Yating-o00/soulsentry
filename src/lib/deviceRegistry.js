@@ -23,26 +23,39 @@ function detectDeviceInfo() {
   const ua = navigator.userAgent || "";
   const lower = ua.toLowerCase();
 
+  // iPadOS 13+ 默认伪装成 macOS Safari,需要用 touch points 判断
+  const hasTouch = (navigator.maxTouchPoints || 0) > 1;
+  const isIPadOS = /macintosh/i.test(ua) && hasTouch;
+  // 小屏 + 触摸 = 移动设备(兜底:iPhone 在某些 WebView 也会伪装 UA)
+  const isSmallTouchScreen =
+    hasTouch && typeof window.screen?.width === "number" && Math.min(window.screen.width, window.screen.height) <= 500;
+
   let device_type = "pc";
   let role = "deep_work";
   let defaultName = "电脑";
 
-  const isTablet = /ipad|tablet|playbook|silk/i.test(ua) || (lower.includes("android") && !lower.includes("mobile"));
-  const isPhone = /iphone|ipod|android.+mobile|windows phone|blackberry|bb10|mini|webos|opera mini/i.test(ua);
+  const isTablet =
+    /ipad|tablet|playbook|silk/i.test(ua) ||
+    isIPadOS ||
+    (lower.includes("android") && !lower.includes("mobile"));
+  const isPhone =
+    /iphone|ipod|android.+mobile|windows phone|blackberry|bb10|mini|webos|opera mini/i.test(ua) ||
+    isSmallTouchScreen;
 
-  if (isTablet) {
-    device_type = "tablet";
-    role = "secondary";
-    defaultName = "平板";
-  } else if (isPhone) {
+  if (isPhone) {
     device_type = "phone";
     role = "primary";
     defaultName = "手机";
+  } else if (isTablet) {
+    device_type = "tablet";
+    role = "secondary";
+    defaultName = "平板";
   }
 
   // 平台
   let platform = "Unknown";
-  if (/iphone|ipad|ipod/i.test(ua)) platform = "iOS";
+  if (/iphone|ipod/i.test(ua) || isSmallTouchScreen) platform = "iOS";
+  else if (isIPadOS || /ipad/i.test(ua)) platform = "iPadOS";
   else if (/android/i.test(ua)) platform = "Android";
   else if (/mac os x/i.test(ua)) platform = "macOS";
   else if (/windows/i.test(ua)) platform = "Windows";

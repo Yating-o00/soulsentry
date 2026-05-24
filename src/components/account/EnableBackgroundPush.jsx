@@ -2,9 +2,18 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BellRing, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { BellRing, CheckCircle2, AlertCircle, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { toast } from "sonner";
+
+// 判断当前页面是否运行在 iframe 中（base44 编辑器预览就是 iframe）
+const isInIframe = () => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+};
 
 /**
  * 后台推送一键开启卡片
@@ -110,9 +119,35 @@ export default function EnableBackgroundPush() {
             )}
 
             {permission === "denied" && (
-              <p className="text-[11px] text-rose-500 mt-2 leading-relaxed">
-                您之前拒绝了通知权限。请点击地址栏左侧的锁形图标 → 通知 → 改为"允许"，然后刷新页面再试。
-              </p>
+              <div className="mt-2 space-y-2">
+                <p className="text-[11px] text-rose-500 leading-relaxed">
+                  {isInIframe()
+                    ? "检测到当前在编辑器预览中，浏览器对 iframe 内的通知权限有额外限制。请在新窗口打开应用后再开启。"
+                    : '您之前拒绝了通知权限。请点击地址栏左侧的锁形图标 → 通知 → 改为"允许"，然后刷新页面再试。'}
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.location.reload()}
+                    className="h-7 text-[11px]"
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                    刷新重新检测
+                  </Button>
+                  {isInIframe() && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(window.location.href, "_blank")}
+                      className="h-7 text-[11px]"
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1" />
+                      在新窗口打开
+                    </Button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>

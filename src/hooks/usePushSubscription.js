@@ -47,6 +47,16 @@ export function usePushSubscription({ onChange } = {}) {
         .catch(() => {});
     }
 
+    // 兜底：iframe 环境下 permissions.query 经常静默失败，且 Notification.permission
+    // 在用户从浏览器设置里改了权限后不一定立即同步到当前页。
+    // 用一个轻量轮询（前 30 秒内每 2 秒检查一次）兜底状态变化。
+    let pollCount = 0;
+    const pollTimer = setInterval(() => {
+      pollCount += 1;
+      refreshState();
+      if (pollCount >= 15) clearInterval(pollTimer);
+    }, 2000);
+
     // 页面重新可见时刷新一次（用户从浏览器设置返回）
     const onVisible = () => {
       if (document.visibilityState === 'visible') refreshState();
@@ -72,6 +82,7 @@ export function usePushSubscription({ onChange } = {}) {
 
     return () => {
       if (permStatus) permStatus.onchange = null;
+      clearInterval(pollTimer);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', refreshState);
       navigator.serviceWorker?.removeEventListener?.('message', onSWMessage);
@@ -82,7 +93,11 @@ export function usePushSubscription({ onChange } = {}) {
     if (!supported || busy) return false;
     setBusy(true);
     try {
-      const perm = await Notification.requestPermission();
+      // 用户点按钮时，先强制读取一次当前权限（应对从浏览器设置改完没回流到 state 的情况）
+      let perm = Notification.permission;
+      if (perm !== 'granted') {
+        perm = await Notification.requestPermission();
+      }
       setPermission(perm);
       if (perm !== 'granted') return false;
 

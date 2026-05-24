@@ -159,13 +159,24 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
                 )}
               </div>
 
-              {/* 平台 / 浏览器 */}
-              {(device.platform || device.browser) && (
-                <p className="text-[11px] text-slate-400 mt-0.5 truncate" title={`${device.platform || ""}${device.browser ? " · " + device.browser : ""}`}>
-                  {device.platform || meta.desc}
-                  {device.browser ? ` · ${device.browser}` : ""}
-                </p>
-              )}
+              {/* 平台 / 浏览器 — 若数据库里的 platform 与 brand 实时判定形态冲突,
+                  以 brand.label(如 iPhone/Android/Mac) 为准,避免显示矛盾信息 */}
+              {(() => {
+                const p = (device.platform || "").toLowerCase();
+                const ua = (device.user_agent || "").toLowerCase();
+                const dt = brand.deviceType;
+                const platformMismatch =
+                  (dt === "phone" && (p.includes("mac") || p.includes("win") || p.includes("linux"))) ||
+                  (dt === "pc" && (p.includes("ios") || p.includes("android") || ua.includes("iphone")));
+                const platformText = platformMismatch ? brand.label : (device.platform || meta.desc);
+                if (!platformText && !device.browser) return null;
+                return (
+                  <p className="text-[11px] text-slate-400 mt-0.5 truncate" title={`${platformText}${device.browser ? " · " + device.browser : ""}`}>
+                    {platformText}
+                    {device.browser ? ` · ${device.browser}` : ""}
+                  </p>
+                );
+              })()}
 
               {/* 最近活跃 */}
               {device.last_seen_at && (

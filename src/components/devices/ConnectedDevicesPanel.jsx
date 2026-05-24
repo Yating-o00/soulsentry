@@ -50,7 +50,7 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={handleCardClick}
-      className={`relative rounded-3xl p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 bg-white/60 ${
+      className={`relative rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 bg-white/60 ${
         isSelected
           ? "border-[#384877]/60 shadow-[0_20px_60px_-15px_rgba(56,72,119,0.35),0_0_0_4px_rgba(91,109,174,0.12)]"
           : device.is_current
@@ -66,17 +66,20 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
         </div>
       )}
 
-      <div className="flex items-start gap-4">
+      <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
         <div
-          className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-md ${
+          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-md ${
             device.is_current || isSelected
               ? "bg-gradient-to-br from-[#384877] via-[#4a5a96] to-[#5b6dae] text-white shadow-[0_8px_24px_-6px_rgba(56,72,119,0.55)]"
               : "bg-gradient-to-br from-white/80 to-slate-100/80 text-[#384877] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_4px_12px_-4px_rgba(15,23,42,0.1)]"
           }`}
         >
-          <Icon className="w-6 h-6" />
+          <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
-        <div className={`min-w-0 flex-1 ${!editing && strategyCount > 0 ? "pr-14" : ""}`}>
+        <div
+          className={`min-w-0 w-full flex-1 ${!editing && strategyCount > 0 ? "pr-16 sm:pr-14" : ""}`}
+          style={{ writingMode: "horizontal-tb" }}
+        >
           {editing ? (
             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
               <Input
@@ -103,7 +106,7 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
             </div>
           ) : (
             <div className="flex items-start gap-1.5">
-              <h4 className="font-semibold text-slate-900 text-[15px] leading-snug break-words min-w-0 flex-1">
+              <h4 className="font-semibold text-slate-900 text-[15px] leading-snug min-w-0 flex-1 break-all" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
                 {device.name || meta.label}
               </h4>
               <button

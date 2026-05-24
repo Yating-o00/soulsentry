@@ -52,14 +52,19 @@ function detectDeviceInfo() {
     defaultName = "平板";
   }
 
-  // 平台
+  // 平台:先按 UA 中的真实标识判断,再用启发式兜底
   let platform = "Unknown";
-  if (/iphone|ipod/i.test(ua) || isSmallTouchScreen) platform = "iOS";
+  if (/iphone|ipod/i.test(ua)) platform = "iOS";
   else if (isIPadOS || /ipad/i.test(ua)) platform = "iPadOS";
   else if (/android/i.test(ua)) platform = "Android";
-  else if (/mac os x/i.test(ua)) platform = "macOS";
   else if (/windows/i.test(ua)) platform = "Windows";
-  else if (/linux/i.test(ua)) platform = "Linux";
+  else if (/linux/i.test(ua) && !/android/i.test(ua)) platform = "Linux";
+  else if (/mac os x/i.test(ua)) {
+    // macOS UA 若同时是手机(小触屏)说明是 iOS WebView 伪装,纠正为 iOS
+    platform = isPhone ? "iOS" : "macOS";
+  }
+  // 兜底:小触屏但 UA 完全未知,标为 iOS(最常见 WebView 场景)
+  else if (isSmallTouchScreen) platform = "iOS";
 
   // 浏览器
   let browser = "Unknown";

@@ -260,18 +260,34 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies) {
   return out.map(({ _scene, ...rest }) => rest);
 }
 
+// 归一化设备 type:把数据库里可能的脏值 (iphone/workstation/desktop/other/...) 映射到标准 5 类
+function normalizeDeviceTypeKey(raw) {
+  const k = String(raw || "").toLowerCase();
+  if (k === "phone" || k === "mobile" || k === "iphone" || k === "android") return "phone";
+  if (k === "pc" || k === "workstation" || k === "desktop" || k === "computer" || k === "laptop" || k === "mac" || k === "macos" || k === "windows") return "pc";
+  if (k === "tablet" || k === "ipad") return "tablet";
+  if (k === "watch" || k === "applewatch") return "watch";
+  if (k === "speaker" || k === "homepod") return "speaker";
+  return null;
+}
+
 function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices) {
   const map = new Map();
   for (const d of baseDevices || []) {
     // 若 baseDevices 未带 device_type,用 id 作为 type 兜底(plan_json 中 id 通常就是 phone/pc 等)
-    map.set(d.id, { ...d, device_type: d.device_type || d.id, strategies: [...(d.strategies || [])] });
+    const baseType = normalizeDeviceTypeKey(d.device_type || d.id) || d.device_type || d.id;
+    map.set(baseType, { ...d, id: baseType, device_type: baseType, strategies: [...(d.strategies || [])] });
   }
 
-  // 用真实已连接设备覆盖:支持所有设备形态(手机/电脑/平板/手表/音箱)
-  const supportedTypes = ["phone", "pc", "tablet", "watch", "speaker"];
+  // 用真实已连接设备覆盖:优先信任 UA 实时判定的形态,再退回数据库 device_type
   const realByType = {};
   for (const rd of realDevices || []) {
-    const key = supportedTypes.includes(rd.device_type) ? rd.device_type : null;
+    // resolveDeviceBrand 通过 UA + name 判定真实形态,绕开数据库脏数据
+    let detected = null;
+    try {
+      detected = resolveDeviceBrand(rd).deviceType;
+    } catch {}
+    const key = normalizeDeviceTypeKey(detected) || normalizeDeviceTypeKey(rd.device_type);
     if (key && !realByType[key]) realByType[key] = rd;
   }
   const defaultNames = {
@@ -294,10 +310,9 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, 
     });
   }
 
-  // 按设备形态差异化分发策略
+  // 按设备形态差异化分发策略 — 此处 key 已经归一化,可直接喂给 filterStrategiesForDevice
   for (const [key, dev] of map.entries()) {
-    const typeKey = dev.device_type || key;
-    const extra = filterStrategiesForDevice(typeKey, taskStrategies, noteStrategies);
+    const extra = filterStrategiesForDevice(key, taskStrategies, noteStrategies);
     if (extra.length > 0) {
       dev.strategies = [...(dev.strategies || []), ...extra];
       map.set(key, dev);

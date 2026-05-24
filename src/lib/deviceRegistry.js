@@ -114,8 +114,18 @@ export async function registerCurrentDevice() {
 
   if (existing && existing.length > 0) {
     const dev = existing[0];
-    await base44.entities.Device.update(dev.id, payload);
-    return { ...dev, ...payload };
+    // 如果旧记录的 device_type 与新检测不一致(例如之前误判为电脑,现在识别出是手机),
+    // 自动修正名称为新类型的默认名;用户已手动改过的非默认名则保留
+    const oldDefaults = ["电脑", "手机", "平板", "手表", "音箱", "其他"];
+    const isUntouchedName =
+      !dev.name ||
+      oldDefaults.some((d) => dev.name === d || dev.name.startsWith(`${d}(`) || dev.name.startsWith(`${d}(`));
+    const finalPayload =
+      dev.device_type !== info.device_type && isUntouchedName
+        ? { ...payload, name: info.defaultName }
+        : payload;
+    await base44.entities.Device.update(dev.id, finalPayload);
+    return { ...dev, ...finalPayload };
   }
   const created = await base44.entities.Device.create({
     ...payload,

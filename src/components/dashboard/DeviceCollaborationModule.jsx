@@ -1,7 +1,7 @@
 import React from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO, isToday, startOfDay, endOfDay, isWithinInterval } from "date-fns";
+import { format, parseISO, isToday, isTomorrow, startOfDay, endOfDay, isWithinInterval, addDays, differenceInCalendarDays } from "date-fns";
 import { motion } from "framer-motion";
 import { Cpu } from "lucide-react";
 import DeviceStrategyPanel from "./planner/DeviceStrategyPanel";
@@ -33,12 +33,21 @@ function priorityFromTask(t) {
   return "medium";
 }
 
-function isTaskTodayActive(t) {
+// 是否为"今天或未来 7 天内"的有效约定 — 固定日期的任务也要进入设备时间轴
+function isTaskUpcoming(t) {
   if (!t || t.deleted_at || t.status === "completed" || t.status === "cancelled") return false;
   if (!t.reminder_time) return false;
-  const start = parseISO(t.reminder_time);
-  const end = t.end_time ? parseISO(t.end_time) : start;
-  return isWithinInterval(new Date(), { start: startOfDay(start), end: endOfDay(end) });
+  try {
+    const start = parseISO(t.reminder_time);
+    const end = t.end_time ? parseISO(t.end_time) : start;
+    const now = new Date();
+    // 任务时段尚未结束 && 起始时间在未来 7 天内
+    if (endOfDay(end) < now) return false;
+    const daysAhead = differenceInCalendarDays(startOfDay(start), startOfDay(now));
+    return daysAhead <= 7;
+  } catch {
+    return false;
+  }
 }
 
 // NLP：识别 title 里没有具体时间点的模糊表达，返回语义时间标签
@@ -66,20 +75,33 @@ function detectFuzzyTimeLabel(title) {
 }
 
 // 决定一条 task 在协同卡片里显示的时间字段
+// - 今日任务:HH:mm
+// - 明日任务:明日 HH:mm
+// - 未来固定日期:MM-dd HH:mm
+// - 模糊表达 + AI 猜的时间:返回语义标签(今晚/周末/...)
 function resolveTaskTimeField(t) {
   const fuzzy = detectFuzzyTimeLabel(t.title);
-  // 如果 title 是模糊表达，且系统标记为 time_is_suggested（AI 猜的时间，非用户给的）→ 用语义标签
   if (fuzzy && t.time_is_suggested) return fuzzy;
-  // 否则按 reminder_time 显示具体时间点
-  return timeFromISO(t.reminder_time);
+  if (!t.reminder_time) return "";
+  try {
+    const d = parseISO(t.reminder_time);
+    const hhmm = format(d, "HH:mm");
+    if (isToday(d)) return hhmm;
+    if (isTomorrow(d)) return `明日 ${hhmm}`;
+    return `${format(d, "MM-dd")} ${hhmm}`;
+  } catch {
+    return "";
+  }
 }
 
-// 同时间合并内容 + 同内容合并时间（取最早），保持时间排序
+// 同时间合并内容 + 同内容合并时间(取最早),按真实时序排序
+// 排序键优先用 _sortKey(ISO 字符串,可正确比较跨日时间);没有则用显示文本
 function consolidateStrategies(strategies) {
   const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
   const priorityWeight = { high: 3, medium: 2, low: 1 };
   const pickPriority = (a, b) =>
     (priorityWeight[a] || 0) >= (priorityWeight[b] || 0) ? a : b;
+  const sortKeyOf = (s) => s._sortKey || s.time || "";
 
   // Step 1: 同内容合并 — 只保留最早时间
   const byContent = new Map();
@@ -90,23 +112,24 @@ function consolidateStrategies(strategies) {
     if (!prev) {
       byContent.set(k, { ...s });
     } else {
-      // 取最早时间
-      const earlier = String(s.time || "") < String(prev.time || "") ? s.time : prev.time;
+      const prevKey = sortKeyOf(prev);
+      const curKey = sortKeyOf(s);
+      const useCurrent = curKey && (!prevKey || curKey < prevKey);
       byContent.set(k, {
         ...prev,
-        time: earlier,
+        time: useCurrent ? s.time : prev.time,
+        _sortKey: useCurrent ? curKey : prevKey,
         priority: pickPriority(prev.priority, s.priority),
       });
     }
   }
   const dedupedByContent = Array.from(byContent.values());
 
-  // Step 2: 同时间合并内容 — 内容用 " · " 拼接
+  // Step 2: 同显示时间合并内容(只合并同一时间点)
   const byTime = new Map();
   for (const s of dedupedByContent) {
     const k = norm(s.time);
     if (!k) {
-      // 没时间字段的单独放
       byTime.set(`__notime_${byTime.size}__`, s);
       continue;
     }
@@ -124,9 +147,15 @@ function consolidateStrategies(strategies) {
     }
   }
 
-  return Array.from(byTime.values()).sort((a, b) =>
-    String(a.time || "").localeCompare(String(b.time || ""))
-  );
+  // 排序:有时间的按真实时序;无时间的(如心签)沉到末尾
+  return Array.from(byTime.values()).sort((a, b) => {
+    const ak = sortKeyOf(a);
+    const bk = sortKeyOf(b);
+    if (!ak && !bk) return 0;
+    if (!ak) return 1;
+    if (!bk) return -1;
+    return ak.localeCompare(bk);
+  });
 }
 
 // ===== 设备优势画像 =====
@@ -186,8 +215,11 @@ function routineHours(routine) {
 }
 
 // 时间段判定:用于音箱(家庭时段)、平板(安静时段)
+// 兼容 "09:00" / "明日 09:00" / "05-26 09:00" 等带前缀的显示时间
 function getHourFromTime(t) {
-  const h = parseInt(String(t || "").slice(0, 2), 10);
+  const m = String(t || "").match(/(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
   return isNaN(h) ? null : h;
 }
 
@@ -344,9 +376,11 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies, r
           .map((s) => ({ ...s, method: "通用提醒" }))
       );
   }
-  // 清理掉内部辅助字段
+  // 清理掉内部辅助字段(保留 _sortKey 用于跨日时序排序)
   return out.map(({ _scene, ...rest }) => rest);
 }
+
+// 注意:_sortKey 字段会一路保留进 consolidateStrategies,用于真实时序排序
 
 // 归一化设备 type:把数据库里可能的脏值 (iphone/workstation/desktop/other/...) 映射到标准 8 类
 function normalizeDeviceTypeKey(raw) {
@@ -463,16 +497,17 @@ export default function DeviceCollaborationModule() {
   const dayPlan = planQueryData?.[0] || null;
   const baseDevices = dayPlan?.plan_json?.devices || [];
 
-  // 当日需要提醒的 Task → 手机策略（NLP 识别模糊时间）
+  // 今日 + 未来 7 天的 Task → 进入设备时间轴(跨日的会显示日期前缀)
   const taskStrategies = React.useMemo(() => {
     return (allTasks || [])
-      .filter(isTaskTodayActive)
+      .filter(isTaskUpcoming)
       .map((t) => ({
         time: resolveTaskTimeField(t),
         content: t.title,
         method: "推送提醒",
         priority: priorityFromTask(t),
         source: "task",
+        _sortKey: t.reminder_time || "",  // 用 ISO 原值排序,避免"明日 09:00"和"09:00"字符串比较错乱
       }));
   }, [allTasks]);
 
@@ -487,10 +522,10 @@ export default function DeviceCollaborationModule() {
       })
       .slice(0, 8)
       .map((n) => {
-        const ref = n.last_active_at || n.updated_date || n.created_date;
         const text = n.plain_text || (n.content || "").replace(/<[^>]+>/g, "").trim();
         return {
-          time: timeFromISO(ref),
+          // 心签不是定时任务,不占时间锚点;让它沉到时间轴末尾
+          time: "",
           content: text ? (text.length > 60 ? text.slice(0, 60) + "…" : text) : "心签更新",
           method: "心签速记",
           priority: n.is_pinned ? "high" : "low",

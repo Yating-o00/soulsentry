@@ -65,6 +65,33 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 1.5) 浏览器后台推送（Web Push）—— 关闭网页也能弹通知的关键
+    if (channels.includes('browser') && recipient) {
+      try {
+        const isUrgent = task.priority === 'urgent' || task.interruption_level === 'critical';
+        const pushRes = await base44.asServiceRole.functions.invoke('sendWebPush', {
+          user_email: recipient,
+          title: notifTitle,
+          body: notifContent.length > 140 ? notifContent.slice(0, 137) + '...' : notifContent,
+          url: `/Tasks?taskId=${task.id}`,
+          tag: `task-${task.id}-${isAdvance ? 'pre' : 'due'}`,
+          requireInteraction: isUrgent,
+          data: {
+            task_id: task.id,
+            is_advance: isAdvance,
+            advance_minutes: advanceMinutes,
+          },
+        });
+        if (!pushRes?.data?.error) {
+          results.browser = true;
+        } else {
+          console.warn('sendWebPush returned error:', pushRes.data.error);
+        }
+      } catch (e) {
+        console.error('sendWebPush failed:', e.message);
+      }
+    }
+
     // 2) 邮件推送（仅当用户开启邮件渠道或 email_reminder.enabled）
     const emailEnabled = channels.includes('email') || task.email_reminder?.enabled;
     if (emailEnabled && recipient) {

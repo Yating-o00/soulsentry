@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
 
     webpush.setVapidDetails(subject, publicKey, privateKey);
 
-    const { user_email, title, body, url, tag, data } = await req.json();
+    const { user_email, title, body, url, tag, data, requireInteraction, vibrate, actions } = await req.json();
     if (!title || !body) {
       return Response.json({ error: 'title and body are required' }, { status: 400 });
     }
@@ -64,7 +64,10 @@ Deno.serve(async (req) => {
       title,
       body,
       url: url || '/',
-      tag: tag || 'soulsentry',
+      tag: tag || `soulsentry-${Date.now()}`,
+      requireInteraction: !!requireInteraction,
+      vibrate: vibrate || [200, 100, 200],
+      actions: actions || undefined,
       data: data || {}
     });
 
@@ -72,7 +75,10 @@ Deno.serve(async (req) => {
       const result = await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: sub.keys },
         payload,
-        { TTL: 60 * 60 } // 1 小时内送达有效
+        {
+          TTL: 60 * 60 * 4,        // 4 小时内送达有效（设备离线时给更长重试窗口）
+          urgency: requireInteraction ? 'high' : 'normal'
+        }
       );
       return Response.json({ success: true, statusCode: result.statusCode });
     } catch (pushErr) {

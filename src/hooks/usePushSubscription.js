@@ -54,10 +54,27 @@ export function usePushSubscription({ onChange } = {}) {
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', refreshState);
 
+    // 监听 SW 自动重订阅事件（Push 订阅过期时会触发）
+    const onSWMessage = async (event) => {
+      if (event.data?.type === 'PUSH_SUBSCRIPTION_CHANGED' && event.data.subscription) {
+        try {
+          await base44.functions.invoke('savePushSubscription', {
+            subscription: event.data.subscription,
+            user_agent: navigator.userAgent
+          });
+          refreshState();
+        } catch (e) {
+          console.warn('[push] 自动重订阅同步失败', e);
+        }
+      }
+    };
+    navigator.serviceWorker?.addEventListener?.('message', onSWMessage);
+
     return () => {
       if (permStatus) permStatus.onchange = null;
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', refreshState);
+      navigator.serviceWorker?.removeEventListener?.('message', onSWMessage);
     };
   }, []);
 
@@ -69,17 +86,30 @@ export function usePushSubscription({ onChange } = {}) {
       setPermission(perm);
       if (perm !== 'granted') return false;
 
-      // 取 VAPID 公钥（可选；若未配置则只做本地通知）
+      // 取 VAPID 公钥 —— 没有它服务器永远推不出通知，必须拿到才能订阅
       let applicationServerKey = null;
       try {
         const r = await base44.functions.invoke('getVapidPublicKey', {});
         if (r?.data?.publicKey) applicationServerKey = urlBase64ToUint8Array(r.data.publicKey);
-      } catch {}
+      } catch (e) {
+        console.warn('[push] 获取 VAPID 公钥失败', e);
+      }
+      if (!applicationServerKey) {
+        console.error('[push] 缺少 VAPID 公钥，无法订阅后台推送');
+        return false;
+      }
 
       const reg = await navigator.serviceWorker.ready;
+
+      // 如果已经有订阅但用的是旧密钥，先取消再重订阅
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        try { await existing.unsubscribe(); } catch {}
+      }
+
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: applicationServerKey || undefined
+        applicationServerKey
       });
 
       const json = sub.toJSON();

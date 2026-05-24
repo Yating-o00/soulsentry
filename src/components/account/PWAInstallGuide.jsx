@@ -84,7 +84,7 @@ export default function PWAInstallGuide() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2">
             <Download className="w-5 h-5 text-sky-600" />
-            把网页变成应用
+            一步安装桌面应用，随时开启
           </CardTitle>
           {isInstalled ? (
             <Badge className="bg-emerald-100 text-emerald-700 border-0">

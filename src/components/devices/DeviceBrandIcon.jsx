@@ -38,7 +38,17 @@ const ChromeLogo = (props) => (
 export function resolveDeviceBrand(device) {
   const platform = (device.platform || "").toLowerCase();
   const ua = (device.user_agent || "").toLowerCase();
+  const name = (device.name || "").toLowerCase();
   const dbType = device.device_type;
+
+  // 名字里带明显形态提示(用户重命名或注册时打的标签)优先级最高
+  // 例:"手机(iOS)" / "我的 iPhone" / "iPad Pro" / "工作电脑"
+  let nameHint = null;
+  if (/iphone|手机|phone(?!\s*os)/.test(name)) nameHint = "phone";
+  else if (/ipad|平板|tablet/.test(name)) nameHint = "tablet";
+  else if (/watch|手表/.test(name)) nameHint = "watch";
+  else if (/speaker|音箱/.test(name)) nameHint = "speaker";
+  else if (/mac|pc|电脑|笔记本|台式|desktop|laptop/.test(name)) nameHint = "pc";
 
   // 先用 UA 实时判定真实形态(忽略数据库 device_type 防止脏数据)
   let detectedType = dbType;
@@ -48,6 +58,19 @@ export function resolveDeviceBrand(device) {
   else if (ua.includes("watch")) detectedType = "watch";
   else if (platform.includes("ios") && !ua.includes("ipad")) detectedType = "phone";
   else if (platform.includes("mac") || platform.includes("win") || platform.includes("linux") || platform.includes("cros")) detectedType = "pc";
+
+  // 名字提示和 UA 判定冲突时,以名字为准(更能反映用户认知里这是哪台设备)
+  if (nameHint && nameHint !== detectedType) {
+    detectedType = nameHint;
+  }
+
+  // 名字暗示是 iOS 设备但 platform 仍是 mac/win,清除掉冲突 platform/ua,避免下游标签显示错乱
+  if (nameHint === "phone" && /ios|iphone/.test(name) && !ua.includes("iphone")) {
+    return { Icon: AppleLogo, label: "iPhone", brandColor: "#0a0a0a", deviceType: "phone" };
+  }
+  if (nameHint === "tablet" && /ipad/.test(name) && !ua.includes("ipad")) {
+    return { Icon: AppleLogo, label: "iPad", brandColor: "#0a0a0a", deviceType: "tablet" };
+  }
 
   // 手表
   if (detectedType === "watch") {

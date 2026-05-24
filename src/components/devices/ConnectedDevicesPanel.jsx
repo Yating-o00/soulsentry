@@ -138,15 +138,30 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
                 )}
               </div>
 
-              {/* 元信息行：类型 · 角色 · 状态 */}
-              <div className="flex items-center gap-1 mt-0.5 text-[11px] text-slate-500 truncate">
-                <span>{meta.label}</span>
-                {device.role && ROLE_META[device.role] && (
-                  <>
-                    <span className="text-slate-300">·</span>
-                    <span className="truncate">{ROLE_META[device.role]}</span>
-                  </>
-                )}
+              {/* 元信息行：类型 · 角色 · 状态
+                  角色与判定出的形态需匹配,否则只显示形态默认描述,避免"手机·深度工作"这种撕裂 */}
+              {(() => {
+                const roleLabel = device.role && ROLE_META[device.role];
+                // 形态-角色 默认搭配,若数据库 role 与形态严重不符,改用形态默认描述
+                const formMatchRole = {
+                  phone: ["primary", "secondary", "wearable"],
+                  pc: ["deep_work", "primary", "secondary"],
+                  tablet: ["secondary", "primary"],
+                  watch: ["wearable", "secondary"],
+                  speaker: ["voice_hub", "secondary"],
+                  other: ["secondary"],
+                };
+                const allowed = formMatchRole[brand.deviceType] || formMatchRole.other;
+                const showRole = roleLabel && allowed.includes(device.role) ? roleLabel : meta.desc;
+                return (
+                  <div className="flex items-center gap-1 mt-0.5 text-[11px] text-slate-500 truncate">
+                    <span>{meta.label}</span>
+                    {showRole && (
+                      <>
+                        <span className="text-slate-300">·</span>
+                        <span className="truncate">{showRole}</span>
+                      </>
+                    )}
                 <span className="text-slate-300">·</span>
                 <span className={device.is_online ? "text-emerald-600 font-medium" : "text-slate-400"}>
                   {device.is_online ? "在线" : "离线"}
@@ -157,18 +172,29 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
                     <span className="text-[#384877] font-medium">本机</span>
                   </>
                 )}
-              </div>
+                  </div>
+                );
+              })()}
 
-              {/* 平台 / 浏览器 — 若数据库里的 platform 与 brand 实时判定形态冲突,
-                  以 brand.label(如 iPhone/Android/Mac) 为准,避免显示矛盾信息 */}
+              {/* 平台 / 浏览器 — 若数据库 platform/browser 与 brand 实时判定形态冲突,
+                  全部丢弃用 brand.label 兜底,避免"手机"卡片显示"macOS·Safari" */}
               {(() => {
                 const p = (device.platform || "").toLowerCase();
                 const ua = (device.user_agent || "").toLowerCase();
                 const dt = brand.deviceType;
                 const platformMismatch =
                   (dt === "phone" && (p.includes("mac") || p.includes("win") || p.includes("linux"))) ||
+                  (dt === "tablet" && (p.includes("win") || p.includes("linux") || (p.includes("mac") && !ua.includes("ipad")))) ||
                   (dt === "pc" && (p.includes("ios") || p.includes("android") || ua.includes("iphone")));
-                const platformText = platformMismatch ? brand.label : (device.platform || meta.desc);
+                // 冲突时:整条平台·浏览器行用 brand.label 单独显示,不再带可能错的 browser
+                if (platformMismatch) {
+                  return (
+                    <p className="text-[11px] text-slate-400 mt-0.5 truncate" title={brand.label}>
+                      {brand.label}
+                    </p>
+                  );
+                }
+                const platformText = device.platform || meta.desc;
                 if (!platformText && !device.browser) return null;
                 return (
                   <p className="text-[11px] text-slate-400 mt-0.5 truncate" title={`${platformText}${device.browser ? " · " + device.browser : ""}`}>

@@ -1759,36 +1759,16 @@ async function executeCalendarEvent(base44, exec) {
   };
 }
 
-// 整理账本（具体实现在独立的 organizeLedger 函数中，此处只做转调）
-async function executeLedgerOrganize(base44, exec, attachmentCtx) {
-  const userText = exec.original_input || exec.task_title;
-  const fileBlock = attachmentCtx?.text || '';
-  const res = await base44.functions.invoke('organizeLedger', {
-    user_text: userText,
-    file_block: fileBlock,
+// 整理账本：委托给独立的 executeLedgerOrganize backend function
+// (本文件已逼近 2000 行硬上限，实现拆到 functions/executeLedgerOrganize.js)
+async function executeLedger(base44, exec, attachmentCtx) {
+  const res = await base44.functions.invoke('executeLedgerOrganize', {
+    user_text: exec.original_input || exec.task_title,
+    file_block: attachmentCtx?.text || '',
   });
   const d = res?.data || {};
-  if (d?.error || !Array.isArray(d.entries)) {
-    throw new Error(`整理账本失败：${d?.message || d?.error || '未能从输入中识别账目'}`);
-  }
-  const entries = d.entries;
-  const stats = d.stats || { total_income: 0, total_expense: 0 };
-  const totalInc = Number(stats.total_income) || 0;
-  const totalExp = Number(stats.total_expense) || 0;
-  const balance = totalInc - totalExp;
-  const previewLines = [
-    `💰 已识别 ${entries.length} 笔账目`,
-    `📈 收入 ¥${totalInc.toFixed(2)} · 📉 支出 ¥${totalExp.toFixed(2)} · 结余 ${balance >= 0 ? '+' : ''}¥${balance.toFixed(2)}`,
-  ];
-  if (Array.isArray(stats.alerts) && stats.alerts.length) {
-    previewLines.push('', '💡 ' + stats.alerts.slice(0, 3).join(' · '));
-  }
-  return {
-    type: "ledger_organize",
-    preview: previewLines.join('\n'),
-    data: { entries, stats, balance },
-    diff: [{ action: "create", target: `账本：${entries.length} 笔账目`, detail: `收入 ¥${totalInc.toFixed(2)} / 支出 ¥${totalExp.toFixed(2)}` }],
-  };
+  if (d?.error) throw new Error(d.error);
+  return d;
 }
 
 const EXECUTORS = {
@@ -1799,7 +1779,7 @@ const EXECUTORS = {
   ppt_doc: executePptDoc,
   file_organize: executeFileOrganize,
   calendar_event: executeCalendarEvent,
-  ledger_organize: executeLedgerOrganize,
+  ledger_organize: executeLedger,
 };
 
 Deno.serve(async (req) => {

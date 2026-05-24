@@ -130,7 +130,8 @@ function consolidateStrategies(strategies) {
 function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices) {
   const map = new Map();
   for (const d of baseDevices || []) {
-    map.set(d.id, { ...d, strategies: [...(d.strategies || [])] });
+    // 若 baseDevices 未带 device_type,用 id 作为 type 兜底(plan_json 中 id 通常就是 phone/pc 等)
+    map.set(d.id, { ...d, device_type: d.device_type || d.id, strategies: [...(d.strategies || [])] });
   }
 
   // 用真实已连接设备覆盖：以 device_type 作为 key 映射到 phone/pc
@@ -151,13 +152,19 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, 
     });
   }
 
+  // 任务策略：手机为主分发,但电脑也展示同样的当日任务时间线(便于在电脑端查看安排)
   if (taskStrategies.length > 0) {
-    const phone = map.get("phone") || { id: "phone", name: "手机", strategies: [] };
+    const phone = map.get("phone") || { id: "phone", device_type: "phone", name: "手机", strategies: [] };
     phone.strategies = [...(phone.strategies || []), ...taskStrategies];
     map.set("phone", phone);
+
+    const pcForTasks = map.get("pc") || { id: "pc", device_type: "pc", name: "工作站", strategies: [] };
+    pcForTasks.strategies = [...(pcForTasks.strategies || []), ...taskStrategies];
+    map.set("pc", pcForTasks);
   }
+  // 心签策略：电脑/工作站为主
   if (noteStrategies.length > 0) {
-    const pc = map.get("pc") || { id: "pc", name: "工作站", strategies: [] };
+    const pc = map.get("pc") || { id: "pc", device_type: "pc", name: "工作站", strategies: [] };
     pc.strategies = [...(pc.strategies || []), ...noteStrategies];
     map.set("pc", pc);
   }
@@ -243,12 +250,22 @@ export default function DeviceCollaborationModule() {
   );
 
   // 按 device_type 聚合策略,便于真实设备卡片显示策略数与时间轴
+  // 归一化 key：把 baseDevices 中可能出现的 'workstation' / 'desktop' 统一映射到 'pc'
+  const normalizeTypeKey = (raw) => {
+    const k = String(raw || "").toLowerCase();
+    if (k === "phone" || k === "mobile" || k === "iphone") return "phone";
+    if (k === "pc" || k === "workstation" || k === "desktop" || k === "computer" || k === "laptop") return "pc";
+    if (k === "tablet" || k === "ipad") return "tablet";
+    if (k === "watch") return "watch";
+    return k || "other";
+  };
+
   const strategiesByType = React.useMemo(() => {
     const map = {};
     for (const d of devices) {
       if (!d.strategies || d.strategies.length === 0) continue;
-      // d.id 可能是 'phone' / 'pc' / 'tablet' 等 type key
-      map[d.id] = d.strategies;
+      const key = normalizeTypeKey(d.device_type || d.id);
+      map[key] = [...(map[key] || []), ...d.strategies];
     }
     return map;
   }, [devices]);
@@ -265,7 +282,7 @@ export default function DeviceCollaborationModule() {
   if (!hasAnyStrategy && !hasAnyRealDevice) return null;
 
   const selectedStrategies = effectiveSelected
-    ? (strategiesByType[effectiveSelected.device_type] || [])
+    ? (strategiesByType[normalizeTypeKey(effectiveSelected.device_type)] || [])
     : [];
 
   return (

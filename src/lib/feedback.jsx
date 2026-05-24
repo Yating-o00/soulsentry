@@ -6,11 +6,23 @@ const BRAND_PRIMARY = "#384877";
 const BRAND_SECONDARY = "#3b5aa2";
 
 // 重置 sonner 默认外壳（去除其白底/渐变/边框/阴影/内边距）
+// 注意：App.jsx 中给 Toaster 全局注入了 default/success/error 等 classNames(带 !important 白底),
+// 这里必须把所有可能命中的 key 全部覆盖为透明,否则会出现"双层白底"。
+const TRANSPARENT_SHELL = '!bg-transparent !bg-none !border-0 !border-transparent !shadow-none !p-0 !pr-0 !backdrop-blur-0 !rounded-none !w-auto !max-w-none !flex !items-stretch [&_[data-icon]]:!hidden [&_[data-close-button]]:!hidden';
 const RESET_SHELL = {
   unstyled: true,
   classNames: {
-    toast: '!bg-transparent !border-0 !shadow-none !p-0 !backdrop-blur-0 !rounded-none',
-    default: '!bg-transparent !border-0 !shadow-none !p-0 !backdrop-blur-0 !rounded-none',
+    toast: TRANSPARENT_SHELL,
+    default: TRANSPARENT_SHELL,
+    success: TRANSPARENT_SHELL,
+    error: TRANSPARENT_SHELL,
+    info: TRANSPARENT_SHELL,
+    warning: TRANSPARENT_SHELL,
+    loading: TRANSPARENT_SHELL,
+    title: '!m-0 !p-0 !font-normal !text-inherit',
+    description: '!m-0 !p-0 !text-inherit',
+    icon: '!hidden',
+    closeButton: '!hidden',
   },
 };
 

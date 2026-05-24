@@ -127,6 +127,63 @@ function consolidateStrategies(strategies) {
   );
 }
 
+// 按设备形态过滤策略 — 不同设备承担不同协同职责
+function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies) {
+  const out = [];
+  switch (deviceType) {
+    case "phone":
+      // 手机:全量推送提醒 — 这是用户主要随身设备
+      out.push(...taskStrategies.map((s) => ({ ...s, method: "推送提醒" })));
+      break;
+    case "pc":
+      // 电脑/工作站:深度工作场景 — 桌面通知 + 心签更新 + 工作时段任务(9:00-19:00)
+      out.push(
+        ...taskStrategies
+          .filter((s) => {
+            const h = parseInt(String(s.time || "").slice(0, 2), 10);
+            // 模糊时间(无数字)也保留;具体时间只保留工作时段
+            return isNaN(h) || (h >= 9 && h <= 19);
+          })
+          .map((s) => ({ ...s, method: "桌面通知" }))
+      );
+      out.push(...noteStrategies.map((s) => ({ ...s, method: "心签速记" })));
+      break;
+    case "tablet":
+      // 平板:阅读/会议场景 — 中高优先级任务 + 心签
+      out.push(
+        ...taskStrategies
+          .filter((s) => s.priority !== "low")
+          .map((s) => ({ ...s, method: "横屏提醒" }))
+      );
+      out.push(...noteStrategies.slice(0, 4).map((s) => ({ ...s, method: "阅读卡片" })));
+      break;
+    case "watch":
+      // 手表:极简 — 仅 high 紧急任务,内容截短
+      out.push(
+        ...taskStrategies
+          .filter((s) => s.priority === "high")
+          .map((s) => ({
+            ...s,
+            content: s.content && s.content.length > 14 ? s.content.slice(0, 14) + "…" : s.content,
+            method: "腕上震动",
+          }))
+      );
+      break;
+    case "speaker":
+      // 音箱:语音播报 — 仅整点/带具体时间点的任务
+      out.push(
+        ...taskStrategies
+          .filter((s) => /^\d{2}:\d{2}$/.test(String(s.time || "")))
+          .map((s) => ({ ...s, method: "语音播报" }))
+      );
+      break;
+    default:
+      // 其它/未知设备:给一份精简版任务
+      out.push(...taskStrategies.slice(0, 5).map((s) => ({ ...s, method: "通用提醒" })));
+  }
+  return out;
+}
+
 function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices) {
   const map = new Map();
   for (const d of baseDevices || []) {
@@ -134,39 +191,41 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, 
     map.set(d.id, { ...d, device_type: d.device_type || d.id, strategies: [...(d.strategies || [])] });
   }
 
-  // 用真实已连接设备覆盖：以 device_type 作为 key 映射到 phone/pc
+  // 用真实已连接设备覆盖:支持所有设备形态(手机/电脑/平板/手表/音箱)
+  const supportedTypes = ["phone", "pc", "tablet", "watch", "speaker"];
   const realByType = {};
   for (const rd of realDevices || []) {
-    const key = rd.device_type === "phone" ? "phone" : rd.device_type === "pc" ? "pc" : null;
+    const key = supportedTypes.includes(rd.device_type) ? rd.device_type : null;
     if (key && !realByType[key]) realByType[key] = rd;
   }
+  const defaultNames = {
+    phone: "手机",
+    pc: "电脑",
+    tablet: "平板",
+    watch: "手表",
+    speaker: "音箱",
+  };
   for (const key of Object.keys(realByType)) {
     const rd = realByType[key];
-    const prev = map.get(key) || { id: key, strategies: [] };
+    const prev = map.get(key) || { id: key, device_type: key, strategies: [] };
     map.set(key, {
       ...prev,
       id: key,
-      name: rd.name || prev.name || (key === "phone" ? "手机" : "电脑"),
+      device_type: key,
+      name: rd.name || prev.name || defaultNames[key] || "设备",
       online: !!rd.is_online,
       isReal: true,
     });
   }
 
-  // 任务策略：手机为主分发,但电脑也展示同样的当日任务时间线(便于在电脑端查看安排)
-  if (taskStrategies.length > 0) {
-    const phone = map.get("phone") || { id: "phone", device_type: "phone", name: "手机", strategies: [] };
-    phone.strategies = [...(phone.strategies || []), ...taskStrategies];
-    map.set("phone", phone);
-
-    const pcForTasks = map.get("pc") || { id: "pc", device_type: "pc", name: "工作站", strategies: [] };
-    pcForTasks.strategies = [...(pcForTasks.strategies || []), ...taskStrategies];
-    map.set("pc", pcForTasks);
-  }
-  // 心签策略：电脑/工作站为主
-  if (noteStrategies.length > 0) {
-    const pc = map.get("pc") || { id: "pc", device_type: "pc", name: "工作站", strategies: [] };
-    pc.strategies = [...(pc.strategies || []), ...noteStrategies];
-    map.set("pc", pc);
+  // 按设备形态差异化分发策略
+  for (const [key, dev] of map.entries()) {
+    const typeKey = dev.device_type || key;
+    const extra = filterStrategiesForDevice(typeKey, taskStrategies, noteStrategies);
+    if (extra.length > 0) {
+      dev.strategies = [...(dev.strategies || []), ...extra];
+      map.set(key, dev);
+    }
   }
   for (const d of map.values()) {
     d.strategies = consolidateStrategies(d.strategies || []);

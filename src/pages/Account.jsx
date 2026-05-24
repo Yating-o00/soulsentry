@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 import ProductInsights from "@/components/memory/ProductInsights";
 import AlertChannelSettings from "@/components/account/AlertChannelSettings";
 import PWAInstallGuide from "@/components/account/PWAInstallGuide";
+import EnableBackgroundPush from "@/components/account/EnableBackgroundPush";
 
 export default function Account() {
   const [user, setUser] = useState(null);
@@ -441,6 +442,15 @@ export default function Account() {
         transition={{ delay: 0.17 }}
       >
         <PWAInstallGuide />
+      </motion.div>
+
+      {/* 后台推送一键开启 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.175 }}
+      >
+        <EnableBackgroundPush />
       </motion.div>
 
       {/* 预警通道设置 */}

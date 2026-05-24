@@ -5,6 +5,15 @@ import { toast } from "sonner";
 const BRAND_PRIMARY = "#384877";
 const BRAND_SECONDARY = "#3b5aa2";
 
+// 重置 sonner 默认外壳（去除其白底/渐变/边框/阴影/内边距）
+const RESET_SHELL = {
+  unstyled: true,
+  classNames: {
+    toast: '!bg-transparent !border-0 !shadow-none !p-0 !backdrop-blur-0 !rounded-none',
+    default: '!bg-transparent !border-0 !shadow-none !p-0 !backdrop-blur-0 !rounded-none',
+  },
+};
+
 // 轻量级成功：右下角、紧凑、带主色（石墨主题）
 export const success = (message, opts = {}) => {
   const { duration = 2800, ...rest } = opts;
@@ -27,8 +36,7 @@ export const success = (message, opts = {}) => {
     {
       position: "bottom-right",
       duration,
-      unstyled: true,
-      classNames: { toast: '!bg-transparent !border-0 !shadow-none !p-0' },
+      ...RESET_SHELL,
       ...rest,
     }
   );
@@ -120,8 +128,7 @@ export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 
     {
       duration,
       position: "bottom-right",
-      unstyled: true,
-      classNames: { toast: '!bg-transparent !border-0 !shadow-none !p-0' },
+      ...RESET_SHELL,
     }
   );
 };
@@ -149,8 +156,7 @@ export const executionChainDone = (chainTitle) => {
     {
       position: "bottom-right",
       duration: 3500,
-      unstyled: true,
-      classNames: { toast: '!bg-transparent !border-0 !shadow-none !p-0' },
+      ...RESET_SHELL,
     }
   );
 };

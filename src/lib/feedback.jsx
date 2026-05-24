@@ -111,7 +111,12 @@ export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 
         )}
       </div>
     ),
-    { duration, position: "bottom-right" }
+    {
+      duration,
+      position: "bottom-right",
+      unstyled: true,
+      classNames: { toast: '!bg-transparent !border-0 !shadow-none !p-0' },
+    }
   );
 };
 

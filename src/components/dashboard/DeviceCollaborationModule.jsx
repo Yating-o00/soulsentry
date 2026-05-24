@@ -8,6 +8,7 @@ import DeviceStrategyPanel from "./planner/DeviceStrategyPanel";
 import ConnectedDevicesPanel from "@/components/devices/ConnectedDevicesPanel";
 import { listMyDevices } from "@/lib/deviceRegistry";
 import { resolveDeviceBrand } from "@/components/devices/DeviceBrandIcon";
+import { rewriteStrategiesForDevice } from "./planner/deviceStrategyRewriter";
 
 /**
  * 全设备智能协同 — 独立模块
@@ -140,8 +141,16 @@ function consolidateStrategies(strategies) {
 // 按关键词识别任务"主场景",决定它属于哪类设备的优势区
 function classifyTaskScene(s) {
   const txt = String(s.content || "").toLowerCase();
+  // 驾驶/通勤 — 汽车优势(独立于普通移动)
+  if (/开车|自驾|加油|充电|车|高速|停车|送车|提车|洗车|挪车|车检/.test(txt)) {
+    return "driving";
+  }
+  // 会议/见面 — 眼镜(AR)+手机协同
+  if (/会议|见面|拜访|客户|签约|谈判|面试|对接|演讲|路演|展会|峰会/.test(txt)) {
+    return "meeting";
+  }
   // 移动/外出/社交 — 手机优势
-  if (/出门|出发|路上|开车|地铁|打车|外出|拜访|见面|约|电话|通话|短信|微信|回复|发消息|快递|取件|买|购物|超市|医院|银行|机场|高铁|约会|接送|接娃/.test(txt)) {
+  if (/出门|出发|路上|地铁|打车|外出|约|电话|通话|短信|微信|回复|发消息|快递|取件|买|购物|超市|医院|银行|机场|高铁|约会|接送|接娃/.test(txt)) {
     return "mobile";
   }
   // 深度工作/创造 — 电脑优势
@@ -152,11 +161,28 @@ function classifyTaskScene(s) {
   if (/读|阅读|看书|学习|背|复习|笔记|手写|批注|论文|文章|课程|视频课/.test(txt)) {
     return "reading";
   }
-  // 家庭/生活/作息 — 音箱优势
-  if (/吃|做饭|喝水|吃药|睡|起床|早安|晚安|洗漱|运动|健身|拉伸|冥想|家务/.test(txt)) {
+  // 家庭/生活/作息 — 音箱/家居优势
+  if (/吃|做饭|喝水|吃药|睡|起床|早安|晚安|洗漱|运动|健身|拉伸|冥想|家务|窗帘|空调|灯|加湿器/.test(txt)) {
     return "ambient";
   }
   return "general";
+}
+
+// 从用户作息中读取关键时间点(HH:mm → 小时数),用于设备时段判断
+function routineHours(routine) {
+  const toH = (s) => {
+    if (!s) return null;
+    const h = parseInt(String(s).slice(0, 2), 10);
+    return isNaN(h) ? null : h;
+  };
+  return {
+    leaveHome: toH(routine?.leave_home),     // 通勤开始
+    arriveOffice: toH(routine?.arrive_office), // 进入工作时段
+    leaveOffice: toH(routine?.leave_office),   // 结束工作
+    arriveHome: toH(routine?.arrive_home),     // 回家
+    sleep: toH(routine?.sleep),                 // 入睡
+    wakeUp: toH(routine?.wake_up),              // 起床
+  };
 }
 
 // 时间段判定:用于音箱(家庭时段)、平板(安静时段)
@@ -166,32 +192,42 @@ function getHourFromTime(t) {
 }
 
 // 按设备形态过滤策略 — 不同设备只承担它的优势工作
-function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies) {
+// routine: 用户作息(可选),用来把"工作时段/家庭时段"贴合本人节奏,而不是硬编码 9-19
+function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies, routine) {
   const out = [];
 
   // 给每条任务打上场景标签,后面各设备按场景挑活
   const tagged = taskStrategies.map((s) => ({ ...s, _scene: classifyTaskScene(s) }));
+
+  // 把用户作息转成小时阈值,缺省值兜底
+  const r = routineHours(routine || {});
+  const workStart = r.arriveOffice ?? 9;
+  const workEnd = r.leaveOffice ?? 19;
+  const homeMorningStart = r.wakeUp ?? 7;
+  const homeMorningEnd = (r.leaveHome ?? 10);
+  const homeEveningStart = r.arriveHome ?? 19;
+  const homeEveningEnd = (r.sleep ?? 23);
 
   switch (deviceType) {
     case "phone": {
       // 手机优势:随身、随时震动、可定位、社交触达
       // → 收:移动/社交/外出类 + 所有 high/urgent(随身兜底,关键事不能漏)
       const picks = tagged.filter(
-        (s) => s._scene === "mobile" || s.priority === "high"
+        (s) => s._scene === "mobile" || s._scene === "meeting" || s.priority === "high"
       );
       out.push(...picks.map((s) => ({
         ...s,
-        method: s._scene === "mobile" ? "出行推送" : "随身推送",
+        method: s._scene === "mobile" ? "出行推送" : s._scene === "meeting" ? "会前提示" : "随身推送",
       })));
       break;
     }
     case "pc": {
       // 电脑优势:大屏、键盘、长会话、文档/代码/邮件入口
-      // → 收:深度工作类 + 工作时段(9-19)的中高优 + 所有心签编辑
+      // → 收:深度工作类 + 个人工作时段的中高优 + 所有心签编辑
       const picks = tagged.filter((s) => {
         if (s._scene === "focus") return true;
         const h = getHourFromTime(s.time);
-        return h !== null && h >= 9 && h <= 19 && s.priority !== "low";
+        return h !== null && h >= workStart && h <= workEnd && s.priority !== "low";
       });
       out.push(...picks.map((s) => ({ ...s, method: "桌面通知" })));
       out.push(...noteStrategies.map((s) => ({ ...s, method: "心签编辑" })));
@@ -199,12 +235,15 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies) {
     }
     case "tablet": {
       // 平板优势:大屏阅读、手写、沉浸式、安静时段(早晨/夜间)
-      // → 收:阅读/学习类 + 安静时段(7-9 / 20-23)的非紧急任务 + 长心签
+      // → 收:阅读/学习类 + 个人晨间/夜间时段的非紧急任务 + 长心签
       const picks = tagged.filter((s) => {
         if (s._scene === "reading") return true;
         if (s.priority === "high") return false; // 紧急的让手机处理
         const h = getHourFromTime(s.time);
-        return h !== null && ((h >= 7 && h < 10) || (h >= 20 && h <= 23));
+        if (h === null) return false;
+        const inMorning = h >= homeMorningStart && h < homeMorningEnd;
+        const inEvening = h >= homeEveningStart && h <= homeEveningEnd;
+        return inMorning || inEvening;
       });
       out.push(...picks.map((s) => ({ ...s, method: "沉浸阅读" })));
       // 长心签优先在平板上呈现(便于手写批注)
@@ -236,15 +275,64 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies) {
     }
     case "speaker": {
       // 音箱优势:无屏、语音、环境感知 — 家庭场景的"播报员"
-      // → 只在家庭时段(早 7-9 / 晚 19-22)播报,且必须是整点任务或生活作息类
+      // → 只在家庭时段(早/晚 由作息决定)播报,且必须是整点任务或生活作息类
       const picks = tagged.filter((s) => {
         const h = getHourFromTime(s.time);
-        const inHomeHour = h !== null && ((h >= 7 && h < 10) || (h >= 19 && h <= 22));
+        const inHomeHour = h !== null && (
+          (h >= homeMorningStart && h < homeMorningEnd) ||
+          (h >= homeEveningStart && h <= homeEveningEnd)
+        );
         const isAmbient = s._scene === "ambient";
         const isHourlyAnchor = /^\d{2}:00$/.test(String(s.time || ""));
         return isAmbient || (inHomeHour && isHourlyAnchor);
       });
       out.push(...picks.map((s) => ({ ...s, method: "语音播报" })));
+      break;
+    }
+    case "glasses": {
+      // 眼镜优势:AR 浮窗、解放双手、贴近视线
+      // → 收:会议/见面前的预备提示(显示对方资料/上次见面回顾) + 高优紧急(浮窗一瞥)
+      // 一天最多 6 条,避免视野持续打扰
+      const picks = tagged.filter(
+        (s) => s._scene === "meeting" || s.priority === "high"
+      ).slice(0, 6);
+      out.push(...picks.map((s) => ({
+        ...s,
+        method: s._scene === "meeting" ? "AR 资料浮窗" : "视线浮窗",
+      })));
+      break;
+    }
+    case "car": {
+      // 汽车优势:车载语音、导航、驾驶安全场景
+      // → 收:驾驶相关任务 + 通勤时段(出门→到办公室、下班→回家)的高优提示
+      const picks = tagged.filter((s) => {
+        if (s._scene === "driving") return true;
+        if (s.priority !== "high") return false;
+        const h = getHourFromTime(s.time);
+        if (h === null) return false;
+        const inMorningCommute = r.leaveHome !== null && r.arriveOffice !== null &&
+          h >= r.leaveHome && h <= r.arriveOffice;
+        const inEveningCommute = r.leaveOffice !== null && r.arriveHome !== null &&
+          h >= r.leaveOffice && h <= r.arriveHome;
+        return inMorningCommute || inEveningCommute;
+      });
+      out.push(...picks.map((s) => ({ ...s, method: "车载语音" })));
+      break;
+    }
+    case "home": {
+      // 家居优势:环境调节(灯光/温度/音乐)、整点播报、晨起/睡前流程
+      // → 收:生活作息类 + 起床/睡前 锚点附近的中低优
+      const picks = tagged.filter((s) => {
+        if (s._scene === "ambient") return true;
+        const h = getHourFromTime(s.time);
+        if (h === null) return false;
+        // 在起床/睡前的 ±1 小时窗口,且不是高紧急(高紧急让手机+手表去)
+        if (s.priority === "high") return false;
+        const nearWake = r.wakeUp !== null && Math.abs(h - r.wakeUp) <= 1;
+        const nearSleep = r.sleep !== null && Math.abs(h - r.sleep) <= 1;
+        return nearWake || nearSleep;
+      });
+      out.push(...picks.map((s) => ({ ...s, method: "家居场景联动" })));
       break;
     }
     default:
@@ -260,7 +348,7 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies) {
   return out.map(({ _scene, ...rest }) => rest);
 }
 
-// 归一化设备 type:把数据库里可能的脏值 (iphone/workstation/desktop/other/...) 映射到标准 5 类
+// 归一化设备 type:把数据库里可能的脏值 (iphone/workstation/desktop/other/...) 映射到标准 8 类
 function normalizeDeviceTypeKey(raw) {
   const k = String(raw || "").toLowerCase();
   if (k === "phone" || k === "mobile" || k === "iphone" || k === "android") return "phone";
@@ -268,10 +356,13 @@ function normalizeDeviceTypeKey(raw) {
   if (k === "tablet" || k === "ipad") return "tablet";
   if (k === "watch" || k === "applewatch") return "watch";
   if (k === "speaker" || k === "homepod") return "speaker";
+  if (k === "glasses" || k === "ar" || k === "xr" || k === "vr") return "glasses";
+  if (k === "car" || k === "vehicle" || k === "auto") return "car";
+  if (k === "home" || k === "smarthome" || k === "iot") return "home";
   return null;
 }
 
-function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices) {
+function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices, routine) {
   const map = new Map();
   for (const d of baseDevices || []) {
     // 若 baseDevices 未带 device_type,用 id 作为 type 兜底(plan_json 中 id 通常就是 phone/pc 等)
@@ -296,6 +387,9 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, 
     tablet: "平板",
     watch: "手表",
     speaker: "音箱",
+    glasses: "眼镜",
+    car: "汽车",
+    home: "家居",
   };
   for (const key of Object.keys(realByType)) {
     const rd = realByType[key];
@@ -312,7 +406,7 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, 
 
   // 按设备形态差异化分发策略 — 此处 key 已经归一化,可直接喂给 filterStrategiesForDevice
   for (const [key, dev] of map.entries()) {
-    const extra = filterStrategiesForDevice(key, taskStrategies, noteStrategies);
+    const extra = filterStrategiesForDevice(key, taskStrategies, noteStrategies, routine);
     if (extra.length > 0) {
       dev.strategies = [...(dev.strategies || []), ...extra];
       map.set(key, dev);
@@ -355,6 +449,17 @@ export default function DeviceCollaborationModule() {
     refetchInterval: 30 * 1000,
   });
 
+  // 用户作息(daily_routine)用于细化各设备时段判断,缺省时各设备退回硬编码窗口
+  const { data: prefs } = useQuery({
+    queryKey: ['user-preference-routine'],
+    queryFn: async () => {
+      const list = await base44.entities.UserPreference.list();
+      return list?.[0] || null;
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+  const routine = prefs?.daily_routine || null;
+
   const dayPlan = planQueryData?.[0] || null;
   const baseDevices = dayPlan?.plan_json?.devices || [];
 
@@ -395,20 +500,16 @@ export default function DeviceCollaborationModule() {
   }, [allNotes]);
 
   const devices = React.useMemo(
-    () => mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices),
-    [baseDevices, taskStrategies, noteStrategies, realDevices]
+    () => mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices, routine),
+    [baseDevices, taskStrategies, noteStrategies, realDevices, routine]
   );
 
+  // Kimi 改写:为当前选中设备的 Top 策略生成更贴合该设备形态的文案
+  // 失败/未命中时静默回退原文,不阻塞渲染
+  const [rewriteMap, setRewriteMap] = React.useState({});  // { deviceType: [strategies...] }
+
   // 按 device_type 聚合策略,便于真实设备卡片显示策略数与时间轴
-  // 归一化 key：把 baseDevices 中可能出现的 'workstation' / 'desktop' 统一映射到 'pc'
-  const normalizeTypeKey = (raw) => {
-    const k = String(raw || "").toLowerCase();
-    if (k === "phone" || k === "mobile" || k === "iphone") return "phone";
-    if (k === "pc" || k === "workstation" || k === "desktop" || k === "computer" || k === "laptop") return "pc";
-    if (k === "tablet" || k === "ipad") return "tablet";
-    if (k === "watch") return "watch";
-    return k || "other";
-  };
+  const normalizeTypeKey = (raw) => normalizeDeviceTypeKey(raw) || (raw ? String(raw).toLowerCase() : "other");
 
   const strategiesByType = React.useMemo(() => {
     const map = {};
@@ -433,13 +534,30 @@ export default function DeviceCollaborationModule() {
     ? normalizeTypeKey(resolveDeviceBrand(effectiveSelected).deviceType || effectiveSelected.device_type)
     : null;
 
+  const rawSelectedStrategies = effectiveSelectedType
+    ? (strategiesByType[effectiveSelectedType] || [])
+    : [];
+
+  // 选中设备变化或原始策略变化时,触发 Kimi 改写(命中缓存则极快返回)
+  // 注意:必须放在任何 early return 之前,以保证每次渲染 hooks 顺序一致
+  React.useEffect(() => {
+    if (!effectiveSelectedType || rawSelectedStrategies.length === 0) return;
+    let cancelled = false;
+    rewriteStrategiesForDevice(effectiveSelectedType, rawSelectedStrategies)
+      .then((rewritten) => {
+        if (!cancelled) setRewriteMap((m) => ({ ...m, [effectiveSelectedType]: rewritten }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // 用策略内容指纹作为依赖,避免 array 引用变化导致重复调用
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSelectedType, rawSelectedStrategies.map((s) => `${s.time}|${s.content}`).join("\n")]);
+
   const hasAnyStrategy = devices.some((d) => d.strategies && d.strategies.length > 0);
   const hasAnyRealDevice = (realDevices || []).length > 0;
   if (!hasAnyStrategy && !hasAnyRealDevice) return null;
 
-  const selectedStrategies = effectiveSelectedType
-    ? (strategiesByType[effectiveSelectedType] || [])
-    : [];
+  const selectedStrategies = rewriteMap[effectiveSelectedType] || rawSelectedStrategies;
 
   return (
     <motion.div

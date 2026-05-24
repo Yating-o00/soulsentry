@@ -6,9 +6,10 @@ import { motion, AnimatePresence } from "framer-motion";
 const DEVICE_META = {
   phone:   { icon: Smartphone, name: "手机",   role: "主控终端",  gradient: "from-[#384877] to-[#3b5aa2]", bg: "bg-[#384877]/5" },
   watch:   { icon: Watch,      name: "手表",   role: "触觉提醒",  gradient: "from-[#3b5aa2] to-[#6366f1]", bg: "bg-slate-500/5" },
-  glasses: { icon: Glasses,    name: "眼镜",   role: "AR视觉",   gradient: "from-[#6366f1] to-[#7c3aed]", bg: "bg-indigo-500/5" },
-  car:     { icon: Car,        name: "汽车",   role: "车载系统",  gradient: "from-emerald-600 to-teal-700", bg: "bg-emerald-500/5" },
-  home:    { icon: Home,       name: "家居",   role: "语音中枢",  gradient: "from-amber-500 to-orange-600", bg: "bg-amber-500/5" },
+  glasses: { icon: Glasses,    name: "眼镜",   role: "AR 视觉",   gradient: "from-[#6366f1] to-[#7c3aed]", bg: "bg-indigo-500/5" },
+  car:     { icon: Car,        name: "汽车",   role: "车载语音",  gradient: "from-emerald-600 to-teal-700", bg: "bg-emerald-500/5" },
+  home:    { icon: Home,       name: "家居",   role: "环境调节",  gradient: "from-amber-500 to-orange-600", bg: "bg-amber-500/5" },
+  speaker: { icon: Home,       name: "音箱",   role: "语音中枢",  gradient: "from-amber-500 to-orange-600", bg: "bg-amber-500/5" },
   pc:      { icon: Monitor,    name: "工作站", role: "深度工作",  gradient: "from-rose-500 to-pink-600", bg: "bg-rose-500/5" },
   tablet:  { icon: Monitor,    name: "平板",   role: "辅助屏",    gradient: "from-sky-500 to-indigo-500", bg: "bg-sky-500/5" },
 };

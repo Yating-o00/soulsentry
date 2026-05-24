@@ -127,61 +127,136 @@ function consolidateStrategies(strategies) {
   );
 }
 
-// 按设备形态过滤策略 — 不同设备承担不同协同职责
+// ===== 设备优势画像 =====
+// 每种设备根据自身物理/场景优势,只接它最擅长的活,避免所有设备都收到同样的提醒
+//
+// 手机 phone   → 随身/移动 → 出行、社交沟通、外勤、地点关联、突发提醒
+// 电脑 pc      → 深度专注/创造 → 文档/写作/编码/会议/长任务/心签编辑
+// 平板 tablet  → 阅读/手写/沉浸 → 长文心签、复盘、晨间/晚间安静时段
+// 手表 watch   → 贴身/不打扰 → 仅紧急 + 关键时间锚点 + 极短摘要
+// 音箱 speaker → 无屏/环境 → 整点语音播报、晨间汇报、家庭时段(早 7-9 / 晚 19-22)
+
+// 按关键词识别任务"主场景",决定它属于哪类设备的优势区
+function classifyTaskScene(s) {
+  const txt = String(s.content || "").toLowerCase();
+  // 移动/外出/社交 — 手机优势
+  if (/出门|出发|路上|开车|地铁|打车|外出|拜访|见面|约|电话|通话|短信|微信|回复|发消息|快递|取件|买|购物|超市|医院|银行|机场|高铁|约会|接送|接娃/.test(txt)) {
+    return "mobile";
+  }
+  // 深度工作/创造 — 电脑优势
+  if (/写|文档|报告|方案|ppt|表格|excel|代码|开发|编码|设计|画|剪辑|渲染|整理|分析|研究|review|代码评审|提交代码|debug|总结|复盘|邮件|email|回邮件/.test(txt)) {
+    return "focus";
+  }
+  // 阅读/学习/思考 — 平板优势
+  if (/读|阅读|看书|学习|背|复习|笔记|手写|批注|论文|文章|课程|视频课/.test(txt)) {
+    return "reading";
+  }
+  // 家庭/生活/作息 — 音箱优势
+  if (/吃|做饭|喝水|吃药|睡|起床|早安|晚安|洗漱|运动|健身|拉伸|冥想|家务/.test(txt)) {
+    return "ambient";
+  }
+  return "general";
+}
+
+// 时间段判定:用于音箱(家庭时段)、平板(安静时段)
+function getHourFromTime(t) {
+  const h = parseInt(String(t || "").slice(0, 2), 10);
+  return isNaN(h) ? null : h;
+}
+
+// 按设备形态过滤策略 — 不同设备只承担它的优势工作
 function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies) {
   const out = [];
+
+  // 给每条任务打上场景标签,后面各设备按场景挑活
+  const tagged = taskStrategies.map((s) => ({ ...s, _scene: classifyTaskScene(s) }));
+
   switch (deviceType) {
-    case "phone":
-      // 手机:全量推送提醒 — 这是用户主要随身设备
-      out.push(...taskStrategies.map((s) => ({ ...s, method: "推送提醒" })));
-      break;
-    case "pc":
-      // 电脑/工作站:深度工作场景 — 桌面通知 + 心签更新 + 工作时段任务(9:00-19:00)
-      out.push(
-        ...taskStrategies
-          .filter((s) => {
-            const h = parseInt(String(s.time || "").slice(0, 2), 10);
-            // 模糊时间(无数字)也保留;具体时间只保留工作时段
-            return isNaN(h) || (h >= 9 && h <= 19);
-          })
-          .map((s) => ({ ...s, method: "桌面通知" }))
+    case "phone": {
+      // 手机优势:随身、随时震动、可定位、社交触达
+      // → 收:移动/社交/外出类 + 所有 high/urgent(随身兜底,关键事不能漏)
+      const picks = tagged.filter(
+        (s) => s._scene === "mobile" || s.priority === "high"
       );
-      out.push(...noteStrategies.map((s) => ({ ...s, method: "心签速记" })));
+      out.push(...picks.map((s) => ({
+        ...s,
+        method: s._scene === "mobile" ? "出行推送" : "随身推送",
+      })));
       break;
-    case "tablet":
-      // 平板:阅读/会议场景 — 中高优先级任务 + 心签
+    }
+    case "pc": {
+      // 电脑优势:大屏、键盘、长会话、文档/代码/邮件入口
+      // → 收:深度工作类 + 工作时段(9-19)的中高优 + 所有心签编辑
+      const picks = tagged.filter((s) => {
+        if (s._scene === "focus") return true;
+        const h = getHourFromTime(s.time);
+        return h !== null && h >= 9 && h <= 19 && s.priority !== "low";
+      });
+      out.push(...picks.map((s) => ({ ...s, method: "桌面通知" })));
+      out.push(...noteStrategies.map((s) => ({ ...s, method: "心签编辑" })));
+      break;
+    }
+    case "tablet": {
+      // 平板优势:大屏阅读、手写、沉浸式、安静时段(早晨/夜间)
+      // → 收:阅读/学习类 + 安静时段(7-9 / 20-23)的非紧急任务 + 长心签
+      const picks = tagged.filter((s) => {
+        if (s._scene === "reading") return true;
+        if (s.priority === "high") return false; // 紧急的让手机处理
+        const h = getHourFromTime(s.time);
+        return h !== null && ((h >= 7 && h < 10) || (h >= 20 && h <= 23));
+      });
+      out.push(...picks.map((s) => ({ ...s, method: "沉浸阅读" })));
+      // 长心签优先在平板上呈现(便于手写批注)
       out.push(
-        ...taskStrategies
-          .filter((s) => s.priority !== "low")
-          .map((s) => ({ ...s, method: "横屏提醒" }))
+        ...noteStrategies
+          .filter((n) => (n.content || "").length > 30)
+          .slice(0, 4)
+          .map((s) => ({ ...s, method: "心签批注" }))
       );
-      out.push(...noteStrategies.slice(0, 4).map((s) => ({ ...s, method: "阅读卡片" })));
       break;
-    case "watch":
-      // 手表:极简 — 仅 high 紧急任务,内容截短
+    }
+    case "watch": {
+      // 手表优势:贴身、抬腕可见、不打扰他人 — 极简哲学
+      // → 只收紧急任务,内容截短到 14 字,只保留关键信息
       out.push(
-        ...taskStrategies
+        ...tagged
           .filter((s) => s.priority === "high")
+          .slice(0, 5) // 一天最多 5 条,守住贴身设备的克制
           .map((s) => ({
             ...s,
-            content: s.content && s.content.length > 14 ? s.content.slice(0, 14) + "…" : s.content,
+            content:
+              s.content && s.content.length > 14
+                ? s.content.slice(0, 14) + "…"
+                : s.content,
             method: "腕上震动",
           }))
       );
       break;
-    case "speaker":
-      // 音箱:语音播报 — 仅整点/带具体时间点的任务
-      out.push(
-        ...taskStrategies
-          .filter((s) => /^\d{2}:\d{2}$/.test(String(s.time || "")))
-          .map((s) => ({ ...s, method: "语音播报" }))
-      );
+    }
+    case "speaker": {
+      // 音箱优势:无屏、语音、环境感知 — 家庭场景的"播报员"
+      // → 只在家庭时段(早 7-9 / 晚 19-22)播报,且必须是整点任务或生活作息类
+      const picks = tagged.filter((s) => {
+        const h = getHourFromTime(s.time);
+        const inHomeHour = h !== null && ((h >= 7 && h < 10) || (h >= 19 && h <= 22));
+        const isAmbient = s._scene === "ambient";
+        const isHourlyAnchor = /^\d{2}:00$/.test(String(s.time || ""));
+        return isAmbient || (inHomeHour && isHourlyAnchor);
+      });
+      out.push(...picks.map((s) => ({ ...s, method: "语音播报" })));
       break;
+    }
     default:
-      // 其它/未知设备:给一份精简版任务
-      out.push(...taskStrategies.slice(0, 5).map((s) => ({ ...s, method: "通用提醒" })));
+      // 未知设备:给一份精简版,只接中高优
+      out.push(
+        ...tagged
+          .filter((s) => s.priority !== "low")
+          .slice(0, 5)
+          .map((s) => ({ ...s, method: "通用提醒" }))
+      );
   }
-  return out;
+  // 清理掉内部辅助字段
+  return out.map(({ _scene, ...rest }) => rest);
 }
 
 function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, realDevices) {

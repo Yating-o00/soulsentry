@@ -50,31 +50,53 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={handleCardClick}
-      className={`relative rounded-3xl p-4 sm:p-5 border backdrop-blur-xl cursor-pointer transition-all duration-300 bg-white/60 ${
+      whileHover={{ y: -3 }}
+      transition={{ type: "spring", stiffness: 300, damping: 22 }}
+      className={`group relative overflow-hidden rounded-3xl p-4 sm:p-5 border backdrop-blur-2xl cursor-pointer transition-all duration-500 ${
         isSelected
-          ? "border-[#384877]/60 shadow-[0_20px_60px_-15px_rgba(56,72,119,0.35),0_0_0_4px_rgba(91,109,174,0.12)]"
+          ? "bg-gradient-to-br from-white/85 via-white/70 to-[#e8ecf7]/60 border-[#384877]/50 shadow-[0_25px_70px_-18px_rgba(56,72,119,0.45),0_0_0_4px_rgba(91,109,174,0.14),inset_0_1px_0_rgba(255,255,255,0.9)]"
           : device.is_current
-          ? "border-white/80 shadow-[0_10px_40px_-12px_rgba(56,72,119,0.25)] hover:shadow-[0_15px_50px_-12px_rgba(56,72,119,0.32)]"
-          : "border-white/70 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.15)] hover:shadow-[0_12px_40px_-12px_rgba(56,72,119,0.22)]"
+          ? "bg-gradient-to-br from-white/80 via-white/65 to-[#eef1fa]/55 border-white/80 shadow-[0_15px_45px_-15px_rgba(56,72,119,0.28),inset_0_1px_0_rgba(255,255,255,0.9)] hover:shadow-[0_22px_55px_-15px_rgba(56,72,119,0.38)]"
+          : "bg-gradient-to-br from-white/70 via-white/55 to-slate-100/40 border-white/70 shadow-[0_10px_35px_-14px_rgba(15,23,42,0.18),inset_0_1px_0_rgba(255,255,255,0.85)] hover:shadow-[0_18px_45px_-14px_rgba(56,72,119,0.28)]"
       }`}
     >
+      {/* 装饰光晕 */}
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full blur-3xl transition-opacity duration-500 ${
+          isSelected || device.is_current
+            ? "bg-gradient-to-br from-[#6b6aae]/30 to-[#384877]/20 opacity-80"
+            : "bg-gradient-to-br from-[#a98ec4]/20 to-[#384877]/10 opacity-50 group-hover:opacity-80"
+        }`}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-20 -left-10 w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-200/20 to-transparent blur-2xl opacity-60"
+      />
+      {/* 顶部高光描边 */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent"
+      />
       {/* 右上角策略徽章（独立浮标，不挤压标题区） */}
       {!editing && strategyCount > 0 && (
-        <div className="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold text-white bg-gradient-to-r from-[#384877] via-[#6b6aae] to-[#a98ec4] shadow-[0_4px_12px_-2px_rgba(107,106,174,0.45)]">
-          <span>{strategyCount}</span>
+        <div className="absolute top-3 right-3 z-10 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold text-white bg-gradient-to-r from-[#384877] via-[#6b6aae] to-[#a98ec4] shadow-[0_6px_18px_-3px_rgba(107,106,174,0.55),inset_0_1px_0_rgba(255,255,255,0.3)] ring-1 ring-white/40">
+          <span className="text-[12px] font-bold">{strategyCount}</span>
           <span className="opacity-90">策略</span>
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+      <div className="relative flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
         <div
-          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-md ${
+          className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 transition-transform duration-500 group-hover:scale-105 ${
             device.is_current || isSelected
-              ? "bg-gradient-to-br from-[#384877] via-[#4a5a96] to-[#5b6dae] text-white shadow-[0_8px_24px_-6px_rgba(56,72,119,0.55)]"
-              : "bg-gradient-to-br from-white/80 to-slate-100/80 text-[#384877] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_4px_12px_-4px_rgba(15,23,42,0.1)]"
+              ? "bg-gradient-to-br from-[#384877] via-[#4a5a96] to-[#6b6aae] text-white shadow-[0_10px_28px_-6px_rgba(56,72,119,0.6),inset_0_1px_0_rgba(255,255,255,0.35)]"
+              : "bg-gradient-to-br from-white via-white/90 to-slate-100 text-[#384877] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_6px_16px_-4px_rgba(15,23,42,0.12)] ring-1 ring-white/80"
           }`}
         >
-          <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+          {/* 图标块顶部高光 */}
+          <span aria-hidden className="pointer-events-none absolute inset-x-2 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent rounded-full" />
+          <Icon className="w-5 h-5 sm:w-6 sm:h-6 relative z-10" />
         </div>
         <div
           className={`min-w-0 w-full flex-1 ${!editing && strategyCount > 0 ? "pr-16 sm:pr-14" : ""}`}

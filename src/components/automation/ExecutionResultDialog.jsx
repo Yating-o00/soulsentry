@@ -41,7 +41,7 @@ export default function ExecutionResultDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0 overflow-hidden rounded-2xl">
+      <DialogContent className="max-w-lg p-0 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden">
         {/* 顶部色带 */}
         <div className={isSuccess
           ? "bg-gradient-to-br from-emerald-50 to-teal-50 px-6 pt-6 pb-5 border-b border-emerald-100/60"
@@ -66,15 +66,15 @@ export default function ExecutionResultDialog({
               </div>
             </div>
             {!isSuccess && errorMessage && (
-              <div className="text-[12px] text-rose-700 bg-white/70 border border-rose-200/60 rounded-lg px-3 py-2 leading-relaxed mt-2">
+              <div className="text-[12px] text-rose-700 bg-white/70 border border-rose-200/60 rounded-lg px-3 py-2 leading-relaxed mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words">
                 {errorMessage}
               </div>
             )}
           </DialogHeader>
         </div>
 
-        {/* 主体 */}
-        <div className="px-6 py-5 space-y-3">
+        {/* 主体（弹窗内容超长时整体可竖向滚动） */}
+        <div className="px-6 py-5 space-y-3 flex-1 overflow-y-auto">
           {/* 成功 */}
           {isSuccess && (
             <>
@@ -103,12 +103,13 @@ export default function ExecutionResultDialog({
               })()}
 
               {resultPreview ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3 max-h-56 overflow-y-auto">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 mb-1.5">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3 max-h-80 overflow-auto">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 mb-1.5 sticky top-0 bg-slate-50/95 backdrop-blur-sm -mx-3.5 px-3.5 py-1 z-10">
                     <Sparkles className="w-3 h-3 text-emerald-500" />
                     AI 结果预览
                   </div>
-                  <pre className="text-[12px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
+                  {/* 默认换行自适应宽度；超长不可断的内容（链接/代码）允许左右滑动查看完整 */}
+                  <pre className="text-[12px] text-slate-700 whitespace-pre-wrap break-words font-sans leading-relaxed min-w-max">
                     {resultPreview}
                   </pre>
                 </div>

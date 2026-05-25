@@ -5,6 +5,7 @@ import {
   Calendar, BarChart3, Target
 } from "lucide-react";
 import moment from "moment";
+import PersonaPortraitCard from "../insights/PersonaPortraitCard";
 
 function InsightCard({ icon: Icon, iconColor, title, value, desc, bgColor }) {
   return (
@@ -70,6 +71,9 @@ export default function CognitionInsights({ tasks, memories, behaviors }) {
 
   return (
     <div className="space-y-3">
+      {/* Kimi 个人画像 - 实时分析 */}
+      <PersonaPortraitCard />
+
       <div className="grid gap-3 md:grid-cols-2">
         <InsightCard
           icon={Clock}

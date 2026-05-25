@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { Brain, MessageSquare, Database } from "lucide-react";
+import { Brain, MessageSquare, Database, User as UserIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
 import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
+import PersonalProfileCard from "@/components/insights/PersonalProfileCard";
 import { motion } from "framer-motion";
 
 export default function Knowledge() {
@@ -26,8 +27,15 @@ export default function Knowledge() {
       </motion.div>
 
       {/* Tabs */}
-      <Tabs defaultValue="chat" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-white shadow-md rounded-xl p-1">
+      <Tabs defaultValue="profile" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 bg-white shadow-md rounded-xl p-1">
+          <TabsTrigger
+            value="profile"
+            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white"
+          >
+            <UserIcon className="w-4 h-4 mr-2" />
+            我的画像
+          </TabsTrigger>
           <TabsTrigger 
             value="chat" 
             className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-blue-600 data-[state=active]:text-white"
@@ -43,6 +51,15 @@ export default function Knowledge() {
             知识管理
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="profile" className="mt-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <PersonalProfileCard />
+          </motion.div>
+        </TabsContent>
 
         <TabsContent value="chat" className="mt-6">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden" style={{ height: "calc(100vh - 280px)" }}>

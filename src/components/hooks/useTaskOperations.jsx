@@ -7,6 +7,7 @@ import { findReusableTask } from "@/lib/findOrReuseTask";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
+import { trackHabit, trackOutcome } from "@/lib/personalDataEngine";
 
 export function useTaskOperations() {
   const queryClient = useQueryClient();
@@ -85,6 +86,16 @@ export function useTaskOperations() {
       }).catch(() => {});
 
       logUserBehavior("task_created", data);
+
+      // 个人数据库:沉淀"创建任务"的操作习惯
+      trackHabit({
+        subtype: "task_create",
+        summary: `在${new Date().getHours()}点创建了${data.category || "未分类"}约定:${data.title}`,
+        category: data.category,
+        related_task_id: data.id,
+        tags: data.tags || [],
+        weight: data.priority === "urgent" ? 5 : data.priority === "high" ? 3 : 2,
+      });
     },
     onError: () => {
         feedback.error("创建任务失败");
@@ -191,6 +202,21 @@ export function useTaskOperations() {
         } else {
           feedback.success("✓ 约定已完成");
         }
+
+        // 个人数据库:沉淀"任务结果"
+        const delayMinutes = task.reminder_time
+          ? Math.round((new Date(completedAt) - new Date(task.reminder_time)) / 60000)
+          : null;
+        trackOutcome({
+          subtype: "task_complete",
+          summary: `完成${task.category || "未分类"}约定「${task.title}」${
+            delayMinutes !== null ? (delayMinutes > 0 ? `,比计划晚${delayMinutes}分钟` : delayMinutes < 0 ? `,提前${-delayMinutes}分钟完成` : ",准时完成") : ""
+          }`,
+          category: task.category,
+          related_task_id: task.id,
+          weight: task.priority === "urgent" ? 6 : task.priority === "high" ? 4 : 2,
+          metadata: { delay_minutes: delayMinutes, priority: task.priority },
+        });
 
         // AI完成总结和建议 (后台异步执行，不阻塞用户操作)
         generateCompletionSummary(task, allTasks);

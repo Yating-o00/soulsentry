@@ -16,6 +16,7 @@ import { SUBSCRIPTION_PLANS } from "@/components/credits/creditConfig";
 import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
 import { useQuery } from "@tanstack/react-query";
 import ProductInsights from "@/components/memory/ProductInsights";
+import PersonalProfileCard from "@/components/insights/PersonalProfileCard";
 import AlertChannelSettings from "@/components/account/AlertChannelSettings";
 import PWAInstallGuide from "@/components/account/PWAInstallGuide";
 import EnableBackgroundPush from "@/components/account/EnableBackgroundPush";
@@ -475,7 +476,8 @@ export default function Account() {
               认知洞察
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 space-y-5">
+            <PersonalProfileCard />
             <ProductInsights
               tasks={tasks}
               notes={notes}

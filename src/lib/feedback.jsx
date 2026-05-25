@@ -100,12 +100,12 @@ export const successWithSource = (message, sourceLabel) => {
 export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 }) => {
   return toast.custom(
     (id) => (
-      // 去掉外层白色容器:整张卡片直接是紫色品牌渐变,悬浮显示
-      <div
-        className="w-[320px] rounded-2xl shadow-[0_12px_32px_rgba(56,72,119,0.35)] overflow-hidden text-white"
-        style={{ background: `linear-gradient(160deg, ${BRAND_PRIMARY} 0%, ${BRAND_SECONDARY} 100%)` }}
-      >
-        <div className="px-4 py-2.5 flex items-center gap-2 border-b border-white/15">
+      // 蓝紫色标题条 + 白色卡身 + 斜体灰字脚注,无外层光晕
+      <div className="w-[320px] rounded-2xl overflow-hidden bg-white shadow-[0_8px_24px_rgba(56,72,119,0.18)]">
+        <div
+          className="px-4 py-2.5 flex items-center gap-2"
+          style={{ background: `linear-gradient(90deg, ${BRAND_PRIMARY} 0%, ${BRAND_SECONDARY} 100%)` }}
+        >
           <span className="text-base">✨</span>
           <span className="text-[13px] font-semibold text-white flex-1 line-clamp-1">{title}</span>
           <button
@@ -118,13 +118,13 @@ export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 
         </div>
         {suggestions.length > 0 && (
           <div className="px-4 py-2.5">
-            <div className="text-[11px] font-medium text-white/85 mb-1.5 flex items-center gap-1">
+            <div className="text-[11px] font-medium text-[#384877] mb-1.5 flex items-center gap-1">
               💡 <span>下一步</span>
             </div>
             <ul className="space-y-1">
               {suggestions.slice(0, 3).map((s, idx) => (
-                <li key={idx} className="text-[12px] text-white/90 leading-snug flex gap-1.5">
-                  <span className="text-white/50 mt-0.5">·</span>
+                <li key={idx} className="text-[12px] text-slate-700 leading-snug flex gap-1.5">
+                  <span className="text-[#384877]/40 mt-0.5">·</span>
                   <span className="flex-1">{s}</span>
                 </li>
               ))}
@@ -132,7 +132,7 @@ export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 
           </div>
         )}
         {footnote && (
-          <p className="px-4 py-2 text-[11px] italic text-white/80 border-t border-white/15 line-clamp-2">
+          <p className="px-4 py-2 text-[11px] italic text-slate-500 bg-slate-50/60 line-clamp-2">
             "{footnote}"
           </p>
         )}

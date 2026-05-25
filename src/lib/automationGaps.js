@@ -72,7 +72,21 @@ const RULES = {
       detect: (text) => text.replace(/\s/g, '').length >= 4,
     },
   ],
-  // summary_note / ledger_organize 没有强制参数 —— 直接放行
+  summary_note: [
+    {
+      // 总结/心签类必须有"可总结的真实素材"——要么描述长一点，要么标注附件/链接/原文。
+      // 拦住"上午专注模式"这种 6 字时间块被误分到 summary_note 调 AI 报 400 的情况。
+      key: 'material',
+      label: '要总结的内容',
+      placeholder: '贴上原文 / 关键要点 / 附件描述',
+      detect: (text) => {
+        const t = String(text || '').replace(/\s/g, '');
+        if (t.length >= 30) return true; // 描述本身够长
+        return /(附件|文件|链接|http|原文|纪要|笔记|对话|聊天|访谈|录音|转写)/i.test(text || '');
+      },
+    },
+  ],
+  // ledger_organize 没有强制参数 —— 直接放行
 };
 
 /**
@@ -110,6 +124,7 @@ export function mergeGapAnswers(originalText, answers) {
       topic: '主题',
       source: '资料来源',
       output_target: '存放/输出需求',
+      material: '要总结的内容',
     }[key] || key;
     parts.push(`${label}：${v}`);
   });

@@ -254,7 +254,23 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
       });
     } catch (e) {
       updateItem(item._id, { status: "failed" });
-      const msg = e?.message || "未知错误";
+      // 兜底解包：axios 抛出时 e.message 只有"Request failed with status code 400"这种泛化文案，
+      // 真正后端错误在 e.response.data.error / message，要逐级捞出来让用户能看懂
+      const backendErr =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.data?.error ||
+        e?.data?.message;
+      const rawMsg = backendErr || e?.message || "未知错误";
+      // 进一步把"Kimi API error 400: {…}"里的真实原因抽出来
+      const kimiMatch = String(rawMsg).match(/Kimi API error \d+:\s*({[\s\S]*})/);
+      let msg = rawMsg;
+      if (kimiMatch) {
+        try {
+          const kimiBody = JSON.parse(kimiMatch[1]);
+          msg = kimiBody?.error?.message || kimiBody?.message || rawMsg;
+        } catch (_) { /* keep rawMsg */ }
+      }
       toast.error(`执行失败：${msg}`, { id: `exec-${item._id}` });
       setFeedback({
         mode: "failed",

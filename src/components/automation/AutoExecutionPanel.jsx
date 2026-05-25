@@ -31,7 +31,26 @@ export default function AutoExecutionPanel() {
   const [attachedFiles, setAttachedFiles] = useState([]); // [{file_name, file_url, file_size, file_type}]
   const [uploading, setUploading] = useState(false);
   const fileInputRef = React.useRef(null);
+  const inputRef = React.useRef(null);
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog, refreshCredits } = useAICreditGate();
+
+  // 监听来自「自动执行清单」（图1）卡片的"填入输入框"事件：
+  // 把卡片文本填入下方输入框、滚动到可视区、聚焦光标，方便用户微调后发送
+  React.useEffect(() => {
+    const handler = (e) => {
+      const text = e?.detail?.text;
+      if (!text) return;
+      setInput(text);
+      requestAnimationFrame(() => {
+        try {
+          inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+          inputRef.current?.focus();
+        } catch (_) { /* noop */ }
+      });
+    };
+    window.addEventListener("auto-exec-fill-input", handler);
+    return () => window.removeEventListener("auto-exec-fill-input", handler);
+  }, []);
   const [creditsDialog, setCreditsDialog] = React.useState({ open: false, cost: 0, balance: 0, featureName: '' });
 
   // 统一执行：plan → execute，识别 402 INSUFFICIENT_CREDITS 弹充值卡
@@ -264,6 +283,7 @@ export default function AutoExecutionPanel() {
           {/* 输入区 */}
           <div className="flex gap-2 mb-2">
             <Input
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !submitting && handleAnalyze()}

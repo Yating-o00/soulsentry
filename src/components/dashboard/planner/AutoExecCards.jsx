@@ -8,6 +8,9 @@ import { toast } from "sonner";
 import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
 import ExecutionResultDialog from "@/components/automation/ExecutionResultDialog";
 import EmailPreviewDialog from "@/components/automation/EmailPreviewDialog";
+import { detectAutomationGaps, mergeGapAnswers } from "@/lib/automationGaps";
+import { Input } from "@/components/ui/input";
+import { AlertCircle } from "lucide-react";
 
 // 从标题/描述粗略推断 automation_type，让单条卡片直接走 executeAutomation
 function inferAutomationType(title = "", desc = "") {
@@ -39,6 +42,7 @@ const STATUS_STYLE = {
   running:    { dot: "bg-[#3b5aa2]",   text: "text-[#3b5aa2]",   label: "执行中",   border: "border-l-[#3b5aa2]", pulse: true },
   done:       { dot: "bg-emerald-500", text: "text-emerald-700", label: "已执行",   border: "border-l-emerald-400" },
   failed:     { dot: "bg-rose-500",    text: "text-rose-700",    label: "失败",     border: "border-l-rose-400" },
+  incomplete: { dot: "bg-red-500",     text: "text-red-700",     label: "待补充",   border: "border-l-red-400", pulse: true },
 };
 
 function normalizeStatus(s) {
@@ -153,8 +157,29 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
     }
   };
 
-  // 授权 → 创建 TaskExecution → plan → execute（支持 overrideInput 重试时携带修改后的需求）
+  // 授权 → 先做参数校验：缺关键字段 → 卡片就地标红「待补充」+ 把内容填入图2输入框，让用户补全后再发送
   const handleAuthorize = async (item, overrideInput) => {
+    // 步骤 0：参数充分性校验（缺关键字段则就地标红，不消耗 AI 点数）
+    const sourceText = overrideInput || `${item.title}\n${item.desc || ""}`;
+    const { missing, hint } = detectAutomationGaps(item.automation_type, sourceText);
+    if (missing.length > 0 && !overrideInput) {
+      updateItem(item._id, { status: "incomplete", missing, gap_hint: hint, gap_answers: {} });
+      // 同步把卡片内容填入图2输入框，给出"补全后一键执行"路径
+      try {
+        window.dispatchEvent(new CustomEvent("auto-exec-fill-input", {
+          detail: {
+            text: `${item.title}（${hint}）\n${item.desc || ""}`.trim(),
+            missing: missing.map(m => m.label),
+          }
+        }));
+      } catch (_) {}
+      toast.warning(`需要补充：${missing.map(m => m.label).join('、')}`, {
+        id: `gap-${item._id}`,
+        duration: 4500,
+      });
+      return;
+    }
+
     // 邮件类：已有草稿且未发送时，直接重新打开预览窗，避免重复调用 AI
     if (
       item.automation_type === "email_draft" &&
@@ -294,6 +319,11 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
                 item={it}
                 onAuthorize={() => handleAuthorize(it)}
                 onOpen={() => openExecution(it)}
+                onResolveGaps={(target, answers) => {
+                  const merged = mergeGapAnswers(`${target.title}\n${target.desc || ""}`, answers);
+                  updateItem(target._id, { status: "ready", missing: [], gap_hint: "", gap_answers: {} });
+                  handleAuthorize(target, merged);
+                }}
               />
             ))}
           </AnimatePresence>
@@ -415,13 +445,22 @@ function buildSuggestions(automationType, errorMsg = "") {
   return list.slice(0, 3);
 }
 
-function ExecCard({ item, onAuthorize, onOpen }) {
+function ExecCard({ item, onAuthorize, onOpen, onFillInput, onResolveGaps }) {
   const meta = TYPE_META[item.automation_type] || TYPE_META.summary_note;
   const status = STATUS_STYLE[item.status] || STATUS_STYLE.ready;
   const Icon = meta.icon;
   const isRunning = item.status === "running";
   const isDone = item.status === "done";
+  const isIncomplete = item.status === "incomplete";
   const canAuthorize = item.status === "ready" || item.status === "pending" || item.status === "failed";
+  const [gapAnswers, setGapAnswers] = React.useState({});
+
+  const handleGapSubmit = () => {
+    const filled = Object.values(gapAnswers).filter(v => String(v || "").trim()).length;
+    if (filled === 0) return;
+    onResolveGaps && onResolveGaps(item, gapAnswers);
+    setGapAnswers({});
+  };
 
   return (
     <motion.div
@@ -451,6 +490,28 @@ function ExecCard({ item, onAuthorize, onOpen }) {
       <div className="text-[11.5px] text-slate-500 line-clamp-2 leading-[1.5] pl-8 pr-1 mb-2">
         {item.desc}
       </div>
+
+      {/* 待补充：行内 chip + 输入框，填完一键继续执行 */}
+      {isIncomplete && Array.isArray(item.missing) && item.missing.length > 0 && (
+        <div className="ml-8 mb-2 rounded-lg bg-rose-50/60 border border-rose-200 px-2.5 py-2 space-y-1.5">
+          <div className="flex items-center gap-1 text-[10px] font-semibold text-rose-700">
+            <AlertCircle className="w-2.5 h-2.5" />
+            缺少：{item.missing.map(m => m.label).join('、')}
+          </div>
+          <div className="space-y-1">
+            {item.missing.map(m => (
+              <Input
+                key={m.key}
+                value={gapAnswers[m.key] || ""}
+                onChange={(e) => setGapAnswers(prev => ({ ...prev, [m.key]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleGapSubmit(); }}
+                placeholder={m.placeholder}
+                className="h-7 text-[11px] bg-white border-rose-200/80 focus-visible:ring-rose-300 focus-visible:ring-offset-0"
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 已执行：文件下载按钮（如果产物含 URL） */}
       {isDone && item.result_preview && (() => {
@@ -509,6 +570,17 @@ function ExecCard({ item, onAuthorize, onOpen }) {
 
       {/* 操作行 */}
       <div className="flex items-center justify-end pl-8">
+        {isIncomplete && (
+          <Button
+            size="sm"
+            onClick={handleGapSubmit}
+            disabled={Object.values(gapAnswers).filter(v => String(v || "").trim()).length === 0}
+            className="h-6 px-2.5 text-[10.5px] font-medium bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white rounded-md shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+            补全并执行
+          </Button>
+        )}
         {canAuthorize && (
           <Button
             size="sm"

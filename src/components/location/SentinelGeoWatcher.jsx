@@ -13,7 +13,7 @@ import { MapPin, AlertTriangle, Bell } from 'lucide-react';
  * 与已有 GeofenceTracker（SavedLocation 维度）并行工作，互不干扰。
  */
 const MIN_MOVE_M = 80;                       // 移动 80m 以内视为静止，不上报
-const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;    // 5 分钟轮询一次（避免 429）
+const DEFAULT_INTERVAL_MS = 2 * 60 * 1000;    // 2 分钟轮询一次（更贴近"路过即提醒"，浏览器在标签后台时仍可运行）
 const STARTUP_DELAY_MS = 20 * 1000;           // 启动 20s 后再发首次
 const RATE_LIMIT_COOLDOWN_MS = 10 * 60 * 1000; // 命中 429 后暂停 10 分钟
 
@@ -104,9 +104,19 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
     const startup = setTimeout(tick, STARTUP_DELAY_MS);
     timerRef.current = setInterval(tick, intervalMs);
 
+    // 关键：页面/PWA 从后台切回前台时立刻补跑一次
+    // —— 这是浏览器允许的"用户回来那一刻补一次位置匹配"的最佳时机
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', tick);
+
     return () => {
       clearTimeout(startup);
       if (timerRef.current) clearInterval(timerRef.current);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', tick);
     };
   }, [intervalMs]);
 

@@ -1,4 +1,48 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import webpush from 'npm:web-push@3.6.7';
+
+// 通过 Web Push 给目标用户发一条系统级通知（页面关闭时仍能收到）
+async function sendWebPushTo(base44, targetEmail, task, hoursLeft) {
+  const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
+  const privateKey = Deno.env.get('VAPID_PRIVATE_KEY');
+  const subject = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@soulsentry.app';
+  if (!publicKey || !privateKey) throw new Error('VAPID keys not configured');
+  webpush.setVapidDetails(subject, publicKey, privateKey);
+
+  const prefs = await base44.asServiceRole.entities.UserPreference.filter(
+    { created_by: targetEmail }, '-updated_date', 1
+  );
+  const pref = prefs?.[0];
+  const sub = pref?.push_subscription;
+  if (!pref?.push_enabled || !sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
+    throw new Error('No active push subscription');
+  }
+
+  const payload = JSON.stringify({
+    title: `⚡ 即将截止：${task.title}`,
+    body: `还剩约 ${hoursLeft} 小时 · 优先级 ${task.priority || 'medium'}`,
+    url: `/Tasks?id=${task.id}`,
+    tag: `task-alert-${task.id}`,
+    requireInteraction: hoursLeft <= 2,
+    vibrate: [200, 100, 200],
+    data: { task_id: task.id, type: 'task_alert' },
+  });
+
+  try {
+    await webpush.sendNotification(
+      { endpoint: sub.endpoint, keys: sub.keys },
+      payload,
+      { TTL: 60 * 60 * 4, urgency: hoursLeft <= 2 ? 'high' : 'normal' }
+    );
+  } catch (err) {
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      await base44.asServiceRole.entities.UserPreference.update(pref.id, {
+        push_enabled: false, push_subscription: null,
+      });
+    }
+    throw err;
+  }
+}
 
 // Build a compact WeCom markdown notice for an upcoming task
 function buildWeworkMarkdown(task, hoursLeft) {
@@ -105,7 +149,8 @@ Deno.serve(async (req) => {
       if (now < triggerAt) continue; // not yet within alert window
 
       const hoursLeft = Math.max(1, Math.round((new Date(task.reminder_time).getTime() - now) / 3600000));
-      const channels = settings.alert_channels?.length ? settings.alert_channels : ['wework'];
+      // 默认通道：企业微信 + Web Push（页面关闭也能收到的浏览器系统通知）
+      const channels = settings.alert_channels?.length ? settings.alert_channels : ['wework', 'web_push'];
 
       let anyOk = false;
       for (const ch of channels) {
@@ -115,6 +160,9 @@ Deno.serve(async (req) => {
             anyOk = true;
           } else if (ch === 'email' && creator.email) {
             await sendEmail(base44, creator.email, task, hoursLeft);
+            anyOk = true;
+          } else if (ch === 'web_push' && creator.email) {
+            await sendWebPushTo(base44, creator.email, task, hoursLeft);
             anyOk = true;
           }
         } catch (e) {

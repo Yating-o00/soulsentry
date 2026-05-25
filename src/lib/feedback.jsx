@@ -101,7 +101,7 @@ export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 
   return toast.custom(
     (id) => (
       // 蓝紫色标题条 + 白色卡身 + 斜体灰字脚注,无外层光晕
-      <div className="w-[320px] rounded-2xl overflow-hidden bg-white shadow-[0_8px_24px_rgba(56,72,119,0.18)]">
+      <div className="w-[320px] rounded-2xl overflow-hidden bg-white">
         <div
           className="px-4 py-2.5 flex items-center gap-2"
           style={{ background: `linear-gradient(90deg, ${BRAND_PRIMARY} 0%, ${BRAND_SECONDARY} 100%)` }}

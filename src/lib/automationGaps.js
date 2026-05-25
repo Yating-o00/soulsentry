@@ -39,6 +39,22 @@ const RULES = {
       placeholder: '如：2026年AI硬件市场规模',
       detect: (text) => text.replace(/\s/g, '').length >= 4,
     },
+    {
+      // 资料来源：网络爬取 / 用户提供 / 兼用——只要文中出现任一关键词即视作已说明
+      key: 'source',
+      label: '资料来源',
+      placeholder: '联网爬取 / 我会提供资料 / 两者结合',
+      detect: (text) =>
+        /(联网|网上|爬取|搜索|web|百度|谷歌|google|bing|公开资料|用户提供|我[来给会]?提供|我有资料|参考(附件|文件|链接)|附件|上传)/i.test(text),
+    },
+    {
+      // 存放/输出需求：报告格式或存放位置
+      key: 'output_target',
+      label: '存放/输出需求',
+      placeholder: '如：生成 HTML 报告 / 存到本地 / 发到我邮箱',
+      detect: (text) =>
+        /(本地|下载|存到|存放|归档|发到|发送|邮箱|邮件|HTML|PDF|Word|Excel|PPT|文档|报告|附件|心签|笔记)/i.test(text),
+    },
   ],
   ppt_doc: [
     {
@@ -92,6 +108,8 @@ export function mergeGapAnswers(originalText, answers) {
       time: '时间',
       target: '目标',
       topic: '主题',
+      source: '资料来源',
+      output_target: '存放/输出需求',
     }[key] || key;
     parts.push(`${label}：${v}`);
   });

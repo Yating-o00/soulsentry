@@ -132,7 +132,7 @@ export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 
           </div>
         )}
         {footnote && (
-          <p className="px-4 py-2 text-[11px] italic text-white/70 border-t border-white/15 line-clamp-2">
+          <p className="px-4 py-2 text-[11px] italic text-white/80 border-t border-white/15 line-clamp-2">
             "{footnote}"
           </p>
         )}

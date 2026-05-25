@@ -54,22 +54,47 @@ export const success = (message, opts = {}) => {
   );
 };
 
-// 轻量级错误：右下角、紧凑、带重试入口（可选）
+// 轻量级错误：右下角、紧凑、自定义卡片(去除 sonner 外壳)
 export const error = (message, opts = {}) => {
-  return toast.error(message, {
-    position: "bottom-right",
-    duration: 4200,
-    ...opts,
-  });
+  const { duration = 4200, ...rest } = opts;
+  return toast.custom(
+    (id) => (
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-white rounded-xl border border-rose-200 shadow-[0_8px_24px_rgba(225,29,72,0.12)] min-w-[260px]">
+        <div className="w-5 h-5 rounded-full bg-rose-500 flex items-center justify-center flex-shrink-0">
+          <span className="text-white text-[11px] font-bold">!</span>
+        </div>
+        <div className="flex-1 text-[13px] font-medium text-rose-700 leading-snug">{message}</div>
+        <button
+          onClick={() => toast.dismiss(id)}
+          className="text-slate-400 hover:text-slate-600 text-base leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-slate-100 flex-shrink-0"
+          aria-label="关闭"
+        >
+          ×
+        </button>
+      </div>
+    ),
+    { position: "bottom-right", duration, ...RESET_SHELL, ...rest }
+  );
 };
 
 // 中性信息
 export const info = (message, opts = {}) => {
-  return toast.message(message, {
-    position: "bottom-right",
-    duration: 3200,
-    ...opts,
-  });
+  const { duration = 3200, ...rest } = opts;
+  return toast.custom(
+    (id) => (
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-white rounded-xl border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.08)] min-w-[260px]">
+        <div className="flex-1 text-[13px] text-slate-700 leading-snug">{message}</div>
+        <button
+          onClick={() => toast.dismiss(id)}
+          className="text-slate-400 hover:text-slate-600 text-base leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-slate-100 flex-shrink-0"
+          aria-label="关闭"
+        >
+          ×
+        </button>
+      </div>
+    ),
+    { position: "bottom-right", duration, ...RESET_SHELL, ...rest }
+  );
 };
 
 // 加载中（返回 id，用于更新）
@@ -82,17 +107,15 @@ export const loading = (message, opts = {}) => {
 
 // 更新一条 loading 为 success/error
 export const update = (id, type, message) => {
-  if (type === "success") return toast.success(message, { id, position: "bottom-right", duration: 2800 });
-  if (type === "error")   return toast.error(message, { id, position: "bottom-right", duration: 4200 });
-  return toast.message(message, { id, position: "bottom-right", duration: 3200 });
+  toast.dismiss(id);
+  if (type === "success") return success(message);
+  if (type === "error")   return error(message);
+  return info(message);
 };
 
 // 带来源提示的成功（例如"✓ 已创建 · 来源：心签页"）
 export const successWithSource = (message, sourceLabel) => {
-  return toast.success(sourceLabel ? `${message} · ${sourceLabel}` : message, {
-    position: "bottom-right",
-    duration: 2800,
-  });
+  return success(sourceLabel ? `${message} · ${sourceLabel}` : message);
 };
 
 // AI 富反馈卡片：完成总结、下一步建议、鼓励语

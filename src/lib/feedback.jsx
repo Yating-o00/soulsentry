@@ -5,10 +5,31 @@ import { toast } from "sonner";
 const BRAND_PRIMARY = "#384877";
 const BRAND_SECONDARY = "#3b5aa2";
 
+// 全局注入一次:让所有 unstyled toast 的外层 li 强制透明,消除全局 Toaster 注入的白色矩形
+if (typeof document !== "undefined" && !document.getElementById("feedback-reset-style")) {
+  const style = document.createElement("style");
+  style.id = "feedback-reset-style";
+  style.textContent = `
+    [data-sonner-toast][data-styled="false"] {
+      background: transparent !important;
+      background-color: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      border-radius: 0 !important;
+      width: auto !important;
+      max-width: none !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // 重置 sonner 默认外壳（去除其白底/渐变/边框/阴影/内边距）
 // 注意：App.jsx 中给 Toaster 全局注入了 default/success/error 等 classNames(带 !important 白底),
 // 这里必须把所有可能命中的 key 全部覆盖为透明,否则会出现"双层白底"。
-const TRANSPARENT_SHELL = '!bg-transparent !bg-none !border-0 !border-transparent !shadow-none !p-0 !pr-0 !backdrop-blur-0 !rounded-none !w-auto !max-w-none !flex !items-stretch [&_[data-icon]]:!hidden [&_[data-close-button]]:!hidden';
+const TRANSPARENT_SHELL = '!bg-transparent !bg-none !bg-white/0 !border-0 !border-transparent !shadow-none !p-0 !pr-0 !backdrop-blur-0 !backdrop-filter-none !rounded-none !w-auto !max-w-none !flex !items-stretch [&_[data-icon]]:!hidden [&_[data-close-button]]:!hidden [&]:!bg-transparent';
 const RESET_SHELL = {
   unstyled: true,
   classNames: {

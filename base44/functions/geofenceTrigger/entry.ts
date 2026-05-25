@@ -122,6 +122,18 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 地点类型 → 关键词词典（用于把"虽然没绑坐标、但内容相关"的待办自动关联到此地）
+    const LOCATION_KEYWORDS = {
+      shopping: ['买', '购', '购物', '采购', '超市', '商场', '日用', '牛奶', '鸡蛋', '蔬菜', '水果', '零食', '洗衣液', '纸巾', '柴米油盐'],
+      restaurant: ['吃', '聚餐', '订餐', '点单', '外卖', '约饭'],
+      gym: ['健身', '锻炼', '跑步', '运动', '瑜伽', '游泳'],
+      hospital: ['医院', '看病', '复诊', '检查', '体检', '挂号', '取药', '配药'],
+      school: ['作业', '上课', '考试', '复习', '老师', '接孩子', '送孩子'],
+      office: ['汇报', '会议', '报告', '开会', '同事', '客户', '提案', '方案', '需求'],
+      home: ['家务', '打扫', '洗衣', '做饭', '收拾', '家人', '父母', '孩子', '老婆', '老公'],
+      other: ['快递', '包裹', '取件', '寄件', '丰巢', '菜鸟', '驿站']
+    };
+
     // For each triggered event, get relevant tasks and generate AI reminder
     const reminders = [];
     for (const t of triggered) {
@@ -129,14 +141,48 @@ Deno.serve(async (req) => {
       const allTasks = await base44.entities.Task.filter({
         created_by: user.email,
         status: 'pending'
-      }, '-reminder_time', 20);
+      }, '-reminder_time', 50);
 
       const activeTasks = allTasks.filter(task => !task.deleted_at);
 
+      // —— 关键词预筛：按地点类型和地点名匹配任务文本，强相关任务置顶 ——
+      const locName = (t.location.name || '').toLowerCase();
+      const typeKeywords = LOCATION_KEYWORDS[t.location.location_type] || [];
+      // 把"地点名本身"也作为关键词（如保存的地点叫"丰巢快递柜"，则"丰巢""快递柜"都可参与匹配）
+      const nameTokens = locName.split(/[\s\/,，·\-]+/).filter(s => s.length >= 2);
+      const allKeywords = Array.from(new Set([...typeKeywords, ...nameTokens]));
+
+      const scoreTask = (task) => {
+        const text = `${task.title || ''} ${task.description || ''} ${(task.tags || []).join(' ')}`.toLowerCase();
+        let score = 0;
+        for (const kw of allKeywords) {
+          if (text.includes(kw.toLowerCase())) score += 2;
+        }
+        // 任务已设定的 location_reminder 也加分（用户显式标记过）
+        if (task.location_reminder?.enabled && task.location_reminder?.location_name) {
+          const tlName = task.location_reminder.location_name.toLowerCase();
+          if (tlName === locName || locName.includes(tlName) || tlName.includes(locName)) score += 5;
+        }
+        // 高优先级加分
+        if (task.priority === 'urgent') score += 1.5;
+        else if (task.priority === 'high') score += 1;
+        return score;
+      };
+
+      const scored = activeTasks
+        .map(task => ({ task, score: scoreTask(task) }))
+        .sort((a, b) => b.score - a.score);
+      const relatedTasks = scored.filter(s => s.score > 0).map(s => s.task);
+      const fallbackTasks = scored.slice(0, 8).map(s => s.task);
+      // 优先用"强相关任务"，没有则退回到最近的待办
+      const tasksForPrompt = relatedTasks.length > 0 ? relatedTasks.slice(0, 8) : fallbackTasks;
+
       // Build context for AI
-      const taskSummary = activeTasks.slice(0, 10).map(t =>
+      const taskSummary = tasksForPrompt.map(t =>
         `- [${t.priority || 'medium'}] ${t.title}${t.reminder_time ? ` (计划: ${new Date(t.reminder_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })})` : ''}`
       ).join('\n');
+
+      const hasStrongMatch = relatedTasks.length > 0;
 
       // 拉取未来 4 小时内的日历会议
       const upcomingEvents = await fetchUpcomingCalendarEvents(base44, 240);
@@ -160,10 +206,13 @@ ${taskSummary || '（暂无待办）'}
 未来4小时内的日历会议：
 ${eventSummary || '（无即将开始的会议）'}
 
-请综合考虑地点、待办和即将开始的会议，生成情境化提醒：
-- 若有会议即将开始（尤其是30分钟内），优先提醒会议（含开始时间/地点/是否线上）；
-- 到达公司推送工作任务与会议；到达商场推送购物清单；离开公司推送生活待办；
-- 挑选最相关的1-3条，top_tasks 中同时可包含任务标题和会议标题。`;
+${hasStrongMatch ? '⚡ 上述待办经关键词匹配，与此地点强相关，请优先纳入 top_tasks。' : '（上述待办未必与此地点直接相关，若确有关联再提及，否则只给一句轻提醒即可）'}
+
+请生成情境化提醒：
+1) 若有会议在30分钟内开始 → 优先提醒会议（含开始时间/地点/是否线上）；
+2) 若有强相关待办（如到快递站碰到取快递、到超市碰到购物清单）→ 直接列 1-3 条到 top_tasks；
+3) 若既无紧迫会议也无相关待办 → title 简短欢迎，message 一句话即可，top_tasks 留空数组；
+4) message 控制在50字内，温暖、有行动感。`;
 
       const aiResult = await callKimi(prompt);
 

@@ -31,26 +31,26 @@ export default function AutoExecutionPanel() {
   const [attachedFiles, setAttachedFiles] = useState([]); // [{file_name, file_url, file_size, file_type}]
   const [uploading, setUploading] = useState(false);
   const fileInputRef = React.useRef(null);
-  const inputRef = React.useRef(null);
-  const { gate, showInsufficientDialog, insufficientProps, dismissDialog, refreshCredits } = useAICreditGate();
+  const inputElRef = React.useRef(null);
+  const panelRef = React.useRef(null);
 
-  // 监听来自「自动执行清单」（图1）卡片的"填入输入框"事件：
-  // 把卡片文本填入下方输入框、滚动到可视区、聚焦光标，方便用户微调后发送
+  // 监听「自动执行清单」点击「确认执行」时派发的事件 → 把卡片内容填入输入框并聚焦
   React.useEffect(() => {
     const handler = (e) => {
       const text = e?.detail?.text;
       if (!text) return;
       setInput(text);
-      requestAnimationFrame(() => {
-        try {
-          inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-          inputRef.current?.focus();
-        } catch (_) { /* noop */ }
-      });
+      // 滚入视野 + 聚焦输入框 + 选中已填入内容方便用户直接覆盖编辑
+      setTimeout(() => {
+        panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        inputElRef.current?.focus();
+        try { inputElRef.current?.setSelectionRange(text.length, text.length); } catch (_) {}
+      }, 80);
     };
-    window.addEventListener("auto-exec-fill-input", handler);
-    return () => window.removeEventListener("auto-exec-fill-input", handler);
+    window.addEventListener('auto-exec-fill-input', handler);
+    return () => window.removeEventListener('auto-exec-fill-input', handler);
   }, []);
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog, refreshCredits } = useAICreditGate();
   const [creditsDialog, setCreditsDialog] = React.useState({ open: false, cost: 0, balance: 0, featureName: '' });
 
   // 统一执行：plan → execute，识别 402 INSUFFICIENT_CREDITS 弹充值卡
@@ -261,7 +261,7 @@ export default function AutoExecutionPanel() {
 
   return (
     <>
-      <Card className="border-none shadow-sm bg-gradient-to-br from-white to-indigo-50/30 overflow-hidden">
+      <Card ref={panelRef} className="border-none shadow-sm bg-gradient-to-br from-white to-indigo-50/30 overflow-hidden">
         <div className="p-4 md:p-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -283,7 +283,7 @@ export default function AutoExecutionPanel() {
           {/* 输入区 */}
           <div className="flex gap-2 mb-2">
             <Input
-              ref={inputRef}
+              ref={inputElRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !submitting && handleAnalyze()}

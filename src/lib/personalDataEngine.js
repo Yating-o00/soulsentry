@@ -1,69 +1,86 @@
-/**
- * 个人数据库引擎 - 统一采集层
- * 在关键节点调用 track() 即可沉淀数据，供 Kimi 实时分析
- */
+// 个人数据库引擎 —— 统一采集入口
 import { base44 } from "@/api/base44Client";
 
-const QUEUE_KEY = "__pde_queue__";
-let flushing = false;
+const recentCache = new Map();
+const THROTTLE_MS = 5 * 60 * 1000;
 
-function enqueue(record) {
-  try {
-    const list = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-    list.push(record);
-    // 队列保留最近 500 条，防止异常堆积
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(list.slice(-500)));
-  } catch (_) {}
+function shouldThrottle(key) {
+  const last = recentCache.get(key);
+  const now = Date.now();
+  if (last && now - last < THROTTLE_MS) return true;
+  recentCache.set(key, now);
+  if (recentCache.size > 200) {
+    const cutoff = now - THROTTLE_MS;
+    for (const [k, v] of recentCache.entries()) {
+      if (v < cutoff) recentCache.delete(k);
+    }
+  }
+  return false;
 }
 
-async function flush() {
-  if (flushing) return;
-  flushing = true;
+async function track(data_type, payload) {
   try {
-    const list = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-    if (!list.length) return;
-    // 一次最多 20 条，避免大请求
-    const batch = list.slice(0, 20);
-    await base44.entities.UserDataPoint.bulkCreate(batch);
-    const rest = list.slice(batch.length);
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(rest));
+    const subtype = payload.subtype || "";
+    const summary = payload.summary || "";
+    const key = data_type + ":" + subtype + ":" + summary;
+    if (shouldThrottle(key)) return null;
+
+    const now = new Date();
+    const record = {
+      data_type: data_type,
+      subtype: subtype,
+      summary: summary,
+      category: payload.category,
+      weight: payload.weight != null ? payload.weight : 1,
+      tags: payload.tags || [],
+      occurred_at: payload.occurred_at || now.toISOString(),
+      hour_of_day: payload.hour_of_day != null ? payload.hour_of_day : now.getHours(),
+      day_of_week: payload.day_of_week != null ? payload.day_of_week : now.getDay(),
+      related_task_id: payload.related_task_id,
+      related_note_id: payload.related_note_id,
+      metadata: payload.metadata || {},
+    };
+    return await base44.entities.UserDataPoint.create(record);
   } catch (e) {
-    // 失败保留队列，下次再试
-    console.warn("[PDE] flush failed", e?.message);
-  } finally {
-    flushing = false;
+    console.warn("[personalDataEngine] track failed:", e && e.message);
+    return null;
   }
 }
 
-/**
- * 采集一个数据点
- * @param {('habit'|'task_outcome'|'ai_decision')} data_type
- * @param {string} event_key
- * @param {{summary?:string, context?:object, weight?:number}} payload
- */
-export function track(data_type, event_key, payload = {}) {
-  if (!data_type || !event_key) return;
-  const record = {
-    data_type,
-    event_key,
-    summary: payload.summary || "",
-    context: payload.context || {},
-    weight: typeof payload.weight === "number" ? payload.weight : 1,
-    occurred_at: new Date().toISOString(),
-  };
-  enqueue(record);
-  // 节流 flush
-  if (!flushing) setTimeout(flush, 1500);
-}
+export function trackHabit(payload) { return track("habit", payload); }
+export function trackOutcome(payload) { return track("outcome", payload); }
+export function trackDecision(payload) { return track("decision", payload); }
 
-/** 立即推送队列（如登出前调用） */
-export const flushNow = flush;
-
-/** 拉取最近 N 条画像数据（按权重 + 时间） */
-export async function fetchRecentDataPoints(limit = 80) {
+export async function getPersonalSuggestion(args) {
+  const scene = (args && args.scene) || "";
+  const context = (args && args.context) || "";
   try {
-    return await base44.entities.UserDataPoint.list("-occurred_at", limit);
-  } catch {
-    return [];
+    const res = await base44.functions.invoke("kimiPersonalInsight", {
+      mode: "realtime",
+      scene: scene,
+      context: context,
+    });
+    return (res && res.data) || null;
+  } catch (e) {
+    console.warn("[personalDataEngine] getPersonalSuggestion failed:", e && e.message);
+    return null;
   }
 }
+
+export async function getProfileInsight() {
+  try {
+    const res = await base44.functions.invoke("kimiPersonalInsight", { mode: "profile" });
+    return (res && res.data) || null;
+  } catch (e) {
+    console.warn("[personalDataEngine] getProfileInsight failed:", e && e.message);
+    return null;
+  }
+}
+
+export default {
+  trackHabit: trackHabit,
+  trackOutcome: trackOutcome,
+  trackDecision: trackDecision,
+  getPersonalSuggestion: getPersonalSuggestion,
+  getProfileInsight: getProfileInsight,
+};

@@ -11,6 +11,8 @@ import AIText from "@/components/AIText";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
+import HeartSignMessage from "../components/heartsign/HeartSignMessage";
+import HeartSignInput from "../components/heartsign/HeartSignInput";
 import NoteShareDialog from "../components/notes/NoteShareDialog";
 import NoteComments from "../components/notes/NoteComments";
 import QuickAddTask from "../components/tasks/QuickAddTask";
@@ -435,99 +437,34 @@ export default function Notes() {
             </div>
           </motion.div>
 
-          {/* Quick Create Area - Desktop / Mobile Adaptive */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0 }}
-            className="sticky top-0 z-10 bg-gradient-to-b from-white via-white to-transparent pb-4"
-          >
-            {!isCreating ? (
-              <button
-                type="button"
-                onClick={() => setIsCreating(true)}
-                className="hidden md:flex w-full text-left group relative overflow-hidden bg-gradient-to-br from-white to-slate-50 border-2 border-dashed border-slate-200 hover:border-[#384877] rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-[#384877]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                
-                <div className="relative flex items-center gap-4">
-                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20 group-hover:scale-110 transition-transform duration-300">
-                    <Plus className="w-6 h-6 text-white" />
+          {/* 聊天信息流 */}
+          <div className="flex flex-col bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}>
+            <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4">
+              {filteredNotes.length === 0 ? (
+                <div className="text-center py-16 max-w-md mx-auto">
+                  <div className="w-16 h-16 bg-gradient-to-br from-violet-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="w-7 h-7 text-violet-500" />
                   </div>
-                  
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-slate-800 group-hover:text-[#384877] transition-colors mb-1">
-                      快速记录心签
-                    </h3>
-                    <p className="text-sm text-slate-500">
-                      💭 随手记下灵感 | 🎯 快捷键：<kbd className="px-1.5 py-0.5 text-xs bg-slate-100 border border-slate-300 rounded">Ctrl+N</kbd>
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <Badge variant="outline" className="text-xs border-[#384877] text-[#384877]">
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      AI 辅助
-                    </Badge>
-                    <Badge variant="outline" className="text-xs border-purple-500 text-purple-600">
-                      快速创建
-                    </Badge>
-                  </div>
+                  <h3 className="text-slate-800 font-medium mb-2"><AIText>暂无心签</AIText></h3>
+                  <p className="text-slate-500 text-sm"><AIText>像给文件传输助手发消息一样，随手记录想法</AIText></p>
                 </div>
-              </button>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="relative"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="absolute -inset-4 bg-gradient-to-br from-[#384877]/10 via-transparent to-purple-500/10 rounded-3xl blur-2xl pointer-events-none" />
-                <NoteEditor
-                  onSave={(data) => createNoteMutation.mutate(data)}
-                  onClose={() => setIsCreating(false)}
-                />
-              </motion.div>
-            )}
-          </motion.div>
-
-          {/* Notes Grid - Using CSS Columns for Masonry effect */}
-          <motion.div
-            layout
-            className="columns-1 md:columns-2 lg:columns-3 gap-3 md:gap-4 space-y-3 md:space-y-4 pb-20 md:pb-20">
-
-            <AnimatePresence mode="popLayout">
-              {filteredNotes.map((note) =>
-              <NoteCard
-                key={note.id}
-                note={note}
-                onEdit={setEditingNote}
-                onDelete={(n) => deleteNoteMutation.mutate(n.id)}
-                onPin={handlePin}
-                onShare={setSharingNote}
-                onConvertToTask={handleSmartConvertToTask}
-                onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
-                onUpdateActivity={handleUpdateActivity} />
-
+              ) : (
+                <div className="max-w-3xl mx-auto space-y-3">
+                  {[...filteredNotes].reverse().map((note) => (
+                    <div key={note.id} onClick={() => setEditingNote(note)} className="cursor-pointer">
+                      <HeartSignMessage note={note} />
+                    </div>
+                  ))}
+                </div>
               )}
-            </AnimatePresence>
-          </motion.div>
+            </div>
 
-          {/* Empty State */}
-          {filteredNotes.length === 0 && !isCreating &&
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-20">
-
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-                <StickyNote className="w-10 h-10 text-slate-400" />
-              </div>
-              <h3 className="text-lg font-medium text-slate-700 mb-1"><AIText>暂无心签</AIText></h3>
-              <p className="text-slate-500"><AIText>记录下你的第一个灵感吧</AIText></p>
-            </motion.div>
-          }
+            <HeartSignInput
+              onSend={async (payload) => {
+                await createNoteMutation.mutateAsync(payload);
+              }}
+            />
+          </div>
         </>
       )}
 

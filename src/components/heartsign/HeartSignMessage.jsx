@@ -1,7 +1,16 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe } from "lucide-react";
+import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, ListTodo } from "lucide-react";
 import { format } from "date-fns";
+import { base44 } from "@/api/base44Client";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 // Notion 风的柔和色板：根据 note.color 切换气泡 + AI 卡片的配色
 const COLOR_SCHEMES = {
@@ -48,6 +57,56 @@ export default function HeartSignMessage({ note }) {
   const isReport = plain.length > 800;
   const displayText = expanded || !isLong ? plain : plain.slice(0, 280) + '…';
   const scheme = getScheme(note.color);
+  const isOptimistic = typeof note.id === 'string' && note.id.startsWith('tmp-');
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(plain);
+      toast.success('已复制到剪贴板');
+    } catch {
+      toast.error('复制失败');
+    }
+  };
+
+  const handleShare = async () => {
+    const text = plain.slice(0, 500);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: '来自心签', text, url: note.source_url || window.location.href });
+      } catch {/* 用户取消 */}
+    } else {
+      await handleCopy();
+      toast.success('已复制，可粘贴分享');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (isOptimistic) return;
+    if (!confirm('确认删除这条心签？可在回收站恢复。')) return;
+    try {
+      await base44.entities.Note.update(note.id, { deleted_at: new Date().toISOString() });
+      toast.success('已删除');
+    } catch (e) {
+      toast.error('删除失败');
+    }
+  };
+
+  const handleConvertToTask = async (category) => {
+    if (isOptimistic) return;
+    try {
+      const title = (ai.summary || plain).slice(0, 60) || '来自心签';
+      await base44.entities.Task.create({
+        title,
+        description: plain.slice(0, 1000),
+        category: category === 'promise' ? 'personal' : 'work',
+        priority: 'medium',
+        tags: note.tags || [],
+      });
+      toast.success(category === 'promise' ? '已转为约定' : '已转为任务');
+    } catch (e) {
+      toast.error('转换失败');
+    }
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex justify-end gap-2 group">
@@ -56,6 +115,41 @@ export default function HeartSignMessage({ note }) {
         <div className={`relative ${scheme.bubble} border rounded-2xl px-4 py-3 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)] hover:shadow-[0_2px_4px_rgba(15,15,15,0.05),0_4px_12px_rgba(15,15,15,0.04)] transition-all`}>
           {note.color && note.color !== 'white' && (
             <span className={`absolute -left-2 top-4 w-1 h-6 rounded-full ${scheme.dot}`} aria-hidden />
+          )}
+
+          {/* 操作菜单：悬停 / 移动端常驻 */}
+          {!isOptimistic && (
+            <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity md:opacity-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-50 flex items-center justify-center text-slate-500"
+                    aria-label="更多操作"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onClick={handleShare}>
+                    <Share2 className="w-3.5 h-3.5 mr-2" /> 分享
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleCopy}>
+                    <Copy className="w-3.5 h-3.5 mr-2" /> 复制文本
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleConvertToTask('promise')}>
+                    <CalendarPlus className="w-3.5 h-3.5 mr-2" /> 转为约定
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleConvertToTask('task')}>
+                    <ListTodo className="w-3.5 h-3.5 mr-2" /> 转为任务
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleDelete} className="text-rose-600 focus:text-rose-700 focus:bg-rose-50">
+                    <Trash2 className="w-3.5 h-3.5 mr-2" /> 删除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
           {(note.source_type !== 'manual' || isReport || note.source_url) && (
             <div className="flex items-center gap-1.5 mb-2 flex-wrap">

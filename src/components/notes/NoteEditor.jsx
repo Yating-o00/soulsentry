@@ -30,6 +30,18 @@ const COLORS = [
   { name: "pink", class: "bg-pink-50 border-pink-200" },
 ];
 
+// Swatch colors for the color picker buttons (inline styles to avoid Tailwind dynamic class purge)
+const COLOR_SWATCHES = {
+  white: "#ffffff",
+  red: "#fee2e2",
+  orange: "#ffedd5",
+  yellow: "#fef9c3",
+  green: "#dcfce7",
+  blue: "#dbeafe",
+  purple: "#f3e8ff",
+  pink: "#fce7f3",
+};
+
 export default function NoteEditor({ onSave, onClose, initialData = null }) {
   const [content, setContent] = useState(initialData?.content || "");
   const [tags, setTags] = useState(initialData?.tags || []);
@@ -639,57 +651,63 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
             )}
         </div>
 
-        <div className="flex items-center justify-between pt-3 border-t border-slate-200" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-slate-600">颜色标记</span>
-                <div className="flex gap-1.5">
-                    {COLORS.map(c => (
-                        <button
-                        key={c.name}
-                        type="button"
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setColor(c.name);
-                        }}
-                        className={`w-7 h-7 rounded-lg border-2 ${c.name === 'white' ? 'bg-white' : `bg-${c.name}-100`} ${color === c.name ? 'ring-2 ring-offset-2 ring-[#384877] scale-110' : 'hover:scale-110 hover:border-slate-300'} transition-all duration-200 shadow-sm`}
-                        style={{ backgroundColor: c.name === 'white' ? '#ffffff' : undefined }}
-                        title={c.name}
-                        />
-                    ))}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 mt-1 border-t border-slate-100" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider shrink-0">颜色</span>
+                <div className="flex gap-1 flex-wrap">
+                    {COLORS.map(c => {
+                        const swatch = COLOR_SWATCHES[c.name] || '#ffffff';
+                        const isActive = color === c.name;
+                        return (
+                            <button
+                                key={c.name}
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setColor(c.name);
+                                }}
+                                className={`relative w-6 h-6 rounded-full transition-all duration-150 ${isActive ? 'ring-2 ring-offset-2 ring-[#384877] scale-110' : 'hover:scale-110 ring-1 ring-slate-200'}`}
+                                style={{ backgroundColor: swatch }}
+                                title={c.name}
+                                aria-label={`颜色 ${c.name}`}
+                                aria-pressed={isActive}
+                            />
+                        );
+                    })}
                 </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0 justify-end">
                 {onClose && (
-                    <button 
+                    <button
                         type="button"
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             onClose();
                         }}
-                        className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors"
+                        className="px-3.5 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
                     >
                         取消
                     </button>
                 )}
-                <button 
+                <button
                     type="button"
                     onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         handleSave();
-                    }} 
-                    className="px-4 py-2 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2"
+                    }}
+                    className="px-4 py-2 bg-[#384877] hover:bg-[#2c3b63] text-white text-sm font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 flex items-center gap-2"
                 >
-                    <Save className="w-4 h-4" />
-                    保存心签
-                    <kbd className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono bg-white/10 rounded border border-white/20">
-                      <span>⌘</span>↵
+                    <Save className="w-3.5 h-3.5" />
+                    <span>保存心签</span>
+                    <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono bg-white/15 rounded border border-white/20 ml-0.5">
+                        <span>⌘</span>↵
                     </kbd>
                 </button>
-                </div>
-                </div>
+            </div>
+        </div>
                 </div>
                 </div>
                 );

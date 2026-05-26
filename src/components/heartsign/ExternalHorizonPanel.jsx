@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Newspaper, Star, BellRing, Quote, ExternalLink, Sparkles, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import ExternalFeedManager from "./ExternalFeedManager";
 
 // 四类外部视野的预设
 const CATEGORIES = [
@@ -296,6 +297,11 @@ export default function ExternalHorizonPanel({ open, onOpenChange, notes = [] })
             )}
           </div>
         </SheetHeader>
+
+        {/* 外部信息订阅管理：默认展开，可管理已接入/推荐源 */}
+        <div className="px-5 pt-4">
+          <ExternalFeedManager defaultCollapsed={false} />
+        </div>
 
         <Tabs value={activeKey} onValueChange={onTabChange} className="flex-1 flex flex-col min-h-0">
           {/* Tabs */}

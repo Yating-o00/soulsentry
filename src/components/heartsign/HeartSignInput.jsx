@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { Send, Plus, Paperclip, Link as LinkIcon, Image as ImageIcon, Mic, X, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
+import QuickTemplates from "./QuickTemplates";
 
 export default function HeartSignInput({ onSend }) {
   const [text, setText] = useState("");
@@ -9,6 +10,7 @@ export default function HeartSignInput({ onSend }) {
   const [sourceUrl, setSourceUrl] = useState("");
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const fileRef = useRef(null);
   const imgRef = useRef(null);
 
@@ -117,8 +119,18 @@ export default function HeartSignInput({ onSend }) {
           </div>
         )}
 
+        {/* 快速模板悬浮 */}
+        {showTemplates && (
+          <div className="mb-2 flex justify-center">
+            <QuickTemplates onPick={(tpl) => { setText(prev => prev + tpl); setShowTemplates(false); }} />
+          </div>
+        )}
+
         {/* 工具栏 */}
         <div className="flex items-center gap-1 mb-2 text-slate-500">
+          <button onClick={() => setShowTemplates(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="快速模板">
+            <Plus className="w-4 h-4" />
+          </button>
           <button onClick={() => fileRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="文件">
             <Paperclip className="w-4 h-4" />
           </button>

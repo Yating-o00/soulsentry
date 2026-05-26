@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { Heart, Search, RefreshCw, Sparkles } from "lucide-react";
+import { Heart, Search, RefreshCw, Sparkles, Globe } from "lucide-react";
 import HeartSignMessage from "@/components/heartsign/HeartSignMessage";
 import HeartSignInput from "@/components/heartsign/HeartSignInput";
 import HeartSignInsightPanel from "@/components/heartsign/HeartSignInsightPanel";
+import ExternalFeedDialog from "@/components/heartsign/ExternalFeedDialog";
 import { format, isToday, isYesterday } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
@@ -32,6 +33,7 @@ export default function HeartSign() {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [feedDialogOpen, setFeedDialogOpen] = useState(false);
   const streamRef = useRef(null);
 
   const load = async () => {
@@ -122,11 +124,16 @@ export default function HeartSign() {
                 className="bg-transparent outline-none text-sm w-40"
               />
             </div>
+            <button onClick={() => setFeedDialogOpen(true)} className="px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-600 rounded-lg text-xs font-medium flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5" />
+              外部连接
+            </button>
             <button onClick={load} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>
         </header>
+        <ExternalFeedDialog open={feedDialogOpen} onOpenChange={setFeedDialogOpen} />
 
         {/* 消息流 */}
         <div ref={streamRef} className="flex-1 overflow-y-auto px-3 md:px-6 py-4">

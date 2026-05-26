@@ -53,27 +53,43 @@ Deno.serve(async (req) => {
     let finalContent = '';
     let safety = 0;
 
+    // 模型降级链：当前账号若无某一模型权限，自动尝试下一个
+    const modelCandidates = ['kimi-k2-0905-preview', 'kimi-latest', 'moonshot-v1-auto'];
+    let activeModel = modelCandidates[0];
+
     while (safety < 6) {
       safety++;
 
-      const resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey.trim()}`
-        },
-        body: JSON.stringify({
-          model: 'kimi-k2-turbo-preview',
-          messages,
-          tools,
-          temperature: 0.3
-        })
-      });
+      let resp;
+      let lastErrText = '';
+      // 在同一轮内尝试模型降级
+      for (let m = modelCandidates.indexOf(activeModel); m < modelCandidates.length; m++) {
+        activeModel = modelCandidates[m];
+        resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey.trim()}`
+          },
+          body: JSON.stringify({
+            model: activeModel,
+            messages,
+            tools,
+            temperature: 0.3
+          })
+        });
+        if (resp.ok) break;
+        lastErrText = await resp.text();
+        // 仅对模型/权限错误尝试降级，其它错误直接抛出
+        if (!/not\s*found\s*the\s*model|Permission\s*denied|resource_not_found/i.test(lastErrText)) {
+          break;
+        }
+        console.warn(`Model ${activeModel} unavailable, falling back. ${lastErrText}`);
+      }
 
       if (!resp.ok) {
-        const errText = await resp.text();
         return Response.json(
-          { error: `Kimi API error ${resp.status}: ${errText}` },
+          { error: `Kimi API error ${resp.status}: ${lastErrText}` },
           { status: 502 }
         );
       }

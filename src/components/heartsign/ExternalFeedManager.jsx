@@ -71,7 +71,7 @@ export default function ExternalFeedManager({ defaultCollapsed = false }) {
       </button>
 
       {!collapsed && (
-        <div className="px-3 pb-3 space-y-3 border-t border-slate-100">
+        <div className="px-3 pb-3 space-y-3 border-t border-slate-100 max-h-[50vh] overflow-y-auto overscroll-contain">
           {/* 已接入 */}
           {feeds.length > 0 && (
             <div className="space-y-1.5 pt-2">

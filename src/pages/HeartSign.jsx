@@ -29,6 +29,15 @@ function groupByDay(notes) {
   return groups;
 }
 
+// 按 created_date 升序（最旧 → 最新），保证聊天信息流顺序正确
+function sortByTimeAsc(list) {
+  return [...list].sort((a, b) => {
+    const ta = new Date(a.created_date || 0).getTime();
+    const tb = new Date(b.created_date || 0).getTime();
+    return ta - tb;
+  });
+}
+
 export default function HeartSign() {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,9 +47,9 @@ export default function HeartSign() {
 
   const load = async () => {
     try {
-      // 按时间正序，最新在底部（聊天信息流）
+      // 拉取后按 created_date 升序排列，最新在底部（聊天信息流）
       const list = await base44.entities.Note.filter({ deleted_at: null }, '-created_date', 200);
-      setNotes((list || []).slice().reverse());
+      setNotes(sortByTimeAsc(list || []));
     } catch (e) {
       console.error(e);
     } finally {
@@ -53,9 +62,9 @@ export default function HeartSign() {
     // 实时订阅
     const unsub = base44.entities.Note.subscribe?.((event) => {
       if (event.type === 'create') {
-        setNotes(prev => [...prev.filter(n => n.id !== event.data.id), event.data]);
+        setNotes(prev => sortByTimeAsc([...prev.filter(n => n.id !== event.data.id), event.data]));
       } else if (event.type === 'update') {
-        setNotes(prev => prev.map(n => n.id === event.id ? event.data : n));
+        setNotes(prev => sortByTimeAsc(prev.map(n => n.id === event.id ? event.data : n)));
       } else if (event.type === 'delete') {
         setNotes(prev => prev.filter(n => n.id !== event.id));
       }
@@ -73,10 +82,10 @@ export default function HeartSign() {
   const handleSend = async (payload) => {
     // 乐观插入
     const optimistic = { ...payload, id: `tmp-${Date.now()}`, created_date: new Date().toISOString(), ai_status: 'pending' };
-    setNotes(prev => [...prev, optimistic]);
+    setNotes(prev => sortByTimeAsc([...prev, optimistic]));
     try {
       const created = await base44.entities.Note.create(payload);
-      setNotes(prev => prev.map(n => n.id === optimistic.id ? created : n));
+      setNotes(prev => sortByTimeAsc(prev.map(n => n.id === optimistic.id ? created : n)));
       // 触发 AI 分析（异步，不阻塞）
       base44.functions.invoke('analyzeHeartSign', { note_id: created.id }).catch(e => console.error(e));
     } catch (e) {

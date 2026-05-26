@@ -50,13 +50,8 @@ const getNavigationItems = (t) => [
   },
   {
     title: t('notes'),
-    url: createPageUrl("Notes"),
-    icon: StickyNote,
-  },
-  {
-    title: '心签',
     url: createPageUrl("HeartSign"),
-    icon: Heart,
+    icon: StickyNote,
   },
   {
     title: t('teams'),

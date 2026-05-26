@@ -103,7 +103,7 @@ export default function HeartSign() {
         {/* 顶部栏 */}
         <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-md">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md shadow-[#384877]/20">
               <Heart className="w-4 h-4 text-white" />
             </div>
             <div>
@@ -124,7 +124,7 @@ export default function HeartSign() {
                 className="bg-transparent outline-none text-sm w-40"
               />
             </div>
-            <button onClick={() => setFeedDialogOpen(true)} className="px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-600 rounded-lg text-xs font-medium flex items-center gap-1.5">
+            <button onClick={() => setFeedDialogOpen(true)} className="px-3 py-1.5 bg-[#384877]/5 hover:bg-[#384877]/10 text-[#384877] rounded-lg text-xs font-medium flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5" />
               外部连接
             </button>

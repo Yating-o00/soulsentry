@@ -38,8 +38,8 @@ export default function HeartSign() {
 
   const load = async () => {
     try {
-      // 按时间正序，最新在底部（像聊天）
-      const list = await base44.entities.Note.filter({ deleted_at: null }, 'created_date', 200);
+      // 按时间倒序，最新在顶部
+      const list = await base44.entities.Note.filter({ deleted_at: null }, '-created_date', 200);
       setNotes(list || []);
     } catch (e) {
       console.error(e);
@@ -53,7 +53,7 @@ export default function HeartSign() {
     // 实时订阅
     const unsub = base44.entities.Note.subscribe?.((event) => {
       if (event.type === 'create') {
-        setNotes(prev => [...prev.filter(n => n.id !== event.data.id), event.data]);
+        setNotes(prev => [event.data, ...prev.filter(n => n.id !== event.data.id)]);
       } else if (event.type === 'update') {
         setNotes(prev => prev.map(n => n.id === event.id ? event.data : n));
       } else if (event.type === 'delete') {
@@ -64,16 +64,16 @@ export default function HeartSign() {
   }, []);
 
   useEffect(() => {
-    // 滚动到底部
+    // 滚动到顶部（最新在上）
     if (streamRef.current) {
-      streamRef.current.scrollTop = streamRef.current.scrollHeight;
+      streamRef.current.scrollTop = 0;
     }
   }, [notes.length]);
 
   const handleSend = async (payload) => {
     // 乐观插入
     const optimistic = { ...payload, id: `tmp-${Date.now()}`, created_date: new Date().toISOString(), ai_status: 'pending' };
-    setNotes(prev => [...prev, optimistic]);
+    setNotes(prev => [optimistic, ...prev]);
     try {
       const created = await base44.entities.Note.create(payload);
       setNotes(prev => prev.map(n => n.id === optimistic.id ? created : n));

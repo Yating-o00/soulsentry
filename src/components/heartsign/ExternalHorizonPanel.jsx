@@ -153,18 +153,65 @@ function renderInline(text) {
   });
 }
 
+const STORAGE_KEY = "heartsign_external_horizon_cache_v1";
+
+// 取本地日期串（按用户本地时区），用于判断"是否同一天"
+function todayKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function loadCacheFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistCache(cache) {
+  try {
+    // 只保留有结果的条目，避免把 loading/error 写盘
+    const slim = {};
+    Object.entries(cache).forEach(([k, v]) => {
+      if (v && v.answer) {
+        slim[k] = {
+          answer: v.answer,
+          references: v.references || [],
+          generatedAt: v.generatedAt,
+          dayKey: v.dayKey,
+        };
+      }
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
 export default function ExternalHorizonPanel({ open, onOpenChange, notes = [] }) {
   const [activeKey, setActiveKey] = useState("news");
-  const [cache, setCache] = useState({});
+  const [cache, setCache] = useState(() => loadCacheFromStorage());
 
   const topics = useMemo(() => deriveTopics(notes), [notes]);
+
+  // 缓存变化时持久化
+  React.useEffect(() => {
+    persistCache(cache);
+  }, [cache]);
 
   const runFetch = async (cat) => {
     if (!topics) {
       toast.info("先随手写几条心签，AI 才知道你关心什么");
       return;
     }
-    setCache((prev) => ({ ...prev, [cat.key]: { ...(prev[cat.key] || {}), loading: true } }));
+    setCache((prev) => ({ ...prev, [cat.key]: { ...(prev[cat.key] || {}), loading: true, error: null } }));
     try {
       const res = await base44.functions.invoke("kimiWebBrowse", {
         query: cat.buildQuery(topics),
@@ -178,25 +225,38 @@ export default function ExternalHorizonPanel({ open, onOpenChange, notes = [] })
           answer: data.answer || "（未获得有效内容）",
           references: Array.isArray(data.references) ? data.references : [],
           generatedAt: new Date().toISOString(),
+          dayKey: todayKey(),
         },
       }));
     } catch (e) {
       console.error(e);
-      setCache((prev) => ({ ...prev, [cat.key]: { loading: false, error: e?.message || "获取失败" } }));
+      // 失败时保留旧内容，仅记录 error
+      setCache((prev) => ({
+        ...prev,
+        [cat.key]: { ...(prev[cat.key] || {}), loading: false, error: e?.message || "获取失败" },
+      }));
       toast.error("获取外部视野失败");
     }
+  };
+
+  // 仅当：① 没有缓存内容 或 ② 缓存的 dayKey 不是今天，才自动拉取
+  const shouldAutoRefresh = (key) => {
+    const entry = cache[key];
+    if (!entry || !entry.answer) return true;
+    if (entry.loading) return false;
+    return entry.dayKey !== todayKey();
   };
 
   const onTabChange = (key) => {
     setActiveKey(key);
     const cat = CATEGORIES.find((c) => c.key === key);
-    if (cat && !cache[key]?.answer && !cache[key]?.loading) {
+    if (cat && shouldAutoRefresh(key)) {
       runFetch(cat);
     }
   };
 
   React.useEffect(() => {
-    if (open && topics && !cache[activeKey]?.answer && !cache[activeKey]?.loading) {
+    if (open && topics && shouldAutoRefresh(activeKey)) {
       const cat = CATEGORIES.find((c) => c.key === activeKey);
       if (cat) runFetch(cat);
     }

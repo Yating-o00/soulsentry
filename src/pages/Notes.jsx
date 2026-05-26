@@ -6,20 +6,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe } from "lucide-react";
 import AIText from "@/components/AIText";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
 import HeartSignMessage from "../components/heartsign/HeartSignMessage";
 import HeartSignInput from "../components/heartsign/HeartSignInput";
-import ExternalVisionCard from "../components/heartsign/ExternalVisionCard";
 import NoteShareDialog from "../components/notes/NoteShareDialog";
 import NoteComments from "../components/notes/NoteComments";
 import QuickAddTask from "../components/tasks/QuickAddTask";
 import AINotesOrganizer from "../components/notes/AINotesOrganizer";
 import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
 import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
+import ExternalHorizonPanel from "../components/heartsign/ExternalHorizonPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
 import { toast } from "sonner";
@@ -41,6 +41,7 @@ export default function Notes() {
   const [showAIOrganizer, setShowAIOrganizer] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
   const [showKnowledgeManager, setShowKnowledgeManager] = useState(false);
+  const [showExternalHorizon, setShowExternalHorizon] = useState(false);
   const [showMobileInput, setShowMobileInput] = useState(false);
   const [activeTab, setActiveTab] = useState("notes");
   const [filters, setFilters] = useState({});
@@ -431,6 +432,16 @@ export default function Notes() {
                 <Wand2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
                 <span className="hidden sm:inline">智能整理</span>
               </Button>
+              <Button
+                onClick={() => setShowExternalHorizon(true)}
+                variant="outline"
+                size="sm"
+                className="h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs md:text-sm"
+                title="基于最近心签，AI 关联外部相关新闻 / 长期内容 / 即时通知 / 经典语录"
+              >
+                <Globe className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span className="hidden sm:inline">外部视野</span>
+              </Button>
               <div className="text-xs md:text-sm text-slate-500 whitespace-nowrap">
                 <span className="font-semibold text-[#384877]">{filteredNotes.length}</span>
                 <span className="hidden md:inline"> 条心签</span>
@@ -441,10 +452,6 @@ export default function Notes() {
           {/* 聊天信息流 */}
           <div className="flex flex-col bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}>
             <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4">
-              {/* 外部视野入口：AI 策展的多元相关信息 */}
-              <div className="max-w-3xl mx-auto mb-4">
-                <ExternalVisionCard />
-              </div>
               {filteredNotes.length === 0 ? (
                 <div className="text-center py-16 max-w-md mx-auto">
                   <div className="w-16 h-16 bg-gradient-to-br from-violet-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -518,6 +525,13 @@ export default function Notes() {
         notes={notes}
         open={showAIOrganizer}
         onOpenChange={setShowAIOrganizer}
+      />
+
+      {/* External Horizon - 外部视野面板 */}
+      <ExternalHorizonPanel
+        open={showExternalHorizon}
+        onOpenChange={setShowExternalHorizon}
+        notes={filteredNotes}
       />
 
       {/* AI Knowledge Base */}

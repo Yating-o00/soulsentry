@@ -78,10 +78,12 @@ Deno.serve(async (req) => {
     // 收集所有可分析的文本
     let materialText = (note.plain_text || note.content || '').replace(/<[^>]+>/g, ' ').slice(0, MAX_TEXT);
 
-    // 外部链接
-    if (note.source_url) {
-      const web = await fetchWebContent(note.source_url);
-      if (web) materialText += `\n\n[外部链接内容 ${note.source_url}]\n${web}`;
+    // 外部链接（external_feed 已携带完整描述，跳过二次抓取以避免超时失败）
+    if (note.source_url && note.source_type !== 'external_feed') {
+      try {
+        const web = await fetchWebContent(note.source_url);
+        if (web) materialText += `\n\n[外部链接内容 ${note.source_url}]\n${web}`;
+      } catch (_) { /* 抓取失败不影响主流程 */ }
     }
 
     // 附件（PDF / 文档 / 图片）

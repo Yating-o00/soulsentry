@@ -59,7 +59,7 @@ async function fetchOneFeed(base44, feed) {
         if (exists?.length) continue;
 
         const plain = `${item.title}\n\n${item.description}`.trim();
-        await base44.asServiceRole.entities.Note.create({
+        const newNote = await base44.asServiceRole.entities.Note.create({
           content: `<div><strong>${item.title || '外部条目'}</strong></div><div>${item.description || ''}</div><div><a href="${item.link}">${item.link}</a></div>`,
           plain_text: plain,
           source_type: 'external_feed',
@@ -68,6 +68,10 @@ async function fetchOneFeed(base44, feed) {
           ai_status: 'pending',
           color: 'white',
         });
+        // 主动触发 AI 分析（不阻塞，失败也不影响入库）
+        try {
+          base44.asServiceRole.functions.invoke('analyzeHeartSign', { note_id: newNote.id });
+        } catch (_) { /* ignore */ }
         created++;
       }
     }

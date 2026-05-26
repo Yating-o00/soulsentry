@@ -13,6 +13,7 @@ import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
 import HeartSignMessage from "../components/heartsign/HeartSignMessage";
 import HeartSignInput from "../components/heartsign/HeartSignInput";
+import ExternalVisionCard from "../components/heartsign/ExternalVisionCard";
 import NoteShareDialog from "../components/notes/NoteShareDialog";
 import NoteComments from "../components/notes/NoteComments";
 import QuickAddTask from "../components/tasks/QuickAddTask";
@@ -440,6 +441,10 @@ export default function Notes() {
           {/* 聊天信息流 */}
           <div className="flex flex-col bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}>
             <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4">
+              {/* 外部视野入口：AI 策展的多元相关信息 */}
+              <div className="max-w-3xl mx-auto mb-4">
+                <ExternalVisionCard />
+              </div>
               {filteredNotes.length === 0 ? (
                 <div className="text-center py-16 max-w-md mx-auto">
                   <div className="w-16 h-16 bg-gradient-to-br from-violet-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">

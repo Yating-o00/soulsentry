@@ -140,9 +140,6 @@ export default function HeartSignMessage({ note }) {
                   <DropdownMenuItem onClick={() => handleConvertToTask('promise')}>
                     <CalendarPlus className="w-3.5 h-3.5 mr-2" /> 转为约定
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleConvertToTask('task')}>
-                    <ListTodo className="w-3.5 h-3.5 mr-2" /> 转为任务
-                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleDelete} className="text-rose-600 focus:text-rose-700 focus:bg-rose-50">
                     <Trash2 className="w-3.5 h-3.5 mr-2" /> 删除

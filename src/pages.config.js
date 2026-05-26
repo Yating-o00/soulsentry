@@ -51,6 +51,7 @@ import Account from './pages/Account';
 import Archive from './pages/Archive.jsx';
 import Dashboard from './pages/Dashboard';
 import GeminiTest from './pages/GeminiTest';
+import HeartSign from './pages/HeartSign.jsx';
 import Knowledge from './pages/Knowledge';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Notes from './pages/Notes';
@@ -72,6 +73,7 @@ export const PAGES = {
     "Archive": Archive,
     "Dashboard": Dashboard,
     "GeminiTest": GeminiTest,
+    "HeartSign": HeartSign,
     "Knowledge": Knowledge,
     "KnowledgeBase": KnowledgeBase,
     "Notes": Notes,

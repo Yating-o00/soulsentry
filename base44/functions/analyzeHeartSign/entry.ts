@@ -1,127 +1,126 @@
+// 心签智能分析后端函数
+// 输入: { note_id } 或 entity automation payload
+// 输出: 更新 Note.ai_analysis (summary / key_points / tags / category / related_topics)
+//      并写入 UserDataPoint 沉淀画像
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-/**
- * 心签智能分析后端函数
- *
- * 职责：
- *   1. 接收 note_id，加载心签内容（包括链接抓取/文件提取）
- *   2. 调用 Kimi 进行：自动摘要 / 关键词标签 / 内容分类 / 相关外部信息补充
- *   3. 回写到 Note.ai_analysis，并触发 personalDataEngine 沉淀
- *
- * 入参：{ note_id: string, force?: boolean }
- */
+const MAX_TEXT = 8000;
+
+async function extractFromFile(base44, attachment) {
+  try {
+    if (!attachment?.file_url) return '';
+    const schema = {
+      type: 'object',
+      properties: { content: { type: 'string' } }
+    };
+    const res = await base44.integrations.Core.ExtractDataFromUploadedFile({
+      file_url: attachment.file_url,
+      json_schema: schema
+    });
+    if (res?.status === 'success' && res.output) {
+      const out = Array.isArray(res.output) ? res.output[0] : res.output;
+      return (out?.content || JSON.stringify(out)).slice(0, MAX_TEXT);
+    }
+  } catch (e) {
+    console.error('extractFromFile error', e?.message);
+  }
+  return '';
+}
+
+async function fetchWebContent(url) {
+  try {
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 SoulSentry/1.0' },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!resp.ok) return '';
+    const html = await resp.text();
+    // 简单去标签提取文本
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text.slice(0, MAX_TEXT);
+  } catch (e) {
+    console.error('fetchWebContent error', e?.message);
+    return '';
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const body = await req.json().catch(() => ({}));
 
-    const { note_id, force = false } = await req.json().catch(() => ({}));
-    if (!note_id) return Response.json({ error: 'note_id required' }, { status: 400 });
+    // 兼容两种触发方式: 直接调用 { note_id } / entity automation { event, data }
+    const noteId = body.note_id || body.event?.entity_id || body.data?.id;
+    if (!noteId) return Response.json({ error: 'note_id required' }, { status: 400 });
 
-    // 1. 加载心签
-    const notes = await base44.entities.Note.filter({ id: note_id });
-    const note = notes?.[0];
+    let note;
+    try {
+      note = await base44.asServiceRole.entities.Note.get?.(noteId);
+    } catch (_) { /* fallback */ }
+    if (!note) {
+      const list = await base44.asServiceRole.entities.Note.filter({ id: noteId }, '-created_date', 1);
+      note = list?.[0];
+    }
     if (!note) return Response.json({ error: 'Note not found' }, { status: 404 });
 
-    // 已分析过且非强制 → 跳过
-    if (!force && note.ai_status === 'done' && note.ai_analysis?.summary) {
-      return Response.json({ skipped: true, ai_analysis: note.ai_analysis });
+    // 跳过已分析过的，避免循环
+    if (note.ai_status === 'completed' && note.ai_analysis?.analyzed_at) {
+      return Response.json({ ok: true, skipped: true });
     }
 
-    // 标记为处理中
-    await base44.entities.Note.update(note_id, { ai_status: 'processing' });
+    await base44.asServiceRole.entities.Note.update(noteId, { ai_status: 'processing' });
 
-    // 2. 拼装原始素材
-    let rawText = (note.plain_text || note.content || '').replace(/<[^>]+>/g, ' ').trim();
-    const sourceType = note.source_type || 'manual';
-    const sourceUrl = note.source_url || '';
-    const attachments = note.attachments || [];
+    // 收集所有可分析的文本
+    let materialText = (note.plain_text || note.content || '').replace(/<[^>]+>/g, ' ').slice(0, MAX_TEXT);
 
-    // 2.a 网页链接：抓取正文
-    if (sourceUrl && (sourceType === 'web_link' || sourceType === 'wechat_share' || sourceType === 'external_feed')) {
-      try {
-        const webRes = await base44.functions.invoke('kimiWebBrowse', { url: sourceUrl });
-        const webContent = webRes?.data?.content || webRes?.data?.text || '';
-        if (webContent) rawText = `${rawText}\n\n[网页正文]\n${webContent.slice(0, 8000)}`;
-      } catch (e) {
-        console.warn('kimiWebBrowse failed:', e.message);
+    // 外部链接
+    if (note.source_url) {
+      const web = await fetchWebContent(note.source_url);
+      if (web) materialText += `\n\n[外部链接内容 ${note.source_url}]\n${web}`;
+    }
+
+    // 附件（PDF / 文档 / 图片）
+    if (Array.isArray(note.attachments) && note.attachments.length) {
+      for (const att of note.attachments.slice(0, 3)) {
+        const fileText = await extractFromFile(base44, att);
+        if (fileText) materialText += `\n\n[附件 ${att.file_name || att.file_url}]\n${fileText}`;
       }
     }
 
-    // 2.b 文件附件：用 Core.ExtractDataFromUploadedFile 提取
-    if (attachments.length > 0) {
-      for (const att of attachments.slice(0, 3)) {
-        if (!att.file_url) continue;
-        try {
-          const ext = await base44.integrations.Core.ExtractDataFromUploadedFile({
-            file_url: att.file_url,
-            json_schema: {
-              type: 'object',
-              properties: {
-                text_content: { type: 'string', description: '文件中的全部文本内容' },
-                key_points: { type: 'array', items: { type: 'string' } },
-              },
-            },
-          });
-          const extracted = ext?.output?.text_content || '';
-          if (extracted) {
-            rawText = `${rawText}\n\n[附件:${att.file_name || '文件'}]\n${extracted.slice(0, 6000)}`;
-          }
-        } catch (e) {
-          console.warn('Extract file failed:', e.message);
-        }
-      }
-    }
+    materialText = materialText.slice(0, MAX_TEXT * 2);
 
-    if (!rawText || rawText.length < 5) {
-      await base44.entities.Note.update(note_id, { ai_status: 'failed' });
-      return Response.json({ error: 'No content to analyze' }, { status: 400 });
-    }
-
-    // 3. 调用 Kimi 做智能分析
+    // 调用 Kimi 做统一智能处理
     const apiKey = Deno.env.get('KIMI_API_KEY') || Deno.env.get('MOONSHOT_API_KEY');
     if (!apiKey) {
-      await base44.entities.Note.update(note_id, { ai_status: 'failed' });
+      await base44.asServiceRole.entities.Note.update(noteId, { ai_status: 'failed' });
       return Response.json({ error: 'KIMI_API_KEY missing' }, { status: 500 });
     }
 
     const schema = {
       type: 'object',
       properties: {
-        summary: { type: 'string', description: '一句话核心摘要,30字以内' },
-        key_points: { type: 'array', items: { type: 'string' }, description: '3-5 条关键要点' },
-        tags: { type: 'array', items: { type: 'string' }, description: '3-6 个智能标签,不带#' },
-        category: {
-          type: 'string',
-          enum: ['work', 'study', 'idea', 'life', 'finance', 'health', 'reading', 'other'],
-        },
+        summary: { type: 'string', description: '1-2 句话精炼摘要' },
+        key_points: { type: 'array', items: { type: 'string' }, description: '3-5 个核心要点' },
+        tags: { type: 'array', items: { type: 'string' }, description: '3-6 个智能标签，不含 #' },
+        category: { type: 'string', description: '一级分类：产品/技术/读书/灵感/工作/生活/财务/健康/其他' },
         entities: {
           type: 'array',
           items: {
             type: 'object',
-            properties: {
-              text: { type: 'string' },
-              type: { type: 'string', description: '人物/地点/产品/概念/时间 等' },
-            },
+            properties: { text: { type: 'string' }, type: { type: 'string' } }
           },
+          description: '关键实体：人名/组织/项目/产品/技术等'
         },
-        external_context: { type: 'string', description: '基于知识为这条心签补充的相关背景或延伸思考,80字以内' },
+        related_topics: { type: 'array', items: { type: 'string' }, description: '可拓展的相关主题（用于外部知识补充）' },
+        actionable: { type: 'boolean', description: '是否包含可执行待办/任务' }
       },
-      required: ['summary', 'key_points', 'tags', 'category'],
+      required: ['summary', 'tags', 'category']
     };
-
-    const sysPrompt = `你是用户的"第二大脑"AI 助手。用户随时给自己发心签(类似微信文件传输助手),内容包括想法/链接/文件/报告等。
-你的任务:
-1. 提炼一句话摘要(简短有力)
-2. 抽取 3-5 个关键要点
-3. 生成 3-6 个智能标签
-4. 自动分类
-5. 抽取关键实体
-6. 基于该内容的主题,补充 1 段相关的延伸背景或思考(让用户视野更开阔)
-
-严格按以下 JSON Schema 返回:
-${JSON.stringify(schema)}`;
 
     const resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
       method: 'POST',
@@ -131,15 +130,18 @@ ${JSON.stringify(schema)}`;
         temperature: 0.4,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: `心签来源:${sourceType}${sourceUrl ? ' / ' + sourceUrl : ''}\n\n内容:\n${rawText.slice(0, 10000)}` },
-        ],
-      }),
+          {
+            role: 'system',
+            content: `你是用户的私人知识库助理。用户发来的每一条"心签"都需要你完成：自动摘要、关键词提取、内容分类、提炼可拓展的相关主题。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`
+          },
+          { role: 'user', content: `请分析以下心签内容：\n\n${materialText}` }
+        ]
+      })
     });
 
     if (!resp.ok) {
       const t = await resp.text();
-      await base44.entities.Note.update(note_id, { ai_status: 'failed' });
+      await base44.asServiceRole.entities.Note.update(noteId, { ai_status: 'failed' });
       return Response.json({ error: `Kimi ${resp.status}: ${t.slice(0, 200)}` }, { status: 502 });
     }
 
@@ -152,45 +154,45 @@ ${JSON.stringify(schema)}`;
       summary: parsed.summary || '',
       key_points: parsed.key_points || [],
       entities: parsed.entities || [],
-      category: parsed.category || 'other',
-      external_context: parsed.external_context || '',
-      related_links: [],
-      analyzed_at: new Date().toISOString(),
+      category: parsed.category || '其他',
+      related_topics: parsed.related_topics || [],
+      actionable: !!parsed.actionable,
+      analyzed_at: new Date().toISOString()
     };
 
-    // 4. 合并标签 (AI 标签 + 已有标签去重)
-    const aiTags = parsed.tags || [];
-    const mergedTags = Array.from(new Set([...(note.tags || []), ...aiTags])).slice(0, 12);
+    // 合并 AI 标签到 note.tags（去重）
+    const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
 
-    // 5. 回写
-    await base44.entities.Note.update(note_id, {
+    await base44.asServiceRole.entities.Note.update(noteId, {
       ai_analysis,
       tags: mergedTags,
-      ai_status: 'done',
+      ai_status: 'completed'
     });
 
-    // 6. 沉淀到个人数据库
+    // 沉淀到个人数据库
     try {
       await base44.asServiceRole.entities.UserDataPoint.create({
-        data_type: 'habit',
-        subtype: 'heart_sign_capture',
-        summary: ai_analysis.summary || rawText.slice(0, 80),
+        data_type: 'outcome',
+        subtype: 'heartsign_capture',
+        summary: ai_analysis.summary || (note.plain_text || '').slice(0, 80),
         category: ai_analysis.category,
-        weight: sourceType === 'report' ? 4 : 2,
-        tags: aiTags,
+        weight: ai_analysis.actionable ? 6 : 3,
+        tags: mergedTags,
         occurred_at: new Date().toISOString(),
-        hour_of_day: new Date().getHours(),
-        day_of_week: new Date().getDay(),
-        related_note_id: note_id,
-        metadata: { source_type: sourceType, source_url: sourceUrl || null },
+        related_note_id: noteId,
+        metadata: {
+          source_type: note.source_type || 'manual',
+          source_url: note.source_url || null,
+          has_attachments: (note.attachments || []).length > 0
+        }
       });
     } catch (e) {
-      console.warn('UserDataPoint create failed:', e.message);
+      console.error('UserDataPoint create failed', e?.message);
     }
 
-    return Response.json({ success: true, ai_analysis, tags: mergedTags });
-  } catch (error) {
-    console.error('analyzeHeartSign error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ ok: true, ai_analysis, tags: mergedTags });
+  } catch (e) {
+    console.error('analyzeHeartSign error', e);
+    return Response.json({ error: e.message }, { status: 500 });
   }
 });

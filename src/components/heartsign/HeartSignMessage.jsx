@@ -1,149 +1,139 @@
-import React from 'react';
-import { format } from 'date-fns';
-import { Sparkles, Tag, Link as LinkIcon, FileText, Image as ImageIcon, Loader2, Globe, Lightbulb, Trash2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import React from "react";
+import { motion } from "framer-motion";
+import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2 } from "lucide-react";
+import { format } from "date-fns";
 
-const CATEGORY_META = {
-  work: { label: '工作', color: 'bg-blue-50 text-blue-700' },
-  study: { label: '学习', color: 'bg-purple-50 text-purple-700' },
-  idea: { label: '灵感', color: 'bg-amber-50 text-amber-700' },
-  life: { label: '生活', color: 'bg-emerald-50 text-emerald-700' },
-  finance: { label: '财务', color: 'bg-green-50 text-green-700' },
-  health: { label: '健康', color: 'bg-rose-50 text-rose-700' },
-  reading: { label: '阅读', color: 'bg-indigo-50 text-indigo-700' },
-  other: { label: '其他', color: 'bg-slate-100 text-slate-600' },
-};
+function StatusDot({ status }) {
+  if (status === 'processing' || status === 'pending') {
+    return <span className="inline-flex items-center gap-1 text-[11px] text-violet-500"><Loader2 className="w-3 h-3 animate-spin" />AI 处理中</span>;
+  }
+  if (status === 'failed') {
+    return <span className="text-[11px] text-rose-500">AI 分析失败</span>;
+  }
+  return null;
+}
 
-const SOURCE_ICON = {
-  web_link: LinkIcon,
-  wechat_share: LinkIcon,
-  external_feed: Globe,
-  file_upload: FileText,
-  image: ImageIcon,
-  report: FileText,
-  manual: Sparkles,
-};
+function SourceBadge({ note }) {
+  const map = {
+    manual: { icon: null, label: null },
+    web_link: { icon: <LinkIcon className="w-3 h-3" />, label: '链接' },
+    file: { icon: <FileText className="w-3 h-3" />, label: '文件' },
+    image: { icon: <ImageIcon className="w-3 h-3" />, label: '图片' },
+    voice: { icon: <Mic className="w-3 h-3" />, label: '语音' },
+    external_feed: { icon: <ExternalLink className="w-3 h-3" />, label: '外部订阅' },
+    wechat_share: { icon: <ExternalLink className="w-3 h-3" />, label: '微信转发' },
+  };
+  const cfg = map[note.source_type] || map.manual;
+  if (!cfg.label) return null;
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[10px] font-medium">
+      {cfg.icon}{cfg.label}
+    </span>
+  );
+}
 
-/**
- * 心签消息卡片 - 类似微信文件传输助手中的"自己发给自己"
- * 左侧显示用户原文，下方挂 AI 分析卡片
- */
-export default function HeartSignMessage({ note, onDelete }) {
-  const SourceIcon = SOURCE_ICON[note.source_type] || Sparkles;
+export default function HeartSignMessage({ note }) {
   const ai = note.ai_analysis || {};
-  const categoryMeta = ai.category ? CATEGORY_META[ai.category] || CATEGORY_META.other : null;
-  const isProcessing = note.ai_status === 'processing' || note.ai_status === 'pending';
+  const time = note.created_date ? format(new Date(note.created_date), 'HH:mm') : '';
+  const plain = (note.plain_text || (note.content || '').replace(/<[^>]+>/g, ' ')).trim();
+  const isLong = plain.length > 200;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex justify-end group"
+      className="flex justify-end gap-2"
     >
-      <div className="max-w-[80%] space-y-2">
-        {/* 用户原始消息 - 右侧气泡 */}
-        <div className="flex justify-end items-start gap-2">
-          <button
-            onClick={() => onDelete?.(note)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-500 mt-2"
-            title="删除"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          <div className="bg-[#384877] text-white rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-sm">
-            <div
-              className="text-[14.5px] leading-relaxed [&_a]:text-white [&_a]:underline [&_img]:rounded-lg [&_img]:my-1"
-              dangerouslySetInnerHTML={{ __html: note.content }}
-            />
+      <div className="max-w-[85%] md:max-w-[70%]">
+        {/* 用户气泡 */}
+        <div className="bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-md">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <SourceBadge note={note} />
+            {note.source_url && (
+              <a href={note.source_url} target="_blank" rel="noreferrer" className="text-[11px] underline opacity-90 truncate max-w-[200px]">
+                {note.source_url}
+              </a>
+            )}
           </div>
+          <div className={`text-[15px] leading-relaxed whitespace-pre-wrap break-words ${isLong ? 'line-clamp-6' : ''}`}>
+            {plain || '（空内容）'}
+          </div>
+          {note.attachments?.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {note.attachments.map((a, i) => (
+                <a
+                  key={i}
+                  href={a.file_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 px-2 py-1.5 bg-white/15 rounded-lg text-[12px] hover:bg-white/25 transition"
+                >
+                  <Paperclip className="w-3 h-3" />
+                  <span className="truncate flex-1">{a.file_name || '附件'}</span>
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* 时间戳 */}
-        <div className="text-right text-[10px] text-slate-400 pr-2">
-          {format(new Date(note.created_date), 'HH:mm')}
-        </div>
+        {/* AI 知识卡片 */}
+        {(note.ai_status === 'pending' || note.ai_status === 'processing') && (
+          <div className="mt-2 bg-white border border-violet-100 rounded-2xl rounded-tl-sm p-3 shadow-sm">
+            <StatusDot status={note.ai_status} />
+          </div>
+        )}
 
-        {/* AI 分析卡片 - 左侧 */}
-        {(isProcessing || ai.summary) && (
+        {note.ai_status === 'completed' && ai.summary && (
           <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="flex justify-start"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mt-2 bg-white border border-slate-100 rounded-2xl rounded-tl-sm p-4 shadow-sm"
           >
-            <div className="bg-white rounded-2xl rounded-tl-sm shadow-sm border border-slate-100 overflow-hidden max-w-full w-[420px]">
-              {isProcessing ? (
-                <div className="p-4 flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#384877]" />
-                  AI 正在理解、归档与关联…
-                </div>
-              ) : (
-                <div className="p-4 space-y-3">
-                  {/* 头部 */}
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center">
-                      <Sparkles className="w-3 h-3 text-violet-600" />
-                    </div>
-                    <span className="text-xs font-medium text-violet-600">AI 智能归档</span>
-                    {categoryMeta && (
-                      <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium ${categoryMeta.color}`}>
-                        {categoryMeta.label}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* 摘要 */}
-                  {ai.summary && (
-                    <p className="text-[14px] text-slate-800 leading-relaxed font-medium">
-                      {ai.summary}
-                    </p>
-                  )}
-
-                  {/* 关键要点 */}
-                  {ai.key_points?.length > 0 && (
-                    <ul className="space-y-1">
-                      {ai.key_points.slice(0, 5).map((pt, i) => (
-                        <li key={i} className="text-[13px] text-slate-600 flex gap-2 leading-relaxed">
-                          <span className="text-violet-400 mt-1">•</span>
-                          <span>{pt}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {/* 外部背景补充 */}
-                  {ai.external_context && (
-                    <div className="bg-amber-50/60 border-l-2 border-amber-300 rounded-r-lg p-2.5 flex gap-2">
-                      <Lightbulb className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-[12px] text-slate-700 leading-relaxed">{ai.external_context}</p>
-                    </div>
-                  )}
-
-                  {/* 标签 */}
-                  {note.tags?.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {note.tags.slice(0, 8).map((t, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[11px]">
-                          <Tag className="w-2.5 h-2.5" />{t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 来源标识 */}
-                  {note.source_url && (
-                    <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-slate-400">
-                      <SourceIcon className="w-3 h-3" />
-                      <a href={note.source_url} target="_blank" rel="noreferrer" className="truncate hover:text-[#384877]">
-                        {note.source_url}
-                      </a>
-                    </div>
-                  )}
-                </div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center">
+                <Sparkles className="w-3 h-3 text-violet-600" />
+              </div>
+              <span className="text-[12px] font-medium text-violet-600">AI 智能处理</span>
+              {ai.category && (
+                <span className="ml-auto text-[11px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">{ai.category}</span>
               )}
             </div>
+
+            <p className="text-[13px] text-slate-700 leading-relaxed mb-2">{ai.summary}</p>
+
+            {ai.key_points?.length > 0 && (
+              <ul className="mb-2 space-y-1">
+                {ai.key_points.slice(0, 4).map((p, i) => (
+                  <li key={i} className="text-[12px] text-slate-600 flex gap-2">
+                    <span className="text-violet-400">•</span>
+                    <span className="flex-1">{p}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {note.tags?.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-slate-100">
+                {note.tags.slice(0, 6).map((t, i) => (
+                  <span key={i} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-violet-50 text-violet-600 text-[10px] rounded-md">
+                    <Tag className="w-2.5 h-2.5" />{t}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {ai.related_topics?.length > 0 && (
+              <div className="mt-2 text-[11px] text-slate-500">
+                <span className="font-medium">可拓展：</span>
+                {ai.related_topics.slice(0, 3).join(' · ')}
+              </div>
+            )}
           </motion.div>
         )}
+
+        <div className="text-right mt-1">
+          <span className="text-[10px] text-slate-400">{time}</span>
+        </div>
       </div>
     </motion.div>
   );

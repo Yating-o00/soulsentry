@@ -1,143 +1,167 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { base44 } from '@/api/base44Client';
-import { Search, Sparkles, Heart } from 'lucide-react';
-import HeartSignInput from '@/components/heartsign/HeartSignInput';
-import HeartSignMessage from '@/components/heartsign/HeartSignMessage';
-import HeartSignInsightPanel from '@/components/heartsign/HeartSignInsightPanel';
-import { Input } from '@/components/ui/input';
-import { toast } from 'sonner';
+import React, { useState, useEffect, useRef } from "react";
+import { base44 } from "@/api/base44Client";
+import { Heart, Search, RefreshCw, Sparkles } from "lucide-react";
+import HeartSignMessage from "@/components/heartsign/HeartSignMessage";
+import HeartSignInput from "@/components/heartsign/HeartSignInput";
+import HeartSignInsightPanel from "@/components/heartsign/HeartSignInsightPanel";
+import { format, isToday, isYesterday } from "date-fns";
+import { zhCN } from "date-fns/locale";
 
-/**
- * 心签 - 用户的私人知识库 / 第二大脑
- * 对内: 文件传输助手式的极简记录
- * 对外: 支持链接/文件等外部信息接入
- * AI:   自动摘要 / 标签 / 分类 / 关联 / 外部背景补充
- */
+function dayLabel(d) {
+  const date = new Date(d);
+  if (isToday(date)) return '今天';
+  if (isYesterday(date)) return '昨天';
+  return format(date, 'M月d日 EEEE', { locale: zhCN });
+}
+
+function groupByDay(notes) {
+  const groups = [];
+  let lastKey = null;
+  notes.forEach(n => {
+    const key = format(new Date(n.created_date), 'yyyy-MM-dd');
+    if (key !== lastKey) {
+      groups.push({ key, label: dayLabel(n.created_date), items: [] });
+      lastKey = key;
+    }
+    groups[groups.length - 1].items.push(n);
+  });
+  return groups;
+}
+
 export default function HeartSign() {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const streamRef = useRef(null);
-  const pollRef = useRef(null);
 
-  const loadNotes = async () => {
+  const load = async () => {
     try {
-      const list = await base44.entities.Note.filter({ deleted_at: null }, '-created_date', 100);
-      setNotes(list);
+      // 按时间正序，最新在底部（像聊天）
+      const list = await base44.entities.Note.filter({ deleted_at: null }, 'created_date', 200);
+      setNotes(list || []);
     } catch (e) {
-      console.error('Load notes failed:', e);
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
-    loadNotes();
+    load();
+    // 实时订阅
+    const unsub = base44.entities.Note.subscribe?.((event) => {
+      if (event.type === 'create') {
+        setNotes(prev => [...prev.filter(n => n.id !== event.data.id), event.data]);
+      } else if (event.type === 'update') {
+        setNotes(prev => prev.map(n => n.id === event.id ? event.data : n));
+      } else if (event.type === 'delete') {
+        setNotes(prev => prev.filter(n => n.id !== event.id));
+      }
+    });
+    return () => unsub?.();
   }, []);
 
-  // 滚动到底部
   useEffect(() => {
+    // 滚动到底部
     if (streamRef.current) {
       streamRef.current.scrollTop = streamRef.current.scrollHeight;
     }
   }, [notes.length]);
 
-  // 轮询处理中的心签，等 AI 分析完成
-  useEffect(() => {
-    const hasProcessing = notes.some(n => n.ai_status === 'pending' || n.ai_status === 'processing');
-    if (hasProcessing) {
-      pollRef.current = setTimeout(loadNotes, 3500);
-    }
-    return () => clearTimeout(pollRef.current);
-  }, [notes]);
-
-  const handleSent = (newNote) => {
-    setNotes(prev => [...prev, newNote]);
-  };
-
-  const handleDelete = async (note) => {
-    if (!confirm('删除这条心签？')) return;
+  const handleSend = async (payload) => {
+    // 乐观插入
+    const optimistic = { ...payload, id: `tmp-${Date.now()}`, created_date: new Date().toISOString(), ai_status: 'pending' };
+    setNotes(prev => [...prev, optimistic]);
     try {
-      await base44.entities.Note.update(note.id, { deleted_at: new Date().toISOString() });
-      setNotes(prev => prev.filter(n => n.id !== note.id));
-      toast.success('已删除');
+      const created = await base44.entities.Note.create(payload);
+      setNotes(prev => prev.map(n => n.id === optimistic.id ? created : n));
+      // 触发 AI 分析（异步，不阻塞）
+      base44.functions.invoke('analyzeHeartSign', { note_id: created.id }).catch(e => console.error(e));
     } catch (e) {
-      toast.error('删除失败');
+      setNotes(prev => prev.filter(n => n.id !== optimistic.id));
+      console.error(e);
     }
   };
 
-  // 搜索过滤（按时间正序展示，最新在底部，类微信对话）
-  const filtered = notes
-    .filter(n => {
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      return (n.plain_text || '').toLowerCase().includes(q)
-        || (n.tags || []).some(t => t.toLowerCase().includes(q))
-        || (n.ai_analysis?.summary || '').toLowerCase().includes(q);
-    })
-    .slice()
-    .reverse();
+  const filtered = search
+    ? notes.filter(n => {
+        const q = search.toLowerCase();
+        return (n.plain_text || '').toLowerCase().includes(q)
+          || (n.ai_analysis?.summary || '').toLowerCase().includes(q)
+          || (n.tags || []).some(t => t.toLowerCase().includes(q));
+      })
+    : notes;
+
+  const groups = groupByDay(filtered);
 
   return (
-    <div className="h-full flex bg-[#f7f7f7]">
-      {/* 主区域 */}
-      <main className="flex-1 flex flex-col min-w-0">
+    <div className="flex h-full bg-slate-50">
+      {/* 主聊天区 */}
+      <div className="flex-1 flex flex-col min-w-0">
         {/* 顶部栏 */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 flex-shrink-0">
+        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
-              <Heart className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-md">
+              <Heart className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-slate-800 text-[15px]">心签 · 文件传输助手</h1>
+              <h1 className="font-bold text-slate-800 text-[15px] leading-tight">心签 · 给自己的传输助手</h1>
               <p className="text-[11px] text-slate-500 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                自己与自己的连接 · AI 实时归档中
+                AI 实时整理 · 你的私密知识库
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 max-w-xs flex-1 ml-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input
+          <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="搜索心签内容/标签…"
-                className="pl-9 h-9 text-sm bg-slate-50 border-slate-200"
+                placeholder="搜索心签..."
+                className="bg-transparent outline-none text-sm w-40"
               />
             </div>
+            <button onClick={load} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
+              <RefreshCw className="w-4 h-4" />
+            </button>
           </div>
         </header>
 
         {/* 消息流 */}
-        <div ref={streamRef} className="flex-1 overflow-y-auto px-4 md:px-6 py-6">
-          <div className="max-w-3xl mx-auto space-y-5">
-            {loading ? (
-              <div className="text-center text-slate-400 py-12">加载中…</div>
-            ) : filtered.length === 0 && !search ? (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 mx-auto bg-gradient-to-br from-violet-100 to-purple-100 rounded-full flex items-center justify-center mb-4">
-                  <Sparkles className="w-8 h-8 text-violet-500" />
-                </div>
-                <h3 className="text-slate-800 font-medium mb-2">这是你的私密知识空间</h3>
-                <p className="text-slate-500 text-sm max-w-md mx-auto leading-relaxed">
-                  像给文件传输助手发消息一样，随时发送文字、链接、文件。<br />
-                  AI 会自动理解、归档、关联，沉淀你的个人知识库。
-                </p>
+        <div ref={streamRef} className="flex-1 overflow-y-auto px-3 md:px-6 py-4">
+          {loading ? (
+            <div className="text-center py-12 text-slate-400 text-sm">加载中...</div>
+          ) : groups.length === 0 ? (
+            <div className="text-center py-16 max-w-md mx-auto">
+              <div className="w-16 h-16 bg-gradient-to-br from-violet-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-7 h-7 text-violet-500" />
               </div>
-            ) : filtered.length === 0 ? (
-              <div className="text-center text-slate-400 py-12 text-sm">没有匹配的心签</div>
-            ) : (
-              filtered.map(note => (
-                <HeartSignMessage key={note.id} note={note} onDelete={handleDelete} />
-              ))
-            )}
-          </div>
+              <h3 className="text-slate-800 font-medium mb-2">这是你的私密空间</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                像给文件传输助手发消息一样，随时发送文字、链接、文件、图片。<br />
+                AI 会自动摘要、打标签、归档，构建你的知识宇宙。
+              </p>
+            </div>
+          ) : (
+            <div className="max-w-3xl mx-auto space-y-6">
+              {groups.map(g => (
+                <div key={g.key} className="space-y-3">
+                  <div className="flex items-center justify-center my-4">
+                    <span className="text-[11px] text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{g.label}</span>
+                  </div>
+                  {g.items.map(n => (
+                    <HeartSignMessage key={n.id} note={n} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* 底部输入 */}
-        <HeartSignInput onSent={handleSent} />
-      </main>
+        {/* 输入区 */}
+        <HeartSignInput onSend={handleSend} />
+      </div>
 
       {/* 右侧洞察面板 */}
       <HeartSignInsightPanel notes={notes} />

@@ -38,7 +38,7 @@ export default function MobileNavigation() {
     { 
       icon: StickyNote, 
       label: t('notes'), 
-      path: createPageUrl('HeartSign') 
+      path: createPageUrl('Notes') 
     },
     { 
       icon: Brain, 

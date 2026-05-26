@@ -68,7 +68,17 @@ export default function HeartSignMessage({ note }) {
       time = format(createdAt, 'yyyy年M月d日 HH:mm', { locale: zhCN });
     }
   }
-  const plain = (note.plain_text || (note.content || '').replace(/<[^>]+>/g, ' ')).trim();
+  const decodeEntities = (s) => String(s || '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
+  const rawPlain = note.plain_text || (note.content || '').replace(/<[^>]+>/g, ' ');
+  // 解码两次：处理双重编码（&amp;lt; → &lt; → <）
+  const plain = decodeEntities(decodeEntities(rawPlain)).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   const isLong = plain.length > 300;
   const isReport = plain.length > 800;
   const displayText = expanded || !isLong ? plain : plain.slice(0, 280) + '…';

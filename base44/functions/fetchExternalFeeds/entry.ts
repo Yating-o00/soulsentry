@@ -11,11 +11,20 @@ function parseRssItems(xml, limit = 5) {
     const get = (tag) => {
       const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, 'i'));
       if (!m) return '';
-      return m[1]
+      let raw = m[1]
         .replace(/<!\[CDATA\[/g, '')
-        .replace(/\]\]>/g, '')
-        .replace(/<[^>]+>/g, '')
-        .trim();
+        .replace(/\]\]>/g, '');
+      // 先解码一次 HTML 实体（处理 RSS 中常见的 &lt;p&gt; 这类编码后的 HTML）
+      raw = raw
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&');
+      // 再剥掉真正的 HTML 标签
+      return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     };
     const linkM = block.match(/<link[^>]*?href=["']([^"']+)["']/i);
     items.push({

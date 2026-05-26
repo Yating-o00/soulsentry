@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, ListTodo } from "lucide-react";
-import { format } from "date-fns";
+import { format, isToday, isYesterday, isThisYear } from "date-fns";
+import { zhCN } from "date-fns/locale";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import {
@@ -51,7 +52,22 @@ function SourceBadge({ note }) {
 export default function HeartSignMessage({ note }) {
   const [expanded, setExpanded] = useState(false);
   const ai = note.ai_analysis || {};
-  const time = note.created_date ? format(new Date(note.created_date), 'HH:mm') : '';
+  const createdAt = note.created_date ? new Date(note.created_date) : null;
+  const isValidDate = createdAt && !isNaN(createdAt.getTime());
+  let time = '';
+  let fullTime = '';
+  if (isValidDate) {
+    fullTime = format(createdAt, 'yyyy年M月d日 HH:mm:ss', { locale: zhCN });
+    if (isToday(createdAt)) {
+      time = format(createdAt, 'HH:mm');
+    } else if (isYesterday(createdAt)) {
+      time = `昨天 ${format(createdAt, 'HH:mm')}`;
+    } else if (isThisYear(createdAt)) {
+      time = format(createdAt, 'M月d日 HH:mm', { locale: zhCN });
+    } else {
+      time = format(createdAt, 'yyyy年M月d日 HH:mm', { locale: zhCN });
+    }
+  }
   const plain = (note.plain_text || (note.content || '').replace(/<[^>]+>/g, ' ')).trim();
   const isLong = plain.length > 300;
   const isReport = plain.length > 800;
@@ -185,7 +201,7 @@ export default function HeartSignMessage({ note }) {
         </div>
 
         <div className="text-right mt-1 pr-1">
-          <span className="text-[10px] text-slate-400">{time}</span>
+          <span className="text-[10px] text-slate-400" title={fullTime}>{time}</span>
         </div>
 
         {/* AI 处理状态 */}

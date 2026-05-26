@@ -3,6 +3,23 @@ import { motion } from "framer-motion";
 import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe } from "lucide-react";
 import { format } from "date-fns";
 
+// Notion 风的柔和色板：根据 note.color 切换气泡 + AI 卡片的配色
+const COLOR_SCHEMES = {
+  white:  { bubble: 'bg-white border-slate-200/80',       accent: 'bg-slate-50 border-slate-200/70 text-slate-600',     dot: 'bg-slate-300' },
+  red:    { bubble: 'bg-rose-50/60 border-rose-200/70',   accent: 'bg-rose-50 border-rose-200/70 text-rose-700',         dot: 'bg-rose-400' },
+  orange: { bubble: 'bg-orange-50/60 border-orange-200/70', accent: 'bg-orange-50 border-orange-200/70 text-orange-700', dot: 'bg-orange-400' },
+  yellow: { bubble: 'bg-amber-50/60 border-amber-200/70', accent: 'bg-amber-50 border-amber-200/70 text-amber-700',     dot: 'bg-amber-400' },
+  green:  { bubble: 'bg-emerald-50/60 border-emerald-200/70', accent: 'bg-emerald-50 border-emerald-200/70 text-emerald-700', dot: 'bg-emerald-400' },
+  teal:   { bubble: 'bg-teal-50/60 border-teal-200/70',   accent: 'bg-teal-50 border-teal-200/70 text-teal-700',         dot: 'bg-teal-400' },
+  blue:   { bubble: 'bg-sky-50/60 border-sky-200/70',     accent: 'bg-sky-50 border-sky-200/70 text-sky-700',             dot: 'bg-sky-400' },
+  darkblue:{ bubble: 'bg-indigo-50/60 border-indigo-200/70', accent: 'bg-indigo-50 border-indigo-200/70 text-indigo-700', dot: 'bg-indigo-400' },
+  purple: { bubble: 'bg-violet-50/60 border-violet-200/70', accent: 'bg-violet-50 border-violet-200/70 text-violet-700', dot: 'bg-violet-400' },
+  pink:   { bubble: 'bg-pink-50/60 border-pink-200/70',   accent: 'bg-pink-50 border-pink-200/70 text-pink-700',         dot: 'bg-pink-400' },
+  brown:  { bubble: 'bg-stone-50 border-stone-200/80',    accent: 'bg-stone-50 border-stone-200/70 text-stone-700',     dot: 'bg-stone-400' },
+  gray:   { bubble: 'bg-slate-50 border-slate-200/80',    accent: 'bg-slate-100 border-slate-200/70 text-slate-700',    dot: 'bg-slate-400' },
+};
+const getScheme = (color) => COLOR_SCHEMES[color] || COLOR_SCHEMES.white;
+
 function SourceBadge({ note }) {
   const map = {
     manual: null,
@@ -30,12 +47,16 @@ export default function HeartSignMessage({ note }) {
   const isLong = plain.length > 300;
   const isReport = plain.length > 800;
   const displayText = expanded || !isLong ? plain : plain.slice(0, 280) + '…';
+  const scheme = getScheme(note.color);
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex justify-end gap-2 group">
       <div className="max-w-[88%] md:max-w-[78%]">
-        {/* 用户气泡 - Notion 风格卡片 */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl px-4 py-3 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)] hover:border-slate-300/80 transition-colors">
+        {/* 用户气泡 - Notion 风格卡片（按 note.color 着色） */}
+        <div className={`relative ${scheme.bubble} border rounded-2xl px-4 py-3 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)] hover:shadow-[0_2px_4px_rgba(15,15,15,0.05),0_4px_12px_rgba(15,15,15,0.04)] transition-all`}>
+          {note.color && note.color !== 'white' && (
+            <span className={`absolute -left-2 top-4 w-1 h-6 rounded-full ${scheme.dot}`} aria-hidden />
+          )}
           {(note.source_type !== 'manual' || isReport || note.source_url) && (
             <div className="flex items-center gap-1.5 mb-2 flex-wrap">
               <SourceBadge note={note} />
@@ -92,7 +113,7 @@ export default function HeartSignMessage({ note }) {
         {/* AI 知识卡片 - Notion 风内联块 */}
         {note.ai_status === 'completed' && ai.summary && (
           <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-            className="mt-2 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)] hover:border-slate-300/80 transition-colors">
+            className={`mt-2 ${scheme.bubble} border rounded-2xl p-4 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)] hover:shadow-[0_2px_4px_rgba(15,15,15,0.05),0_4px_12px_rgba(15,15,15,0.04)] transition-all`}>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-5 h-5 rounded-md bg-slate-100 flex items-center justify-center">
                 <Sparkles className="w-3 h-3 text-slate-600" />

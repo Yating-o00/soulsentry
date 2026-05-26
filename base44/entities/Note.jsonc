@@ -1,0 +1,224 @@
+{
+  "name": "Note",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "string",
+      "description": "HTML or Rich Text Content"
+    },
+    "plain_text": {
+      "type": "string",
+      "description": "Extracted plain text for search and AI analysis"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "AI or manually generated tags"
+    },
+    "is_pinned": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the note is pinned"
+    },
+    "color": {
+      "type": "string",
+      "default": "white",
+      "enum": [
+        "white",
+        "red",
+        "orange",
+        "yellow",
+        "green",
+        "teal",
+        "blue",
+        "darkblue",
+        "purple",
+        "pink",
+        "brown",
+        "gray"
+      ],
+      "description": "Background color of the note"
+    },
+    "deleted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Soft delete timestamp"
+    },
+    "ai_analysis": {
+      "type": "object",
+      "description": "AI generated entities and summary",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "key_points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of key points extracted from the note"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "category": {
+          "type": "string",
+          "description": "AI \u81ea\u52a8\u5206\u7c7b: work/study/idea/life/finance/health/reading/other"
+        },
+        "external_context": {
+          "type": "string",
+          "description": "AI \u4ece\u4e92\u8054\u7f51\u8865\u5145\u7684\u76f8\u5173\u80cc\u666f\u4fe1\u606f"
+        },
+        "related_links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "snippet": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "AI \u627e\u5230\u7684\u76f8\u5173\u5916\u90e8\u94fe\u63a5"
+        },
+        "analyzed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "AI \u5206\u6790\u5b8c\u6210\u7684\u65f6\u95f4\u6233"
+        }
+      }
+    },
+    "shared_with": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string",
+            "enum": [
+              "view",
+              "edit"
+            ],
+            "default": "view"
+          }
+        }
+      },
+      "description": "\u7528\u6237\u5206\u4eab\u5217\u8868\u53ca\u6743\u9650",
+      "default": []
+    },
+    "is_shared": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u5df2\u5206\u4eab"
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u516c\u5f00\u8bbf\u95ee"
+    },
+    "is_burn_after_reading": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u4e3a\u9605\u540e\u5373\u711a\u7b14\u8bb0"
+    },
+    "last_active_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u6700\u540e\u6d3b\u52a8\u65f6\u95f4\uff08\u7f16\u8f91\u6216\u67e5\u770b\uff09"
+    },
+    "burn_duration_minutes": {
+      "type": "number",
+      "default": 5,
+      "description": "\u9605\u540e\u5373\u711a\u65f6\u957f\uff08\u5206\u949f\uff09"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "web_link",
+        "file_upload",
+        "image",
+        "voice",
+        "external_feed",
+        "wechat_share",
+        "report"
+      ],
+      "default": "manual",
+      "description": "\u5fc3\u7b7e\u6765\u6e90\u7c7b\u578b\uff1a\u624b\u52a8/\u7f51\u9875\u94fe\u63a5/\u6587\u4ef6\u4e0a\u4f20/\u56fe\u7247/\u8bed\u97f3/\u5916\u90e8\u8ba2\u9605/\u5fae\u4fe1\u8f6c\u53d1/\u957f\u6587\u672c\u62a5\u544a"
+    },
+    "source_url": {
+      "type": "string",
+      "description": "\u6765\u6e90URL\uff08\u94fe\u63a5\u3001\u539f\u59cb\u7f51\u9875\u5730\u5740\uff09"
+    },
+    "source_title": {
+      "type": "string",
+      "description": "\u6765\u6e90\u6807\u9898\uff08\u94fe\u63a5\u6807\u9898/\u6587\u4ef6\u540d\u7b49\uff09"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_url": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "file_type": {
+            "type": "string"
+          },
+          "file_size": {
+            "type": "number"
+          }
+        }
+      },
+      "default": [],
+      "description": "\u9644\u4ef6\u5217\u8868\uff08\u6587\u4ef6\u3001\u56fe\u7247\u3001\u8bed\u97f3\u7b49\uff09"
+    },
+    "ai_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "done",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "AI \u667a\u80fd\u5904\u7406\u72b6\u6001"
+    },
+    "related_note_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "AI \u81ea\u52a8\u5173\u8054\u7684\u76f8\u4f3c\u5fc3\u7b7e ID"
+    }
+  },
+  "required": [
+    "content"
+  ]
+}

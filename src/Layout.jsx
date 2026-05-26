@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -52,6 +52,11 @@ const getNavigationItems = (t) => [
     title: t('notes'),
     url: createPageUrl("Notes"),
     icon: StickyNote,
+  },
+  {
+    title: '心签',
+    url: createPageUrl("HeartSign"),
+    icon: Heart,
   },
   {
     title: t('teams'),

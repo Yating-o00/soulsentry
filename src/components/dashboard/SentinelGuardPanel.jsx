@@ -9,11 +9,10 @@ import { Shield, RefreshCw } from "lucide-react";
 /**
  * 时空感知守护面板 - 聚合地理感知 + 遗忘拯救两类真实数据卡片
  */
-// 模块级缓存：同一会话内复用结果，只有当底层数据（Task/Note）真正发生变化时才失效。
-// 避免来回切页面、组件重挂载导致重复打后端（容易触发 429 限流）。
-const GUARD_CACHE = { ts: 0, data: null, assoc: null };
-// 兜底 TTL（30 分钟）：即便订阅链路异常也不会无限陈旧
-const GUARD_TTL_MS = 30 * 60 * 1000;
+// 模块级缓存：会话内常驻，不再按时间过期。
+// 刷新由 Task / Note / SavedLocation 的实时订阅事件驱动，或用户手动点击"重新分析"。
+const GUARD_CACHE = { ts: 0, data: null, assoc: null, dirty: false };
+const GUARD_TTL_MS = Infinity;
 // 单次请求最长 12 秒：超时则静默回退，不再让用户长时间盯着 loading
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -26,13 +25,14 @@ export default function SentinelGuardPanel() {
   const fetchedRef = useRef(false);
 
   const fetchGuard = async (force = false) => {
-    // 命中模块缓存就直接复用，不再请求
-    if (!force && Date.now() - GUARD_CACHE.ts < GUARD_TTL_MS && GUARD_CACHE.data) {
+    // 命中模块缓存就直接复用：除非数据被订阅事件标记为 dirty，或调用方明确 force
+    if (!force && !GUARD_CACHE.dirty && GUARD_CACHE.data) {
       setData(GUARD_CACHE.data);
       setAssoc(GUARD_CACHE.assoc);
       setLoading(false);
       return;
     }
+    GUARD_CACHE.dirty = false;
     setLoading(true);
     setErrored(false);
 
@@ -100,25 +100,18 @@ export default function SentinelGuardPanel() {
     fetchGuard();
   }, []);
 
-  // 事件驱动失效：当 Task/Note 真正变化时才标记缓存过期并重新拉取
+  // 事件驱动:Task / Note / SavedLocation 任一变化都把缓存标记为 dirty,
+  // 当用户下次进入有此面板的页面或当前已挂载时,立即重新分析。
   useEffect(() => {
-    const unsubs = [];
-    const invalidate = () => {
-      GUARD_CACHE.ts = 0;
-      GUARD_CACHE.data = null;
-      GUARD_CACHE.assoc = null;
+    const markDirtyAndRefetch = () => {
+      GUARD_CACHE.dirty = true;
       fetchGuard(true);
     };
-    try {
-      const u1 = base44.entities.Task.subscribe?.(invalidate);
-      if (u1) unsubs.push(u1);
-    } catch {}
-    try {
-      const u2 = base44.entities.Note.subscribe?.(invalidate);
-      if (u2) unsubs.push(u2);
-    } catch {}
+    const unsubs = [];
+    try { const u = base44.entities.Task?.subscribe?.(markDirtyAndRefetch); if (u) unsubs.push(u); } catch {}
+    try { const u = base44.entities.Note?.subscribe?.(markDirtyAndRefetch); if (u) unsubs.push(u); } catch {}
+    try { const u = base44.entities.SavedLocation?.subscribe?.(markDirtyAndRefetch); if (u) unsubs.push(u); } catch {}
     return () => { unsubs.forEach((u) => { try { u?.(); } catch {} }); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSnooze = (type) => {

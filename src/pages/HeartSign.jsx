@@ -62,8 +62,14 @@ export default function HeartSign() {
     // 实时订阅
     const unsub = base44.entities.Note.subscribe?.((event) => {
       if (event.type === 'create') {
+        if (event.data?.deleted_at) return;
         setNotes(prev => sortByTimeAsc([...prev.filter(n => n.id !== event.data.id), event.data]));
       } else if (event.type === 'update') {
+        // 若该条被软删除，则从信息流中移除
+        if (event.data?.deleted_at) {
+          setNotes(prev => prev.filter(n => n.id !== event.id));
+          return;
+        }
         setNotes(prev => sortByTimeAsc(prev.map(n => n.id === event.id ? event.data : n)));
       } else if (event.type === 'delete') {
         setNotes(prev => prev.filter(n => n.id !== event.id));

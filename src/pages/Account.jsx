@@ -20,6 +20,7 @@ import PersonalProfileCard from "@/components/insights/PersonalProfileCard";
 import AlertChannelSettings from "@/components/account/AlertChannelSettings";
 import PWAInstallGuide from "@/components/account/PWAInstallGuide";
 import EnableBackgroundPush from "@/components/account/EnableBackgroundPush";
+import DeleteAccountSection from "@/components/account/DeleteAccountSection";
 
 export default function Account() {
   const [user, setUser] = useState(null);
@@ -515,6 +516,10 @@ export default function Account() {
               <p className="text-xs text-slate-500 px-2">
                 退出后您将需要重新登录才能访问您的任务和数据
               </p>
+
+              <Separator className="my-2" />
+
+              <DeleteAccountSection user={user} />
             </div>
           </CardContent>
         </Card>

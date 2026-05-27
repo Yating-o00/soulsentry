@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart, ChevronLeft } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -212,6 +212,43 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   );
 }
 
+function MobileHeader() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  // 主导航页面：显示侧边栏按钮；其它子页面显示返回按钮
+  const mainPaths = [
+    createPageUrl("Dashboard"),
+    createPageUrl("Tasks"),
+    createPageUrl("Notes"),
+    "/"
+  ];
+  const isMainPage = mainPaths.indexOf(location.pathname) !== -1;
+
+  return (
+    <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-4 py-3 lg:hidden sticky top-0 z-10 min-h-[56px]">
+      <div className="flex items-center gap-3">
+        {isMainPage ? (
+          <SidebarTrigger className="hover:bg-slate-100 p-2.5 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center" />
+        ) : (
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            aria-label="返回"
+            className="hover:bg-slate-100 p-2.5 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center"
+          >
+            <ChevronLeft className="w-5 h-5 text-slate-700" />
+          </button>
+        )}
+        <h1 className="text-base font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+          {t('soulSentry')}
+        </h1>
+      </div>
+    </header>
+  );
+}
+
 function LayoutContent({ children }) {
   const location = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -222,20 +259,35 @@ function LayoutContent({ children }) {
   // Fetch user theme preferences
   const [theme, setTheme] = useState({
     primary: "#384877",
-    fontSize: "medium", 
-    darkMode: false
+    fontSize: "medium",
+    darkMode: false,
+    darkModePref: "system" // 'light' | 'dark' | 'system'
   });
+
+  // 根据用户偏好 + 系统媒体查询解析最终深色模式状态
+  const resolveDarkMode = React.useCallback(function(pref) {
+    if (pref === "dark" || pref === true) return true;
+    if (pref === "light" || pref === false) return false;
+    // 未设置/system → 跟随系统
+    if (typeof window !== "undefined" && window.matchMedia) {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return false;
+  }, []);
 
   React.useEffect(function() {
     var fetchTheme = function() {
         getCachedUser().then(function(user) {
-            if (user && user.theme_preferences) {
-                setTheme({
-                    primary: user.theme_preferences.primary_color || "#384877",
-                    fontSize: user.theme_preferences.font_size || "medium",
-                    darkMode: user.theme_preferences.dark_mode || false
-                });
-            }
+            var prefs = (user && user.theme_preferences) || {};
+            // dark_mode 历史上是 boolean，新版本支持 'light' | 'dark' | 'system'
+            var raw = prefs.dark_mode;
+            var pref = (raw === undefined || raw === null) ? "system" : raw;
+            setTheme({
+                primary: prefs.primary_color || "#384877",
+                fontSize: prefs.font_size || "medium",
+                darkMode: resolveDarkMode(pref),
+                darkModePref: pref
+            });
         }).catch(function(e) {
             console.error("Failed to load theme", e);
         });
@@ -243,11 +295,35 @@ function LayoutContent({ children }) {
     fetchTheme();
     // Listen for theme changes event (dispatched from Account page)
     var handleThemeChange = function(e) {
-        if (e.detail) setTheme(function(prev) { return Object.assign({}, prev, e.detail); });
+        if (e.detail) setTheme(function(prev) {
+            var next = Object.assign({}, prev, e.detail);
+            if (e.detail.darkModePref !== undefined) {
+                next.darkMode = resolveDarkMode(e.detail.darkModePref);
+            }
+            return next;
+        });
     };
     window.addEventListener('theme-change', handleThemeChange);
-    return function() { window.removeEventListener('theme-change', handleThemeChange); };
-  }, []);
+
+    // 监听系统深色模式变化：只在用户未手动设置时（system 模式）才跟随系统
+    var mq = (typeof window !== "undefined" && window.matchMedia)
+        ? window.matchMedia("(prefers-color-scheme: dark)")
+        : null;
+    var handleSysChange = function(ev) {
+        setTheme(function(prev) {
+            if (prev.darkModePref !== "system") return prev; // 用户手动选过，保留
+            return Object.assign({}, prev, { darkMode: ev.matches });
+        });
+    };
+    if (mq && mq.addEventListener) mq.addEventListener("change", handleSysChange);
+    else if (mq && mq.addListener) mq.addListener(handleSysChange);
+
+    return function() {
+        window.removeEventListener('theme-change', handleThemeChange);
+        if (mq && mq.removeEventListener) mq.removeEventListener("change", handleSysChange);
+        else if (mq && mq.removeListener) mq.removeListener(handleSysChange);
+    };
+  }, [resolveDarkMode]);
 
   React.useEffect(function() {
     var down = function(e) {
@@ -375,14 +451,7 @@ function LayoutContent({ children }) {
 
         <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative w-full overflow-hidden pb-20 md:pb-0">
           <FloatingAssistantButton />
-          <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-4 py-3 lg:hidden sticky top-0 z-10 min-h-[56px]">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger className="hover:bg-slate-100 p-2.5 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center" />
-              <h1 className="text-base font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
-                {t('soulSentry')}
-              </h1>
-            </div>
-          </header>
+          <MobileHeader />
 
           <div className="flex-1 overflow-auto">
             {children}

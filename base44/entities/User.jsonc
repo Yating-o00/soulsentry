@@ -2,68 +2,17 @@
   "name": "User",
   "type": "object",
   "properties": {
-    "avatar_url": {
-      "type": "string",
-      "description": "\u7528\u6237\u5934\u50cfURL"
-    },
     "assistant_name": {
       "type": "string",
-      "default": "\u5c0f\u96c5",
-      "description": "AI\u52a9\u624b\u6635\u79f0"
+      "description": "\u7528\u6237\u81ea\u5b9a\u4e49\u52a9\u624b\u6635\u79f0"
     },
-    "theme_preferences": {
-      "type": "object",
-      "description": "\u7528\u6237\u4e3b\u9898\u504f\u597d\u8bbe\u7f6e",
-      "properties": {
-        "primary_color": {
-          "type": "string",
-          "default": "#384877",
-          "description": "\u4e3b\u9898\u4e3b\u8272\u8c03"
-        },
-        "font_size": {
-          "type": "string",
-          "enum": [
-            "small",
-            "medium",
-            "large"
-          ],
-          "default": "medium",
-          "description": "\u5b57\u4f53\u5927\u5c0f"
-        },
-        "dark_mode": {
-          "type": "boolean",
-          "default": false,
-          "description": "\u6df1\u8272\u6a21\u5f0f"
-        }
-      }
-    },
-    "has_seen_welcome": {
-      "type": "boolean",
-      "default": false,
-      "description": "\u662f\u5426\u5df2\u770b\u8fc7\u6b22\u8fce\u9875"
-    },
-    "notification_preferences": {
-      "type": "object",
-      "description": "\u901a\u77e5\u504f\u597d\u8bbe\u7f6e",
-      "properties": {
-        "email_enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "browser_enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "in_app_enabled": {
-          "type": "boolean",
-          "default": true
-        }
-      }
+    "avatar_url": {
+      "type": "string",
+      "description": "\u7528\u6237\u5934\u50cf URL"
     },
     "ai_credits": {
       "type": "number",
-      "default": 200,
-      "description": "AI\u70b9\u6570\u4f59\u989d\uff08\u65b0\u7528\u6237\u8d60\u9001200\u70b9\uff09"
+      "description": "AI \u70b9\u6570\u4f59\u989d"
     },
     "subscription_plan": {
       "type": "string",
@@ -72,48 +21,52 @@
         "pro",
         "team"
       ],
-      "default": "free",
-      "description": "\u8ba2\u9605\u8ba1\u5212"
+      "default": "free"
     },
-    "subscription_expires": {
-      "type": "string",
-      "format": "date-time",
-      "description": "\u8ba2\u9605\u5230\u671f\u65f6\u95f4"
-    },
-    "wework_webhook_url": {
-      "type": "string",
-      "description": "\u4f01\u4e1a\u5fae\u4fe1\u7fa4\u673a\u5668\u4eba Webhook URL\uff0c\u7528\u4e8e\u63a5\u6536\u4efb\u52a1\u63d0\u9192\u63a8\u9001"
-    },
-    "task_alert_settings": {
+    "theme_preferences": {
       "type": "object",
-      "description": "\u4efb\u52a1\u9884\u8b66\u63a8\u9001\u8bbe\u7f6e",
+      "description": "\u7528\u6237\u4e3b\u9898\u504f\u597d",
       "properties": {
-        "auto_alert_enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "\u662f\u5426\u5f00\u542f\u4e34\u8fd1\u622a\u6b62\u81ea\u52a8\u9884\u8b66"
+        "primary_color": {
+          "type": "string"
         },
-        "alert_channels": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "email",
-              "wework"
-            ]
-          },
-          "default": [
-            "wework"
+        "font_size": {
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large"
+          ]
+        },
+        "dark_mode": {
+          "type": "string",
+          "enum": [
+            "light",
+            "dark",
+            "system"
           ],
-          "description": "\u81ea\u52a8\u9884\u8b66\u4f7f\u7528\u7684\u63a8\u9001\u6e20\u9053"
-        },
-        "alert_hours_before": {
-          "type": "number",
-          "default": 2,
-          "description": "\u5728\u622a\u6b62\u524d\u591a\u5c11\u5c0f\u65f6\u89e6\u53d1\u81ea\u52a8\u9884\u8b66"
+          "description": "\u5916\u89c2\u6a21\u5f0f\uff1a\u6d45\u8272/\u6df1\u8272/\u8ddf\u968f\u7cfb\u7edf\u3002\u672a\u8bbe\u7f6e\u65f6\u9ed8\u8ba4\u8ddf\u968f\u7cfb\u7edf\u3002"
         }
       }
+    },
+    "account_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "pending_deletion"
+      ],
+      "default": "active",
+      "description": "\u8d26\u53f7\u72b6\u6001\uff1a\u6b63\u5e38 / \u5f85\u5220\u9664"
+    },
+    "deletion_requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u7528\u6237\u53d1\u8d77\u5220\u9664\u8d26\u53f7\u7684\u65f6\u95f4"
+    },
+    "deletion_purge_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u6570\u636e\u5f7b\u5e95\u6e05\u9664\u7684\u9884\u5b9a\u65f6\u95f4\uff08\u6ce8\u9500\u540e 30 \u5929\uff09"
     }
-  },
-  "required": []
+  }
 }

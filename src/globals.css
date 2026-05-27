@@ -22,6 +22,30 @@ css
     /* iOS Safari viewport fix */
     height: -webkit-fill-available;
   }
+
+  /* 全局禁止 UI 元素被选中（按钮、导航、图标、徽章等），
+     避免移动端长按 UI 时弹出"复制/选中"菜单。
+     正文内容（笔记/心签/任务描述）通过 .selectable-text 显式开启选中。 */
+  button, a, [role="button"], nav, header, aside,
+  [data-sidebar], [data-radix-collection-item],
+  .lucide, svg, label, .badge {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* 正文/可读内容显式开启文本选中 */
+  p, span, h1, h2, h3, h4, h5, h6, li, td, blockquote, code, pre,
+  .prose, .selectable-text, .note-content, .ql-editor,
+  [contenteditable="true"], input, textarea {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
   
   body {
     @apply antialiased text-slate-900 bg-[#f8f9fa]; /* Lighter background */

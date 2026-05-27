@@ -462,7 +462,7 @@ export default function Notes() {
                 </div>
               ) : (
                 <div className="max-w-3xl mx-auto space-y-3">
-                  {[...filteredNotes].reverse().map((note) => (
+                  {filteredNotes.map((note) => (
                     <div key={note.id} onClick={() => setEditingNote(note)} className="cursor-pointer">
                       <HeartSignMessage note={note} />
                     </div>

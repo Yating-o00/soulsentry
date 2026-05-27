@@ -49,7 +49,7 @@ function SourceBadge({ note }) {
   );
 }
 
-export default function HeartSignMessage({ note }) {
+export default function HeartSignMessage({ note, onDeleted }) {
   const [expanded, setExpanded] = useState(false);
   const ai = note.ai_analysis || {};
   const createdAt = note.created_date ? new Date(note.created_date) : null;
@@ -111,6 +111,8 @@ export default function HeartSignMessage({ note }) {
     if (!confirm('确认删除这条心签？可在回收站恢复。')) return;
     try {
       await base44.entities.Note.update(note.id, { deleted_at: new Date().toISOString() });
+      // 立即从父组件信息流中移除，无需等待实时订阅
+      onDeleted?.(note.id);
       toast.success('已删除');
     } catch (e) {
       toast.error('删除失败');

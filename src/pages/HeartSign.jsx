@@ -173,7 +173,11 @@ export default function HeartSign() {
                     <span className="text-[11px] text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{g.label}</span>
                   </div>
                   {g.items.map(n => (
-                    <HeartSignMessage key={n.id} note={n} />
+                    <HeartSignMessage
+                      key={n.id}
+                      note={n}
+                      onDeleted={(id) => setNotes(prev => prev.filter(x => x.id !== id))}
+                    />
                   ))}
                 </div>
               ))}

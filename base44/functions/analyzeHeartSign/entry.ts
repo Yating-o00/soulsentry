@@ -124,27 +124,34 @@ Deno.serve(async (req) => {
       required: ['summary', 'tags', 'category']
     };
 
-    const resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey.trim()}` },
-      body: JSON.stringify({
-        model: 'kimi-k2-turbo-preview',
-        temperature: 0.4,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: `你是用户的私人知识库助理。用户发来的每一条"心签"都需要你完成：自动摘要、关键词提取、内容分类、提炼可拓展的相关主题。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`
-          },
-          { role: 'user', content: `请分析以下心签内容：\n\n${materialText}` }
-        ]
-      })
-    });
+    const models = ['kimi-k2-0905-preview', 'kimi-latest', 'moonshot-v1-auto'];
+    let resp = null;
+    let lastErr = '';
+    for (const model of models) {
+      resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey.trim()}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0.4,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content: `你是用户的私人知识库助理。用户发来的每一条"心签"都需要你完成：自动摘要、关键词提取、内容分类、提炼可拓展的相关主题。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`
+            },
+            { role: 'user', content: `请分析以下心签内容：\n\n${materialText}` }
+          ]
+        })
+      });
+      if (resp.ok) break;
+      lastErr = `${resp.status}: ${(await resp.text()).slice(0, 200)}`;
+      if (resp.status !== 404 && resp.status !== 403) break;
+    }
 
-    if (!resp.ok) {
-      const t = await resp.text();
+    if (!resp || !resp.ok) {
       await base44.asServiceRole.entities.Note.update(noteId, { ai_status: 'failed' });
-      return Response.json({ error: `Kimi ${resp.status}: ${t.slice(0, 200)}` }, { status: 502 });
+      return Response.json({ error: `Kimi ${lastErr}` }, { status: 502 });
     }
 
     const data = await resp.json();

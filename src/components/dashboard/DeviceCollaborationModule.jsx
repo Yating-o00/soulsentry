@@ -1,6 +1,6 @@
 import React from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, isToday, isTomorrow, startOfDay, endOfDay, isWithinInterval, addDays, differenceInCalendarDays } from "date-fns";
 import { motion } from "framer-motion";
 import { Cpu } from "lucide-react";
@@ -454,33 +454,42 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, 
 
 export default function DeviceCollaborationModule() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
+  const queryClient = useQueryClient();
+
+  // 统一策略:仅在数据真正变化时刷新(订阅推送 / 手动 invalidate),
+  // 不再因为重新进入页面、窗口聚焦或定时器而盲目重拉。
+  const sharedOpts = {
+    staleTime: Infinity,             // 缓存永不过期(变化由订阅驱动)
+    refetchOnMount: false,           // 重新挂载不刷
+    refetchOnWindowFocus: false,     // 切回标签页不刷
+    refetchOnReconnect: false,       // 网络恢复不刷(避免抖动)
+  };
 
   const { data: planQueryData } = useQuery({
     queryKey: ['dailyPlan', todayStr],
     queryFn: () => base44.entities.DailyPlan.filter({ plan_date: todayStr }),
-    staleTime: 2 * 60 * 1000,
+    ...sharedOpts,
   });
 
   const { data: allTasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-reminder_time'),
     initialData: [],
-    staleTime: 2 * 60 * 1000,
+    ...sharedOpts,
   });
 
   const { data: allNotes = [] } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date', 100),
     initialData: [],
-    staleTime: 2 * 60 * 1000,
+    ...sharedOpts,
   });
 
   const { data: realDevices = [] } = useQuery({
     queryKey: ['my-devices'],
     queryFn: () => listMyDevices(),
     initialData: [],
-    staleTime: 30 * 1000,
-    refetchInterval: 30 * 1000,
+    ...sharedOpts,
   });
 
   // 用户作息(daily_routine)用于细化各设备时段判断,缺省时各设备退回硬编码窗口
@@ -490,8 +499,39 @@ export default function DeviceCollaborationModule() {
       const list = await base44.entities.UserPreference.list();
       return list?.[0] || null;
     },
-    staleTime: 10 * 60 * 1000,
+    ...sharedOpts,
   });
+
+  // 事件驱动刷新:订阅实体变化时才让相关 query 重新拉取
+  React.useEffect(() => {
+    const unsubs = [];
+    try {
+      const u1 = base44.entities.Task.subscribe?.(() => {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      });
+      if (u1) unsubs.push(u1);
+    } catch {}
+    try {
+      const u2 = base44.entities.Note.subscribe?.(() => {
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+      });
+      if (u2) unsubs.push(u2);
+    } catch {}
+    try {
+      const u3 = base44.entities.Device?.subscribe?.(() => {
+        queryClient.invalidateQueries({ queryKey: ['my-devices'] });
+      });
+      if (u3) unsubs.push(u3);
+    } catch {}
+    try {
+      const u4 = base44.entities.DailyPlan?.subscribe?.(() => {
+        queryClient.invalidateQueries({ queryKey: ['dailyPlan', todayStr] });
+      });
+      if (u4) unsubs.push(u4);
+    } catch {}
+    return () => { unsubs.forEach((u) => { try { u?.(); } catch {} }); };
+  }, [queryClient, todayStr]);
+
   const routine = prefs?.daily_routine || null;
 
   const dayPlan = planQueryData?.[0] || null;

@@ -9,9 +9,11 @@ import { Shield, RefreshCw } from "lucide-react";
 /**
  * 时空感知守护面板 - 聚合地理感知 + 遗忘拯救两类真实数据卡片
  */
-// 模块级缓存：同一会话内 5 分钟内复用结果，避免来回切页面时重复打后端导致 429
+// 模块级缓存：同一会话内复用结果，只有当底层数据（Task/Note）真正发生变化时才失效。
+// 避免来回切页面、组件重挂载导致重复打后端（容易触发 429 限流）。
 const GUARD_CACHE = { ts: 0, data: null, assoc: null };
-const GUARD_TTL_MS = 5 * 60 * 1000;
+// 兜底 TTL（30 分钟）：即便订阅链路异常也不会无限陈旧
+const GUARD_TTL_MS = 30 * 60 * 1000;
 // 单次请求最长 12 秒：超时则静默回退，不再让用户长时间盯着 loading
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -96,6 +98,27 @@ export default function SentinelGuardPanel() {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
     fetchGuard();
+  }, []);
+
+  // 事件驱动失效：当 Task/Note 真正变化时才标记缓存过期并重新拉取
+  useEffect(() => {
+    const unsubs = [];
+    const invalidate = () => {
+      GUARD_CACHE.ts = 0;
+      GUARD_CACHE.data = null;
+      GUARD_CACHE.assoc = null;
+      fetchGuard(true);
+    };
+    try {
+      const u1 = base44.entities.Task.subscribe?.(invalidate);
+      if (u1) unsubs.push(u1);
+    } catch {}
+    try {
+      const u2 = base44.entities.Note.subscribe?.(invalidate);
+      if (u2) unsubs.push(u2);
+    } catch {}
+    return () => { unsubs.forEach((u) => { try { u?.(); } catch {} }); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSnooze = (type) => {

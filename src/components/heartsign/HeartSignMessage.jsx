@@ -145,29 +145,36 @@ export default function HeartSignMessage({ note }) {
 
           {/* 操作菜单：悬停 / 移动端常驻 */}
           {!isOptimistic && (
-            <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity md:opacity-0">
+            <div
+              className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity md:opacity-0"
+              onClick={(e) => e.stopPropagation()}
+            >
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
+                    onClick={(e) => e.stopPropagation()}
                     className="w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-50 flex items-center justify-center text-slate-500"
                     aria-label="更多操作"
                   >
                     <MoreHorizontal className="w-3.5 h-3.5" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem onClick={handleShare}>
+                <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); handleShare(); }}>
                     <Share2 className="w-3.5 h-3.5 mr-2" /> 分享
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleCopy}>
+                  <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); handleCopy(); }}>
                     <Copy className="w-3.5 h-3.5 mr-2" /> 复制文本
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleConvertToTask('promise')}>
+                  <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); handleConvertToTask('promise'); }}>
                     <CalendarPlus className="w-3.5 h-3.5 mr-2" /> 转为约定
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleDelete} className="text-rose-600 focus:text-rose-700 focus:bg-rose-50">
+                  <DropdownMenuItem
+                    onSelect={(e) => { e.preventDefault?.(); handleDelete(); }}
+                    className="text-rose-600 focus:text-rose-700 focus:bg-rose-50"
+                  >
                     <Trash2 className="w-3.5 h-3.5 mr-2" /> 删除
                   </DropdownMenuItem>
                 </DropdownMenuContent>

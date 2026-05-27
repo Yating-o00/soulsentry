@@ -256,74 +256,31 @@ function LayoutContent({ children }) {
   const { t } = useTranslation();
   const { isOnline, pendingSync } = useOfflineManager();
   
-  // Fetch user theme preferences
+  // Fetch user theme preferences (深色模式已移除，仅保留主色与字号)
   const [theme, setTheme] = useState({
     primary: "#384877",
-    fontSize: "medium",
-    darkMode: false,
-    darkModePref: "system" // 'light' | 'dark' | 'system'
+    fontSize: "medium"
   });
-
-  // 根据用户偏好 + 系统媒体查询解析最终深色模式状态
-  const resolveDarkMode = React.useCallback(function(pref) {
-    if (pref === "dark" || pref === true) return true;
-    if (pref === "light" || pref === false) return false;
-    // 未设置/system → 跟随系统
-    if (typeof window !== "undefined" && window.matchMedia) {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-    return false;
-  }, []);
 
   React.useEffect(function() {
     var fetchTheme = function() {
         getCachedUser().then(function(user) {
             var prefs = (user && user.theme_preferences) || {};
-            // dark_mode 历史上是 boolean，新版本支持 'light' | 'dark' | 'system'
-            var raw = prefs.dark_mode;
-            var pref = (raw === undefined || raw === null) ? "system" : raw;
             setTheme({
                 primary: prefs.primary_color || "#384877",
-                fontSize: prefs.font_size || "medium",
-                darkMode: resolveDarkMode(pref),
-                darkModePref: pref
+                fontSize: prefs.font_size || "medium"
             });
         }).catch(function(e) {
             console.error("Failed to load theme", e);
         });
     };
     fetchTheme();
-    // Listen for theme changes event (dispatched from Account page)
     var handleThemeChange = function(e) {
-        if (e.detail) setTheme(function(prev) {
-            var next = Object.assign({}, prev, e.detail);
-            if (e.detail.darkModePref !== undefined) {
-                next.darkMode = resolveDarkMode(e.detail.darkModePref);
-            }
-            return next;
-        });
+        if (e.detail) setTheme(function(prev) { return Object.assign({}, prev, e.detail); });
     };
     window.addEventListener('theme-change', handleThemeChange);
-
-    // 监听系统深色模式变化：只在用户未手动设置时（system 模式）才跟随系统
-    var mq = (typeof window !== "undefined" && window.matchMedia)
-        ? window.matchMedia("(prefers-color-scheme: dark)")
-        : null;
-    var handleSysChange = function(ev) {
-        setTheme(function(prev) {
-            if (prev.darkModePref !== "system") return prev; // 用户手动选过，保留
-            return Object.assign({}, prev, { darkMode: ev.matches });
-        });
-    };
-    if (mq && mq.addEventListener) mq.addEventListener("change", handleSysChange);
-    else if (mq && mq.addListener) mq.addListener(handleSysChange);
-
-    return function() {
-        window.removeEventListener('theme-change', handleThemeChange);
-        if (mq && mq.removeEventListener) mq.removeEventListener("change", handleSysChange);
-        else if (mq && mq.removeListener) mq.removeListener(handleSysChange);
-    };
-  }, [resolveDarkMode]);
+    return function() { window.removeEventListener('theme-change', handleThemeChange); };
+  }, []);
 
   React.useEffect(function() {
     var down = function(e) {
@@ -349,10 +306,10 @@ function LayoutContent({ children }) {
         --scale-factor: ${theme.fontSize === 'small' ? '0.875' : theme.fontSize === 'large' ? '1.125' : '1'};
 
         /* Neutral/Background Colors */
-        --bg-white: ${theme.darkMode ? '30 41 59' : '255 255 255'};
-        --bg-grey-minimal: ${theme.darkMode ? '15 23 42' : '249 250 251'};
-        --text-dark: ${theme.darkMode ? '241 245 249' : '34 34 34'};
-        --text-muted: ${theme.darkMode ? '148 163 184' : '100 116 139'};
+        --bg-white: 255 255 255;
+        --bg-grey-minimal: 249 250 251;
+        --text-dark: 34 34 34;
+        --text-muted: 100 116 139;
 
         /* Legacy Variables Mapped to New System */
         --color-primary: var(--primary-main);
@@ -367,39 +324,6 @@ function LayoutContent({ children }) {
         background-color: rgb(var(--bg-grey-minimal));
         font-size: var(--base-font-size);
       }
-
-      /* Dark mode specific overrides */
-      ${theme.darkMode ? `
-        .bg-white { background-color: rgb(30 41 59) !important; }
-        .bg-slate-50 { background-color: rgb(15 23 42) !important; }
-        .bg-slate-100 { background-color: rgb(30 41 59) !important; }
-        .text-slate-900 { color: rgb(241 245 249) !important; }
-        .text-slate-700 { color: rgb(226 232 240) !important; }
-        .text-slate-600 { color: rgb(203 213 225) !important; }
-        .text-slate-500 { color: rgb(148 163 184) !important; }
-        .border-slate-200 { border-color: rgb(51 65 85) !important; }
-        .border-slate-100 { border-color: rgb(30 41 59) !important; }
-        input, textarea, select { 
-            background-color: rgb(30 41 59) !important; 
-            color: rgb(241 245 249) !important;
-            border-color: rgb(51 65 85) !important;
-        }
-        /* Ensure text visibility on colored backgrounds */
-        .bg-amber-50 { background-color: rgb(55 48 28) !important; }
-        .text-amber-600 { color: rgb(253 224 71) !important; }
-
-        /* Stone color overrides for dark mode (used in task/milestone cards) */
-        .text-stone-900 { color: rgb(241 245 249) !important; }
-        .text-stone-800 { color: rgb(226 232 240) !important; }
-        .text-stone-700 { color: rgb(203 213 225) !important; }
-        .text-stone-600 { color: rgb(178 190 205) !important; }
-        .text-stone-500 { color: rgb(148 163 184) !important; }
-        .text-stone-400 { color: rgb(130 145 165) !important; }
-        .bg-stone-50 { background-color: rgb(15 23 42) !important; }
-        .bg-stone-100 { background-color: rgb(30 41 59) !important; }
-        .border-stone-100 { border-color: rgb(51 65 85) !important; }
-        .border-stone-200 { border-color: rgb(51 65 85) !important; }
-      ` : ''}
 
       /* Override Blue/Purple classes to use our new Primary Tech Blue */
       .bg-blue-600, .bg-blue-500, .bg-purple-600 { background-color: rgb(var(--primary-main)) !important; }

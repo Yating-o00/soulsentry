@@ -59,6 +59,13 @@ async function fetchOneFeed(base44, feed) {
         if (exists?.length) continue;
 
         const plain = `${item.title}\n\n${item.description}`.trim();
+        // 解析文章发布时间（pubDate），写入 created_date，
+        // 让每条 RSS 心签的时间真实反映"内容生成时间"，而不是"抓取入库时间"
+        let pubIso = null;
+        if (item.pubDate) {
+          const t = new Date(item.pubDate);
+          if (!isNaN(t.getTime())) pubIso = t.toISOString();
+        }
         const newNote = await base44.asServiceRole.entities.Note.create({
           content: `<div><strong>${item.title || '外部条目'}</strong></div><div>${item.description || ''}</div><div><a href="${item.link}">${item.link}</a></div>`,
           plain_text: plain,
@@ -67,6 +74,7 @@ async function fetchOneFeed(base44, feed) {
           tags: [feed.name, feed.feed_type].filter(Boolean),
           ai_status: 'pending',
           color: 'white',
+          ...(pubIso ? { created_date: pubIso } : {}),
         });
         // 主动触发 AI 分析（不阻塞，失败也不影响入库）
         try {

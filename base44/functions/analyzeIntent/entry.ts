@@ -4,19 +4,26 @@ async function callKimi(apiKey, systemPrompt, userPrompt, useJsonFormat) {
   const messages = [];
   if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
   messages.push({ role: "user", content: userPrompt });
-  
-  // 降低温度以提高时间解析的确定性（时间是结构化信息，不应发挥创造性）
-  const body = { model: "kimi-k2-turbo-preview", messages, temperature: 0.2 };
-  if (useJsonFormat) body.response_format = { type: "json_object" };
-  
-  const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`Kimi API error: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
+
+  const models = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+  let lastErr = null;
+  for (const model of models) {
+    const body = { model, messages, temperature: 0.2 };
+    if (useJsonFormat) body.response_format = { type: "json_object" };
+    const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || '';
+    }
+    const text = await res.text();
+    lastErr = `Kimi API error: ${res.status} ${text}`;
+    if (res.status !== 404 && res.status !== 403) break;
+  }
+  throw new Error(lastErr || 'Kimi API error');
 }
 
 function parseJSON(content) {

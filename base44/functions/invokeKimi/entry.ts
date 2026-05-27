@@ -160,34 +160,44 @@ Deno.serve(async (req) => {
     // 注意：moonshot vision 模型不支持 response_format=json_object（会 400）。
     // 因此当同时需要 JSON 输出 + 图片时，仍使用 vision 模型但去掉 response_format，
     // 通过 system prompt 中的 schema 约束让模型输出 JSON，再在外层 parse 兜底。
-    const selectedModel = model || (hasImages ? "moonshot-v1-32k-vision-preview" : "kimi-k2-turbo-preview");
+    // 视觉用 vision 模型；纯文本用文本模型，并对 404/403 自动 fallback
+    const textModels = model ? [model] : ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+    const candidateModels = hasImages
+      ? [model || "moonshot-v1-32k-vision-preview"]
+      : textModels;
 
-    const body = {
-      model: selectedModel,
-      messages: [
-        { role: "system", content: systemContent },
-        { role: "user", content: userContent }
-      ],
-      temperature
-    };
-    // 只有非 vision 模型才发 response_format，避免 Kimi vision 报错
-    if (wantsJson && !hasImages) {
-      body.response_format = { type: "json_object" };
+    let response = null;
+    let lastErrText = '';
+    let lastStatus = 0;
+    for (const m of candidateModels) {
+      const body = {
+        model: m,
+        messages: [
+          { role: "system", content: systemContent },
+          { role: "user", content: userContent }
+        ],
+        temperature
+      };
+      if (wantsJson && !hasImages) {
+        body.response_format = { type: "json_object" };
+      }
+      response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey.trim()}`
+        },
+        body: JSON.stringify(body)
+      });
+      if (response.ok) break;
+      lastErrText = await response.text();
+      lastStatus = response.status;
+      if (response.status !== 404 && response.status !== 403) break;
     }
 
-    const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey.trim()}`
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
+    if (!response || !response.ok) {
       return Response.json(
-        { error: `Kimi API error ${response.status}: ${errText}` },
+        { error: `Kimi API error ${lastStatus}: ${lastErrText}` },
         { status: 502 }
       );
     }

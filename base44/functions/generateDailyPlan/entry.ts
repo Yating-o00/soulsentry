@@ -1,22 +1,31 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 async function callKimi(apiKey, systemPrompt, userPrompt) {
-  const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: "kimi-k2-turbo-preview",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      temperature: 0.7,
-      response_format: { type: "json_object" }
-    })
-  });
-  if (!res.ok) throw new Error(`Kimi API error: ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
+  const models = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+  let lastErr = null;
+  for (const model of models) {
+    const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.7,
+        response_format: { type: "json_object" }
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || '';
+    }
+    const text = await res.text();
+    lastErr = `Kimi API error: ${res.status} ${text}`;
+    if (res.status !== 404 && res.status !== 403) break;
+  }
+  throw new Error(lastErr || 'Kimi API error');
 }
 
 function parseJSON(content) {

@@ -380,7 +380,7 @@ export default function ExternalHorizonPanel({ open, onOpenChange, notes = [] })
                       <div className={`absolute left-0 top-0 bottom-0 w-1 ${c.dot}`} />
                       <div className="px-5 pt-4 pb-2 flex items-center gap-2 text-[11px] text-slate-400">
                         <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-                        <span className="uppercase tracking-wider font-medium">AI · Kimi 联网检索</span>
+                        <span className="uppercase tracking-wider font-medium">AI全网检索</span>
                       </div>
                       <div className="px-5 pb-5">
                         <MiniMarkdown text={state.answer} />

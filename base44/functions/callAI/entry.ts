@@ -102,34 +102,44 @@ Deno.serve(async (req) => {
 
     messages.push({ role: "user", content: prompt });
 
-    const kimiBody = {
-      model: "kimi-k2-turbo-preview",
-      messages,
-      temperature: 0.7,
-    };
+    // 模型 fallback 列表：kimi-k2-turbo-preview 已下线/无权限，按顺序尝试
+    const candidateModels = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
 
-    if (response_json_schema) {
-      kimiBody.response_format = { type: "json_object" };
+    let response = null;
+    let lastErr = '';
+    let lastStatus = 0;
+    for (const m of candidateModels) {
+      const kimiBody = {
+        model: m,
+        messages,
+        temperature: 0.7,
+      };
+      if (response_json_schema) {
+        kimiBody.response_format = { type: "json_object" };
+      }
+      response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey.trim()}`
+        },
+        body: JSON.stringify(kimiBody)
+      });
+      if (response.ok) break;
+      lastErr = await response.text();
+      lastStatus = response.status;
+      // 404/403 = 模型不可用，继续 fallback；其他错误（如 429/400）直接退出
+      if (response.status !== 404 && response.status !== 403) break;
     }
 
-    const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey.trim()}`
-      },
-      body: JSON.stringify(kimiBody)
-    });
-
-    if (!response.ok) {
+    if (!response || !response.ok) {
       // === 失败：全额退还预扣 ===
       if (holdApplied > 0) {
         try {
           await base44.asServiceRole.entities.User.update(userId, { ai_credits: holdBalance + holdApplied });
         } catch (_) {}
       }
-      const errText = await response.text();
-      return Response.json({ error: `Kimi API error: ${response.status} ${errText}` }, { status: 502 });
+      return Response.json({ error: `Kimi API error: ${lastStatus} ${lastErr}` }, { status: 502 });
     }
 
     const data = await response.json();

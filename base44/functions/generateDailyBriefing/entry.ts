@@ -137,7 +137,7 @@ ${taskDataBlock}
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
                 body: JSON.stringify({
-                    model: "kimi-k2-turbo-preview",
+                    model: "kimi-k2-0905-preview",
                     messages: [
                         { role: "system", content: systemPrompt },
                         { role: "user", content: "请根据我的真实任务数据生成今日简报。记住：只引用数据中真实存在的任务名称。" }

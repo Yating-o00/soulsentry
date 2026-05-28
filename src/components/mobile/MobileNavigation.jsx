@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { 
   LayoutDashboard, 
@@ -15,6 +15,7 @@ import { useTranslation } from '@/components/TranslationContext';
 
 export default function MobileNavigation() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const [showQuickActions, setShowQuickActions] = useState(false);
 
@@ -53,8 +54,12 @@ export default function MobileNavigation() {
       label: '新建约定', 
       color: 'from-blue-500 to-blue-600',
       action: () => {
-        window.dispatchEvent(new CustomEvent('mobile-create-task'));
         setShowQuickActions(false);
+        navigate(createPageUrl('Tasks') + '?new=1');
+        // 兼容已挂载的页面：派发事件让 Tasks 页直接打开新建弹窗
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('mobile-create-task'));
+        }, 50);
       }
     },
     { 
@@ -62,8 +67,11 @@ export default function MobileNavigation() {
       label: '新建心签', 
       color: 'from-purple-500 to-purple-600',
       action: () => {
-        window.dispatchEvent(new CustomEvent('mobile-create-note'));
         setShowQuickActions(false);
+        navigate(createPageUrl('Notes') + '?new=1');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('mobile-create-note'));
+        }, 50);
       }
     }
   ];

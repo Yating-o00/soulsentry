@@ -66,6 +66,20 @@ export default function Notes() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
+  // Mobile + 号 → 打开移动端语音/文字输入面板
+  useEffect(() => {
+    const handler = () => {
+      setActiveTab("notes");
+      setShowMobileInput(true);
+    };
+    window.addEventListener('mobile-create-note', handler);
+    // 也支持 ?new=1 直接触发
+    if (searchParams.get('new') === '1') {
+      setTimeout(handler, 100);
+    }
+    return () => window.removeEventListener('mobile-create-note', handler);
+  }, [searchParams]);
+
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date'),

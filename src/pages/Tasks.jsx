@@ -92,6 +92,28 @@ export default function Tasks() {
     return () => window.removeEventListener('open-task-detail', handler);
   }, [allTasks]);
 
+  // Mobile + 号 → 滚动到创建输入框并聚焦
+  useEffect(() => {
+    const focusInput = () => {
+      const panel = document.getElementById('mobile-task-create-anchor');
+      if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(() => {
+          const input = panel.querySelector('textarea, input[type="text"]');
+          if (input) input.focus();
+        }, 400);
+      }
+    };
+    const handler = () => focusInput();
+    window.addEventListener('mobile-create-task', handler);
+    // 也支持通过 ?new=1 直接触发
+    const params = new URLSearchParams(location.search);
+    if (params.get('new') === '1') {
+      setTimeout(focusInput, 100);
+    }
+    return () => window.removeEventListener('mobile-create-task', handler);
+  }, [location.search]);
+
   const { data: allComments = [] } = useQuery({
     queryKey: ['all-comments'],
     queryFn: () => base44.entities.Comment.list(),
@@ -425,7 +447,7 @@ export default function Tasks() {
         </div>
 
         {/* Task Creation Panel */}
-        <section className="mb-10">
+        <section id="mobile-task-create-anchor" className="mb-10 scroll-mt-20">
           <TaskCreationPanel
             onAddTask={handleAddTask}
             onOpenManual={() => setSelectedTask({ status: 'pending', priority: 'medium' })}

@@ -1,0 +1,73 @@
+{
+  "name": "KnowledgeBase",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "\u77e5\u8bc6\u6761\u76ee\u6807\u9898"
+    },
+    "content": {
+      "type": "string",
+      "description": "\u77e5\u8bc6\u5185\u5bb9\uff08\u53ef\u4ee5\u662f\u5fc3\u7b7e\u5185\u5bb9\u6216\u5176\u4ed6\u6587\u672c\uff09"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "note",
+        "manual",
+        "ai_analysis"
+      ],
+      "default": "manual",
+      "description": "\u6765\u6e90\u7c7b\u578b"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "\u6765\u6e90ID\uff08\u5982\u5fc3\u7b7eID\uff09"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u6807\u7b7e",
+      "default": []
+    },
+    "category": {
+      "type": "string",
+      "description": "\u5206\u7c7b"
+    },
+    "summary": {
+      "type": "string",
+      "description": "\u6458\u8981"
+    },
+    "key_points": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u5173\u952e\u8981\u70b9",
+      "default": []
+    },
+    "embeddings": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "\u5411\u91cf\u5d4c\u5165\uff08\u7528\u4e8e\u8bed\u4e49\u641c\u7d22\uff09"
+    },
+    "access_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u8bbf\u95ee\u6b21\u6570"
+    },
+    "last_accessed": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u6700\u540e\u8bbf\u95ee\u65f6\u95f4"
+    }
+  },
+  "required": [
+    "title",
+    "content"
+  ]
+}

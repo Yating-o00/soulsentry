@@ -1,0 +1,36 @@
+{
+  "name": "WeeklyPlan",
+  "type": "object",
+  "properties": {
+    "week_start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The Monday date of the planned week (YYYY-MM-DD)"
+    },
+    "original_input": {
+      "type": "string",
+      "description": "User's original natural language input"
+    },
+    "theme": {
+      "type": "string",
+      "description": "Weekly theme"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Weekly summary"
+    },
+    "plan_json": {
+      "type": "object",
+      "description": "Full JSON data of the plan including events, strategies, automations, stats"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this plan is active"
+    }
+  },
+  "required": [
+    "week_start_date",
+    "plan_json"
+  ]
+}

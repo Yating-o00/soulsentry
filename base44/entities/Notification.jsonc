@@ -1,0 +1,52 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "recipient_id": {
+      "type": "string",
+      "description": "\u63a5\u6536\u901a\u77e5\u7684\u7528\u6237ID"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "system",
+        "assignment",
+        "comment",
+        "mention",
+        "reminder"
+      ],
+      "default": "system",
+      "description": "\u901a\u77e5\u7c7b\u578b"
+    },
+    "title": {
+      "type": "string",
+      "description": "\u901a\u77e5\u6807\u9898"
+    },
+    "content": {
+      "type": "string",
+      "description": "\u901a\u77e5\u5185\u5bb9"
+    },
+    "link": {
+      "type": "string",
+      "description": "\u70b9\u51fb\u8df3\u8f6c\u94fe\u63a5"
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u5df2\u8bfb"
+    },
+    "related_entity_id": {
+      "type": "string",
+      "description": "\u5173\u8054\u5b9e\u4f53ID (\u5982TaskID)"
+    },
+    "sender_id": {
+      "type": "string",
+      "description": "\u53d1\u9001\u8005ID"
+    }
+  },
+  "required": [
+    "recipient_id",
+    "title",
+    "content"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "MonthlyPlan",
+  "type": "object",
+  "properties": {
+    "month_start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The first day of the planned month (YYYY-MM-01)"
+    },
+    "original_input": {
+      "type": "string",
+      "description": "User's original natural language input for the month"
+    },
+    "theme": {
+      "type": "string",
+      "description": "Monthly theme"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Monthly summary"
+    },
+    "plan_json": {
+      "type": "object",
+      "description": "Full JSON data of the plan including weekly breakdowns, milestones, strategies, stats"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this plan is active"
+    }
+  },
+  "required": [
+    "month_start_date",
+    "plan_json"
+  ]
+}

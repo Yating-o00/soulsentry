@@ -1,0 +1,36 @@
+{
+  "name": "DailyPlan",
+  "type": "object",
+  "properties": {
+    "plan_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The date of this daily plan (YYYY-MM-DD)"
+    },
+    "original_input": {
+      "type": "string",
+      "description": "User's original natural language input for the day"
+    },
+    "theme": {
+      "type": "string",
+      "description": "Daily theme or focus"
+    },
+    "summary": {
+      "type": "string",
+      "description": "AI-generated daily summary"
+    },
+    "plan_json": {
+      "type": "object",
+      "description": "Full JSON data of the plan including events, focus blocks, tasks"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this plan is active"
+    }
+  },
+  "required": [
+    "plan_date",
+    "plan_json"
+  ]
+}

@@ -1,8 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 import webpush from 'npm:web-push@3.6.7';
 
-// 通过 Web Push 给目标用户发一条系统级通知（页面关闭时仍能收到）
-async function sendWebPushTo(base44, targetEmail, task, hoursLeft) {
+// 给目标用户发一条 Web Push 系统通知（App 关闭也能收到）
+async function sendWebPushTo(base44, targetEmail, task, opts) {
   const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
   const privateKey = Deno.env.get('VAPID_PRIVATE_KEY');
   const subject = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@soulsentry.app';
@@ -19,20 +19,20 @@ async function sendWebPushTo(base44, targetEmail, task, hoursLeft) {
   }
 
   const payload = JSON.stringify({
-    title: `⚡ 即将截止：${task.title}`,
-    body: `还剩约 ${hoursLeft} 小时 · 优先级 ${task.priority || 'medium'}`,
+    title: opts.title,
+    body: opts.body,
     url: `/Tasks?id=${task.id}`,
-    tag: `task-alert-${task.id}`,
-    requireInteraction: hoursLeft <= 2,
+    tag: `${opts.kind}-${task.id}`,
+    requireInteraction: opts.urgent,
     vibrate: [200, 100, 200],
-    data: { task_id: task.id, type: 'task_alert' },
+    data: { task_id: task.id, type: opts.kind },
   });
 
   try {
     await webpush.sendNotification(
       { endpoint: sub.endpoint, keys: sub.keys },
       payload,
-      { TTL: 60 * 60 * 4, urgency: hoursLeft <= 2 ? 'high' : 'normal' }
+      { TTL: 60 * 60 * 4, urgency: opts.urgent ? 'high' : 'normal' }
     );
   } catch (err) {
     if (err.statusCode === 410 || err.statusCode === 404) {
@@ -44,7 +44,6 @@ async function sendWebPushTo(base44, targetEmail, task, hoursLeft) {
   }
 }
 
-// Build a compact WeCom markdown notice for an upcoming task
 function buildWeworkMarkdown(task, hoursLeft) {
   const priorityMap = { urgent: '🔴 紧急', high: '🟠 高', medium: '🟡 中', low: '🟢 低' };
   const dueStr = new Date(task.reminder_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
@@ -56,9 +55,7 @@ function buildWeworkMarkdown(task, hoursLeft) {
     `> 🎯 优先级：${priorityMap[task.priority] || '中'}`,
     `> 📈 进度：${task.progress || 0}%`,
   ];
-  if (task.description) {
-    lines.push(`> 📝 ${String(task.description).slice(0, 150)}`);
-  }
+  if (task.description) lines.push(`> 📝 ${String(task.description).slice(0, 150)}`);
   lines.push(``);
   lines.push(`<font color="comment">— 灵魂哨兵 自动预警</font>`);
   return lines.join('\n');
@@ -74,51 +71,37 @@ async function sendWework(url, markdown) {
   if (data.errcode !== 0) throw new Error(data.errmsg || 'wework error');
 }
 
-async function sendEmail(base44, email, task, hoursLeft) {
-  const { accessToken } = await base44.asServiceRole.connectors.getConnection('gmail');
-  const dueStr = new Date(task.reminder_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-  const html = `
-<div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:20px;">
-  <div style="background:linear-gradient(135deg,#f97316,#ef4444);padding:20px;border-radius:10px 10px 0 0;color:white;">
-    <h2 style="margin:0;">⚡ 任务即将截止</h2>
-    <p style="margin:4px 0 0;opacity:.9;">还剩约 ${hoursLeft} 小时</p>
-  </div>
-  <div style="background:white;padding:22px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px;">
-    <h3 style="margin:0 0 10px;color:#0f172a;">${task.title}</h3>
-    <p style="color:#475569;margin:6px 0;">截止时间：${dueStr}</p>
-    <p style="color:#475569;margin:6px 0;">当前进度：${task.progress || 0}%</p>
-  </div>
-</div>`;
-  const subject = `⚡ 即将截止：${task.title}`;
-  const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
-  const raw = [
-    `To: ${email}`,
-    `Subject: ${utf8Subject}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/html; charset=utf-8',
-    '',
-    html,
-  ].join('\r\n');
-  const encoded = btoa(unescape(encodeURIComponent(raw)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw: encoded }),
-  });
+// 收集任务的所有接收者：创建者 + 被分配者
+async function collectRecipients(base44, task) {
+  const emails = new Set();
+  if (task.created_by) emails.add(task.created_by);
+
+  // assigned_to 可能存的是 user.id 或 email
+  if (Array.isArray(task.assigned_to) && task.assigned_to.length > 0) {
+    for (const idOrEmail of task.assigned_to) {
+      if (!idOrEmail) continue;
+      if (typeof idOrEmail === 'string' && idOrEmail.includes('@')) {
+        emails.add(idOrEmail);
+        continue;
+      }
+      try {
+        const users = await base44.asServiceRole.entities.User.filter({ id: idOrEmail });
+        if (users?.[0]?.email) emails.add(users[0].email);
+      } catch {}
+    }
+  }
+  return Array.from(emails);
 }
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    // This function is triggered by a scheduled automation (admin) - verify admin role
     const user = await base44.auth.me();
     if (user?.role !== 'admin') {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
     const now = Date.now();
-    // Scan tasks whose deadline is within the next 24 hours and not yet alerted / completed
     const inWindow = new Date(now + 24 * 3600 * 1000).toISOString();
     const nowIso = new Date(now).toISOString();
 
@@ -127,56 +110,111 @@ Deno.serve(async (req) => {
       reminder_sent: false,
     });
 
-    let processed = 0;
+    let processedDue = 0;
+    let processedAdvance = 0;
     const errors = [];
 
     for (const task of tasks) {
       if (!task.reminder_time) continue;
-      if (task.reminder_time > inWindow) continue;
-      if (task.reminder_time < nowIso) continue; // already overdue - skip (manual only)
       if (task.deleted_at) continue;
 
-      // Load creator's settings
-      const creators = await base44.asServiceRole.entities.User.filter({ email: task.created_by });
-      const creator = creators?.[0];
-      if (!creator) continue;
+      const reminderMs = new Date(task.reminder_time).getTime();
+      if (Number.isNaN(reminderMs)) continue;
 
-      const settings = creator.task_alert_settings || {};
-      if (!settings.auto_alert_enabled) continue;
+      // —— 情况 A：到点提醒（任务的 reminder_time 现在 ≤ 当前时间，且未超过 1 小时前）
+      // 5 分钟扫描一次，这里给 65 分钟容错窗口防止漏推
+      const isDueNow = reminderMs <= now && now - reminderMs <= 65 * 60 * 1000;
 
-      const hoursBefore = settings.alert_hours_before ?? 2;
-      const triggerAt = new Date(task.reminder_time).getTime() - hoursBefore * 3600 * 1000;
-      if (now < triggerAt) continue; // not yet within alert window
+      // —— 情况 B：截止预警（在未来 24 小时窗口内，按用户设置的提前小时数预警）
+      const isInAdvanceWindow = task.reminder_time > nowIso && task.reminder_time <= inWindow;
 
-      const hoursLeft = Math.max(1, Math.round((new Date(task.reminder_time).getTime() - now) / 3600000));
-      // 默认通道：企业微信 + Web Push（页面关闭也能收到的浏览器系统通知）
-      const channels = settings.alert_channels?.length ? settings.alert_channels : ['wework', 'web_push'];
+      if (!isDueNow && !isInAdvanceWindow) continue;
+
+      // 收集所有接收者：创建者 + assigned_to
+      const recipients = await collectRecipients(base44, task);
+      if (recipients.length === 0) continue;
 
       let anyOk = false;
-      for (const ch of channels) {
-        try {
-          if (ch === 'wework' && creator.wework_webhook_url) {
-            await sendWework(creator.wework_webhook_url, buildWeworkMarkdown(task, hoursLeft));
-            anyOk = true;
-          } else if (ch === 'email' && creator.email) {
-            await sendEmail(base44, creator.email, task, hoursLeft);
-            anyOk = true;
-          } else if (ch === 'web_push' && creator.email) {
-            await sendWebPushTo(base44, creator.email, task, hoursLeft);
-            anyOk = true;
+
+      for (const email of recipients) {
+        const users = await base44.asServiceRole.entities.User.filter({ email });
+        const u = users?.[0];
+        if (!u) continue;
+
+        const settings = u.task_alert_settings || {};
+        // 默认开启 web_push，让用户开了"后台推送"就能直接收到
+        const channels = settings.alert_channels?.length
+          ? settings.alert_channels
+          : ['web_push'];
+
+        // 到点提醒：直接推
+        if (isDueNow) {
+          for (const ch of channels) {
+            try {
+              if (ch === 'web_push') {
+                await sendWebPushTo(base44, email, task, {
+                  title: `🔔 ${task.title}`,
+                  body: task.description
+                    ? String(task.description).slice(0, 120)
+                    : '提醒时间到了',
+                  kind: 'task_due',
+                  urgent: task.priority === 'urgent' || task.priority === 'high',
+                });
+                anyOk = true;
+              } else if (ch === 'wework' && u.wework_webhook_url) {
+                const md = `## 🔔 任务提醒\n**${task.title}**\n> ${new Date(reminderMs).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
+                await sendWework(u.wework_webhook_url, md);
+                anyOk = true;
+              }
+            } catch (e) {
+              errors.push({ task_id: task.id, email, channel: ch, error: e.message });
+            }
           }
-        } catch (e) {
-          errors.push({ task_id: task.id, channel: ch, error: e.message });
+          if (anyOk) processedDue++;
+          continue;
+        }
+
+        // 截止预警：只有用户显式开启了 auto_alert_enabled 才推（保留原逻辑）
+        if (isInAdvanceWindow && settings.auto_alert_enabled) {
+          const hoursBefore = settings.alert_hours_before ?? 2;
+          const triggerAt = reminderMs - hoursBefore * 3600 * 1000;
+          if (now < triggerAt) continue;
+
+          const hoursLeft = Math.max(1, Math.round((reminderMs - now) / 3600000));
+          for (const ch of channels) {
+            try {
+              if (ch === 'wework' && u.wework_webhook_url) {
+                await sendWework(u.wework_webhook_url, buildWeworkMarkdown(task, hoursLeft));
+                anyOk = true;
+              } else if (ch === 'web_push') {
+                await sendWebPushTo(base44, email, task, {
+                  title: `⚡ 即将截止：${task.title}`,
+                  body: `还剩约 ${hoursLeft} 小时 · 优先级 ${task.priority || 'medium'}`,
+                  kind: 'task_alert',
+                  urgent: hoursLeft <= 2,
+                });
+                anyOk = true;
+              }
+            } catch (e) {
+              errors.push({ task_id: task.id, email, channel: ch, error: e.message });
+            }
+          }
+          if (anyOk) processedAdvance++;
         }
       }
 
       if (anyOk) {
         await base44.asServiceRole.entities.Task.update(task.id, { reminder_sent: true });
-        processed++;
       }
     }
 
-    return Response.json({ success: true, processed, scanned: tasks.length, errors });
+    return Response.json({
+      success: true,
+      scanned: tasks.length,
+      due_now_sent: processedDue,
+      advance_sent: processedAdvance,
+      errors,
+    });
   } catch (error) {
     console.error('scanTaskAlerts error:', error);
     return Response.json({ error: error.message || 'Failed' }, { status: 500 });

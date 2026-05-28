@@ -1,0 +1,49 @@
+{
+  "name": "Feedback",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "string",
+      "description": "\u53cd\u9988\u5185\u5bb9/\u95ee\u9898\u63cf\u8ff0"
+    },
+    "contact_info": {
+      "type": "string",
+      "description": "\u8054\u7cfb\u65b9\u5f0f\uff08\u90ae\u7bb1/\u7535\u8bdd\uff09"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "bug",
+        "feature",
+        "other"
+      ],
+      "default": "other",
+      "description": "\u53cd\u9988\u7c7b\u578b"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "resolved"
+      ],
+      "default": "pending",
+      "description": "\u5904\u7406\u72b6\u6001"
+    },
+    "admin_reply": {
+      "type": "string",
+      "description": "\u7ba1\u7406\u5458\u56de\u590d"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "\u622a\u56fe/\u56fe\u7247\u9644\u4ef6URL"
+    }
+  },
+  "required": [
+    "content",
+    "contact_info"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "TaskCompletion",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "The ID of the task"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "overdue",
+        "pending",
+        "cancelled"
+      ],
+      "default": "completed",
+      "description": "Status at the time of completion"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the task was completed"
+    },
+    "note": {
+      "type": "string",
+      "description": "Optional note for this completion"
+    }
+  },
+  "required": [
+    "task_id",
+    "status"
+  ]
+}

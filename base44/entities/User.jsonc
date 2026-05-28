@@ -68,5 +68,13 @@
       "format": "date-time",
       "description": "\u6570\u636e\u5f7b\u5e95\u6e05\u9664\u7684\u9884\u5b9a\u65f6\u95f4\uff08\u6ce8\u9500\u540e 30 \u5929\uff09"
     }
-  }
+  },
+  "required": [
+    "assistant_name",
+    "avatar_url",
+    "ai_credits",
+    "theme_preferences",
+    "deletion_requested_at",
+    "deletion_purge_at"
+  ]
 }

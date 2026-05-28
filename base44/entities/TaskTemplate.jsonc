@@ -1,0 +1,50 @@
+{
+  "name": "TaskTemplate",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "\u6a21\u677f\u540d\u79f0"
+    },
+    "description": {
+      "type": "string",
+      "description": "\u6a21\u677f\u63cf\u8ff0"
+    },
+    "template_data": {
+      "type": "object",
+      "description": "\u7ea6\u5b9a\u7684\u6570\u636e\u7ed3\u6784(JSON)",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "subtasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "name",
+    "template_data"
+  ]
+}

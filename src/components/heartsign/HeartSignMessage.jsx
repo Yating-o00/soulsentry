@@ -229,30 +229,34 @@ export default function HeartSignMessage({ note, onDeleted }) {
           </div>
         )}
 
-        {/* AI 知识卡片 - Notion 风内联块 */}
+        {/* AI 知识卡片 - 与用户气泡区隔的紫色 AI 风格 */}
         {note.ai_status === 'completed' && ai.summary && (
           <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-            className={`mt-2 ${scheme.bubble} border rounded-2xl p-4 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)] hover:shadow-[0_2px_4px_rgba(15,15,15,0.05),0_4px_12px_rgba(15,15,15,0.04)] transition-all`}>
+            className="relative mt-2 rounded-2xl p-4 border border-violet-200/70 bg-gradient-to-br from-violet-50/80 via-indigo-50/50 to-white shadow-[0_1px_2px_rgba(99,102,241,0.06),0_2px_10px_rgba(99,102,241,0.05)] hover:shadow-[0_2px_4px_rgba(99,102,241,0.08),0_6px_18px_rgba(99,102,241,0.08)] transition-all overflow-hidden">
+            {/* 左侧紫色高亮条，强化"AI 生成"的视觉信号 */}
+            <span className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-violet-400 to-indigo-500" aria-hidden />
+
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-5 h-5 rounded-md bg-slate-100 flex items-center justify-center">
-                <Sparkles className="w-3 h-3 text-slate-600" />
+              <div className="w-5 h-5 rounded-md bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center shadow-sm shadow-violet-500/30">
+                <Sparkles className="w-3 h-3 text-white" />
               </div>
-              <span className="text-[11.5px] font-medium text-slate-500 tracking-wide">
+              <span className="text-[11.5px] font-semibold text-violet-700 tracking-wide">
                 {isReport ? '长文摘要' : note.source_type === 'external_feed' ? '外部信息已解析' : 'AI 智能处理'}
               </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-600 font-medium">AI</span>
               {ai.category && (
-                <span className="ml-auto text-[10.5px] px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md border border-slate-200/70">{ai.category}</span>
+                <span className="ml-auto text-[10.5px] px-2 py-0.5 bg-white/80 text-violet-700 rounded-md border border-violet-200/70">{ai.category}</span>
               )}
             </div>
 
             <p className="text-[13.5px] text-slate-800 leading-[1.7] mb-3">{ai.summary}</p>
 
             {ai.key_points?.length > 0 && (
-              <div className="mb-3 pl-3 border-l-2 border-slate-200">
+              <div className="mb-3 pl-3 border-l-2 border-violet-300/60">
                 <ul className="space-y-1.5">
                   {ai.key_points.slice(0, isReport ? 6 : 4).map((p, i) => (
-                    <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex gap-2">
-                      <span className="text-slate-400 mt-0.5">·</span>
+                    <li key={i} className="text-[12.5px] text-slate-700 leading-relaxed flex gap-2">
+                      <span className="text-violet-400 mt-0.5">·</span>
                       <span className="flex-1">{p}</span>
                     </li>
                   ))}
@@ -261,9 +265,9 @@ export default function HeartSignMessage({ note, onDeleted }) {
             )}
 
             {note.tags?.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-slate-100">
+              <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-violet-100">
                 {note.tags.slice(0, 6).map((t, i) => (
-                  <span key={i} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-slate-50 text-slate-600 text-[10.5px] rounded-md border border-slate-200/60">
+                  <span key={i} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white/80 text-violet-700 text-[10.5px] rounded-md border border-violet-200/60">
                     <Tag className="w-2.5 h-2.5" />{t}
                   </span>
                 ))}
@@ -271,8 +275,8 @@ export default function HeartSignMessage({ note, onDeleted }) {
             )}
 
             {ai.related_topics?.length > 0 && (
-              <div className="mt-3 text-[11.5px] text-slate-500 bg-slate-50/70 border border-slate-200/60 rounded-lg px-3 py-2 leading-relaxed">
-                <span className="font-medium text-slate-700">拓展视野 · </span>
+              <div className="mt-3 text-[11.5px] text-violet-700 bg-white/70 border border-violet-200/60 rounded-lg px-3 py-2 leading-relaxed">
+                <span className="font-semibold">拓展视野 · </span>
                 {ai.related_topics.slice(0, 3).join(' · ')}
               </div>
             )}

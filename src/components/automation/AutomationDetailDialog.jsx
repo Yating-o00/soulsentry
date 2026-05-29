@@ -524,17 +524,21 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                 </div>
               )}
 
-              {/* 邮件草稿：提供发送按钮 */}
-              {execution.automation_type === "email_draft" && emailDraft && !emailDraft.sent_at && (
-                <Button
-                  className="w-full mt-3 bg-orange-500 hover:bg-orange-600"
-                  onClick={handleSendEmail}
-                  disabled={sending || !emailDraft.to?.trim()}
-                >
-                  {sending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-                  {emailDraft.to?.trim() ? `发送给 ${emailDraft.to}` : "请先填写收件人"}
-                </Button>
-              )}
+              {/* 邮件草稿：提供发送按钮（emailDraft 未初始化时回退用 result.data，避免按钮消失） */}
+              {execution.automation_type === "email_draft" && (() => {
+                const draft = emailDraft || result?.data;
+                if (!draft || draft.sent_at) return null;
+                return (
+                  <Button
+                    className="w-full mt-3 bg-orange-500 hover:bg-orange-600"
+                    onClick={handleSendEmail}
+                    disabled={sending || !draft.to?.trim()}
+                  >
+                    {sending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
+                    {draft.to?.trim() ? `发送给 ${draft.to}` : "请先填写收件人"}
+                  </Button>
+                );
+              })()}
               {execution.automation_type === "email_draft" && result.data?.sent_at && (
                 <div className="mt-3 flex items-center gap-2 p-2.5 rounded-md bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
                   <Mail className="w-3.5 h-3.5" />邮件已于 {new Date(result.data.sent_at).toLocaleString('zh-CN')} 发送

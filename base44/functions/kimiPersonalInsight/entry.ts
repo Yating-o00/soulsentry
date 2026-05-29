@@ -72,26 +72,36 @@ Deno.serve(async (req) => {
       required: ['persona', 'insights', 'suggestions'],
     };
 
-    const resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: 'kimi-k2-turbo-preview',
-        temperature: 0.5,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: sysPrompt + `\n\n严格按以下 schema 返回 JSON：\n${JSON.stringify(schema)}` },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
+    // 模型 fallback 列表：kimi-k2-turbo-preview 已下线
+    const candidateModels = ['kimi-k2-0905-preview', 'kimi-latest', 'moonshot-v1-auto'];
+    let resp = null;
+    let lastErr = '';
+    let lastStatus = 0;
+    for (const model of candidateModels) {
+      resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.5,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: sysPrompt + `\n\n严格按以下 schema 返回 JSON：\n${JSON.stringify(schema)}` },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      });
+      if (resp.ok) break;
+      lastErr = await resp.text();
+      lastStatus = resp.status;
+      if (resp.status !== 404 && resp.status !== 403) break;
+    }
 
-    if (!resp.ok) {
-      const t = await resp.text();
-      return Response.json({ error: `Kimi ${resp.status}: ${t.slice(0, 200)}` }, { status: 502 });
+    if (!resp || !resp.ok) {
+      return Response.json({ error: `Kimi ${lastStatus}: ${lastErr.slice(0, 200)}` }, { status: 502 });
     }
     const data = await resp.json();
     const content = data.choices?.[0]?.message?.content || '{}';

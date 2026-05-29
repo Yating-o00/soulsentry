@@ -74,21 +74,32 @@ CRITICAL RULES:
 }`;
 
         try {
-            const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
-                body: JSON.stringify({
-                    model: "kimi-k2-turbo-preview",
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: input }
-                    ],
-                    temperature: 0.7,
-                    response_format: { type: "json_object" }
-                })
-            });
+            // 模型 fallback 列表：kimi-k2-turbo-preview 已下线
+            const candidateModels = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+            let res = null;
+            let lastErr = '';
+            let lastStatus = 0;
+            for (const model of candidateModels) {
+                res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
+                    body: JSON.stringify({
+                        model,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: input }
+                        ],
+                        temperature: 0.7,
+                        response_format: { type: "json_object" }
+                    })
+                });
+                if (res.ok) break;
+                lastErr = await res.text();
+                lastStatus = res.status;
+                if (res.status !== 404 && res.status !== 403) break;
+            }
 
-            if (!res.ok) throw new Error(`Kimi error: ${res.status}`);
+            if (!res || !res.ok) throw new Error(`Kimi error: ${lastStatus} ${lastErr.slice(0, 200)}`);
             const data = await res.json();
             const content = data.choices?.[0]?.message?.content || '';
             const plan = parseJSON(content);

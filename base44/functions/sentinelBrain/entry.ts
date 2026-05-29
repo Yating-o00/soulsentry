@@ -65,26 +65,36 @@ async function callKimi(prompt, apiKey) {
 请严格按以下 JSON Schema 返回，不输出任何多余文字：
 ${JSON.stringify(RESPONSE_SCHEMA)}`;
 
-  const response = await fetch(KIMI_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey.trim()}`
-    },
-    body: JSON.stringify({
-      model: "kimi-k2-turbo-preview",
-      messages: [
-        { role: "system", content: systemContent },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.3,
-      response_format: { type: "json_object" }
-    })
-  });
+  // 模型 fallback 列表：kimi-k2-turbo-preview 已下线
+  const candidateModels = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+  let response = null;
+  let lastErr = '';
+  let lastStatus = 0;
+  for (const model of candidateModels) {
+    response = await fetch(KIMI_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey.trim()}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemContent },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.3,
+        response_format: { type: "json_object" }
+      })
+    });
+    if (response.ok) break;
+    lastErr = await response.text();
+    lastStatus = response.status;
+    if (response.status !== 404 && response.status !== 403) break;
+  }
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Kimi API ${response.status}: ${errText}`);
+  if (!response || !response.ok) {
+    throw new Error(`Kimi API ${lastStatus}: ${lastErr}`);
   }
 
   const data = await response.json();

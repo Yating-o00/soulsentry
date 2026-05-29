@@ -121,9 +121,10 @@ Deno.serve(async (req) => {
       const reminderMs = new Date(task.reminder_time).getTime();
       if (Number.isNaN(reminderMs)) continue;
 
-      // —— 情况 A：到点提醒（任务的 reminder_time 现在 ≤ 当前时间，且未超过 1 小时前）
-      // 5 分钟扫描一次，这里给 65 分钟容错窗口防止漏推
-      const isDueNow = reminderMs <= now && now - reminderMs <= 65 * 60 * 1000;
+      // —— 情况 A：到点提醒（任务的 reminder_time 现在 ≤ 当前时间，且未超过 10 分钟前）
+      // 5 分钟扫描一次，10 分钟窗口足够覆盖一次延迟，且避免几小时前的任务被反复补推
+      // 超过窗口仍未发出的任务由"24h+ 高优先级主动 nag"逻辑兜底，不在这里堆积
+      const isDueNow = reminderMs <= now && now - reminderMs <= 10 * 60 * 1000;
 
       // —— 情况 B：截止预警（在未来 24 小时窗口内，按用户设置的提前小时数预警）
       const isInAdvanceWindow = task.reminder_time > nowIso && task.reminder_time <= inWindow;

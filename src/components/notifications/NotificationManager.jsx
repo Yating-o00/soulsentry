@@ -426,9 +426,13 @@ export default function NotificationManager() {
              }
           }
       } else {
-          // Single day logic (Original) — 用持久化 key 防止跨页面重复提醒
+          // Single day logic — 用持久化 key 防止跨页面重复提醒
+          // 关键修复：只对"刚到点 10 分钟内"的任务弹通知，避免打开 App 时把所有
+          // 逾期未推送的任务一次性砸出来（用户报告的 6~7 条 11:21 通知在 19:30 集中弹出）
+          const minutesSinceDue = differenceInMinutes(now, reminderTime);
+          const isFreshlyDue = minutesSinceDue >= 0 && minutesSinceDue <= 10;
           const singleKey = `${task.id}-single-${format(reminderTime, 'yyyy-MM-dd-HH-mm')}`;
-          if (isPast(reminderTime) && !task.reminder_sent && !checkedTasks.current.has(singleKey) && !isNotified(singleKey)) {
+          if (isFreshlyDue && !task.reminder_sent && !checkedTasks.current.has(singleKey) && !isNotified(singleKey)) {
             sendNotification(task, false);
             checkedTasks.current.add(singleKey);
             markNotified(singleKey);
@@ -437,6 +441,10 @@ export default function NotificationManager() {
             if (task.persistent_reminder) {
               setupPersistentReminder(task);
             }
+          } else if (isPast(reminderTime) && !task.reminder_sent && minutesSinceDue > 10) {
+            // 已严重逾期：静默标记 reminder_sent，避免下次再触发
+            // 真正的"高优先级长时逾期"由下方 proactive-nag 逻辑兜底（仅 high/urgent 且 24h+）
+            markNotified(singleKey);
           }
       }
 

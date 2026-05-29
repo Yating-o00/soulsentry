@@ -251,25 +251,17 @@ export default function HeartSignMessage({ note, onDeleted }) {
 
             <p className="text-[13.5px] text-slate-800 leading-[1.7] mb-3">{ai.summary}</p>
 
-            {(ai.key_points?.length > 0 || ai.related_topics?.length > 0) && (
-              <div className="mt-3 bg-white/70 border border-[#384877]/15 rounded-lg px-3 py-2.5 leading-relaxed">
-                <div className="text-[11.5px] font-medium text-[#384877]/80 mb-2">拓展视野</div>
-                {ai.key_points?.length > 0 && (
-                  <ul className="space-y-2">
-                    {ai.key_points.slice(0, isReport ? 6 : 4).map((p, i) => (
-                      <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex flex-wrap gap-2 items-center">
-                        <span className="text-[#384877]/40">·</span>
-                        <span className="flex-1 min-w-0">{p}</span>
-                        <KeywordExplorer keyword={p} context={ai.summary || plain} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {ai.related_topics?.length > 0 && (
-                  <div className={`text-[11.5px] text-slate-500 ${ai.key_points?.length > 0 ? 'mt-2 pt-2 border-t border-[#384877]/10' : ''}`}>
-                    {ai.related_topics.slice(0, 3).join(' · ')}
-                  </div>
-                )}
+            {ai.key_points?.length > 0 && (
+              <div className="mb-3 pl-3 border-l-2 border-[#384877]/20">
+                <ul className="space-y-2">
+                  {ai.key_points.slice(0, isReport ? 6 : 4).map((p, i) => (
+                    <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex flex-wrap gap-2 items-center">
+                      <span className="text-[#384877]/40">·</span>
+                      <span className="flex-1 min-w-0">{p}</span>
+                      <KeywordExplorer keyword={p} context={ai.summary || plain} />
+                    </li>
+                  ))}
+                </ul>
                 <div className="mt-2 text-[10.5px] text-slate-400">点击关键词右侧标签 · 拓展外部相关内容与链接</div>
               </div>
             )}
@@ -281,6 +273,13 @@ export default function HeartSignMessage({ note, onDeleted }) {
                     <Tag className="w-2.5 h-2.5" />{t}
                   </span>
                 ))}
+              </div>
+            )}
+
+            {ai.related_topics?.length > 0 && (
+              <div className="mt-3 text-[11.5px] text-slate-600 bg-white/70 border border-[#384877]/12 rounded-lg px-3 py-2 leading-relaxed">
+                <span className="font-medium text-[#384877]/80">拓展视野 · </span>
+                {ai.related_topics.slice(0, 3).join(' · ')}
               </div>
             )}
           </motion.div>

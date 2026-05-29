@@ -92,9 +92,34 @@ function buildMime({ to, from, subject, body, isHtml, cc, bcc, attachments = [] 
   }
 
   if (!hasAttachments) {
-    // No attachments: merge body part's headers directly into top-level headers
-    // (otherwise mail clients treat Content-Type/Encoding lines as body text)
-    return [baseHeaders.join('\r\n'), bodyPart].join('\r\n');
+    // No attachments: promote body-part headers to top-level, then blank line, then base64 body.
+    // For simple text emails this means Content-Type/Encoding live in the message headers directly.
+    if (isHtml) {
+      // multipart/alternative: top-level Content-Type points to the alternative boundary
+      return [
+        ...baseHeaders,
+        `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+        '',
+        `--${altBoundary}`,
+        'Content-Type: text/plain; charset="UTF-8"',
+        'Content-Transfer-Encoding: base64',
+        '',
+        encodeBody((body || '').replace(/<[^>]+>/g, '')),
+        `--${altBoundary}`,
+        'Content-Type: text/html; charset="UTF-8"',
+        'Content-Transfer-Encoding: base64',
+        '',
+        encodeBody(body),
+        `--${altBoundary}--`,
+      ].join('\r\n');
+    }
+    return [
+      ...baseHeaders,
+      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      encodeBody(body),
+    ].join('\r\n');
   }
 
   // Wrap body + attachments in multipart/mixed

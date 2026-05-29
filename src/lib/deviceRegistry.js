@@ -298,9 +298,16 @@ export function startDeviceHeartbeat() {
 
   timer = setInterval(tick, HEARTBEAT_INTERVAL);
 
+  // visibilitychange 节流：用户在标签页之间频繁切换时不要每次都打一次心跳，
+  // 避免和其它后台轮询叠加触发 429。最多 5 分钟一次。
+  let lastVisibleTick = 0;
   const onVisibility = () => {
     if (document.visibilityState === "visible") {
-      tick();
+      const now = Date.now();
+      if (now - lastVisibleTick > 5 * 60 * 1000) {
+        lastVisibleTick = now;
+        tick();
+      }
     } else {
       markOffline();
     }

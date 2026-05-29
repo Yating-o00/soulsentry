@@ -13,9 +13,9 @@ import { MapPin, AlertTriangle, Bell } from 'lucide-react';
  * 与已有 GeofenceTracker（SavedLocation 维度）并行工作，互不干扰。
  */
 const MIN_MOVE_M = 80;                       // 移动 80m 以内视为静止，不上报
-const DEFAULT_INTERVAL_MS = 2 * 60 * 1000;    // 2 分钟轮询一次（更贴近"路过即提醒"，浏览器在标签后台时仍可运行）
-const STARTUP_DELAY_MS = 20 * 1000;           // 启动 20s 后再发首次
-const RATE_LIMIT_COOLDOWN_MS = 10 * 60 * 1000; // 命中 429 后暂停 10 分钟
+const DEFAULT_INTERVAL_MS = 10 * 60 * 1000;   // 10 分钟轮询一次（原 2 分钟太频繁，叠加其他后台任务会撞 base44 429）
+const STARTUP_DELAY_MS = 60 * 1000;           // 启动 60s 后再发首次，给页面初始化让路
+const RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000; // 命中 429 后暂停 30 分钟
 
 function distance(a, b) {
   if (!a || !b) return Infinity;

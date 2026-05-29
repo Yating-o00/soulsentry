@@ -252,10 +252,12 @@ export default function ConnectedDevicesPanel({
     onSelectDevice?.(device);
   };
 
+  // 不再每 30 秒轮询设备列表：
+  // listMyDevices 内部会做 Device.filter + dedupe（含批量 delete），叠加 DeviceHeartbeat 的
+  // 自动心跳后，会持续把 base44 平台 quota 打到 429，连带 executeAutomation 等关键调用 500。
+  // 用户需要最新状态时点右上角的"刷新"按钮即可。
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 30 * 1000);
-    return () => clearInterval(t);
   }, []);
 
   const handleConnectCurrent = async () => {

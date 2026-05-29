@@ -8,7 +8,10 @@ import { MapPin } from 'lucide-react';
  * Mount once in Layout.jsx to enable geofence-based reminders.
  */
 export default function GeofenceTracker() {
-  const { permission, error } = useGeolocation({ enabled: true, intervalMs: 120000 });
+  // 临时关闭主动轮询：和 SentinelGeoWatcher / DeviceHeartbeat 叠加会持续把 base44 quota 打到 429，
+  // 导致 executeAutomation 等关键调用返回 500。用户实际地理围栏功能仍可通过 SentinelGeoWatcher 走，
+  // 这里只保留事件监听用于本地 toast 展示。
+  const { permission, error } = useGeolocation({ enabled: false, intervalMs: 600000 });
 
   // Listen to geofence trigger events and show toast
   useEffect(() => {

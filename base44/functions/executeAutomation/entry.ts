@@ -1782,31 +1782,43 @@ const EXECUTORS = {
   ledger_organize: executeLedger,
 };
 
+// 关键基础设施：把 base44 entity / auth 调用统一包一层 429 退避重试。
+// 平台层偶发 Rate Limit 时直接抛 429 会让 executeAutomation 整个 500，
+// 让用户看到"执行失败 500"。这里做最多 4 次指数退避（1s/2s/4s），
+// 大多数偶发限流都能在 7s 内自愈，不会显著影响用户体验。
+async function withRetry429(fn, label = 'op') {
+  const MAX = 4;
+  for (let attempt = 0; attempt < MAX; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const status = e?.response?.status || e?.status;
+      const msg = e?.message || '';
+      const isRateLimit = status === 429 || /rate limit/i.test(msg);
+      if (isRateLimit && attempt < MAX - 1) {
+        const wait = 1000 * Math.pow(2, attempt);
+        console.warn(`[executeAutomation] ${label} hit 429, retry in ${wait}ms (attempt ${attempt + 1}/${MAX})`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await withRetry429(() => base44.auth.me(), 'auth.me');
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { execution_id, phase = "plan" } = await req.json();
     if (!execution_id) return Response.json({ error: 'execution_id required' }, { status: 400 });
 
-    // 关键修复：base44 平台偶发 429 rate limit。这里在拿 TaskExecution 时做一次退避重试，
-    // 避免一打开就因为前端多个 widget 并发把 quota 撞爆，导致执行直接 500 出错。
-    let exec = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        exec = await base44.entities.TaskExecution.get(execution_id);
-        break;
-      } catch (e) {
-        const status = e?.response?.status || e?.status;
-        if (status === 429 && attempt < 2) {
-          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-          continue;
-        }
-        throw e;
-      }
-    }
+    const exec = await withRetry429(
+      () => base44.entities.TaskExecution.get(execution_id),
+      'TaskExecution.get'
+    );
     if (!exec) return Response.json({ error: 'Execution not found' }, { status: 404 });
 
     // 读取用户上传的附件（plan / execute 都用得到）
@@ -1838,13 +1850,13 @@ Deno.serve(async (req) => {
       }));
 
       const nextStatus = planRes.requires_approval ? "waiting_confirm" : "pending";
-      const updated = await base44.entities.TaskExecution.update(execution_id, {
+      const updated = await withRetry429(() => base44.entities.TaskExecution.update(execution_id, {
         automation_type: planRes.automation_type,
         automation_plan: planRes.plan,
         requires_approval: planRes.requires_approval,
         execution_steps: steps,
         execution_status: nextStatus,
-      });
+      }), 'TaskExecution.update[plan]');
 
       // 成功后扣 plan 点数
       await chargeCredits(base44, user.id, planCost, 'automation_plan',

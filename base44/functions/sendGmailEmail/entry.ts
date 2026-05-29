@@ -92,7 +92,9 @@ function buildMime({ to, from, subject, body, isHtml, cc, bcc, attachments = [] 
   }
 
   if (!hasAttachments) {
-    return [baseHeaders.join('\r\n'), '', bodyPart].join('\r\n');
+    // No attachments: merge body part's headers directly into top-level headers
+    // (otherwise mail clients treat Content-Type/Encoding lines as body text)
+    return [baseHeaders.join('\r\n'), bodyPart].join('\r\n');
   }
 
   // Wrap body + attachments in multipart/mixed

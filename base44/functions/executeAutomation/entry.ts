@@ -20,23 +20,42 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 async function callKimi(base44, prompt, response_json_schema, system_prompt, file_urls) {
   let res;
-  try {
-    res = await base44.functions.invoke('invokeKimi', {
-      prompt,
-      response_json_schema,
-      system_prompt,
-      temperature: 0.4,
-      file_urls,
-    });
-  } catch (e) {
-    // axios 抛出时把后端 response.data 里真实的错误信息提取出来，
-    // 否则前端只会看到 "Request failed with status code 400" 这种无用串
-    const apiErr = e?.response?.data?.error || e?.response?.data?.message;
-    const status = e?.response?.status;
+  // 关键：base44 平台偶发 429。给 invokeKimi 调用做指数退避重试，
+  // 最多 4 次（1s/2s/4s），避免一次偶发限流就让整个 plan 阶段 500
+  const MAX = 4;
+  let lastErr;
+  for (let attempt = 0; attempt < MAX; attempt++) {
+    try {
+      res = await base44.functions.invoke('invokeKimi', {
+        prompt,
+        response_json_schema,
+        system_prompt,
+        temperature: 0.4,
+        file_urls,
+      });
+      lastErr = null;
+      break;
+    } catch (e) {
+      const status = e?.response?.status;
+      const apiErr = e?.response?.data?.error || e?.response?.data?.message || '';
+      const isRateLimit = status === 429 || /rate limit/i.test(apiErr) || /rate limit/i.test(e?.message || '');
+      if (isRateLimit && attempt < MAX - 1) {
+        const wait = 1000 * Math.pow(2, attempt);
+        console.warn(`[callKimi] hit 429, retry in ${wait}ms (${attempt + 1}/${MAX})`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      lastErr = e;
+      break;
+    }
+  }
+  if (lastErr) {
+    const apiErr = lastErr?.response?.data?.error || lastErr?.response?.data?.message;
+    const status = lastErr?.response?.status;
     if (apiErr) {
       throw new Error(`AI 调用失败（HTTP ${status}）：${apiErr}`);
     }
-    throw e;
+    throw lastErr;
   }
   const data = res?.data || {};
   // invokeKimi 即使 HTTP 200 也可能在 body 里携带 error 字段（如 DOC_EXTRACT_FAILED）
@@ -1842,7 +1861,21 @@ Deno.serve(async (req) => {
         throw e;
       }
 
-      const planRes = await generatePlan(base44, exec, attachmentCtx);
+      // 用 try/catch 包住 plan 生成 —— 失败时把 TaskExecution 状态写为 failed 并返回真实错误，
+      // 而不是裸 500，避免前端只看到 "Request failed with status code 500"
+      let planRes;
+      try {
+        planRes = await generatePlan(base44, exec, attachmentCtx);
+      } catch (e) {
+        const realMsg = e?.response?.data?.error || e?.message || '方案规划失败';
+        try {
+          await withRetry429(() => base44.entities.TaskExecution.update(execution_id, {
+            execution_status: "failed",
+            error_message: realMsg,
+          }), 'TaskExecution.update[plan-failed]');
+        } catch (_) { /* ignore */ }
+        return Response.json({ error: realMsg }, { status: 500 });
+      }
       const steps = (planRes.plan.steps || []).map(s => ({
         step_name: s.name,
         status: "pending",

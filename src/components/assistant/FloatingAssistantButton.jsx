@@ -86,31 +86,6 @@ export default function FloatingAssistantButton() {
         transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 20 }}
       >
         <div className="relative">
-          {/* 轻量提示气泡 */}
-          <AnimatePresence>
-            {shouldPrompt && !isOpen && (
-              <motion.div
-                initial={{ opacity: 0, x: 10, scale: 0.9 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 10, scale: 0.9 }}
-                className="absolute bottom-0 right-16 w-56"
-              >
-                <button
-                  onClick={() => setIsOpen(true)}
-                  className="bg-white rounded-xl shadow-lg p-3 border border-[#dce4ed] hover:border-[#c8d1e0] transition-all text-left w-full group"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Sparkles className="w-3.5 h-3.5 text-[#5a647d]" />
-                    <span className="text-xs font-semibold text-[#222222]">{assistantName}提醒</span>
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                    今天有 <strong className="text-[#5a647d]">{pendingCount}</strong> 个约定等你完成 💪
-                  </p>
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* 小助按钮 - 缩小版 */}
           <motion.button
             onClick={() => setIsOpen(!isOpen)}

@@ -1,10 +1,13 @@
 import React from "react";
-import { Mail, User, Tag, AlertTriangle, Paperclip, X, Plus } from "lucide-react";
+import { Mail, User, Tag, AlertTriangle, Paperclip, X, Plus, Upload, Loader2 } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import { toast } from "sonner";
 
 // 邮件类结果视图：收件人/抄送/主题/正文均可编辑；变更通过 onChange 上抛
 // availableAttachments: 同任务下其它执行产物（PPT/PDF/调研报告等），用户可一键挂载
 export default function EmailResultView({ data, preview, editable = true, onChange, availableAttachments = [] }) {
   const [showAllCandidates, setShowAllCandidates] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
   if (!data && !preview) return null;
   const handle = (key) => (e) => {
     if (!onChange) return;
@@ -34,6 +37,35 @@ export default function EmailResultView({ data, preview, editable = true, onChan
   const addAllCandidates = () => {
     if (!onChange || candidates.length === 0) return;
     onChange({ ...(data || {}), attachments: [...attachments, ...candidates] });
+  };
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !onChange) return;
+    setUploading(true);
+    try {
+      const uploaded = [];
+      for (const file of files) {
+        const res = await base44.integrations.Core.UploadFile({ file });
+        if (res?.file_url) {
+          uploaded.push({
+            file_name: file.name,
+            file_url: res.file_url,
+            mime_type: file.type || 'application/octet-stream',
+            source: '本地上传',
+          });
+        }
+      }
+      if (uploaded.length > 0) {
+        onChange({ ...(data || {}), attachments: [...attachments, ...uploaded] });
+        toast.success(`已添加 ${uploaded.length} 个附件`);
+      }
+    } catch (err) {
+      toast.error("上传失败：" + err.message);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   };
 
   return (
@@ -135,12 +167,26 @@ export default function EmailResultView({ data, preview, editable = true, onChan
         </div>
       )}
 
-      {/* 附件列表 */}
-      {attachments.length > 0 && (
+      {/* 附件列表 + 上传入口 */}
+      {(attachments.length > 0 || editable) && (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 mb-2 uppercase tracking-wide">
-            <Paperclip className="w-3 h-3" /> 附件 · 将随邮件一并发送（{attachments.length}）
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+              <Paperclip className="w-3 h-3" /> 附件 · 将随邮件一并发送（{attachments.length}）
+            </div>
+            {editable && (
+              <label className="cursor-pointer inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-[#384877]/40 text-[10.5px] font-semibold text-[#384877] hover:bg-[#384877]/5 transition">
+                {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                上传本地附件
+                <input type="file" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
+              </label>
+            )}
           </div>
+          {attachments.length === 0 && (
+            <div className="text-[11px] text-slate-400 text-center py-2">
+              暂无附件，可点击上方"上传本地附件"添加
+            </div>
+          )}
           <div className="space-y-1.5">
             {attachments.map((a, i) => (
               <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100">

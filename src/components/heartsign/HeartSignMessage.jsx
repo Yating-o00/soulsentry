@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import KeywordExplorer from "@/components/heartsign/KeywordExplorer";
 
 // Notion 风的柔和色板：根据 note.color 切换气泡 + AI 卡片的配色
 const COLOR_SCHEMES = {
@@ -252,14 +253,16 @@ export default function HeartSignMessage({ note, onDeleted }) {
 
             {ai.key_points?.length > 0 && (
               <div className="mb-3 pl-3 border-l-2 border-[#384877]/20">
-                <ul className="space-y-1.5">
+                <ul className="space-y-2">
                   {ai.key_points.slice(0, isReport ? 6 : 4).map((p, i) => (
-                    <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex gap-2">
-                      <span className="text-[#384877]/40 mt-0.5">·</span>
-                      <span className="flex-1">{p}</span>
+                    <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex flex-wrap gap-2 items-center">
+                      <span className="text-[#384877]/40">·</span>
+                      <span className="flex-1 min-w-0">{p}</span>
+                      <KeywordExplorer keyword={p} context={ai.summary || plain} />
                     </li>
                   ))}
                 </ul>
+                <div className="mt-2 text-[10.5px] text-slate-400">点击关键词右侧标签 · 拓展外部相关内容与链接</div>
               </div>
             )}
 

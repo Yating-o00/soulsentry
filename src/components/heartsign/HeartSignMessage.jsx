@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, ListTodo } from "lucide-react";
-import { format, isToday, isYesterday, isThisYear } from "date-fns";
+import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
@@ -57,16 +57,9 @@ export default function HeartSignMessage({ note, onDeleted }) {
   let time = '';
   let fullTime = '';
   if (isValidDate) {
+    // 统一使用浏览器本地时区显示完整时间，避免"今天/昨天"判断错位和时区混乱
     fullTime = format(createdAt, 'yyyy年M月d日 HH:mm:ss', { locale: zhCN });
-    if (isToday(createdAt)) {
-      time = format(createdAt, 'HH:mm');
-    } else if (isYesterday(createdAt)) {
-      time = `昨天 ${format(createdAt, 'HH:mm')}`;
-    } else if (isThisYear(createdAt)) {
-      time = format(createdAt, 'M月d日 HH:mm', { locale: zhCN });
-    } else {
-      time = format(createdAt, 'yyyy年M月d日 HH:mm', { locale: zhCN });
-    }
+    time = format(createdAt, 'yyyy年M月d日 HH:mm', { locale: zhCN });
   }
   const decodeEntities = (s) => String(s || '')
     .replace(/&lt;/g, '<')

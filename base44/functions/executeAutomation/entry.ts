@@ -1,67 +1,72 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-/**
- * 自动执行编排器 - 心栈 SoulSentry
- *
- * 工作流：
- *   1. 接收 execution_id，加载 TaskExecution 记录
- *   2. 根据 phase 执行不同动作:
- *      - "plan"    : 调用 Kimi 生成执行方案（automation_plan），状态 → waiting_confirm
- *      - "execute" : 用户已确认，调用对应工具执行，状态 → executing → completed/failed
- *
- * 支持 automation_type:
- *   - email_draft    : 生成邮件草稿（不发送，仅写入 automation_result.data，用户在UI确认后再发送）
- *   - web_research   : 调 Kimi 联网搜索摘要（实际靠 Kimi 知识 + 用户上传内容）
- *   - summary_note   : 生成总结心签
- *   - office_doc     : 生成 Word/Excel/PPT 结构化大纲（实际生成由外部微服务接入）
- *   - file_organize  : 生成文件整理计划（实际移动由桌面伴侣 App 接入）
- *   - calendar_event : 生成日历事件（写入 Task + 触发同步）
- */
+// 自动执行编排器:plan(规划方案)/ execute(执行)。Types: email_draft / web_research / summary_note / office_doc / ppt_doc / file_organize / calendar_event / ledger_organize
+
+// 纯文本 LLM 调用直连 Moonshot,绕开 base44 quota(避免 429 让 plan 500)
+async function callKimiDirect(prompt, response_json_schema, system_prompt) {
+  const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
+  if (!apiKey) throw new Error('KIMI_API_KEY 未配置');
+  const wantsJson = !!response_json_schema;
+  let systemContent = system_prompt || "你是一位专业、贴心的 AI 助手。";
+  if (wantsJson) systemContent += `\n\n请严格按以下 JSON Schema 返回结果，不要输出任何额外文字：\n${JSON.stringify(response_json_schema)}`;
+  const models = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+  let lastErrText = '', lastStatus = 0, response = null;
+  for (const m of models) {
+    const body = { model: m, messages: [{ role: "system", content: systemContent }, { role: "user", content: prompt }], temperature: 0.4 };
+    if (wantsJson) body.response_format = { type: "json_object" };
+    try {
+      response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
+        body: JSON.stringify(body),
+      });
+      if (response.ok) break;
+      lastErrText = await response.text();
+      lastStatus = response.status;
+      if (response.status !== 404 && response.status !== 403) break;
+    } catch (e) { lastErrText = e?.message || String(e); lastStatus = 0; }
+  }
+  if (!response || !response.ok) throw new Error(`Kimi API 调用失败 (${lastStatus}): ${String(lastErrText).slice(0, 300)}`);
+  const json = await response.json();
+  const content = json.choices?.[0]?.message?.content || "";
+  if (wantsJson) {
+    try { return JSON.parse(content); } catch {
+      const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (match) { try { return JSON.parse(match[1]); } catch {} }
+      return { _raw: content, _parse_error: true };
+    }
+  }
+  return { text: content };
+}
 
 async function callKimi(base44, prompt, response_json_schema, system_prompt, file_urls) {
-  let res;
-  // 关键：base44 平台偶发 429。给 invokeKimi 调用做指数退避重试，
-  // 最多 4 次（1s/2s/4s），避免一次偶发限流就让整个 plan 阶段 500
+  // 无附件:直连 Moonshot,绕开 base44 quota
+  if (!Array.isArray(file_urls) || file_urls.length === 0) {
+    return await callKimiDirect(prompt, response_json_schema, system_prompt);
+  }
+  // 有附件:走 invokeKimi(它有文件抽取/视觉),带 429 退避
   const MAX = 4;
-  let lastErr;
+  let res, lastErr;
   for (let attempt = 0; attempt < MAX; attempt++) {
     try {
-      res = await base44.functions.invoke('invokeKimi', {
-        prompt,
-        response_json_schema,
-        system_prompt,
-        temperature: 0.4,
-        file_urls,
-      });
-      lastErr = null;
-      break;
+      res = await base44.functions.invoke('invokeKimi', { prompt, response_json_schema, system_prompt, temperature: 0.4, file_urls });
+      lastErr = null; break;
     } catch (e) {
       const status = e?.response?.status;
       const apiErr = e?.response?.data?.error || e?.response?.data?.message || '';
       const isRateLimit = status === 429 || /rate limit/i.test(apiErr) || /rate limit/i.test(e?.message || '');
-      if (isRateLimit && attempt < MAX - 1) {
-        const wait = 1000 * Math.pow(2, attempt);
-        console.warn(`[callKimi] hit 429, retry in ${wait}ms (${attempt + 1}/${MAX})`);
-        await new Promise((r) => setTimeout(r, wait));
-        continue;
-      }
-      lastErr = e;
-      break;
+      if (isRateLimit && attempt < MAX - 1) { await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt))); continue; }
+      lastErr = e; break;
     }
   }
   if (lastErr) {
     const apiErr = lastErr?.response?.data?.error || lastErr?.response?.data?.message;
     const status = lastErr?.response?.status;
-    if (apiErr) {
-      throw new Error(`AI 调用失败（HTTP ${status}）：${apiErr}`);
-    }
+    if (apiErr) throw new Error(`AI 调用失败（HTTP ${status}）：${apiErr}`);
     throw lastErr;
   }
   const data = res?.data || {};
-  // invokeKimi 即使 HTTP 200 也可能在 body 里携带 error 字段（如 DOC_EXTRACT_FAILED）
-  if (data?.error && !data?._doc_extract_failed) {
-    throw new Error(`AI 调用失败：${data.error}${data.message ? ' — ' + data.message : ''}`);
-  }
+  if (data?.error && !data?._doc_extract_failed) throw new Error(`AI 调用失败：${data.error}${data.message ? ' — ' + data.message : ''}`);
   return data;
 }
 

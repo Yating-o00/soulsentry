@@ -89,9 +89,15 @@ export default function KeywordExplorer({ keyword, context = "", inline = false 
               )}
               {!loading && !error && result && (
                 <div className="space-y-2">
-                  {result.answer && (
-                    <p className="text-slate-700 whitespace-pre-wrap">{result.answer}</p>
-                  )}
+                  {(() => {
+                    // 去掉答案末尾的"参考来源/参考资料/References"段，避免与下方链接列表重复
+                    const cleaned = (result.answer || "")
+                      .replace(/\n*\s*(参考来源|参考资料|引用来源|来源|References?)[：:][\s\S]*$/i, "")
+                      .trim();
+                    return cleaned ? (
+                      <p className="text-slate-700 whitespace-pre-wrap">{cleaned}</p>
+                    ) : null;
+                  })()}
                   {result.references?.length > 0 && (
                     <ul className="space-y-1 pt-1 border-t border-[#384877]/10">
                       {result.references.slice(0, 6).map((ref, i) => (

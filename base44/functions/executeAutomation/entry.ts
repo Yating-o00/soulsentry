@@ -29,7 +29,7 @@ async function callKimi(base44, prompt, response_json_schema, system_prompt, fil
     if (!apiKey) throw new Error('KIMI_API_KEY 未配置');
     const wantsJson = !!response_json_schema;
     let sys = system_prompt || "你是一位专业、贴心的 AI 助手。";
-    if (wantsJson) sys += `\n\n⚠️ 你必须返回一个【符合下方 Schema 的 JSON 实例对象】,而不是返回 Schema 本身。直接输出可被 JSON.parse 的对象,例如 {"automation_type":"email_draft","plan":{...}},禁止输出 {"type":"object","properties":{...}} 这种 schema 元描述。\n\nSchema 参考:\n${JSON.stringify(response_json_schema)}`;
+    if (wantsJson) sys += `\n\n⚠️ 你必须返回一个【符合下方 Schema 的 JSON 实例对象】，而不是返回 Schema 本身。\n- 正确：直接输出 schema 中 properties 描述的真实字段及其真实取值，例如 schema 中要求 {subject,body} 就输出 {"subject":"...","body":"..."}。\n- 禁止：① 不要输出 {"type":"object","properties":{...}} 这种 schema 元描述；② 不要画蛇添足把所有字段塞到额外的 wrapper 对象里（如 {"plan":{...}}、{"data":{...}}），除非 schema 明确要求这种嵌套。\n\nSchema 参考：\n${JSON.stringify(response_json_schema)}`;
     const models = ["kimi-latest", "kimi-k2-0905-preview", "moonshot-v1-auto"];
     let resp = null, lastErr = '', lastStatus = 0;
     for (const m of models) {
@@ -399,13 +399,15 @@ async function executeEmailDraft(base44, exec, attachmentCtx) {
 
   const todayCN = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'long', day: 'numeric' });
   const userFileBlock = attachmentCtx?.text || '';
-  const data = await callKimi(
+  let data = await callKimi(
     base44,
-    `当前日期：${todayCN}（请在邮件落款日期处使用这个真实日期，不要编造其它日期）\n\n该任务下已生成的产物（将随邮件作为附件发送）：\n${attachmentBrief}${userFileBlock ? `\n\n用户上传的参考文件（请基于其内容撰写邮件正文，可以引用其中的具体信息）：${userFileBlock}` : ''}\n\n请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}\n\n若有附件，请在正文中自然提及"附件"，但不要罗列附件名。`,
+    `当前日期：${todayCN}（请在邮件落款日期处使用这个真实日期，不要编造其它日期）\n\n该任务下已生成的产物（将随邮件作为附件发送）：\n${attachmentBrief}${userFileBlock ? `\n\n用户上传的参考文件（请基于其内容撰写邮件正文，可以引用其中的具体信息）：${userFileBlock}` : ''}\n\n请根据用户指令生成一封专业邮件草稿（注意：仅生成草稿，等待用户确认后才会发送）：\n${exec.original_input || exec.task_title}\n\n若有附件，请在正文中自然提及"附件"，但不要罗列附件名。\n\n⚠️ 直接返回 {to, to_name, cc, subject, body, tone}，不要包 wrapper。subject 和 body 必须填，绝不能漏。`,
     schema,
-    `你是专业商务邮件助手。今日日期：${todayCN}。要求：1) 主题精炼，10字内最好；2) 正文结构清晰，含问候、正文、署名；3) 若需写落款日期，必须使用今日真实日期，禁止编造历史日期；4) 根据指令推断语气（正式/友好/简洁）；5) 收件人未指明则留空，由用户在确认时填写。`
+    `你是专业商务邮件助手。今日日期：${todayCN}。要求：1) 主题精炼，10字内最好；2) 正文结构清晰，含问候、正文、署名；3) 若需写落款日期，必须使用今日真实日期，禁止编造历史日期；4) 根据指令推断语气（正式/友好/简洁）；5) 收件人未指明则留空，由用户在确认时填写。⚠️ subject 和 body 都必须填，绝不能漏。`
   );
-
+  // 防御兜底：Kimi 偶尔会把字段塞到 wrapper(plan/data/email),自动解包;仍缺字段则报错
+  if (data && (!data.subject || !data.body)) for (const k of ['plan','data','email','draft','result']) if (data[k]?.subject && data[k]?.body) { data = data[k]; break; }
+  if (!data?.subject || !data?.body) throw new Error(`AI 生成的邮件缺少必要字段(subject/body),请重试。AI 返回:${JSON.stringify(data||{}).slice(0,300)}`);
   const previewLines = [
     `📧 主题：${data.subject}`,
     `收件人：${data.to || '（待用户填写）'}`,

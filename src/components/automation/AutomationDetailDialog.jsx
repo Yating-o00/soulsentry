@@ -355,12 +355,13 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
           : [],
       });
       if (res.data?.error) throw new Error(res.data.error);
-      toast.success("邮件已发送");
+      toast.success("✉️ 邮件已发送", { description: `发往 ${emailData.to}`, duration: 5000 });
       const sentData = { ...emailData, sent_at: new Date().toISOString() };
       await base44.entities.TaskExecution.update(execution.id, {
         automation_result: { ...result, data: sentData }
       });
       setEmailDraft(sentData);
+      await reloadExecution(); // 同步 localExecution，避免"已发送"提示用旧 result 判断不出来
       refresh();
     } catch (e) {
       toast.error("发送失败：" + e.message);
@@ -539,11 +540,26 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                   </Button>
                 );
               })()}
-              {execution.automation_type === "email_draft" && result.data?.sent_at && (
-                <div className="mt-3 flex items-center gap-2 p-2.5 rounded-md bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
-                  <Mail className="w-3.5 h-3.5" />邮件已于 {new Date(result.data.sent_at).toLocaleString('zh-CN')} 发送
-                </div>
-              )}
+              {/* 已发送提示：优先看本地 emailDraft，回退看 result.data，确保发完立刻显示 */}
+              {execution.automation_type === "email_draft" && (() => {
+                const sentAt = emailDraft?.sent_at || result?.data?.sent_at;
+                if (!sentAt) return null;
+                const toAddr = emailDraft?.to || result?.data?.to;
+                return (
+                  <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                    <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold text-emerald-800">邮件已成功发送</div>
+                      <div className="text-[11.5px] text-emerald-700 mt-0.5 truncate">
+                        发往 <span className="font-medium">{toAddr}</span> · {new Date(sentAt).toLocaleString('zh-CN')}
+                      </div>
+                      <div className="text-[10.5px] text-emerald-600/80 mt-1">无需重复发送，可关闭此窗口</div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

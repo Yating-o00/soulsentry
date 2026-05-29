@@ -1791,7 +1791,22 @@ Deno.serve(async (req) => {
     const { execution_id, phase = "plan" } = await req.json();
     if (!execution_id) return Response.json({ error: 'execution_id required' }, { status: 400 });
 
-    const exec = await base44.entities.TaskExecution.get(execution_id);
+    // 关键修复：base44 平台偶发 429 rate limit。这里在拿 TaskExecution 时做一次退避重试，
+    // 避免一打开就因为前端多个 widget 并发把 quota 撞爆，导致执行直接 500 出错。
+    let exec = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        exec = await base44.entities.TaskExecution.get(execution_id);
+        break;
+      } catch (e) {
+        const status = e?.response?.status || e?.status;
+        if (status === 429 && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        throw e;
+      }
+    }
     if (!exec) return Response.json({ error: 'Execution not found' }, { status: 404 });
 
     // 读取用户上传的附件（plan / execute 都用得到）

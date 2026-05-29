@@ -1,8 +1,10 @@
 import { base44 } from "@/api/base44Client";
 
 const DEVICE_ID_KEY = "ss_device_id";
-const HEARTBEAT_INTERVAL = 60 * 1000; // 60s 心跳
-const ONLINE_THRESHOLD_MS = 3 * 60 * 1000; // 3 分钟无心跳 = 离线
+// 心跳频率：从 60s 降到 5 分钟，避免与其他后台请求叠加打爆 base44 rate limit。
+// 在线判定窗口也对应放宽到 12 分钟。
+const HEARTBEAT_INTERVAL = 5 * 60 * 1000;
+const ONLINE_THRESHOLD_MS = 12 * 60 * 1000;
 
 /** 生成或读取本机稳定指纹 */
 function getOrCreateDeviceId() {
@@ -175,7 +177,15 @@ export async function heartbeat() {
       );
     if (isUntouchedName) patch.name = info.defaultName;
   }
-  await base44.entities.Device.update(dev.id, patch);
+  try {
+    await base44.entities.Device.update(dev.id, patch);
+  } catch (e) {
+    // 404 = 这条 Device 已被别处去重删掉，重新注册一台干净的，避免一直 404 刷屏
+    if (e?.response?.status === 404 || /not found/i.test(e?.message || "")) {
+      return registerCurrentDevice();
+    }
+    throw e;
+  }
   return { ...dev, ...patch };
 }
 

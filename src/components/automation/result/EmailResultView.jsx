@@ -4,6 +4,7 @@ import { Mail, User, Tag, AlertTriangle, Paperclip, X, Plus } from "lucide-react
 // 邮件类结果视图：收件人/抄送/主题/正文均可编辑；变更通过 onChange 上抛
 // availableAttachments: 同任务下其它执行产物（PPT/PDF/调研报告等），用户可一键挂载
 export default function EmailResultView({ data, preview, editable = true, onChange, availableAttachments = [] }) {
+  const [showAllCandidates, setShowAllCandidates] = React.useState(false);
   if (!data && !preview) return null;
   const handle = (key) => (e) => {
     if (!onChange) return;
@@ -103,7 +104,7 @@ export default function EmailResultView({ data, preview, editable = true, onChan
             </button>
           </div>
           <div className="space-y-1.5">
-            {candidates.map((a, i) => (
+            {(showAllCandidates ? candidates : candidates.slice(0, 3)).map((a, i) => (
               <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200">
                 <div className="w-7 h-7 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
                   <Paperclip className="w-3.5 h-3.5 text-slate-500" />
@@ -122,6 +123,15 @@ export default function EmailResultView({ data, preview, editable = true, onChan
               </div>
             ))}
           </div>
+          {candidates.length > 3 && (
+            <button
+              type="button"
+              onClick={() => setShowAllCandidates(v => !v)}
+              className="mt-2 w-full text-[10.5px] font-semibold text-[#384877] hover:text-[#3b5aa2] py-1.5 rounded-md hover:bg-white/60 transition"
+            >
+              {showAllCandidates ? "收起" : `展开剩余 ${candidates.length - 3} 个`}
+            </button>
+          )}
         </div>
       )}
 

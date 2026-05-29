@@ -100,17 +100,16 @@ export default function SentinelGuardPanel() {
     fetchGuard();
   }, []);
 
-  // 事件驱动:Task / Note / SavedLocation 任一变化都把缓存标记为 dirty,
-  // 当用户下次进入有此面板的页面或当前已挂载时,立即重新分析。
+  // 事件驱动:Task / Note / SavedLocation 任一变化只把缓存标记为 dirty,
+  // 不立即 refetch —— 避免在 executeAutomation 等长流程中频繁调用 2 个高消耗后端,
+  // 把 base44 quota 打到 429,反过来又让关键调用 500。
+  // 用户下次手动点击"重新分析"或重新进入页面时才会真正拉取最新结果。
   useEffect(() => {
-    const markDirtyAndRefetch = () => {
-      GUARD_CACHE.dirty = true;
-      fetchGuard(true);
-    };
+    const markDirty = () => { GUARD_CACHE.dirty = true; };
     const unsubs = [];
-    try { const u = base44.entities.Task?.subscribe?.(markDirtyAndRefetch); if (u) unsubs.push(u); } catch {}
-    try { const u = base44.entities.Note?.subscribe?.(markDirtyAndRefetch); if (u) unsubs.push(u); } catch {}
-    try { const u = base44.entities.SavedLocation?.subscribe?.(markDirtyAndRefetch); if (u) unsubs.push(u); } catch {}
+    try { const u = base44.entities.Task?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch {}
+    try { const u = base44.entities.Note?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch {}
+    try { const u = base44.entities.SavedLocation?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch {}
     return () => { unsubs.forEach((u) => { try { u?.(); } catch {} }); };
   }, []);
 

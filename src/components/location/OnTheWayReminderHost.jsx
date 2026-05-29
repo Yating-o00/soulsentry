@@ -43,7 +43,11 @@ function isSnoozed(taskId) {
  * - 弹出底部浮层卡片
  */
 export default function OnTheWayReminderHost() {
-  const { position, permission } = useGeolocation({ enabled: true, intervalMs: 120000 });
+  // 关键稳定性修复：useGeolocation 内部会自动调用 geofenceTrigger + nearbyTaskMatcher 两个高消耗后端，
+  // 与 SentinelGeoWatcher / SentinelGuardPanel 叠加后会把 base44 quota 打到 429，
+  // 进而导致 executeAutomation 等关键调用返回 500。改为 enabled:false，
+  // 顺路提醒仍由 SentinelGeoWatcher → sentinelGeofenceTrigger 链路负责。
+  const { position, permission } = useGeolocation({ enabled: false, intervalMs: 600000 });
   const [activeMatch, setActiveMatch] = useState(null);
   const lastCheckedRef = useRef({ pos: null, time: 0 });
 

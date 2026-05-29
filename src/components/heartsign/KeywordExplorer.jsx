@@ -8,7 +8,7 @@ import { toast } from "sonner";
  * 关键词外部信息浏览器：点击关键词 chip → 调用 kimiWebBrowse 获取相关内容/链接 → 内联展开
  * 用于在 AI 智能处理卡片里把关键词与外部信息维度连接起来
  */
-export default function KeywordExplorer({ keyword, context = "" }) {
+export default function KeywordExplorer({ keyword, context = "", inline = false }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null); // { answer, references }
@@ -41,6 +41,15 @@ export default function KeywordExplorer({ keyword, context = "" }) {
     }
   };
 
+  const triggerClass = inline
+    ? `text-left flex-1 min-w-0 inline-flex items-start gap-1 text-[12.5px] leading-relaxed transition
+       ${open ? "text-[#384877] font-medium" : "text-slate-600 hover:text-[#384877]"}
+       cursor-pointer underline decoration-dotted decoration-[#384877]/30 underline-offset-4 hover:decoration-[#384877]/70`
+    : `inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] border transition
+       ${open
+         ? "bg-[#384877] text-white border-[#384877]"
+         : "bg-white text-[#384877]/85 border-[#384877]/20 hover:bg-[#384877]/8 hover:border-[#384877]/40"}`;
+
   return (
     <>
       <button
@@ -49,15 +58,12 @@ export default function KeywordExplorer({ keyword, context = "" }) {
           e.stopPropagation();
           explore();
         }}
-        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] border transition
-          ${open
-            ? "bg-[#384877] text-white border-[#384877]"
-            : "bg-white text-[#384877]/85 border-[#384877]/20 hover:bg-[#384877]/8 hover:border-[#384877]/40"}`}
+        className={triggerClass}
         title={`查看「${keyword}」相关外部内容`}
       >
-        <Sparkles className="w-2.5 h-2.5" />
-        <span>{keyword}</span>
-        <ChevronDown className={`w-2.5 h-2.5 transition-transform ${open ? "rotate-180" : ""}`} />
+        {!inline && <Sparkles className="w-2.5 h-2.5" />}
+        <span className={inline ? "flex-1" : ""}>{keyword}</span>
+        <ChevronDown className={`shrink-0 transition-transform ${inline ? "w-3 h-3 mt-1 text-[#384877]/50" : "w-2.5 h-2.5"} ${open ? "rotate-180" : ""}`} />
       </button>
 
       <AnimatePresence>

@@ -253,16 +253,15 @@ export default function HeartSignMessage({ note, onDeleted }) {
 
             {ai.key_points?.length > 0 && (
               <div className="mb-3 pl-3 border-l-2 border-[#384877]/20">
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {ai.key_points.slice(0, isReport ? 6 : 4).map((p, i) => (
-                    <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex flex-wrap gap-2 items-center">
-                      <span className="text-[#384877]/40">·</span>
-                      <span className="flex-1 min-w-0">{p}</span>
-                      <KeywordExplorer keyword={p} context={ai.summary || plain} />
+                    <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex flex-wrap gap-x-2 gap-y-1 items-start">
+                      <span className="text-[#384877]/40 mt-0.5">·</span>
+                      <KeywordExplorer keyword={p} context={ai.summary || plain} inline />
                     </li>
                   ))}
                 </ul>
-                <div className="mt-2 text-[10.5px] text-slate-400">点击关键词右侧标签 · 拓展外部相关内容与链接</div>
+                <div className="mt-2 text-[10.5px] text-slate-400">点击关键词 · 展开外部相关内容与链接</div>
               </div>
             )}
 

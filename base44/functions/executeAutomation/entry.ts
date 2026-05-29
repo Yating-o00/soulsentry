@@ -1,72 +1,84 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// 自动执行编排器:plan(规划方案)/ execute(执行)。Types: email_draft / web_research / summary_note / office_doc / ppt_doc / file_organize / calendar_event / ledger_organize
+/**
+ * 自动执行编排器 - 心栈 SoulSentry
+ *
+ * 工作流：
+ *   1. 接收 execution_id，加载 TaskExecution 记录
+ *   2. 根据 phase 执行不同动作:
+ *      - "plan"    : 调用 Kimi 生成执行方案（automation_plan），状态 → waiting_confirm
+ *      - "execute" : 用户已确认，调用对应工具执行，状态 → executing → completed/failed
+ *
+ * 支持 automation_type:
+ *   - email_draft    : 生成邮件草稿（不发送，仅写入 automation_result.data，用户在UI确认后再发送）
+ *   - web_research   : 调 Kimi 联网搜索摘要（实际靠 Kimi 知识 + 用户上传内容）
+ *   - summary_note   : 生成总结心签
+ *   - office_doc     : 生成 Word/Excel/PPT 结构化大纲（实际生成由外部微服务接入）
+ *   - file_organize  : 生成文件整理计划（实际移动由桌面伴侣 App 接入）
+ *   - calendar_event : 生成日历事件（写入 Task + 触发同步）
+ */
 
-// 纯文本 LLM 调用直连 Moonshot,绕开 base44 quota(避免 429 让 plan 500)
-async function callKimiDirect(prompt, response_json_schema, system_prompt) {
-  const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
-  if (!apiKey) throw new Error('KIMI_API_KEY 未配置');
-  const wantsJson = !!response_json_schema;
-  let systemContent = system_prompt || "你是一位专业、贴心的 AI 助手。";
-  if (wantsJson) systemContent += `\n\n请严格按以下 JSON Schema 返回结果，不要输出任何额外文字：\n${JSON.stringify(response_json_schema)}`;
-  const models = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
-  let lastErrText = '', lastStatus = 0, response = null;
-  for (const m of models) {
-    const body = { model: m, messages: [{ role: "system", content: systemContent }, { role: "user", content: prompt }], temperature: 0.4 };
-    if (wantsJson) body.response_format = { type: "json_object" };
-    try {
-      response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
-        body: JSON.stringify(body),
-      });
-      if (response.ok) break;
-      lastErrText = await response.text();
-      lastStatus = response.status;
-      if (response.status !== 404 && response.status !== 403) break;
-    } catch (e) { lastErrText = e?.message || String(e); lastStatus = 0; }
-  }
-  if (!response || !response.ok) throw new Error(`Kimi API 调用失败 (${lastStatus}): ${String(lastErrText).slice(0, 300)}`);
-  const json = await response.json();
-  const content = json.choices?.[0]?.message?.content || "";
-  if (wantsJson) {
-    try { return JSON.parse(content); } catch {
-      const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (match) { try { return JSON.parse(match[1]); } catch {} }
-      return { _raw: content, _parse_error: true };
-    }
-  }
-  return { text: content };
-}
-
+// === 关键修复(2026-05-29)===
+// 原版调用 base44.functions.invoke('invokeKimi') —— 走 base44 平台 axios,
+// 会因 base44 平台 quota(Rate limit exceeded)整体卡住几分钟,导致 plan/执行 500。
+// 新版:无附件时直连 Moonshot,有附件才走 invokeKimi(因为它内置文件抽取)。
 async function callKimi(base44, prompt, response_json_schema, system_prompt, file_urls) {
-  // 无附件:直连 Moonshot,绕开 base44 quota
-  if (!Array.isArray(file_urls) || file_urls.length === 0) {
-    return await callKimiDirect(prompt, response_json_schema, system_prompt);
+  const hasFiles = Array.isArray(file_urls) && file_urls.length > 0;
+  if (!hasFiles) {
+    const apiKey = (Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY") || "").trim();
+    if (!apiKey) throw new Error('KIMI_API_KEY 未配置');
+    const wantsJson = !!response_json_schema;
+    let sys = system_prompt || "你是一位专业、贴心的 AI 助手。";
+    if (wantsJson) sys += `\n\n⚠️ 你必须返回一个【符合下方 Schema 的 JSON 实例对象】,而不是返回 Schema 本身。直接输出可被 JSON.parse 的对象,例如 {"automation_type":"email_draft","plan":{...}},禁止输出 {"type":"object","properties":{...}} 这种 schema 元描述。\n\nSchema 参考:\n${JSON.stringify(response_json_schema)}`;
+    const models = ["kimi-latest", "kimi-k2-0905-preview", "moonshot-v1-auto"];
+    let resp = null, lastErr = '', lastStatus = 0;
+    for (const m of models) {
+      const body = { model: m, messages: [{ role: "system", content: sys }, { role: "user", content: prompt }], temperature: 0.4 };
+      if (wantsJson) body.response_format = { type: "json_object" };
+      try {
+        resp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+          body: JSON.stringify(body),
+        });
+        if (resp.ok) break;
+        lastErr = await resp.text(); lastStatus = resp.status;
+        if (resp.status !== 404 && resp.status !== 403) break;
+      } catch (e) { lastErr = e?.message || String(e); lastStatus = 0; }
+    }
+    if (!resp || !resp.ok) throw new Error(`Kimi API ${lastStatus}: ${String(lastErr).slice(0, 200)}`);
+    const j = await resp.json();
+    const content = j.choices?.[0]?.message?.content || "";
+    if (wantsJson) {
+      try { return JSON.parse(content); } catch {
+        const m = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (m) { try { return JSON.parse(m[1]); } catch {} }
+        return { _raw: content, _parse_error: true };
+      }
+    }
+    return { text: content };
   }
-  // 有附件:走 invokeKimi(它有文件抽取/视觉),带 429 退避
-  const MAX = 4;
-  let res, lastErr;
-  for (let attempt = 0; attempt < MAX; attempt++) {
+  // 有附件 → 仍走 invokeKimi (内置文件抽取/视觉)
+  const MAX = 4; let res, lastErr;
+  for (let i = 0; i < MAX; i++) {
     try {
       res = await base44.functions.invoke('invokeKimi', { prompt, response_json_schema, system_prompt, temperature: 0.4, file_urls });
       lastErr = null; break;
     } catch (e) {
-      const status = e?.response?.status;
-      const apiErr = e?.response?.data?.error || e?.response?.data?.message || '';
-      const isRateLimit = status === 429 || /rate limit/i.test(apiErr) || /rate limit/i.test(e?.message || '');
-      if (isRateLimit && attempt < MAX - 1) { await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt))); continue; }
+      const st = e?.response?.status; const am = e?.response?.data?.error || e?.response?.data?.message || '';
+      if ((st === 429 || /rate limit/i.test(am) || /rate limit/i.test(e?.message || '')) && i < MAX - 1) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i))); continue;
+      }
       lastErr = e; break;
     }
   }
   if (lastErr) {
-    const apiErr = lastErr?.response?.data?.error || lastErr?.response?.data?.message;
-    const status = lastErr?.response?.status;
-    if (apiErr) throw new Error(`AI 调用失败（HTTP ${status}）：${apiErr}`);
+    const am = lastErr?.response?.data?.error || lastErr?.response?.data?.message;
+    if (am) throw new Error(`AI 调用失败(HTTP ${lastErr?.response?.status}):${am}`);
     throw lastErr;
   }
   const data = res?.data || {};
-  if (data?.error && !data?._doc_extract_failed) throw new Error(`AI 调用失败：${data.error}${data.message ? ' — ' + data.message : ''}`);
+  if (data?.error && !data?._doc_extract_failed) throw new Error(`AI 调用失败:${data.error}${data.message ? ' — ' + data.message : ''}`);
   return data;
 }
 
@@ -316,9 +328,7 @@ async function generatePlan(base44, exec, attachmentCtx) {
     "你是心栈 SoulSentry 的自动执行规划官，负责把用户的自然语言指令转换成结构化执行方案。要简洁、具体、可执行。严格遵守 automation_type 选择铁律：带附件要求生成纪要/总结/笔记的，一律选 summary_note，不要选 file_organize。"
   );
 
-  if (planRes._parse_error || !planRes.automation_type) {
-    throw new Error("AI 方案生成失败");
-  }
+  if (planRes._parse_error || !planRes.automation_type) { const dbg = JSON.stringify(planRes).slice(0, 600); console.error('[generatePlan] bad output:', dbg); throw new Error(`AI 方案生成失败:${planRes?._parse_error ? '非JSON' : '缺automation_type'} | raw=${dbg.slice(0, 200)}`); }
 
   return planRes;
 }

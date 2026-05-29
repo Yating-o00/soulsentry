@@ -60,6 +60,9 @@ function buildMime({ to, from, subject, body, isHtml, cc, bcc, attachments = [] 
   const mixedBoundary = `----=_Mixed_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
 
+  // Encode a UTF-8 string to wrapped base64 (76-char lines per RFC 2045)
+  const encodeBody = (s) => wrapBase64(bytesToBase64(new TextEncoder().encode(s || '')));
+
   // Build the body part (either text-only or multipart/alternative)
   let bodyPart;
   if (isHtml) {
@@ -71,12 +74,12 @@ function buildMime({ to, from, subject, body, isHtml, cc, bcc, attachments = [] 
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: base64',
       '',
-      btoa(unescape(encodeURIComponent(plainFallback))),
+      encodeBody(plainFallback),
       `--${altBoundary}`,
       'Content-Type: text/html; charset="UTF-8"',
       'Content-Transfer-Encoding: base64',
       '',
-      btoa(unescape(encodeURIComponent(body || ''))),
+      encodeBody(body),
       `--${altBoundary}--`,
     ].join('\r\n');
   } else {
@@ -84,7 +87,7 @@ function buildMime({ to, from, subject, body, isHtml, cc, bcc, attachments = [] 
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: base64',
       '',
-      btoa(unescape(encodeURIComponent(body || ''))),
+      encodeBody(body),
     ].join('\r\n');
   }
 

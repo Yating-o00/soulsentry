@@ -461,7 +461,7 @@ ${templatesInfo}
                 </div>
               </div>
 
-              {suggestions.subtasks &&
+              {Array.isArray(suggestions.subtasks) && suggestions.subtasks.length > 0 &&
             <div className="space-y-2">
                       <div className="flex items-center gap-2 text-[14px] text-slate-500 font-medium">
                           <ListTodo className="w-4 h-4 text-blue-600" />

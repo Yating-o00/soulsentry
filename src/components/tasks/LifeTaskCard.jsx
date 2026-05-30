@@ -24,6 +24,7 @@ import SnoozePopover from "@/components/tasks/SnoozePopover";
 import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
 import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
 import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
+import PriorityQuickMenu from "@/components/tasks/PriorityQuickMenu";
 
 export default function LifeTaskCard({ 
   task, 
@@ -432,18 +433,9 @@ export default function LifeTaskCard({
                                 </span>
                             )}
 
-                            {/* Priority */}
-                            <span className={cn(
-                                "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border",
-                                task.priority === 'high' || task.priority === 'urgent' 
-                                    ? "bg-red-50 text-red-600 border-red-100" 
-                                    : "bg-stone-50 text-stone-600 border-stone-100"
-                            )}>
-                                <Flag className="w-3 h-3" />
-                                {task.priority === 'urgent' ? '紧急' : 
-                                 task.priority === 'high' ? '高' : 
-                                 task.priority === 'low' ? '低' : '中'}
-                            </span>
+                            {/* Priority - 可点击调整 */}
+                            <PriorityQuickMenu task={task} onUpdateTask={onUpdateTask} />
+
 
                             {/* AI Suggestion Badge */}
                             {task.ai_analysis?.suggested_priority === 'urgent' && (
@@ -548,6 +540,9 @@ export default function LifeTaskCard({
                                      预计{task.estimated_duration}分钟
                                  </span>
                              )}
+
+                             {/* Priority - 可点击调整（非工作类同样支持） */}
+                             <PriorityQuickMenu task={task} onUpdateTask={onUpdateTask} />
                         </div>
                     )}
 

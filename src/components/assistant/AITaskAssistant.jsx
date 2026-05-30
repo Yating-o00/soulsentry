@@ -595,6 +595,8 @@ import React, { useState, useEffect, useRef } from "react";
                {[
                  { label: "⏰ 今日截止未做", text: "今天有哪些截止的约定或事项还没做？请按列表给我，每条带时间和状态。" },
                  { label: "⚠️ 过期未完成", text: "列出所有已过期但还没完成的约定" },
+                 { label: "📌 置顶某条约定", text: "请帮我把约定『』置顶（priority 设为 urgent）。请先用 Task.filter 找到该约定再 update。" },
+                 { label: "⚡ 改优先级示例", text: "把『买菜』这件事改成高优先级" },
                  { label: "📝 最近心签", text: "查一下我最近一周写的心签，列出标题或第一句话" },
                  { label: "✏️ 改时间示例", text: "把明天上午10点的会议改到下午2点" },
                  { label: "📊 进度分析", text: "分析当前约定状况并给出建议，请先关注主任务，再检查子任务" },

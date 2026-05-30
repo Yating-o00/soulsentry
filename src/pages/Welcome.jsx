@@ -296,20 +296,16 @@ export default function Welcome({ onComplete }) {
       className="bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 flex items-center justify-center p-6 relative"
       style={{ minHeight: '100dvh' }}
     >
-      {/* 背景装饰 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 0.1, scale: 1 }}
-          transition={{ duration: 2, repeat: Infinity, repeatType: "reverse" }}
-          className="absolute top-20 right-20 w-96 h-96 bg-blue-400 rounded-full blur-3xl" />
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 0.1, scale: 1 }}
-          transition={{ duration: 2.5, repeat: Infinity, repeatType: "reverse" }}
-          className="absolute bottom-20 left-20 w-96 h-96 bg-purple-400 rounded-full blur-3xl" />
-      </div>
+      {/* 背景装饰 —— 用纯 CSS 渐变替代 motion + blur-3xl,
+          避免 iPhone 17 Pro / iOS 26 Safari 上 backdrop-blur 巨大模糊圆 + 无限动画
+          导致 GPU 合成层崩溃出现整页白屏。装饰效果保留(径向渐变光晕),零 JS 成本。 */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 85% 15%, rgba(96,165,250,0.18), transparent 45%), radial-gradient(circle at 15% 85%, rgba(168,85,247,0.16), transparent 45%)'
+        }}
+      />
 
       <div className="relative z-10 w-full max-w-2xl">
         <AnimatePresence mode="wait">

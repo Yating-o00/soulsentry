@@ -172,6 +172,39 @@ export default function Tasks() {
 
     const roots = active.filter((t) => !t.parent_task_id);
 
+    // 综合排序：置顶(urgent) > 优先级 > 时间紧迫度 > AI 风险等级
+    // 适用于所有分组与 milestone/life 列表，保证用户置顶的约定始终排在最上方
+    const nowMs = Date.now();
+    const PRI_WEIGHT = { urgent: 1000, high: 100, medium: 10, low: 1 };
+    const RISK_WEIGHT = { critical: 30, high: 20, medium: 8, low: 2 };
+    const sortByPriorityTimeImportance = (a, b) => {
+      // 1) 优先级（urgent=置顶 远超 其它级别）
+      const pa = PRI_WEIGHT[a.priority] ?? PRI_WEIGHT.medium;
+      const pb = PRI_WEIGHT[b.priority] ?? PRI_WEIGHT.medium;
+      if (pa !== pb) return pb - pa;
+      // 2) 时间紧迫度：已逾期 > 越接近现在越靠前；无时间的排后面
+      const at = a.reminder_time ? new Date(a.reminder_time).getTime() : null;
+      const bt = b.reminder_time ? new Date(b.reminder_time).getTime() : null;
+      if (at !== null && bt !== null) {
+        // 距离当前时间的绝对值越小越靠前（已逾期天然靠前）
+        const ad = Math.abs(at - nowMs);
+        const bd = Math.abs(bt - nowMs);
+        if (ad !== bd) return ad - bd;
+      } else if (at !== null) {
+        return -1;
+      } else if (bt !== null) {
+        return 1;
+      }
+      // 3) AI 风险等级加权
+      const ra = RISK_WEIGHT[a.ai_analysis?.risk_level] || 0;
+      const rb = RISK_WEIGHT[b.ai_analysis?.risk_level] || 0;
+      if (ra !== rb) return rb - ra;
+      // 4) 兜底：创建时间晚的靠前
+      const ca = a.created_date ? new Date(a.created_date).getTime() : 0;
+      const cb = b.created_date ? new Date(b.created_date).getTime() : 0;
+      return cb - ca;
+    };
+
     const milestone = [];
     const life = [];
 
@@ -321,15 +354,16 @@ export default function Tasks() {
     const smartSuggestionIds = new Set(smartSuggestion.map(t => t.id));
     const dedupedFixedSchedule = fixedSchedule.filter(t => !canDoNowSet.has(t.id) && !smartSuggestionIds.has(t.id));
 
+    // 综合排序：在保留分组打分逻辑的基础上，统一让"置顶(urgent) + 时间紧迫 + 重要性"决定卡片顺序
     return {
-      milestoneTasks: milestone,
-      lifeTasks: life,
+      milestoneTasks: [...milestone].sort(sortByPriorityTimeImportance),
+      lifeTasks: [...life].sort(sortByPriorityTimeImportance),
       completedTasks: completed,
       smartGroups: {
-        canDoNow,
-        dueSoon,
-        smartSuggestion,
-        fixedSchedule: dedupedFixedSchedule
+        canDoNow: [...canDoNow].sort(sortByPriorityTimeImportance),
+        dueSoon: [...dueSoon].sort(sortByPriorityTimeImportance),
+        smartSuggestion: [...smartSuggestion].sort(sortByPriorityTimeImportance),
+        fixedSchedule: [...dedupedFixedSchedule].sort(sortByPriorityTimeImportance)
       },
       stats: {
         pending: todayPendingCount,

@@ -128,8 +128,9 @@ Deno.serve(async (req) => {
       if (response.ok) break;
       lastErr = await response.text();
       lastStatus = response.status;
-      // 404/403/401 = 模型不可用或无权限，继续 fallback；其他错误（如 429/400）直接退出
-      if (![404, 403, 401].includes(response.status)) break;
+      // 404/403/401 = 模型不可用或无权限；429/500/502/503 = 过载或临时故障，全部继续 fallback
+      // 其他错误（如 400 参数错误）直接退出，不浪费配额
+      if (![404, 403, 401, 429, 500, 502, 503].includes(response.status)) break;
     }
 
     if (!response || !response.ok) {

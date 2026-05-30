@@ -21,7 +21,7 @@ async function callKimi(apiKey, systemPrompt, userPrompt, useJsonFormat) {
     }
     const text = await res.text();
     lastErr = `Kimi API error: ${res.status} ${text}`;
-    if (![404, 403, 401].includes(res.status)) break;
+    if (![404, 403, 401, 429, 500, 502, 503].includes(res.status)) break;
   }
   throw new Error(lastErr || 'Kimi API error');
 }

@@ -292,7 +292,10 @@ export default function Welcome({ onComplete }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 flex items-center justify-center p-6 relative overflow-hidden">
+    <div
+      className="bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 flex items-center justify-center p-6 relative"
+      style={{ minHeight: '100dvh' }}
+    >
       {/* 背景装饰 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div

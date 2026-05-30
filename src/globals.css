@@ -51,9 +51,12 @@ css
     @apply antialiased text-slate-900 bg-[#f8f9fa]; /* Lighter background */
     /* 防止 iOS 滚动弹跳 */
     overscroll-behavior-y: none;
-    /* iOS viewport height fix */
+    /* iOS viewport height fix —— iPhone 17 Pro/iOS 26 上 100vh 与 -webkit-fill-available
+       在某些情况会算成 0,导致 #root 容器塌陷 → 整页白屏。
+       优先用 dvh（动态视口高度）兜底,旧机型自动回退。 */
     min-height: 100vh;
     min-height: -webkit-fill-available;
+    min-height: 100dvh;
   }
 
   /* Minimum touch target sizes on mobile */

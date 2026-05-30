@@ -5,7 +5,7 @@ async function callKimi(apiKey, systemPrompt, userPrompt, useJsonFormat) {
   if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
   messages.push({ role: "user", content: userPrompt });
 
-  const models = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+  const models = ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
   let lastErr = null;
   for (const model of models) {
     const body = { model, messages, temperature: 0.2 };
@@ -21,7 +21,7 @@ async function callKimi(apiKey, systemPrompt, userPrompt, useJsonFormat) {
     }
     const text = await res.text();
     lastErr = `Kimi API error: ${res.status} ${text}`;
-    if (res.status !== 404 && res.status !== 403) break;
+    if (![404, 403, 401].includes(res.status)) break;
   }
   throw new Error(lastErr || 'Kimi API error');
 }

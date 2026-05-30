@@ -102,8 +102,8 @@ Deno.serve(async (req) => {
 
     messages.push({ role: "user", content: prompt });
 
-    // 模型 fallback 列表：kimi-k2-turbo-preview 已下线/无权限，按顺序尝试
-    const candidateModels = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
+    // 模型 fallback 列表：kimi-k2-0905-preview 已下线/无权限，改用 kimi-latest 为首选
+    const candidateModels = ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
 
     let response = null;
     let lastErr = '';
@@ -128,8 +128,8 @@ Deno.serve(async (req) => {
       if (response.ok) break;
       lastErr = await response.text();
       lastStatus = response.status;
-      // 404/403 = 模型不可用，继续 fallback；其他错误（如 429/400）直接退出
-      if (response.status !== 404 && response.status !== 403) break;
+      // 404/403/401 = 模型不可用或无权限，继续 fallback；其他错误（如 429/400）直接退出
+      if (![404, 403, 401].includes(response.status)) break;
     }
 
     if (!response || !response.ok) {

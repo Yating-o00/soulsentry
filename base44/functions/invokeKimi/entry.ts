@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
     // 因此当同时需要 JSON 输出 + 图片时，仍使用 vision 模型但去掉 response_format，
     // 通过 system prompt 中的 schema 约束让模型输出 JSON，再在外层 parse 兜底。
     // 视觉用 vision 模型；纯文本用文本模型，并对 404/403 自动 fallback
-    const textModels = model ? [model] : ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+    const textModels = model ? [model] : ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
     const candidateModels = hasImages
       ? [model || "moonshot-v1-32k-vision-preview"]
       : textModels;
@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
       if (response.ok) break;
       lastErrText = await response.text();
       lastStatus = response.status;
-      if (response.status !== 404 && response.status !== 403) break;
+      if (![404, 403, 401].includes(response.status)) break;
     }
 
     if (!response || !response.ok) {

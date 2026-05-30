@@ -12,26 +12,53 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * 抽到独立 function 的原因：executeAutomation 已逼近 2000 行硬上限，必须拆。
  */
 
+// 直连 Moonshot（与 executeAutomation 同款），绕开 base44 平台 quota，
+// 避免账本场景因平台限流/wrapper 包装导致 entries 为空、出现"已整理 0 笔账目"假成功
 async function callKimi(base44, prompt, response_json_schema, system_prompt) {
-  let res;
-  try {
-    res = await base44.functions.invoke('invokeKimi', {
-      prompt,
-      response_json_schema,
-      system_prompt,
+  const apiKey = (Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY") || "").trim();
+  if (!apiKey) throw new Error('KIMI_API_KEY 未配置');
+  const wantsJson = !!response_json_schema;
+  let sys = system_prompt || "你是个人财务整理助手。";
+  if (wantsJson) {
+    sys += `\n\n⚠️ 你必须返回一个【符合下方 Schema 的 JSON 实例对象】，而不是返回 Schema 本身。直接输出 schema 中描述的真实字段及其取值，不要包 wrapper（不要塞到 result / data / ledger 这种外层对象里）。\n\nSchema 参考：\n${JSON.stringify(response_json_schema)}`;
+  }
+  const models = ["kimi-latest", "kimi-k2-0905-preview", "moonshot-v1-auto"];
+  let resp = null, lastErr = '', lastStatus = 0;
+  for (const m of models) {
+    const body = {
+      model: m,
+      messages: [{ role: "system", content: sys }, { role: "user", content: prompt }],
       temperature: 0.3,
-    });
-  } catch (e) {
-    const apiErr = e?.response?.data?.error || e?.response?.data?.message;
-    const status = e?.response?.status;
-    if (apiErr) throw new Error(`AI 调用失败（HTTP ${status}）：${apiErr}`);
-    throw e;
+    };
+    if (wantsJson) body.response_format = { type: "json_object" };
+    try {
+      resp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) break;
+      lastErr = await resp.text();
+      lastStatus = resp.status;
+      if (resp.status !== 404 && resp.status !== 403) break;
+    } catch (e) {
+      lastErr = e?.message || String(e);
+      lastStatus = 0;
+    }
   }
-  const data = res?.data || {};
-  if (data?.error && !data?._doc_extract_failed) {
-    throw new Error(`AI 调用失败：${data.error}${data.message ? ' — ' + data.message : ''}`);
+  if (!resp || !resp.ok) {
+    throw new Error(`Kimi API ${lastStatus}: ${String(lastErr).slice(0, 200)}`);
   }
-  return data;
+  const j = await resp.json();
+  const content = j.choices?.[0]?.message?.content || "";
+  if (wantsJson) {
+    try { return JSON.parse(content); } catch {
+      const m = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (m) { try { return JSON.parse(m[1]); } catch {} }
+      throw new Error(`AI 返回非 JSON，无法解析。原文片段：${String(content).slice(0, 200)}`);
+    }
+  }
+  return { text: content };
 }
 
 const LEDGER_SCHEMA = {
@@ -145,8 +172,26 @@ ${file_block ? `\n附件内容（可能是聊天截图/银行流水/语音转写
       "你是个人财务整理助手。能从极度混乱的语音转写/聊天碎片/银行流水中精准提取账目，自动归类、统计、识别周期账单和异常。严格遵循 JSON Schema。"
     );
 
-    const entries = Array.isArray(data.entries) ? data.entries : [];
-    const stats = data.stats || {};
+    // AI 偶尔会把结果包在 wrapper（如 { result: { entries }, data: { entries } }）里，做一层兜底解包
+    let payload = data;
+    if (!Array.isArray(payload?.entries)) {
+      for (const k of ['result', 'data', 'ledger', 'output']) {
+        if (Array.isArray(payload?.[k]?.entries)) { payload = payload[k]; break; }
+      }
+    }
+
+    const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    const stats = payload.stats || {};
+
+    // 关键修复：entries 为空时直接抛错，由 executeAutomation 标记 failed,
+    // 弹出"重试 / 修改描述"的失败对话框,而不是默默落地"已整理 0 笔"的假成功结果
+    if (entries.length === 0) {
+      console.warn('[executeLedgerOrganize] empty entries, raw payload:', JSON.stringify(data).slice(0, 500));
+      return Response.json({
+        error: 'LEDGER_EMPTY',
+        message: '未能从你的输入中识别出账目。请确认包含明确的金额（如 12元 / ¥58 / 9.9）和消费描述（如 早饭/咖啡/超市）后再试。',
+      }, { status: 500 });
+    }
 
     // 后端兜底：若 AI 漏填 total / by_category，本地重新算
     if (!stats.total_income || !stats.total_expense || !stats.by_category) {

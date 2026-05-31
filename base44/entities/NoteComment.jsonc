@@ -15,12 +15,19 @@
       "items": {
         "type": "string"
       },
-      "description": "\u63d0\u53ca\u7684\u7528\u6237ID\u5217\u8868",
       "default": []
     }
   },
   "required": [
     "note_id",
     "content"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
 }

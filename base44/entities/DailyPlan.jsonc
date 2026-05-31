@@ -32,5 +32,13 @@
   "required": [
     "plan_date",
     "plan_json"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
 }

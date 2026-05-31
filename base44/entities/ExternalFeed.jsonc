@@ -1,11 +1,10 @@
 {
   "name": "ExternalFeed",
   "type": "object",
-  "description": "\u7528\u6237\u63a5\u5165\u7684\u5916\u90e8\u6570\u636e\u6e90\uff08RSS / Newsletter / \u6587\u7ae0\u94fe\u63a5 / \u5fae\u4fe1\u8f6c\u53d1\u7b49\uff09\uff0c\u7528\u4e8e\u62d3\u5c55\u77e5\u8bc6\u5e93\u3001\u907f\u514d\u4fe1\u606f\u8327\u623f",
+  "description": "\u7528\u6237\u63a5\u5165\u7684\u5916\u90e8\u6570\u636e\u6e90",
   "properties": {
     "name": {
-      "type": "string",
-      "description": "\u8ba2\u9605\u6e90\u540d\u79f0"
+      "type": "string"
     },
     "feed_type": {
       "type": "string",
@@ -16,50 +15,49 @@
         "wechat",
         "custom"
       ],
-      "default": "rss",
-      "description": "\u7c7b\u578b\uff1aRSS\u8ba2\u9605/Newsletter/\u5355\u7bc7\u6587\u7ae0/\u5fae\u4fe1\u8f6c\u53d1/\u81ea\u5b9a\u4e49"
+      "default": "rss"
     },
     "url": {
-      "type": "string",
-      "description": "\u8ba2\u9605\u6e90 URL / RSS Feed \u5730\u5740"
+      "type": "string"
     },
     "description": {
-      "type": "string",
-      "description": "\u7b80\u4ecb"
+      "type": "string"
     },
     "icon": {
       "type": "string",
-      "default": "\ud83d\udce1",
-      "description": "\u56fe\u6807 emoji"
+      "default": "\ud83d\udce1"
     },
     "is_active": {
       "type": "boolean",
-      "default": true,
-      "description": "\u662f\u5426\u542f\u7528\u62c9\u53d6"
+      "default": true
     },
     "fetch_frequency_hours": {
       "type": "number",
-      "default": 24,
-      "description": "\u62c9\u53d6\u9891\u7387\uff08\u5c0f\u65f6\uff09"
+      "default": 24
     },
     "last_fetched_at": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u6700\u8fd1\u4e00\u6b21\u62c9\u53d6\u65f6\u95f4"
+      "format": "date-time"
     },
     "last_item_count": {
       "type": "number",
-      "default": 0,
-      "description": "\u6700\u8fd1\u4e00\u6b21\u62c9\u53d6\u5230\u7684\u6761\u76ee\u6570"
+      "default": 0
     },
     "auto_archive_to_heartsign": {
       "type": "boolean",
-      "default": true,
-      "description": "\u662f\u5426\u81ea\u52a8\u5f52\u6863\u65b0\u6761\u76ee\u5230\u5fc3\u7b7e"
+      "default": true
     }
   },
   "required": [
     "name",
     "feed_type"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
 }

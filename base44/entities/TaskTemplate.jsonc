@@ -3,16 +3,13 @@
   "type": "object",
   "properties": {
     "name": {
-      "type": "string",
-      "description": "\u6a21\u677f\u540d\u79f0"
+      "type": "string"
     },
     "description": {
-      "type": "string",
-      "description": "\u6a21\u677f\u63cf\u8ff0"
+      "type": "string"
     },
     "template_data": {
       "type": "object",
-      "description": "\u7ea6\u5b9a\u7684\u6570\u636e\u7ed3\u6784(JSON)",
       "properties": {
         "title": {
           "type": "string"
@@ -46,5 +43,13 @@
   "required": [
     "name",
     "template_data"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
 }

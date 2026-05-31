@@ -1,7 +1,7 @@
 {
   "name": "UserDataPoint",
   "type": "object",
-  "description": "\u4e2a\u4eba\u6570\u636e\u5e93\u5f15\u64ce\uff1a\u7edf\u4e00\u6c89\u6dc0\u7528\u6237\u7684\u64cd\u4f5c\u4e60\u60ef\u3001\u4efb\u52a1\u7ed3\u679c\u3001AI \u5bf9\u8bdd\u4e0e\u51b3\u7b56\uff0c\u4f5c\u4e3a Kimi \u4e2a\u6027\u5316\u5206\u6790\u7684\u8f93\u5165\u3002\u6bcf\u6761\u8bb0\u5f55\u4e3a\u4e00\u4e2a\u53ef\u88ab AI \u68c0\u7d22\u7684\u753b\u50cf\u6570\u636e\u70b9",
+  "description": "\u4e2a\u4eba\u6570\u636e\u5e93\u5f15\u64ce",
   "properties": {
     "data_type": {
       "type": "string",
@@ -9,38 +9,31 @@
         "habit",
         "outcome",
         "decision"
-      ],
-      "description": "\u6570\u636e\u7c7b\u578b\uff1ahabit=\u64cd\u4f5c\u4e60\u60ef  outcome=\u4efb\u52a1/\u7ea6\u5b9a\u7ed3\u679c  decision=AI\u5bf9\u8bdd\u4e0e\u51b3\u7b56"
+      ]
     },
     "subtype": {
-      "type": "string",
-      "description": "\u7ec6\u5206\u7c7b\u578b\uff0c\u5982 page_visit / feature_use / task_complete / task_defer / ai_suggestion_accept / ai_suggestion_reject"
+      "type": "string"
     },
     "summary": {
-      "type": "string",
-      "description": "\u4e00\u53e5\u8bdd\u6458\u8981\uff0c\u4f9b Kimi \u76f4\u63a5\u6d88\u8d39"
+      "type": "string"
     },
     "category": {
-      "type": "string",
-      "description": "\u6240\u5c5e\u4e1a\u52a1\u5206\u7c7b\uff0c\u5982 work / personal / health / family / finance"
+      "type": "string"
     },
     "weight": {
       "type": "number",
-      "default": 1,
-      "description": "\u91cd\u8981\u6027\u6743\u91cd 1-10\uff0cAI \u68c0\u7d22\u65f6\u4f18\u5148\u53d6\u9ad8\u6743\u91cd"
+      "default": 1
     },
     "tags": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "default": [],
-      "description": "\u7528\u4e8e\u805a\u7c7b\u4e0e\u68c0\u7d22\u7684\u6807\u7b7e"
+      "default": []
     },
     "occurred_at": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u4e8b\u4ef6\u53d1\u751f\u65f6\u95f4"
+      "format": "date-time"
     },
     "hour_of_day": {
       "type": "number",
@@ -59,12 +52,19 @@
       "type": "string"
     },
     "metadata": {
-      "type": "object",
-      "description": "\u7ed3\u6784\u5316\u8865\u5145\u6570\u636e"
+      "type": "object"
     }
   },
   "required": [
     "data_type",
     "summary"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
 }

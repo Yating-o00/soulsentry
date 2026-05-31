@@ -12,36 +12,36 @@
         "task_snoozed",
         "notification_interacted",
         "optimal_time"
-      ],
-      "description": "\u884c\u4e3a\u7c7b\u578b"
+      ]
     },
     "task_id": {
-      "type": "string",
-      "description": "\u5173\u8054\u4efb\u52a1ID"
+      "type": "string"
     },
     "hour_of_day": {
-      "type": "number",
-      "description": "\u4e00\u5929\u4e2d\u7684\u5c0f\u65f6\uff080-23\uff09"
+      "type": "number"
     },
     "day_of_week": {
-      "type": "number",
-      "description": "\u661f\u671f\u51e0\uff080-6\uff09"
+      "type": "number"
     },
     "category": {
-      "type": "string",
-      "description": "\u4efb\u52a1\u7c7b\u522b"
+      "type": "string"
     },
     "response_time_seconds": {
-      "type": "number",
-      "description": "\u54cd\u5e94\u65f6\u95f4\uff08\u79d2\uff09"
+      "type": "number"
     },
     "metadata": {
-      "type": "object",
-      "description": "\u989d\u5916\u5143\u6570\u636e"
+      "type": "object"
     }
   },
   "required": [
     "event_type"
   ],
-  "rls": {}
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
 }

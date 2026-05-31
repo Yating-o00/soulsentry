@@ -97,27 +97,23 @@
           ]
         },
         "interval": {
-          "type": "number",
-          "description": "\u95f4\u9694\uff08\u5982\u6bcf2\u5468\uff09"
+          "type": "number"
         },
         "days_of_week": {
           "type": "array",
           "items": {
             "type": "number"
-          },
-          "description": "\u661f\u671f\u51e0(0-6\uff0c0\u662f\u5468\u65e5\uff09"
+          }
         },
         "days_of_month": {
           "type": "array",
           "items": {
             "type": "number"
-          },
-          "description": "\u6bcf\u6708\u7684\u54ea\u51e0\u5929"
+          }
         },
         "end_date": {
           "type": "string",
-          "format": "date",
-          "description": "\u91cd\u590d\u7ed3\u675f\u65e5\u671f"
+          "format": "date"
         }
       }
     },
@@ -125,18 +121,15 @@
       "type": "array",
       "items": {
         "type": "string"
-      },
-      "description": "\u4efb\u52a1\u6807\u7b7e"
+      }
     },
     "is_all_day": {
       "type": "boolean",
-      "default": false,
-      "description": "\u662f\u5426\u5168\u5929\u4efb\u52a1"
+      "default": false
     },
     "reminder_sent": {
       "type": "boolean",
-      "default": false,
-      "description": "\u662f\u5426\u5df2\u53d1\u9001\u63d0\u9192"
+      "default": false
     },
     "notification_sound": {
       "type": "string",
@@ -148,20 +141,17 @@
         "bells",
         "none"
       ],
-      "default": "default",
-      "description": "\u63d0\u9192\u97f3\u6548"
+      "default": "default"
     },
     "advance_reminders": {
       "type": "array",
       "items": {
         "type": "number"
       },
-      "description": "\u63d0\u524d\u63d0\u9192\u65f6\u95f4\uff08\u5206\u949f\uff09",
       "default": []
     },
     "reminder_strategy": {
       "type": "object",
-      "description": "\u9ad8\u7ea7\u63d0\u9192\u7b56\u7565",
       "properties": {
         "steps": {
           "type": "array",
@@ -188,30 +178,25 @@
         },
         "dynamic_adjustment": {
           "type": "boolean",
-          "default": false,
-          "description": "\u662f\u5426\u5141\u8bb8AI\u52a8\u6001\u8c03\u6574\u63d0\u9192"
+          "default": false
         }
       }
     },
     "snooze_until": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u63a8\u8fdf\u5230\u6307\u5b9a\u65f6\u95f4"
+      "format": "date-time"
     },
     "snooze_count": {
       "type": "number",
-      "default": 0,
-      "description": "\u63a8\u8fdf\u6b21\u6570"
+      "default": 0
     },
     "persistent_reminder": {
       "type": "boolean",
-      "default": false,
-      "description": "\u6301\u7eed\u63d0\u9192\u76f4\u5230\u5b8c\u6210"
+      "default": false
     },
     "notification_interval": {
       "type": "number",
-      "default": 15,
-      "description": "\u6301\u7eed\u63d0\u9192\u95f4\u9694\uff08\u5206\u949f\uff09"
+      "default": 15
     },
     "notification_channels": {
       "type": "array",
@@ -226,63 +211,53 @@
       "default": [
         "in_app",
         "browser"
-      ],
-      "description": "\u901a\u77e5\u6e20\u9053"
+      ]
     },
     "email_reminder": {
       "type": "object",
-      "description": "\u90ae\u4ef6\u63d0\u9192\u8bbe\u7f6e",
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": false
         },
         "recipient_email": {
-          "type": "string",
-          "description": "\u63a5\u6536\u90ae\u4ef6\u5730\u5740\uff08\u9ed8\u8ba4\u7528\u6237\u90ae\u7bb1\uff09"
+          "type": "string"
         },
         "send_times": {
           "type": "array",
           "items": {
             "type": "string",
             "format": "date-time"
-          },
-          "description": "\u6307\u5b9a\u53d1\u9001\u90ae\u4ef6\u7684\u65f6\u95f4\u70b9"
+          }
         },
         "advance_hours": {
           "type": "array",
           "items": {
             "type": "number"
           },
-          "description": "\u63d0\u524d\u591a\u5c11\u5c0f\u65f6\u53d1\u9001\u90ae\u4ef6",
           "default": []
         }
       }
     },
     "location_reminder": {
       "type": "object",
-      "description": "\u57fa\u4e8e\u5730\u7406\u4f4d\u7f6e\u7684\u63d0\u9192",
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": false
         },
         "latitude": {
-          "type": "number",
-          "description": "\u7eac\u5ea6"
+          "type": "number"
         },
         "longitude": {
-          "type": "number",
-          "description": "\u7ecf\u5ea6"
+          "type": "number"
         },
         "radius": {
           "type": "number",
-          "default": 500,
-          "description": "\u89e6\u53d1\u534a\u5f84\uff08\u7c73\uff09"
+          "default": 500
         },
         "location_name": {
-          "type": "string",
-          "description": "\u4f4d\u7f6e\u540d\u79f0"
+          "type": "string"
         },
         "trigger_on": {
           "type": "string",
@@ -291,29 +266,24 @@
             "exit",
             "both"
           ],
-          "default": "enter",
-          "description": "\u8fdb\u5165/\u79bb\u5f00/\u4e24\u8005\u65f6\u89e6\u53d1"
+          "default": "enter"
         }
       }
     },
     "completed_at": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u5b8c\u6210\u65f6\u95f4"
+      "format": "date-time"
     },
     "optimal_reminder_time": {
-      "type": "string",
-      "description": "AI\u5efa\u8bae\u7684\u6700\u4f73\u63d0\u9192\u65f6\u95f4\uff08ISO\u5b57\u7b26\u4e32\uff09"
+      "type": "string"
     },
     "ai_context_summary": {
-      "type": "string",
-      "description": "\u54e8\u5175AI\u751f\u6210\u76843\u53e5\u8bdd\u80cc\u666f\u91cd\u5efa\u6458\u8981\u2014\u2014\u4e3a\u4ec0\u4e48\u8fd9\u4ef6\u4e8b\u5bf9\u4f60\u73b0\u5728\u91cd\u8981"
+      "type": "string"
     },
     "interruption_score": {
       "type": "number",
       "minimum": 0,
-      "maximum": 100,
-      "description": "\u54e8\u5175AI\u8bc4\u5b9a\u7684\u6253\u65ad\u5e72\u6270\u5206\u6570\uff080-100\uff09\uff0c\u51b3\u5b9a\u901a\u77e5\u68af\u5ea6"
+      "maximum": 100
     },
     "interruption_level": {
       "type": "string",
@@ -323,27 +293,22 @@
         "standard",
         "assertive",
         "critical"
-      ],
-      "description": "\u6253\u65ad\u68af\u5ea6\u7b49\u7ea7\uff1a\u9759\u9ed8/\u73af\u5883/\u6807\u51c6/\u5f3a\u63d0\u9192/\u5173\u952e"
+      ]
     },
     "is_waiting_for_reply": {
       "type": "boolean",
-      "default": false,
-      "description": "\u662f\u5426\u4e3a\u6c89\u9ed8\u4efb\u52a1\uff08\u7b49\u5f85\u4ed6\u4eba\u56de\u590d/\u53cd\u9988\uff09"
+      "default": false
     },
     "waiting_for": {
-      "type": "string",
-      "description": "\u6b63\u5728\u7b49\u5f85\u8c01\uff08\u4eba\u540d/\u7cfb\u7edf/\u4e8b\u4ef6\uff09"
+      "type": "string"
     },
     "silence_followup_at": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u6c89\u9ed8\u8ffd\u95ee\u7684\u89e6\u53d1\u65f6\u95f4"
+      "format": "date-time"
     },
     "last_forgetting_check": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u4e0a\u6b21\u9057\u5fd8\u66f2\u7ebf\u68c0\u67e5\u65f6\u95f4"
+      "format": "date-time"
     },
     "forgetting_risk": {
       "type": "string",
@@ -351,42 +316,35 @@
         "low",
         "medium",
         "high"
-      ],
-      "description": "\u9057\u5fd8\u98ce\u9669\u7b49\u7ea7"
+      ]
     },
     "sentinel_analyzed_at": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u54e8\u5175\u5927\u8111\u4e0a\u6b21\u5206\u6790\u65f6\u95f4"
+      "format": "date-time"
     },
     "ai_analysis": {
       "type": "object",
-      "description": "AI\u4efb\u52a1\u5206\u6790",
       "properties": {
         "status_summary": {
-          "type": "string",
-          "description": "\u6574\u4f53\u72b6\u6001\u6458\u8981"
+          "type": "string"
         },
         "risks": {
           "type": "array",
           "items": {
             "type": "string"
-          },
-          "description": "\u6f5c\u5728\u98ce\u9669"
+          }
         },
         "key_dependencies": {
           "type": "array",
           "items": {
             "type": "string"
-          },
-          "description": "\u5173\u952e\u4f9d\u8d56"
+          }
         },
         "suggestions": {
           "type": "array",
           "items": {
             "type": "string"
-          },
-          "description": "\u6539\u8fdb\u5efa\u8bae"
+          }
         },
         "suggested_priority": {
           "type": "string",
@@ -395,26 +353,21 @@
             "medium",
             "high",
             "urgent"
-          ],
-          "description": "AI\u5efa\u8bae\u4f18\u5148\u7ea7"
+          ]
         },
         "priority_reasoning": {
-          "type": "string",
-          "description": "\u4f18\u5148\u7ea7\u5efa\u8bae\u7406\u7531"
+          "type": "string"
         },
         "recommended_execution_start": {
           "type": "string",
-          "format": "date-time",
-          "description": "AI\u5efa\u8bae\u7684\u6700\u4f73\u6267\u884c\u5f00\u59cb\u65f6\u95f4"
+          "format": "date-time"
         },
         "recommended_execution_end": {
           "type": "string",
-          "format": "date-time",
-          "description": "AI\u5efa\u8bae\u7684\u6700\u4f73\u6267\u884c\u7ed3\u675f\u65f6\u95f4"
+          "format": "date-time"
         },
         "time_reasoning": {
-          "type": "string",
-          "description": "\u65f6\u95f4\u5efa\u8bae\u7406\u7531"
+          "type": "string"
         },
         "risk_level": {
           "type": "string",
@@ -423,16 +376,13 @@
             "medium",
             "high",
             "critical"
-          ],
-          "description": "\u6574\u4f53\u98ce\u9669\u7b49\u7ea7"
+          ]
         },
         "time_is_fuzzy": {
-          "type": "boolean",
-          "description": "\u7528\u6237\u7ed9\u51fa\u7684\u65f6\u95f4\u662f\u5426\u4e3a\u6a21\u7cca\u8868\u8fbe"
+          "type": "boolean"
         },
         "best_location": {
-          "type": "string",
-          "description": "\u6700\u5408\u9002\u7684\u6267\u884c/\u63d0\u9192\u5730\u70b9"
+          "type": "string"
         },
         "delivery_channel": {
           "type": "string",
@@ -441,14 +391,12 @@
             "browser",
             "email",
             "silent"
-          ],
-          "description": "\u54e8\u5175\u5efa\u8bae\u7684\u901a\u77e5\u6e20\u9053"
+          ]
         }
       }
     },
     "parent_task_id": {
-      "type": "string",
-      "description": "\u7236\u4efb\u52a1ID\uff08\u7528\u4e8e\u5b50\u4efb\u52a1\uff09"
+      "type": "string"
     },
     "attachments": {
       "type": "array",
@@ -472,8 +420,7 @@
             "format": "date-time"
           }
         }
-      },
-      "description": "\u9644\u4ef6\u5217\u8868"
+      }
     },
     "notes": {
       "type": "array",
@@ -492,28 +439,24 @@
             "format": "date-time"
           }
         }
-      },
-      "description": "\u7b14\u8bb0\u5217\u8868"
+      }
     },
     "progress": {
       "type": "number",
       "minimum": 0,
       "maximum": 100,
-      "default": 0,
-      "description": "\u4efb\u52a1\u5b8c\u6210\u8fdb\u5ea6"
+      "default": 0
     },
     "assigned_to": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "\u5206\u914d\u7ed9\u7684\u7528\u6237ID\u5217\u8868",
       "default": []
     },
     "is_shared": {
       "type": "boolean",
-      "default": false,
-      "description": "\u662f\u5426\u4e3a\u5171\u4eab\u4efb\u52a1"
+      "default": false
     },
     "team_visibility": {
       "type": "string",
@@ -522,22 +465,18 @@
         "team",
         "public"
       ],
-      "default": "private",
-      "description": "\u56e2\u961f\u53ef\u89c1\u6027"
+      "default": "private"
     },
     "deleted_at": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u8f6f\u5220\u9664\u65f6\u95f4"
+      "format": "date-time"
     },
     "google_calendar_event_id": {
-      "type": "string",
-      "description": "\u5173\u8054\u7684Google Calendar\u4e8b\u4ef6ID"
+      "type": "string"
     },
     "gcal_sync_enabled": {
       "type": "boolean",
-      "default": false,
-      "description": "\u662f\u5426\u542f\u7528Google Calendar\u540c\u6b65"
+      "default": false
     },
     "planning_horizon": {
       "type": "string",
@@ -548,48 +487,38 @@
         "quarterly",
         "yearly"
       ],
-      "default": "none",
-      "description": "\u957f\u5468\u671f\u7ea6\u5b9a\u7c7b\u578b\uff1a\u5468/\u6708/\u5b63\u5ea6/\u5e74\u3002\u8bbe\u7f6e\u540e\u7cfb\u7edf\u4f1a\u81ea\u52a8\u5c06\u4efb\u52a1\u62c6\u5206\u4e3a\u5206\u5e03\u5f0f\u63d0\u9192\uff0c\u800c\u975e\u6bcf\u5929\u63d0\u9192"
+      "default": "none"
     },
     "long_term_summary": {
-      "type": "string",
-      "description": "AI \u4e3a\u957f\u5468\u671f\u7ea6\u5b9a\u751f\u6210\u7684\u7b80\u6d01\u6458\u8981\uff08\u4e00\u53e5\u8bdd\uff0c\u7528\u4e8e\u901a\u77e5\u548c\u5361\u7247\u5c55\u793a\uff09"
+      "type": "string"
     },
     "long_term_plan": {
       "type": "object",
-      "description": "AI \u4e3a\u957f\u5468\u671f\u7ea6\u5b9a\u751f\u6210\u7684\u5206\u5e03\u5f0f\u63d0\u9192\u8ba1\u5212",
       "properties": {
         "generated_at": {
           "type": "string",
-          "format": "date-time",
-          "description": "\u751f\u6210\u65f6\u95f4"
+          "format": "date-time"
         },
         "horizon": {
-          "type": "string",
-          "description": "\u5bf9\u5e94\u5468\u671f"
+          "type": "string"
         },
         "checkpoints": {
           "type": "array",
-          "description": "\u5206\u5e03\u5f0f\u68c0\u67e5\u70b9\u5217\u8868",
           "items": {
             "type": "object",
             "properties": {
               "scheduled_at": {
                 "type": "string",
-                "format": "date-time",
-                "description": "\u63d0\u9192\u89e6\u53d1\u65f6\u95f4"
+                "format": "date-time"
               },
               "title": {
-                "type": "string",
-                "description": "\u8be5\u68c0\u67e5\u70b9\u7684\u7b80\u6d01\u6807\u9898"
+                "type": "string"
               },
               "summary": {
-                "type": "string",
-                "description": "\u8be5\u68c0\u67e5\u70b9\u7684\u7b80\u6d01\u6458\u8981"
+                "type": "string"
               },
               "subtask_id": {
-                "type": "string",
-                "description": "\u5bf9\u5e94\u751f\u6210\u7684\u5b50\u4efb\u52a1 ID\uff08\u5982\u5df2\u751f\u6210\uff09"
+                "type": "string"
               },
               "status": {
                 "type": "string",
@@ -608,5 +537,27 @@
   },
   "required": [
     "title"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "assigned_to": {
+            "$in": [
+              "{{user.id}}"
+            ]
+          }
+        },
+        {
+          "team_visibility": "public"
+        }
+      ]
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
 }

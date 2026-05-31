@@ -360,7 +360,18 @@ export default function NotificationManager() {
   useEffect(() => {
     const now = new Date();
 
-    tasks.forEach(task => {
+    // 节流：本次 effect 最多弹 1 条到点 toast，避免多任务到点时连环弹窗
+    // 历史逾期任务在下方 isFreshlyDue 分支外会自动写 reminder_sent，不会涌入
+    let dueBudget = 1;
+
+    // 按 reminder_time 升序处理，让最早到点的任务优先获得名额
+    const sortedTasks = [...tasks].sort((a, b) => {
+      const ta = a?.reminder_time ? new Date(a.reminder_time).getTime() : Infinity;
+      const tb = b?.reminder_time ? new Date(b.reminder_time).getTime() : Infinity;
+      return ta - tb;
+    });
+
+    sortedTasks.forEach(task => {
       if (task.status === "completed" || task.status === "cancelled") {
         if (persistentIntervals.current[task.id]) {
           clearInterval(persistentIntervals.current[task.id]);
@@ -432,19 +443,22 @@ export default function NotificationManager() {
           const minutesSinceDue = differenceInMinutes(now, reminderTime);
           const isFreshlyDue = minutesSinceDue >= 0 && minutesSinceDue <= 10;
           const singleKey = `${task.id}-single-${format(reminderTime, 'yyyy-MM-dd-HH-mm')}`;
-          if (isFreshlyDue && !task.reminder_sent && !checkedTasks.current.has(singleKey) && !isNotified(singleKey)) {
+          if (isFreshlyDue && !task.reminder_sent && !checkedTasks.current.has(singleKey) && !isNotified(singleKey) && dueBudget > 0) {
             sendNotification(task, false);
             checkedTasks.current.add(singleKey);
             markNotified(singleKey);
+            dueBudget -= 1;
 
             // 如果是持续提醒，设置定时器
             if (task.persistent_reminder) {
               setupPersistentReminder(task);
             }
           } else if (isPast(reminderTime) && !task.reminder_sent && minutesSinceDue > 10) {
-            // 已严重逾期：静默标记 reminder_sent，避免下次再触发
+            // 已严重逾期：真正写库 reminder_sent，避免每次打开 App 时同时涌出一堆历史 toast
             // 真正的"高优先级长时逾期"由下方 proactive-nag 逻辑兜底（仅 high/urgent 且 24h+）
             markNotified(singleKey);
+            checkedTasks.current.add(singleKey);
+            updateTaskMutation.mutate({ id: task.id, data: { reminder_sent: true } });
           }
       }
 

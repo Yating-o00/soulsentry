@@ -110,8 +110,37 @@ Deno.serve(async (req) => {
       reminder_sent: false,
     });
 
+    // 预取所有用户的偏好设置（静默时段），避免循环内重复查询
+    const prefsCache = new Map(); // email -> UserPreference
+
+    // 判断 email 对应用户当前是否处于静默时段；静默期内只允许 urgent 任务推送
+    async function isInQuietHours(email) {
+      if (!prefsCache.has(email)) {
+        try {
+          const list = await base44.asServiceRole.entities.UserPreference.filter(
+            { created_by: email }, '-updated_date', 1
+          );
+          prefsCache.set(email, list?.[0] || null);
+        } catch { prefsCache.set(email, null); }
+      }
+      const pref = prefsCache.get(email);
+      if (!pref || !pref.quiet_hours_enabled) return false;
+      const start = pref.quiet_hours_start || '22:00';
+      const end = pref.quiet_hours_end || '08:00';
+      // 用户时区固定 Asia/Shanghai
+      const sh = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+      const cur = sh.getHours() * 60 + sh.getMinutes();
+      const [sh1, sm1] = start.split(':').map(Number);
+      const [sh2, sm2] = end.split(':').map(Number);
+      const s = sh1 * 60 + sm1;
+      const e = sh2 * 60 + sm2;
+      return s < e ? (cur >= s && cur < e) : (cur >= s || cur < e);
+    }
+
     let processedDue = 0;
     let processedAdvance = 0;
+    let suppressedQuiet = 0;
+    let suppressedLocation = 0;
     const errors = [];
 
     for (const task of tasks) {
@@ -121,10 +150,9 @@ Deno.serve(async (req) => {
       const reminderMs = new Date(task.reminder_time).getTime();
       if (Number.isNaN(reminderMs)) continue;
 
-      // —— 情况 A：到点提醒（任务的 reminder_time 现在 ≤ 当前时间，且未超过 10 分钟前）
-      // 5 分钟扫描一次，10 分钟窗口足够覆盖一次延迟，且避免几小时前的任务被反复补推
-      // 超过窗口仍未发出的任务由"24h+ 高优先级主动 nag"逻辑兜底，不在这里堆积
-      const isDueNow = reminderMs <= now && now - reminderMs <= 10 * 60 * 1000;
+      // —— 情况 A：到点提醒（未来 ≤ 60 分钟"补窗口"——容忍单次扫描失败 / 推送被锁屏丢失）
+      // 仍超出窗口的逾期任务由"24h+ 高优先级主动 nag"兜底，不在这里堆积
+      const isDueNow = reminderMs <= now && now - reminderMs <= 60 * 60 * 1000;
 
       // —— 情况 B：截止预警（在未来 24 小时窗口内，按用户设置的提前小时数预警）
       const isInAdvanceWindow = task.reminder_time > nowIso && task.reminder_time <= inWindow;
@@ -148,8 +176,32 @@ Deno.serve(async (req) => {
           ? settings.alert_channels
           : ['web_push'];
 
-        // 到点提醒：直接推
+        // 到点提醒：根据"静默时段 + 位置匹配"决定是否真推
         if (isDueNow) {
+          // 适时：静默时段内，仅 urgent 通过；其余跳过且不写 reminder_sent，等出静默后下次扫描补推
+          const inQuiet = await isInQuietHours(email);
+          if (inQuiet && task.priority !== 'urgent') {
+            suppressedQuiet++;
+            continue;
+          }
+          // 适地：任务指定了 best_location，但用户当前位置类型不匹配时，跳过并保留 reminder_sent=false
+          // 真正到达时由 sentinelGeofenceTrigger / OnTheWayReminderHost 触发
+          const bestLoc = task.ai_analysis?.best_location;
+          if (bestLoc && bestLoc !== '任意' && bestLoc !== 'any') {
+            const pref = prefsCache.get(email);
+            const currentPlace = pref?.last_location?.place_type || null;
+            if (currentPlace && currentPlace !== 'unknown') {
+              // 简单匹配：best_location 文本里含 currentPlace 中文/英文关键字才算"到位"
+              const placeMap = { home: '家', office: '办公', gym: '健身', school: '学校', shopping: '购物', hospital: '医院', restaurant: '餐厅' };
+              const placeWord = placeMap[currentPlace] || '';
+              const matched = placeWord && String(bestLoc).includes(placeWord);
+              if (!matched && task.priority !== 'urgent') {
+                suppressedLocation++;
+                continue;
+              }
+            }
+          }
+
           for (const ch of channels) {
             try {
               if (ch === 'web_push') {
@@ -214,6 +266,8 @@ Deno.serve(async (req) => {
       scanned: tasks.length,
       due_now_sent: processedDue,
       advance_sent: processedAdvance,
+      suppressed_quiet_hours: suppressedQuiet,
+      suppressed_wrong_location: suppressedLocation,
       errors,
     });
   } catch (error) {

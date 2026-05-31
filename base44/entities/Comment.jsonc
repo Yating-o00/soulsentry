@@ -15,6 +15,7 @@
       "items": {
         "type": "string"
       },
+      "description": "\u63d0\u53ca\u7684\u7528\u6237ID\u5217\u8868",
       "default": []
     }
   },
@@ -24,9 +25,21 @@
   ],
   "rls": {
     "read": {
-      "created_by_id": "{{user.id}}"
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "mentions": {
+            "$contains": "{{user.id}}"
+          }
+        }
+      ]
     },
     "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
       "created_by_id": "{{user.id}}"
     }
   }

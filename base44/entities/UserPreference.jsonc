@@ -1,19 +1,22 @@
 {
   "name": "UserPreference",
   "type": "object",
-  "description": "\u7528\u6237\u663e\u5f0f\u8bbe\u7f6e\u7684\u4e2a\u6027\u5316\u504f\u597d",
+  "description": "\u7528\u6237\u663e\u5f0f\u8bbe\u7f6e\u7684\u4e2a\u6027\u5316\u504f\u597d\uff0c\u7528\u4e8e PWA \u51b7\u542f\u52a8\u65f6\u5feb\u901f\u6e32\u67d3\u5408\u9002\u5185\u5bb9",
   "properties": {
     "quiet_hours_enabled": {
       "type": "boolean",
-      "default": false
+      "default": false,
+      "description": "\u662f\u5426\u542f\u7528\u514d\u6253\u6270\u65f6\u6bb5"
     },
     "quiet_hours_start": {
       "type": "string",
-      "default": "22:00"
+      "default": "22:00",
+      "description": "\u514d\u6253\u6270\u5f00\u59cb\u65f6\u95f4 HH:mm"
     },
     "quiet_hours_end": {
       "type": "string",
-      "default": "08:00"
+      "default": "08:00",
+      "description": "\u514d\u6253\u6270\u7ed3\u675f\u65f6\u95f4 HH:mm"
     },
     "preferred_reminder_style": {
       "type": "string",
@@ -22,7 +25,8 @@
         "standard",
         "assertive"
       ],
-      "default": "standard"
+      "default": "standard",
+      "description": "\u504f\u597d\u7684\u63d0\u9192\u98ce\u683c\uff1a\u6e29\u67d4/\u6807\u51c6/\u7d27\u8feb"
     },
     "enabled_card_types": {
       "type": "array",
@@ -38,18 +42,22 @@
         "geo_context",
         "decision_preload",
         "on_the_way"
-      ]
+      ],
+      "description": "\u9996\u9875\u542f\u7528\u7684\u60c5\u5883\u5361\u7247\u7c7b\u578b"
     },
     "location_tracking_enabled": {
       "type": "boolean",
-      "default": false
+      "default": false,
+      "description": "\u662f\u5426\u5141\u8bb8\u540e\u53f0\u5b9a\u4f4d\uff08\u6709\u9650\u6301\u7eed\u5b9a\u4f4d\uff09"
     },
     "push_enabled": {
       "type": "boolean",
-      "default": false
+      "default": false,
+      "description": "\u662f\u5426\u5df2\u8ba2\u9605\u6d4f\u89c8\u5668 Push"
     },
     "push_subscription": {
       "type": "object",
+      "description": "Web Push \u8ba2\u9605\u5bf9\u8c61\uff08SW \u63a8\u9001\u6240\u9700\uff09",
       "properties": {
         "endpoint": {
           "type": "string"
@@ -76,10 +84,12 @@
     },
     "onboarded": {
       "type": "boolean",
-      "default": false
+      "default": false,
+      "description": "\u662f\u5426\u5b8c\u6210\u4e86\u9996\u6b21\u504f\u597d\u521d\u59cb\u5316\u5f15\u5bfc"
     },
     "home_locations": {
       "type": "array",
+      "description": "\u51b7\u542f\u52a8\u5373\u53ef\u7528\u7684\u5173\u952e\u5730\u70b9\u5feb\u7167\uff08name, lat, lng\uff09\uff0c\u7528\u4e8e SW \u9996\u5c4f\u6e32\u67d3",
       "items": {
         "type": "object",
         "properties": {
@@ -101,36 +111,45 @@
     },
     "daily_routine": {
       "type": "object",
+      "description": "\u7528\u6237\u65e5\u5e38\u4f5c\u606f\u8282\u70b9\uff08\u7528\u4e8e AI \u667a\u80fd\u63a8\u65ad\u987a\u8def\u578b/\u4f4d\u7f6e\u578b\u4efb\u52a1\u7684\u6700\u4f73\u63d0\u9192\u65f6\u95f4\uff09",
       "properties": {
         "wake_up": {
-          "type": "string"
+          "type": "string",
+          "description": "\u8d77\u5e8a\u65f6\u95f4 HH:mm"
         },
         "leave_home": {
-          "type": "string"
+          "type": "string",
+          "description": "\u51fa\u95e8\u4e0a\u73ed\u65f6\u95f4 HH:mm"
         },
         "arrive_office": {
-          "type": "string"
+          "type": "string",
+          "description": "\u5230\u8fbe\u529e\u516c\u5ba4\u65f6\u95f4 HH:mm"
         },
         "leave_office": {
-          "type": "string"
+          "type": "string",
+          "description": "\u4e0b\u73ed\u79bb\u5f00\u65f6\u95f4 HH:mm"
         },
         "arrive_home": {
-          "type": "string"
+          "type": "string",
+          "description": "\u5230\u5bb6\u65f6\u95f4 HH:mm"
         },
         "sleep": {
-          "type": "string"
+          "type": "string",
+          "description": "\u7761\u89c9\u65f6\u95f4 HH:mm"
         },
         "work_days": {
           "type": "array",
           "items": {
             "type": "number"
-          }
+          },
+          "description": "\u5de5\u4f5c\u65e5\uff080=\u5468\u65e5, 6=\u5468\u516d\uff09"
         }
       }
     },
     "last_synced_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "\u504f\u597d\u6700\u8fd1\u4e00\u6b21\u540c\u6b65\u7684\u65f6\u95f4\u6233"
     }
   },
   "required": [],
@@ -139,6 +158,9 @@
       "created_by_id": "{{user.id}}"
     },
     "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
       "created_by_id": "{{user.id}}"
     }
   }

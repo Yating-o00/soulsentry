@@ -3,7 +3,8 @@
   "type": "object",
   "properties": {
     "task_id": {
-      "type": "string"
+      "type": "string",
+      "description": "The ID of the task"
     },
     "status": {
       "type": "string",
@@ -13,14 +14,17 @@
         "pending",
         "cancelled"
       ],
-      "default": "completed"
+      "default": "completed",
+      "description": "Status at the time of completion"
     },
     "completed_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "When the task was completed"
     },
     "note": {
-      "type": "string"
+      "type": "string",
+      "description": "Optional note for this completion"
     }
   },
   "required": [
@@ -32,6 +36,9 @@
       "created_by_id": "{{user.id}}"
     },
     "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
       "created_by_id": "{{user.id}}"
     }
   }

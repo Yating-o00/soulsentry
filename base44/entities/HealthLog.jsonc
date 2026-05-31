@@ -12,20 +12,25 @@
         "sleep",
         "calories",
         "mood"
-      ]
+      ],
+      "description": "Type of health metric"
     },
     "value": {
-      "type": "number"
+      "type": "number",
+      "description": "The value of the metric"
     },
     "unit": {
-      "type": "string"
+      "type": "string",
+      "description": "Unit of measurement (e.g., bpm, kg, km)"
     },
     "date": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "Date and time of the log"
     },
     "notes": {
-      "type": "string"
+      "type": "string",
+      "description": "Optional notes"
     }
   },
   "required": [
@@ -38,6 +43,9 @@
       "created_by_id": "{{user.id}}"
     },
     "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
       "created_by_id": "{{user.id}}"
     }
   }

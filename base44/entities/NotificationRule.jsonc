@@ -3,11 +3,13 @@
   "type": "object",
   "properties": {
     "title": {
-      "type": "string"
+      "type": "string",
+      "description": "\u89c4\u5219\u540d\u79f0"
     },
     "is_enabled": {
       "type": "boolean",
-      "default": true
+      "default": true,
+      "description": "\u662f\u5426\u542f\u7528"
     },
     "condition_category": {
       "type": "string",
@@ -22,7 +24,8 @@
         "finance",
         "other"
       ],
-      "default": "all"
+      "default": "all",
+      "description": "\u5339\u914d\u5206\u7c7b\uff08all\u4e3a\u6240\u6709\uff09"
     },
     "condition_priority": {
       "type": "string",
@@ -33,11 +36,13 @@
         "high",
         "urgent"
       ],
-      "default": "all"
+      "default": "all",
+      "description": "\u5339\u914d\u4f18\u5148\u7ea7\uff08all\u4e3a\u6240\u6709\uff09"
     },
     "action_mute": {
       "type": "boolean",
-      "default": false
+      "default": false,
+      "description": "\u662f\u5426\u9759\u97f3/\u5c4f\u853d\u901a\u77e5"
     },
     "action_sound": {
       "type": "string",
@@ -49,7 +54,8 @@
         "bells",
         "none"
       ],
-      "default": "default"
+      "default": "default",
+      "description": "\u81ea\u5b9a\u4e49\u63d0\u793a\u97f3"
     },
     "action_channels": {
       "type": "array",
@@ -63,14 +69,16 @@
       },
       "default": [
         "in_app"
-      ]
+      ],
+      "description": "\u901a\u77e5\u6e20\u9053"
     },
     "action_advance_minutes": {
       "type": "array",
       "items": {
         "type": "number"
       },
-      "default": []
+      "default": [],
+      "description": "\u989d\u5916\u7684\u63d0\u524d\u63d0\u9192\u65f6\u95f4\uff08\u5206\u949f\uff09"
     }
   },
   "required": [
@@ -81,6 +89,9 @@
       "created_by_id": "{{user.id}}"
     },
     "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
       "created_by_id": "{{user.id}}"
     }
   }

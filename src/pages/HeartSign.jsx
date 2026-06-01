@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { Heart, Search, RefreshCw, Sparkles, Globe } from "lucide-react";
+import { Heart, Search, RefreshCw, Sparkles, Globe, User } from "lucide-react";
 import HeartSignMessage from "@/components/heartsign/HeartSignMessage";
 import HeartSignInput from "@/components/heartsign/HeartSignInput";
 import HeartSignInsightPanel from "@/components/heartsign/HeartSignInsightPanel";
@@ -43,7 +43,11 @@ export default function HeartSign() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [feedDialogOpen, setFeedDialogOpen] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(false);
   const streamRef = useRef(null);
+
+  // 纯外部信息来源（外部订阅源 / 网页链接 / 微信转发）
+  const EXTERNAL_SOURCES = ['external_feed', 'web_link', 'wechat_share'];
 
   const load = async () => {
     try {
@@ -100,14 +104,17 @@ export default function HeartSign() {
     }
   };
 
-  const filtered = search
-    ? notes.filter(n => {
-        const q = search.toLowerCase();
-        return (n.plain_text || '').toLowerCase().includes(q)
-          || (n.ai_analysis?.summary || '').toLowerCase().includes(q)
-          || (n.tags || []).some(t => t.toLowerCase().includes(q));
-      })
+  let filtered = onlyMine
+    ? notes.filter(n => !EXTERNAL_SOURCES.includes(n.source_type))
     : notes;
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(n =>
+      (n.plain_text || '').toLowerCase().includes(q)
+      || (n.ai_analysis?.summary || '').toLowerCase().includes(q)
+      || (n.tags || []).some(t => t.toLowerCase().includes(q))
+    );
+  }
 
   const groups = groupByDay(filtered);
 
@@ -139,6 +146,18 @@ export default function HeartSign() {
                 className="bg-transparent outline-none text-sm w-40"
               />
             </div>
+            <button
+              onClick={() => setOnlyMine(v => !v)}
+              title={onlyMine ? '当前只显示我自建的内容，点击显示全部' : '只显示我自建的内容'}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                onlyMine
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              {onlyMine ? '仅我的内容' : '全部内容'}
+            </button>
             <button onClick={() => setFeedDialogOpen(true)} className="px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-600 rounded-lg text-xs font-medium flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5" />
               外部连接

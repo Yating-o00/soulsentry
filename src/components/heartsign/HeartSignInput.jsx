@@ -4,9 +4,12 @@ import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import QuickTemplates from "./QuickTemplates";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
+import ChatPasteRecognizer from "./ChatPasteRecognizer";
+import { looksLikeChatLog } from "@/components/utils/processPastedContent";
 
 export default function HeartSignInput({ onSend }) {
   const [text, setText] = useState("");
+  const [showChatRecognizer, setShowChatRecognizer] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [sourceUrl, setSourceUrl] = useState("");
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -21,6 +24,12 @@ export default function HeartSignInput({ onSend }) {
   const detectUrlInText = (val) => {
     const m = val.match(/https?:\/\/\S+/);
     if (m && !sourceUrl) setSourceUrl(m[0]);
+  };
+
+  const handlePaste = (e) => {
+    const pasted = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+    const combined = (text + pasted).trim();
+    if (looksLikeChatLog(combined)) setShowChatRecognizer(true);
   };
 
   const autoResize = (el) => {
@@ -87,6 +96,15 @@ export default function HeartSignInput({ onSend }) {
   return (
     <div className="bg-white border-t border-slate-200 p-3 md:p-4">
       <div className="max-w-3xl mx-auto">
+        {/* 聊天记录智能识别条 */}
+        {showChatRecognizer && text.trim() && (
+          <ChatPasteRecognizer
+            text={text}
+            onDone={() => { setText(''); setShowChatRecognizer(false); }}
+            onDismiss={() => setShowChatRecognizer(false)}
+          />
+        )}
+
         {/* 附件预览 */}
         {(attachments.length > 0 || sourceUrl) && (
           <div className="mb-2 flex flex-wrap gap-2">
@@ -162,6 +180,7 @@ export default function HeartSignInput({ onSend }) {
             rows={1}
             value={text}
             onChange={(e) => { setText(e.target.value); detectUrlInText(e.target.value); autoResize(e.target); }}
+            onPaste={handlePaste}
             onKeyDown={onKey}
             placeholder="发给自己 — 想法、链接、报告、文件，AI 会自动整理归档..."
             className="flex-1 bg-transparent outline-none resize-none text-[15px] text-slate-800 placeholder-slate-400 px-2 py-2 max-h-[200px]"

@@ -4,10 +4,13 @@ import { cn } from "@/lib/utils";
 import { deepSemanticParse } from "@/components/utils/semanticParser";
 import { normalizeTaskTime } from "@/lib/timeCore";
 import SemanticPreview from "./SemanticPreview";
+import ChatPasteRecognizer from "@/components/heartsign/ChatPasteRecognizer";
+import { looksLikeChatLog } from "@/components/utils/processPastedContent";
 
 export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange }) {
   const [internalValue, setInternalValue] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [showChatRecognizer, setShowChatRecognizer] = useState(false);
   const recognitionRef = useRef(null);
   
   const value = propValue !== undefined ? propValue : internalValue;
@@ -161,8 +164,22 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
     }
   };
 
+  const handlePaste = (e) => {
+    const pasted = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+    if (looksLikeChatLog((value + pasted).trim())) setShowChatRecognizer(true);
+  };
+
   return (
     <div className="bg-white rounded-3xl p-2 shadow-sm border border-slate-100 transition-all focus-within:ring-4 focus-within:ring-slate-100 focus-within:border-slate-200">
+      {showChatRecognizer && value.trim() && (
+        <div className="px-2 pt-2">
+          <ChatPasteRecognizer
+            text={value}
+            onDone={() => { handleClear(); setShowChatRecognizer(false); }}
+            onDismiss={() => setShowChatRecognizer(false)}
+          />
+        </div>
+      )}
       <div className="flex items-center gap-2 p-2">
         <div className="flex-1 relative">
           <div className="absolute left-3 top-1/2 -translate-y-1/2">
@@ -185,6 +202,7 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder="告诉我你想记住什么，无论是重要目标还是生活小事..."
             className="w-full pl-12 pr-4 py-3.5 rounded-2xl text-slate-700 placeholder-slate-400 focus:outline-none bg-transparent"
           />

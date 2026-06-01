@@ -121,12 +121,8 @@ export async function registerCurrentDevice() {
 
   if (existing && existing.length > 0) {
     const dev = existing[0];
-    // 如果旧记录的 device_type 与新检测不一致(例如之前误判为电脑,现在识别出是手机),
-    // 自动修正名称为新类型的默认名;用户已手动改过的非默认名则保留
-    const oldDefaults = ["电脑", "手机", "平板", "手表", "音箱", "其他"];
-    const isUntouchedName =
-      !dev.name ||
-      oldDefaults.some((d) => dev.name === d || dev.name.startsWith(`${d}(`) || dev.name.startsWith(`${d}(`));
+    // 用户手动改过名字的设备：绝不覆盖 name
+    const isUntouchedName = !dev.name_customized;
     const finalPayload =
       dev.device_type !== info.device_type && isUntouchedName
         ? { ...payload, name: info.defaultName }
@@ -168,14 +164,8 @@ export async function heartbeat() {
     patch.screen_size = info.screen_size;
     patch.capabilities = info.capabilities;
 
-    // 若 name 仍是旧默认名(电脑/Mac 等),同步更新为新形态默认名
-    const oldDefaults = ["电脑", "手机", "平板", "手表", "音箱", "其他", "设备"];
-    const isUntouchedName =
-      !dev.name ||
-      oldDefaults.some(
-        (d) => dev.name === d || dev.name.startsWith(`${d}(`) || dev.name.startsWith(`${d}（`)
-      );
-    if (isUntouchedName) patch.name = info.defaultName;
+    // 用户手动改过名字的设备：绝不覆盖 name
+    if (!dev.name_customized) patch.name = info.defaultName;
   }
   try {
     await base44.entities.Device.update(dev.id, patch);

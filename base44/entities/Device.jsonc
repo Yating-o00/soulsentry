@@ -1,15 +1,17 @@
 {
   "name": "Device",
   "type": "object",
-  "description": "\u7528\u6237\u5df2\u8fde\u63a5\u7684\u771f\u5b9e\u8bbe\u5907\uff08\u624b\u673a/\u7535\u8111/\u5e73\u677f\u7b49\uff09\uff0c\u901a\u8fc7\u6d4f\u89c8\u5668\u6307\u7eb9\u8bc6\u522b\u5e76\u7ef4\u6301\u5728\u7ebf\u5fc3\u8df3",
   "properties": {
     "device_id": {
-      "type": "string",
-      "description": "\u672c\u673a\u751f\u6210\u7684\u7a33\u5b9a\u6307\u7eb9\uff08localStorage \u6301\u4e45\u5316\uff09"
+      "type": "string"
     },
     "name": {
-      "type": "string",
-      "description": "\u8bbe\u5907\u663e\u793a\u540d\uff08\u7528\u6237\u53ef\u81ea\u5b9a\u4e49\uff09\uff0c\u5982\uff1a\u6211\u7684 iPhone\u3001\u5de5\u4f5c\u7535\u8111"
+      "type": "string"
+    },
+    "name_customized": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u7528\u6237\u662f\u5426\u624b\u52a8\u91cd\u547d\u540d\u8fc7\uff1b\u4e3a true \u65f6\u5fc3\u8df3/\u6ce8\u518c\u903b\u8f91\u4e0d\u518d\u8986\u76d6 name"
     },
     "device_type": {
       "type": "string",
@@ -21,8 +23,7 @@
         "speaker",
         "other"
       ],
-      "default": "other",
-      "description": "\u8bbe\u5907\u7c7b\u578b"
+      "default": "other"
     },
     "role": {
       "type": "string",
@@ -33,38 +34,30 @@
         "wearable",
         "secondary"
       ],
-      "default": "secondary",
-      "description": "\u5728\u7528\u6237\u591a\u7aef\u751f\u6001\u4e2d\u7684\u89d2\u8272\u5b9a\u4f4d"
+      "default": "secondary"
     },
     "platform": {
-      "type": "string",
-      "description": "\u64cd\u4f5c\u7cfb\u7edf\u5e73\u53f0\uff0c\u5982 iOS / Android / macOS / Windows"
+      "type": "string"
     },
     "browser": {
-      "type": "string",
-      "description": "\u6d4f\u89c8\u5668\u540d\u79f0\uff0c\u5982 Chrome / Safari"
+      "type": "string"
     },
     "user_agent": {
-      "type": "string",
-      "description": "\u5b8c\u6574 UA \u5b57\u7b26\u4e32"
+      "type": "string"
     },
     "screen_size": {
-      "type": "string",
-      "description": "\u5c4f\u5e55\u5206\u8fa8\u7387\uff0c\u5982 1920x1080"
+      "type": "string"
     },
     "is_online": {
       "type": "boolean",
-      "default": false,
-      "description": "\u5f53\u524d\u662f\u5426\u5728\u7ebf\uff08\u57fa\u4e8e\u6700\u8fd1\u5fc3\u8df3\uff09"
+      "default": false
     },
     "last_seen_at": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u6700\u8fd1\u4e00\u6b21\u5fc3\u8df3/\u6d3b\u8dc3\u65f6\u95f4"
+      "format": "date-time"
     },
     "push_subscription": {
       "type": "object",
-      "description": "\u8be5\u8bbe\u5907\u7684 Web Push \u8ba2\u9605(\u7528\u4e8e\u5b9a\u5411\u63a8\u9001)",
       "properties": {
         "endpoint": {
           "type": "string"
@@ -87,13 +80,11 @@
       "items": {
         "type": "string"
       },
-      "description": "\u8bbe\u5907\u652f\u6301\u7684\u80fd\u529b\uff1apush / geolocation / notification / camera / mic \u7b49",
       "default": []
     },
     "is_current": {
       "type": "boolean",
-      "default": false,
-      "description": "\u6807\u8bb0\u662f\u5426\u4e3a\u5f53\u524d\u6b63\u5728\u4f7f\u7528\u7684\u8bbe\u5907\uff08\u4ec5\u524d\u7aef\u5c55\u793a\u7528\uff09"
+      "default": false
     }
   },
   "required": [
@@ -102,13 +93,28 @@
   ],
   "rls": {
     "read": {
-      "created_by_id": "{{user.id}}"
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        }
+      ]
     },
     "write": {
-      "created_by_id": "{{user.id}}"
-    },
-    "delete": {
-      "created_by_id": "{{user.id}}"
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        }
+      ]
     }
   }
 }

@@ -286,12 +286,24 @@ export default function ConnectedDevicesPanel({
   };
 
   const handleRename = async (device, newName) => {
+    // 乐观更新：先在本地改名，避免刷新前后短暂闪回旧名
+    setDevices((prev) =>
+      prev.map((d) => (d.id === device.id ? { ...d, name: newName, name_customized: true } : d))
+    );
     try {
-      await base44.entities.Device.update(device.id, { name: newName });
+      await base44.entities.Device.update(device.id, { name: newName, name_customized: true });
       toast.success("已更新设备名");
       refresh();
     } catch (e) {
-      toast.error("重命名失败");
+      const status = e?.response?.status;
+      if (status === 404) {
+        toast.error("该设备记录已失效，请刷新后重试");
+      } else if (status === 403) {
+        toast.error("无权限修改这台设备（仅创建者可重命名）");
+      } else {
+        toast.error("重命名失败：" + (e?.message || "请稍后再试"));
+      }
+      refresh();
     }
   };
 

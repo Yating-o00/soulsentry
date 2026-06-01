@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Smartphone, Monitor, Tablet, Watch, Speaker, RefreshCw, Pencil, Check, X, Wifi, WifiOff } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { listMyDevices, registerCurrentDevice } from "@/lib/deviceRegistry";
+import { listMyDevices, registerCurrentDevice, renameDeviceByFingerprint } from "@/lib/deviceRegistry";
 import { resolveDeviceBrand } from "./DeviceBrandIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -288,17 +288,18 @@ export default function ConnectedDevicesPanel({
   const handleRename = async (device, newName) => {
     // 乐观更新：先在本地改名，避免刷新前后短暂闪回旧名
     setDevices((prev) =>
-      prev.map((d) => (d.id === device.id ? { ...d, name: newName, name_customized: true } : d))
+      prev.map((d) =>
+        d.device_id === device.device_id ? { ...d, name: newName, name_customized: true } : d
+      )
     );
     try {
-      await base44.entities.Device.update(device.id, { name: newName, name_customized: true });
+      // 用稳定指纹 device_id 重命名，绕开去重可能已删除的旧记录 id（修复 "Device ... not found"）
+      await renameDeviceByFingerprint(device.device_id, newName);
       toast.success("已更新设备名");
       refresh();
     } catch (e) {
       const status = e?.response?.status;
-      if (status === 404) {
-        toast.error("该设备记录已失效，请刷新后重试");
-      } else if (status === 403) {
+      if (status === 403) {
         toast.error("无权限修改这台设备（仅创建者可重命名）");
       } else {
         toast.error("重命名失败：" + (e?.message || "请稍后再试"));

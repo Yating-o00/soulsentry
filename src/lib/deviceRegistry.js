@@ -179,6 +179,22 @@ export async function heartbeat() {
   return { ...dev, ...patch };
 }
 
+/** 按稳定指纹 device_id 安全重命名：
+ *  不依赖 UI 里可能已被去重删除的旧 id，而是用 device_id 重新查出当前存活记录再写入。
+ *  若该指纹下有多条（去重前），全部写上同样的名字，避免下一次去重后名字丢失。
+ */
+export async function renameDeviceByFingerprint(deviceId, newName) {
+  const existing = await base44.entities.Device.filter({ device_id: deviceId });
+  if (!existing || existing.length === 0) {
+    throw new Error("设备记录不存在，请刷新后重试");
+  }
+  await Promise.all(
+    existing.map((d) =>
+      base44.entities.Device.update(d.id, { name: newName, name_customized: true }).catch(() => null)
+    )
+  );
+}
+
 /** 标记本机离线（页面隐藏/关闭时调用） */
 export async function markOffline() {
   try {
@@ -219,13 +235,28 @@ async function dedupeDevices(list) {
       survivors.push(arr[0]);
       continue;
     }
-    // 按 last_seen_at 倒序，最新的留下
+    // 优先保留用户改过名的记录，其次按 last_seen_at 倒序（最新的留下）
     arr.sort((a, b) => {
+      if (!!a.name_customized !== !!b.name_customized) {
+        return a.name_customized ? -1 : 1;
+      }
       const ta = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
       const tb = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
       return tb - ta;
     });
-    survivors.push(arr[0]);
+    // 把幸存者的自定义名同步给同组其它记录，避免删错或竞态导致名字丢失
+    const winner = arr[0];
+    if (winner.name_customized && winner.name) {
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i].name !== winner.name) {
+          base44.entities.Device.update(arr[i].id, {
+            name: winner.name,
+            name_customized: true,
+          }).catch(() => null);
+        }
+      }
+    }
+    survivors.push(winner);
     for (let i = 1; i < arr.length; i++) toDelete.push(arr[i].id);
   }
 

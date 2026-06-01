@@ -243,14 +243,35 @@ export default function SmartDailyPlanner() {
       const targetDate = data.resolved_date || selectedDateStr;
 
       if (targetDate === selectedDateStr) {
-        setAnalysis(data);
         setResolvedDateHint(null);
+
+        // 叠加而非覆盖：把已有规划的时间线/自动化与本次新内容合并去重
+        const existingTimeline = (dayPlan?.plan_json?.focus_blocks || []).map(b => ({ time: b.time, title: b.title, description: b.description || '', type: b.type || 'focus', date: b.date || selectedDateStr }));
+        const newTimeline = (data.timeline || []).filter(t => !t.date || t.date === selectedDateStr).map(t => ({ time: t.time, title: t.title, description: t.description || '', type: t.type || 'focus', date: t.date || selectedDateStr }));
+        const mergedTimeline = dedupeBlocks([...existingTimeline, ...newTimeline]);
+
+        const existingAutomations = (dayPlan?.plan_json?.key_tasks || []).map(t => ({ title: t.title, desc: t.description || '', status: t.status === 'completed' ? 'done' : (t.status === 'in_progress' || t.status === 'running' ? 'running' : 'ready') }));
+        const newAutomations = data.automations || [];
+        const mergedAutomations = (() => {
+          const seen = new Set();
+          const out = [];
+          for (const a of [...existingAutomations, ...newAutomations]) {
+            if (!a) continue;
+            const k = normKey(a.title);
+            if (!k || seen.has(k)) continue;
+            seen.add(k); out.push(a);
+          }
+          return out;
+        })();
+
+        // analysis 视图展示累计后的完整规划，而不是只显示最新一次输入
+        setAnalysis({ ...data, timeline: mergedTimeline, automations: mergedAutomations });
 
         // Save to DailyPlan
         const planRecord = {
           plan_date: selectedDateStr,
           original_input: [dayPlan?.original_input, capturedInput].filter(Boolean).join('\n'),
-          theme: data.parsed?.intents?.[0] || '',
+          theme: data.parsed?.intents?.[0] || dayPlan?.theme || '',
           summary: '',
           plan_json: {
             key_tasks: dedupeTasks([...(dayPlan?.plan_json?.key_tasks || []), ...(data.automations || []).map(a => ({ title: a.title, description: a.desc || '', status: 'pending', priority: 'medium', category: 'other' }))]),

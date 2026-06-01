@@ -7,7 +7,6 @@ import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
-import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
 import { deepSemanticParse } from "@/components/utils/semanticParser";
 import { detectEmailIntent } from "@/components/gmail/detectEmailIntent";
@@ -211,33 +210,104 @@ export default function Welcome({ onComplete }) {
           input: textToAnalyze
       });
 
-      // Route by intent: wishes → notes only
-      const isWishOrNote = semanticHint?.primary_intent === "wish" || semanticHint?.primary_intent === "note";
+      // —— AI 内容识别与精准分流 ——
+      // 把用户输入拆成若干条内容，逐条判定：
+      //   needs_confirmation=true（需要用户再次确认完成 / 有待办性质）→ 录入【约定】
+      //   否则（纯记录、想法、信息、参考资料）→ 录入【心签】
+      let classification = null;
+      try {
+        classification = await base44.integrations.Core.InvokeLLM({
+          prompt: `分析以下用户输入，识别其中包含的内容条目，并对每一条判断它应归入"约定"还是"心签"。
 
-      // 始终尝试提取任务：AI 若识别到约定/任务类内容则自动创建约定
-      // extractAndCreateTasks 内部会判断是否存在真正的任务，无任务时返回空数组
-      extractAndCreateTasks(textToAnalyze).then(tasks => {
-        if (tasks.length > 0) {
-          toast.success(`已同步 ${tasks.length} 个约定`);
-        }
-      }).catch(e => console.error("Task extraction failed", e));
+判定规则（务必严格遵守）：
+- 凡是需要用户【再次确认完成】的内容（待办事项、计划、提醒、约定、安排、需要执行或跟进的事），一律归为"约定"(commitment)。
+- 其余仅作记录、想法、灵感、愿望、信息收藏、参考资料等无需确认完成的内容，归为"心签"(note)。
 
-      // Wishes get special note treatment
-      if (isWishOrNote) {
-        base44.entities.Note.create({
-          content: semanticHint.primary_intent === "wish" 
-            ? `💫 愿望: ${semanticHint.refined_title || textToAnalyze}\n\n${semanticHint.refined_description || ""}`
-            : textToAnalyze,
-          plain_text: textToAnalyze,
-          tags: [...(semanticHint.tags || []), semanticHint.primary_intent === "wish" ? "愿望清单" : "随手记"],
-          color: semanticHint.primary_intent === "wish" ? "yellow" : "blue",
-          is_pinned: semanticHint.primary_intent === "wish",
-        }).then(() => toast.success(semanticHint.primary_intent === "wish" ? "已加入愿望清单 💫" : "已保存随手记")).catch(e => console.error(e));
+用户输入:
+"""
+${textToAnalyze}
+"""
+
+要求：
+1. items: 数组，把输入拆成 1~N 个独立条目（若是单一意图则只有 1 条）。
+2. 每条包含 kind("commitment" 或 "note") 和 text(该条对应的原文片段，尽量保留原话)。
+3. 不要编造原文中不存在的内容。`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    kind: { type: "string", enum: ["commitment", "note"] },
+                    text: { type: "string" },
+                  },
+                  required: ["kind", "text"],
+                },
+              },
+            },
+            required: ["items"],
+          },
+        });
+      } catch (e) {
+        console.warn("内容分流识别失败，回退到默认处理", e);
       }
 
-      syncPlanToNote(textToAnalyze, "welcome").then(note => {
-        if (note) toast.success("已同步到心签");
-      }).catch(e => console.error("Note sync failed", e));
+      const items = Array.isArray(classification?.items) ? classification.items.filter(it => it?.text?.trim()) : [];
+      const commitmentItems = items.filter(it => it.kind === "commitment");
+      const noteItems = items.filter(it => it.kind === "note");
+
+      let createdCommitments = 0;
+      let createdNotes = 0;
+
+      if (items.length > 0) {
+        // 需要确认完成的 → 约定
+        for (const it of commitmentItems) {
+          try {
+            const tasks = await extractAndCreateTasks(it.text);
+            createdCommitments += tasks.length;
+          } catch (err) {
+            console.error("约定创建失败", err);
+          }
+        }
+        // 其余 → 心签
+        for (const it of noteItems) {
+          try {
+            await base44.entities.Note.create({
+              content: it.text,
+              plain_text: it.text,
+              tags: [...(semanticHint?.tags || []), "随手记"],
+              color: "blue",
+              source_type: "manual",
+            });
+            createdNotes += 1;
+          } catch (err) {
+            console.error("心签创建失败", err);
+          }
+        }
+      } else {
+        // 回退：识别失败时沿用原有的双通道处理
+        try {
+          const tasks = await extractAndCreateTasks(textToAnalyze);
+          createdCommitments += tasks.length;
+        } catch (err) { console.error("约定创建失败", err); }
+        try {
+          await base44.entities.Note.create({
+            content: textToAnalyze,
+            plain_text: textToAnalyze,
+            tags: [...(semanticHint?.tags || []), "随手记"],
+            color: "blue",
+            source_type: "manual",
+          });
+          createdNotes += 1;
+        } catch (err) { console.error("心签创建失败", err); }
+      }
+
+      if (createdCommitments > 0) toast.success(`已录入 ${createdCommitments} 个约定`);
+      if (createdNotes > 0) toast.success(`已录入 ${createdNotes} 条心签`);
+
+      const isWishOrNote = noteItems.length > 0 && commitmentItems.length === 0;
 
       // 邮件意图检测：识别到发送邮件意图时弹出确认对话框
       detectEmailIntent(textToAnalyze).then(suggestion => {

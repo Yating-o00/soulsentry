@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
+import { attachPlanItemsToParent } from "@/components/utils/attachPlanItemsToParent";
 import { cn } from "@/lib/utils";
 import { base44 } from "@/api/base44Client";
 import { useAICreditGate } from "@/components/credits/useAICreditGate";
@@ -177,11 +178,26 @@ export default function SoulMonthPlanner({
             clearInterval(stepInterval);
             setProcessingStepIndex(PROCESSING_STEPS.length - 1);
 
-            // Extract & create tasks from user input
-            extractAndCreateTasks(userInput, format(start, 'yyyy-MM-dd')).then(tasks => {
-              if (tasks.length > 0) {
-                toast.success(`已同步 ${tasks.length} 个约定`);
-              }
+            // 用户输入 → 一条父约定；AI 拆解的里程碑/周节奏 → 子约定挂到父下
+            const monthStartStr = data.plan_start_date || format(start, 'yyyy-MM-dd');
+            extractAndCreateTasks(userInput, monthStartStr).then(async tasks => {
+              const parent = tasks?.[0];
+              if (!parent?.id) return;
+              const childItems = [
+                ...(data.key_milestones || []).map(m => ({
+                  title: m.title,
+                  description: ({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || '里程碑',
+                  date: m.deadline && /^\d{4}-\d{2}-\d{2}$/.test(m.deadline) ? m.deadline : undefined,
+                  tag: '月度里程碑',
+                })),
+                ...(data.weeks_breakdown || []).map(w => ({
+                  title: w.week_label ? `${w.week_label}：${w.focus || ''}`.trim() : (w.focus || '周节奏'),
+                  description: (w.key_events || []).join('、'),
+                  tag: '周度节奏',
+                })),
+              ];
+              const n = await attachPlanItemsToParent(parent.id, childItems, '月度规划').catch(() => 0);
+              toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
             }).catch(e => console.error("Task extraction failed", e));
 
             // 同步到心签

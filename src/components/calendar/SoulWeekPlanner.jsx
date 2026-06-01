@@ -31,6 +31,7 @@ import { base44 } from "@/api/base44Client";
 import { useAICreditGate } from "@/components/credits/useAICreditGate";
 import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
+import { attachPlanItemsToParent } from "@/components/utils/attachPlanItemsToParent";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
 import CalendarWeekGridView from "./CalendarWeekGridView";
 
@@ -219,10 +220,27 @@ export default function SoulWeekPlanner({
                     toast.success("已生成全情境规划");
                     savePlanToDB(data, userInput);
 
-                    // 同步到约定和心签
+                    // 用户输入 → 一条父约定；AI 拆解的事件/自动执行 → 子约定挂到父下
                     const weekStart = data.plan_start_date || format(start, 'yyyy-MM-dd');
-                    extractAndCreateTasks(userInput, weekStart).then(tasks => {
-                      if (tasks.length > 0) toast.success(`已同步 ${tasks.length} 个约定`);
+                    extractAndCreateTasks(userInput, weekStart).then(async tasks => {
+                      const parent = tasks?.[0];
+                      if (!parent?.id) return;
+                      const childItems = [
+                        ...(data.events || []).map(e => ({
+                          title: e.title,
+                          description: e.description || '',
+                          date: e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : undefined,
+                          time: e.time,
+                          tag: '周事件',
+                        })),
+                        ...(data.automations || []).map(a => ({
+                          title: a.title,
+                          description: a.description || '',
+                          tag: 'AI自动执行',
+                        })),
+                      ];
+                      const n = await attachPlanItemsToParent(parent.id, childItems, '周度规划').catch(() => 0);
+                      toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
                     }).catch(e => console.error("Task sync failed", e));
                     syncPlanToNote(userInput, "week_plan", { dateRange: weekRangeLabel, theme: data.theme }).then(note => {
                       if (note) toast.success("已同步到心签");

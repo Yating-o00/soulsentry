@@ -78,6 +78,8 @@ export default function HeartSignMessage({ note, onDeleted }) {
   const displayText = expanded || !isLong ? plain : plain.slice(0, 280) + '…';
   const scheme = getScheme(note.color);
   const isOptimistic = typeof note.id === 'string' && note.id.startsWith('tmp-');
+  // 纯外部信息（外部订阅源 / 网页链接 / 微信转发）靠左对齐，与用户自建内容（靠右）区分
+  const isExternal = ['external_feed', 'web_link', 'wechat_share'].includes(note.source_type);
 
   const handleCopy = async () => {
     try {
@@ -131,7 +133,7 @@ export default function HeartSignMessage({ note, onDeleted }) {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex justify-end gap-2 group">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className={`flex ${isExternal ? 'justify-start' : 'justify-end'} gap-2 group`}>
       <div className="max-w-[88%] md:max-w-[78%]">
         {/* 用户气泡 - Notion 风格卡片（按 note.color 着色） */}
         <div className={`relative ${scheme.bubble} border rounded-2xl px-4 py-3 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)] hover:shadow-[0_2px_4px_rgba(15,15,15,0.05),0_4px_12px_rgba(15,15,15,0.04)] transition-all`}>
@@ -213,7 +215,7 @@ export default function HeartSignMessage({ note, onDeleted }) {
           )}
         </div>
 
-        <div className="text-right mt-1 pr-1">
+        <div className={`mt-1 ${isExternal ? 'text-left pl-1' : 'text-right pr-1'}`}>
           <span className="text-[10px] text-slate-400" title={fullTime}>{time}</span>
         </div>
 

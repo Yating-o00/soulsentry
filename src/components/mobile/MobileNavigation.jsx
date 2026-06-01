@@ -11,13 +11,16 @@ import {
   Plus,
   Brain
 } from 'lucide-react';
+import { Mic } from 'lucide-react';
 import { useTranslation } from '@/components/TranslationContext';
+import VoiceQuickCreate from './VoiceQuickCreate';
 
 export default function MobileNavigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [showVoiceCreate, setShowVoiceCreate] = useState(false);
 
   const navItems = [
     { 
@@ -50,9 +53,18 @@ export default function MobileNavigation() {
 
   const quickActions = [
     { 
-      icon: ListTodo, 
-      label: '新建约定', 
+      icon: Mic, 
+      label: '语音生成约定', 
       color: 'from-blue-500 to-blue-600',
+      action: () => {
+        setShowQuickActions(false);
+        setShowVoiceCreate(true);
+      }
+    },
+    { 
+      icon: ListTodo, 
+      label: '手动新建约定', 
+      color: 'from-slate-500 to-slate-600',
       action: () => {
         setShowQuickActions(false);
         navigate(createPageUrl('Tasks') + '?new=1');
@@ -157,7 +169,7 @@ export default function MobileNavigation() {
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
               className="md:hidden fixed bottom-24 inset-x-4 z-50"
             >
-              <div className="bg-white rounded-3xl shadow-2xl p-3 flex gap-3">
+              <div className="bg-white rounded-3xl shadow-2xl p-3 flex flex-col gap-3">
                 {quickActions.map((action, index) => {
                   const Icon = action.icon;
                   return (
@@ -167,10 +179,10 @@ export default function MobileNavigation() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.08 }}
                       onClick={action.action}
-                      className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-2xl bg-gradient-to-br ${action.color} text-white shadow-lg active:scale-[0.97] transition-transform`}
+                      className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl bg-gradient-to-br ${action.color} text-white shadow-lg active:scale-[0.98] transition-transform`}
                     >
-                      <Icon className="w-6 h-6" />
-                      <span className="font-semibold text-sm">{action.label}</span>
+                      <Icon className="w-6 h-6 text-white shrink-0" strokeWidth={2.2} />
+                      <span className="font-semibold text-base text-white">{action.label}</span>
                     </motion.button>
                   );
                 })}
@@ -179,6 +191,8 @@ export default function MobileNavigation() {
           </>
         )}
       </AnimatePresence>
+
+      <VoiceQuickCreate open={showVoiceCreate} onClose={() => setShowVoiceCreate(false)} />
     </>
   );
 }

@@ -477,7 +477,7 @@ export default function Notes() {
                 title="基于最近心签，AI 关联外部相关新闻 / 长期内容 / 即时通知 / 经典语录"
               >
                 <Globe className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                <span className="hidden sm:inline">外部视野</span>
+                <span className="hidden sm:inline">扩展视野</span>
               </Button>
               <div className="text-xs md:text-sm text-slate-500 whitespace-nowrap">
                 <span className="font-semibold text-[#384877]">{filteredNotes.length}</span>

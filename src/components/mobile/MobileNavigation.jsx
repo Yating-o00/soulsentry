@@ -55,7 +55,8 @@ export default function MobileNavigation() {
     { 
       icon: Mic, 
       label: '语音生成约定', 
-      bg: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+      desc: '说一句话，AI 帮你生成约定',
+      iconBg: 'bg-blue-500',
       action: () => {
         setShowQuickActions(false);
         setShowVoiceCreate(true);
@@ -64,7 +65,8 @@ export default function MobileNavigation() {
     { 
       icon: ListTodo, 
       label: '手动新建约定', 
-      bg: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+      desc: '自己填写约定的详细信息',
+      iconBg: 'bg-[#384877]',
       action: () => {
         setShowQuickActions(false);
         navigate(createPageUrl('Tasks') + '?new=1');
@@ -77,7 +79,8 @@ export default function MobileNavigation() {
     { 
       icon: StickyNote, 
       label: '新建心签', 
-      bg: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
+      desc: '随手记录想法与灵感',
+      iconBg: 'bg-purple-500',
       action: () => {
         setShowQuickActions(false);
         navigate(createPageUrl('Notes') + '?new=1');
@@ -169,7 +172,8 @@ export default function MobileNavigation() {
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
               className="md:hidden fixed bottom-24 inset-x-4 z-50"
             >
-              <div className="bg-white rounded-3xl shadow-2xl p-3 flex flex-col gap-3">
+              <div className="bg-white rounded-3xl shadow-2xl p-3 flex flex-col gap-2">
+                <p className="px-3 pt-2 pb-1 text-xs font-semibold text-slate-400">快速创建</p>
                 {quickActions.map((action, index) => {
                   const Icon = action.icon;
                   return (
@@ -179,11 +183,15 @@ export default function MobileNavigation() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.08 }}
                       onClick={action.action}
-                      style={{ background: action.bg }}
-                      className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-transform"
+                      className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-[0.98] transition-all border border-slate-100 text-left"
                     >
-                      <Icon className="w-6 h-6 shrink-0" color="#ffffff" strokeWidth={2.2} />
-                      <span className="font-semibold text-base" style={{ color: '#ffffff' }}>{action.label}</span>
+                      <div className={`h-11 w-11 rounded-xl ${action.iconBg} flex items-center justify-center shrink-0 shadow-sm`}>
+                        <Icon className="w-5 h-5 text-white" strokeWidth={2.2} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-[15px] text-slate-800 leading-tight">{action.label}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 leading-tight">{action.desc}</p>
+                      </div>
                     </motion.button>
                   );
                 })}

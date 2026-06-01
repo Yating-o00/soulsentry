@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User } from "lucide-react";
 import AIText from "@/components/AIText";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
@@ -46,7 +46,11 @@ export default function Notes() {
   const [activeTab, setActiveTab] = useState("notes");
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
+  const [onlyMine, setOnlyMine] = useState(false);
   const queryClient = useQueryClient();
+
+  // 纯外部信息来源（外部订阅源 / 网页链接 / 微信转发）
+  const EXTERNAL_SOURCES = ['external_feed', 'web_link', 'wechat_share'];
   const [searchParams] = useSearchParams();
 
   // Keyboard shortcut: Ctrl+N to quick create
@@ -284,6 +288,11 @@ export default function Notes() {
   const filteredNotes = useMemo(() => {
     let result = notes.filter((note) => !note.deleted_at);
 
+    // 只显示用户自建内容（过滤掉外部信息）
+    if (onlyMine) {
+      result = result.filter((note) => !EXTERNAL_SOURCES.includes(note.source_type));
+    }
+
     // Full-text search (content + tags)
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
@@ -335,7 +344,7 @@ export default function Notes() {
       if (!a.is_pinned && b.is_pinned) return 1;
       return new Date(b.created_date) - new Date(a.created_date);
     });
-  }, [notes, searchQuery, filters]);
+  }, [notes, searchQuery, filters, onlyMine]);
 
   const handlePin = (note) => {
     updateNoteMutation.mutate({
@@ -428,6 +437,20 @@ export default function Notes() {
             />
 
             <div className="flex items-center gap-1.5 md:gap-3">
+              <Button
+                onClick={() => setOnlyMine((v) => !v)}
+                variant="outline"
+                size="sm"
+                title={onlyMine ? '当前只显示我自建的内容，点击显示全部' : '只显示我自建的内容，隐藏外部信息'}
+                className={`h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 text-xs md:text-sm ${
+                  onlyMine
+                    ? 'border-transparent bg-[#384877] hover:bg-[#2f3d63] text-white'
+                    : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-700'
+                }`}
+              >
+                <User className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span className="hidden sm:inline">{onlyMine ? '仅我的内容' : '全部内容'}</span>
+              </Button>
               <Button
                 onClick={() => setShowKnowledgeBase(true)}
                 variant="outline"

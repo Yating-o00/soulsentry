@@ -96,8 +96,10 @@ async function collectRecipients(base44, task) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (user?.role !== 'admin') {
+    // 后台定时任务（Automation）触发时无登录用户上下文，auth.me() 返回 null —— 此时放行。
+    // 仅当存在明确的登录用户且非 admin 时才拦截（防止普通用户手动直调）。
+    const user = await base44.auth.me().catch(() => null);
+    if (user && user.role !== 'admin') {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 

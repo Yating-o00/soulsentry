@@ -188,8 +188,9 @@ async function summarizeUserBehavior(base44, userEmail) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    // 后台定时任务（sentinelDailyScan via service role）调用时无登录用户上下文。
+    // 此时不再 401，而是用任务自身 created_by 作为分析上下文，全程走 service role 读写。
+    const user = await base44.auth.me().catch(() => null);
 
     const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
     if (!apiKey) return Response.json({ error: "KIMI_API_KEY not configured" }, { status: 500 });
@@ -197,10 +198,18 @@ Deno.serve(async (req) => {
     const { task_id, trigger, current_location } = await req.json();
     if (!task_id) return Response.json({ error: "Missing task_id" }, { status: 400 });
 
-    const task = await base44.entities.Task.get(task_id);
+    // 后台/定时来源（scheduled、geofence）或无登录用户时，强制走 service role，
+    // 避免跨用户读写任务被 RLS 拦截（403）。
+    const isBackground = !user || trigger === "scheduled" || trigger === "geofence";
+
+    // 后台模式用 service role 读取任务，避免越权失败
+    const task = isBackground
+      ? await base44.asServiceRole.entities.Task.get(task_id)
+      : await base44.entities.Task.get(task_id);
     if (!task) return Response.json({ error: "Task not found" }, { status: 404 });
 
-    const userBehaviorSummary = await summarizeUserBehavior(base44, user.email);
+    const ownerEmail = isBackground ? (task.created_by || user?.email) : user.email;
+    const userBehaviorSummary = await summarizeUserBehavior(base44, ownerEmail);
 
     const prompt = buildPrompt({
       task,
@@ -243,7 +252,9 @@ Deno.serve(async (req) => {
       updatePayload.silence_followup_at = analysis.silence_followup_at;
     }
 
-    const updated = await base44.entities.Task.update(task_id, updatePayload);
+    const updated = isBackground
+      ? await base44.asServiceRole.entities.Task.update(task_id, updatePayload)
+      : await base44.entities.Task.update(task_id, updatePayload);
 
     return Response.json({ success: true, analysis, task: updated });
   } catch (error) {

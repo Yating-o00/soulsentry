@@ -12,8 +12,10 @@ const STALE_DAYS = 7;
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (user?.role !== "admin") {
+    // 后台定时任务（Automation）触发时无登录用户上下文，auth.me() 返回 null —— 此时放行。
+    // 仅当存在明确的登录用户且非 admin 时才拦截。
+    const user = await base44.auth.me().catch(() => null);
+    if (user && user.role !== "admin") {
       return Response.json({ error: "Forbidden: admin only" }, { status: 403 });
     }
 
@@ -43,13 +45,19 @@ Deno.serve(async (req) => {
     const results = [];
     for (const taskId of BATCH) {
       try {
-        const r = await base44.asServiceRole.functions.invoke("sentinelBrain", {
+        const r = await base44.functions.invoke("sentinelBrain", {
           task_id: taskId,
           trigger: "scheduled"
         });
-        results.push({ task_id: taskId, ok: true });
+        const body = r?.data ?? r;
+        if (body?.error) {
+          results.push({ task_id: taskId, ok: false, error: body.error });
+        } else {
+          results.push({ task_id: taskId, ok: true });
+        }
       } catch (err) {
-        results.push({ task_id: taskId, ok: false, error: err.message });
+        const detail = err?.response?.data?.error || err?.response?.data || err.message;
+        results.push({ task_id: taskId, ok: false, error: typeof detail === "string" ? detail : JSON.stringify(detail) });
       }
     }
 

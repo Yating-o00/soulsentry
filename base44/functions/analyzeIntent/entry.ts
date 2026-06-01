@@ -5,10 +5,10 @@ async function callKimi(apiKey, systemPrompt, userPrompt, useJsonFormat) {
   if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
   messages.push({ role: "user", content: userPrompt });
 
-  const models = ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
+  const models = ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-32k"];
   let lastErr = null;
   for (const model of models) {
-    const body = { model, messages, temperature: 0.2 };
+    const body = { model, messages, temperature: 0.2, max_tokens: 8000 };
     if (useJsonFormat) body.response_format = { type: "json_object" };
     const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
       method: "POST",
@@ -26,12 +26,102 @@ async function callKimi(apiKey, systemPrompt, userPrompt, useJsonFormat) {
   throw new Error(lastErr || 'Kimi API error');
 }
 
+// 修复 LLM 偶发的非法 JSON：数组/对象元素之间缺少逗号、尾随逗号等
+// 用一个轻量状态机精确判断"在字符串外"的相邻 token 之间是否缺逗号，避免误伤字符串内容。
+function repairJSON(str) {
+  let out = '';
+  let inStr = false;
+  let escaped = false;
+  // 上一个非空白、字符串外的有意义字符（值/容器的结束符）
+  let prevMeaningful = '';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (inStr) {
+      out += ch;
+      if (escaped) { escaped = false; }
+      else if (ch === '\\') { escaped = true; }
+      else if (ch === '"') { inStr = false; prevMeaningful = '"'; }
+      continue;
+    }
+    if (ch === '"') {
+      // 进入字符串前：若上一个有意义字符是值/容器结束符，说明缺逗号
+      if (prevMeaningful === '"' || prevMeaningful === '}' || prevMeaningful === ']'
+        || /[0-9a-zA-Z]/.test(prevMeaningful)) {
+        out += ',';
+      }
+      inStr = true;
+      out += ch;
+      continue;
+    }
+    if (ch === '{' || ch === '[') {
+      if (prevMeaningful === '"' || prevMeaningful === '}' || prevMeaningful === ']'
+        || /[0-9a-zA-Z]/.test(prevMeaningful)) {
+        out += ',';
+      }
+      out += ch;
+      prevMeaningful = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) { out += ch; continue; }
+    // 其它有意义字符（} ] , : 数字 字母等）
+    out += ch;
+    if (ch !== ',' && ch !== ':') prevMeaningful = ch;
+    else prevMeaningful = ch === ',' ? ',' : ':';
+  }
+  // 去掉多余尾随逗号
+  out = out.replace(/,\s*([\]}])/g, '$1');
+  return out;
+}
+
+// 修复被截断（token 上限导致）的 JSON：补全未闭合的字符串、对象、数组
+function repairTruncated(str) {
+  let s = str;
+  const stack = [];
+  let inStr = false;
+  let escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  // 未闭合的字符串先收尾
+  if (inStr) s += '"';
+  // 去掉末尾悬挂的逗号或冒号或半个键值
+  s = s.replace(/,\s*$/, '').replace(/:\s*$/, ': null');
+  // 按栈倒序补全括号
+  for (let i = stack.length - 1; i >= 0; i--) {
+    s += stack[i] === '{' ? '}' : ']';
+  }
+  // 再清一次尾随逗号
+  s = s.replace(/,\s*([\]}])/g, '$1');
+  return s;
+}
+
+function tryParse(str) {
+  try { return JSON.parse(str); } catch (_) {}
+  try { return JSON.parse(repairJSON(str)); } catch (_) {}
+  try { return JSON.parse(repairTruncated(str)); } catch (_) {}
+  try { return JSON.parse(repairTruncated(repairJSON(str))); } catch (_) {}
+  return undefined;
+}
+
 function parseJSON(content) {
   const cleaned = content.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-  try { return JSON.parse(cleaned); } catch (_) {}
+  let r = tryParse(cleaned);
+  if (r !== undefined) return r;
   const s = content.indexOf('{');
   const e = content.lastIndexOf('}');
-  if (s !== -1 && e > s) return JSON.parse(content.slice(s, e + 1));
+  if (s !== -1 && e > s) {
+    r = tryParse(content.slice(s, e + 1));
+    if (r !== undefined) return r;
+  }
   throw new Error('Failed to parse JSON');
 }
 

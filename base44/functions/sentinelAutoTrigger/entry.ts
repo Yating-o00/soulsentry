@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       trigger: event.type === "create" ? "create" : "update"
     });
 
-    return Response.json({ success: true, brain_result: result });
+    return Response.json({ success: true, brain_result: result?.data ?? null });
   } catch (e) {
     console.error("sentinelAutoTrigger error:", e);
     return Response.json({ error: e.message }, { status: 500 });

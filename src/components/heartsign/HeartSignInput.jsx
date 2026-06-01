@@ -1,8 +1,9 @@
 import React, { useState, useRef } from "react";
-import { Send, Plus, Paperclip, Link as LinkIcon, Image as ImageIcon, Mic, X, Loader2 } from "lucide-react";
+import { Send, Plus, Paperclip, Link as LinkIcon, Image as ImageIcon, Mic, MicOff, X, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import QuickTemplates from "./QuickTemplates";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 
 export default function HeartSignInput({ onSend }) {
   const [text, setText] = useState("");
@@ -13,6 +14,9 @@ export default function HeartSignInput({ onSend }) {
   const [showTemplates, setShowTemplates] = useState(false);
   const fileRef = useRef(null);
   const imgRef = useRef(null);
+  const { isListening, toggle: toggleVoice } = useVoiceInput((transcript) => {
+    setText((prev) => (prev ? prev + transcript : transcript));
+  });
 
   const detectUrlInText = (val) => {
     const m = val.match(/https?:\/\/\S+/);
@@ -140,8 +144,12 @@ export default function HeartSignInput({ onSend }) {
           <button onClick={() => setShowUrlInput(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="链接">
             <LinkIcon className="w-4 h-4" />
           </button>
-          <button disabled className="p-2 hover:bg-slate-100 rounded-lg opacity-50 cursor-not-allowed" title="语音（即将上线）">
-            <Mic className="w-4 h-4" />
+          <button
+            onClick={toggleVoice}
+            className={`p-2 rounded-lg transition-colors ${isListening ? 'bg-red-100 text-red-500 animate-pulse' : 'hover:bg-slate-100'}`}
+            title={isListening ? '点击停止' : '语音输入'}
+          >
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
           <div className="flex-1" />
           {uploading && <span className="text-xs text-violet-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />上传中</span>}

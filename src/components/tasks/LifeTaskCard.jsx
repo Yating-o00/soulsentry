@@ -9,8 +9,9 @@ import {
   Car, Store, Home, AlertCircle, Timer,
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, MessageSquare,
-  Link2, StickyNote, Paperclip, Bell
+  Link2, StickyNote, Paperclip, Bell, CornerDownRight
 } from "lucide-react";
+import AttachToParentDialog from "@/components/tasks/AttachToParentDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +43,7 @@ export default function LifeTaskCard({
 }) {
   const [completed, setCompleted] = useState(task.status === 'completed');
   const [expanded, setExpanded] = useState(false);
+  const [showAttachDialog, setShowAttachDialog] = useState(false);
 
   const handleComplete = (e) => {
     e.stopPropagation();
@@ -359,6 +361,9 @@ export default function LifeTaskCard({
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>
                             <Edit className="w-4 h-4 mr-2" /> 编辑
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShowAttachDialog(true); }}>
+                            <CornerDownRight className="w-4 h-4 mr-2" /> 挂到其他约定下
                         </DropdownMenuItem>
                         <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); /* onDelete */ }}>
                             <Trash2 className="w-4 h-4 mr-2" /> 删除
@@ -762,6 +767,14 @@ export default function LifeTaskCard({
                 </button>
               </div>
             )}
+        </div>
+
+        <div onClick={(e) => e.stopPropagation()}>
+          <AttachToParentDialog
+            task={task}
+            open={showAttachDialog}
+            onClose={() => setShowAttachDialog(false)}
+          />
         </div>
     </div>
   );

@@ -3,8 +3,9 @@ import { format } from "date-fns";
 import { 
   Clock, MapPin, Zap, Check, CheckCircle2, MoreHorizontal, 
   Sun, Repeat, Heart, AlertCircle, Package, Flag, Calendar,
-  Navigation, ShoppingBag, Briefcase, ChevronDown
+  Navigation, ShoppingBag, Briefcase, ChevronDown, CornerDownRight
 } from "lucide-react";
+import AttachToParentDialog from "./AttachToParentDialog";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -18,6 +19,7 @@ import AITaskAssistant from "./AITaskAssistant";
 export default function TaskCard({ task, onComplete, onEdit }) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [showAttachDialog, setShowAttachDialog] = useState(false);
 
   const handleComplete = (e) => {
     e.stopPropagation();
@@ -178,6 +180,10 @@ export default function TaskCard({ task, onComplete, onEdit }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(task); }}>编辑</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShowAttachDialog(true); }}>
+              <CornerDownRight className="w-4 h-4 mr-2" />
+              挂到其他约定下
+            </DropdownMenuItem>
             <DropdownMenuItem className="text-red-600">删除</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -288,6 +294,14 @@ export default function TaskCard({ task, onComplete, onEdit }) {
               onEdit({ ...task, priority: data });
             }
           }}
+        />
+      </div>
+
+      <div onClick={(e) => e.stopPropagation()}>
+        <AttachToParentDialog
+          task={task}
+          open={showAttachDialog}
+          onClose={() => setShowAttachDialog(false)}
         />
       </div>
     </div>

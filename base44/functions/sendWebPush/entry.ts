@@ -107,14 +107,16 @@ Deno.serve(async (req) => {
       );
       return Response.json({ success: true, statusCode: result.statusCode });
     } catch (pushErr) {
-      // 410 / 404 表示订阅已失效，清除它
-      if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+      // 410 / 404 = 订阅失效；403 = VAPID 密钥与订阅不匹配（如更换了 VAPID 密钥后旧订阅作废）。
+      // 这些情况都说明该订阅已不可用，清除它并提示用户重新开启推送。
+      const sc = pushErr.statusCode;
+      if (sc === 410 || sc === 404 || sc === 403) {
         await base44.asServiceRole.entities.UserPreference.update(pref.id, {
           push_enabled: false,
           push_subscription: null
         });
         return Response.json(
-          { error: 'Subscription expired, cleared', statusCode: pushErr.statusCode },
+          { error: 'Subscription invalid, cleared. User must re-enable push.', statusCode: sc },
           { status: 410 }
         );
       }

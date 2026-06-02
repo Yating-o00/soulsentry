@@ -25,13 +25,19 @@ Deno.serve(async (req) => {
 
     const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
     const privateKey = Deno.env.get('VAPID_PRIVATE_KEY');
-    const subject = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@soulsentry.app';
+    let subject = Deno.env.get('VAPID_SUBJECT') || '';
 
     if (!publicKey || !privateKey) {
       return Response.json(
         { error: 'VAPID keys not configured' },
         { status: 500 }
       );
+    }
+
+    // VAPID subject 必须是合法的 mailto: 或 https: URL。
+    // 若密钥被误填为其它内容（如把公钥填进来），回退到安全默认值，避免 web-push 抛错导致整条推送失败。
+    if (!/^(mailto:|https:\/\/)/.test(subject)) {
+      subject = 'mailto:admin@soulsentry.app';
     }
 
     webpush.setVapidDetails(subject, publicKey, privateKey);
@@ -47,13 +53,32 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // 查找目标用户的订阅（存在 UserPreference.push_subscription，按 created_by 过滤）
-    const prefs = await base44.asServiceRole.entities.UserPreference.filter(
-      { created_by: targetEmail },
-      '-updated_date',
-      1
-    );
-    const pref = prefs?.[0];
+    // 解析目标用户 id（UserPreference 按内置字段 created_by_id 归属，而非邮箱）
+    let targetUserId = null;
+    try {
+      const users = await base44.asServiceRole.entities.User.filter({ email: targetEmail });
+      targetUserId = users?.[0]?.id || null;
+    } catch (_) { /* ignore */ }
+
+    // 查找目标用户的订阅（存在 UserPreference.push_subscription）
+    let pref = null;
+    if (targetUserId) {
+      const prefs = await base44.asServiceRole.entities.UserPreference.filter(
+        { created_by_id: targetUserId },
+        '-updated_date',
+        1
+      );
+      pref = prefs?.[0] || null;
+    }
+    // 兼容旧数据：若按 id 未找到，尝试按 created_by 邮箱兜底
+    if (!pref) {
+      const legacy = await base44.asServiceRole.entities.UserPreference.filter(
+        { created_by: targetEmail },
+        '-updated_date',
+        1
+      );
+      pref = legacy?.[0] || null;
+    }
     const sub = pref?.push_subscription;
 
     if (!pref?.push_enabled || !sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {

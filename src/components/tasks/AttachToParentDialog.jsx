@@ -114,6 +114,11 @@ export default function AttachToParentDialog({ task, open, onClose }) {
                 <span className="flex-1 text-[15px] text-slate-800 truncate">
                   {t.title}
                 </span>
+                {t.status !== "completed" && t.status !== "cancelled" && (
+                  <span className="flex-shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-100">
+                    未完成
+                  </span>
+                )}
                 {savingId === t.id ? (
                   <Loader2 className="w-4 h-4 animate-spin text-[#384877]" />
                 ) : (

@@ -21,8 +21,10 @@ import {
   Link2,
   StickyNote,
   Bell,
-  History
+  History,
+  CornerDownRight
 } from "lucide-react";
+import AttachToParentDialog from "@/components/tasks/AttachToParentDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +59,7 @@ export default function MilestoneCard({
   onViewTab
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showAttachDialog, setShowAttachDialog] = useState(false);
   const totalSubtasks = subtasks.length;
   const completedSubtasks = subtasks.filter((t) => t.status === 'completed').length;
   const progress = totalSubtasks > 0 ? Math.round(completedSubtasks / totalSubtasks * 100) : task.progress || 0;
@@ -258,6 +261,13 @@ export default function MilestoneCard({
                 <Share2 className="w-4 h-4 text-stone-500" />
                 <span>分享约定</span>
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => { e.stopPropagation(); setShowAttachDialog(true); }}
+                className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer"
+              >
+                <CornerDownRight className="w-4 h-4 text-stone-500" />
+                <span>挂到其他约定下</span>
+              </DropdownMenuItem>
               <DropdownMenuItem className="flex items-center gap-2 px-2 py-2 text-sm text-stone-700 rounded-lg hover:bg-stone-50 cursor-pointer">
                 <Languages className="w-4 h-4 text-stone-500" />
                 <span>翻译</span>
@@ -440,6 +450,14 @@ export default function MilestoneCard({
           <div className="h-1 w-12 bg-stone-200 rounded-full group-hover:bg-blue-200 transition-colors" />
         </div>
       )}
+
+      <div onClick={(e) => e.stopPropagation()}>
+        <AttachToParentDialog
+          task={task}
+          open={showAttachDialog}
+          onClose={() => setShowAttachDialog(false)}
+        />
+      </div>
     </div>
   );
 }

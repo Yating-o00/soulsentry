@@ -28,7 +28,7 @@ export default function AttachToParentDialog({ task, open, onClose }) {
     initialData: [],
   });
 
-  // 排除自身、已是其子约定的约定、已删除的，避免成环；未完成的约定优先排在前面
+  // 排除自身、已是其子约定的约定、已删除的，避免成环；未完成的优先排在前面
   const options = useMemo(() => {
     const kw = search.trim().toLowerCase();
     const filtered = candidates.filter((t) => {
@@ -38,8 +38,13 @@ export default function AttachToParentDialog({ task, open, onClose }) {
       if (kw && !(t.title || "").toLowerCase().includes(kw)) return false;
       return true;
     });
+    // 未完成（pending/in_progress/blocked/snoozed）排在已完成/已取消之前
     const isDone = (t) => t.status === "completed" || t.status === "cancelled";
-    return [...filtered].sort((a, b) => Number(isDone(a)) - Number(isDone(b)));
+    return filtered.sort((a, b) => {
+      const ad = isDone(a) ? 1 : 0;
+      const bd = isDone(b) ? 1 : 0;
+      return ad - bd;
+    });
   }, [candidates, search, task?.id]);
 
   const attachMutation = useMutation({
@@ -97,9 +102,7 @@ export default function AttachToParentDialog({ task, open, onClose }) {
               没有可选的目标约定
             </div>
           ) : (
-            options.map((t) => {
-              const done = t.status === "completed" || t.status === "cancelled";
-              return (
+            options.map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -108,26 +111,16 @@ export default function AttachToParentDialog({ task, open, onClose }) {
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left border border-transparent hover:border-[#d6dcf0] hover:bg-[#f0f3fb] transition-all disabled:opacity-50"
               >
                 <CornerDownRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                <span className={`flex-1 text-[15px] truncate ${done ? "text-slate-400" : "text-slate-800"}`}>
+                <span className="flex-1 text-[15px] text-slate-800 truncate">
                   {t.title}
                 </span>
-                {!done ? (
-                  <span className="flex-shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">
-                    未完成
-                  </span>
-                ) : (
-                  <span className="flex-shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-400">
-                    已完成
-                  </span>
-                )}
                 {savingId === t.id ? (
                   <Loader2 className="w-4 h-4 animate-spin text-[#384877]" />
                 ) : (
                   <Check className="w-4 h-4 text-slate-300" />
                 )}
               </button>
-              );
-            })
+            ))
           )}
         </div>
       </DialogContent>

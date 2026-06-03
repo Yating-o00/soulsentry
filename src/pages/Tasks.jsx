@@ -389,6 +389,15 @@ export default function Tasks() {
     handleComplete(task, allTasks, status);
   };
 
+  // 拖拽挂载：把 draggedId 设为 targetId 的子约定（防成环）
+  const handleReparent = async (draggedId, targetId) => {
+    if (!draggedId || !targetId || draggedId === targetId) return;
+    // 防止把约定挂到它自己的直接子约定下（简单成环保护）
+    const target = allTasks.find(t => t.id === targetId);
+    if (target?.parent_task_id === draggedId) return;
+    await updateTaskAsync({ id: draggedId, data: { parent_task_id: targetId } });
+  };
+
   const toggleSelection = (taskId) => {
     setSelectedTaskIds(prev => 
       prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
@@ -739,6 +748,7 @@ export default function Tasks() {
                     onShare={() => setSharingTask(task)}
                     onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                     onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                    onReparent={handleReparent}
                   />
                 )}
               </div>

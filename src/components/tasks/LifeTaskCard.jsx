@@ -39,11 +39,41 @@ export default function LifeTaskCard({
   isSelectionMode = false,
   isSelected = false,
   onToggleSelection,
-  onViewTab
+  onViewTab,
+  onReparent
 }) {
   const [completed, setCompleted] = useState(task.status === 'completed');
   const [expanded, setExpanded] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const dragEnabled = !isSelectionMode && !!onReparent;
+
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('text/task-id', task.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    if (isDragOver) setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    setIsDragOver(false);
+    const draggedId = e.dataTransfer.getData('text/task-id');
+    if (draggedId && draggedId !== task.id) {
+      onReparent(draggedId, task.id);
+    }
+  };
 
   const handleComplete = (e) => {
     e.stopPropagation();
@@ -244,6 +274,11 @@ export default function LifeTaskCard({
 
   return (
     <div 
+      draggable={dragEnabled}
+      onDragStart={dragEnabled ? handleDragStart : undefined}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       onClick={(e) => {
         if (e.target.closest('button')) return;
         if (isSelectionMode) {
@@ -257,10 +292,21 @@ export default function LifeTaskCard({
       }}
       className={cn(
         "group bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1",
+        dragEnabled && "cursor-grab active:cursor-grabbing",
         completed && "opacity-60",
-        isSelected && "ring-2 ring-blue-500 bg-blue-50/10"
+        isSelected && "ring-2 ring-blue-500 bg-blue-50/10",
+        isDragOver && "ring-2 ring-[#384877] ring-offset-2 bg-[#eef2ff]/50 scale-[1.01]"
       )}
     >
+        {/* 拖拽悬停提示 */}
+        {isDragOver && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#384877]/5 backdrop-blur-[1px] pointer-events-none rounded-2xl">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#384877] text-white text-sm font-medium shadow-lg">
+              <CornerDownRight className="w-4 h-4" />
+              挂到「{task.title}」下
+            </div>
+          </div>
+        )}
         {/* Selection Checkbox Overlay */}
         {isSelectionMode && (
              <div className="absolute top-4 left-4 z-30" onClick={(e) => e.stopPropagation()}>

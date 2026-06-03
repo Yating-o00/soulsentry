@@ -56,10 +56,40 @@ export default function MilestoneCard({
   isSelectionMode = false,
   isSelected = false,
   onToggleSelection,
-  onViewTab
+  onViewTab,
+  onReparent
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const dragEnabled = !isSelectionMode && !!onReparent;
+
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('text/task-id', task.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    if (isDragOver) setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    setIsDragOver(false);
+    const draggedId = e.dataTransfer.getData('text/task-id');
+    if (draggedId && draggedId !== task.id) {
+      onReparent(draggedId, task.id);
+    }
+  };
   const totalSubtasks = subtasks.length;
   const completedSubtasks = subtasks.filter((t) => t.status === 'completed').length;
   const progress = totalSubtasks > 0 ? Math.round(completedSubtasks / totalSubtasks * 100) : task.progress || 0;
@@ -120,6 +150,11 @@ export default function MilestoneCard({
 
   return (
     <div
+      draggable={dragEnabled}
+      onDragStart={dragEnabled ? handleDragStart : undefined}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       onClick={(e) => {
         if (isSelectionMode) {
           e.stopPropagation();
@@ -131,10 +166,21 @@ export default function MilestoneCard({
       className={cn(
         "task-card group bg-white rounded-2xl shadow-sm border border-stone-100 relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer",
         "border-l-[3px] border-l-[#384877]",
+        dragEnabled && "active:cursor-grabbing",
         isCompleted && "opacity-60",
-        isSelected && "ring-2 ring-blue-500 bg-blue-50/30"
+        isSelected && "ring-2 ring-blue-500 bg-blue-50/30",
+        isDragOver && "ring-2 ring-[#384877] ring-offset-2 bg-[#eef2ff]/50 scale-[1.01]"
       )}
     >
+      {/* 拖拽悬停提示 */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#384877]/5 backdrop-blur-[1px] pointer-events-none rounded-2xl">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#384877] text-white text-sm font-medium shadow-lg">
+            <CornerDownRight className="w-4 h-4" />
+            挂到「{task.title}」下
+          </div>
+        </div>
+      )}
       {isSelectionMode && (
         <div className="absolute top-4 right-4 z-20">
           <div className={cn(

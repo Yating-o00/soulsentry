@@ -711,7 +711,8 @@ export default function Tasks() {
               onEdit={() => setEditingTask(task)}
               onShare={(task) => setSharingTask(task)}
               onView={() => { setSelectedTask(task); setSelectedTab(null); }}
-              onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }} />
+              onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+              onReparent={handleReparent} />
             )}
             </div>
           }

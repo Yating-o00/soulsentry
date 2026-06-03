@@ -209,20 +209,18 @@ export async function markOffline() {
 }
 
 /**
- * 同一台真实设备去重：按 platform + browser + screen_size + device_type 作为硬件指纹合并
- * 保留 last_seen_at 最新的一条，其余作为重复记录清理掉
+ * 同一台真实设备去重：仅按稳定指纹 device_id 合并同一台设备的多条记录，
+ * 保留 last_seen_at 最新的一条，其余作为重复记录清理掉。
+ * 注意：绝不按 platform/browser/screen_size 这类硬件特征跨 device_id 合并，
+ * 否则两台同型号设备（如两台同分辨率 Windows）会被误删，重命名后刷新就丢失。
  */
 async function dedupeDevices(list) {
   if (!Array.isArray(list) || list.length <= 1) return list;
 
   const groups = new Map();
   for (const d of list) {
-    const key = [
-      d.device_type || "?",
-      d.platform || "?",
-      d.browser || "?",
-      d.screen_size || "?",
-    ].join("|");
+    // 只用 device_id 作为去重键，确保不同物理设备永不互相合并
+    const key = d.device_id || `__no_id_${d.id}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(d);
   }

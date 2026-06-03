@@ -45,6 +45,8 @@ function pickView(result, automationType) {
   if (t.includes("file") || t.includes("organize")) return "file";
   // 会议纪要专用预览：variant=minutes 或 sections 是 items 结构（带 type 字段）
   if (d.variant === "minutes" || (Array.isArray(d.sections) && d.sections[0]?.items && d.file_url)) return "minutes";
+  // 长文总结心签：有 heading/body 章节结构（非 items），心签视图渲染不了 → 走 research 视图（支持章节+Markdown+图片）
+  if (Array.isArray(d.sections) && d.sections.length > 0 && d.sections[0]?.heading) return "research";
   if (t.includes("note") || t.includes("summary") || Array.isArray(d.tags) || Array.isArray(d.key_points)) return "note";
   return null;
 }

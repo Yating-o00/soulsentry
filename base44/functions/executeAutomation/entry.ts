@@ -1178,7 +1178,9 @@ async function executeSummaryNote(base44, exec, attachmentCtx) {
     "你是用户的思维整理助手。当用户提供附件时，必须基于附件真实内容生成结构化总结。"
   );
 
-  const isLong = data.length_estimate === "long" && Array.isArray(data.sections) && data.sections.length > 0;
+  const hasSecs = Array.isArray(data.sections) && data.sections.length > 0;
+  // 误判保险：AI 标 short 但 content 空、却给了 sections 时，按 long 渲染，避免空白心签
+  const isLong = hasSecs && (data.length_estimate === "long" || !String(data.content || '').trim());
 
   if (isLong) {
     const html = renderRichHtml({ title: data.title, subtitle: data.subtitle || '', sections: data.sections });
@@ -1203,7 +1205,8 @@ async function executeSummaryNote(base44, exec, attachmentCtx) {
     };
   }
 
-  const shortContent = data.content || '';
+  const shortContent = String(data.content || '').trim();
+  if (!shortContent) throw new Error('AI 未能生成有效正文，请重试，或在指令中加入"写一份详细报告/长文"。');
   const note = await base44.entities.Note.create({
     content: `<h2>${data.title}</h2><div>${shortContent.replace(/\n/g, '<br/>')}</div>`,
     plain_text: `${data.title}\n\n${shortContent}`,
@@ -1796,7 +1799,6 @@ async function executeCalendarEvent(base44, exec) {
 }
 
 // 整理账本：委托给独立的 executeLedgerOrganize backend function
-// (本文件已逼近 2000 行硬上限，实现拆到 functions/executeLedgerOrganize.js)
 async function executeLedger(base44, exec, attachmentCtx) {
   const res = await base44.functions.invoke('executeLedgerOrganize', {
     user_text: exec.original_input || exec.task_title,
@@ -1818,10 +1820,7 @@ const EXECUTORS = {
   ledger_organize: executeLedger,
 };
 
-// 关键基础设施：把 base44 entity / auth 调用统一包一层 429 退避重试。
-// 平台层偶发 Rate Limit 时直接抛 429 会让 executeAutomation 整个 500，
-// 让用户看到"执行失败 500"。这里做最多 4 次指数退避（1s/2s/4s），
-// 大多数偶发限流都能在 7s 内自愈，不会显著影响用户体验。
+// 给 base44 entity/auth 调用包一层 429 指数退避重试（1s/2s/4s），避免偶发限流直接 500
 async function withRetry429(fn, label = 'op') {
   const MAX = 4;
   for (let attempt = 0; attempt < MAX; attempt++) {

@@ -30,9 +30,17 @@ function renderContentWithImages(text) {
 
 // 笔记/心签类结果视图：标题、要点、正文、标签均可编辑
 export default function NoteResultView({ data, preview, onChange, editable = true }) {
-  const title = data?.title || "整理结果";
+  // 过滤掉字面量 "undefined"/"null" 字符串以及非字符串脏值，避免正文里显示 "undefined"
+  const clean = (v) => {
+    if (typeof v !== "string") return "";
+    const t = v.trim();
+    if (t === "undefined" || t === "null" || t === "NaN") return "";
+    return v;
+  };
+  const title = clean(data?.title) || "整理结果";
   const contentKey = data?.content !== undefined ? "content" : (data?.body !== undefined ? "body" : "content");
-  const content = data?.[contentKey] || preview || "";
+  // 正文优先级：content/body → plain_preview（会议纪要分支无 content）→ preview
+  const content = clean(data?.[contentKey]) || clean(data?.plain_preview) || clean(preview) || "";
   const tags = Array.isArray(data?.tags) ? data.tags : [];
   const keyPoints = Array.isArray(data?.key_points) ? data.key_points : [];
 

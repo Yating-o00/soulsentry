@@ -49,6 +49,9 @@ import AITaskEnhancer from "./AITaskEnhancer";
 import TaskChangeHistory from "./TaskChangeHistory";
 import TaskDependencySelector from "./TaskDependencySelector";
 import QuickAlertButton from "./QuickAlertButton";
+import TaskReviseDialog from "./TaskReviseDialog";
+import TaskRevisionTimeline from "./TaskRevisionTimeline";
+import { GitBranch } from "lucide-react";
 
 function CommentCount({ taskId }) {
   const { data: comments = [] } = useQuery({
@@ -76,6 +79,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
   const [originalContent, setOriginalContent] = useState({ title: "", description: "" });
   const [isTranslating, setIsTranslating] = useState(false);
+  const [showReviseDialog, setShowReviseDialog] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
@@ -594,6 +598,16 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             </DialogTitle>
           </div>
           <div className="flex items-center gap-2 md:absolute md:right-12 md:top-5">
+             <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowReviseDialog(true)}
+                className="h-9 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 gap-1.5"
+                title="新一轮更新"
+             >
+                <GitBranch className="w-4 h-4" />
+                <span className="hidden md:inline text-xs font-medium">新一轮</span>
+             </Button>
              <QuickAlertButton task={task} />
              <Button 
                 variant="ghost" 
@@ -679,6 +693,10 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </TabsTrigger>
               <TabsTrigger value="notes" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
                 笔记 ({task.notes?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="revisions" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+                <GitBranch className="w-3.5 h-3.5" />
+                版本 ({(task.revisions?.length || 0) + 1})
               </TabsTrigger>
               <TabsTrigger value="comments" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
                 评论 <CommentCount taskId={task.id} />
@@ -1133,6 +1151,23 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </div>
             </TabsContent>
 
+            {/* Revisions Tab */}
+            <TabsContent value="revisions" className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold text-slate-900">更新历史</h3>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowReviseDialog(true)}
+                  className="border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 h-9 rounded-xl font-medium"
+                >
+                  <GitBranch className="w-3.5 h-3.5 mr-1.5" />
+                  发起新一轮更新
+                </Button>
+              </div>
+              <TaskRevisionTimeline task={task} />
+            </TabsContent>
+
             {/* Comments Tab */}
             <TabsContent value="comments" className="space-y-4">
               <TaskComments task={task} />
@@ -1211,6 +1246,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
 
         </div>
       </DialogContent>
+
+      <TaskReviseDialog
+        task={task}
+        open={showReviseDialog}
+        onOpenChange={setShowReviseDialog}
+      />
 
       {showRecurrenceEditor && (
         <Dialog open={showRecurrenceEditor} onOpenChange={setShowRecurrenceEditor}>

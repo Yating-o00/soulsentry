@@ -38,6 +38,7 @@ export default function LifeTaskCard({
   onUpdateTask,
   isSelectionMode = false,
   isSelected = false,
+  selectedTaskIds = [],
   onToggleSelection,
   onViewTab,
   onReparent
@@ -748,25 +749,36 @@ export default function LifeTaskCard({
                 expanded ? "opacity-100" : "max-h-0 opacity-0 mt-0 border-t-0"
               )}>
                 <div className="pt-3 space-y-2">
-                  {subtasks.map((subtask) => (
+                  {subtasks.map((subtask) => {
+                    const subSelected = isSelectionMode && Array.isArray(selectedTaskIds) && selectedTaskIds.includes(subtask.id);
+                    return (
                     <div
                       key={subtask.id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onToggleSubtask && onToggleSubtask(subtask);
+                        if (isSelectionMode) {
+                          onToggleSelection && onToggleSelection(subtask.id);
+                        } else {
+                          onToggleSubtask && onToggleSubtask(subtask);
+                        }
                       }}
                       className={cn(
                         "flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-all bg-stone-50 border border-stone-100 hover:border-stone-300",
-                        subtask.status === 'completed' && "opacity-60"
+                        subtask.status === 'completed' && !isSelectionMode && "opacity-60",
+                        subSelected && "ring-2 ring-blue-500 border-blue-300 bg-blue-50/30"
                       )}
                     >
                       <div className={cn(
                         "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
-                        subtask.status === 'completed'
-                          ? "bg-green-500 border-green-500 text-white"
-                          : "border-stone-300 bg-white"
+                        isSelectionMode
+                          ? (subSelected ? "bg-blue-500 border-blue-500 text-white" : "border-stone-300 bg-white")
+                          : (subtask.status === 'completed'
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "border-stone-300 bg-white")
                       )}>
-                        {subtask.status === 'completed' && <Check className="w-3 h-3" />}
+                        {isSelectionMode
+                          ? (subSelected && <Check className="w-3 h-3" />)
+                          : (subtask.status === 'completed' && <Check className="w-3 h-3" />)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className={cn(
@@ -778,7 +790,8 @@ export default function LifeTaskCard({
                         <SubtaskContextBadges subtask={subtask} />
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

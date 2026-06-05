@@ -69,7 +69,8 @@ export default function SmartGroupSection({
             commentCount={commentCountMap[task.id] || 0}
             isSelectionMode={isSelectionMode}
             isSelected={selectedTaskIds.includes(task.id)}
-            onToggleSelection={() => onToggleSelection(task.id)}
+            selectedTaskIds={selectedTaskIds}
+            onToggleSelection={(id) => onToggleSelection(id ?? task.id)}
             onToggleSubtask={onToggleSubtask}
             onComplete={onComplete}
             onEdit={() => onEdit(task)}

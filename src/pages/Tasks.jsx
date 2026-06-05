@@ -713,7 +713,8 @@ export default function Tasks() {
               commentCount={commentCountMap[task.id] || 0}
               isSelectionMode={isSelectionMode}
               isSelected={selectedTaskIds.includes(task.id)}
-              onToggleSelection={() => toggleSelection(task.id)}
+              selectedTaskIds={selectedTaskIds}
+              onToggleSelection={(id) => toggleSelection(id ?? task.id)}
               onToggleSubtask={handleToggleSubtask}
               onUpdateStatus={handleUpdateStatus}
               onAddSubtask={() => {
@@ -756,7 +757,8 @@ export default function Tasks() {
                     commentCount={commentCountMap[task.id] || 0}
                     isSelectionMode={isSelectionMode}
                     isSelected={selectedTaskIds.includes(task.id)}
-                    onToggleSelection={() => toggleSelection(task.id)}
+                    selectedTaskIds={selectedTaskIds}
+                    onToggleSelection={(id) => toggleSelection(id ?? task.id)}
                     onToggleSubtask={handleToggleSubtask}
                     onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
                     onEdit={() => { setSelectedTask(task); setSelectedTab(null); }}

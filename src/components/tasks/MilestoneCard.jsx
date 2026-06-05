@@ -55,6 +55,7 @@ export default function MilestoneCard({
   onShare,
   isSelectionMode = false,
   isSelected = false,
+  selectedTaskIds = [],
   onToggleSelection,
   onViewTab,
   onReparent
@@ -441,22 +442,36 @@ export default function MilestoneCard({
           expanded ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
         )}>
           <div className="p-4 space-y-2 max-h-[600px] overflow-y-auto">
-            {subtasks.map((subtask) => (
+            {subtasks.map((subtask) => {
+              const subSelected = isSelectionMode && Array.isArray(selectedTaskIds) && selectedTaskIds.includes(subtask.id);
+              return (
               <div
                 key={subtask.id}
-                onClick={(e) => { e.stopPropagation(); onToggleSubtask(subtask); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isSelectionMode) {
+                    onToggleSelection && onToggleSelection(subtask.id);
+                  } else {
+                    onToggleSubtask(subtask);
+                  }
+                }}
                 className={cn(
                   "group flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all bg-white border border-stone-200 hover:border-blue-300",
-                  subtask.status === 'completed' && "opacity-60"
+                  subtask.status === 'completed' && !isSelectionMode && "opacity-60",
+                  subSelected && "ring-2 ring-blue-500 border-blue-300 bg-blue-50/30"
                 )}
               >
                 <div className={cn(
                   "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
-                  subtask.status === 'completed'
-                    ? "bg-green-500 border-green-500 text-white"
-                    : "border-stone-300 bg-white group-hover:border-blue-400"
+                  isSelectionMode
+                    ? (subSelected ? "bg-blue-500 border-blue-500 text-white" : "border-stone-300 bg-white")
+                    : (subtask.status === 'completed'
+                        ? "bg-green-500 border-green-500 text-white"
+                        : "border-stone-300 bg-white group-hover:border-blue-400")
                 )}>
-                  {subtask.status === 'completed' && <Check className="w-3 h-3" />}
+                  {isSelectionMode
+                    ? (subSelected && <Check className="w-3 h-3" />)
+                    : (subtask.status === 'completed' && <Check className="w-3 h-3" />)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className={cn(
@@ -468,7 +483,8 @@ export default function MilestoneCard({
                   <SubtaskContextBadges subtask={subtask} />
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             <div className="flex items-center justify-between pt-2">
               <button

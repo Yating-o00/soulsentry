@@ -80,6 +80,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [originalContent, setOriginalContent] = useState({ title: "", description: "" });
   const [isTranslating, setIsTranslating] = useState(false);
   const [showReviseDialog, setShowReviseDialog] = useState(false);
+  const [revisingSubtask, setRevisingSubtask] = useState(null);
   const queryClient = useQueryClient();
 
   // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
@@ -979,6 +980,21 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                       >
                         {subtask.title}
                       </span>
+                      {subtask.revisions?.length > 0 && (
+                        <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5">
+                          <GitBranch className="w-3 h-3" />
+                          v{subtask.revisions.length + 1}
+                        </span>
+                      )}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setRevisingSubtask(subtask)}
+                        title="新一轮更新"
+                        className="h-8 w-8 hover:bg-amber-100 hover:text-amber-600"
+                      >
+                        <GitBranch className="h-4 w-4" />
+                      </Button>
                       <Button
                         size="icon"
                         variant="ghost"
@@ -1251,6 +1267,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
         task={task}
         open={showReviseDialog}
         onOpenChange={setShowReviseDialog}
+      />
+
+      <TaskReviseDialog
+        task={revisingSubtask}
+        open={!!revisingSubtask}
+        onOpenChange={(o) => { if (!o) setRevisingSubtask(null); }}
       />
 
       {showRecurrenceEditor && (

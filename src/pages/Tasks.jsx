@@ -761,7 +761,7 @@ export default function Tasks() {
                     onToggleSelection={(id) => toggleSelection(id ?? task.id)}
                     onToggleSubtask={handleToggleSubtask}
                     onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                    onEdit={() => { setSelectedTask(task); setSelectedTab(null); }}
+                    onEdit={() => setEditingTask(task)}
                     onShare={() => setSharingTask(task)}
                     onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                     onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}

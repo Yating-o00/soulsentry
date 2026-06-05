@@ -284,7 +284,7 @@ export default function LifeTaskCard({
         if (e.target.closest('button')) return;
         if (isSelectionMode) {
           e.stopPropagation();
-          onToggleSelection && onToggleSelection();
+          onToggleSelection && onToggleSelection(task.id);
         } else if (subtasks.length > 0) {
           setExpanded(!expanded);
         } else {
@@ -312,7 +312,7 @@ export default function LifeTaskCard({
         {isSelectionMode && (
              <div className="absolute top-4 left-4 z-30" onClick={(e) => e.stopPropagation()}>
                 <div 
-                    onClick={onToggleSelection}
+                    onClick={() => onToggleSelection && onToggleSelection(task.id)}
                     className={cn(
                         "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer",
                         isSelected ? "bg-blue-500 border-blue-500" : "bg-white border-slate-300"

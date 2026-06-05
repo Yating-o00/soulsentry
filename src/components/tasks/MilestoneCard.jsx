@@ -159,7 +159,7 @@ export default function MilestoneCard({
       onClick={(e) => {
         if (isSelectionMode) {
           e.stopPropagation();
-          onToggleSelection && onToggleSelection();
+          onToggleSelection && onToggleSelection(task.id);
         } else {
           setExpanded(!expanded);
         }

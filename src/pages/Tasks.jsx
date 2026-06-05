@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight } from "lucide-react";
+import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -20,6 +20,7 @@ import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import TaskShareCard from "../components/tasks/TaskShareCard";
 import GlobalSearch from "../components/search/GlobalSearch";
 import SmartGroupSection from "../components/tasks/SmartGroupSection";
+import CombineParentDialog from "../components/tasks/CombineParentDialog";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -40,6 +41,7 @@ export default function Tasks() {
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  const [combineOpen, setCombineOpen] = useState(false);
   const [filters, setFilters] = useState({ 
     category: 'all', 
     priority: 'all', 
@@ -965,6 +967,16 @@ export default function Tasks() {
         />
       )}
 
+      {/* Combine into new parent dialog */}
+      <CombineParentDialog
+        open={combineOpen}
+        onClose={() => setCombineOpen(false)}
+        selectedTasks={allTasks.filter(t => selectedTaskIds.includes(t.id))}
+        createTaskAsync={createTaskAsync}
+        updateTaskAsync={updateTaskAsync}
+        onCombined={() => { setSelectedTaskIds([]); setIsSelectionMode(false); }}
+      />
+
       {/* Bulk Selection Action Bar */}
       <AnimatePresence>
         {isSelectionMode && selectedTaskIds.length > 0 && (
@@ -977,13 +989,20 @@ export default function Tasks() {
              <span className="text-sm font-medium text-slate-700">{selectedTaskIds.length} 个已选择</span>
              <div className="h-4 w-px bg-slate-200"></div>
              <button 
+               onClick={() => setCombineOpen(true)}
+               className="flex items-center gap-1.5 text-sm text-[#384877] hover:bg-[#eef2ff] px-3 py-1.5 rounded-lg transition-colors"
+             >
+                <Layers className="w-4 h-4" />
+                <span>组合为新父约定</span>
+             </button>
+             <div className="h-4 w-px bg-slate-200"></div>
+             <button 
                onClick={handleBulkDelete}
                className="flex items-center gap-1.5 text-sm text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
              >
                 <Trash2 className="w-4 h-4" />
                 <span>删除</span>
              </button>
-             {/* Add more bulk actions here if needed */}
           </motion.div>
         )}
       </AnimatePresence>

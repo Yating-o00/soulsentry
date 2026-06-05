@@ -260,6 +260,45 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     setUploading(false);
   };
 
+  // 从剪贴板事件中提取图片/文件并作为附件上传
+  const handlePasteUpload = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === "file") {
+        const f = items[i].getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length === 0) return; // 没有文件则保持默认（粘贴文字）
+
+    e.preventDefault();
+    setUploading(true);
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (file) => {
+          const { file_url } = await base44.integrations.Core.UploadFile({ file });
+          return {
+            file_url,
+            file_name: file.name || `粘贴图片_${Date.now()}.png`,
+            file_size: file.size,
+            file_type: file.type,
+            uploaded_at: new Date().toISOString(),
+          };
+        })
+      );
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: { attachments: [...(task.attachments || []), ...uploaded] },
+      });
+      toast.success("已粘贴并上传附件");
+    } catch (err) {
+      toast.error("粘贴上传失败");
+    }
+    setUploading(false);
+  };
+
   const handleRemoveAttachment = async (index) => {
     const updatedAttachments = task.attachments.filter((_, i) => i !== index);
     await updateTaskMutation.mutateAsync({
@@ -966,6 +1005,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                     </div>
                   </Button>
                 </label>
+
+                {/* 粘贴区域：聚焦后直接 Ctrl/Cmd+V 粘贴截图或文件 */}
+                <div
+                  tabIndex={0}
+                  onPaste={handlePasteUpload}
+                  className="mt-2 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 focus:border-purple-400 focus:bg-purple-50 outline-none transition-colors py-3 text-center text-xs text-slate-400 cursor-text"
+                >
+                  点击此处后按 Ctrl/Cmd + V 直接粘贴图片或截图
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1027,9 +1075,10 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             <TabsContent value="notes" className="space-y-4">
               <div className="flex gap-2">
                 <Textarea
-                  placeholder="添加笔记..."
+                  placeholder="添加笔记...（可直接粘贴文字，或粘贴图片自动存为附件）"
                   value={newNote}
                   onChange={(e) => setNewNote(e.target.value)}
+                  onPaste={handlePasteUpload}
                   className="flex-1 min-h-[80px]"
                 />
               </div>

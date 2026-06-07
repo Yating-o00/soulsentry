@@ -61,7 +61,7 @@ export default function WarmResponseCard({ ai }) {
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1], delay: 0.05 }}
-      className={`relative mt-2 mr-auto w-full rounded-[20px] p-5 border ${cfg.border} bg-gradient-to-br ${cfg.gradient} overflow-hidden text-left shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-sm`}>
+      className={`relative mt-2 mr-auto w-full p-5 border rounded-[20px] ${cfg.border} bg-gradient-to-br ${cfg.gradient} overflow-hidden text-left shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-sm`}>
       
       {/* 柔光晕染 */}
       <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full ${cfg.glow} blur-3xl pointer-events-none`} aria-hidden />

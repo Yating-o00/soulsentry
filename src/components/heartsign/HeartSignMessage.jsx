@@ -178,6 +178,7 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
   };
 
   return (
+   <div className="space-y-2">
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className={`flex ${isExternal ? 'justify-start' : 'justify-end'} gap-2 group`}>
       <div className="max-w-[88%] md:max-w-[78%]">
         {/* 用户气泡 - Notion 风格卡片（按 note.color 着色） */}
@@ -336,9 +337,17 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
           </motion.div>
         )}
 
-        {/* 感性内容 · AI 温暖回应（安慰者 / 师长 / 朋友） */}
-        {note.ai_status === 'completed' && <WarmResponseCard ai={ai} />}
       </div>
     </motion.div>
+
+    {/* 感性内容 · AI 温暖回应（安慰者 / 师长 / 朋友）——从对话框左侧弹出 */}
+    {note.ai_status === 'completed' && (
+      <div className="flex justify-start">
+        <div className="max-w-[88%] md:max-w-[78%]">
+          <WarmResponseCard ai={ai} />
+        </div>
+      </div>
+    )}
+   </div>
   );
 }

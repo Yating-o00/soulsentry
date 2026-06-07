@@ -2,7 +2,7 @@
 // 输入: { note_id } 或 entity automation payload
 // 输出: 更新 Note.ai_analysis (summary / key_points / tags / category / related_topics)
 //      并写入 UserDataPoint 沉淀画像
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const MAX_TEXT = 8000;
 
@@ -60,13 +60,20 @@ Deno.serve(async (req) => {
 
     let note;
     try {
-      note = await base44.asServiceRole.entities.Note.get?.(noteId);
-    } catch (_) { /* fallback */ }
-    if (!note) {
-      const list = await base44.asServiceRole.entities.Note.filter({ id: noteId }, '-created_date', 1);
-      note = list?.[0];
+      note = await base44.asServiceRole.entities.Note.get(noteId);
+    } catch (e) {
+      console.error('Note.get failed', e?.message);
     }
-    if (!note) return Response.json({ error: 'Note not found' }, { status: 404 });
+    if (!note) {
+      try {
+        const list = await base44.asServiceRole.entities.Note.filter({ id: noteId });
+        console.log('fallback filter found:', list?.length);
+        note = Array.isArray(list) ? list[0] : null;
+      } catch (e) {
+        console.error('Note.filter failed', e?.message);
+      }
+    }
+    if (!note) return Response.json({ error: 'Note not found', noteId }, { status: 404 });
 
     // 跳过已分析过的，避免循环
     if (note.ai_status === 'completed' && note.ai_analysis?.analyzed_at) {

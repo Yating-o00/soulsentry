@@ -61,7 +61,7 @@ export default function WarmResponseCard({ ai }) {
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1], delay: 0.05 }}
-      className={`relative mt-2 mr-auto w-full p-5 border rounded-[20px] ${cfg.border} bg-gradient-to-br ${cfg.gradient} overflow-hidden text-left shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-sm`}>
+      className={`relative mt-2 mr-auto w-full p-3 border rounded-[14px] ${cfg.border} bg-gradient-to-br ${cfg.gradient} overflow-hidden text-left shadow-[0_3px_16px_-8px_rgba(0,0,0,0.08)] backdrop-blur-sm`}>
       
       {/* 柔光晕染 */}
       <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full ${cfg.glow} blur-3xl pointer-events-none`} aria-hidden />
@@ -71,26 +71,26 @@ export default function WarmResponseCard({ ai }) {
       <span className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-gradient-to-b ${cfg.bar}`} aria-hidden />
 
       <div className="relative">
-        <div className="flex items-center gap-2.5 mb-3.5">
+        <div className="flex items-center gap-2 mb-2.5">
           <motion.div
             initial={{ rotate: -8, scale: 0.8 }}
             animate={{ rotate: 0, scale: 1 }}
             transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.15 }}
-            className={`w-8 h-8 rounded-xl ${cfg.iconBg} flex items-center justify-center shadow-sm`}>
+            className={`w-6 h-6 rounded-lg ${cfg.iconBg} flex items-center justify-center shadow-sm`}>
             
-            <Icon className="w-4 h-4" />
+            <Icon className="w-3.5 h-3.5" />
           </motion.div>
-          <span className={`text-[13px] font-medium ${cfg.titleColor} tracking-wide flex items-center gap-1.5`}>
+          <span className={`text-[12px] font-medium ${cfg.titleColor} tracking-wide flex items-center gap-1.5`}>
             {title}
             <Sparkles className="w-3 h-3 opacity-50" />
           </span>
         </div>
 
-        <p className="text-slate-700/95 leading-[2] tracking-wide whitespace-pre-wrap break-words font-handwriting selectable-text text-sm opacity-75">
+        <p className="text-slate-700/95 leading-[1.85] tracking-wide whitespace-pre-wrap break-words font-handwriting selectable-text text-[15px] opacity-80">
           {ai.emotional_response}
         </p>
 
-        <div className="mt-3.5 flex items-center justify-end gap-2">
+        <div className="mt-2.5 flex items-center justify-end gap-2">
           <span className={`h-px w-8 bg-gradient-to-r from-transparent ${cfg.bar} opacity-40`} aria-hidden />
           <span className={`text-[15px] ${cfg.signColor} font-handwriting`}>{cfg.sign}</span>
         </div>

@@ -2,7 +2,7 @@
 // 设计原则:
 //  - 只对每台设备最重要的前 N 条做改写(避免 token 浪费)
 //  - 改写规则随设备形态变化(手机短促/手表极简/平板沉浸/音箱口播)
-//  - sessionStorage 按 (deviceType+date+原文 hash) 缓存,同日不重复调用
+//  - localStorage 按 (deviceType+date+原文 hash) 缓存,跨会话保留,同日不重复调用
 //  - 任何失败都静默回退到原文,不影响 UI
 
 import { base44 } from "@/api/base44Client";
@@ -20,7 +20,7 @@ function hash(s) {
 function loadCache() {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const raw = sessionStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return { date: today, items: {} };
     const parsed = JSON.parse(raw);
     if (parsed.date !== today) return { date: today, items: {} };
@@ -31,7 +31,7 @@ function loadCache() {
 }
 
 function saveCache(cache) {
-  try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch {}
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch {}
 }
 
 // 不同设备形态的改写指令

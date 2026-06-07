@@ -283,6 +283,11 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
           </button>
         )}
 
+        {/* 感性内容 · AI 温暖回应（安慰者 / 师长 / 朋友）——置于智能处理卡片之前 */}
+        {note.ai_status === 'completed' && (
+          <WarmResponseCard ai={ai} />
+        )}
+
         {/* AI 知识卡片 - 主题色低调风格 */}
         {note.ai_status === 'completed' && ai.summary && (
           <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
@@ -339,15 +344,6 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
 
       </div>
     </motion.div>
-
-    {/* 感性内容 · AI 温暖回应（安慰者 / 师长 / 朋友）——从对话框左侧弹出 */}
-    {note.ai_status === 'completed' && (
-      <div className="flex justify-start">
-        <div className="max-w-[88%] md:max-w-[78%]">
-          <WarmResponseCard ai={ai} />
-        </div>
-      </div>
-    )}
    </div>
   );
 }

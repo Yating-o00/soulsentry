@@ -58,20 +58,15 @@ Deno.serve(async (req) => {
     const noteId = body.note_id || body.event?.entity_id || body.data?.id;
     if (!noteId) return Response.json({ error: 'note_id required' }, { status: 400 });
 
-    let note;
+    let note = null;
     try {
-      note = await base44.asServiceRole.entities.Note.get(noteId);
+      const list = await base44.asServiceRole.entities.Note.filter({ id: noteId });
+      note = Array.isArray(list) ? list[0] : null;
     } catch (e) {
-      console.error('Note.get failed', e?.message);
+      console.error('Note.filter failed', e?.message);
     }
     if (!note) {
-      try {
-        const list = await base44.asServiceRole.entities.Note.filter({ id: noteId });
-        console.log('fallback filter found:', list?.length);
-        note = Array.isArray(list) ? list[0] : null;
-      } catch (e) {
-        console.error('Note.filter failed', e?.message);
-      }
+      try { note = await base44.asServiceRole.entities.Note.get(noteId); } catch (_) {}
     }
     if (!note) return Response.json({ error: 'Note not found', noteId }, { status: 404 });
 

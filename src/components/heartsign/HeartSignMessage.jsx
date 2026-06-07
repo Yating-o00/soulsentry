@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, ListTodo } from "lucide-react";
+import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, ListTodo, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { base44 } from "@/api/base44Client";
@@ -53,7 +53,31 @@ function SourceBadge({ note }) {
 
 export default function HeartSignMessage({ note, onDeleted }) {
   const [expanded, setExpanded] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const ai = note.ai_analysis || {};
+
+  const handleRetry = async () => {
+    if (retrying || isOptimistic) return;
+    setRetrying(true);
+    try {
+      await base44.functions.invoke('analyzeHeartSign', { note_id: note.id });
+      toast.success('已重新分析');
+    } catch (e) {
+      toast.error('重试失败，请稍后再试');
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  // 长时间卡在 pending 的旧记录：进入页面时自动补触发一次分析
+  React.useEffect(() => {
+    if (note.ai_status !== 'pending') return;
+    if (typeof note.id === 'string' && note.id.startsWith('tmp-')) return;
+    const age = Date.now() - new Date(note.created_date || 0).getTime();
+    if (age < 30000) return; // 刚创建的交给创建流程处理，避免重复
+    base44.functions.invoke('analyzeHeartSign', { note_id: note.id }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id]);
   const createdAt = note.created_date ? new Date(note.created_date) : null;
   const isValidDate = createdAt && !isNaN(createdAt.getTime());
   let time = '';
@@ -228,9 +252,14 @@ export default function HeartSignMessage({ note, onDeleted }) {
           </div>
         )}
         {note.ai_status === 'failed' && (
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-rose-600 bg-rose-50 border border-rose-200/70 rounded-md px-2.5 py-1">
-            AI 分析失败
-          </div>
+          <button
+            onClick={handleRetry}
+            disabled={retrying}
+            className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-rose-600 bg-rose-50 border border-rose-200/70 rounded-md px-2.5 py-1 hover:bg-rose-100 transition disabled:opacity-60"
+          >
+            {retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+            AI 分析失败 · 点击重试
+          </button>
         )}
 
         {/* AI 知识卡片 - 主题色低调风格 */}

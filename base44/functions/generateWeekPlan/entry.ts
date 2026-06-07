@@ -63,7 +63,8 @@ CRITICAL RULES:
    - "time" must be "HH:MM" 24-hour format (Asia/Shanghai local time)
    - For all-day events, set time to "00:00" and include "is_all_day": true
    - Every event MUST have both "date" and "time" for accurate calendar sync
-6. Return ONLY JSON:
+6. FOCUS-FIRST SCHEDULING (important): 优先为用户保留大块连续的深度专注时间，用于做同一件事或深度思考。把需要心流的深度工作（写作/编码/方案/设计/研究/复盘等，type="focus"或"work"）排成 90-180 分钟的连续整块，且尽量放在每天上午精力最佳时段，避免被切碎。把会议、电话、对接、回消息等易打断注意力的事务（type="meeting"）聚合安排到零散边角时间（临近午餐前、下班前或两个专注块之间），并尽量批量集中以减少注意力切换。不要让会议穿插打断深度专注块。
+7. Return ONLY JSON:
 {
   "plan_start_date": "YYYY-MM-DD",
   "summary": "string", "theme": "string",

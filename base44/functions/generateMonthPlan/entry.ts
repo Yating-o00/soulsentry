@@ -69,6 +69,7 @@ Return JSON:
   "key_milestones": [{"title": "string", "deadline": "YYYY-MM-DD", "type": "work/personal/health/study"}],
   "strategies": {"work_life_balance": "string", "energy_management": "string", "behavioral_adjustment": "string"}
 }
+FOCUS-FIRST STRATEGY (important): 在每周的 focus 与 key_events 安排中，优先为用户保留大块连续的深度专注时间用于推进核心目标与深度思考；把深度工作集中成整块、放在精力最佳的时段。将会议、沟通、对接等易打断注意力的事务聚合到零散边角时间并尽量批量集中，避免穿插打断深度专注。strategies 中应体现"保护深度专注、批处理碎片事务"的安排思路。
 Constraint: Realistic plan, concrete milestones, RETURN ONLY JSON.`;
 
         try {

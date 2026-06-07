@@ -60,9 +60,18 @@ Deno.serve(async (req) => {
 - 所有时间必须位于 ${planDate} 当天
 `.trim();
 
+    const focusStrategy = `
+【专注优先排程策略 - 重要】
+- 核心目标：为用户保留尽可能大块的、不被打断的"深度专注"时间，用于做同一件事或深度思考。
+- 深度工作（写作/编码/方案/设计/研究/复盘等需要心流的任务）应安排在大块连续时段（理想 90-180 分钟一段），并放进 focus_blocks，尽量不要被其它事务切碎。
+- 会议、电话、对接、回消息、审批等"碎片化、易打断注意力"的事务，应聚合安排在零散的边角时间（如临近午餐前、下班前、或两个专注块之间的过渡时段），避免插入并打断深度专注块。
+- 尽量把多个零散会议/沟通事项集中到相邻的时间窗口（批处理），减少全天注意力切换次数。
+- 优先把上午（精力最佳时段）留给最重要的深度专注任务；把协调性、沟通性事务排到精力相对低谷或碎片时段。
+- 在每个 focus_block 之间预留短暂缓冲，但不要用碎事填满，保护专注节奏。`.trim();
+
     const baseSystem = existingPlan
-      ? `你是一个智能日程助手。用户已有当日规划，现在想追加新内容。请将新内容智能融入现有规划中，避免时间冲突，保持合理节奏。\n现有规划: ${JSON.stringify(existingPlan)}\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`
-      : `你是一个智能日程助手。请根据用户输入，为 ${planDate} 生成一份详细的日规划。\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`;
+      ? `你是一个智能日程助手。用户已有当日规划，现在想追加新内容。请将新内容智能融入现有规划中，避免时间冲突，保持合理节奏。\n现有规划: ${JSON.stringify(existingPlan)}\n\n${focusStrategy}\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`
+      : `你是一个智能日程助手。请根据用户输入，为 ${planDate} 生成一份详细的日规划。\n\n${focusStrategy}\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`;
 
     const content = await callKimi(apiKey.trim(), baseSystem, input);
     const planData = parseJSON(content);

@@ -130,11 +130,11 @@ Deno.serve(async (req) => {
       required: ['summary', 'tags', 'category']
     };
 
-    const models = ['kimi-k2-0905-preview', 'kimi-latest', 'moonshot-v1-auto'];
+    const models = ['moonshot-v1-auto', 'moonshot-v1-8k'];
     let resp = null;
     let lastErr = '';
     for (const model of models) {
-      resp = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+      resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey.trim()}` },
         body: JSON.stringify({

@@ -55,7 +55,7 @@ export default function WarmResponseCard({ ai }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.05 }}
-      className={`relative mt-2 rounded-2xl p-4 border ${cfg.border} bg-gradient-to-br ${cfg.gradient} overflow-hidden`}
+      className={`relative mt-2 mr-auto w-full rounded-2xl p-4 border ${cfg.border} bg-gradient-to-br ${cfg.gradient} overflow-hidden text-left`}
     >
       <span className={`absolute left-0 top-0 bottom-0 w-[3px] ${cfg.bar}`} aria-hidden />
 

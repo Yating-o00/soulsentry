@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
     let resp = null;
     let lastErr = '';
     for (const model of models) {
-      resp = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+      resp = await fetch('https://api.moonshot.cn/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey.trim()}` },
         body: JSON.stringify({

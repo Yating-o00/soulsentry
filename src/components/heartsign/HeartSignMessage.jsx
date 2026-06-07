@@ -264,7 +264,12 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
         <div className={`mt-1 ${isExternal ? 'text-left pl-1' : 'text-right pr-1'}`}>
           <span className="text-[10px] text-slate-400" title={fullTime}>{time}</span>
         </div>
+      </div>
+    </motion.div>
 
+    {/* 所有非用户编辑的 AI 内容 —— 统一置于对话框左侧 */}
+    <div className="flex justify-start">
+      <div className="max-w-[88%] md:max-w-[78%] w-full">
         {/* AI 处理状态 */}
         {(note.ai_status === 'pending' || note.ai_status === 'processing') && (
           <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200/70 rounded-md px-2.5 py-1">
@@ -283,13 +288,9 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
           </button>
         )}
 
-        {/* 感性内容 · AI 温暖回应 —— 置于智能处理之前，左侧显示 */}
+        {/* 感性内容 · AI 温暖回应 —— 置于智能处理之前 */}
         {note.ai_status === 'completed' && (
-          <div className="flex justify-start mt-2">
-            <div className="w-full">
-              <WarmResponseCard ai={ai} />
-            </div>
-          </div>
+          <WarmResponseCard ai={ai} />
         )}
 
         {/* AI 知识卡片 - 主题色低调风格 */}
@@ -345,9 +346,8 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
             )}
           </motion.div>
         )}
-
       </div>
-    </motion.div>
+    </div>
    </div>
   );
 }

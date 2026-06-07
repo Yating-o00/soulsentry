@@ -51,7 +51,7 @@ function SourceBadge({ note }) {
   );
 }
 
-export default function HeartSignMessage({ note, onDeleted }) {
+export default function HeartSignMessage({ note, onDeleted, onRestore }) {
   const [expanded, setExpanded] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const ai = note.ai_analysis || {};
@@ -136,14 +136,14 @@ export default function HeartSignMessage({ note, onDeleted }) {
 
   const handleDelete = async () => {
     if (isOptimistic) return;
-    if (!confirm('确认删除这条心签？可在回收站恢复。')) return;
+    // 先乐观移除，保证点击即时有反馈（移动端/PWA 下 confirm 可能被静默拦截导致"无反应"）
+    onDeleted?.(note.id);
     try {
       await base44.entities.Note.update(note.id, { deleted_at: new Date().toISOString() });
-      // 立即从父组件信息流中移除，无需等待实时订阅
-      onDeleted?.(note.id);
-      toast.success('已删除');
+      toast.success('已删除', { description: '可在回收站恢复' });
     } catch (e) {
-      toast.error('删除失败');
+      toast.error('删除失败，请重试');
+      onRestore?.(note);
     }
   };
 

@@ -283,6 +283,15 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
           </button>
         )}
 
+        {/* 感性内容 · AI 温暖回应 —— 置于智能处理之前，左侧显示 */}
+        {note.ai_status === 'completed' && (
+          <div className="flex justify-start mt-2">
+            <div className="w-full">
+              <WarmResponseCard ai={ai} />
+            </div>
+          </div>
+        )}
+
         {/* AI 知识卡片 - 主题色低调风格 */}
         {note.ai_status === 'completed' && ai.summary && (
           <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
@@ -339,15 +348,6 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
 
       </div>
     </motion.div>
-
-    {/* 感性内容 · AI 温暖回应 —— 对话框外左侧独立显示 */}
-    {note.ai_status === 'completed' && (
-      <div className="flex justify-start">
-        <div className="max-w-[88%] md:max-w-[78%]">
-          <WarmResponseCard ai={ai} />
-        </div>
-      </div>
-    )}
    </div>
   );
 }

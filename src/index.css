@@ -1,6 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&family=Caveat:wght@500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 信件/行书手写字体工具类 */
+.font-handwriting {
+  font-family: 'Ma Shan Zheng', 'Caveat', 'STKaiti', 'KaiTi', 'Liu Jian Mao Cao', cursive;
+}
+.font-letter {
+  font-family: 'Caveat', 'Ma Shan Zheng', 'STKaiti', 'KaiTi', cursive;
+}
 
 
 /* :root {

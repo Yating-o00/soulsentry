@@ -86,13 +86,13 @@ export default function WarmResponseCard({ ai }) {
           </span>
         </div>
 
-        <p className="text-[14.5px] text-slate-700/95 leading-[1.9] whitespace-pre-wrap break-words font-serif selectable-text">
+        <p className="text-[18px] text-slate-700/95 leading-[2] tracking-wide whitespace-pre-wrap break-words font-handwriting selectable-text">
           {ai.emotional_response}
         </p>
 
         <div className="mt-3.5 flex items-center justify-end gap-2">
           <span className={`h-px w-8 bg-gradient-to-r from-transparent ${cfg.bar} opacity-40`} aria-hidden />
-          <span className={`text-[11.5px] ${cfg.signColor} italic font-serif`}>{cfg.sign}</span>
+          <span className={`text-[15px] ${cfg.signColor} font-handwriting`}>{cfg.sign}</span>
         </div>
       </div>
     </motion.div>

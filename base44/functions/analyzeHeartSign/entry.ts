@@ -119,7 +119,11 @@ Deno.serve(async (req) => {
           description: '关键实体：人名/组织/项目/产品/技术等'
         },
         related_topics: { type: 'array', items: { type: 'string' }, description: '可拓展的相关主题（用于外部知识补充）' },
-        actionable: { type: 'boolean', description: '是否包含可执行待办/任务' }
+        actionable: { type: 'boolean', description: '是否包含可执行待办/任务' },
+        is_emotional: { type: 'boolean', description: '内容是否为生活记录、情绪倾诉、心灵感悟、人生灵感等偏感性、需要被关怀回应的内容（而非纯信息/任务/资料）' },
+        response_persona: { type: 'string', description: '若 is_emotional 为真，选择最合适的回应身份：comforter(温柔的安慰者，适合情绪低落/疲惫/委屈)、mentor(睿智的师长，适合迷茫/成长/抉择时给予指引)、friend(亲密的朋友，适合分享喜悦/日常/小确幸)；否则留空' },
+        response_title: { type: 'string', description: '若 is_emotional 为真，给这段回应起一个温暖的标题，如「一封来自安慰者的信」「师长的几句话」「想对你说」；否则留空' },
+        emotional_response: { type: 'string', description: '若 is_emotional 为真，以所选身份的口吻，写一段 80-200 字、真诚、温暖、有人文关怀的回应——可以是安慰、共情、鼓励、或长者般的见解与指引，像一封写给朋友的短信，避免空洞说教与套话；否则留空' }
       },
       required: ['summary', 'tags', 'category']
     };
@@ -138,7 +142,7 @@ Deno.serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `你是用户的私人知识库助理。用户发来的每一条"心签"都需要你完成：自动摘要、关键词提取、内容分类、提炼可拓展的相关主题。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`
+              content: `你是用户的私人知识库助理，同时也是一位懂得共情的伙伴。用户发来的每一条"心签"都需要你完成：自动摘要、关键词提取、内容分类、提炼可拓展的相关主题。\n此外，请判断这条心签是否属于生活记录、情绪倾诉、心灵感悟或人生灵感等偏感性、值得被温柔回应的内容：若是，请把 is_emotional 设为 true，选择最贴切的回应身份(response_persona)，并以那个身份的口吻写一段真诚、温暖、有人文温度的回应(emotional_response)，让用户感到被理解、被陪伴、被指引；若只是资料/任务/信息类内容，则 is_emotional 为 false，相关字段留空。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`
             },
             { role: 'user', content: `请分析以下心签内容：\n\n${materialText}` }
           ]
@@ -166,6 +170,10 @@ Deno.serve(async (req) => {
       category: parsed.category || '其他',
       related_topics: parsed.related_topics || [],
       actionable: !!parsed.actionable,
+      is_emotional: !!parsed.is_emotional,
+      response_persona: parsed.is_emotional ? (parsed.response_persona || 'friend') : '',
+      response_title: parsed.is_emotional ? (parsed.response_title || '') : '',
+      emotional_response: parsed.is_emotional ? (parsed.emotional_response || '') : '',
       analyzed_at: new Date().toISOString()
     };
 

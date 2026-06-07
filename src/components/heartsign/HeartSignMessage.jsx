@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import KeywordExplorer from "@/components/heartsign/KeywordExplorer";
+import WarmResponseCard from "@/components/heartsign/WarmResponseCard";
 
 // Notion 风的柔和色板：根据 note.color 切换气泡 + AI 卡片的配色
 const COLOR_SCHEMES = {
@@ -285,6 +286,9 @@ export default function HeartSignMessage({ note, onDeleted }) {
             )}
           </motion.div>
         )}
+
+        {/* 感性内容 · AI 温暖回应（安慰者 / 师长 / 朋友） */}
+        {note.ai_status === 'completed' && <WarmResponseCard ai={ai} />}
       </div>
     </motion.div>
   );

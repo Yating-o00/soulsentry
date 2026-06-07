@@ -15,7 +15,7 @@ const PERSONA_CONFIG = {
     iconBg: "bg-gradient-to-br from-rose-100 to-pink-100 text-rose-500",
     titleColor: "text-rose-700/90",
     signColor: "text-rose-400/80",
-    sign: "—— 一直在你身边",
+    sign: "—— 一直在你身边"
   },
   mentor: {
     label: "师长",
@@ -28,7 +28,7 @@ const PERSONA_CONFIG = {
     iconBg: "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-600",
     titleColor: "text-amber-700/90",
     signColor: "text-amber-500/80",
-    sign: "—— 与你共勉",
+    sign: "—— 与你共勉"
   },
   friend: {
     label: "朋友",
@@ -41,8 +41,8 @@ const PERSONA_CONFIG = {
     iconBg: "bg-gradient-to-br from-teal-100 to-emerald-100 text-teal-600",
     titleColor: "text-teal-700/90",
     signColor: "text-teal-500/80",
-    sign: "—— 你的朋友",
-  },
+    sign: "—— 你的朋友"
+  }
 };
 
 /**
@@ -61,8 +61,8 @@ export default function WarmResponseCard({ ai }) {
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1], delay: 0.05 }}
-      className={`relative mt-2 mr-auto w-full rounded-[20px] p-5 border ${cfg.border} bg-gradient-to-br ${cfg.gradient} overflow-hidden text-left shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-sm`}
-    >
+      className={`relative mt-2 mr-auto w-full rounded-[20px] p-5 border ${cfg.border} bg-gradient-to-br ${cfg.gradient} overflow-hidden text-left shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-sm`}>
+      
       {/* 柔光晕染 */}
       <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full ${cfg.glow} blur-3xl pointer-events-none`} aria-hidden />
       <div className={`absolute -bottom-12 -left-8 w-28 h-28 rounded-full ${cfg.glow} blur-3xl opacity-60 pointer-events-none`} aria-hidden />
@@ -76,8 +76,8 @@ export default function WarmResponseCard({ ai }) {
             initial={{ rotate: -8, scale: 0.8 }}
             animate={{ rotate: 0, scale: 1 }}
             transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.15 }}
-            className={`w-8 h-8 rounded-xl ${cfg.iconBg} flex items-center justify-center shadow-sm`}
-          >
+            className={`w-8 h-8 rounded-xl ${cfg.iconBg} flex items-center justify-center shadow-sm`}>
+            
             <Icon className="w-4 h-4" />
           </motion.div>
           <span className={`text-[13px] font-medium ${cfg.titleColor} tracking-wide flex items-center gap-1.5`}>
@@ -86,7 +86,7 @@ export default function WarmResponseCard({ ai }) {
           </span>
         </div>
 
-        <p className="text-[18px] text-slate-700/95 leading-[2] tracking-wide whitespace-pre-wrap break-words font-handwriting selectable-text">
+        <p className="text-slate-700/95 leading-[2] tracking-wide whitespace-pre-wrap break-words font-handwriting selectable-text text-sm">
           {ai.emotional_response}
         </p>
 
@@ -95,6 +95,6 @@ export default function WarmResponseCard({ ai }) {
           <span className={`text-[15px] ${cfg.signColor} font-handwriting`}>{cfg.sign}</span>
         </div>
       </div>
-    </motion.div>
-  );
+    </motion.div>);
+
 }

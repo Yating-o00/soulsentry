@@ -96,8 +96,18 @@ export default function HeartSign() {
     try {
       const created = await base44.entities.Note.create(payload);
       setNotes(prev => sortByTimeAsc(prev.map(n => n.id === optimistic.id ? created : n)));
-      // 触发 AI 分析（异步，不阻塞）
-      base44.functions.invoke('analyzeHeartSign', { note_id: created.id }).catch(e => console.error(e));
+      // 触发 AI 分析（异步，不阻塞）——直接带上笔记内容，绕开后端"查不到笔记"的隔离问题
+      base44.functions.invoke('analyzeHeartSign', {
+        note_id: created.id,
+        note_data: {
+          plain_text: created.plain_text,
+          content: created.content,
+          source_type: created.source_type,
+          source_url: created.source_url,
+          attachments: created.attachments,
+          tags: created.tags,
+        },
+      }).catch(e => console.error(e));
     } catch (e) {
       setNotes(prev => prev.filter(n => n.id !== optimistic.id));
       console.error(e);

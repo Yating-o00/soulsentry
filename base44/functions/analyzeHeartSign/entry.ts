@@ -59,21 +59,29 @@ Deno.serve(async (req) => {
     if (!noteId) return Response.json({ error: 'note_id required' }, { status: 400 });
 
     let note = null;
-    // 1) filter by id（service role 绕过 RLS，最稳）
-    try {
-      const r = await base44.asServiceRole.entities.Note.filter({ id: noteId });
-      note = Array.isArray(r) ? r[0] : null;
-    } catch (e) { console.error('filter failed', e?.message); }
-    // 2) get by id
-    if (!note) {
-      try { note = await base44.asServiceRole.entities.Note.get(noteId); } catch (e) { console.error('get failed', e?.message); }
+
+    // 0) 前端直接传入的笔记内容（最可靠，绕开数据隔离/RLS 导致的"查不到"）
+    if (body.note_data && (body.note_data.plain_text || body.note_data.content)) {
+      note = { id: noteId, ...body.note_data };
     }
-    // 3) list 内存查找兜底
+
+    // 1) 用户态 filter by id（与笔记创建者同一上下文，最匹配）
     if (!note) {
       try {
-        const recent = await base44.asServiceRole.entities.Note.list('-created_date', 500);
-        note = (recent || []).find(n => n.id === noteId) || null;
-      } catch (e) { console.error('list fallback failed', e?.message); }
+        const r = await base44.entities.Note.filter({ id: noteId });
+        note = Array.isArray(r) ? r[0] : null;
+      } catch (e) { console.error('user filter failed', e?.message); }
+    }
+    // 2) service role filter by id
+    if (!note) {
+      try {
+        const r = await base44.asServiceRole.entities.Note.filter({ id: noteId });
+        note = Array.isArray(r) ? r[0] : null;
+      } catch (e) { console.error('filter failed', e?.message); }
+    }
+    // 3) service role get by id
+    if (!note) {
+      try { note = await base44.asServiceRole.entities.Note.get(noteId); } catch (e) { console.error('get failed', e?.message); }
     }
     if (!note) return Response.json({ error: 'Note not found', noteId }, { status: 404 });
 
@@ -82,7 +90,20 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, skipped: true });
     }
 
-    await base44.asServiceRole.entities.Note.update(noteId, { ai_status: 'processing' });
+    // 写回工具：service role 失败则降级用户态，保证状态能落库
+    const safeUpdate = async (id, data) => {
+      try {
+        await base44.asServiceRole.entities.Note.update(id, data);
+      } catch (e1) {
+        try {
+          await base44.entities.Note.update(id, data);
+        } catch (e2) {
+          console.error('update failed (both modes)', e1?.message, e2?.message);
+        }
+      }
+    };
+
+    await safeUpdate(noteId, { ai_status: 'processing' });
 
     // 收集所有可分析的文本
     let materialText = (note.plain_text || note.content || '').replace(/<[^>]+>/g, ' ').slice(0, MAX_TEXT);
@@ -108,7 +129,7 @@ Deno.serve(async (req) => {
     // 调用 Kimi 做统一智能处理
     const apiKey = Deno.env.get('KIMI_API_KEY') || Deno.env.get('MOONSHOT_API_KEY');
     if (!apiKey) {
-      await base44.asServiceRole.entities.Note.update(noteId, { ai_status: 'failed' });
+      await safeUpdate(noteId, { ai_status: 'failed' });
       return Response.json({ error: 'KIMI_API_KEY missing' }, { status: 500 });
     }
 
@@ -146,7 +167,7 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey.trim()}` },
         body: JSON.stringify({
           model,
-          temperature: 0.4,
+          temperature: 1,
           response_format: { type: 'json_object' },
           messages: [
             {
@@ -163,7 +184,7 @@ Deno.serve(async (req) => {
     }
 
     if (!resp || !resp.ok) {
-      await base44.asServiceRole.entities.Note.update(noteId, { ai_status: 'failed' });
+      await safeUpdate(noteId, { ai_status: 'failed' });
       return Response.json({ error: `Kimi ${lastErr}` }, { status: 502 });
     }
 
@@ -189,7 +210,7 @@ Deno.serve(async (req) => {
     // 合并 AI 标签到 note.tags（去重）
     const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
 
-    await base44.asServiceRole.entities.Note.update(noteId, {
+    await safeUpdate(noteId, {
       ai_analysis,
       tags: mergedTags,
       ai_status: 'completed'

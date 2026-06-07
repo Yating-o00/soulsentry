@@ -56,11 +56,21 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
   const [retrying, setRetrying] = useState(false);
   const ai = note.ai_analysis || {};
 
+  // 携带笔记内容一起传给后端，绕开后端"查不到笔记"的数据隔离问题
+  const buildNoteData = () => ({
+    plain_text: note.plain_text,
+    content: note.content,
+    source_type: note.source_type,
+    source_url: note.source_url,
+    attachments: note.attachments,
+    tags: note.tags,
+  });
+
   const handleRetry = async () => {
     if (retrying || isOptimistic) return;
     setRetrying(true);
     try {
-      await base44.functions.invoke('analyzeHeartSign', { note_id: note.id });
+      await base44.functions.invoke('analyzeHeartSign', { note_id: note.id, note_data: buildNoteData() });
       toast.success('已重新分析');
     } catch (e) {
       toast.error('重试失败，请稍后再试');
@@ -75,7 +85,10 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
     if (typeof note.id === 'string' && note.id.startsWith('tmp-')) return;
     const age = Date.now() - new Date(note.created_date || 0).getTime();
     if (age < 30000) return; // 刚创建的交给创建流程处理，避免重复
-    base44.functions.invoke('analyzeHeartSign', { note_id: note.id }).catch(() => {});
+    base44.functions.invoke('analyzeHeartSign', {
+      note_id: note.id,
+      note_data: buildNoteData(),
+    }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.id]);
   const createdAt = note.created_date ? new Date(note.created_date) : null;

@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
       required: ['summary', 'tags', 'category']
     };
 
-    const models = ['moonshot-v1-auto', 'moonshot-v1-8k'];
+    const models = ['kimi-k2.6', 'moonshot-v1-auto', 'moonshot-v1-8k'];
     let resp = null;
     let lastErr = '';
     for (const model of models) {

@@ -83,9 +83,16 @@ export default function HeartSignMessage({ note, onDeleted }) {
   let time = '';
   let fullTime = '';
   if (isValidDate) {
-    // 统一使用浏览器本地时区显示完整时间，避免"今天/昨天"判断错位和时区混乱
-    fullTime = format(createdAt, 'yyyy年M月d日 HH:mm:ss', { locale: zhCN });
-    time = format(createdAt, 'yyyy年M月d日 HH:mm', { locale: zhCN });
+    // 统一以北京时间（Asia/Shanghai）显示，避免设备时区不同导致时间错乱
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).formatToParts(createdAt).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+    const y = parts.year, mo = +parts.month, d = +parts.day;
+    const hh = parts.hour === '24' ? '00' : parts.hour, mm = parts.minute, ss = parts.second;
+    time = `${y}年${mo}月${d}日 ${hh}:${mm}`;
+    fullTime = `${y}年${mo}月${d}日 ${hh}:${mm}:${ss}`;
   }
   const decodeEntities = (s) => String(s || '')
     .replace(/&lt;/g, '<')

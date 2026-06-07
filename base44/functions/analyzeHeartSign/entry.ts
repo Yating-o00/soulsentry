@@ -59,14 +59,21 @@ Deno.serve(async (req) => {
     if (!noteId) return Response.json({ error: 'note_id required' }, { status: 400 });
 
     let note = null;
+    // 1) filter by id（service role 绕过 RLS，最稳）
     try {
-      const list = await base44.asServiceRole.entities.Note.filter({ id: noteId });
-      note = Array.isArray(list) ? list[0] : null;
-    } catch (e) {
-      console.error('Note.filter failed', e?.message);
-    }
+      const r = await base44.asServiceRole.entities.Note.filter({ id: noteId });
+      note = Array.isArray(r) ? r[0] : null;
+    } catch (e) { console.error('filter failed', e?.message); }
+    // 2) get by id
     if (!note) {
-      try { note = await base44.asServiceRole.entities.Note.get(noteId); } catch (_) {}
+      try { note = await base44.asServiceRole.entities.Note.get(noteId); } catch (e) { console.error('get failed', e?.message); }
+    }
+    // 3) list 内存查找兜底
+    if (!note) {
+      try {
+        const recent = await base44.asServiceRole.entities.Note.list('-created_date', 500);
+        note = (recent || []).find(n => n.id === noteId) || null;
+      } catch (e) { console.error('list fallback failed', e?.message); }
     }
     if (!note) return Response.json({ error: 'Note not found', noteId }, { status: 404 });
 

@@ -5,21 +5,31 @@ import HeartSignMessage from "@/components/heartsign/HeartSignMessage";
 import HeartSignInput from "@/components/heartsign/HeartSignInput";
 import HeartSignInsightPanel from "@/components/heartsign/HeartSignInsightPanel";
 import ExternalFeedDialog from "@/components/heartsign/ExternalFeedDialog";
-import { format, isToday, isYesterday } from "date-fns";
-import { zhCN } from "date-fns/locale";
+// 以北京时间（Asia/Shanghai）计算日期键 YYYY-MM-DD，保证跨午夜分组正确
+function bjDateKey(d) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(d));
+}
 
 function dayLabel(d) {
-  const date = new Date(d);
-  if (isToday(date)) return '今天';
-  if (isYesterday(date)) return '昨天';
-  return format(date, 'M月d日 EEEE', { locale: zhCN });
+  const key = bjDateKey(d);
+  const todayKey = bjDateKey(new Date());
+  const yesterdayKey = bjDateKey(new Date(Date.now() - 86400000));
+  if (key === todayKey) return '今天';
+  if (key === yesterdayKey) return '昨天';
+  const wd = ['周日','周一','周二','周三','周四','周五','周六'];
+  const [, m, day] = key.split('-');
+  // 取北京时间的星期
+  const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', weekday: 'short' }).format(new Date(d));
+  return `${parseInt(m, 10)}月${parseInt(day, 10)}日 ${weekday}`;
 }
 
 function groupByDay(notes) {
   const groups = [];
   let lastKey = null;
   notes.forEach(n => {
-    const key = format(new Date(n.created_date), 'yyyy-MM-dd');
+    const key = bjDateKey(n.created_date);
     if (key !== lastKey) {
       groups.push({ key, label: dayLabel(n.created_date), items: [] });
       lastKey = key;

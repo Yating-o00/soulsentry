@@ -86,7 +86,7 @@ export default function WarmResponseCard({ ai }) {
           </span>
         </div>
 
-        <p className="text-slate-700/95 leading-[2] tracking-wide whitespace-pre-wrap break-words font-handwriting selectable-text text-sm">
+        <p className="text-slate-700/95 leading-[2] tracking-wide whitespace-pre-wrap break-words font-handwriting selectable-text text-sm opacity-65">
           {ai.emotional_response}
         </p>
 

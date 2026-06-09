@@ -48,6 +48,15 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   const theme = { from: "#384877", to: "#3b5aa2", soft: "#eef2f7", text: "#384877" };
   const content = (text || "").trim();
 
+  // 正文字号随内容长度自适应，长内容也能保持优雅排版
+  const bodyStyle = (() => {
+    const len = content.length;
+    if (len > 280) return { fontSize: "13px", lineHeight: 1.85 };
+    if (len > 160) return { fontSize: "14.5px", lineHeight: 1.95 };
+    if (len > 60)  return { fontSize: "16px", lineHeight: 2 };
+    return { fontSize: "18px", lineHeight: 2.1 };
+  })();
+
   const [encouragement] = useState(
     () => ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
   );
@@ -147,17 +156,27 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
 
                 <div className="relative z-10 px-7 pt-7 pb-6">
                   {/* 头部 */}
-                  <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-2">
-                      <Heart className="w-4 h-4" style={{ color: theme.from }} />
-                      <span className="text-[13px] font-medium tracking-[0.2em] text-slate-700">心签</span>
+                  <div className="flex items-center justify-between mb-7">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center"
+                        style={{ background: `linear-gradient(135deg, ${theme.from}, ${theme.to})` }}
+                      >
+                        <Heart className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <span
+                        className="text-[17px] font-bold tracking-[0.18em]"
+                        style={{ color: theme.text }}
+                      >
+                        心　签
+                      </span>
                     </div>
                     <span className="text-[10px] tracking-wide text-slate-400">{dateStr}</span>
                   </div>
 
                   {/* 正文 */}
                   <Quote className="w-6 h-6 mb-3" style={{ color: theme.from, opacity: 0.35 }} />
-                  <p className="text-[16px] leading-[2] text-slate-800 whitespace-pre-wrap break-words">
+                  <p className="text-slate-800 whitespace-pre-wrap break-words" style={bodyStyle}>
                     {content || "（空内容）"}
                   </p>
 

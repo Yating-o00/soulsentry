@@ -138,7 +138,10 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
 
         <div className="space-y-5">
           {/* 预览区 */}
-          <div className="flex justify-center bg-slate-100/60 p-4 rounded-2xl">
+          <div
+            className="flex justify-center p-5 rounded-2xl"
+            style={{ background: `linear-gradient(160deg, ${theme.soft}, #ffffff)` }}
+          >
             <div ref={cardRef} className="w-[360px] relative">
               <div
                 className="relative rounded-[28px] overflow-hidden shadow-xl"
@@ -207,15 +210,31 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
 
           {/* 操作按钮 */}
           <div className="grid grid-cols-3 gap-2.5">
-            <Button onClick={handleDownload} disabled={generating} variant="outline" className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50">
+            <Button
+              onClick={handleDownload}
+              disabled={generating}
+              className="text-white shadow-sm hover:opacity-90 transition-opacity border-0"
+              style={{ background: `linear-gradient(135deg, ${theme.from}, ${theme.to})` }}
+            >
               <Download className="w-4 h-4 mr-1.5" />
               {generating ? "生成中" : "下载"}
             </Button>
-            <Button onClick={handleCopyImage} disabled={generating} variant="outline" className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+            <Button
+              onClick={handleCopyImage}
+              disabled={generating}
+              variant="outline"
+              className="bg-white hover:bg-transparent transition-colors"
+              style={{ borderColor: `${theme.from}55`, color: theme.text }}
+            >
               <Copy className="w-4 h-4 mr-1.5" />
               复制图
             </Button>
-            <Button onClick={handleCopyText} variant="outline" className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+            <Button
+              onClick={handleCopyText}
+              variant="outline"
+              className="bg-white hover:bg-transparent transition-colors"
+              style={{ borderColor: `${theme.from}55`, color: theme.text }}
+            >
               <Copy className="w-4 h-4 mr-1.5" />
               复制文
             </Button>

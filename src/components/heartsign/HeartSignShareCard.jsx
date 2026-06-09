@@ -182,9 +182,14 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
 
                   {/* 底部署名 + 二维码 */}
                   <div className="mt-5 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-white/85">
-                      <Heart className="w-3 h-3" />
-                      <span className="text-[10.5px] tracking-wide leading-tight">心灵存放站<br />坚定守护，适时轻唤</span>
+                    <div className="flex items-center gap-2 text-white/90">
+                      <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
+                        <Heart className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <div className="leading-tight">
+                        <p className="text-[11.5px] font-bold tracking-wide">心栈 SoulSentry</p>
+                        <p className="text-[9.5px] text-white/70">坚定守护，适时轻唤</p>
+                      </div>
                     </div>
                     {qrCodeUrl && (
                       <div className="flex items-center gap-2">

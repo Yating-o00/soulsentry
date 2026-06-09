@@ -165,7 +165,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
                         <Heart className="w-3.5 h-3.5 text-white" />
                       </div>
                       <span
-                        className="text-[17px] font-bold tracking-[0.18em]"
+                        className="text-[17px] font-bold tracking-[0.18em] mx-2 px-1"
                         style={{ color: theme.text }}>
                         
                         心　签

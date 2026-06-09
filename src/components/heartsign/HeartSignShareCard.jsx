@@ -138,66 +138,45 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
 
         <div className="space-y-5">
           {/* 预览区 */}
-          <div
-            className="flex justify-center p-5 rounded-2xl"
-            style={{ background: `linear-gradient(160deg, ${theme.soft}, #ffffff)` }}
-          >
+          <div className="flex justify-center p-5 rounded-2xl bg-slate-50">
             <div ref={cardRef} className="w-[360px] relative">
-              <div
-                className="relative rounded-[28px] overflow-hidden shadow-xl"
-                style={{ background: `linear-gradient(160deg, ${theme.from}, ${theme.to})` }}
-              >
-                {/* 柔光装饰 */}
-                <div className="absolute -top-10 -right-8 w-40 h-40 rounded-full bg-white/15 blur-2xl" />
-                <div className="absolute bottom-10 -left-10 w-32 h-32 rounded-full bg-white/10 blur-2xl" />
+              <div className="relative bg-white rounded-[20px] overflow-hidden border border-slate-100 shadow-[0_8px_40px_-12px_rgba(15,23,42,0.12)]">
+                {/* 顶部主题色细条 */}
+                <div className="h-1" style={{ background: `linear-gradient(90deg, ${theme.from}, ${theme.to})` }} />
 
-                <div className="relative z-10 p-6">
+                <div className="relative z-10 px-7 pt-7 pb-6">
                   {/* 头部 */}
-                  <div className="flex items-center gap-2 text-white/90 mb-6">
-                    <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
-                      <Heart className="w-4 h-4 text-white" />
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-2">
+                      <Heart className="w-4 h-4" style={{ color: theme.from }} />
+                      <span className="text-[13px] font-medium tracking-[0.2em] text-slate-700">心签</span>
                     </div>
-                    <div className="leading-tight">
-                      <p className="text-[13px] font-semibold tracking-wide">心签</p>
-                      <p className="text-[10px] text-white/70">给自己的一句话</p>
-                    </div>
-                    <span className="ml-auto text-[10px] text-white/70">{dateStr}</span>
+                    <span className="text-[10px] tracking-wide text-slate-400">{dateStr}</span>
                   </div>
 
-                  {/* 正文卡片 */}
-                  <div className="bg-white rounded-2xl p-5 shadow-sm">
-                    <Quote className="w-5 h-5 mb-2" style={{ color: theme.from, opacity: 0.5 }} />
-                    <p className="text-[15px] leading-[1.85] text-slate-800 whitespace-pre-wrap break-words">
-                      {content || "（空内容）"}
-                    </p>
+                  {/* 正文 */}
+                  <Quote className="w-6 h-6 mb-3" style={{ color: theme.from, opacity: 0.35 }} />
+                  <p className="text-[16px] leading-[2] text-slate-800 whitespace-pre-wrap break-words">
+                    {content || "（空内容）"}
+                  </p>
 
-                    {/* 暖心寄语 */}
-                    <div
-                      className="mt-4 pt-4 border-t flex items-start gap-2"
-                      style={{ borderColor: `${theme.from}22` }}
-                    >
-                      <Heart className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: theme.text }} />
-                      <p className="text-[13px] leading-relaxed font-medium" style={{ color: theme.text }}>
-                        {encouragement}
-                      </p>
-                    </div>
+                  {/* 暖心寄语 */}
+                  <div className="mt-7 pt-5 border-t border-slate-100">
+                    <p className="text-[13px] leading-relaxed text-slate-500 italic">
+                      {encouragement}
+                    </p>
                   </div>
 
                   {/* 底部署名 + 二维码 */}
-                  <div className="mt-5 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-white/90">
-                      <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
-                        <Heart className="w-3.5 h-3.5 text-white" />
-                      </div>
-                      <div className="leading-tight">
-                        <p className="text-[11.5px] font-bold tracking-wide">心栈 SoulSentry</p>
-                        <p className="text-[9.5px] text-white/70">坚定守护，适时轻唤</p>
-                      </div>
+                  <div className="mt-7 pt-5 border-t border-slate-100 flex items-center justify-between">
+                    <div className="leading-tight">
+                      <p className="text-[12px] font-semibold tracking-wide text-slate-700">心栈 SoulSentry</p>
+                      <p className="text-[9.5px] text-slate-400 mt-0.5">坚定守护，适时轻唤</p>
                     </div>
                     {qrCodeUrl && (
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-white/70">扫码<br />查看</span>
-                        <div className="w-9 h-9 bg-white rounded-lg p-0.5 shadow-sm">
+                        <span className="text-[9.5px] text-slate-400 text-right leading-tight">扫码<br />查看</span>
+                        <div className="w-9 h-9 bg-white rounded-md p-0.5 border border-slate-100">
                           <img src={qrCodeUrl} alt="QR" crossOrigin="anonymous" className="w-full h-full object-contain" />
                         </div>
                       </div>

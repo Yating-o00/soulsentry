@@ -135,16 +135,30 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
     }
   };
 
+  const fallbackShareCopy = async () => {
+    const text = plain.slice(0, 500);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('已复制，可粘贴分享');
+    } catch {
+      toast.error('分享失败，请手动复制');
+    }
+  };
+
   const handleShare = async () => {
     const text = plain.slice(0, 500);
-    if (navigator.share) {
+    // 仅在 HTTPS 安全环境且支持 Web Share 时尝试系统分享
+    if (typeof navigator !== 'undefined' && navigator.share && window.isSecureContext) {
       try {
         await navigator.share({ title: '来自心签', text, url: note.source_url || window.location.href });
-      } catch {/* 用户取消 */}
-    } else {
-      await handleCopy();
-      toast.success('已复制，可粘贴分享');
+        return;
+      } catch (e) {
+        // 用户主动取消，不再回退
+        if (e?.name === 'AbortError') return;
+        // 其它错误（权限/不支持）回退到复制
+      }
     }
+    await fallbackShareCopy();
   };
 
   const handleDelete = async () => {

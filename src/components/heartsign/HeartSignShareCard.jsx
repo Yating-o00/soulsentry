@@ -61,8 +61,13 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     () => ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
   );
 
-  const noteUrl = typeof window !== "undefined" && note?.id ?
-  `${window.location.origin}${createPageUrl("HeartSign")}?noteId=${note.id}` :
+  // 二维码指向正式发布域名（去掉预览沙箱前缀），避免微信将 preview-sandbox 沙箱链接判定为风险站点而拦截
+  const publicOrigin = (() => {
+    if (typeof window === "undefined") return "";
+    return window.location.origin.replace(/preview-sandbox--/i, "");
+  })();
+  const noteUrl = publicOrigin && note?.id ?
+  `${publicOrigin}${createPageUrl("HeartSign")}?noteId=${note.id}` :
   "";
   const qrCodeUrl = noteUrl ?
   `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(noteUrl)}&bgcolor=ffffff` :

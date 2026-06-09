@@ -44,7 +44,8 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   const cardRef = useRef(null);
   const [generating, setGenerating] = useState(false);
 
-  const theme = THEMES[note?.color] || THEMES.white;
+  // 统一使用产品科技蓝主题色调
+  const theme = { from: "#384877", to: "#3b5aa2", soft: "#eef2f7", text: "#384877" };
   const content = (text || "").trim();
 
   const [encouragement] = useState(

@@ -117,9 +117,19 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
     .replace(/&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&');
-  const rawPlain = note.plain_text || (note.content || '').replace(/<[^>]+>/g, ' ');
+  // 保留原文换行：用换行替换块级标签，再去除其余标签
+  const rawPlain = note.plain_text || (note.content || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, '');
   // 解码两次：处理双重编码（&amp;lt; → &lt; → <）
-  const plain = decodeEntities(decodeEntities(rawPlain)).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  // 保留换行/空行，仅清理行尾空格并把连续多空行压缩为最多一个空行
+  const plain = decodeEntities(decodeEntities(rawPlain))
+    .replace(/<[^>]+>/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
   const isLong = plain.length > 300;
   const isReport = plain.length > 800;
   const displayText = expanded || !isLong ? plain : plain.slice(0, 280) + '…';

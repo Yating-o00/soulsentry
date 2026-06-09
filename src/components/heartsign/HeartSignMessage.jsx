@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import KeywordExplorer from "@/components/heartsign/KeywordExplorer";
 import WarmResponseCard from "@/components/heartsign/WarmResponseCard";
+import HeartSignShareCard from "@/components/heartsign/HeartSignShareCard";
 
 // Notion 风的柔和色板：根据 note.color 切换气泡 + AI 卡片的配色
 const COLOR_SCHEMES = {
@@ -54,6 +55,7 @@ function SourceBadge({ note }) {
 export default function HeartSignMessage({ note, onDeleted, onRestore }) {
   const [expanded, setExpanded] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const ai = note.ai_analysis || {};
 
   // 携带笔记内容一起传给后端，绕开后端"查不到笔记"的数据隔离问题
@@ -135,30 +137,8 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
     }
   };
 
-  const fallbackShareCopy = async () => {
-    const text = plain.slice(0, 500);
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success('已复制，可粘贴分享');
-    } catch {
-      toast.error('分享失败，请手动复制');
-    }
-  };
-
-  const handleShare = async () => {
-    const text = plain.slice(0, 500);
-    // 仅在 HTTPS 安全环境且支持 Web Share 时尝试系统分享
-    if (typeof navigator !== 'undefined' && navigator.share && window.isSecureContext) {
-      try {
-        await navigator.share({ title: '来自心签', text, url: note.source_url || window.location.href });
-        return;
-      } catch (e) {
-        // 用户主动取消，不再回退
-        if (e?.name === 'AbortError') return;
-        // 其它错误（权限/不支持）回退到复制
-      }
-    }
-    await fallbackShareCopy();
+  const handleShare = () => {
+    setShareOpen(true);
   };
 
   const handleDelete = async () => {
@@ -193,6 +173,7 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
 
   return (
    <div className="space-y-2">
+    <HeartSignShareCard note={note} text={plain} open={shareOpen} onClose={() => setShareOpen(false)} />
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className={`flex ${isExternal ? 'justify-start' : 'justify-end'} gap-2 group`}>
       <div className="max-w-[88%] md:max-w-[78%]">
         {/* 用户气泡 - Notion 风格卡片（按 note.color 着色） */}

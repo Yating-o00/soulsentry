@@ -154,9 +154,9 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
                 {/* 顶部主题色细条 */}
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${theme.from}, ${theme.to})` }} />
 
-                <div className="relative z-10 px-9 pt-5 pb-5">
+                <div className="relative z-10 px-7 pt-7 pb-6">
                   {/* 头部 */}
-                  <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center justify-between mb-7">
                     <div className="flex items-center gap-2.5">
                       <div
                         className="w-7 h-7 rounded-lg flex items-center justify-center"
@@ -181,14 +181,14 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
                   </p>
 
                   {/* 暖心寄语 */}
-                  <div className="mt-5 pt-4 border-t border-slate-100">
+                  <div className="mt-7 pt-5 border-t border-slate-100">
                     <p className="text-[13px] leading-relaxed text-slate-500 italic">
                       {encouragement}
                     </p>
                   </div>
 
                   {/* 底部署名 + 二维码 */}
-                  <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <div className="mt-7 pt-5 border-t border-slate-100 flex items-center justify-between">
                     <div className="leading-tight">
                       <p className="text-[12px] font-semibold tracking-wide text-slate-700">心栈 SoulSentry</p>
                       <p className="text-[9.5px] text-slate-400 mt-0.5">坚定守护，适时轻唤</p>

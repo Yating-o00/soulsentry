@@ -6,9 +6,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2, Heart, Sparkles, Quote } from "lucide-react";
+import { Download, Copy, Share2, Heart, Quote } from "lucide-react";
 import { toast } from "sonner";
+import { createPageUrl } from "@/utils";
 import html2canvas from "html2canvas";
+
+const ENCOURAGEMENTS = [
+  "你已经做得很好了，请对自己温柔一点。",
+  "慢慢来，一切都会好起来的。",
+  "你值得被世界温柔以待。",
+  "每一个努力的当下，都在悄悄发光。",
+  "允许自己休息，也允许自己慢慢变好。",
+  "你比想象中更坚强，也更可爱。",
+  "今天也辛苦了，记得给自己一个拥抱。",
+  "星光不问赶路人，时光不负有心人。",
+  "别急，好的事情正在路上。",
+  "愿你被爱包围，也勇敢去爱。",
+];
 
 // 与气泡一致的柔和色板：决定卡片主题色
 const THEMES = {
@@ -31,8 +45,18 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   const [generating, setGenerating] = useState(false);
 
   const theme = THEMES[note?.color] || THEMES.white;
-  const ai = note?.ai_analysis || {};
   const content = (text || "").trim();
+
+  const [encouragement] = useState(
+    () => ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
+  );
+
+  const noteUrl = typeof window !== "undefined" && note?.id
+    ? `${window.location.origin}${createPageUrl("HeartSign")}?noteId=${note.id}`
+    : "";
+  const qrCodeUrl = noteUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(noteUrl)}&bgcolor=ffffff`
+    : "";
 
   const dateStr = (() => {
     const d = note?.created_date ? new Date(note.created_date) : new Date();
@@ -91,7 +115,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   };
 
   const handleCopyText = async () => {
-    const out = `【心签】\n\n${content}\n\n${ai.summary ? `✨ ${ai.summary}\n\n` : ""}—— 来自心灵存放站 · ${dateStr}`;
+    const out = `【心签】\n\n${content}\n\n💛 ${encouragement}\n\n—— 来自心灵存放站 · ${dateStr}`;
     try {
       await navigator.clipboard.writeText(out);
       toast.success("心签文本已复制");
@@ -144,37 +168,32 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
                       {content || "（空内容）"}
                     </p>
 
-                    {ai.summary && (
-                      <div
-                        className="mt-4 pt-4 border-t flex gap-2"
-                        style={{ borderColor: `${theme.from}22` }}
-                      >
-                        <Sparkles className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: theme.text }} />
-                        <p className="text-[12.5px] leading-relaxed" style={{ color: theme.text }}>
-                          {ai.summary}
-                        </p>
-                      </div>
-                    )}
-
-                    {note.tags?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-3">
-                        {note.tags.slice(0, 4).map((t, i) => (
-                          <span
-                            key={i}
-                            className="text-[10.5px] px-2 py-0.5 rounded-full"
-                            style={{ backgroundColor: theme.soft, color: theme.text }}
-                          >
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {/* 暖心寄语 */}
+                    <div
+                      className="mt-4 pt-4 border-t flex items-start gap-2"
+                      style={{ borderColor: `${theme.from}22` }}
+                    >
+                      <Heart className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: theme.text }} />
+                      <p className="text-[13px] leading-relaxed font-medium" style={{ color: theme.text }}>
+                        {encouragement}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* 底部署名 */}
-                  <div className="mt-5 flex items-center justify-center gap-1.5 text-white/80">
-                    <Heart className="w-3 h-3" />
-                    <span className="text-[10.5px] tracking-wide">心灵存放站 · 坚定守护，适时轻唤</span>
+                  {/* 底部署名 + 二维码 */}
+                  <div className="mt-5 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-white/85">
+                      <Heart className="w-3 h-3" />
+                      <span className="text-[10.5px] tracking-wide leading-tight">心灵存放站<br />坚定守护，适时轻唤</span>
+                    </div>
+                    {qrCodeUrl && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-white/70">扫码<br />查看</span>
+                        <div className="w-12 h-12 bg-white rounded-lg p-0.5 shadow-sm">
+                          <img src={qrCodeUrl} alt="QR" crossOrigin="anonymous" className="w-full h-full object-contain" />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

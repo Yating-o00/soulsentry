@@ -176,7 +176,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
 
                   {/* 正文 */}
                   <Quote className="w-6 h-6 mb-3" style={{ color: theme.from, opacity: 0.35 }} />
-                  <p className="text-slate-800 whitespace-pre-wrap break-words my-2" style={bodyStyle}>
+                  <p className="text-slate-800 whitespace-pre-wrap break-words px-3" style={bodyStyle}>
                     {content || "（空内容）"}
                   </p>
 

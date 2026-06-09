@@ -194,7 +194,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
                     {qrCodeUrl && (
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-white/70">扫码<br />查看</span>
-                        <div className="w-12 h-12 bg-white rounded-lg p-0.5 shadow-sm">
+                        <div className="w-9 h-9 bg-white rounded-lg p-0.5 shadow-sm">
                           <img src={qrCodeUrl} alt="QR" crossOrigin="anonymous" className="w-full h-full object-contain" />
                         </div>
                       </div>

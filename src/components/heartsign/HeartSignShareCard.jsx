@@ -160,19 +160,17 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
                   <div className="flex items-center justify-between mb-7">
                     <div className="flex items-center gap-2.5">
                       <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
                         style={{ background: `linear-gradient(135deg, ${theme.from}, ${theme.to})` }}>
-                        
                         <Heart className="w-3.5 h-3.5 text-white" />
                       </div>
                       <span
-                        className="text-[17px] font-bold tracking-[0.06em] mx-2 px-1"
+                        className="text-[17px] font-bold leading-none tracking-[0.06em]"
                         style={{ color: theme.text }}>
-                        
                         心签
                       </span>
                     </div>
-                    <span className="text-[10px] tracking-wide text-slate-400">{dateStr}</span>
+                    <span className="text-[10px] leading-none tracking-wide text-slate-400">{dateStr}</span>
                   </div>
 
                   {/* 正文 */}

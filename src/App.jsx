@@ -11,6 +11,7 @@ import { setupIframeMessaging } from './lib/iframe-messaging';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import { createPageUrl } from '@/utils';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -50,9 +51,22 @@ const AuthenticatedApp = () => {
     <LayoutWrapper currentPageName={mainPageKey}>
       <Routes>
         <Route path="/" element={<MainPage />} />
-        {Object.entries(Pages).map(([path, Page]) => (
-          <Route key={path} path={`/${path}`} element={<Page />} />
-        ))}
+        {Object.entries(Pages).flatMap(([path, Page]) => {
+          const normalizedPath = createPageUrl(path);
+          const legacyPath = `/${path}`;
+          const routes = [
+            <Route key={`normalized-${path}`} path={normalizedPath} element={<Page />} />
+          ];
+
+          // Keep legacy uppercase routes working while the app uses normalized URLs.
+          if (legacyPath !== normalizedPath) {
+            routes.push(
+              <Route key={`legacy-${path}`} path={legacyPath} element={<Page />} />
+            );
+          }
+
+          return routes;
+        })}
         <Route path="*" element={<PageNotFound />} />
       </Routes>
     </LayoutWrapper>

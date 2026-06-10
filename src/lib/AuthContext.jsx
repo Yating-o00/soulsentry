@@ -4,6 +4,10 @@ import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 
 const AuthContext = createContext();
+const isStandalonePricingPreview = () => {
+  if (typeof window === "undefined") return false;
+  return ["/pricing", "/Pricing"].includes(window.location.pathname);
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -14,6 +18,14 @@ export const AuthProvider = ({ children }) => {
   const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
 
   useEffect(() => {
+    if (isStandalonePricingPreview()) {
+      setIsLoadingPublicSettings(false);
+      setIsLoadingAuth(false);
+      setIsAuthenticated(false);
+      setAuthError(null);
+      return;
+    }
+
     checkAppState();
   }, []);
 

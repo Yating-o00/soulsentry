@@ -384,11 +384,18 @@ function LayoutContent({ children }) {
     }
 
     export default function Layout({ children }) {
+  const location = useLocation();
+  const isStandalonePricingPage = [createPageUrl("Pricing"), "/Pricing"].includes(location.pathname);
+
       return (
         <TranslationProvider>
-          <WelcomeGuard>
-            <LayoutContent>{children}</LayoutContent>
-          </WelcomeGuard>
+      {isStandalonePricingPage ? (
+        children
+      ) : (
+        <WelcomeGuard>
+          <LayoutContent>{children}</LayoutContent>
+        </WelcomeGuard>
+      )}
         </TranslationProvider>
       );
     }

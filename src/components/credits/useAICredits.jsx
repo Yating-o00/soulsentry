@@ -8,16 +8,35 @@ export function useAICredits() {
   const [loading, setLoading] = useState(true);
 
   const loadCredits = useCallback(async (forceRefresh = false) => {
-    const user = await getCachedUser(forceRefresh);
-    const currentCredits = user.ai_credits ?? 200;
-    const currentPlan = user.subscription_plan || "free";
-    setCredits(currentCredits);
-    setPlan(currentPlan);
-    setLoading(false);
-    if (forceRefresh) {
-      window.dispatchEvent(new CustomEvent("credits-updated", { detail: { credits: currentCredits, plan: currentPlan } }));
+    if (typeof window !== "undefined" && ["/pricing", "/Pricing"].includes(window.location.pathname)) {
+      const fallbackCredits = 200;
+      const fallbackPlan = "free";
+      setCredits(fallbackCredits);
+      setPlan(fallbackPlan);
+      setLoading(false);
+      return { credits: fallbackCredits, plan: fallbackPlan };
     }
-    return { credits: currentCredits, plan: currentPlan };
+
+    try {
+      const user = await getCachedUser(forceRefresh);
+      const currentCredits = user.ai_credits ?? 200;
+      const currentPlan = user.subscription_plan || "free";
+      setCredits(currentCredits);
+      setPlan(currentPlan);
+      setLoading(false);
+      if (forceRefresh) {
+        window.dispatchEvent(new CustomEvent("credits-updated", { detail: { credits: currentCredits, plan: currentPlan } }));
+      }
+      return { credits: currentCredits, plan: currentPlan };
+    } catch (error) {
+      // Fall back to a friendly local preview state when backend config is unavailable.
+      const fallbackCredits = 200;
+      const fallbackPlan = "free";
+      setCredits(fallbackCredits);
+      setPlan(fallbackPlan);
+      setLoading(false);
+      return { credits: fallbackCredits, plan: fallbackPlan, error };
+    }
   }, []);
 
   useEffect(() => {

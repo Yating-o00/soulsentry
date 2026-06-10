@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useLocation } from "react-router-dom";
 import Welcome from "@/pages/Welcome";
 
 // Helper for safe localStorage access
@@ -24,6 +25,7 @@ const setStorageItem = (key, value) => {
 };
 
 export default function WelcomeGuard({ children }) {
+  const location = useLocation();
   // Initialize state synchronously to avoid white flash
   const [showWelcome, setShowWelcome] = useState(() => {
     const completed = getStorageItem("soul_sentry_welcome_completed_v1");
@@ -35,7 +37,8 @@ export default function WelcomeGuard({ children }) {
     setShowWelcome(false);
   };
 
-  if (showWelcome) {
+  // Only gate the landing page so direct page previews can render as expected.
+  if (showWelcome && location.pathname === "/") {
     return <Welcome onComplete={handleComplete} />;
   }
 

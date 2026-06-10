@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Send, Clock, Sparkles, Loader2 } from "lucide-react";
+import { Mail, Send, Clock, Sparkles, Loader2, Wand2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
@@ -29,6 +29,42 @@ export default function EmailSendConfirmDialog({ open, onOpenChange, suggestion,
   const [body, setBody] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [sending, setSending] = useState(false);
+  const [beautifying, setBeautifying] = useState(false);
+
+  const handleBeautify = async () => {
+    if (!body.trim()) {
+      toast.error("请先填写正文内容");
+      return;
+    }
+    setBeautifying(true);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `你是一位专业的邮件排版助手。请对下面这封邮件正文进行排版美化，让表达更得体、结构更清晰美观。要求：
+1. 保留原意和全部关键信息，不要增删核心内容，不要编造事实。
+2. 合理分段，每段表达一个完整意思，段落之间空一行。
+3. 开头保留/补全恰当的称呼问候，结尾补全礼貌的致意与落款占位（如"此致 敬礼"或"祝好"），但不要杜撰具体署名。
+4. 语气保持原文风格（中文/英文跟随原文语言）。
+5. 只返回排版后的纯文本正文，不要使用 Markdown 符号，不要任何额外解释。
+
+原始正文：
+"""
+${body}
+"""`,
+      });
+      const cleaned = (typeof result === "string" ? result : "").trim();
+      if (cleaned) {
+        setBody(cleaned);
+        toast.success("已为你优化排版 ✨");
+      } else {
+        toast.error("排版优化失败，请重试");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("排版优化失败，请重试");
+    } finally {
+      setBeautifying(false);
+    }
+  };
 
   useEffect(() => {
     if (open && suggestion) {
@@ -106,12 +142,27 @@ export default function EmailSendConfirmDialog({ open, onOpenChange, suggestion,
             />
           </div>
           <div>
-            <Label className="text-xs text-slate-500">正文</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-slate-500">正文</Label>
+              <button
+                type="button"
+                onClick={handleBeautify}
+                disabled={beautifying || sending}
+                className="flex items-center gap-1 text-[11px] font-medium text-[#384877] hover:text-[#2d3a5f] disabled:opacity-50 transition-colors"
+              >
+                {beautifying ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Wand2 className="w-3 h-3" />
+                )}
+                {beautifying ? "优化中..." : "AI 美化排版"}
+              </button>
+            </div>
             <Textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={8}
-              className="mt-1 resize-none"
+              className="mt-1 resize-none whitespace-pre-wrap"
             />
           </div>
           <div>

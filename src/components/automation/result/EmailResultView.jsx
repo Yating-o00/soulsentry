@@ -1,5 +1,5 @@
 import React from "react";
-import { Mail, User, Tag, AlertTriangle, Paperclip, X, Plus, Upload, Loader2 } from "lucide-react";
+import { Mail, User, Tag, AlertTriangle, Paperclip, X, Plus, Upload, Loader2, Wand2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 export default function EmailResultView({ data, preview, editable = true, onChange, availableAttachments = [] }) {
   const [showAllCandidates, setShowAllCandidates] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
+  const [beautifying, setBeautifying] = React.useState(false);
   if (!data && !preview) return null;
   const handle = (key) => (e) => {
     if (!onChange) return;
@@ -21,6 +22,41 @@ export default function EmailResultView({ data, preview, editable = true, onChan
   const attachments = Array.isArray(data?.attachments) ? data.attachments : [];
   const attachedUrls = new Set(attachments.map(a => a.file_url));
   const candidates = (availableAttachments || []).filter(a => a.file_url && !attachedUrls.has(a.file_url));
+
+  const handleBeautify = async () => {
+    if (!body.trim()) {
+      toast.error("请先填写正文内容");
+      return;
+    }
+    if (!onChange) return;
+    setBeautifying(true);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `你是一位专业的邮件排版助手。请对下面这封邮件正文进行排版美化，让表达更得体、结构更清晰美观。要求：
+1. 保留原意和全部关键信息，不要增删核心内容，不要编造事实。
+2. 合理分段，每段表达一个完整意思，段落之间空一行。
+3. 开头保留/补全恰当的称呼问候，结尾补全礼貌的致意（如"此致 敬礼"或"祝好"），但不要杜撰具体署名。
+4. 语气保持原文风格（中文/英文跟随原文语言）。
+5. 只返回排版后的纯文本正文，不要使用 Markdown 符号，不要任何额外解释。
+
+原始正文：
+"""
+${body}
+"""`,
+      });
+      const cleaned = (typeof result === "string" ? result : "").trim();
+      if (cleaned) {
+        onChange({ ...(data || {}), body: cleaned });
+        toast.success("已为你优化排版 ✨");
+      } else {
+        toast.error("排版优化失败，请重试");
+      }
+    } catch (err) {
+      toast.error("排版优化失败，请重试");
+    } finally {
+      setBeautifying(false);
+    }
+  };
 
   const removeAttachment = (idx) => {
     if (!onChange) return;
@@ -102,8 +138,21 @@ export default function EmailResultView({ data, preview, editable = true, onChan
 
       {/* 正文 */}
       <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-        <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">
-          <Mail className="w-3 h-3" /> 邮件正文
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+            <Mail className="w-3 h-3" /> 邮件正文
+          </div>
+          {editable && (
+            <button
+              type="button"
+              onClick={handleBeautify}
+              disabled={beautifying}
+              className="flex items-center gap-1 text-[10.5px] font-semibold text-[#384877] hover:text-[#3b5aa2] disabled:opacity-50 transition-colors"
+            >
+              {beautifying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+              {beautifying ? "优化中..." : "AI 美化排版"}
+            </button>
+          )}
         </div>
         {editable ? (
           <textarea

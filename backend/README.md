@@ -21,6 +21,26 @@
 - AI 点数充值占位接口：`POST /api/credits/top-up`
 - 任务列表与创建：`GET/POST /api/tasks`
 - 笔记列表与创建：`GET/POST /api/notes`
+- Kimi 文本调用：`POST /api/functions/invokeKimi`
+- Kimi 联网搜索：`POST /api/functions/kimiWebBrowse`
+- Kimi 日程分析：`POST /api/functions/analyzeIntent`
+
+## Kimi 配置
+
+在 `backend/.env` 中配置以下任一变量即可：
+
+```bash
+KIMI_API_KEY=your_kimi_key
+# 或
+MOONSHOT_API_KEY=your_moonshot_key
+KIMI_BASE_URL=https://api.moonshot.ai/v1
+```
+
+说明：
+
+- 当前已接入文本与结构化 JSON 输出
+- `invokeKimi` 的附件上传和文档抽取能力暂未迁移
+- 未配置 Key 时，相关接口会返回明确错误：`KIMI_API_KEY 或 MOONSHOT_API_KEY 未配置`
 
 ## 本地启动
 
@@ -60,3 +80,4 @@ npm run dev
 - 本地开发先使用 SQLite，生产环境切换到 PostgreSQL 或 MySQL
 - 将前端的 `base44.auth / base44.entities / base44.functions` 逐步收敛到显式 REST API
 - 优先迁移鉴权、任务、笔记、点数、通知，再迁移 AI 编排与第三方连接器
+- 建议下一步把 `Welcome`、`SoulSentryHub`、`SmartDailyPlanner` 直接切到 `analyzeIntent`

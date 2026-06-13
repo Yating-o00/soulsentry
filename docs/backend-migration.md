@@ -79,4 +79,6 @@
 
 - 已新增 `backend/` 独立 Node 后端骨架
 - 已定义 Prisma 数据模型和基础鉴权/任务/笔记/点数 API
+- 已接入 Kimi 基础能力：`invokeKimi`、`kimiWebBrowse`、`analyzeIntent`
+- 前端已支持 `VITE_API_MODE=standalone` 切换到独立后端适配层
 - 后续建议先把产品页和账户页切换到新后端，再扩大迁移范围

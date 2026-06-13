@@ -87,10 +87,11 @@ export const standaloneClient = {
   entities: createEntityProxy(),
   functions: {
     async invoke(name, payload = {}) {
-      return httpRequest(`/api/functions/${name}`, {
+      const data = await httpRequest(`/api/functions/${name}`, {
         method: "POST",
         body: payload
       });
+      return { data };
     },
     async gemini() {
       unsupported("functions", "gemini");
@@ -98,8 +99,15 @@ export const standaloneClient = {
   },
   integrations: {
     Core: {
-      async InvokeLLM() {
-        unsupported("integrations.Core", "InvokeLLM");
+      async InvokeLLM(payload) {
+        const { data } = await standaloneClient.functions.invoke("invokeKimi", {
+          prompt: payload?.prompt,
+          system_prompt: payload?.system_prompt,
+          response_json_schema: payload?.response_json_schema,
+          model: payload?.model,
+          temperature: payload?.temperature
+        });
+        return data;
       },
       async SendEmail() {
         unsupported("integrations.Core", "SendEmail");

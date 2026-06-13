@@ -41,6 +41,7 @@ KIMI_BASE_URL=https://api.moonshot.ai/v1
 - 当前已接入文本与结构化 JSON 输出
 - `invokeKimi` 的附件上传和文档抽取能力暂未迁移
 - 未配置 Key 时，相关接口会返回明确错误：`KIMI_API_KEY 或 MOONSHOT_API_KEY 未配置`
+- 请优先使用 Kimi Open Platform / Moonshot Open Platform 的模型 API Key，而不是 Kimi Code 专用 key
 
 ## 本地启动
 

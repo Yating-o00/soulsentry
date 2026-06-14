@@ -94,8 +94,8 @@ export default function HeartSignInput({ onSend }) {
   };
 
   return (
-    <div className="bg-white border-t border-slate-200 p-3 md:p-4">
-      <div className="max-w-3xl mx-auto">
+    <div className="bg-white border-t border-slate-200 px-2 py-2 md:p-4">
+      <div className="max-w-3xl mx-auto w-full">
         {/* 聊天记录智能识别条 */}
         {showChatRecognizer && text.trim() && (
           <ChatPasteRecognizer
@@ -149,33 +149,33 @@ export default function HeartSignInput({ onSend }) {
         )}
 
         {/* 工具栏 */}
-        <div className="flex items-center gap-1 mb-2 text-slate-500">
-          <button onClick={() => setShowTemplates(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="快速模板">
+        <div className="flex items-center gap-0.5 md:gap-1 mb-2 text-slate-500">
+          <button onClick={() => setShowTemplates(v => !v)} className="p-1.5 md:p-2 hover:bg-slate-100 rounded-lg shrink-0 no-min-size" title="快速模板">
             <Plus className="w-4 h-4" />
           </button>
-          <button onClick={() => fileRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="文件">
+          <button onClick={() => fileRef.current?.click()} className="p-1.5 md:p-2 hover:bg-slate-100 rounded-lg shrink-0 no-min-size" title="文件">
             <Paperclip className="w-4 h-4" />
           </button>
-          <button onClick={() => imgRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="图片">
+          <button onClick={() => imgRef.current?.click()} className="p-1.5 md:p-2 hover:bg-slate-100 rounded-lg shrink-0 no-min-size" title="图片">
             <ImageIcon className="w-4 h-4" />
           </button>
-          <button onClick={() => setShowUrlInput(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="链接">
+          <button onClick={() => setShowUrlInput(v => !v)} className="p-1.5 md:p-2 hover:bg-slate-100 rounded-lg shrink-0 no-min-size" title="链接">
             <LinkIcon className="w-4 h-4" />
           </button>
           <button
             onClick={toggleVoice}
-            className={`p-2 rounded-lg transition-colors ${isListening ? 'bg-red-100 text-red-500 animate-pulse' : 'hover:bg-slate-100'}`}
+            className={`p-1.5 md:p-2 rounded-lg transition-colors shrink-0 no-min-size ${isListening ? 'bg-red-100 text-red-500 animate-pulse' : 'hover:bg-slate-100'}`}
             title={isListening ? '点击停止' : '语音输入'}
           >
             {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
-          <div className="flex-1" />
-          {uploading && <span className="text-xs text-violet-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />上传中</span>}
-          <span className="hidden md:inline text-[11px] text-slate-400">Enter 发送 · Shift+Enter 换行</span>
+          <div className="flex-1 min-w-0" />
+          {uploading && <span className="text-xs text-violet-500 flex items-center gap-1 shrink-0"><Loader2 className="w-3 h-3 animate-spin" />上传中</span>}
+          <span className="hidden md:inline text-[11px] text-slate-400 shrink-0">Enter 发送 · Shift+Enter 换行</span>
         </div>
 
         {/* 输入框 */}
-        <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 transition">
+        <div className="flex items-end gap-1.5 md:gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-1.5 md:p-2 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 transition">
           <textarea
             rows={1}
             value={text}
@@ -183,12 +183,12 @@ export default function HeartSignInput({ onSend }) {
             onPaste={handlePaste}
             onKeyDown={onKey}
             placeholder="发给自己 — 想法、链接、报告、文件，AI 会自动整理归档..."
-            className="flex-1 bg-transparent outline-none resize-none text-[15px] text-slate-800 placeholder-slate-400 px-2 py-2 max-h-[200px]"
+            className="flex-1 min-w-0 bg-transparent outline-none resize-none text-[15px] text-slate-800 placeholder-slate-400 px-1.5 md:px-2 py-2 max-h-[200px]"
           />
           <button
             onClick={submit}
             disabled={uploading}
-            className="p-2.5 bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition hover:scale-105 active:scale-95"
+            className="shrink-0 p-2.5 bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition hover:scale-105 active:scale-95 no-min-size"
           >
             <Send className="w-4 h-4" />
           </button>

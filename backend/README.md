@@ -30,10 +30,10 @@
 在 `backend/.env` 中配置以下任一变量即可：
 
 ```bash
-KIMI_API_KEY=your_kimi_key
-# 或
-MOONSHOT_API_KEY=your_moonshot_key
-KIMI_BASE_URL=https://api.moonshot.ai/v1
+KIMI_API_KEY=your_china_kimi_key
+KIMI_BASE_URL=https://api.moonshot.cn/v1
+KIMI_FALLBACK_API_KEY=your_global_kimi_key
+KIMI_FALLBACK_BASE_URL=https://api.moonshot.ai/v1
 ```
 
 说明：
@@ -42,6 +42,8 @@ KIMI_BASE_URL=https://api.moonshot.ai/v1
 - `invokeKimi` 的附件上传和文档抽取能力暂未迁移
 - 未配置 Key 时，相关接口会返回明确错误：`KIMI_API_KEY 或 MOONSHOT_API_KEY 未配置`
 - 请优先使用 Kimi Open Platform / Moonshot Open Platform 的模型 API Key，而不是 Kimi Code 专用 key
+- 当前默认策略是“国内主用，国际备用”
+- 当国内链路出现认证错误、限流、超时或服务端异常时，会自动切换到国际链路
 
 ## 本地启动
 

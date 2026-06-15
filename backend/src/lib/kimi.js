@@ -1,21 +1,51 @@
-import { env } from "../config/env.js";
-
-const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
+const DEFAULT_BASE_URL = "https://api.moonshot.cn/v1";
+const DEFAULT_FALLBACK_BASE_URL = "https://api.moonshot.ai/v1";
 const DEFAULT_TEXT_MODELS = ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
 const DEFAULT_WEB_MODELS = ["kimi-latest", "moonshot-v1-auto"];
 
-function ensureApiKey() {
-  const apiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
-  if (!apiKey) {
+function getEndpointConfigs() {
+  const primaryApiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
+  const primaryBaseUrl = (process.env.KIMI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const fallbackApiKey = process.env.KIMI_FALLBACK_API_KEY || process.env.MOONSHOT_FALLBACK_API_KEY;
+  const fallbackBaseUrl = (process.env.KIMI_FALLBACK_BASE_URL || DEFAULT_FALLBACK_BASE_URL).replace(/\/+$/, "");
+
+  const endpoints = [];
+
+  if (primaryApiKey) {
+    endpoints.push({
+      label: "primary",
+      apiKey: primaryApiKey.trim(),
+      baseUrl: primaryBaseUrl
+    });
+  }
+
+  if (fallbackApiKey) {
+    const normalizedFallbackKey = fallbackApiKey.trim();
+    const isDuplicate = endpoints.some((item) => item.apiKey === normalizedFallbackKey && item.baseUrl === fallbackBaseUrl);
+    if (!isDuplicate) {
+      endpoints.push({
+        label: "fallback",
+        apiKey: normalizedFallbackKey,
+        baseUrl: fallbackBaseUrl
+      });
+    }
+  }
+
+  if (endpoints.length === 0) {
     const error = new Error("KIMI_API_KEY 或 MOONSHOT_API_KEY 未配置");
     error.status = 500;
     throw error;
   }
-  return apiKey.trim();
+
+  return endpoints;
 }
 
-function getBaseUrl() {
-  return (process.env.KIMI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+function shouldTryFallback(status, errorText = "") {
+  if ([401, 403, 404, 408, 409, 429, 500, 502, 503, 504].includes(status)) {
+    return true;
+  }
+
+  return /invalid authentication|permission denied|resource_not_found|rate limit|overload|timeout/i.test(errorText);
 }
 
 function normalizeJsonString(content) {
@@ -49,56 +79,76 @@ export async function callKimiChat({
   maxTokens = 4000,
   tools
 }) {
-  const apiKey = ensureApiKey();
-  const baseUrl = getBaseUrl();
+  const endpoints = getEndpointConfigs();
   const candidateModels = model
     ? [model]
     : (Array.isArray(tools) && tools.length > 0 ? DEFAULT_WEB_MODELS : DEFAULT_TEXT_MODELS);
 
   let lastStatus = 0;
   let lastErrorText = "";
+  let lastError = null;
 
-  for (const candidateModel of candidateModels) {
-    const body = {
-      model: candidateModel,
-      messages,
-      temperature,
-      max_tokens: maxTokens
-    };
+  for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex += 1) {
+    const endpoint = endpoints[endpointIndex];
 
-    if (responseJsonSchema) {
-      body.response_format = { type: "json_object" };
-    }
-
-    if (Array.isArray(tools) && tools.length > 0) {
-      body.tools = tools;
-    }
-
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      return {
+    for (const candidateModel of candidateModels) {
+      const body = {
         model: candidateModel,
-        raw: data,
-        content: data.choices?.[0]?.message?.content || "",
-        message: data.choices?.[0]?.message || null,
-        finishReason: data.choices?.[0]?.finish_reason || null
+        messages,
+        temperature,
+        max_tokens: maxTokens
       };
-    }
 
-    lastStatus = response.status;
-    lastErrorText = await response.text();
-    if (![401, 403, 404, 429, 500, 502, 503].includes(response.status)) {
-      break;
+      if (responseJsonSchema) {
+        body.response_format = { type: "json_object" };
+      }
+
+      if (Array.isArray(tools) && tools.length > 0) {
+        body.tools = tools;
+      }
+
+      try {
+        const response = await fetch(`${endpoint.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${endpoint.apiKey}`
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return {
+            endpoint: endpoint.label,
+            baseUrl: endpoint.baseUrl,
+            model: candidateModel,
+            raw: data,
+            content: data.choices?.[0]?.message?.content || "",
+            message: data.choices?.[0]?.message || null,
+            finishReason: data.choices?.[0]?.finish_reason || null
+          };
+        }
+
+        lastStatus = response.status;
+        lastErrorText = await response.text();
+        lastError = null;
+
+        if (!shouldTryFallback(response.status, lastErrorText)) {
+          const error = new Error(`Kimi API error ${lastStatus}: ${lastErrorText}`);
+          error.status = 502;
+          throw error;
+        }
+      } catch (error) {
+        lastError = error;
+        lastStatus = error?.status || 0;
+        lastErrorText = error?.message || "Unknown request failure";
+      }
     }
+  }
+
+  if (lastError?.status && !shouldTryFallback(lastError.status, lastError.message || "")) {
+    throw lastError;
   }
 
   const error = new Error(`Kimi API error ${lastStatus}: ${lastErrorText}`);

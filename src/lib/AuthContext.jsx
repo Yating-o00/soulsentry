@@ -34,9 +34,24 @@ export const AuthProvider = ({ children }) => {
       setIsLoadingPublicSettings(false);
       setAuthError(null);
 
-      if (base44.auth.isAuthenticated()) {
-        await checkUserAuth();
-      } else {
+      try {
+        if (!base44.auth.isAuthenticated() && typeof base44.auth.bootstrapDevSession === "function") {
+          const bootstrapUser = await base44.auth.bootstrapDevSession();
+          setUser(bootstrapUser.user || bootstrapUser);
+          setIsAuthenticated(true);
+          setIsLoadingAuth(false);
+          return;
+        }
+
+        if (base44.auth.isAuthenticated()) {
+          await checkUserAuth();
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
+          setIsLoadingAuth(false);
+        }
+      } catch (error) {
+        console.error("Standalone auth bootstrap failed:", error);
         setUser(null);
         setIsAuthenticated(false);
         setIsLoadingAuth(false);

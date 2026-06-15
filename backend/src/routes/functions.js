@@ -50,6 +50,21 @@ functionsRouter.post("/:name", async (req, res) => {
       return res.json(data);
     }
 
+    if (name === "callAI") {
+      const data = await invokeKimiText({
+        prompt: payload.prompt,
+        systemPrompt: payload.system_prompt,
+        responseJsonSchema: payload.response_json_schema,
+        model: payload.model,
+        temperature: payload.temperature
+      });
+
+      return res.json({
+        data,
+        balance: req.user.aiCredits
+      });
+    }
+
     if (["executeAutomation", "savePushSubscription", "getVapidPublicKey", "createStripeCheckout", "queryWechatOrder"].includes(name)) {
       return res.status(501).json({
         error: "FUNCTION_NOT_IMPLEMENTED",

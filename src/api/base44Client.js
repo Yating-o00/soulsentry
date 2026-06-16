@@ -3,14 +3,18 @@ import { appParams } from '@/lib/app-params';
 import { isStandaloneMode } from './platformConfig';
 import { standaloneClient } from './standaloneClient';
 
-const { appId, serverUrl, token, functionsVersion } = appParams;
+export const base44 = (() => {
+  if (isStandaloneMode) {
+    return standaloneClient;
+  }
 
-const base44SdkClient = createClient({
-  appId,
-  serverUrl,
-  token,
-  functionsVersion,
-  requiresAuth: false
-});
+  const { appId, serverUrl, token, functionsVersion } = appParams;
 
-export const base44 = isStandaloneMode ? standaloneClient : base44SdkClient;
+  return createClient({
+    appId,
+    serverUrl,
+    token,
+    functionsVersion,
+    requiresAuth: false
+  });
+})();

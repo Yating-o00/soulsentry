@@ -196,6 +196,7 @@ export const standaloneClient = {
   entities: createEntityProxy(),
   functions: {
     async invoke(name, payload = {}) {
+      await ensureStandaloneSession();
       const data = await httpRequest(`/api/functions/${name}`, {
         method: "POST",
         body: payload

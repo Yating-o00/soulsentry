@@ -11,8 +11,7 @@ export default function DeviceHeartbeat() {
     let cleanup = null;
     let cancelled = false;
 
-    base44.auth
-      .isAuthenticated()
+    Promise.resolve(base44.auth.isAuthenticated())
       .then((authed) => {
         if (cancelled || !authed) return;
         cleanup = startDeviceHeartbeat();

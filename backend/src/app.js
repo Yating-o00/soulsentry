@@ -9,6 +9,7 @@ import { usersRouter } from "./routes/users.js";
 import { creditsRouter } from "./routes/credits.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { notesRouter } from "./routes/notes.js";
+import { taskExecutionsRouter } from "./routes/taskExecutions.js";
 import { functionsRouter } from "./routes/functions.js";
 
 export const app = express();
@@ -34,6 +35,7 @@ app.use("/api/users", usersRouter);
 app.use("/api/credits", creditsRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/notes", notesRouter);
+app.use("/api/task-executions", taskExecutionsRouter);
 app.use("/api/functions", functionsRouter);
 
 app.use((err, _req, res, _next) => {

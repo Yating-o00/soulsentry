@@ -98,6 +98,55 @@ function createNoteEntity() {
   };
 }
 
+function createTaskExecutionEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/task-executions?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = String(value);
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/task-executions?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/task-executions/${id}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/task-executions", {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/task-executions/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/task-executions/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.TaskExecution", "subscribe");
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -109,6 +158,10 @@ function createEntityProxy() {
 
         if (entityName === "Note") {
           return createNoteEntity();
+        }
+
+        if (entityName === "TaskExecution") {
+          return createTaskExecutionEntity();
         }
 
         if (entityName === "AICreditTransaction") {

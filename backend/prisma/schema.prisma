@@ -56,6 +56,7 @@ model User {
   preferences       UserPreference?
   notifications     Notification[]
   creditTxs         AICreditTransaction[]
+  taskExecutions    TaskExecution[]
 }
 
 model UserPreference {
@@ -150,4 +151,31 @@ model AICreditTransaction {
   user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+model TaskExecution {
+  id               String   @id @default(cuid())
+  userId           String
+  taskId           String?
+  taskTitle        String
+  category         String   @default("task")
+  executionStatus  String   @default("parsing")
+  originalInput    String?
+  aiParsedResult   Json?
+  executionSteps   Json?
+  errorMessage     String?
+  completedAt      DateTime?
+  automationType   String   @default("none")
+  automationPlan   Json?
+  automationResult Json?
+  requiresApproval Boolean  @default(false)
+  userFeedback     Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, taskId])
+  @@index([userId, executionStatus])
+  @@index([userId, completedAt])
 }

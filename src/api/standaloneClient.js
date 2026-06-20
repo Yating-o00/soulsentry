@@ -147,6 +147,55 @@ function createTaskExecutionEntity() {
   };
 }
 
+function createDailyPlanEntity() {
+  return {
+    async list(sort = "-plan_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/daily-plans?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-plan_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/daily-plans?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/daily-plans/${id}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/daily-plans", {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/daily-plans/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/daily-plans/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.DailyPlan", "subscribe");
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -162,6 +211,10 @@ function createEntityProxy() {
 
         if (entityName === "TaskExecution") {
           return createTaskExecutionEntity();
+        }
+
+        if (entityName === "DailyPlan") {
+          return createDailyPlanEntity();
         }
 
         if (entityName === "AICreditTransaction") {

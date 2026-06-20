@@ -10,6 +10,7 @@ import { creditsRouter } from "./routes/credits.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { notesRouter } from "./routes/notes.js";
 import { taskExecutionsRouter } from "./routes/taskExecutions.js";
+import { dailyPlansRouter } from "./routes/dailyPlans.js";
 import { functionsRouter } from "./routes/functions.js";
 
 export const app = express();
@@ -36,6 +37,7 @@ app.use("/api/credits", creditsRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/notes", notesRouter);
 app.use("/api/task-executions", taskExecutionsRouter);
+app.use("/api/daily-plans", dailyPlansRouter);
 app.use("/api/functions", functionsRouter);
 
 app.use((err, _req, res, _next) => {

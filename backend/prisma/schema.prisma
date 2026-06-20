@@ -57,6 +57,7 @@ model User {
   notifications     Notification[]
   creditTxs         AICreditTransaction[]
   taskExecutions    TaskExecution[]
+  dailyPlans        DailyPlan[]
 }
 
 model UserPreference {
@@ -178,4 +179,23 @@ model TaskExecution {
   @@index([userId, taskId])
   @@index([userId, executionStatus])
   @@index([userId, completedAt])
+}
+
+model DailyPlan {
+  id            String   @id @default(cuid())
+  userId        String
+  planDate      String
+  originalInput String?
+  theme         String?
+  summary       String?
+  planJson      Json
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, planDate])
+  @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
 }

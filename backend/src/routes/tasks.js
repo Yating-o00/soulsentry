@@ -76,8 +76,30 @@ function parseSort(sort = "-created_date") {
 tasksRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || req.query.take || 100), 300);
   const orderBy = parseSort(req.query.sort || req.query.orderBy);
+  const where = { userId: req.user.id };
+
+  if (req.query.id) where.id = String(req.query.id);
+  if (req.query.parent_task_id !== undefined) {
+    const value = String(req.query.parent_task_id).trim();
+    where.parentTaskId = value ? value : null;
+  }
+  if (req.query.category) where.category = String(req.query.category);
+  if (req.query.status) where.status = toPrismaTaskStatus(req.query.status);
+
+  // 默认不返回已删除任务，避免前端删除后“视觉上消失但刷新又回来”
+  if (req.query.deleted_at === undefined) {
+    where.deletedAt = null;
+  } else {
+    const deletedQuery = String(req.query.deleted_at).trim().toLowerCase();
+    if (deletedQuery === "null" || deletedQuery === "false" || deletedQuery === "0") {
+      where.deletedAt = null;
+    } else if (deletedQuery === "not_null" || deletedQuery === "true" || deletedQuery === "1") {
+      where.deletedAt = { not: null };
+    }
+  }
+
   const tasks = await prisma.task.findMany({
-    where: { userId: req.user.id },
+    where,
     orderBy,
     take: Number.isFinite(limit) ? limit : 100
   });

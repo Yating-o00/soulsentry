@@ -32,6 +32,19 @@ function createTaskEntity() {
       await ensureStandaloneSession();
       return httpRequest(`/api/tasks?sort=${encodeURIComponent(sort)}&limit=${limit}`);
     },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/tasks?${params.toString()}`);
+    },
     async get(id) {
       await ensureStandaloneSession();
       return httpRequest(`/api/tasks/${id}`);

@@ -209,6 +209,127 @@ function createDailyPlanEntity() {
   };
 }
 
+function createUserEntity() {
+  return {
+    async list(sort = "created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/users?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      const users = await httpRequest("/api/users");
+      return (users || []).find((item) => item.id === id) || null;
+    },
+    subscribe() {
+      unsupported("entities.User", "subscribe");
+    }
+  };
+}
+
+function createCommentEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/comments?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/comments?${params.toString()}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/comments", {
+        method: "POST",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/comments/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.Comment", "subscribe");
+    }
+  };
+}
+
+function createTaskCompletionEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/task-completions?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/task-completions?${params.toString()}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/task-completions", {
+        method: "POST",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/task-completions/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.TaskCompletion", "subscribe");
+    }
+  };
+}
+
+function createTaskChangeLogEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/task-change-logs?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/task-change-logs?${params.toString()}`);
+    },
+    subscribe() {
+      unsupported("entities.TaskChangeLog", "subscribe");
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -228,6 +349,22 @@ function createEntityProxy() {
 
         if (entityName === "DailyPlan") {
           return createDailyPlanEntity();
+        }
+
+        if (entityName === "User") {
+          return createUserEntity();
+        }
+
+        if (entityName === "Comment") {
+          return createCommentEntity();
+        }
+
+        if (entityName === "TaskCompletion") {
+          return createTaskCompletionEntity();
+        }
+
+        if (entityName === "TaskChangeLog") {
+          return createTaskChangeLogEntity();
         }
 
         if (entityName === "AICreditTransaction") {

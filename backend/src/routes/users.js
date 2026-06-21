@@ -14,6 +14,25 @@ const updateMeSchema = z.object({
 
 usersRouter.use(requireAuth);
 
+usersRouter.get("/", async (_req, res) => {
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: "asc" }
+  });
+
+  return res.json(users.map((user) => ({
+    id: user.id,
+    email: user.email,
+    full_name: user.displayName || user.email,
+    display_name: user.displayName,
+    role: user.role.toLowerCase(),
+    subscription_plan: user.subscriptionPlan,
+    ai_credits: user.aiCredits,
+    theme_preferences: user.themePreferences,
+    created_date: user.createdAt,
+    updated_date: user.updatedAt
+  })));
+});
+
 usersRouter.get("/me", async (req, res) => {
   return res.json({
     id: req.user.id,

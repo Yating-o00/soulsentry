@@ -80,6 +80,52 @@ function parseSort(sort = "-created_date") {
   return { [mapping[key] || "createdAt"]: order };
 }
 
+function toDisplayValue(value) {
+  if (value === null || value === undefined || value === "") return "(空)";
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function fieldLabel(field) {
+  const labels = {
+    title: "标题",
+    description: "描述",
+    status: "状态",
+    priority: "优先级",
+    category: "分类",
+    due_at: "截止时间",
+    reminder_time: "提醒时间",
+    end_time: "结束时间",
+    completed_at: "完成时间",
+    deleted_at: "删除时间",
+    progress: "进度"
+  };
+  return labels[field] || field;
+}
+
+async function createTaskChangeLog(userId, task, changeType, payload = {}, previous = null) {
+  const changedFields = Object.keys(payload || {}).filter((key) => key !== "metadata");
+  const changesDetail = changedFields.map((field) => ({
+    field,
+    field_label: fieldLabel(field),
+    old_value: toDisplayValue(previous?.[field]),
+    new_value: toDisplayValue(payload?.[field])
+  }));
+
+  await prisma.taskChangeLog.create({
+    data: {
+      userId,
+      taskId: task.id,
+      parentTaskId: task.parentTaskId,
+      changeType,
+      taskTitle: task.title,
+      changedFields,
+      changesDetail
+    }
+  });
+}
+
 tasksRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || req.query.take || 100), 300);
   const orderBy = parseSort(req.query.sort || req.query.orderBy);
@@ -158,6 +204,13 @@ tasksRouter.post("/", async (req, res) => {
     }
   });
 
+  await createTaskChangeLog(
+    req.user.id,
+    task,
+    task.parentTaskId ? "subtask_created" : "created",
+    payload.data
+  );
+
   return res.status(201).json(serializeTask(task));
 });
 
@@ -201,6 +254,32 @@ tasksRouter.patch("/:id", async (req, res) => {
     }
   });
 
+  const nextChangeType = payload.data.deleted_at
+    ? (task.parentTaskId ? "subtask_deleted" : "deleted")
+    : payload.data.status
+      ? (task.parentTaskId ? "subtask_status_changed" : "status_changed")
+      : (task.parentTaskId ? "subtask_updated" : "updated");
+
+  await createTaskChangeLog(
+    req.user.id,
+    task,
+    nextChangeType,
+    payload.data,
+    {
+      title: existing.title,
+      description: existing.description,
+      status: serializeTask(existing).status,
+      priority: existing.priority,
+      category: existing.category,
+      due_at: existing.dueAt?.toISOString?.() || null,
+      reminder_time: existing.reminderTime?.toISOString?.() || null,
+      end_time: existing.endTime?.toISOString?.() || null,
+      completed_at: existing.completedAt?.toISOString?.() || null,
+      deleted_at: existing.deletedAt?.toISOString?.() || null,
+      progress: existing.progress
+    }
+  );
+
   return res.json(serializeTask(task));
 });
 
@@ -217,5 +296,18 @@ tasksRouter.delete("/:id", async (req, res) => {
   }
 
   await prisma.task.delete({ where: { id: existing.id } });
+  await createTaskChangeLog(
+    req.user.id,
+    existing,
+    existing.parentTaskId ? "subtask_deleted" : "deleted",
+    { deleted_at: new Date().toISOString() },
+    {
+      title: existing.title,
+      description: existing.description,
+      status: serializeTask(existing).status,
+      priority: existing.priority,
+      category: existing.category
+    }
+  );
   return res.status(204).send();
 });

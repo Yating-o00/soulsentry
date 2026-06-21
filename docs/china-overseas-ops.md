@@ -53,13 +53,43 @@ server {
 - 如果后续给裸域名单独申请证书，证书路径应改成裸域名自己的 `live` 目录。
 - 如果当前浏览器里裸域名已经能正常打开，而你也接受裸域名直接服务，那可以暂时不改；但长期推荐统一跳转到 `www`。
 
-## 3. 国内 Kimi Key 配置
+## 3. 国内配置与持久化
 
-### 3.1 配置位置
+### 3.1 持久化目录
 
-国内后端环境变量文件：
+为避免后续更新代码时再次丢失数据库或 `.env`，国内服务器固定使用下面两个目录：
 
-- `/opt/soulsentry/china-app/backend/.env`
+- 数据库：`/opt/soulsentry/data/china.db`
+- 后端环境变量备份：`/opt/soulsentry/config/backend.env`
+
+推荐先执行一次初始化：
+
+```bash
+sudo mkdir -p /opt/soulsentry/data /opt/soulsentry/config /opt/soulsentry/backups
+```
+
+如果后端当前 `.env` 可用，立刻备份一份：
+
+```bash
+cp /opt/soulsentry/china-app/backend/.env /opt/soulsentry/config/backend.env
+```
+
+### 3.2 数据库固定路径
+
+后端 `.env` 中的数据库地址固定为：
+
+```env
+DATABASE_URL="file:/opt/soulsentry/data/china.db"
+```
+
+不要再使用 `file:./prisma/dev.db` 这种项目内相对路径，否则重新拉代码目录时容易把数据库一起删掉。
+
+### 3.3 国内 Kimi Key 配置
+
+配置位置建议分两份：
+
+- 当前运行文件：`/opt/soulsentry/china-app/backend/.env`
+- 永久备份文件：`/opt/soulsentry/config/backend.env`
 
 至少配置以下字段：
 
@@ -72,38 +102,45 @@ KIMI_FALLBACK_API_KEY=sk-你的国际备用Key
 KIMI_FALLBACK_BASE_URL=https://api.moonshot.ai/v1
 ```
 
-### 3.2 安全修改步骤
+### 3.4 安全修改步骤
 
 在服务器执行：
 
 ```bash
-cd /opt/soulsentry/china-app/backend
-sed -n '1,120p' .env
+sed -n '1,160p' /opt/soulsentry/config/backend.env
 ```
 
 确认后编辑：
 
 ```bash
-nano /opt/soulsentry/china-app/backend/.env
+nano /opt/soulsentry/config/backend.env
 ```
 
 填入或修改：
 
 ```env
+NODE_ENV=production
+PORT=3001
+DATABASE_URL="file:/opt/soulsentry/data/china.db"
+JWT_SECRET=你的长随机串至少16位
+JWT_EXPIRES_IN=7d
+CORS_ORIGIN=https://www.xinzhan-soulsentry.cn,https://xinzhan-soulsentry.cn,http://39.105.75.92
+
 KIMI_API_KEY=sk-你的国内Key
 KIMI_BASE_URL=https://api.moonshot.cn/v1
 KIMI_FALLBACK_API_KEY=sk-你的国际备用Key
 KIMI_FALLBACK_BASE_URL=https://api.moonshot.ai/v1
 ```
 
-保存后重启后端：
+保存后同步回当前代码目录，再重启后端：
 
 ```bash
+cp /opt/soulsentry/config/backend.env /opt/soulsentry/china-app/backend/.env
 sudo systemctl restart soulsentry-backend
 sudo systemctl status soulsentry-backend --no-pager
 ```
 
-### 3.3 验证方式
+### 3.5 验证方式
 
 先检查后端是否存活：
 
@@ -162,7 +199,24 @@ curl https://www.xinzhan-soulsentry.cn/api/health
 
 ### 6.1 代码更新
 
-如果 `china-standalone` 已有新代码，服务器执行：
+如果 `china-standalone` 已有新代码，服务器执行。
+
+注意：
+
+- 可以删除并重建 `china-app` 代码目录
+- 但数据库必须在 `/opt/soulsentry/data/china.db`
+- `.env` 必须先备份在 `/opt/soulsentry/config/backend.env`
+- 更新前先做一次数据库备份
+
+先备份：
+
+```bash
+mkdir -p /opt/soulsentry/backups
+cp /opt/soulsentry/data/china.db /opt/soulsentry/backups/china-$(date +%F-%H%M%S).db
+cp /opt/soulsentry/config/backend.env /opt/soulsentry/backups/backend-$(date +%F-%H%M%S).env
+```
+
+再更新代码：
 
 ```bash
 cd /opt/soulsentry
@@ -175,11 +229,20 @@ mv soulsentry-china-standalone china-app
 ### 6.2 后端更新
 
 ```bash
+cp /opt/soulsentry/config/backend.env /opt/soulsentry/china-app/backend/.env
 cd /opt/soulsentry/china-app/backend
 npm install --no-audit --no-fund --registry=https://registry.npmmirror.com
-npx prisma db push --accept-data-loss
+# 只有 schema 真的变化时，才执行下面这条
+# npx prisma db push --accept-data-loss
 sudo systemctl restart soulsentry-backend
 sudo systemctl status soulsentry-backend --no-pager
+```
+
+如果这次后端 schema 有改动，建议先备份数据库再执行：
+
+```bash
+cp /opt/soulsentry/data/china.db /opt/soulsentry/backups/china-before-schema-$(date +%F-%H%M%S).db
+npx prisma db push --accept-data-loss
 ```
 
 ### 6.3 前端更新
@@ -203,6 +266,8 @@ sudo systemctl reload nginx
 ```bash
 curl https://www.xinzhan-soulsentry.cn/api/health
 curl -I https://www.xinzhan-soulsentry.cn
+ls -lh /opt/soulsentry/data/china.db
+grep '^DATABASE_URL=' /opt/soulsentry/china-app/backend/.env
 sudo systemctl status soulsentry-backend --no-pager
 sudo nginx -t
 ```
@@ -215,6 +280,7 @@ sudo nginx -t
 - `/api/health` 是否返回 `ok: true`
 - Welcome 是否能正常进入 Dashboard
 - AI 入口是否能正常调用 Kimi
+- `/opt/soulsentry/data/china.db` 是否仍存在且大小正常
 - 后端服务是否仍为 `active (running)`
 
 建议常用命令：
@@ -224,6 +290,7 @@ sudo systemctl status soulsentry-backend --no-pager
 sudo journalctl -u soulsentry-backend -n 100 --no-pager
 sudo nginx -t
 curl https://www.xinzhan-soulsentry.cn/api/health
+ls -lh /opt/soulsentry/data/china.db
 ```
 
 ## 8. 推荐长期策略
@@ -233,3 +300,4 @@ curl https://www.xinzhan-soulsentry.cn/api/health
 - 产品改动优先在 GitHub 管理，避免只留在平台里
 - Base44 上发生的重要产品改动，要尽量定期同步回 GitHub
 - 国内环境变量、域名、证书、数据库路径，只保留在国内部署体系中
+- 国内数据库与 `.env` 必须外置到代码目录之外

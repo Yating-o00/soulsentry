@@ -7,6 +7,28 @@ function unsupported(target, method) {
 const DEMO_EMAIL = "demo@soulsentry.local";
 const DEMO_PASSWORD = "demo123456";
 
+function normalizeRedirectUrl(redirectUrl) {
+  if (!redirectUrl || typeof window === "undefined") return "/";
+
+  try {
+    const current = new URL(window.location.href);
+    const target = new URL(redirectUrl, window.location.origin);
+
+    // Prevent recursive "/?redirect=...redirect=..." growth that eventually causes nginx 414.
+    if (target.origin === current.origin) {
+      if (target.pathname === "/" && target.searchParams.has("redirect")) {
+        return "/";
+      }
+
+      return `${target.pathname}${target.search}${target.hash}` || "/";
+    }
+
+    return "/";
+  } catch (_error) {
+    return "/";
+  }
+}
+
 async function ensureStandaloneSession() {
   if (getAccessToken()) return true;
 
@@ -436,13 +458,10 @@ export const standaloneClient = {
     },
     logout(redirectUrl) {
       setAccessToken(null);
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
-      }
+      window.location.href = normalizeRedirectUrl(redirectUrl);
     },
     redirectToLogin(redirectUrl) {
-      const target = redirectUrl ? `/?redirect=${encodeURIComponent(redirectUrl)}` : "/";
-      window.location.href = target;
+      window.location.href = normalizeRedirectUrl(redirectUrl);
     },
     async bootstrapDevSession() {
       await ensureStandaloneSession();

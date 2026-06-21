@@ -34,6 +34,32 @@ const PRIORITIES = [
 { value: "high", label: "高优先级", color: "bg-orange-50 text-orange-600 border-orange-300" },
 { value: "urgent", label: "紧急", color: "bg-red-50 text-red-600 border-red-300" }];
 
+function safeIsoText(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function normalizeSuggestions(raw) {
+  const next = raw && typeof raw === "object" ? raw : {};
+  return {
+    description: typeof next.description === "string" ? next.description : "",
+    category: typeof next.category === "string" ? next.category : "other",
+    priority: typeof next.priority === "string" ? next.priority : "medium",
+    tags: Array.isArray(next.tags) ? next.tags.filter(Boolean).map(String) : [],
+    subtasks: Array.isArray(next.subtasks) ? next.subtasks : [],
+    reminder_time: typeof next.reminder_time === "string" ? next.reminder_time : "",
+    execution_start: typeof next.execution_start === "string" ? next.execution_start : "",
+    execution_end: typeof next.execution_end === "string" ? next.execution_end : "",
+    time_reasoning: typeof next.time_reasoning === "string" ? next.time_reasoning : "",
+    risks: Array.isArray(next.risks) ? next.risks.filter(Boolean).map(String) : [],
+    risk_level: typeof next.risk_level === "string" ? next.risk_level : "low",
+    dependencies: Array.isArray(next.dependencies) ? next.dependencies.filter(Boolean).map(String) : [],
+    reasoning: typeof next.reasoning === "string" ? next.reasoning : "AI 已完成分析。",
+    recommended_template_id: typeof next.recommended_template_id === "string" ? next.recommended_template_id : ""
+  };
+}
+
 
 export default function AITaskEnhancer({ taskTitle, currentDescription, availableTemplates, onApply }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -90,7 +116,7 @@ ${JSON.stringify(suggestions)}
         }
       });
 
-      setSuggestions(response);
+      setSuggestions(normalizeSuggestions(response));
       setRefineInstruction("");
       toast.success("已根据您的指令调整建议");
     } catch (error) {
@@ -199,20 +225,20 @@ ${templatesInfo}
       });
 
       // 如果推荐了模板，将模板内容合并到建议中
-      let finalResponse = response;
+      let finalResponse = normalizeSuggestions(response);
       if (response.recommended_template_id && availableTemplates) {
         const template = availableTemplates.find((t) => t.id === response.recommended_template_id);
         if (template && template.template_data) {
           const data = template.template_data;
-          finalResponse = {
-            ...response,
+          finalResponse = normalizeSuggestions({
+            ...finalResponse,
             // 优先使用模板的结构化数据，但保留 AI 生成的针对性描述
-            category: data.category || response.category,
-            priority: data.priority || response.priority,
-            subtasks: data.subtasks && data.subtasks.map((s) => typeof s === 'string' ? s : s.title) || response.subtasks,
-            reasoning: `(基于模板 "${template.name}") ${response.reasoning}`
+            category: data.category || finalResponse.category,
+            priority: data.priority || finalResponse.priority,
+            subtasks: data.subtasks?.map((s) => typeof s === 'string' ? s : s.title) || finalResponse.subtasks,
+            reasoning: `(基于模板 "${template.name}") ${finalResponse.reasoning}`
             // 可以在这里合并更多字段
-          };
+          });
           toast("已自动匹配约定模板: " + template.name, { icon: "📋" });
         }
       }
@@ -303,14 +329,16 @@ ${templatesInfo}
   };
 
   const addTag = () => {
-    if (newTag.trim() && !suggestions.tags.includes(newTag.trim())) {
-      updateSuggestion('tags', [...suggestions.tags, newTag.trim()]);
+    const safeTags = Array.isArray(suggestions?.tags) ? suggestions.tags : [];
+    if (newTag.trim() && !safeTags.includes(newTag.trim())) {
+      updateSuggestion('tags', [...safeTags, newTag.trim()]);
       setNewTag("");
     }
   };
 
   const removeTag = (tagToRemove) => {
-    updateSuggestion('tags', suggestions.tags.filter((t) => t !== tagToRemove));
+    const safeTags = Array.isArray(suggestions?.tags) ? suggestions.tags : [];
+    updateSuggestion('tags', safeTags.filter((t) => t !== tagToRemove));
   };
 
   return (
@@ -425,7 +453,7 @@ ${templatesInfo}
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-3">
                   <div className="flex flex-wrap gap-2">
-                    {suggestions.tags.map((tag, index) =>
+                    {(Array.isArray(suggestions.tags) ? suggestions.tags : []).map((tag, index) =>
                   <Badge
                     key={index}
                     variant="outline"
@@ -540,18 +568,18 @@ ${templatesInfo}
                           <span className="text-xs font-bold">最佳执行时间</span>
                       </div>
                       <div className="space-y-1 text-xs text-indigo-700">
-                          {suggestions.reminder_time &&
+                          {safeIsoText(suggestions.reminder_time) &&
                   <div className="flex justify-between">
                                   <span className="opacity-70">建议提醒:</span>
-                                  <span className="font-medium">{format(new Date(suggestions.reminder_time), "MM-dd HH:mm")}</span>
+                                  <span className="font-medium">{format(safeIsoText(suggestions.reminder_time), "MM-dd HH:mm")}</span>
                               </div>
                   }
-                          {suggestions.execution_start &&
+                          {safeIsoText(suggestions.execution_start) &&
                   <div className="flex justify-between">
                                   <span className="opacity-70">建议执行:</span>
                                   <span className="font-medium">
-                                      {format(new Date(suggestions.execution_start), "MM-dd HH:mm")}
-                                      {suggestions.execution_end && ` - ${format(new Date(suggestions.execution_end), "HH:mm")}`}
+                                      {format(safeIsoText(suggestions.execution_start), "MM-dd HH:mm")}
+                                      {safeIsoText(suggestions.execution_end) && ` - ${format(safeIsoText(suggestions.execution_end), "HH:mm")}`}
                                   </span>
                               </div>
                   }
@@ -580,7 +608,7 @@ ${templatesInfo}
                           </span>
                       </div>
                       <div className="space-y-1 text-xs">
-                          {suggestions.risks?.length > 0 ?
+                          {Array.isArray(suggestions.risks) && suggestions.risks.length > 0 ?
                   <ul className="list-disc list-inside space-y-0.5 opacity-80">
                                   {suggestions.risks.map((risk, i) =>
                     <li key={i}>{risk}</li>

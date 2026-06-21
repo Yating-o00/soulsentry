@@ -226,10 +226,13 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           });
         }
         toast.success(`已生成 ${res.subtasks.length} 个子约定`);
+      } else {
+        toast.message("AI 未生成可用子约定，请尝试补充更具体的约定描述");
       }
     } catch (error) {
       console.error("AI生成子约定失败:", error);
-      toast.error("生成失败，请重试");
+      const errorMsg = error?.message || error?.toString() || "未知错误";
+      toast.error(`生成失败: ${errorMsg}`);
     } finally {
       setIsGeneratingSubtasks(false);
     }

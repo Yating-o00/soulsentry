@@ -1,4 +1,4 @@
-import { httpRequest, setAccessToken, getAccessToken } from "./httpClient";
+import { httpRequest, setAccessToken, getAccessToken, buildApiUrl } from "./httpClient";
 
 function unsupported(target, method) {
   throw new Error(`独立后端尚未实现 ${target}.${method}，请先完成对应模块迁移`);
@@ -482,7 +482,37 @@ export const standaloneClient = {
         unsupported("integrations.Core", "SendSMS");
       },
       async UploadFile() {
-        unsupported("integrations.Core", "UploadFile");
+        await ensureStandaloneSession();
+        const file = arguments?.[0]?.file;
+        if (!file) {
+          throw new Error("未收到上传文件");
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch(buildApiUrl("/api/uploads"), {
+          method: "POST",
+          headers: getAccessToken()
+            ? { Authorization: `Bearer ${getAccessToken()}` }
+            : {},
+          body: formData
+        });
+
+        const text = await response.text();
+        const data = text ? JSON.parse(text) : null;
+        if (!response.ok) {
+          throw new Error(data?.message || data?.error || "文件上传失败");
+        }
+
+        const fileUrl = data?.file_url?.startsWith("http")
+          ? data.file_url
+          : `${window.location.origin}${data?.file_url || ""}`;
+
+        return {
+          ...data,
+          file_url: fileUrl
+        };
       },
       async GenerateImage() {
         unsupported("integrations.Core", "GenerateImage");

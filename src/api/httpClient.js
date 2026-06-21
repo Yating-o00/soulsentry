@@ -22,9 +22,13 @@ export function setAccessToken(token) {
   }
 }
 
+export function buildApiUrl(path) {
+  return `${standaloneApiBaseUrl}${path}`;
+}
+
 export async function httpRequest(path, { method = "GET", body, headers = {} } = {}) {
   const token = getAccessToken();
-  const response = await fetch(`${standaloneApiBaseUrl}${path}`, {
+  const response = await fetch(buildApiUrl(path), {
     method,
     headers: {
       "Content-Type": "application/json",

@@ -23,7 +23,27 @@ const taskInputSchema = z.object({
   tags: z.any().optional(),
   reminder_strategy: z.any().optional(),
   metadata: z.any().optional()
-});
+}).passthrough();
+
+const KNOWN_TASK_FIELDS = new Set([
+  "title",
+  "description",
+  "status",
+  "priority",
+  "category",
+  "due_at",
+  "reminder_time",
+  "end_time",
+  "is_all_day",
+  "parent_task_id",
+  "gcal_sync_enabled",
+  "progress",
+  "completed_at",
+  "deleted_at",
+  "tags",
+  "reminder_strategy",
+  "metadata"
+]);
 
 tasksRouter.use(requireAuth);
 
@@ -37,7 +57,57 @@ function toPrismaTaskStatus(status) {
   return "TODO";
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function getTaskExtraFields(payload = {}) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key, value]) => !KNOWN_TASK_FIELDS.has(key) && value !== undefined)
+  );
+}
+
+function mergeTaskMetadata(existingMetadata, nextMetadata, extraFields = {}) {
+  const baseMetadata = nextMetadata === undefined ? existingMetadata : nextMetadata;
+  const hasExtraFields = Object.keys(extraFields).length > 0;
+
+  if (baseMetadata === undefined && !hasExtraFields) {
+    return undefined;
+  }
+
+  const normalized = isPlainObject(baseMetadata)
+    ? { ...baseMetadata }
+    : baseMetadata === undefined || baseMetadata === null
+      ? {}
+      : { _value: baseMetadata };
+
+  const previousExtraFields = isPlainObject(normalized._extraFields)
+    ? normalized._extraFields
+    : {};
+
+  if (hasExtraFields || Object.keys(previousExtraFields).length > 0) {
+    normalized._extraFields = {
+      ...previousExtraFields,
+      ...extraFields
+    };
+  }
+
+  return normalized;
+}
+
+function getSerializedTaskExtraFields(task) {
+  const extraFields = isPlainObject(task?.metadata?._extraFields)
+    ? task.metadata._extraFields
+    : {};
+
+  return Object.fromEntries(
+    Object.entries(extraFields).filter(([, value]) => value !== undefined)
+  );
+}
+
 function serializeTask(task) {
+  const extraFields = getSerializedTaskExtraFields(task);
+
   return {
     id: task.id,
     title: task.title,
@@ -60,6 +130,7 @@ function serializeTask(task) {
     deleted_at: task.deletedAt,
     tags: task.tags,
     reminder_strategy: task.reminderStrategy,
+    ...extraFields,
     metadata: task.metadata,
     created_date: task.createdAt,
     updated_date: task.updatedAt
@@ -99,7 +170,11 @@ function fieldLabel(field) {
     end_time: "结束时间",
     completed_at: "完成时间",
     deleted_at: "删除时间",
-    progress: "进度"
+    progress: "进度",
+    attachments: "附件",
+    dependencies: "依赖",
+    notes: "笔记",
+    revisions: "版本"
   };
   return labels[field] || field;
 }
@@ -181,6 +256,8 @@ tasksRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
 
+  const extraFields = getTaskExtraFields(payload.data);
+
   const task = await prisma.task.create({
     data: {
       userId: req.user.id,
@@ -200,7 +277,7 @@ tasksRouter.post("/", async (req, res) => {
       deletedAt: payload.data.deleted_at ? new Date(payload.data.deleted_at) : null,
       tags: payload.data.tags,
       reminderStrategy: payload.data.reminder_strategy,
-      metadata: payload.data.metadata
+      metadata: mergeTaskMetadata(undefined, payload.data.metadata, extraFields)
     }
   });
 
@@ -231,6 +308,11 @@ tasksRouter.patch("/:id", async (req, res) => {
     return res.status(404).json({ error: "NOT_FOUND", message: "任务不存在" });
   }
 
+  const extraFields = getTaskExtraFields(payload.data);
+  const nextMetadata = payload.data.metadata === undefined && Object.keys(extraFields).length === 0
+    ? undefined
+    : mergeTaskMetadata(existing.metadata, payload.data.metadata, extraFields);
+
   const task = await prisma.task.update({
     where: { id: existing.id },
     data: {
@@ -250,7 +332,7 @@ tasksRouter.patch("/:id", async (req, res) => {
       deletedAt: payload.data.deleted_at === undefined ? undefined : (payload.data.deleted_at ? new Date(payload.data.deleted_at) : null),
       tags: payload.data.tags,
       reminderStrategy: payload.data.reminder_strategy,
-      metadata: payload.data.metadata
+      metadata: nextMetadata
     }
   });
 

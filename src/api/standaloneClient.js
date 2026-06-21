@@ -30,19 +30,71 @@ function normalizeRedirectUrl(redirectUrl) {
 }
 
 async function ensureStandaloneSession() {
-  if (getAccessToken()) return true;
+  const currentToken = getAccessToken();
 
-  const result = await httpRequest("/api/auth/login", {
-    method: "POST",
-    body: {
-      email: DEMO_EMAIL,
-      password: DEMO_PASSWORD
+  // Existing tokens may point to a user record that no longer exists after a DB reset.
+  if (currentToken) {
+    try {
+      await httpRequest("/api/auth/me");
+      return true;
+    } catch (_error) {
+      setAccessToken(null);
     }
-  });
+  }
 
-  if (result?.token) {
-    setAccessToken(result.token);
-    return true;
+  try {
+    const result = await httpRequest("/api/auth/login", {
+      method: "POST",
+      body: {
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD
+      }
+    });
+
+    if (result?.token) {
+      setAccessToken(result.token);
+      return true;
+    }
+  } catch (error) {
+    const code = error?.data?.error;
+    const shouldBootstrapDemoUser = error?.status === 401 || code === "INVALID_CREDENTIALS";
+
+    if (!shouldBootstrapDemoUser) {
+      throw error;
+    }
+  }
+
+  try {
+    const result = await httpRequest("/api/auth/register", {
+      method: "POST",
+      body: {
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
+        displayName: "SoulSentry Demo"
+      }
+    });
+
+    if (result?.token) {
+      setAccessToken(result.token);
+      return true;
+    }
+  } catch (error) {
+    if (error?.status === 409 || error?.data?.error === "EMAIL_EXISTS") {
+      const result = await httpRequest("/api/auth/login", {
+        method: "POST",
+        body: {
+          email: DEMO_EMAIL,
+          password: DEMO_PASSWORD
+        }
+      });
+
+      if (result?.token) {
+        setAccessToken(result.token);
+        return true;
+      }
+    }
+
+    throw error;
   }
 
   return false;

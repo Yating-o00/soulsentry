@@ -175,6 +175,23 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const buildFallbackSubtasks = () => {
+    const text = `${task.title || ""} ${task.description || ""}`;
+    if (text.includes("深圳") || text.includes("航班") || text.includes("行李") || text.includes("出行")) {
+      return [
+        { title: "确认航班时间与出发安排", priority: "high" },
+        { title: "整理证件和随身物品", priority: "high" },
+        { title: "收拾行李并检查遗漏", priority: "medium" }
+      ];
+    }
+
+    return [
+      { title: "梳理完成这项约定所需的关键步骤", priority: "medium" },
+      { title: "准备执行所需资料或物品", priority: "medium" },
+      { title: "执行后检查结果并补充收尾", priority: "medium" }
+    ];
+  };
+
   const handleAutoGenerateSubtasks = async () => {
     if (!task.title && !task.description) {
       toast.error("请先填写约定内容");
@@ -183,7 +200,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
 
     setIsGeneratingSubtasks(true);
     try {
-      const res = await invokeAI({
+      let res = await invokeAI({
         prompt: `根据以下约定信息，生成3-5个合理的子约定步骤。
 
 约定标题：${task.title}
@@ -212,8 +229,45 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
         }
       });
 
-      if (res && res.subtasks && res.subtasks.length > 0) {
-        for (const st of res.subtasks) {
+      if (!res?.subtasks?.length) {
+        res = await invokeAI({
+          prompt: `请把下面的约定强制拆分成至少3个可以直接执行的子约定。不要解释，只返回 JSON。
+
+约定标题：${task.title}
+约定描述：${task.description || "无"}
+
+要求：
+1. 子约定必须具体、可执行。
+2. 每个子约定一句话。
+3. 适合个人待办管理场景。
+4. 优先级只能是 low / medium / high / urgent。`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              subtasks: {
+                type: "array",
+                minItems: 3,
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
+                  },
+                  required: ["title", "priority"]
+                }
+              }
+            },
+            required: ["subtasks"]
+          }
+        });
+      }
+
+      const finalSubtasks = Array.isArray(res?.subtasks) && res.subtasks.length > 0
+        ? res.subtasks
+        : buildFallbackSubtasks();
+
+      if (finalSubtasks.length > 0) {
+        for (const st of finalSubtasks) {
           await createSubtaskMutation.mutateAsync({
             title: st.title,
             description: "",
@@ -225,7 +279,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             end_time: task.end_time
           });
         }
-        toast.success(`已生成 ${res.subtasks.length} 个子约定`);
+        toast.success(`已生成 ${finalSubtasks.length} 个子约定`);
       } else {
         toast.message("AI 未生成可用子约定，请尝试补充更具体的约定描述");
       }

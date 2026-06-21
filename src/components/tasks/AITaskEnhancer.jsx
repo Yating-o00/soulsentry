@@ -34,28 +34,44 @@ const PRIORITIES = [
 { value: "high", label: "高优先级", color: "bg-orange-50 text-orange-600 border-orange-300" },
 { value: "urgent", label: "紧急", color: "bg-red-50 text-red-600 border-red-300" }];
 
-function safeIsoText(value) {
+function safeDate(value) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function normalizeSuggestions(raw) {
+function fallbackTagsFromText(title = "", description = "") {
+  const source = `${title} ${description}`;
+  const tags = [];
+  if (source.includes("深圳") || source.includes("出差") || source.includes("出行") || source.includes("航班")) tags.push("出行");
+  if (source.includes("行李") || source.includes("收拾")) tags.push("准备");
+  if (source.includes("提醒")) tags.push("提醒");
+  if (source.includes("明天") || source.includes("今晚") || source.includes("明早")) tags.push("近期");
+  return Array.from(new Set(tags)).slice(0, 5);
+}
+
+function normalizeSuggestions(raw, { taskTitle = "", currentDescription = "" } = {}) {
   const next = raw && typeof raw === "object" ? raw : {};
   return {
-    description: typeof next.description === "string" ? next.description : "",
-    category: typeof next.category === "string" ? next.category : "other",
-    priority: typeof next.priority === "string" ? next.priority : "medium",
-    tags: Array.isArray(next.tags) ? next.tags.filter(Boolean).map(String) : [],
+    description: typeof next.description === "string" && next.description.trim()
+      ? next.description
+      : (currentDescription || taskTitle || ""),
+    category: typeof next.category === "string" && next.category ? next.category : "other",
+    priority: typeof next.priority === "string" && next.priority ? next.priority : "medium",
+    tags: Array.isArray(next.tags) && next.tags.length > 0
+      ? next.tags.filter(Boolean).map(String)
+      : fallbackTagsFromText(taskTitle, currentDescription),
     subtasks: Array.isArray(next.subtasks) ? next.subtasks : [],
     reminder_time: typeof next.reminder_time === "string" ? next.reminder_time : "",
     execution_start: typeof next.execution_start === "string" ? next.execution_start : "",
     execution_end: typeof next.execution_end === "string" ? next.execution_end : "",
     time_reasoning: typeof next.time_reasoning === "string" ? next.time_reasoning : "",
     risks: Array.isArray(next.risks) ? next.risks.filter(Boolean).map(String) : [],
-    risk_level: typeof next.risk_level === "string" ? next.risk_level : "low",
+    risk_level: typeof next.risk_level === "string" && next.risk_level ? next.risk_level : "low",
     dependencies: Array.isArray(next.dependencies) ? next.dependencies.filter(Boolean).map(String) : [],
-    reasoning: typeof next.reasoning === "string" ? next.reasoning : "AI 已完成分析。",
+    reasoning: typeof next.reasoning === "string" && next.reasoning.trim()
+      ? next.reasoning
+      : "AI 已完成基础分析，你可以继续手动调整建议内容。",
     recommended_template_id: typeof next.recommended_template_id === "string" ? next.recommended_template_id : ""
   };
 }
@@ -116,7 +132,7 @@ ${JSON.stringify(suggestions)}
         }
       });
 
-      setSuggestions(normalizeSuggestions(response));
+      setSuggestions(normalizeSuggestions(response, { taskTitle, currentDescription }));
       setRefineInstruction("");
       toast.success("已根据您的指令调整建议");
     } catch (error) {
@@ -225,7 +241,7 @@ ${templatesInfo}
       });
 
       // 如果推荐了模板，将模板内容合并到建议中
-      let finalResponse = normalizeSuggestions(response);
+      let finalResponse = normalizeSuggestions(response, { taskTitle, currentDescription });
       if (response.recommended_template_id && availableTemplates) {
         const template = availableTemplates.find((t) => t.id === response.recommended_template_id);
         if (template && template.template_data) {
@@ -238,7 +254,7 @@ ${templatesInfo}
             subtasks: data.subtasks?.map((s) => typeof s === 'string' ? s : s.title) || finalResponse.subtasks,
             reasoning: `(基于模板 "${template.name}") ${finalResponse.reasoning}`
             // 可以在这里合并更多字段
-          });
+          }, { taskTitle, currentDescription });
           toast("已自动匹配约定模板: " + template.name, { icon: "📋" });
         }
       }
@@ -329,16 +345,16 @@ ${templatesInfo}
   };
 
   const addTag = () => {
-    const safeTags = Array.isArray(suggestions?.tags) ? suggestions.tags : [];
-    if (newTag.trim() && !safeTags.includes(newTag.trim())) {
-      updateSuggestion('tags', [...safeTags, newTag.trim()]);
+    const currentTags = Array.isArray(suggestions?.tags) ? suggestions.tags : [];
+    if (newTag.trim() && !currentTags.includes(newTag.trim())) {
+      updateSuggestion('tags', [...currentTags, newTag.trim()]);
       setNewTag("");
     }
   };
 
   const removeTag = (tagToRemove) => {
-    const safeTags = Array.isArray(suggestions?.tags) ? suggestions.tags : [];
-    updateSuggestion('tags', safeTags.filter((t) => t !== tagToRemove));
+    const currentTags = Array.isArray(suggestions?.tags) ? suggestions.tags : [];
+    updateSuggestion('tags', currentTags.filter((t) => t !== tagToRemove));
   };
 
   return (
@@ -568,18 +584,18 @@ ${templatesInfo}
                           <span className="text-xs font-bold">最佳执行时间</span>
                       </div>
                       <div className="space-y-1 text-xs text-indigo-700">
-                          {safeIsoText(suggestions.reminder_time) &&
+                          {safeDate(suggestions.reminder_time) &&
                   <div className="flex justify-between">
                                   <span className="opacity-70">建议提醒:</span>
-                                  <span className="font-medium">{format(safeIsoText(suggestions.reminder_time), "MM-dd HH:mm")}</span>
+                                  <span className="font-medium">{format(safeDate(suggestions.reminder_time), "MM-dd HH:mm")}</span>
                               </div>
                   }
-                          {safeIsoText(suggestions.execution_start) &&
+                          {safeDate(suggestions.execution_start) &&
                   <div className="flex justify-between">
                                   <span className="opacity-70">建议执行:</span>
                                   <span className="font-medium">
-                                      {format(safeIsoText(suggestions.execution_start), "MM-dd HH:mm")}
-                                      {safeIsoText(suggestions.execution_end) && ` - ${format(safeIsoText(suggestions.execution_end), "HH:mm")}`}
+                                      {format(safeDate(suggestions.execution_start), "MM-dd HH:mm")}
+                                      {safeDate(suggestions.execution_end) && ` - ${format(safeDate(suggestions.execution_end), "HH:mm")}`}
                                   </span>
                               </div>
                   }

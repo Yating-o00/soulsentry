@@ -30,6 +30,9 @@ tasksRouter.use(requireAuth);
 function toPrismaTaskStatus(status) {
   const normalized = String(status || "TODO").toUpperCase();
   if (normalized === "PENDING") return "TODO";
+  if (normalized === "COMPLETED") return "DONE";
+  if (normalized === "DONE") return "DONE";
+  if (normalized === "IN_PROGRESS" || normalized === "RUNNING" || normalized === "BLOCKED") return "IN_PROGRESS";
   if (["TODO", "IN_PROGRESS", "DONE", "ARCHIVED"].includes(normalized)) return normalized;
   return "TODO";
 }
@@ -39,7 +42,11 @@ function serializeTask(task) {
     id: task.id,
     title: task.title,
     description: task.description,
-    status: task.status === "TODO" ? "pending" : task.status.toLowerCase(),
+    status: task.status === "DONE"
+      ? "completed"
+      : task.status === "TODO"
+        ? "pending"
+        : task.status.toLowerCase(),
     priority: task.priority,
     category: task.category,
     due_at: task.dueAt,

@@ -164,8 +164,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const deleteSubtaskMutation = useMutation({
     mutationFn: (id) => base44.entities.Task.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      queryClient.invalidateQueries({ queryKey: ['subtasks', task?.id] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success("子约定已删除");
+    },
+    onError: () => {
+      toast.error("删除子约定失败");
     },
   });
 

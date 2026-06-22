@@ -8,7 +8,8 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16),
   JWT_EXPIRES_IN: z.string().default("7d"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
-  UPLOAD_DIR: z.string().default("uploads")
+  UPLOAD_DIR: z.string().default("uploads"),
+  VAPID_PUBLIC_KEY: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);

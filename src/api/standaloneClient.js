@@ -569,6 +569,58 @@ function createNoteCommentEntity() {
   };
 }
 
+function createSavedLocationEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/saved-locations?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/saved-locations?${params.toString()}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/saved-locations", {
+        method: "POST",
+        body: data
+      });
+    },
+    async bulkCreate(items = []) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/saved-locations/batch", {
+        method: "POST",
+        body: items
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/saved-locations/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/saved-locations/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.SavedLocation", "subscribe");
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -620,6 +672,10 @@ function createEntityProxy() {
 
         if (entityName === "NoteComment") {
           return createNoteCommentEntity();
+        }
+
+        if (entityName === "SavedLocation") {
+          return createSavedLocationEntity();
         }
 
         if (entityName === "AICreditTransaction") {

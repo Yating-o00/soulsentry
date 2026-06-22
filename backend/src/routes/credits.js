@@ -10,6 +10,14 @@ const topUpSchema = z.object({
   description: z.string().max(120).optional()
 });
 
+const transactionCreateSchema = z.object({
+  type: z.string().min(1),
+  amount: z.number().int(),
+  balance_after: z.number().int().min(0).optional(),
+  feature: z.string().max(120).optional(),
+  description: z.string().max(255).optional()
+});
+
 creditsRouter.use(requireAuth);
 
 creditsRouter.get("/balance", async (req, res) => {
@@ -37,6 +45,42 @@ creditsRouter.get("/transactions", async (req, res) => {
       created_date: item.createdAt
     }))
   );
+});
+
+creditsRouter.post("/transactions", async (req, res) => {
+  const payload = transactionCreateSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const normalizedType = String(payload.data.type || "PURCHASE").toUpperCase();
+  const allowedTypes = new Set(["PURCHASE", "CONSUME", "GIFT", "REFUND", "SUBSCRIPTION_BONUS"]);
+  const nextBalance = payload.data.balance_after ?? req.user.aiCredits;
+
+  if (!allowedTypes.has(normalizedType)) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "不支持的点数流水类型" });
+  }
+
+  const tx = await prisma.aICreditTransaction.create({
+    data: {
+      userId: req.user.id,
+      type: normalizedType,
+      amount: payload.data.amount,
+      balanceAfter: nextBalance,
+      feature: payload.data.feature,
+      description: payload.data.description
+    }
+  });
+
+  return res.status(201).json({
+    id: tx.id,
+    type: tx.type.toLowerCase(),
+    amount: tx.amount,
+    balance_after: tx.balanceAfter,
+    feature: tx.feature,
+    description: tx.description,
+    created_date: tx.createdAt
+  });
 });
 
 creditsRouter.post("/top-up", async (req, res) => {

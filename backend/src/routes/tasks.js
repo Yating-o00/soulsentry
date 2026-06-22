@@ -25,6 +25,8 @@ const taskInputSchema = z.object({
   metadata: z.any().optional()
 }).passthrough();
 
+const taskBatchInputSchema = z.array(taskInputSchema).min(1).max(100);
+
 const KNOWN_TASK_FIELDS = new Set([
   "title",
   "description",
@@ -134,6 +136,31 @@ function serializeTask(task) {
     metadata: task.metadata,
     created_date: task.createdAt,
     updated_date: task.updatedAt
+  };
+}
+
+function buildTaskCreateData(userId, payload) {
+  const extraFields = getTaskExtraFields(payload);
+
+  return {
+    userId,
+    title: payload.title,
+    description: payload.description,
+    status: toPrismaTaskStatus(payload.status),
+    priority: payload.priority || "medium",
+    category: payload.category,
+    dueAt: payload.due_at ? new Date(payload.due_at) : null,
+    reminderTime: payload.reminder_time ? new Date(payload.reminder_time) : null,
+    endTime: payload.end_time ? new Date(payload.end_time) : null,
+    isAllDay: Boolean(payload.is_all_day),
+    parentTaskId: payload.parent_task_id || null,
+    gcalSyncEnabled: Boolean(payload.gcal_sync_enabled),
+    progress: payload.progress ?? 0,
+    completedAt: payload.completed_at ? new Date(payload.completed_at) : null,
+    deletedAt: payload.deleted_at ? new Date(payload.deleted_at) : null,
+    tags: payload.tags,
+    reminderStrategy: payload.reminder_strategy,
+    metadata: mergeTaskMetadata(undefined, payload.metadata, extraFields)
   };
 }
 
@@ -256,29 +283,8 @@ tasksRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
 
-  const extraFields = getTaskExtraFields(payload.data);
-
   const task = await prisma.task.create({
-    data: {
-      userId: req.user.id,
-      title: payload.data.title,
-      description: payload.data.description,
-      status: toPrismaTaskStatus(payload.data.status),
-      priority: payload.data.priority || "medium",
-      category: payload.data.category,
-      dueAt: payload.data.due_at ? new Date(payload.data.due_at) : null,
-      reminderTime: payload.data.reminder_time ? new Date(payload.data.reminder_time) : null,
-      endTime: payload.data.end_time ? new Date(payload.data.end_time) : null,
-      isAllDay: Boolean(payload.data.is_all_day),
-      parentTaskId: payload.data.parent_task_id || null,
-      gcalSyncEnabled: Boolean(payload.data.gcal_sync_enabled),
-      progress: payload.data.progress ?? 0,
-      completedAt: payload.data.completed_at ? new Date(payload.data.completed_at) : null,
-      deletedAt: payload.data.deleted_at ? new Date(payload.data.deleted_at) : null,
-      tags: payload.data.tags,
-      reminderStrategy: payload.data.reminder_strategy,
-      metadata: mergeTaskMetadata(undefined, payload.data.metadata, extraFields)
-    }
+    data: buildTaskCreateData(req.user.id, payload.data)
   });
 
   await createTaskChangeLog(
@@ -289,6 +295,41 @@ tasksRouter.post("/", async (req, res) => {
   );
 
   return res.status(201).json(serializeTask(task));
+});
+
+tasksRouter.post("/batch", async (req, res) => {
+  const payload = taskBatchInputSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const tasks = await prisma.$transaction(async (tx) => {
+    const created = [];
+
+    for (const item of payload.data) {
+      const task = await tx.task.create({
+        data: buildTaskCreateData(req.user.id, item)
+      });
+
+      await tx.taskChangeLog.create({
+        data: {
+          userId: req.user.id,
+          taskId: task.id,
+          parentTaskId: task.parentTaskId,
+          changeType: task.parentTaskId ? "subtask_created" : "created",
+          taskTitle: task.title,
+          changedFields: Object.keys(item || {}).filter((key) => key !== "metadata"),
+          changesDetail: []
+        }
+      });
+
+      created.push(task);
+    }
+
+    return created;
+  });
+
+  return res.status(201).json(tasks.map(serializeTask));
 });
 
 tasksRouter.patch("/:id", async (req, res) => {

@@ -57,8 +57,24 @@ function parseSort(sort = "-updated_date") {
 notesRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || req.query.take || 100), 300);
   const orderBy = parseSort(req.query.sort || req.query.orderBy);
+  const where = { userId: req.user.id };
+
+  if (req.query.id) where.id = String(req.query.id);
+  if (req.query.status) where.status = toPrismaNoteStatus(req.query.status);
+  if (req.query.source_type) where.sourceType = String(req.query.source_type);
+  if (req.query.ai_status) where.aiStatus = String(req.query.ai_status);
+
+  if (req.query.deleted_at !== undefined) {
+    const deletedQuery = String(req.query.deleted_at).trim().toLowerCase();
+    if (deletedQuery === "null" || deletedQuery === "false" || deletedQuery === "0") {
+      where.deletedAt = null;
+    } else if (deletedQuery === "not_null" || deletedQuery === "true" || deletedQuery === "1") {
+      where.deletedAt = { not: null };
+    }
+  }
+
   const notes = await prisma.note.findMany({
-    where: { userId: req.user.id },
+    where,
     orderBy,
     take: Number.isFinite(limit) ? limit : 100
   });

@@ -130,6 +130,13 @@ function createTaskEntity() {
         body: data
       });
     },
+    async bulkCreate(items = []) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/tasks/batch", {
+        method: "POST",
+        body: items
+      });
+    },
     async update(id, data) {
       await ensureStandaloneSession();
       return httpRequest(`/api/tasks/${id}`, {
@@ -158,6 +165,23 @@ function createNoteEntity() {
     async get(id) {
       await ensureStandaloneSession();
       return httpRequest(`/api/notes/${id}`);
+    },
+    async filter(filters = {}, sort = "-updated_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined) return;
+        if (value === null) {
+          params.set(key, "null");
+          return;
+        }
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/notes?${params.toString()}`);
     },
     async create(data) {
       await ensureStandaloneSession();
@@ -446,6 +470,13 @@ function createEntityProxy() {
             async list() {
               await ensureStandaloneSession();
               return httpRequest("/api/credits/transactions");
+            },
+            async create(data) {
+              await ensureStandaloneSession();
+              return httpRequest("/api/credits/transactions", {
+                method: "POST",
+                body: data
+              });
             }
           };
         }

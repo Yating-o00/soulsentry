@@ -755,6 +755,55 @@ function createMemoryRecordEntity() {
   };
 }
 
+function createKnowledgeBaseEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/knowledge-bases?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/knowledge-bases?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/knowledge-bases/${id}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/knowledge-bases", {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/knowledge-bases/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/knowledge-bases/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.KnowledgeBase", "subscribe");
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -822,6 +871,10 @@ function createEntityProxy() {
 
         if (entityName === "MemoryRecord") {
           return createMemoryRecordEntity();
+        }
+
+        if (entityName === "KnowledgeBase") {
+          return createKnowledgeBaseEntity();
         }
 
         if (entityName === "AICreditTransaction") {

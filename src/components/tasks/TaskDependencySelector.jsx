@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Link as LinkIcon, X, AlertCircle, CheckCircle2, FolderOpen, GitMerge } from "lucide-react";
+import { toast } from "sonner";
 
 const CATEGORY_LABELS = {
     work: "工作", personal: "个人", health: "健康", study: "学习",
@@ -68,13 +69,26 @@ export default function TaskDependencySelector({ currentTaskId, currentTask, sel
     const effectiveSelected = selectedDependencyIds ?? selectedDependencies ?? [];
     const [searchQuery, setSearchQuery] = useState("");
     const [filterType, setFilterType] = useState("all"); // "all" | "parent" | "child"
-    const [saving, setSaving] = useState(false);
+  const [localSelected, setLocalSelected] = useState(effectiveSelected);
+  const [saving, setSaving] = useState(false);
+  const debounceRef = useRef(null);
+  const pendingIdsRef = useRef(effectiveSelected);
+  const lastSavedRef = useRef(effectiveSelected);
+  const inFlightRef = useRef(false);
+  const dirtyRef = useRef(false);
 
     const { data: allTasks = [] } = useQuery({
         queryKey: ['tasks-dependency-search'],
         queryFn: () => base44.entities.Task.list(),
         initialData: []
     });
+
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    setLocalSelected(effectiveSelected);
+    pendingIdsRef.current = effectiveSelected;
+    lastSavedRef.current = effectiveSelected;
+  }, [effectiveSelected]);
 
     // Build a map of task id -> task for parent title lookup
     const taskMap = useMemo(() => {
@@ -134,19 +148,72 @@ export default function TaskDependencySelector({ currentTaskId, currentTask, sel
         return list;
     }, [parentTasks, childTasks, taskMap, filterType, searchQuery]);
 
-    const dependencies = allTasks.filter(t => effectiveSelected.includes(t.id));
+  const dependencies = allTasks.filter(t => localSelected.includes(t.id));
 
-    const handleToggle = async (taskId) => {
-        const newIds = effectiveSelected.includes(taskId)
-            ? effectiveSelected.filter(id => id !== taskId)
-            : [...effectiveSelected, taskId];
-        setSaving(true);
-        try {
-            await onUpdate(newIds);
-        } finally {
-            setSaving(false);
-        }
-    };
+  const isSameIds = (a, b) => {
+    if (a === b) return true;
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  };
+
+  const flushSave = async () => {
+    if (typeof onUpdate !== "function") return;
+    if (inFlightRef.current) return;
+    const nextIds = pendingIdsRef.current || [];
+    if (isSameIds(nextIds, lastSavedRef.current || [])) {
+      dirtyRef.current = false;
+      setSaving(false);
+      return;
+    }
+
+    inFlightRef.current = true;
+    setSaving(true);
+    try {
+      await onUpdate(nextIds);
+      lastSavedRef.current = nextIds;
+      dirtyRef.current = false;
+    } catch (error) {
+      toast.error(error?.data?.message || error?.message || "依赖保存失败");
+      pendingIdsRef.current = effectiveSelected;
+      lastSavedRef.current = effectiveSelected;
+      dirtyRef.current = false;
+      setLocalSelected(effectiveSelected);
+    } finally {
+      inFlightRef.current = false;
+      setSaving(false);
+      const latestPending = pendingIdsRef.current || [];
+      if (!isSameIds(latestPending, lastSavedRef.current || [])) {
+        flushSave();
+      }
+    }
+  };
+
+  const scheduleSave = (nextIds) => {
+    pendingIdsRef.current = nextIds;
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      flushSave();
+    }, 350);
+  };
+
+  const handleToggle = (taskId) => {
+    setLocalSelected((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const nextIds = current.includes(taskId)
+        ? current.filter((id) => id !== taskId)
+        : [...current, taskId];
+      dirtyRef.current = true;
+      scheduleSave(nextIds);
+      return nextIds;
+    });
+  };
 
     return (
         <div className="space-y-4">
@@ -237,7 +304,7 @@ export default function TaskDependencySelector({ currentTaskId, currentTask, sel
                                 <TaskRow
                                     key={task.id}
                                     task={task}
-                                    isSelected={effectiveSelected.includes(task.id)}
+                                    isSelected={localSelected.includes(task.id)}
                                     isChild={task._isChild}
                                     parentTitle={task._parentTitle}
                                     onToggle={handleToggle}

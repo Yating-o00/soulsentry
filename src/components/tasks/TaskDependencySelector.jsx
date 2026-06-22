@@ -13,18 +13,24 @@ const CATEGORY_LABELS = {
     family: "家庭", shopping: "购物", finance: "财务", other: "其他"
 };
 
-function TaskRow({ task, isSelected, isChild, parentTitle, onToggle }) {
+function TaskRow({ task, isSelected, isChild, parentTitle, onToggle, disabled }) {
     return (
         <div
-            onClick={() => onToggle(task.id)}
-            className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+            onClick={() => {
+                if (disabled) return;
+                onToggle(task.id);
+            }}
+            className={`flex items-center gap-3 p-2 rounded-md transition-colors ${
                 isChild ? "ml-5" : ""
-            } ${isSelected ? "bg-blue-50 border border-blue-200" : "hover:bg-slate-50"}`}
+            } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"} ${
+                isSelected ? "bg-blue-50 border border-blue-200" : "hover:bg-slate-50"
+            }`}
         >
             <Checkbox
                 checked={isSelected}
                 onCheckedChange={() => onToggle(task.id)}
                 id={`task-${task.id}`}
+                disabled={disabled}
             />
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -62,6 +68,7 @@ export default function TaskDependencySelector({ currentTaskId, currentTask, sel
     const effectiveSelected = selectedDependencyIds ?? selectedDependencies ?? [];
     const [searchQuery, setSearchQuery] = useState("");
     const [filterType, setFilterType] = useState("all"); // "all" | "parent" | "child"
+    const [saving, setSaving] = useState(false);
 
     const { data: allTasks = [] } = useQuery({
         queryKey: ['tasks-dependency-search'],
@@ -129,11 +136,16 @@ export default function TaskDependencySelector({ currentTaskId, currentTask, sel
 
     const dependencies = allTasks.filter(t => effectiveSelected.includes(t.id));
 
-    const handleToggle = (taskId) => {
+    const handleToggle = async (taskId) => {
         const newIds = effectiveSelected.includes(taskId)
             ? effectiveSelected.filter(id => id !== taskId)
             : [...effectiveSelected, taskId];
-        onUpdate(newIds);
+        setSaving(true);
+        try {
+            await onUpdate(newIds);
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -229,6 +241,7 @@ export default function TaskDependencySelector({ currentTaskId, currentTask, sel
                                     isChild={task._isChild}
                                     parentTitle={task._parentTitle}
                                     onToggle={handleToggle}
+                                    disabled={saving}
                                 />
                             ))
                         )}

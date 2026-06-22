@@ -321,7 +321,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
 
       toast.success("文件上传成功");
     } catch (error) {
-      toast.error("文件上传失败");
+      const message = error?.data?.message || error?.message || "文件上传失败";
+      toast.error(message);
     }
     setUploading(false);
   };
@@ -360,7 +361,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
       });
       toast.success("已粘贴并上传附件");
     } catch (err) {
-      toast.error("粘贴上传失败");
+      const message = err?.data?.message || err?.message || "粘贴上传失败";
+      toast.error(message);
     }
     setUploading(false);
   };
@@ -489,41 +491,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   };
 
     const handleUpdateDependencies = async (newDependencyIds) => {
-      // Check if we need to update status
-      // If we add a dependency that is NOT completed, task might become blocked
-      // We'll let the backend or a separate logic handle status, but here we update the list
-      // Or we can simple check here:
-
-      // For now, just update the list. The parent component or logic should handle status updates if we want automation.
-      // But user asked for "automatically mark". 
-      // We can check the status of the added dependencies here.
-
-      let newStatus = task.status;
-
-      if (newDependencyIds.length > 0) {
-           const allTasks = await base44.entities.Task.list(); // Ideally fetch only needed, but list is ok for now
-           const blockingTasks = allTasks.filter(t => newDependencyIds.includes(t.id) && t.status !== 'completed');
-
-           if (blockingTasks.length > 0 && task.status !== 'completed') {
-               newStatus = 'blocked';
-           } else if (blockingTasks.length === 0 && task.status === 'blocked') {
-               newStatus = 'pending'; // Unblock if no blocking tasks
-           }
-      } else if (task.status === 'blocked') {
-          newStatus = 'pending';
-      }
-
       await updateTaskMutation.mutateAsync({
-          id: task.id,
-          data: { 
-              dependencies: newDependencyIds,
-              status: newStatus
-          }
+        id: task.id,
+        data: {
+          dependencies: newDependencyIds
+        }
       });
 
-      if (newStatus === 'blocked') {
-          toast("约定已标记为阻塞状态 (等待前置约定完成)", { icon: "🚫" });
-      }
+      toast.success("依赖已更新");
     };
 
     const handleDeleteNote = async (index) => {

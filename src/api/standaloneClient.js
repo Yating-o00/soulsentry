@@ -670,6 +670,42 @@ function createRelationshipEntity() {
   };
 }
 
+function createUserBehaviorEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/user-behaviors?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/user-behaviors?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/user-behaviors/${id}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/user-behaviors", {
+        method: "POST",
+        body: data
+      });
+    },
+    subscribe() {
+      unsupported("entities.UserBehavior", "subscribe");
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -729,6 +765,10 @@ function createEntityProxy() {
 
         if (entityName === "Relationship") {
           return createRelationshipEntity();
+        }
+
+        if (entityName === "UserBehavior") {
+          return createUserBehaviorEntity();
         }
 
         if (entityName === "AICreditTransaction") {

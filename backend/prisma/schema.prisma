@@ -67,6 +67,7 @@ model User {
   relationships     Relationship[]
   userBehaviors     UserBehavior[]
   memoryRecords     MemoryRecord[]
+  knowledgeBases    KnowledgeBase[]
 }
 
 model UserPreference {
@@ -264,6 +265,34 @@ model MemoryRecord {
   @@index([userId, updatedAt])
   @@index([userId, memoryType])
   @@index([userId, eventDate])
+}
+
+model KnowledgeBase {
+  id               String   @id @default(cuid())
+  userId           String
+  title            String
+  content          String
+  sourceType       String   @default("manual")
+  sourceId         String?
+  tags             Json?
+  category         String?
+  summary          String?
+  keyPoints        Json?
+  embeddings       Json?
+  accessCount      Int      @default(0)
+  lastAccessed     DateTime?
+  importance       Int      @default(3)
+  embeddingSummary String?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+  @@index([userId, sourceType])
+  @@index([userId, category])
+  @@index([userId, importance])
 }
 
 model AICreditTransaction {

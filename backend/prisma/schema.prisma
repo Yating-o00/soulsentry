@@ -55,10 +55,12 @@ model User {
   notes             Note[]
   preferences       UserPreference?
   notifications     Notification[]
+  notificationRules NotificationRule[]
   creditTxs         AICreditTransaction[]
   taskExecutions    TaskExecution[]
   dailyPlans        DailyPlan[]
   comments          Comment[]
+  noteComments      NoteComment[]
   taskCompletions   TaskCompletion[]
   taskChangeLogs    TaskChangeLog[]
 }
@@ -73,6 +75,7 @@ model UserPreference {
   locationReminders       Boolean  @default(false)
   locale                  String   @default("zh-CN")
   timezone                String   @default("Asia/Shanghai")
+  metadata                Json?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -123,6 +126,7 @@ model Note {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  noteComments NoteComment[]
 
   @@index([userId, status])
   @@index([userId, deletedAt])
@@ -141,6 +145,25 @@ model Notification {
   user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
+}
+
+model NotificationRule {
+  id                String   @id @default(cuid())
+  userId            String
+  title             String
+  conditionCategory String   @default("all")
+  conditionPriority String   @default("all")
+  actionMute        Boolean  @default(false)
+  actionSound       String   @default("default")
+  actionChannels    Json?
+  isEnabled         Boolean  @default(true)
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isEnabled])
 }
 
 model AICreditTransaction {
@@ -215,6 +238,21 @@ model Comment {
 
   @@index([userId, createdAt])
   @@index([taskId, createdAt])
+}
+
+model NoteComment {
+  id        String   @id @default(cuid())
+  userId    String
+  noteId    String
+  content   String
+  mentions  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([noteId, createdAt])
 }
 
 model TaskCompletion {

@@ -428,6 +428,147 @@ function createTaskChangeLogEntity() {
   };
 }
 
+function createNotificationEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notifications?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/notifications?${params.toString()}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/notifications", {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notifications/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notifications/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.Notification", "subscribe");
+    }
+  };
+}
+
+function createNotificationRuleEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notification-rules?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/notification-rules", {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notification-rules/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notification-rules/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.NotificationRule", "subscribe");
+    }
+  };
+}
+
+function createUserPreferenceEntity() {
+  return {
+    async list(sort = "-updated_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/user-preferences?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/user-preferences", {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/user-preferences/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    subscribe() {
+      unsupported("entities.UserPreference", "subscribe");
+    }
+  };
+}
+
+function createNoteCommentEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/note-comments?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/note-comments?${params.toString()}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/note-comments", {
+        method: "POST",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/note-comments/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.NoteComment", "subscribe");
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -463,6 +604,22 @@ function createEntityProxy() {
 
         if (entityName === "TaskChangeLog") {
           return createTaskChangeLogEntity();
+        }
+
+        if (entityName === "Notification") {
+          return createNotificationEntity();
+        }
+
+        if (entityName === "NotificationRule") {
+          return createNotificationRuleEntity();
+        }
+
+        if (entityName === "UserPreference") {
+          return createUserPreferenceEntity();
+        }
+
+        if (entityName === "NoteComment") {
+          return createNoteCommentEntity();
         }
 
         if (entityName === "AICreditTransaction") {

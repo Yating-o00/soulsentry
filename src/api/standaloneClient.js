@@ -100,6 +100,157 @@ async function ensureStandaloneSession() {
   return false;
 }
 
+const ENTITY_SUBSCRIPTION_POLL_MS = 4000;
+const entitySubscriptionRegistry = new Map();
+
+function safeSerializeSnapshot(item) {
+  try {
+    return JSON.stringify(item ?? null);
+  } catch (_error) {
+    return String(item?.id || "");
+  }
+}
+
+function buildEntitySnapshot(items = []) {
+  const snapshot = new Map();
+
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    if (!item?.id) return;
+    snapshot.set(String(item.id), {
+      data: item,
+      signature: safeSerializeSnapshot(item)
+    });
+  });
+
+  return snapshot;
+}
+
+function createRefreshEvents(previousSnapshot, nextSnapshot) {
+  if (previousSnapshot.size !== nextSnapshot.size) {
+    return [{ type: "refresh" }];
+  }
+
+  for (const [id, nextEntry] of nextSnapshot.entries()) {
+    const previousEntry = previousSnapshot.get(id);
+    if (!previousEntry || previousEntry.signature !== nextEntry.signature) {
+      return [{ type: "refresh" }];
+    }
+  }
+
+  return [];
+}
+
+function createDetailedEvents(previousSnapshot, nextSnapshot) {
+  const events = [];
+
+  for (const [id, nextEntry] of nextSnapshot.entries()) {
+    const previousEntry = previousSnapshot.get(id);
+    if (!previousEntry) {
+      events.push({ type: "create", id, data: nextEntry.data });
+      continue;
+    }
+
+    if (previousEntry.signature !== nextEntry.signature) {
+      events.push({ type: "update", id, data: nextEntry.data });
+    }
+  }
+
+  for (const [id, previousEntry] of previousSnapshot.entries()) {
+    if (!nextSnapshot.has(id)) {
+      events.push({ type: "delete", id, data: previousEntry.data });
+    }
+  }
+
+  return events;
+}
+
+function getEntitySubscriptionManager(entityName, fetchItems, diffStrategy = "refresh") {
+  if (entitySubscriptionRegistry.has(entityName)) {
+    return entitySubscriptionRegistry.get(entityName);
+  }
+
+  const buildEvents = diffStrategy === "detailed" ? createDetailedEvents : createRefreshEvents;
+
+  const manager = {
+    listeners: new Set(),
+    timer: null,
+    polling: false,
+    initialized: false,
+    snapshot: new Map(),
+    notify(event) {
+      manager.listeners.forEach((listener) => {
+        try {
+          listener(event);
+        } catch (_error) {
+          // Ignore subscriber failures to keep the polling loop alive.
+        }
+      });
+    },
+    async poll() {
+      if (manager.polling) return;
+
+      manager.polling = true;
+      try {
+        await ensureStandaloneSession();
+        const nextItems = await fetchItems();
+        const nextSnapshot = buildEntitySnapshot(nextItems);
+
+        if (manager.initialized) {
+          const events = buildEvents(manager.snapshot, nextSnapshot);
+          events.forEach((event) => manager.notify(event));
+        }
+
+        manager.snapshot = nextSnapshot;
+        manager.initialized = true;
+      } catch (_error) {
+        // Ignore transient polling failures; the next cycle can recover.
+      } finally {
+        manager.polling = false;
+      }
+    },
+    start() {
+      if (manager.timer) return;
+      manager.poll();
+      manager.timer = window.setInterval(() => {
+        manager.poll();
+      }, ENTITY_SUBSCRIPTION_POLL_MS);
+    },
+    stop() {
+      if (manager.timer) {
+        window.clearInterval(manager.timer);
+        manager.timer = null;
+      }
+      manager.initialized = false;
+      manager.snapshot = new Map();
+    },
+    subscribe(listener) {
+      if (typeof listener !== "function") {
+        return () => {};
+      }
+
+      manager.listeners.add(listener);
+      if (manager.listeners.size === 1) {
+        manager.start();
+      }
+
+      return () => {
+        manager.listeners.delete(listener);
+        if (manager.listeners.size === 0) {
+          manager.stop();
+        }
+      };
+    }
+  };
+
+  entitySubscriptionRegistry.set(entityName, manager);
+  return manager;
+}
+
+function subscribeToEntity(entityName, fetchItems, listener, diffStrategy = "refresh") {
+  const manager = getEntitySubscriptionManager(entityName, fetchItems, diffStrategy);
+  return manager.subscribe(listener);
+}
+
 function createTaskEntity() {
   return {
     async list(sort = "-created_date", limit = 100) {
@@ -150,8 +301,12 @@ function createTaskEntity() {
         method: "DELETE"
       });
     },
-    subscribe() {
-      unsupported("entities.Task", "subscribe");
+    subscribe(listener) {
+      return subscribeToEntity(
+        "Task",
+        () => httpRequest("/api/tasks?sort=-updated_date&limit=300"),
+        listener
+      );
     }
   };
 }
@@ -203,8 +358,13 @@ function createNoteEntity() {
         method: "DELETE"
       });
     },
-    subscribe() {
-      unsupported("entities.Note", "subscribe");
+    subscribe(listener) {
+      return subscribeToEntity(
+        "Note",
+        () => httpRequest("/api/notes?sort=-created_date&limit=300"),
+        listener,
+        "detailed"
+      );
     }
   };
 }
@@ -301,8 +461,12 @@ function createDailyPlanEntity() {
         method: "DELETE"
       });
     },
-    subscribe() {
-      unsupported("entities.DailyPlan", "subscribe");
+    subscribe(listener) {
+      return subscribeToEntity(
+        "DailyPlan",
+        () => httpRequest("/api/daily-plans?sort=-plan_date&limit=100"),
+        listener
+      );
     }
   };
 }
@@ -804,6 +968,59 @@ function createKnowledgeBaseEntity() {
   };
 }
 
+function createExternalFeedEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/external-feeds?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/external-feeds?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/external-feeds/${id}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/external-feeds", {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/external-feeds/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/external-feeds/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe(listener) {
+      return subscribeToEntity(
+        "ExternalFeed",
+        () => httpRequest("/api/external-feeds?sort=-updated_date&limit=100"),
+        listener
+      );
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -875,6 +1092,10 @@ function createEntityProxy() {
 
         if (entityName === "KnowledgeBase") {
           return createKnowledgeBaseEntity();
+        }
+
+        if (entityName === "ExternalFeed") {
+          return createExternalFeedEntity();
         }
 
         if (entityName === "AICreditTransaction") {

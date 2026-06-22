@@ -63,6 +63,72 @@ function getGeofencePreset(locationType) {
   return presets[String(locationType || "other")] || presets.other;
 }
 
+function decodeXmlEntities(value = "") {
+  return String(value)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function stripHtml(value = "") {
+  return decodeXmlEntities(String(value).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+}
+
+function pickXmlValue(block, tagName) {
+  const regex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)</${tagName}>`, "i");
+  const matched = String(block || "").match(regex);
+  return matched ? decodeXmlEntities(matched[1]).trim() : "";
+}
+
+function pickXmlLink(block) {
+  const attributeMatch = String(block || "").match(/<link\b[^>]*href=["']([^"']+)["'][^>]*\/?>/i);
+  if (attributeMatch?.[1]) {
+    return decodeXmlEntities(attributeMatch[1]).trim();
+  }
+  return stripHtml(pickXmlValue(block, "link"));
+}
+
+function parseRssItems(xmlText = "") {
+  const blocks = String(xmlText).match(/<(item|entry)\b[\s\S]*?<\/(item|entry)>/gi) || [];
+  return blocks.map((block) => {
+    const title = stripHtml(pickXmlValue(block, "title"));
+    const link = pickXmlLink(block);
+    const description = stripHtml(
+      pickXmlValue(block, "description")
+      || pickXmlValue(block, "summary")
+      || pickXmlValue(block, "content")
+      || pickXmlValue(block, "content:encoded")
+    );
+    const pubDate = stripHtml(
+      pickXmlValue(block, "pubDate")
+      || pickXmlValue(block, "published")
+      || pickXmlValue(block, "updated")
+    );
+    return {
+      title,
+      link,
+      summary: description.slice(0, 280),
+      published_at: pubDate || null
+    };
+  }).filter((item) => item.title && item.link);
+}
+
+function buildExternalVisionCards(feed, items = []) {
+  return items.slice(0, 3).map((item, index) => ({
+    id: `${feed.id}:${index}:${item.link}`,
+    type: feed.feedType === "rss" ? "subscription" : "expansion",
+    title: item.title,
+    summary: item.summary || `${feed.name} 的最新更新`,
+    source: feed.name,
+    url: item.link,
+    relevance: feed.description || "",
+    published_at: item.published_at || null
+  }));
+}
+
 functionsRouter.post("/:name", async (req, res) => {
   const { name } = req.params;
   const payload = req.body || {};
@@ -299,6 +365,131 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       return res.json({ results });
+    }
+
+    if (name === "fetchExternalFeeds") {
+      const feed = await prisma.externalFeed.findFirst({
+        where: {
+          id: payload.feed_id,
+          userId: req.user.id
+        }
+      });
+
+      if (!feed) {
+        return res.status(404).json({
+          error: "NOT_FOUND",
+          message: "外部信息源不存在"
+        });
+      }
+
+      if (!feed.url) {
+        return res.status(400).json({
+          error: "INVALID_FEED",
+          message: "该信息源缺少 URL"
+        });
+      }
+
+      const response = await fetch(feed.url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 SoulSentry/1.0"
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) {
+        return res.status(502).json({
+          error: "FETCH_FAILED",
+          message: `拉取失败：${response.status}`
+        });
+      }
+
+      const xmlText = await response.text();
+      const items = parseRssItems(xmlText);
+      const now = new Date();
+
+      let archived = 0;
+      if (feed.autoArchiveToHeartsign) {
+        for (const item of items.slice(0, 10)) {
+          const duplicate = await prisma.note.findFirst({
+            where: {
+              userId: req.user.id,
+              sourceType: "external_feed",
+              plainText: `${item.title} ${item.summary}`.slice(0, 1000)
+            }
+          });
+
+          if (duplicate) continue;
+
+          await prisma.note.create({
+            data: {
+              userId: req.user.id,
+              title: item.title.slice(0, 200),
+              content: `**${item.title}**\n\n${item.summary}\n\n来源：${feed.name}\n链接：${item.link}`,
+              plainText: `${item.title} ${item.summary}`.slice(0, 1000),
+              sourceType: "external_feed",
+              aiStatus: "pending",
+              tags: ["外部信息", feed.name]
+            }
+          });
+          archived += 1;
+        }
+      }
+
+      await prisma.externalFeed.update({
+        where: { id: feed.id },
+        data: {
+          lastFetchedAt: now,
+          lastItemCount: items.length,
+          metadata: {
+            ...(isPlainObject(feed.metadata) ? feed.metadata : {}),
+            latest_items: items.slice(0, 10)
+          }
+        }
+      });
+
+      return res.json({
+        fetched: items.length,
+        archived,
+        feed_id: feed.id
+      });
+    }
+
+    if (name === "getExternalVision") {
+      const feeds = await prisma.externalFeed.findMany({
+        where: {
+          userId: req.user.id,
+          isActive: true
+        },
+        orderBy: [
+          { lastFetchedAt: "desc" },
+          { createdAt: "desc" }
+        ],
+        take: 6
+      });
+
+      const cards = [];
+
+      for (const feed of feeds) {
+        const latestItems = Array.isArray(feed.metadata?.latest_items) ? feed.metadata.latest_items : [];
+
+        if (latestItems.length > 0) {
+          cards.push(...buildExternalVisionCards(feed, latestItems));
+          continue;
+        }
+
+        cards.push({
+          id: feed.id,
+          type: feed.feedType === "rss" ? "subscription" : "expansion",
+          title: feed.name,
+          summary: feed.description || "已接入外部信息源，等待首次拉取内容。",
+          source: feed.name,
+          url: feed.url || "",
+          relevance: "可在“外部信息接入”中手动拉取最新内容"
+        });
+      }
+
+      return res.json({
+        cards: cards.slice(0, 12)
+      });
     }
 
     if (["executeAutomation", "createStripeCheckout", "queryWechatOrder"].includes(name)) {

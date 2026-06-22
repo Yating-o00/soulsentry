@@ -25,12 +25,45 @@ export default function ExternalFeedDialog({ open, onOpenChange }) {
     setLoading(false);
   };
 
-  useEffect(() => { if (open) load(); }, [open]);
+  const fetchFeedNow = async (feedId) => {
+    const res = await base44.functions.invoke('fetchExternalFeeds', { feed_id: feedId });
+    return res?.data || res;
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    load();
+    const unsub = base44.entities.ExternalFeed.subscribe?.(() => {
+      load();
+    });
+    return () => unsub?.();
+  }, [open]);
 
   const addFeed = async (data) => {
     try {
-      await base44.entities.ExternalFeed.create({ ...data, is_active: true, auto_archive_to_heartsign: true });
-      toast.success('已接入：' + data.name);
+      const created = await base44.entities.ExternalFeed.create({
+        ...data,
+        is_active: true,
+        auto_archive_to_heartsign: true
+      });
+
+      let fetchResult = null;
+      if (created?.id && created?.url) {
+        try {
+          fetchResult = await fetchFeedNow(created.id);
+        } catch (fetchError) {
+          toast.error(`已接入，但首次拉取失败：${fetchError.message}`);
+        }
+      }
+
+      if (fetchResult?.error) {
+        toast.error(`已接入，但首次拉取失败：${fetchResult.error}`);
+      } else if (fetchResult) {
+        toast.success(`已接入 ${data.name}，首次拉取 ${fetchResult.fetched || 0} 条`);
+      } else {
+        toast.success('已接入：' + data.name);
+      }
+
       setNewFeed({ name: '', url: '', feed_type: 'rss', icon: '📡' });
       load();
     } catch (e) { toast.error('接入失败：' + e.message); }

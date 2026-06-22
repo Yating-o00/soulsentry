@@ -113,6 +113,10 @@ export default function ExternalVisionCard() {
   useEffect(() => {
     // 首次进入自动拉取一次
     load();
+    const unsub = base44.entities.ExternalFeed.subscribe?.(() => {
+      load();
+    });
+    return () => unsub?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

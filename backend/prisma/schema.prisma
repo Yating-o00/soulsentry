@@ -68,6 +68,7 @@ model User {
   userBehaviors     UserBehavior[]
   memoryRecords     MemoryRecord[]
   knowledgeBases    KnowledgeBase[]
+  externalFeeds     ExternalFeed[]
 }
 
 model UserPreference {
@@ -293,6 +294,30 @@ model KnowledgeBase {
   @@index([userId, sourceType])
   @@index([userId, category])
   @@index([userId, importance])
+}
+
+model ExternalFeed {
+  id                     String   @id @default(cuid())
+  userId                 String
+  name                   String
+  feedType               String   @default("rss")
+  url                    String?
+  description            String?
+  icon                   String   @default("📡")
+  isActive               Boolean  @default(true)
+  fetchFrequencyHours    Int      @default(24)
+  lastFetchedAt          DateTime?
+  lastItemCount          Int      @default(0)
+  autoArchiveToHeartsign Boolean  @default(true)
+  metadata               Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+  @@index([userId, isActive])
+  @@index([userId, feedType])
 }
 
 model AICreditTransaction {

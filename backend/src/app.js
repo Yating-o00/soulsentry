@@ -11,6 +11,8 @@ import { tasksRouter } from "./routes/tasks.js";
 import { notesRouter } from "./routes/notes.js";
 import { taskExecutionsRouter } from "./routes/taskExecutions.js";
 import { functionsRouter } from "./routes/functions.js";
+import { weeklyPlansRouter } from "./routes/weeklyPlans.js";
+import { monthlyPlansRouter } from "./routes/monthlyPlans.js";
 
 export const app = express();
 
@@ -36,6 +38,8 @@ app.use("/api/credits", creditsRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/notes", notesRouter);
 app.use("/api/task-executions", taskExecutionsRouter);
+app.use("/api/weekly-plans", weeklyPlansRouter);
+app.use("/api/monthly-plans", monthlyPlansRouter);
 app.use("/api/functions", functionsRouter);
 
 app.use((err, _req, res, _next) => {

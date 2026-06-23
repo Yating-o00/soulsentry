@@ -24,6 +24,7 @@ const taskInputSchema = z.object({
   reminder_strategy: z.any().optional(),
   metadata: z.any().optional()
 });
+const taskBatchInputSchema = z.array(taskInputSchema).min(1).max(100);
 
 tasksRouter.use(requireAuth);
 
@@ -76,8 +77,28 @@ function parseSort(sort = "-created_date") {
 tasksRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || req.query.take || 100), 300);
   const orderBy = parseSort(req.query.sort || req.query.orderBy);
+  const where = { userId: req.user.id };
+
+  if (req.query.id) where.id = String(req.query.id);
+  if (req.query.parent_task_id !== undefined) {
+    const value = String(req.query.parent_task_id).trim();
+    where.parentTaskId = value ? value : null;
+  }
+  if (req.query.category) where.category = String(req.query.category);
+  if (req.query.status) where.status = toPrismaTaskStatus(req.query.status);
+  if (req.query.deleted_at === undefined) {
+    where.deletedAt = null;
+  } else {
+    const deletedQuery = String(req.query.deleted_at).trim().toLowerCase();
+    if (deletedQuery === "null" || deletedQuery === "false" || deletedQuery === "0") {
+      where.deletedAt = null;
+    } else if (deletedQuery === "not_null" || deletedQuery === "true" || deletedQuery === "1") {
+      where.deletedAt = { not: null };
+    }
+  }
+
   const tasks = await prisma.task.findMany({
-    where: { userId: req.user.id },
+    where,
     orderBy,
     take: Number.isFinite(limit) ? limit : 100
   });
@@ -130,6 +151,45 @@ tasksRouter.post("/", async (req, res) => {
   });
 
   return res.status(201).json(serializeTask(task));
+});
+
+tasksRouter.post("/batch", async (req, res) => {
+  const payload = taskBatchInputSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const tasks = await prisma.$transaction(async (tx) => {
+    const created = [];
+    for (const item of payload.data) {
+      const task = await tx.task.create({
+        data: {
+          userId: req.user.id,
+          title: item.title,
+          description: item.description,
+          status: toPrismaTaskStatus(item.status),
+          priority: item.priority || "medium",
+          category: item.category,
+          dueAt: item.due_at ? new Date(item.due_at) : null,
+          reminderTime: item.reminder_time ? new Date(item.reminder_time) : null,
+          endTime: item.end_time ? new Date(item.end_time) : null,
+          isAllDay: Boolean(item.is_all_day),
+          parentTaskId: item.parent_task_id || null,
+          gcalSyncEnabled: Boolean(item.gcal_sync_enabled),
+          progress: item.progress ?? 0,
+          completedAt: item.completed_at ? new Date(item.completed_at) : null,
+          deletedAt: item.deleted_at ? new Date(item.deleted_at) : null,
+          tags: item.tags,
+          reminderStrategy: item.reminder_strategy,
+          metadata: item.metadata
+        }
+      });
+      created.push(task);
+    }
+    return created;
+  });
+
+  return res.status(201).json(tasks.map(serializeTask));
 });
 
 tasksRouter.patch("/:id", async (req, res) => {

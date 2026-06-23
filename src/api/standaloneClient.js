@@ -32,6 +32,19 @@ function createTaskEntity() {
       await ensureStandaloneSession();
       return httpRequest(`/api/tasks?sort=${encodeURIComponent(sort)}&limit=${limit}`);
     },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/tasks?${params.toString()}`);
+    },
     async get(id) {
       await ensureStandaloneSession();
       return httpRequest(`/api/tasks/${id}`);
@@ -41,6 +54,13 @@ function createTaskEntity() {
       return httpRequest("/api/tasks", {
         method: "POST",
         body: data
+      });
+    },
+    async bulkCreate(items = []) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/tasks/batch", {
+        method: "POST",
+        body: items
       });
     },
     async update(id, data) {
@@ -94,6 +114,55 @@ function createNoteEntity() {
     },
     subscribe() {
       unsupported("entities.Note", "subscribe");
+    }
+  };
+}
+
+function createPlanEntity(resourcePath) {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`${resourcePath}?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`${resourcePath}?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`${resourcePath}/${id}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest(resourcePath, {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`${resourcePath}/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`${resourcePath}/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported(`entities.${resourcePath}`, "subscribe");
     }
   };
 }
@@ -162,6 +231,14 @@ function createEntityProxy() {
 
         if (entityName === "TaskExecution") {
           return createTaskExecutionEntity();
+        }
+
+        if (entityName === "WeeklyPlan") {
+          return createPlanEntity("/api/weekly-plans");
+        }
+
+        if (entityName === "MonthlyPlan") {
+          return createPlanEntity("/api/monthly-plans");
         }
 
         if (entityName === "AICreditTransaction") {

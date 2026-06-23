@@ -69,7 +69,7 @@ export default function SoulMonthPlanner({
   // Fetch user behaviors for smart planning
   const { data: recentBehaviors = [] } = useQuery({
     queryKey: ['recentBehaviors_planner'],
-    queryFn: () => base44.entities.UserBehavior.list('-created_date', 50),
+    queryFn: () => base44.entities.UserBehavior.list('-created_date', 50).catch(() => []),
     staleTime: 5 * 60 * 1000
   });
 

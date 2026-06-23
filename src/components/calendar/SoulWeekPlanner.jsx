@@ -60,49 +60,251 @@ const PROCESSING_STEPS = [
   { icon: '✨', text: '最终编织周情境网络...' }
 ];
 
+function toText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch (_error) {
+    return String(value);
+  }
+}
+
+function parseJsonLike(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const looksLikeJson =
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"));
+
+  if (!looksLikeJson) return trimmed;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch (_error) {
+    return trimmed;
+  }
+}
+
+function hasDisplayValue(value) {
+  if (value === null || value === undefined || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+function sanitizeStrategyValue(value) {
+  const parsed = parseJsonLike(value);
+
+  if (parsed === null || parsed === undefined) return "";
+  if (typeof parsed === "string") return parsed.trim();
+  if (typeof parsed === "number" || typeof parsed === "boolean") return String(parsed);
+
+  if (Array.isArray(parsed)) {
+    return parsed
+      .map((item) => sanitizeStrategyValue(item))
+      .filter((item) => hasDisplayValue(item));
+  }
+
+  if (typeof parsed === "object") {
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, item]) => [key, sanitizeStrategyValue(item)])
+        .filter(([, item]) => hasDisplayValue(item))
+    );
+  }
+
+  return "";
+}
+
+function formatStrategyLabel(key) {
+  const labelMap = {
+    morning_briefing: "早间简报",
+    evening_summary: "晚间总结",
+    events: "关注事项",
+    notifications: "提醒安排",
+    include: "包含内容",
+    focus_mode: "专注模式",
+    commute: "通勤协同",
+    preparation: "准备事项",
+    summary: "摘要",
+    time: "时间",
+    date: "日期",
+    location: "地点"
+  };
+
+  if (labelMap[key]) return labelMap[key];
+
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function buildStrategyLines(value, label = "") {
+  if (!hasDisplayValue(value)) return [];
+
+  if (typeof value === "string") {
+    return [label ? `${label}：${value}` : value];
+  }
+
+  if (Array.isArray(value)) {
+    if (value.every((item) => typeof item === "string")) {
+      const text = value.filter(Boolean).join("、");
+      return text ? [label ? `${label}：${text}` : text] : [];
+    }
+
+    return value.flatMap((item, index) => {
+      const nextLabel = label && typeof item !== "string" ? `${label} ${index + 1}` : label;
+      return buildStrategyLines(item, nextLabel);
+    });
+  }
+
+  if (typeof value === "object") {
+    const quickParts = [
+      typeof value.date === "string" ? value.date : "",
+      typeof value.time === "string" ? value.time : "",
+      typeof value.title === "string" ? value.title : "",
+      typeof value.summary === "string" ? value.summary : "",
+      typeof value.message === "string" ? value.message : ""
+    ].filter(Boolean);
+
+    const includeText = Array.isArray(value.include)
+      ? value.include.filter(Boolean).join("、")
+      : typeof value.include === "string"
+        ? value.include
+        : "";
+
+    if (quickParts.length > 0 || includeText) {
+      const mainText = quickParts.join(" ");
+      const tail = includeText ? `包含${includeText}` : "";
+      const content = [mainText, tail].filter(Boolean).join("，");
+      return content ? [label ? `${label}：${content}` : content] : [];
+    }
+
+    return Object.entries(value).flatMap(([key, item]) =>
+      buildStrategyLines(item, formatStrategyLabel(key))
+    );
+  }
+
+  return [label ? `${label}：${String(value)}` : String(value)];
+}
+
 function normalizeStrategyDisplay(strategy) {
-  if (!strategy) {
+  const normalizedStrategy = sanitizeStrategyValue(strategy);
+
+  if (!hasDisplayValue(normalizedStrategy)) {
     return {
       summary: "本周无特殊策略，保持常规辅助模式。",
       lines: []
     };
   }
 
-  if (typeof strategy === "string") {
+  if (typeof normalizedStrategy === "string") {
     return {
-      summary: strategy || "本周无特殊策略，保持常规辅助模式。",
+      summary: normalizedStrategy,
       lines: []
     };
   }
 
-  if (typeof strategy === "object" && !Array.isArray(strategy)) {
-    const notifications = Array.isArray(strategy.notifications)
-      ? strategy.notifications
-          .map((item) => {
-            const date = typeof item?.date === "string" ? item.date : "";
-            const time = typeof item?.time === "string" ? item.time : "";
-            const message = typeof item?.message === "string" ? item.message : "";
-            const prefix = [date, time].filter(Boolean).join(" ");
-            return [prefix, message].filter(Boolean).join(" ");
-          })
-          .filter(Boolean)
-      : [];
+  let lines = [];
 
-    const lines = notifications.length > 0
-      ? notifications
-      : Object.entries(strategy)
-          .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
-          .filter(Boolean);
+  if (Array.isArray(normalizedStrategy)) {
+    lines = buildStrategyLines(normalizedStrategy);
+  } else if (typeof normalizedStrategy === "object") {
+    const processedKeys = new Set();
 
-    return {
-      summary: lines[0] || "本周无特殊策略，保持常规辅助模式。",
-      lines
-    };
+    if (normalizedStrategy.morning_briefing) {
+      lines.push(...buildStrategyLines(normalizedStrategy.morning_briefing, "早间简报"));
+      processedKeys.add("morning_briefing");
+    }
+
+    if (normalizedStrategy.notifications) {
+      lines.push(...buildStrategyLines(normalizedStrategy.notifications, "提醒安排"));
+      processedKeys.add("notifications");
+    }
+
+    if (normalizedStrategy.events) {
+      lines.push(...buildStrategyLines(normalizedStrategy.events, "关注事项"));
+      processedKeys.add("events");
+    }
+
+    if (normalizedStrategy.evening_summary) {
+      lines.push(...buildStrategyLines(normalizedStrategy.evening_summary, "晚间总结"));
+      processedKeys.add("evening_summary");
+    }
+
+    Object.entries(normalizedStrategy).forEach(([key, value]) => {
+      if (processedKeys.has(key)) return;
+      lines.push(...buildStrategyLines(value, formatStrategyLabel(key)));
+    });
   }
 
+  const uniqueLines = Array.from(
+    new Set(lines.map((line) => line.trim()).filter(Boolean))
+  );
+
   return {
-    summary: String(strategy),
-    lines: []
+    summary: uniqueLines[0] || "本周无特殊策略，保持常规辅助模式。",
+    lines: uniqueLines
+  };
+}
+
+function normalizeWeekPayload(data, fallbackStartDate) {
+  const normalizeEvents = (value) => {
+    if (!Array.isArray(value)) return [];
+    return value.map((event) => ({
+      date: typeof event?.date === "string" ? event.date : undefined,
+      day_index: typeof event?.day_index === "number" ? event.day_index : undefined,
+      title: toText(event?.title).slice(0, 160),
+      time: typeof event?.time === "string" ? event.time : "09:00",
+      end_time: typeof event?.end_time === "string" ? event.end_time : undefined,
+      is_all_day: Boolean(event?.is_all_day),
+      type: typeof event?.type === "string" ? event.type : "other",
+      icon: toText(event?.icon).slice(0, 8) || "📅",
+      description: toText(event?.description).slice(0, 500)
+    }));
+  };
+
+  const normalizeAutomations = (value) => {
+    if (!Array.isArray(value)) return [];
+    return value.map((automation) => ({
+      title: toText(automation?.title).slice(0, 160),
+      description: toText(automation?.description).slice(0, 500),
+      icon: toText(automation?.icon).slice(0, 8) || "⚙️",
+      status: typeof automation?.status === "string" ? automation.status : "pending"
+    }));
+  };
+
+  const normalizeStrategies = (value) => {
+    const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    return Object.fromEntries(
+      Object.entries(obj).map(([key, entry]) => [key, sanitizeStrategyValue(entry)])
+    );
+  };
+
+  const normalizeStats = (value) => {
+    const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const focus = Number(obj.focus_hours);
+    const meetings = Number(obj.meetings);
+    return {
+      focus_hours: Number.isFinite(focus) ? focus : 0,
+      meetings: Number.isFinite(meetings) ? meetings : 0,
+      travel_days: Number.isFinite(Number(obj.travel_days)) ? Number(obj.travel_days) : 0
+    };
+  };
+
+  return {
+    ...data,
+    plan_start_date: data?.plan_start_date || fallbackStartDate,
+    theme: toText(data?.theme).slice(0, 120),
+    summary: toText(data?.summary).slice(0, 1200),
+    events: normalizeEvents(data?.events),
+    automations: normalizeAutomations(data?.automations),
+    device_strategies: normalizeStrategies(data?.device_strategies),
+    stats: normalizeStats(data?.stats),
   };
 }
 
@@ -179,11 +381,11 @@ export default function SoulWeekPlanner({
     if (weekPlans && weekPlans.length > 0) {
       const plan = weekPlans[0];
       setExistingPlanId(plan.id);
-      setWeekData({
+      setWeekData(normalizeWeekPayload({
         ...plan.plan_json,
         theme: plan.theme,
         summary: plan.summary
-      });
+      }, currentWeekStartStr));
       setUserInput(plan.original_input || '');
       setStage('results');
     } else {
@@ -262,72 +464,7 @@ export default function SoulWeekPlanner({
         });
 
         if (data) {
-            const toText = (value) => {
-              if (value === null || value === undefined) return "";
-              if (typeof value === "string") return value;
-              if (typeof value === "number" || typeof value === "boolean") return String(value);
-              try {
-                return JSON.stringify(value);
-              } catch (_error) {
-                return String(value);
-              }
-            };
-
-            const normalizeStrategies = (value) => {
-              const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-              const next = {};
-              Object.entries(obj).forEach(([key, entry]) => {
-                next[key] = toText(entry);
-              });
-              return next;
-            };
-
-            const normalizeEvents = (value) => {
-              if (!Array.isArray(value)) return [];
-              return value.map((event) => ({
-                date: typeof event?.date === "string" ? event.date : undefined,
-                day_index: typeof event?.day_index === "number" ? event.day_index : undefined,
-                title: toText(event?.title).slice(0, 160),
-                time: typeof event?.time === "string" ? event.time : "09:00",
-                end_time: typeof event?.end_time === "string" ? event.end_time : undefined,
-                is_all_day: Boolean(event?.is_all_day),
-                type: typeof event?.type === "string" ? event.type : "other",
-                icon: toText(event?.icon).slice(0, 8) || "📅",
-                description: toText(event?.description).slice(0, 500)
-              }));
-            };
-
-            const normalizeAutomations = (value) => {
-              if (!Array.isArray(value)) return [];
-              return value.map((automation) => ({
-                title: toText(automation?.title).slice(0, 160),
-                description: toText(automation?.description).slice(0, 500),
-                icon: toText(automation?.icon).slice(0, 8) || "⚙️",
-                status: typeof automation?.status === "string" ? automation.status : "pending"
-              }));
-            };
-
-            const normalizeStats = (value) => {
-              const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-              const focus = Number(obj.focus_hours);
-              const meetings = Number(obj.meetings);
-              return {
-                focus_hours: Number.isFinite(focus) ? focus : 0,
-                meetings: Number.isFinite(meetings) ? meetings : 0,
-                travel_days: Number.isFinite(Number(obj.travel_days)) ? Number(obj.travel_days) : 0
-              };
-            };
-
-            const normalized = {
-              ...data,
-              plan_start_date: data.plan_start_date || currentWeekStartStr,
-              theme: toText(data.theme).slice(0, 120),
-              summary: toText(data.summary).slice(0, 1200),
-              events: normalizeEvents(data.events),
-              automations: normalizeAutomations(data.automations),
-              device_strategies: normalizeStrategies(data.device_strategies),
-              stats: normalizeStats(data.stats),
-            };
+            const normalized = normalizeWeekPayload(data, currentWeekStartStr);
             setWeekData(normalized);
 
             clearInterval(stepInterval);
@@ -411,22 +548,27 @@ export default function SoulWeekPlanner({
         existingPlan: weekData
       });
       if (data) {
+        const normalizedAppend = normalizeWeekPayload(data, weekData.plan_start_date || currentWeekStartStr);
         // Merge: keep existing events and add new ones, merge strategies
         const merged = {
           ...weekData,
-          ...data,
+          ...normalizedAppend,
           events: [
             ...(weekData.events || []),
-            ...(data.events || []).filter(newE =>
+            ...(normalizedAppend.events || []).filter(newE =>
               !(weekData.events || []).some(e => e.title === newE.title && e.date === newE.date)
             )
           ],
           automations: [
             ...(weekData.automations || []),
-            ...(data.automations || []).filter(newA =>
+            ...(normalizedAppend.automations || []).filter(newA =>
               !(weekData.automations || []).some(a => a.title === newA.title)
             )
-          ]
+          ],
+          device_strategies: {
+            ...(weekData.device_strategies || {}),
+            ...(normalizedAppend.device_strategies || {})
+          }
         };
         setWeekData(merged);
         savePlanToDB(merged, userInput + '\n' + appendInput);

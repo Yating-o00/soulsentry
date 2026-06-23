@@ -210,22 +210,19 @@ export default function SoulWeekPlanner({
         });
 
         if (data) {
-            setWeekData(data);
-            
-            // Intelligent Date Alignment
-            if (data.plan_start_date) {
-                // Parse manually to ensure local time (avoid UTC timezone shifts)
-                const [py, pm, pd] = data.plan_start_date.split('-').map(Number);
-                const plannedStart = new Date(py, pm - 1, pd);
-                
-                const currentStartStr = format(start, 'yyyy-MM-dd');
-                
-                // If the planned week is different from the currently viewed week, switch view
-                if (data.plan_start_date !== currentStartStr && !isNaN(plannedStart.getTime())) {
-                    setCurrentWeekDate(plannedStart);
-                    toast.info(`已自动跳转到规划周: ${data.plan_start_date}`, { icon: "📅" });
-                }
-            }
+            const normalized = {
+              ...data,
+              plan_start_date: data.plan_start_date || currentWeekStartStr,
+              events: Array.isArray(data.events) ? data.events : [],
+              automations: Array.isArray(data.automations) ? data.automations : [],
+              device_strategies: (data.device_strategies && typeof data.device_strategies === 'object' && !Array.isArray(data.device_strategies))
+                ? data.device_strategies
+                : {},
+              stats: (data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats))
+                ? data.stats
+                : {},
+            };
+            setWeekData(normalized);
 
             clearInterval(stepInterval);
             setProcessingStepIndex(PROCESSING_STEPS.length - 1);
@@ -239,22 +236,22 @@ export default function SoulWeekPlanner({
                     toast.warning("AI服务不可用 (API Key无效)，已显示演示数据", { duration: 5000 });
                 } else {
                     toast.success("已生成全情境规划");
-                    savePlanToDB(data, userInput);
+                    savePlanToDB(normalized, userInput);
 
                     // 用户输入 → 一条父约定；AI 拆解的事件/自动执行 → 子约定挂到父下
-                    const weekStart = data.plan_start_date || format(start, 'yyyy-MM-dd');
+                    const weekStart = normalized.plan_start_date || format(start, 'yyyy-MM-dd');
                     extractAndCreateTasks(userInput, weekStart).then(async tasks => {
                       const parent = tasks?.[0];
                       if (!parent?.id) return;
                       const childItems = [
-                        ...(data.events || []).map(e => ({
+                        ...(normalized.events || []).map(e => ({
                           title: e.title,
                           description: e.description || '',
                           date: e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : undefined,
                           time: e.time,
                           tag: '周事件',
                         })),
-                        ...(data.automations || []).map(a => ({
+                        ...(normalized.automations || []).map(a => ({
                           title: a.title,
                           description: a.description || '',
                           tag: 'AI自动执行',
@@ -263,7 +260,7 @@ export default function SoulWeekPlanner({
                       const n = await attachPlanItemsToParent(parent.id, childItems, '周度规划').catch(() => 0);
                       toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
                     }).catch(e => console.error("Task sync failed", e));
-                    syncPlanToNote(userInput, "week_plan", { dateRange: weekRangeLabel, theme: data.theme }).then(note => {
+                    syncPlanToNote(userInput, "week_plan", { dateRange: weekRangeLabel, theme: normalized.theme }).then(note => {
                       if (note) toast.success("已同步到心签");
                     }).catch(e => console.error("Note sync failed", e));
                 }

@@ -60,6 +60,52 @@ const PROCESSING_STEPS = [
   { icon: '✨', text: '最终编织周情境网络...' }
 ];
 
+function normalizeStrategyDisplay(strategy) {
+  if (!strategy) {
+    return {
+      summary: "本周无特殊策略，保持常规辅助模式。",
+      lines: []
+    };
+  }
+
+  if (typeof strategy === "string") {
+    return {
+      summary: strategy || "本周无特殊策略，保持常规辅助模式。",
+      lines: []
+    };
+  }
+
+  if (typeof strategy === "object" && !Array.isArray(strategy)) {
+    const notifications = Array.isArray(strategy.notifications)
+      ? strategy.notifications
+          .map((item) => {
+            const date = typeof item?.date === "string" ? item.date : "";
+            const time = typeof item?.time === "string" ? item.time : "";
+            const message = typeof item?.message === "string" ? item.message : "";
+            const prefix = [date, time].filter(Boolean).join(" ");
+            return [prefix, message].filter(Boolean).join(" ");
+          })
+          .filter(Boolean)
+      : [];
+
+    const lines = notifications.length > 0
+      ? notifications
+      : Object.entries(strategy)
+          .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
+          .filter(Boolean);
+
+    return {
+      summary: lines[0] || "本周无特殊策略，保持常规辅助模式。",
+      lines
+    };
+  }
+
+  return {
+    summary: String(strategy),
+    lines: []
+  };
+}
+
 export default function SoulWeekPlanner({
   currentDate: initialDate,
   tasks = [],
@@ -755,6 +801,7 @@ export default function SoulWeekPlanner({
                             {Object.entries(DEVICE_MAP).map(([key, config]) => {
                                 const DeviceIcon = config.icon;
                                 const strategy = weekData.device_strategies?.[key];
+                                const strategyDisplay = normalizeStrategyDisplay(strategy);
                                 const isSelected = selectedDevice === key;
 
                                 return (
@@ -780,7 +827,9 @@ export default function SoulWeekPlanner({
                                         </h4>
                                         <div className="flex items-center justify-center gap-1.5">
                                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-                                            <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">在线</span>
+                                            <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">
+                                              {strategyDisplay.lines.length > 0 || strategyDisplay.summary !== "本周无特殊策略，保持常规辅助模式。" ? "已规划" : "在线"}
+                                            </span>
                                         </div>
                                     </div>
                                     </div>
@@ -797,6 +846,10 @@ export default function SoulWeekPlanner({
                             exit={{ opacity: 0, y: -10 }}
                             className="mt-4 bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm"
                             >
+                                {(() => {
+                                  const strategyDisplay = normalizeStrategyDisplay(weekData.device_strategies?.[selectedDevice]);
+                                  return (
+                                    <>
                                 <div className="flex items-start gap-4">
                                     <div className="w-10 h-10 rounded-full bg-[#384877]/5 flex items-center justify-center text-[#384877]">
                                         <Zap className="w-5 h-5" />
@@ -804,12 +857,22 @@ export default function SoulWeekPlanner({
                                     <div>
                                         <h4 className="text-sm font-medium text-slate-500 mb-1">本周策略 · {DEVICE_MAP[selectedDevice].name}</h4>
                                         <p className="text-base text-slate-900 font-medium leading-relaxed">
-                                            {typeof weekData.device_strategies?.[selectedDevice] === 'string'
-                                              ? (weekData.device_strategies?.[selectedDevice] || "本周无特殊策略，保持常规辅助模式。")
-                                              : "本周无特殊策略，保持常规辅助模式。"}
+                                            {strategyDisplay.summary}
                                         </p>
                                     </div>
                                 </div>
+                                {strategyDisplay.lines.length > 1 && (
+                                  <div className="mt-4 pl-14 space-y-2">
+                                    {strategyDisplay.lines.slice(1).map((line, index) => (
+                                      <div key={index} className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-xl px-3 py-2">
+                                        {line}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                    </>
+                                  );
+                                })()}
                             </motion.div>
                         </AnimatePresence>
                         </section>

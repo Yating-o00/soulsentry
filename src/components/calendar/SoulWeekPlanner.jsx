@@ -210,17 +210,71 @@ export default function SoulWeekPlanner({
         });
 
         if (data) {
+            const toText = (value) => {
+              if (value === null || value === undefined) return "";
+              if (typeof value === "string") return value;
+              if (typeof value === "number" || typeof value === "boolean") return String(value);
+              try {
+                return JSON.stringify(value);
+              } catch (_error) {
+                return String(value);
+              }
+            };
+
+            const normalizeStrategies = (value) => {
+              const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+              const next = {};
+              Object.entries(obj).forEach(([key, entry]) => {
+                next[key] = toText(entry);
+              });
+              return next;
+            };
+
+            const normalizeEvents = (value) => {
+              if (!Array.isArray(value)) return [];
+              return value.map((event) => ({
+                date: typeof event?.date === "string" ? event.date : undefined,
+                day_index: typeof event?.day_index === "number" ? event.day_index : undefined,
+                title: toText(event?.title).slice(0, 160),
+                time: typeof event?.time === "string" ? event.time : "09:00",
+                end_time: typeof event?.end_time === "string" ? event.end_time : undefined,
+                is_all_day: Boolean(event?.is_all_day),
+                type: typeof event?.type === "string" ? event.type : "other",
+                icon: toText(event?.icon).slice(0, 8) || "📅",
+                description: toText(event?.description).slice(0, 500)
+              }));
+            };
+
+            const normalizeAutomations = (value) => {
+              if (!Array.isArray(value)) return [];
+              return value.map((automation) => ({
+                title: toText(automation?.title).slice(0, 160),
+                description: toText(automation?.description).slice(0, 500),
+                icon: toText(automation?.icon).slice(0, 8) || "⚙️",
+                status: typeof automation?.status === "string" ? automation.status : "pending"
+              }));
+            };
+
+            const normalizeStats = (value) => {
+              const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+              const focus = Number(obj.focus_hours);
+              const meetings = Number(obj.meetings);
+              return {
+                focus_hours: Number.isFinite(focus) ? focus : 0,
+                meetings: Number.isFinite(meetings) ? meetings : 0,
+                travel_days: Number.isFinite(Number(obj.travel_days)) ? Number(obj.travel_days) : 0
+              };
+            };
+
             const normalized = {
               ...data,
               plan_start_date: data.plan_start_date || currentWeekStartStr,
-              events: Array.isArray(data.events) ? data.events : [],
-              automations: Array.isArray(data.automations) ? data.automations : [],
-              device_strategies: (data.device_strategies && typeof data.device_strategies === 'object' && !Array.isArray(data.device_strategies))
-                ? data.device_strategies
-                : {},
-              stats: (data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats))
-                ? data.stats
-                : {},
+              theme: toText(data.theme).slice(0, 120),
+              summary: toText(data.summary).slice(0, 1200),
+              events: normalizeEvents(data.events),
+              automations: normalizeAutomations(data.automations),
+              device_strategies: normalizeStrategies(data.device_strategies),
+              stats: normalizeStats(data.stats),
             };
             setWeekData(normalized);
 
@@ -543,7 +597,7 @@ export default function SoulWeekPlanner({
                    <div className="flex items-center gap-3 mb-1">
                        <h3 className="text-2xl font-bold text-slate-900">已为你安排</h3>
                        <span className="px-3 py-1 bg-[#384877]/10 text-[#384877] text-xs font-medium rounded-full">
-                          {weekData.theme || '周计划'}
+                          {typeof weekData.theme === 'string' ? (weekData.theme || '周计划') : '周计划'}
                        </span>
                    </div>
                    <p className="text-sm text-slate-500">基于输入: "{userInput.length > 30 ? userInput.substring(0, 30) + '...' : userInput}"</p>
@@ -655,7 +709,7 @@ export default function SoulWeekPlanner({
                                 <div className="relative z-10">
                                     <div className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2">本周摘要</div>
                                     <p className="text-lg font-medium leading-relaxed opacity-95">
-                                        {weekData.summary}
+                                        {typeof weekData.summary === 'string' ? weekData.summary : ''}
                                     </p>
                                 </div>
                             </div>
@@ -741,7 +795,9 @@ export default function SoulWeekPlanner({
                                     <div>
                                         <h4 className="text-sm font-medium text-slate-500 mb-1">本周策略 · {DEVICE_MAP[selectedDevice].name}</h4>
                                         <p className="text-base text-slate-900 font-medium leading-relaxed">
-                                            {weekData.device_strategies?.[selectedDevice] || "本周无特殊策略，保持常规辅助模式。"}
+                                            {typeof weekData.device_strategies?.[selectedDevice] === 'string'
+                                              ? (weekData.device_strategies?.[selectedDevice] || "本周无特殊策略，保持常规辅助模式。")
+                                              : "本周无特殊策略，保持常规辅助模式。"}
                                         </p>
                                     </div>
                                 </div>

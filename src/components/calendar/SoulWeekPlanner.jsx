@@ -82,6 +82,7 @@ export default function SoulWeekPlanner({
   const [isAppending, setIsAppending] = useState(false);
   const [showAppendInput, setShowAppendInput] = useState(false);
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
+  const processingLockRef = useRef(false);
 
   // Sync internal state with prop changes (e.g. when user navigates in the parent Dashboard)
   useEffect(() => {
@@ -189,9 +190,14 @@ export default function SoulWeekPlanner({
 
   const handleProcess = async () => {
     if (!userInput.trim()) return;
+    if (processingLockRef.current) return;
+    processingLockRef.current = true;
     
     const allowed = await gate("weekly_plan", "周计划生成");
-    if (!allowed) return;
+    if (!allowed) {
+      processingLockRef.current = false;
+      return;
+    }
 
     setStage('processing');
     setIsProcessing(true);
@@ -285,6 +291,7 @@ export default function SoulWeekPlanner({
             setTimeout(() => {
                 setStage('results');
                 setIsProcessing(false);
+                processingLockRef.current = false;
                 
                 if (data.is_demo) {
                     toast.warning("AI服务不可用 (API Key无效)，已显示演示数据", { duration: 5000 });
@@ -324,6 +331,7 @@ export default function SoulWeekPlanner({
                 }, 100);
             }, 800);
         }
+        processingLockRef.current = false;
     } catch (error) {
         console.error("Planning failed details:", error);
         // Show more detailed error if available
@@ -331,6 +339,7 @@ export default function SoulWeekPlanner({
         toast.error(`规划生成失败: ${errorMsg}`);
         setStage('input');
         setIsProcessing(false);
+        processingLockRef.current = false;
         clearInterval(stepInterval);
     }
   };

@@ -58,6 +58,7 @@ model User {
   notificationRules NotificationRule[]
   creditTxs         AICreditTransaction[]
   taskExecutions    TaskExecution[]
+<<<<<<< HEAD
   dailyPlans        DailyPlan[]
   weeklyPlans       WeeklyPlan[]
   monthlyPlans      MonthlyPlan[]
@@ -71,6 +72,10 @@ model User {
   memoryRecords     MemoryRecord[]
   knowledgeBases    KnowledgeBase[]
   externalFeeds     ExternalFeed[]
+=======
+  weeklyPlans       WeeklyPlan[]
+  monthlyPlans      MonthlyPlan[]
+>>>>>>> a4f998e (feat: 呈现产品页面)
 }
 
 model UserPreference {
@@ -363,6 +368,7 @@ model TaskExecution {
   @@index([userId, completedAt])
 }
 
+<<<<<<< HEAD
 model DailyPlan {
   id            String   @id @default(cuid())
   userId        String
@@ -382,6 +388,8 @@ model DailyPlan {
   @@index([userId, updatedAt])
 }
 
+=======
+>>>>>>> a4f998e (feat: 呈现产品页面)
 model WeeklyPlan {
   id            String   @id @default(cuid())
   userId        String
@@ -397,8 +405,11 @@ model WeeklyPlan {
 
   @@index([userId, weekStartDate])
   @@index([userId, isActive])
+<<<<<<< HEAD
   @@index([userId, createdAt])
   @@index([userId, updatedAt])
+=======
+>>>>>>> a4f998e (feat: 呈现产品页面)
 }
 
 model MonthlyPlan {
@@ -416,6 +427,7 @@ model MonthlyPlan {
 
   @@index([userId, monthStartDate])
   @@index([userId, isActive])
+<<<<<<< HEAD
   @@index([userId, createdAt])
   @@index([userId, updatedAt])
 }
@@ -481,4 +493,6 @@ model TaskChangeLog {
   @@index([userId, createdAt])
   @@index([taskId, createdAt])
   @@index([parentTaskId, createdAt])
+=======
+>>>>>>> a4f998e (feat: 呈现产品页面)
 }

@@ -29,6 +29,8 @@ import { taskCompletionsRouter } from "./routes/taskCompletions.js";
 import { taskChangeLogsRouter } from "./routes/taskChangeLogs.js";
 import { uploadsRouter } from "./routes/uploads.js";
 import { functionsRouter } from "./routes/functions.js";
+import { weeklyPlansRouter } from "./routes/weeklyPlans.js";
+import { monthlyPlansRouter } from "./routes/monthlyPlans.js";
 
 export const app = express();
 
@@ -63,6 +65,7 @@ app.use("/api/memory-records", memoryRecordsRouter);
 app.use("/api/knowledge-bases", knowledgeBasesRouter);
 app.use("/api/external-feeds", externalFeedsRouter);
 app.use("/api/task-executions", taskExecutionsRouter);
+<<<<<<< HEAD
 app.use("/api/daily-plans", dailyPlansRouter);
 app.use("/api/weekly-plans", weeklyPlansRouter);
 app.use("/api/monthly-plans", monthlyPlansRouter);
@@ -71,6 +74,10 @@ app.use("/api/note-comments", noteCommentsRouter);
 app.use("/api/task-completions", taskCompletionsRouter);
 app.use("/api/task-change-logs", taskChangeLogsRouter);
 app.use("/api/uploads", uploadsRouter);
+=======
+app.use("/api/weekly-plans", weeklyPlansRouter);
+app.use("/api/monthly-plans", monthlyPlansRouter);
+>>>>>>> a4f998e (feat: 呈现产品页面)
 app.use("/api/functions", functionsRouter);
 
 app.use("/uploads", express.static(path.resolve(process.cwd(), env.UPLOAD_DIR)));

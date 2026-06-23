@@ -23,6 +23,7 @@ const taskInputSchema = z.object({
   tags: z.any().optional(),
   reminder_strategy: z.any().optional(),
   metadata: z.any().optional()
+<<<<<<< HEAD
 }).passthrough();
 
 const taskBatchInputSchema = z.array(taskInputSchema).min(1).max(100);
@@ -46,6 +47,10 @@ const KNOWN_TASK_FIELDS = new Set([
   "reminder_strategy",
   "metadata"
 ]);
+=======
+});
+const taskBatchInputSchema = z.array(taskInputSchema).min(1).max(100);
+>>>>>>> a4f998e (feat: 呈现产品页面)
 
 tasksRouter.use(requireAuth);
 
@@ -241,8 +246,11 @@ tasksRouter.get("/", async (req, res) => {
   }
   if (req.query.category) where.category = String(req.query.category);
   if (req.query.status) where.status = toPrismaTaskStatus(req.query.status);
+<<<<<<< HEAD
 
   // 默认不返回已删除任务，避免前端删除后“视觉上消失但刷新又回来”
+=======
+>>>>>>> a4f998e (feat: 呈现产品页面)
   if (req.query.deleted_at === undefined) {
     where.deletedAt = null;
   } else {
@@ -306,6 +314,7 @@ tasksRouter.post("/batch", async (req, res) => {
 
   const tasks = await prisma.$transaction(async (tx) => {
     const created = [];
+<<<<<<< HEAD
 
     for (const item of payload.data) {
       const task = await tx.task.create({
@@ -327,6 +336,33 @@ tasksRouter.post("/batch", async (req, res) => {
       created.push(task);
     }
 
+=======
+    for (const item of payload.data) {
+      const task = await tx.task.create({
+        data: {
+          userId: req.user.id,
+          title: item.title,
+          description: item.description,
+          status: toPrismaTaskStatus(item.status),
+          priority: item.priority || "medium",
+          category: item.category,
+          dueAt: item.due_at ? new Date(item.due_at) : null,
+          reminderTime: item.reminder_time ? new Date(item.reminder_time) : null,
+          endTime: item.end_time ? new Date(item.end_time) : null,
+          isAllDay: Boolean(item.is_all_day),
+          parentTaskId: item.parent_task_id || null,
+          gcalSyncEnabled: Boolean(item.gcal_sync_enabled),
+          progress: item.progress ?? 0,
+          completedAt: item.completed_at ? new Date(item.completed_at) : null,
+          deletedAt: item.deleted_at ? new Date(item.deleted_at) : null,
+          tags: item.tags,
+          reminderStrategy: item.reminder_strategy,
+          metadata: item.metadata
+        }
+      });
+      created.push(task);
+    }
+>>>>>>> a4f998e (feat: 呈现产品页面)
     return created;
   });
 

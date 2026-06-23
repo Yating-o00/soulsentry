@@ -73,20 +73,29 @@ function toText(value) {
 
 function parseJsonLike(value) {
   if (typeof value !== "string") return value;
-  const trimmed = value.trim();
-  if (!trimmed) return "";
+  let current = value.trim();
+  if (!current) return "";
 
-  const looksLikeJson =
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"));
+  for (let i = 0; i < 3; i += 1) {
+    const first = current[0];
+    const mayBeJson = first === "{" || first === "[" || first === "\"";
+    if (!mayBeJson) break;
 
-  if (!looksLikeJson) return trimmed;
-
-  try {
-    return JSON.parse(trimmed);
-  } catch (_error) {
-    return trimmed;
+    try {
+      const parsed = JSON.parse(current);
+      if (typeof parsed === "string") {
+        const next = parsed.trim();
+        if (!next || next === current) return next;
+        current = next;
+        continue;
+      }
+      return parsed;
+    } catch (_error) {
+      break;
+    }
   }
+
+  return current;
 }
 
 function hasDisplayValue(value) {

@@ -367,6 +367,25 @@ functionsRouter.post("/:name", async (req, res) => {
       return res.json({ results });
     }
 
+    if (name === "getSentinelGuard") {
+      return res.json({
+        success: true,
+        geo_context: null,
+        forgetting_rescue: null,
+        generated_at: new Date().toISOString()
+      });
+    }
+
+    if (name === "getAssociationRecommendations") {
+      return res.json({
+        success: true,
+        sequential_recommendation: null,
+        location_pattern: null,
+        rules_count: 0,
+        generated_at: new Date().toISOString()
+      });
+    }
+
     if (name === "fetchExternalFeeds") {
       const feed = await prisma.externalFeed.findFirst({
         where: {

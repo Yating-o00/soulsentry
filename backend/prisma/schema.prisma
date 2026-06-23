@@ -59,6 +59,8 @@ model User {
   creditTxs         AICreditTransaction[]
   taskExecutions    TaskExecution[]
   dailyPlans        DailyPlan[]
+  weeklyPlans       WeeklyPlan[]
+  monthlyPlans      MonthlyPlan[]
   comments          Comment[]
   noteComments      NoteComment[]
   taskCompletions   TaskCompletion[]
@@ -375,6 +377,44 @@ model DailyPlan {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, planDate])
+  @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+}
+
+model WeeklyPlan {
+  id            String   @id @default(cuid())
+  userId        String
+  weekStartDate String
+  originalInput String?
+  theme         String?
+  summary       String?
+  planJson      Json
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, weekStartDate])
+  @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+}
+
+model MonthlyPlan {
+  id             String   @id @default(cuid())
+  userId         String
+  monthStartDate String
+  originalInput  String?
+  theme          String?
+  summary        String?
+  planJson       Json
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, monthStartDate])
   @@index([userId, isActive])
   @@index([userId, createdAt])
   @@index([userId, updatedAt])

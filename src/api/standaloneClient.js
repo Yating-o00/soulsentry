@@ -471,6 +471,59 @@ function createDailyPlanEntity() {
   };
 }
 
+function createPlanEntity(resourcePath, dateField) {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`${resourcePath}?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`${resourcePath}?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`${resourcePath}/${id}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest(resourcePath, {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`${resourcePath}/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`${resourcePath}/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe(listener) {
+      return subscribeToEntity(
+        resourcePath,
+        () => httpRequest(`${resourcePath}?sort=-${dateField}&limit=100`),
+        listener
+      );
+    }
+  };
+}
+
 function createUserEntity() {
   return {
     async list(sort = "created_date", limit = 100) {
@@ -1040,6 +1093,14 @@ function createEntityProxy() {
 
         if (entityName === "DailyPlan") {
           return createDailyPlanEntity();
+        }
+
+        if (entityName === "WeeklyPlan") {
+          return createPlanEntity("/api/weekly-plans", "week_start_date");
+        }
+
+        if (entityName === "MonthlyPlan") {
+          return createPlanEntity("/api/monthly-plans", "month_start_date");
         }
 
         if (entityName === "User") {

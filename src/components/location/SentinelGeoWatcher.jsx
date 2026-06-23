@@ -82,10 +82,13 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
             });
           } catch (e) {
             // 命中限流则进入冷却，避免持续打 base44
-            const status = e?.response?.status;
+            const status = e?.status || e?.response?.status;
+            const code = e?.data?.error;
             if (status === 429 || /rate limit/i.test(e?.message || '')) {
               cooldownUntilRef.current = Date.now() + RATE_LIMIT_COOLDOWN_MS;
               console.warn('[SentinelGeoWatcher] 命中限流，暂停 10 分钟');
+            } else if (status === 404 || code === "NOT_FOUND") {
+              // 独立后端未启用地理围栏函数时静默跳过，避免持续刷屏。
             } else {
               console.warn('[SentinelGeoWatcher] trigger failed:', e?.message);
             }

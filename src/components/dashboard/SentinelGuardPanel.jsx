@@ -55,6 +55,12 @@ export default function SentinelGuardPanel() {
       new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), REQUEST_TIMEOUT_MS))
     ]);
 
+    const isMissingCapability = (reason) => {
+      const status = reason?.status || reason?.response?.status;
+      const code = reason?.data?.error;
+      return status === 404 || code === "NOT_FOUND" || /未找到函数|not found/i.test(reason?.message || "");
+    };
+
     try {
       // 用 allSettled 而不是 all：一个失败不应该让另一个的结果也丢失
       const [guardRes, assocRes] = await Promise.allSettled([
@@ -71,11 +77,18 @@ export default function SentinelGuardPanel() {
         const guardMsg = guardRes.reason?.message || '';
         const assocMsg = assocRes.reason?.message || '';
         const isRateLimit =
-          /rate limit/i.test(guardMsg) || guardRes.reason?.response?.status === 429 ||
-          /rate limit/i.test(assocMsg) || assocRes.reason?.response?.status === 429;
+          /rate limit/i.test(guardMsg) || (guardRes.reason?.status || guardRes.reason?.response?.status) === 429 ||
+          /rate limit/i.test(assocMsg) || (assocRes.reason?.status || assocRes.reason?.response?.status) === 429;
+        const isMissing =
+          isMissingCapability(guardRes.reason) &&
+          isMissingCapability(assocRes.reason);
         if (isRateLimit) {
           GUARD_CACHE.ts = Date.now();
           console.warn('[sentinel-guard] 命中限流，5 分钟内不再重试');
+        } else if (isMissing) {
+          GUARD_CACHE.ts = Date.now();
+          GUARD_CACHE.data = null;
+          GUARD_CACHE.assoc = null;
         } else {
           console.warn('[sentinel-guard] 拉取失败', guardRes.reason, assocRes.reason);
           setErrored(true);
@@ -84,8 +97,8 @@ export default function SentinelGuardPanel() {
         GUARD_CACHE.ts = Date.now();
         GUARD_CACHE.data = g;
         GUARD_CACHE.assoc = a;
-        if (guardFailed) console.warn('[sentinel-guard] guard 失败但 assoc 成功', guardRes.reason);
-        if (assocFailed) console.warn('[sentinel-guard] assoc 失败但 guard 成功', assocRes.reason);
+        if (guardFailed && !isMissingCapability(guardRes.reason)) console.warn('[sentinel-guard] guard 失败但 assoc 成功', guardRes.reason);
+        if (assocFailed && !isMissingCapability(assocRes.reason)) console.warn('[sentinel-guard] assoc 失败但 guard 成功', assocRes.reason);
       }
       setData(g);
       setAssoc(a);
@@ -107,10 +120,10 @@ export default function SentinelGuardPanel() {
   useEffect(() => {
     const markDirty = () => { GUARD_CACHE.dirty = true; };
     const unsubs = [];
-    try { const u = base44.entities.Task?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch {}
-    try { const u = base44.entities.Note?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch {}
-    try { const u = base44.entities.SavedLocation?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch {}
-    return () => { unsubs.forEach((u) => { try { u?.(); } catch {} }); };
+    try { const u = base44.entities.Task?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch (_error) { void _error; }
+    try { const u = base44.entities.Note?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch (_error) { void _error; }
+    try { const u = base44.entities.SavedLocation?.subscribe?.(markDirty); if (u) unsubs.push(u); } catch (_error) { void _error; }
+    return () => { unsubs.forEach((u) => { try { u?.(); } catch (_error) { void _error; } }); };
   }, []);
 
   const handleSnooze = (type) => {

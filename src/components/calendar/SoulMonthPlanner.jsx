@@ -313,14 +313,13 @@ export default function SoulMonthPlanner({
                             <Button variant="ghost" size="icon" className="text-slate-400 hover:text-[#384877] hover:bg-slate-50">
                               <ImageIcon className="w-5 h-5" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => setShowQuickTemplates(!showQuickTemplates)}
-                              className="text-xs text-slate-500 hover:text-[#384877] hover:bg-slate-50 gap-1"
+                            <button
+                              type="button"
+                              onClick={() => setShowQuickTemplates((prev) => !prev)}
+                              className="inline-flex items-center rounded-md px-2 py-1 text-xs text-slate-500 hover:text-[#384877] hover:bg-slate-50 gap-1"
                             >
                               快速模板 <ChevronDown className="w-3 h-3" />
-                            </Button>
+                            </button>
                          </div>
                          <Button 
                             onClick={handleProcess}

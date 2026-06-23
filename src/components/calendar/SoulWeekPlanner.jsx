@@ -92,10 +92,31 @@ export default function SoulWeekPlanner({
 
   const resultsRef = useRef(null);
 
-  const start = startOfWeek(currentWeekDate, { locale: zhCN, weekStartsOn: 1 });
-  const end = endOfWeek(currentWeekDate, { locale: zhCN, weekStartsOn: 1 });
-  const currentWeekStartStr = format(start, 'yyyy-MM-dd');
-  const weekRangeLabel = `${format(start, 'M月d日')} - ${format(end, 'M月d日')}`;
+  const safeWeekBaseDate = (() => {
+    if (currentWeekDate instanceof Date && !Number.isNaN(currentWeekDate.getTime())) {
+      return currentWeekDate;
+    }
+    return new Date();
+  })();
+
+  const start = startOfWeek(safeWeekBaseDate, { locale: zhCN, weekStartsOn: 1 });
+  const end = endOfWeek(safeWeekBaseDate, { locale: zhCN, weekStartsOn: 1 });
+
+  const currentWeekStartStr = (() => {
+    try {
+      return format(start, 'yyyy-MM-dd');
+    } catch (_error) {
+      return format(startOfWeek(new Date(), { locale: zhCN, weekStartsOn: 1 }), 'yyyy-MM-dd');
+    }
+  })();
+
+  const weekRangeLabel = (() => {
+    try {
+      return `${format(start, 'M月d日')} - ${format(end, 'M月d日')}`;
+    } catch (_error) {
+      return '';
+    }
+  })();
 
   const queryClient = useQueryClient();
 
@@ -421,14 +442,13 @@ export default function SoulWeekPlanner({
                             <Button variant="ghost" size="icon" className="text-slate-400 hover:text-[#384877] hover:bg-slate-50">
                               <ImageIcon className="w-5 h-5" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => setShowQuickTemplates(!showQuickTemplates)}
-                              className="text-xs text-slate-500 hover:text-[#384877] hover:bg-slate-50 gap-1"
+                            <button
+                              type="button"
+                              onClick={() => setShowQuickTemplates((prev) => !prev)}
+                              className="inline-flex items-center rounded-md px-2 py-1 text-xs text-slate-500 hover:text-[#384877] hover:bg-slate-50 gap-1"
                             >
                               快速模板 <ChevronDown className="w-3 h-3" />
-                            </Button>
+                            </button>
                          </div>
                          <Button 
                             onClick={handleProcess}

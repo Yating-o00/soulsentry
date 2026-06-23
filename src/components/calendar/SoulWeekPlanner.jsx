@@ -60,6 +60,194 @@ const PROCESSING_STEPS = [
   { icon: '✨', text: '最终编织周情境网络...' }
 ];
 
+function parseJsonLike(value) {
+  if (typeof value !== "string") return value;
+  let current = value.trim();
+  if (!current) return "";
+
+  for (let i = 0; i < 3; i += 1) {
+    const first = current[0];
+    const mayBeJson = first === "{" || first === "[" || first === "\"";
+    if (!mayBeJson) break;
+
+    try {
+      const parsed = JSON.parse(current);
+      if (typeof parsed === "string") {
+        const next = parsed.trim();
+        if (!next || next === current) return next;
+        current = next;
+        continue;
+      }
+      return parsed;
+    } catch (_error) {
+      break;
+    }
+  }
+
+  return current;
+}
+
+function hasDisplayValue(value) {
+  if (value === null || value === undefined || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+function sanitizeStrategyValue(value) {
+  const parsed = parseJsonLike(value);
+
+  if (parsed === null || parsed === undefined) return "";
+  if (typeof parsed === "string") return parsed.trim();
+  if (typeof parsed === "number" || typeof parsed === "boolean") return String(parsed);
+
+  if (Array.isArray(parsed)) {
+    return parsed
+      .map((item) => sanitizeStrategyValue(item))
+      .filter((item) => hasDisplayValue(item));
+  }
+
+  if (typeof parsed === "object") {
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, item]) => [key, sanitizeStrategyValue(item)])
+        .filter(([, item]) => hasDisplayValue(item))
+    );
+  }
+
+  return "";
+}
+
+function formatStrategyLabel(key) {
+  const labelMap = {
+    morning_briefing: "早间简报",
+    evening_summary: "晚间总结",
+    events: "关注事项",
+    notifications: "提醒安排",
+    include: "包含内容",
+    summary: "摘要",
+    time: "时间",
+    date: "日期",
+    location: "地点",
+    message: "内容"
+  };
+
+  if (labelMap[key]) return labelMap[key];
+
+  return String(key)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function buildStrategyLines(value, label = "") {
+  if (!hasDisplayValue(value)) return [];
+
+  if (typeof value === "string") {
+    return [label ? `${label}：${value}` : value];
+  }
+
+  if (Array.isArray(value)) {
+    if (value.every((item) => typeof item === "string")) {
+      const text = value.filter(Boolean).join("、");
+      return text ? [label ? `${label}：${text}` : text] : [];
+    }
+
+    return value.flatMap((item, index) => {
+      const nextLabel = label && typeof item !== "string" ? `${label} ${index + 1}` : label;
+      return buildStrategyLines(item, nextLabel);
+    });
+  }
+
+  if (typeof value === "object") {
+    const quickParts = [
+      typeof value.date === "string" ? value.date : "",
+      typeof value.time === "string" ? value.time : "",
+      typeof value.title === "string" ? value.title : "",
+      typeof value.summary === "string" ? value.summary : "",
+      typeof value.message === "string" ? value.message : ""
+    ].filter(Boolean);
+
+    const includeText = Array.isArray(value.include)
+      ? value.include.filter(Boolean).join("、")
+      : typeof value.include === "string"
+        ? value.include
+        : "";
+
+    if (quickParts.length > 0 || includeText) {
+      const mainText = quickParts.join(" ");
+      const tail = includeText ? `包含${includeText}` : "";
+      const content = [mainText, tail].filter(Boolean).join("，");
+      return content ? [label ? `${label}：${content}` : content] : [];
+    }
+
+    return Object.entries(value).flatMap(([key, item]) =>
+      buildStrategyLines(item, formatStrategyLabel(key))
+    );
+  }
+
+  return [label ? `${label}：${String(value)}` : String(value)];
+}
+
+function normalizeStrategyDisplay(strategy) {
+  const normalizedStrategy = sanitizeStrategyValue(strategy);
+
+  if (!hasDisplayValue(normalizedStrategy)) {
+    return {
+      summary: "本周无特殊策略，保持常规辅助模式。",
+      lines: []
+    };
+  }
+
+  if (typeof normalizedStrategy === "string") {
+    return {
+      summary: normalizedStrategy,
+      lines: []
+    };
+  }
+
+  let lines = [];
+
+  if (Array.isArray(normalizedStrategy)) {
+    lines = buildStrategyLines(normalizedStrategy);
+  } else if (typeof normalizedStrategy === "object") {
+    const processedKeys = new Set();
+
+    if (normalizedStrategy.morning_briefing) {
+      lines.push(...buildStrategyLines(normalizedStrategy.morning_briefing, "早间简报"));
+      processedKeys.add("morning_briefing");
+    }
+
+    if (normalizedStrategy.notifications) {
+      lines.push(...buildStrategyLines(normalizedStrategy.notifications, "提醒安排"));
+      processedKeys.add("notifications");
+    }
+
+    if (normalizedStrategy.events) {
+      lines.push(...buildStrategyLines(normalizedStrategy.events, "关注事项"));
+      processedKeys.add("events");
+    }
+
+    if (normalizedStrategy.evening_summary) {
+      lines.push(...buildStrategyLines(normalizedStrategy.evening_summary, "晚间总结"));
+      processedKeys.add("evening_summary");
+    }
+
+    Object.entries(normalizedStrategy).forEach(([key, value]) => {
+      if (processedKeys.has(key)) return;
+      lines.push(...buildStrategyLines(value, formatStrategyLabel(key)));
+    });
+  }
+
+  const uniqueLines = Array.from(
+    new Set(lines.map((line) => line.trim()).filter(Boolean))
+  );
+
+  return {
+    summary: uniqueLines[0] || "本周无特殊策略，保持常规辅助模式。",
+    lines: uniqueLines
+  };
+}
+
 export default function SoulWeekPlanner({
   currentDate: initialDate,
   tasks = [],
@@ -717,17 +905,33 @@ export default function SoulWeekPlanner({
                             exit={{ opacity: 0, y: -10 }}
                             className="mt-4 bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm"
                             >
-                                <div className="flex items-start gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-[#384877]/5 flex items-center justify-center text-[#384877]">
-                                        <Zap className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-slate-500 mb-1">本周策略 · {DEVICE_MAP[selectedDevice].name}</h4>
-                                        <p className="text-base text-slate-900 font-medium leading-relaxed">
-                                            {weekData.device_strategies?.[selectedDevice] || "本周无特殊策略，保持常规辅助模式。"}
-                                        </p>
-                                    </div>
-                                </div>
+                                {(() => {
+                                  const strategyDisplay = normalizeStrategyDisplay(weekData.device_strategies?.[selectedDevice]);
+                                  return (
+                                    <>
+                                      <div className="flex items-start gap-4">
+                                          <div className="w-10 h-10 rounded-full bg-[#384877]/5 flex items-center justify-center text-[#384877]">
+                                              <Zap className="w-5 h-5" />
+                                          </div>
+                                          <div>
+                                              <h4 className="text-sm font-medium text-slate-500 mb-1">本周策略 · {DEVICE_MAP[selectedDevice].name}</h4>
+                                              <p className="text-base text-slate-900 font-medium leading-relaxed">
+                                                  {strategyDisplay.summary}
+                                              </p>
+                                          </div>
+                                      </div>
+                                      {strategyDisplay.lines.length > 1 && (
+                                        <div className="mt-4 pl-14 space-y-2">
+                                          {strategyDisplay.lines.slice(1).map((line, index) => (
+                                            <div key={index} className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-xl px-3 py-2">
+                                              {line}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                             </motion.div>
                         </AnimatePresence>
                         </section>

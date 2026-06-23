@@ -33,6 +33,7 @@ import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsD
 import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
 import { attachPlanItemsToParent } from "@/components/utils/attachPlanItemsToParent";
 import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
+import DeviceStrategyPanel from "@/components/dashboard/planner/DeviceStrategyPanel";
 import CalendarWeekGridView from "./CalendarWeekGridView";
 
 // Device Configurations with icons mapping
@@ -246,6 +247,153 @@ function normalizeStrategyDisplay(strategy) {
     summary: uniqueLines[0] || "本周无特殊策略，保持常规辅助模式。",
     lines: uniqueLines
   };
+}
+
+function formatStrategyTimelineTime(date, time) {
+  const dateText = typeof date === "string" ? date.trim() : "";
+  const timeText = typeof time === "string" ? time.trim() : "";
+
+  if (dateText && /^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
+    const shortDate = dateText.slice(5);
+    return timeText ? `${shortDate} ${timeText}` : shortDate;
+  }
+
+  if (timeText) return timeText;
+  if (dateText) return dateText;
+  return "本周";
+}
+
+function buildStrategyTimeline(strategy, deviceKey) {
+  const normalizedStrategy = sanitizeStrategyValue(strategy);
+
+  if (!hasDisplayValue(normalizedStrategy)) return [];
+
+  const pushItem = (items, item) => {
+    const content = typeof item?.content === "string" ? item.content.trim() : "";
+    if (!content) return;
+
+    items.push({
+      time: item.time || "本周",
+      priority: item.priority || "medium",
+      content,
+      method: item.method || "协同提醒"
+    });
+  };
+
+  const items = [];
+
+  if (typeof normalizedStrategy === "string") {
+    pushItem(items, {
+      time: "本周",
+      priority: "medium",
+      content: normalizedStrategy,
+      method: "协同策略"
+    });
+    return items;
+  }
+
+  if (Array.isArray(normalizedStrategy)) {
+    normalizedStrategy.forEach((entry, index) => {
+      if (typeof entry === "string") {
+        pushItem(items, {
+          time: "本周",
+          priority: index === 0 ? "medium" : "low",
+          content: entry,
+          method: "协同策略"
+        });
+        return;
+      }
+
+      if (entry && typeof entry === "object") {
+        const content = [
+          typeof entry.title === "string" ? entry.title : "",
+          typeof entry.summary === "string" ? entry.summary : "",
+          typeof entry.message === "string" ? entry.message : ""
+        ].filter(Boolean).join("，");
+
+        pushItem(items, {
+          time: formatStrategyTimelineTime(entry.date, entry.time),
+          priority: "medium",
+          content: content || `策略 ${index + 1}`,
+          method: "协同策略"
+        });
+      }
+    });
+    return items;
+  }
+
+  if (typeof normalizedStrategy === "object") {
+    if (Array.isArray(normalizedStrategy.notifications)) {
+      normalizedStrategy.notifications.forEach((entry) => {
+        const summary = [
+          typeof entry?.title === "string" ? entry.title : "",
+          typeof entry?.message === "string" ? entry.message : "",
+          typeof entry?.summary === "string" ? entry.summary : ""
+        ].filter(Boolean).join("，");
+
+        pushItem(items, {
+          time: formatStrategyTimelineTime(entry?.date, entry?.time),
+          priority: deviceKey === "phone" ? "medium" : "low",
+          content: summary || "提醒安排",
+          method: deviceKey === "phone" ? "出行推送" : "提醒推送"
+        });
+      });
+    }
+
+    if (normalizedStrategy.morning_briefing && typeof normalizedStrategy.morning_briefing === "object") {
+      const entry = normalizedStrategy.morning_briefing;
+      const summary = [
+        typeof entry.summary === "string" ? entry.summary : "",
+        Array.isArray(entry.include) ? `包含${entry.include.filter(Boolean).join("、")}` : ""
+      ].filter(Boolean).join("，");
+
+      pushItem(items, {
+        time: formatStrategyTimelineTime(entry.date, entry.time || "07:30"),
+        priority: "medium",
+        content: summary || "早间简报",
+        method: "晨间提醒"
+      });
+    }
+
+    if (normalizedStrategy.evening_summary && typeof normalizedStrategy.evening_summary === "object") {
+      const entry = normalizedStrategy.evening_summary;
+      pushItem(items, {
+        time: formatStrategyTimelineTime(entry.date, entry.time || "18:00"),
+        priority: "medium",
+        content: typeof entry.summary === "string" ? entry.summary : "晚间总结",
+        method: "晚间回顾"
+      });
+    }
+
+    if (Array.isArray(normalizedStrategy.events) && normalizedStrategy.events.length > 0) {
+      pushItem(items, {
+        time: "本周",
+        priority: "low",
+        content: `关注事项：${normalizedStrategy.events.filter((entry) => typeof entry === "string" && entry.trim()).join("、")}`,
+        method: "情境关注"
+      });
+    }
+
+    const handledKeys = new Set(["notifications", "morning_briefing", "evening_summary", "events"]);
+
+    Object.entries(normalizedStrategy).forEach(([key, value]) => {
+      if (handledKeys.has(key)) return;
+
+      buildStrategyLines(value, formatStrategyLabel(key)).forEach((line, index) => {
+        pushItem(items, {
+          time: "本周",
+          priority: index === 0 ? "medium" : "low",
+          content: line,
+          method: "协同策略"
+        });
+      });
+    });
+  }
+
+  return items.filter((item, index, array) => {
+    const key = `${item.time}__${item.content}__${item.method}`;
+    return array.findIndex((entry) => `${entry.time}__${entry.content}__${entry.method}` === key) === index;
+  });
 }
 
 export default function SoulWeekPlanner({
@@ -863,6 +1011,7 @@ export default function SoulWeekPlanner({
                             {Object.entries(DEVICE_MAP).map(([key, config]) => {
                                 const DeviceIcon = config.icon;
                                 const strategy = weekData.device_strategies?.[key];
+                                const strategyTimeline = buildStrategyTimeline(strategy, key);
                                 const isSelected = selectedDevice === key;
 
                                 return (
@@ -888,7 +1037,9 @@ export default function SoulWeekPlanner({
                                         </h4>
                                         <div className="flex items-center justify-center gap-1.5">
                                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-                                            <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">在线</span>
+                                            <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">
+                                              {strategyTimeline.length > 0 ? "已规划" : "在线"}
+                                            </span>
                                         </div>
                                     </div>
                                     </div>
@@ -898,41 +1049,22 @@ export default function SoulWeekPlanner({
 
                         {/* Device Detail Panel */}
                         <AnimatePresence mode="wait">
-                            <motion.div 
-                            key={selectedDevice}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="mt-4 bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm"
-                            >
-                                {(() => {
-                                  const strategyDisplay = normalizeStrategyDisplay(weekData.device_strategies?.[selectedDevice]);
-                                  return (
-                                    <>
-                                      <div className="flex items-start gap-4">
-                                          <div className="w-10 h-10 rounded-full bg-[#384877]/5 flex items-center justify-center text-[#384877]">
-                                              <Zap className="w-5 h-5" />
-                                          </div>
-                                          <div>
-                                              <h4 className="text-sm font-medium text-slate-500 mb-1">本周策略 · {DEVICE_MAP[selectedDevice].name}</h4>
-                                              <p className="text-base text-slate-900 font-medium leading-relaxed">
-                                                  {strategyDisplay.summary}
-                                              </p>
-                                          </div>
-                                      </div>
-                                      {strategyDisplay.lines.length > 1 && (
-                                        <div className="mt-4 pl-14 space-y-2">
-                                          {strategyDisplay.lines.slice(1).map((line, index) => (
-                                            <div key={index} className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-xl px-3 py-2">
-                                              {line}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                            </motion.div>
+                            {(() => {
+                              const strategyTimeline = buildStrategyTimeline(
+                                weekData.device_strategies?.[selectedDevice],
+                                selectedDevice
+                              );
+
+                              return (
+                                <div className="mt-4">
+                                  <DeviceStrategyPanel
+                                    deviceType={selectedDevice}
+                                    deviceName={DEVICE_MAP[selectedDevice].name}
+                                    strategies={strategyTimeline}
+                                  />
+                                </div>
+                              );
+                            })()}
                         </AnimatePresence>
                         </section>
                     </>

@@ -6,7 +6,7 @@ import { requireAuth } from "../middleware/auth.js";
 export const tasksRouter = Router();
 
 const taskInputSchema = z.object({
-  title: z.string().min(1).max(120),
+  title: z.string().min(1).max(500),
   description: z.string().max(5000).optional(),
   status: z.string().optional(),
   priority: z.string().min(1).max(20).optional(),
@@ -141,10 +141,11 @@ function serializeTask(task) {
 
 function buildTaskCreateData(userId, payload) {
   const extraFields = getTaskExtraFields(payload);
+  const title = String(payload.title || "").trim();
 
   return {
     userId,
-    title: payload.title,
+    title: title.slice(0, 120),
     description: payload.description,
     status: toPrismaTaskStatus(payload.status),
     priority: payload.priority || "medium",

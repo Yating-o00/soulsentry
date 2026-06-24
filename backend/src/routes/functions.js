@@ -212,6 +212,365 @@ function buildExternalVisionCards(feed, items = []) {
   }));
 }
 
+const YMD_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function toYmd(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = String(d.getFullYear());
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseYmd(value) {
+  if (typeof value !== "string" || !YMD_PATTERN.test(value)) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function addDaysYmd(value, offset) {
+  const base = parseYmd(value) || new Date();
+  base.setDate(base.getDate() + offset);
+  return toYmd(base);
+}
+
+function normalizeDateString(value, fallback) {
+  const direct = typeof value === "string" ? value.trim() : "";
+  if (direct && YMD_PATTERN.test(direct)) return direct;
+  const fb = typeof fallback === "string" ? fallback.trim() : "";
+  if (fb && YMD_PATTERN.test(fb)) return fb;
+  return toYmd(new Date());
+}
+
+function parseJsonLoose(value) {
+  if (!value) return value;
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return value;
+  const text = value.trim();
+  if (!text) return value;
+  if (!(text.startsWith("{") || text.startsWith("["))) return value;
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return value;
+  }
+}
+
+function getWeekDates(startDate) {
+  const start = parseYmd(startDate) || new Date();
+  const dates = [];
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    dates.push(toYmd(d));
+  }
+  return dates;
+}
+
+function normalizeWeekEvent(event, weekDates) {
+  if (!isPlainObject(event)) return null;
+  const title = typeof event.title === "string" ? event.title.trim() : "";
+  if (!title) return null;
+
+  const dayIndex = Number.isFinite(Number(event.day_index)) ? Number(event.day_index) : null;
+  const dateCandidate = typeof event.date === "string" ? event.date.trim() : "";
+  const date = YMD_PATTERN.test(dateCandidate)
+    ? dateCandidate
+    : dayIndex !== null && weekDates[dayIndex]
+      ? weekDates[dayIndex]
+      : weekDates[0];
+
+  const timeText = typeof event.time === "string" && event.time.trim() ? event.time.trim() : "09:00";
+  const typeText = typeof event.type === "string" && event.type.trim() ? event.type.trim() : "other";
+  const iconText = typeof event.icon === "string" && event.icon.trim() ? event.icon.trim().slice(0, 8) : "📅";
+
+  return {
+    date,
+    day_index: dayIndex !== null ? Math.max(0, Math.min(6, dayIndex)) : undefined,
+    title: title.slice(0, 160),
+    time: timeText.slice(0, 10),
+    type: typeText.slice(0, 40),
+    icon: iconText,
+    description: typeof event.description === "string" ? event.description.slice(0, 500) : ""
+  };
+}
+
+function normalizeWeekPlan(raw, startDate, existingPlan) {
+  const data = parseJsonLoose(raw);
+  const base = isPlainObject(data) ? data : {};
+  const weekDates = getWeekDates(startDate);
+
+  const events = Array.isArray(base.events)
+    ? base.events.map((item) => normalizeWeekEvent(item, weekDates)).filter(Boolean)
+    : [];
+
+  const automations = Array.isArray(base.automations)
+    ? base.automations
+        .map((item) => (isPlainObject(item) ? item : null))
+        .filter(Boolean)
+        .map((item) => ({
+          title: typeof item.title === "string" ? item.title.slice(0, 160) : "自动执行",
+          description: typeof item.description === "string" ? item.description.slice(0, 500) : "",
+          icon: typeof item.icon === "string" ? item.icon.slice(0, 8) : "⚙️",
+          status: typeof item.status === "string" ? item.status : "pending"
+        }))
+    : [];
+
+  const rawStrategies = isPlainObject(base.device_strategies) ? base.device_strategies : {};
+  const device_strategies = {
+    phone: rawStrategies.phone ?? rawStrategies.mobile ?? rawStrategies.smartphone ?? "",
+    watch: rawStrategies.watch ?? "",
+    pc: rawStrategies.pc ?? rawStrategies.desktop ?? "",
+    car: rawStrategies.car ?? "",
+    home: rawStrategies.home ?? "",
+    glasses: rawStrategies.glasses ?? ""
+  };
+
+  const statsRaw = isPlainObject(base.stats) ? base.stats : {};
+  const focusHours = Number(statsRaw.focus_hours);
+  const meetings = Number(statsRaw.meetings);
+  const travelDays = Number(statsRaw.travel_days);
+
+  return {
+    ...base,
+    plan_start_date: normalizeDateString(base.plan_start_date, startDate),
+    theme: typeof base.theme === "string" ? base.theme.slice(0, 120) : (existingPlan?.theme || ""),
+    summary: typeof base.summary === "string" ? base.summary.slice(0, 1600) : (existingPlan?.summary || ""),
+    events,
+    automations,
+    device_strategies,
+    stats: {
+      focus_hours: Number.isFinite(focusHours) ? focusHours : 0,
+      meetings: Number.isFinite(meetings) ? meetings : 0,
+      travel_days: Number.isFinite(travelDays) ? travelDays : 0
+    }
+  };
+}
+
+function buildWeekFallbackPlan(input, startDate, existingPlan) {
+  const weekDates = getWeekDates(startDate);
+  return {
+    is_demo: true,
+    plan_start_date: startDate,
+    theme: existingPlan?.theme || "演示周计划",
+    summary: "AI 服务暂时不可用，已生成演示规划（不影响保存与后续编辑）。",
+    events: [
+      {
+        date: weekDates[0],
+        day_index: 0,
+        title: "梳理本周三件最重要的事",
+        time: "09:30",
+        type: "focus",
+        icon: "🎯",
+        description: String(input || "").slice(0, 200)
+      }
+    ],
+    automations: [
+      { title: "每日晨间提醒", description: "09:00 触发今日三件事复盘", icon: "⏰", status: "pending" }
+    ],
+    device_strategies: {
+      phone: "提醒安排：根据日程自动推送关键任务与出行提醒。",
+      watch: "用短震动提示到点事项，避免打断深度工作。",
+      pc: "工作时段集中显示待办与会议摘要，减少切屏。",
+      car: "",
+      home: "",
+      glasses: ""
+    },
+    stats: { focus_hours: 6, meetings: 2, travel_days: 0 }
+  };
+}
+
+async function generateWeekPlan(payload) {
+  const startDate = normalizeDateString(payload.startDate, payload.currentDate);
+
+  const schema = {
+    type: "object",
+    properties: {
+      plan_start_date: { type: "string" },
+      theme: { type: "string" },
+      summary: { type: "string" },
+      events: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            date: { type: "string" },
+            day_index: { type: "number" },
+            title: { type: "string" },
+            time: { type: "string" },
+            type: { type: "string" },
+            icon: { type: "string" },
+            description: { type: "string" }
+          },
+          required: ["date", "title", "time", "type", "icon"]
+        }
+      },
+      device_strategies: { type: "object" },
+      automations: { type: "array" },
+      stats: { type: "object" }
+    },
+    required: ["plan_start_date", "theme", "summary", "events", "device_strategies"]
+  };
+
+  try {
+    const data = await invokeKimiText({
+      systemPrompt: [
+        "你是一名中文周计划规划助手。",
+        `当前查看周起始日期（周一）是：${startDate}。`,
+        "输出必须是 JSON，不要输出解释。",
+        "请返回完整周计划，而不是片段。",
+        "events 中每条都要包含：date(YYYY-MM-DD)、day_index(0-6)、title、time(HH:MM)、type、icon。",
+        "device_strategies 至少包含 phone/watch/pc 三项。",
+        "automations 仅保留 1-4 条最有价值的自动化动作。"
+      ].join("\n"),
+      prompt: String(payload.input || "").trim(),
+      responseJsonSchema: schema,
+      model: payload.model,
+      temperature: payload.temperature
+    });
+
+    return normalizeWeekPlan(data, startDate, payload.existingPlan);
+  } catch (_error) {
+    return buildWeekFallbackPlan(payload.input, startDate, payload.existingPlan);
+  }
+}
+
+function normalizeMonthPlan(raw, monthStartDate, existingPlan) {
+  const data = parseJsonLoose(raw);
+  const base = isPlainObject(data) ? data : {};
+
+  const strategies = isPlainObject(base.strategies) ? base.strategies : {};
+  const key_milestones = Array.isArray(base.key_milestones)
+    ? base.key_milestones
+        .map((m) => (isPlainObject(m) ? m : null))
+        .filter(Boolean)
+        .map((m) => ({
+          title: typeof m.title === "string" ? m.title.slice(0, 200) : "里程碑",
+          type: typeof m.type === "string" ? m.type : "milestone",
+          deadline: normalizeDateString(m.deadline, monthStartDate)
+        }))
+    : [];
+
+  const weeks_breakdown = Array.isArray(base.weeks_breakdown)
+    ? base.weeks_breakdown
+        .map((w) => (isPlainObject(w) ? w : null))
+        .filter(Boolean)
+        .map((w, idx) => ({
+          week_label: typeof w.week_label === "string" ? w.week_label.slice(0, 40) : `第 ${idx + 1} 周`,
+          focus: typeof w.focus === "string" ? w.focus.slice(0, 120) : "",
+          key_events: Array.isArray(w.key_events)
+            ? w.key_events.filter((e) => typeof e === "string" && e.trim()).map((e) => e.slice(0, 80)).slice(0, 8)
+            : []
+        }))
+    : [];
+
+  const statsRaw = isPlainObject(base.stats) ? base.stats : {};
+  const focusHours = Number(statsRaw.focus_hours);
+  const milestonesCount = Number(statsRaw.milestones_count);
+
+  return {
+    ...base,
+    plan_start_date: normalizeDateString(base.plan_start_date, monthStartDate),
+    theme: typeof base.theme === "string" ? base.theme.slice(0, 120) : (existingPlan?.theme || ""),
+    summary: typeof base.summary === "string" ? base.summary.slice(0, 2000) : (existingPlan?.summary || ""),
+    strategies,
+    key_milestones,
+    weeks_breakdown,
+    stats: {
+      focus_hours: Number.isFinite(focusHours) ? focusHours : 0,
+      milestones_count: Number.isFinite(milestonesCount) ? milestonesCount : key_milestones.length
+    }
+  };
+}
+
+function buildMonthFallbackPlan(input, monthStartDate, existingPlan) {
+  return {
+    is_demo: true,
+    plan_start_date: monthStartDate,
+    theme: existingPlan?.theme || "演示月计划",
+    summary: "AI 服务暂时不可用，已生成演示规划（不影响保存与后续编辑）。",
+    strategies: {
+      focus: "先完成最关键的一项交付，其余保持低摩擦推进。",
+      rhythm: "每周保留 2 个深度专注块，周末做一次复盘。"
+    },
+    key_milestones: [
+      { title: "确认本月目标与范围", type: "milestone", deadline: addDaysYmd(monthStartDate, 2) }
+    ],
+    weeks_breakdown: [
+      { week_label: "第 1 周", focus: "打底与拆解", key_events: ["明确目标", "列出关键交付"] },
+      { week_label: "第 2 周", focus: "集中推进", key_events: ["深度工作块", "阶段验收"] },
+      { week_label: "第 3 周", focus: "收口与修正", key_events: ["补齐短板", "预演输出"] },
+      { week_label: "第 4 周", focus: "发布与复盘", key_events: ["交付", "复盘"] }
+    ],
+    stats: { focus_hours: 32, milestones_count: 1 },
+    original_input: String(input || "").slice(0, 800)
+  };
+}
+
+async function generateMonthPlan(payload) {
+  const startDate = normalizeDateString(payload.startDate, payload.currentDate);
+
+  const schema = {
+    type: "object",
+    properties: {
+      plan_start_date: { type: "string" },
+      theme: { type: "string" },
+      summary: { type: "string" },
+      strategies: { type: "object" },
+      key_milestones: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            type: { type: "string" },
+            deadline: { type: "string" }
+          },
+          required: ["title", "type", "deadline"]
+        }
+      },
+      weeks_breakdown: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            week_label: { type: "string" },
+            focus: { type: "string" },
+            key_events: { type: "array", items: { type: "string" } }
+          },
+          required: ["week_label", "focus"]
+        }
+      },
+      stats: { type: "object" }
+    },
+    required: ["plan_start_date", "theme", "summary", "weeks_breakdown"]
+  };
+
+  try {
+    const data = await invokeKimiText({
+      systemPrompt: [
+        "你是一名中文月度目标拆解与节奏规划助手。",
+        `当前规划月份起始日期（YYYY-MM-DD）是：${startDate}。`,
+        "输出必须是 JSON，不要输出解释。",
+        "weeks_breakdown 需要给出 4-6 周的节奏，每周包含 week_label、focus、key_events(0-6条)。",
+        "key_milestones 给出 1-6 个关键里程碑，包含 title/type/deadline(YYYY-MM-DD)。",
+        "stats 至少包含 focus_hours、milestones_count。",
+      ].join("\n"),
+      prompt: String(payload.input || "").trim(),
+      responseJsonSchema: schema,
+      model: payload.model,
+      temperature: payload.temperature
+    });
+
+    return normalizeMonthPlan(data, startDate, payload.existingPlan);
+  } catch (_error) {
+    return buildMonthFallbackPlan(payload.input, startDate, payload.existingPlan);
+  }
+}
+
 functionsRouter.post("/:name", async (req, res) => {
   const { name } = req.params;
   const payload = req.body || {};
@@ -286,6 +645,14 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       return res.json(await generateWeekPlan(payload));
+    }
+
+    if (name === "generateMonthPlan") {
+      if (!payload.input || !String(payload.input).trim()) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少月计划输入内容" });
+      }
+
+      return res.json(await generateMonthPlan(payload));
     }
 
     if (name === "savePushSubscription") {

@@ -79,13 +79,14 @@ export default function SentinelGuardPanel() {
         const isRateLimit =
           /rate limit/i.test(guardMsg) || (guardRes.reason?.status || guardRes.reason?.response?.status) === 429 ||
           /rate limit/i.test(assocMsg) || (assocRes.reason?.status || assocRes.reason?.response?.status) === 429;
+        const isTimeout = guardMsg === 'TIMEOUT' && assocMsg === 'TIMEOUT';
         const isMissing =
           isMissingCapability(guardRes.reason) &&
           isMissingCapability(assocRes.reason);
         if (isRateLimit) {
           GUARD_CACHE.ts = Date.now();
           console.warn('[sentinel-guard] 命中限流，5 分钟内不再重试');
-        } else if (isMissing) {
+        } else if (isTimeout || isMissing) {
           GUARD_CACHE.ts = Date.now();
           GUARD_CACHE.data = null;
           GUARD_CACHE.assoc = null;

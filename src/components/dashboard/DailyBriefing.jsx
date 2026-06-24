@@ -18,7 +18,9 @@ export default function DailyBriefing() {
         try {
             const oldKey = `daily_briefing_${today}`;
             localStorage.removeItem(oldKey);
-        } catch (_) {}
+        } catch (_error) {
+            void _error;
+        }
 
         if (!force) {
             const cached = localStorage.getItem(cacheKey);
@@ -27,8 +29,8 @@ export default function DailyBriefing() {
                     setBriefing(JSON.parse(cached));
                     setLoading(false);
                     return;
-                } catch (e) {
-                    // Cache invalid
+                } catch (_error) {
+                    void _error;
                 }
             }
         }

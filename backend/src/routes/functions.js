@@ -49,6 +49,89 @@ function getTaskLocationReminder(task) {
   return isPlainObject(reminder) ? reminder : null;
 }
 
+function startOfLocalDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfLocalDay(date) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function buildDailyBriefingTitle(displayName) {
+  const now = new Date();
+  const hour = now.getHours();
+  const period = hour < 12 ? "早安" : hour < 18 ? "午后" : "晚间";
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${displayName || "旅行者"}的${period}心栈·${month}月${day}日`;
+}
+
+async function generateDailyBriefingForUser(user) {
+  const now = new Date();
+  const todayStart = startOfLocalDay(now);
+  const todayEnd = endOfLocalDay(now);
+
+  const tasks = await prisma.task.findMany({
+    where: { userId: user.id, deletedAt: null },
+    orderBy: [{ updatedAt: "desc" }],
+    take: 300
+  });
+
+  const activeTasks = tasks.filter((t) => t.status !== "DONE" && t.status !== "ARCHIVED");
+  const urgentTasks = activeTasks.filter((t) => t.priority === "urgent" || t.priority === "high");
+  const overdueTasks = activeTasks.filter((t) => t.endTime && new Date(t.endTime) < now);
+  const todayDueTasks = activeTasks.filter((t) => {
+    const candidate = t.dueAt || t.endTime || t.reminderTime;
+    if (!candidate) return false;
+    const dt = new Date(candidate);
+    return dt >= todayStart && dt <= todayEnd;
+  });
+
+  const recentCompleted = tasks
+    .filter((t) => t.status === "DONE")
+    .sort((a, b) => new Date(b.completedAt || b.updatedAt) - new Date(a.completedAt || a.updatedAt))
+    .slice(0, 5);
+
+  const topTitles = urgentTasks.slice(0, 3).map((t) => `「${t.title}」`).join("、");
+  const shortTerm = (() => {
+    if (activeTasks.length === 0) return "今天没有待办任务，适合把精力留给恢复与长期目标。";
+    if (urgentTasks.length > 0) return `优先推进 ${topTitles}。把需要快速反馈的事项先收口，再处理常规任务。`;
+    if (todayDueTasks.length > 0) return `今天有 ${todayDueTasks.length} 项需要关注的到期/提醒任务，建议先完成最容易推进的一项来启动节奏。`;
+    if (overdueTasks.length > 0) return `有 ${overdueTasks.length} 项任务已超过预期时间，挑选其中影响最大的先做一次“降阻/改期”处理。`;
+    return `你当前有 ${activeTasks.length} 项活跃任务，建议用一个 25 分钟专注块推进最关键的一项。`;
+  })();
+
+  const longTerm = (() => {
+    if (recentCompleted.length > 0) {
+      const names = recentCompleted.slice(0, 2).map((t) => `「${t.title}」`).join("、");
+      return `你最近完成了 ${names}。保持这个节奏，把“重要但不紧急”的事项也安排进日程里。`;
+    }
+    return "给未来留一点空间：把本周最重要的目标写下来，并为它预留一个稳定的固定时段。";
+  })();
+
+  const mindful = urgentTasks.length > 0
+    ? "先做最重要的一件事，其他事会自动变轻。"
+    : "慢一点也没关系，重要的是方向正确。";
+
+  return {
+    title: buildDailyBriefingTitle(user.displayName),
+    short_term_narrative: shortTerm,
+    long_term_narrative: longTerm,
+    mindful_tip: mindful,
+    task_stats: {
+      active: activeTasks.length,
+      urgent: urgentTasks.length,
+      overdue: overdueTasks.length,
+      today_due: todayDueTasks.length,
+      recent_completed: recentCompleted.length
+    }
+  };
+}
+
 function getGeofencePreset(locationType) {
   const presets = {
     home: { radius: 180, quiet_minutes: 45 },
@@ -191,6 +274,18 @@ functionsRouter.post("/:name", async (req, res) => {
       return res.json({
         publicKey: env.VAPID_PUBLIC_KEY || null
       });
+    }
+
+    if (name === "generateDailyBriefing") {
+      return res.json(await generateDailyBriefingForUser(req.user));
+    }
+
+    if (name === "generateWeekPlan") {
+      if (!payload.input || !String(payload.input).trim()) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少周计划输入内容" });
+      }
+
+      return res.json(await generateWeekPlan(payload));
     }
 
     if (name === "savePushSubscription") {

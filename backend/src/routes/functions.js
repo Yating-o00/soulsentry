@@ -6,6 +6,7 @@ import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { getCreditPack } from "../config/creditPacks.js";
 import { createWechatNativeOrder, generateOutTradeNo, getWechatMerchantConfig, queryWechatOrder as wechatQueryOrder } from "../lib/wechatPay.js";
 import { markWechatOrderPaid } from "../services/wechatOrders.js";
+import { buildPreferenceMetadata, getVapidPublicKey as getConfiguredVapidPublicKey } from "../lib/webPush.js";
 
 export const functionsRouter = Router();
 
@@ -498,7 +499,51 @@ functionsRouter.post("/:name", async (req, res) => {
       return res.json({ data: { paid: false, order_no: order.orderNo } });
     }
 
-    if (["executeAutomation", "savePushSubscription", "getVapidPublicKey", "createStripeCheckout"].includes(name)) {
+    if (name === "getVapidPublicKey") {
+      return res.json({
+        data: {
+          publicKey: getConfiguredVapidPublicKey()
+        }
+      });
+    }
+
+    if (name === "savePushSubscription") {
+      const existingPreference = await prisma.userPreference.findUnique({
+        where: { userId: req.user.id }
+      });
+
+      const nextSubscription = payload.subscription || null;
+      const nextMetadata = buildPreferenceMetadata(existingPreference?.metadata, {
+        push_subscription: nextSubscription,
+        push_user_agent: payload.user_agent ? String(payload.user_agent).slice(0, 500) : null,
+        push_enabled: Boolean(nextSubscription)
+      });
+
+      const preference = await prisma.userPreference.upsert({
+        where: { userId: req.user.id },
+        update: {
+          pushNotifications: Boolean(nextSubscription),
+          metadata: nextMetadata
+        },
+        create: {
+          userId: req.user.id,
+          pushNotifications: Boolean(nextSubscription),
+          locale: "zh-CN",
+          timezone: "Asia/Shanghai",
+          metadata: nextMetadata
+        }
+      });
+
+      return res.json({
+        data: {
+          ok: true,
+          subscribed: Boolean(nextSubscription),
+          preference_id: preference.id
+        }
+      });
+    }
+
+    if (["executeAutomation", "createStripeCheckout"].includes(name)) {
       return res.status(501).json({
         error: "FUNCTION_NOT_IMPLEMENTED",
         message: `独立后端已预留 ${name}，但尚未完成迁移`,

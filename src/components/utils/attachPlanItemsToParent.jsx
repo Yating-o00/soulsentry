@@ -64,8 +64,7 @@ export async function attachPlanItemsToParent(parentTaskId, items = [], defaultT
   if (payloads.length === 0) return 0;
   try {
     await base44.entities.Task.bulkCreate(payloads);
-  } catch (e) {
-    console.warn("attachPlanItemsToParent bulkCreate failed", e);
+  } catch (_) {
     return 0;
   }
   return payloads.length;

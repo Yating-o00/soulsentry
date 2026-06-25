@@ -10,6 +10,7 @@ import { Download, Copy, Share2, Heart, Quote } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import html2canvas from "html2canvas";
+import QRCodeImage from "@/components/ui/QRCode";
 
 const ENCOURAGEMENTS = [
 "你已经做得很好了，请对自己温柔一点。",
@@ -65,9 +66,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   const noteUrl = note?.id ?
   `https://xinzhan-soulsentry.com${createPageUrl("HeartSign")}?noteId=${note.id}` :
   "";
-  const qrCodeUrl = noteUrl ?
-  `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(noteUrl)}&bgcolor=ffffff` :
-  "";
+  const qrCodeValue = noteUrl;
 
   const dateStr = (() => {
     const d = note?.created_date ? new Date(note.created_date) : new Date();
@@ -192,11 +191,11 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
                       <p className="text-[12px] font-semibold tracking-wide text-slate-700">心栈 SoulSentry</p>
                       <p className="text-[9.5px] text-slate-400 mt-0.5">坚定守护，适时轻唤</p>
                     </div>
-                    {qrCodeUrl &&
+                    {qrCodeValue &&
                     <div className="flex items-center gap-2">
                         <span className="text-[9.5px] text-slate-400 text-right leading-tight">扫码<br />查看</span>
                         <div className="w-9 h-9 bg-white rounded-md p-0.5 border border-slate-100">
-                          <img src={qrCodeUrl} alt="QR" crossOrigin="anonymous" className="w-full h-full object-contain" />
+                          <QRCodeImage value={qrCodeValue} size={96} alt="QR" className="w-full h-full object-contain" />
                         </div>
                       </div>
                     }

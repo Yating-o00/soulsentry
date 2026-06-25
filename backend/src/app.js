@@ -13,6 +13,7 @@ import { taskExecutionsRouter } from "./routes/taskExecutions.js";
 import { functionsRouter } from "./routes/functions.js";
 import { weeklyPlansRouter } from "./routes/weeklyPlans.js";
 import { monthlyPlansRouter } from "./routes/monthlyPlans.js";
+import { handleWechatNotify } from "./routes/wechatNotify.js";
 
 export const app = express();
 
@@ -21,8 +22,9 @@ app.use(cors({
   origin: env.CORS_ORIGIN.split(",").map((item) => item.trim()),
   credentials: true
 }));
-app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
+app.post("/api/wechat/notify", express.raw({ type: "application/json" }), handleWechatNotify);
+app.use(express.json({ limit: "2mb" }));
 
 app.get("/", (_req, res) => {
   res.json({

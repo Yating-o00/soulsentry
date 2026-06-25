@@ -2,8 +2,15 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
+<<<<<<< HEAD
 import { env } from "../config/env.js";
+=======
+import { prisma } from "../lib/prisma.js";
+>>>>>>> 8338621 (feat: 呈现产品页面)
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
+import { getCreditPack } from "../config/creditPacks.js";
+import { createWechatNativeOrder, generateOutTradeNo, getWechatMerchantConfig, queryWechatOrder as wechatQueryOrder } from "../lib/wechatPay.js";
+import { markWechatOrderPaid } from "../services/wechatOrders.js";
 
 export const functionsRouter = Router();
 
@@ -930,6 +937,7 @@ functionsRouter.post("/:name", async (req, res) => {
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     if (name === "savePushSubscription") {
       const existingPreferences = await prisma.userPreference.findUnique({
         where: { userId: req.user.id }
@@ -1252,6 +1260,127 @@ functionsRouter.post("/:name", async (req, res) => {
 =======
     if (["executeAutomation", "savePushSubscription", "getVapidPublicKey", "createStripeCheckout", "queryWechatOrder"].includes(name)) {
 >>>>>>> a4f998e (feat: 呈现产品页面)
+=======
+    if (name === "createWechatOrder") {
+      const pack = getCreditPack(payload.packId);
+      if (!pack) {
+        return res.status(400).json({ error: "INVALID_PACK", message: "无效的点数包" });
+      }
+
+      const cfg = await getWechatMerchantConfig();
+      if (!cfg) {
+        return res.status(501).json({ error: "WECHAT_NOT_CONFIGURED", message: "微信支付未配置" });
+      }
+
+      const reuseAfterMs = 10 * 60 * 1000;
+      const reuseSince = new Date(Date.now() - reuseAfterMs);
+      const existing = await prisma.wechatOrder.findFirst({
+        where: {
+          userId: req.user.id,
+          packId: pack.id,
+          status: "PENDING",
+          createdAt: { gt: reuseSince }
+        },
+        orderBy: { createdAt: "desc" }
+      });
+
+      if (existing?.codeUrl) {
+        return res.json({
+          data: {
+            code_url: existing.codeUrl,
+            order_no: existing.orderNo
+          }
+        });
+      }
+
+      const outTradeNo = generateOutTradeNo("wx");
+      const description = `SoulSentry · ${pack.name} · ${pack.credits}点`;
+      const attach = JSON.stringify({ user_id: req.user.id, pack_id: pack.id, credits: pack.credits });
+
+      const result = await createWechatNativeOrder(
+        {
+          description,
+          outTradeNo,
+          totalFen: pack.priceFen,
+          attach
+        },
+        cfg
+      );
+
+      const codeUrl = result?.code_url;
+      if (!codeUrl) {
+        return res.status(502).json({ error: "WECHAT_CREATE_ORDER_FAILED", message: "微信下单失败" });
+      }
+
+      await prisma.wechatOrder.create({
+        data: {
+          userId: req.user.id,
+          orderNo: outTradeNo,
+          packId: pack.id,
+          credits: pack.credits,
+          amountFen: pack.priceFen,
+          description,
+          codeUrl,
+          status: "PENDING"
+        }
+      });
+
+      return res.json({ data: { code_url: codeUrl, order_no: outTradeNo } });
+    }
+
+    if (name === "queryWechatOrder") {
+      const orderNo = String(payload.order_no || "").trim();
+      if (!orderNo) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少订单号" });
+      }
+
+      const order = await prisma.wechatOrder.findFirst({
+        where: { orderNo, userId: req.user.id }
+      });
+
+      if (!order) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "订单不存在" });
+      }
+
+      if (order.status === "PAID") {
+        return res.json({ data: { paid: true, order_no: order.orderNo } });
+      }
+
+      const cfg = await getWechatMerchantConfig();
+      if (!cfg) {
+        return res.json({ data: { paid: false, order_no: order.orderNo } });
+      }
+
+      try {
+        const remote = await wechatQueryOrder(order.orderNo, cfg);
+        const tradeState = remote?.trade_state;
+        const transactionId = remote?.transaction_id || null;
+        const successTime = remote?.success_time || null;
+
+        if (tradeState === "SUCCESS") {
+          await markWechatOrderPaid({
+            orderNo: order.orderNo,
+            transactionId,
+            paidAt: successTime ? new Date(successTime) : null
+          });
+          return res.json({ data: { paid: true, order_no: order.orderNo } });
+        }
+
+        if (tradeState && tradeState !== order.status) {
+          await prisma.wechatOrder.update({
+            where: { id: order.id },
+            data: { status: String(tradeState).slice(0, 40) }
+          });
+        }
+      } catch (_error) {
+        void _error;
+      }
+
+      return res.json({ data: { paid: false, order_no: order.orderNo } });
+    }
+
+    if (["executeAutomation", "savePushSubscription", "getVapidPublicKey", "createStripeCheckout"].includes(name)) {
+>>>>>>> 8338621 (feat: 呈现产品页面)
       return res.status(501).json({
         error: "FUNCTION_NOT_IMPLEMENTED",
         message: `独立后端已预留 ${name}，但尚未完成迁移`,

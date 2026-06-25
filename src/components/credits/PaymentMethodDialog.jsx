@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { CreditCard, Smartphone, Loader2, ExternalLink, QrCode, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
+import QRCodeImage from "@/components/ui/QRCode";
 
 export default function PaymentMethodDialog({ open, onOpenChange, pack, onPaymentSuccess }) {
   const [loading, setLoading] = useState(null);
@@ -132,11 +133,7 @@ export default function PaymentMethodDialog({ open, onOpenChange, pack, onPaymen
               </div>
             ) : (
               <div className="w-52 h-52 bg-white border-2 border-emerald-200 rounded-2xl flex items-center justify-center p-3 shadow-inner relative">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(wechatQR.code_url)}`}
-                  alt="微信支付二维码"
-                  className="w-full h-full"
-                />
+                <QRCodeImage value={wechatQR.code_url} size={200} alt="微信支付二维码" className="w-full h-full" />
                 <div className="absolute bottom-2 right-2 bg-white/90 rounded-full px-2 py-1 flex items-center gap-1 shadow-sm">
                   <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />
                   <span className="text-[10px] text-slate-500">等待支付</span>

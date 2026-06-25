@@ -8,8 +8,18 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16),
   JWT_EXPIRES_IN: z.string().default("7d"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+<<<<<<< HEAD
   UPLOAD_DIR: z.string().default("uploads"),
   VAPID_PUBLIC_KEY: z.string().optional()
+=======
+  WECHAT_APPID: z.string().optional(),
+  WECHAT_MCHID: z.string().optional(),
+  WECHAT_SERIAL_NO: z.string().optional(),
+  WECHAT_API_V3_KEY: z.string().optional(),
+  WECHAT_PRIVATE_KEY: z.string().optional(),
+  WECHAT_PRIVATE_KEY_PATH: z.string().optional(),
+  WECHAT_NOTIFY_URL: z.string().optional()
+>>>>>>> 8338621 (feat: 呈现产品页面)
 });
 
 export const env = envSchema.parse(process.env);

@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
+import QRCodeImage from "@/components/ui/QRCode";
 
 const CATEGORY_COLORS = {
   work: { accent: "#1D4ED8", bg: "#EFF6FF" },
@@ -107,7 +108,7 @@ export default function TaskShareCard({ task, open, onClose }) {
     ? `${window.location.origin}${createPageUrl("Tasks")}?taskId=${task.id}`
     : "";
 
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(taskUrl)}&bgcolor=ffffff`;
+  const qrCodeValue = taskUrl;
 
   // Detect language
   const isEnglish = React.useMemo(() => {
@@ -720,13 +721,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                          <p className="text-[10px] text-slate-400 font-mono">ID: {task.id.slice(0,4)}</p>
                        </div>
                        <div className="w-12 h-12 bg-white rounded-md p-0.5 shadow-sm border border-slate-100">
-                         {/* 使用跨域属性以允许 html2canvas 捕获 */}
-                         <img 
-                            src={qrCodeUrl} 
-                            alt="QR Code" 
-                            crossOrigin="anonymous"
-                            className="w-full h-full object-contain"
-                         />
+                         <QRCodeImage value={qrCodeValue} size={96} alt="QR Code" className="w-full h-full object-contain" />
                        </div>
                     </div>
                   </div>

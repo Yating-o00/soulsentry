@@ -136,7 +136,7 @@ async function doExtractAndCreate(inputText, contextDateStr) {
         const key = normTitle(rt.title);
         return isDuplicate(key, rt.reminder_time || null, !!rt.is_all_day, titleKey, normalized.reminder_time, normalized.is_all_day);
       });
-      if (dup) return [];
+      if (dup) return [dup];
     } catch (_) { /* ignore */ }
   }
 

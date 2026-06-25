@@ -78,6 +78,7 @@ export default function SoulWeekPlanner({
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [existingPlanId, setExistingPlanId] = useState(null);
+  const [parentTaskId, setParentTaskId] = useState(null);
   const [appendInput, setAppendInput] = useState('');
   const [isAppending, setIsAppending] = useState(false);
   const [showAppendInput, setShowAppendInput] = useState(false);
@@ -111,6 +112,7 @@ export default function SoulWeekPlanner({
     if (weekPlans && weekPlans.length > 0) {
       const plan = weekPlans[0];
       setExistingPlanId(plan.id);
+      setParentTaskId(plan.plan_json?.parent_task_id || null);
       setWeekData({
         ...plan.plan_json,
         theme: plan.theme,
@@ -120,20 +122,23 @@ export default function SoulWeekPlanner({
       setStage('results');
     } else {
       setExistingPlanId(null);
+      setParentTaskId(null);
       setWeekData(null);
       setUserInput('');
       setStage('input');
     }
   }, [weekPlans]);
 
-  const savePlanToDB = async (data, input) => {
+  const savePlanToDB = async (data, input, parentTaskIdValue) => {
     try {
+      const nextParentTaskId = parentTaskIdValue || data?.parent_task_id || parentTaskId || null;
+      const planJson = nextParentTaskId ? { ...data, parent_task_id: nextParentTaskId } : data;
       const planData = {
         week_start_date: data.plan_start_date || currentWeekStartStr,
         original_input: input,
         theme: data.theme,
         summary: data.summary,
-        plan_json: data,
+        plan_json: planJson,
         is_active: true
       };
 
@@ -210,7 +215,7 @@ export default function SoulWeekPlanner({
             setProcessingStepIndex(PROCESSING_STEPS.length - 1);
             
             // Short delay to show completion
-            setTimeout(() => {
+            setTimeout(async () => {
                 setStage('results');
                 setIsProcessing(false);
                 
@@ -218,30 +223,42 @@ export default function SoulWeekPlanner({
                     toast.warning("AI服务不可用 (API Key无效)，已显示演示数据", { duration: 5000 });
                 } else {
                     toast.success("已生成全情境规划");
-                    savePlanToDB(data, userInput);
-
-                    // 用户输入 → 一条父约定；AI 拆解的事件/自动执行 → 子约定挂到父下
                     const weekStart = data.plan_start_date || format(start, 'yyyy-MM-dd');
-                    extractAndCreateTasks(userInput, weekStart).then(async tasks => {
-                      const parent = tasks?.[0];
-                      if (!parent?.id) return;
-                      const childItems = [
-                        ...(data.events || []).map(e => ({
-                          title: e.title,
-                          description: e.description || '',
-                          date: e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : undefined,
-                          time: e.time,
-                          tag: '周事件',
-                        })),
-                        ...(data.automations || []).map(a => ({
-                          title: a.title,
-                          description: a.description || '',
-                          tag: 'AI自动执行',
-                        })),
-                      ];
-                      const n = await attachPlanItemsToParent(parent.id, childItems, '周度规划').catch(() => 0);
-                      toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
-                    }).catch(e => console.error("Task sync failed", e));
+                    let resolvedParentTaskId = parentTaskId || data?.parent_task_id || null;
+                    try {
+                      if (resolvedParentTaskId) {
+                        const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
+                        if (!parent?.id) resolvedParentTaskId = null;
+                      }
+
+                      if (!resolvedParentTaskId) {
+                        const tasksCreated = await extractAndCreateTasks(userInput, weekStart);
+                        const parent = tasksCreated?.[0];
+                        resolvedParentTaskId = parent?.id || null;
+                      }
+
+                      if (resolvedParentTaskId) {
+                        setParentTaskId(resolvedParentTaskId);
+                        const childItems = [
+                          ...(data.events || []).map(e => ({
+                            title: e.title,
+                            description: e.description || '',
+                            date: e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : undefined,
+                            time: e.time,
+                            tag: '周事件',
+                          })),
+                          ...(data.automations || []).map(a => ({
+                            title: a.title,
+                            description: a.description || '',
+                            tag: 'AI自动执行',
+                          })),
+                        ];
+                        const n = await attachPlanItemsToParent(resolvedParentTaskId, childItems, '周度规划').catch(() => 0);
+                        toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
+                      }
+                    } catch (_error) { void _error; }
+
+                    savePlanToDB(data, userInput, resolvedParentTaskId);
                     syncPlanToNote(userInput, "week_plan", { dateRange: weekRangeLabel, theme: data.theme }).then(note => {
                       if (note) toast.success("已同步到心签");
                     }).catch(e => console.error("Note sync failed", e));
@@ -302,7 +319,41 @@ export default function SoulWeekPlanner({
           ]
         };
         setWeekData(merged);
-        savePlanToDB(merged, userInput + '\n' + appendInput);
+        const weekStart = merged.plan_start_date || currentWeekStartStr;
+        let resolvedParentTaskId = parentTaskId || merged?.parent_task_id || null;
+        try {
+          if (resolvedParentTaskId) {
+            const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
+            if (!parent?.id) resolvedParentTaskId = null;
+          }
+
+          if (!resolvedParentTaskId) {
+            const tasksCreated = await extractAndCreateTasks(userInput, weekStart);
+            const parent = tasksCreated?.[0];
+            resolvedParentTaskId = parent?.id || null;
+          }
+
+          if (resolvedParentTaskId) {
+            setParentTaskId(resolvedParentTaskId);
+            const childItems = [
+              ...(merged.events || []).map(e => ({
+                title: e.title,
+                description: e.description || '',
+                date: e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : undefined,
+                time: e.time,
+                tag: '周事件',
+              })),
+              ...(merged.automations || []).map(a => ({
+                title: a.title,
+                description: a.description || '',
+                tag: 'AI自动执行',
+              })),
+            ];
+            await attachPlanItemsToParent(resolvedParentTaskId, childItems, '周度规划').catch(() => 0);
+          }
+        } catch (_error) { void _error; }
+
+        savePlanToDB(merged, userInput + '\n' + appendInput, resolvedParentTaskId);
         setAppendInput('');
         setShowAppendInput(false);
         toast.success('已将新内容智能融入本周规划');

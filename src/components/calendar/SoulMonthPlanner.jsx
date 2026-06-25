@@ -59,6 +59,7 @@ export default function SoulMonthPlanner({
   const [monthData, setMonthData] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [existingPlanId, setExistingPlanId] = useState(null);
+  const [parentTaskId, setParentTaskId] = useState(null);
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
   const [appendInput, setAppendInput] = useState('');
   const [isAppending, setIsAppending] = useState(false);
@@ -97,6 +98,7 @@ export default function SoulMonthPlanner({
     if (monthPlans && monthPlans.length > 0) {
       const plan = monthPlans[0];
       setExistingPlanId(plan.id);
+      setParentTaskId(plan.plan_json?.parent_task_id || null);
       setMonthData({
         ...plan.plan_json,
         theme: plan.theme,
@@ -106,20 +108,23 @@ export default function SoulMonthPlanner({
       setStage('results');
     } else {
       setExistingPlanId(null);
+      setParentTaskId(null);
       setMonthData(null);
       setUserInput('');
       setStage('input');
     }
   }, [monthPlans]);
 
-  const savePlanToDB = async (data, input) => {
+  const savePlanToDB = async (data, input, parentTaskIdValue) => {
     try {
+      const nextParentTaskId = parentTaskIdValue || data?.parent_task_id || parentTaskId || null;
+      const planJson = nextParentTaskId ? { ...data, parent_task_id: nextParentTaskId } : data;
       const planData = {
         month_start_date: data.plan_start_date || currentMonthStartStr,
         original_input: input,
         theme: data.theme,
         summary: data.summary,
-        plan_json: data,
+        plan_json: planJson,
         is_active: true
       };
 
@@ -178,27 +183,39 @@ export default function SoulMonthPlanner({
             clearInterval(stepInterval);
             setProcessingStepIndex(PROCESSING_STEPS.length - 1);
 
-            // 用户输入 → 一条父约定；AI 拆解的里程碑/周节奏 → 子约定挂到父下
             const monthStartStr = data.plan_start_date || format(start, 'yyyy-MM-dd');
-            extractAndCreateTasks(userInput, monthStartStr).then(async tasks => {
-              const parent = tasks?.[0];
-              if (!parent?.id) return;
-              const childItems = [
-                ...(data.key_milestones || []).map(m => ({
-                  title: m.title,
-                  description: ({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || '里程碑',
-                  date: m.deadline && /^\d{4}-\d{2}-\d{2}$/.test(m.deadline) ? m.deadline : undefined,
-                  tag: '月度里程碑',
-                })),
-                ...(data.weeks_breakdown || []).map(w => ({
-                  title: w.week_label ? `${w.week_label}：${w.focus || ''}`.trim() : (w.focus || '周节奏'),
-                  description: (w.key_events || []).join('、'),
-                  tag: '周度节奏',
-                })),
-              ];
-              const n = await attachPlanItemsToParent(parent.id, childItems, '月度规划').catch(() => 0);
-              toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
-            }).catch(e => console.error("Task extraction failed", e));
+            let resolvedParentTaskId = parentTaskId || data?.parent_task_id || null;
+            try {
+              if (resolvedParentTaskId) {
+                const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
+                if (!parent?.id) resolvedParentTaskId = null;
+              }
+
+              if (!resolvedParentTaskId) {
+                const tasksCreated = await extractAndCreateTasks(userInput, monthStartStr);
+                const parent = tasksCreated?.[0];
+                resolvedParentTaskId = parent?.id || null;
+              }
+
+              if (resolvedParentTaskId) {
+                setParentTaskId(resolvedParentTaskId);
+                const childItems = [
+                  ...(data.key_milestones || []).map(m => ({
+                    title: m.title,
+                    description: ({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || '里程碑',
+                    date: m.deadline && /^\d{4}-\d{2}-\d{2}$/.test(m.deadline) ? m.deadline : undefined,
+                    tag: '月度里程碑',
+                  })),
+                  ...(data.weeks_breakdown || []).map(w => ({
+                    title: w.week_label ? `${w.week_label}：${w.focus || ''}`.trim() : (w.focus || '周节奏'),
+                    description: (w.key_events || []).join('、'),
+                    tag: '周度节奏',
+                  })),
+                ];
+                const n = await attachPlanItemsToParent(resolvedParentTaskId, childItems, '月度规划').catch(() => 0);
+                toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
+              }
+            } catch (_error) { void _error; }
 
             // 同步到心签
             syncPlanToNote(userInput, "month_plan", { dateRange: monthLabel, theme: data.theme }).then(note => {
@@ -209,7 +226,7 @@ export default function SoulMonthPlanner({
                 setStage('results');
                 setIsProcessing(false);
                 toast.success("已生成月度全景规划");
-                savePlanToDB(data, userInput);
+                savePlanToDB(data, userInput, resolvedParentTaskId);
                 
                 setTimeout(() => {
                     resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -257,7 +274,40 @@ export default function SoulMonthPlanner({
           ]
         };
         setMonthData(merged);
-        savePlanToDB(merged, userInput + '\n' + appendInput);
+        const monthStartStr = merged.plan_start_date || format(start, 'yyyy-MM-dd');
+        let resolvedParentTaskId = parentTaskId || merged?.parent_task_id || null;
+        try {
+          if (resolvedParentTaskId) {
+            const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
+            if (!parent?.id) resolvedParentTaskId = null;
+          }
+
+          if (!resolvedParentTaskId) {
+            const tasksCreated = await extractAndCreateTasks(userInput, monthStartStr);
+            const parent = tasksCreated?.[0];
+            resolvedParentTaskId = parent?.id || null;
+          }
+
+          if (resolvedParentTaskId) {
+            setParentTaskId(resolvedParentTaskId);
+            const childItems = [
+              ...(merged.key_milestones || []).map(m => ({
+                title: m.title,
+                description: ({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || '里程碑',
+                date: m.deadline && /^\d{4}-\d{2}-\d{2}$/.test(m.deadline) ? m.deadline : undefined,
+                tag: '月度里程碑',
+              })),
+              ...(merged.weeks_breakdown || []).map(w => ({
+                title: w.week_label ? `${w.week_label}：${w.focus || ''}`.trim() : (w.focus || '周节奏'),
+                description: (w.key_events || []).join('、'),
+                tag: '周度节奏',
+              })),
+            ];
+            await attachPlanItemsToParent(resolvedParentTaskId, childItems, '月度规划').catch(() => 0);
+          }
+        } catch (_error) { void _error; }
+
+        savePlanToDB(merged, userInput + '\n' + appendInput, resolvedParentTaskId);
         setAppendInput('');
         setShowAppendInput(false);
         toast.success('已将新内容智能融入本月规划');

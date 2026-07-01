@@ -15,13 +15,33 @@ function toPemPrivateKey(keyText) {
   return `-----BEGIN PRIVATE KEY-----\n${text}\n-----END PRIVATE KEY-----`;
 }
 
+function describePemLabel(text) {
+  const match = String(text || "").match(/-----BEGIN ([^-]+)-----/);
+  return match?.[1] || "UNKNOWN";
+}
+
+function assertValidMerchantPrivateKey(privateKey) {
+  try {
+    crypto.createPrivateKey(privateKey);
+    return privateKey;
+  } catch (error) {
+    const detail = error?.message ? `：${error.message}` : "";
+    const keyType = describePemLabel(privateKey);
+    const configError = new Error(
+      `WECHAT_PRIVATE_KEY 无法解析，当前检测到密钥头为 ${keyType}。请确认填写的是商户 API 证书私钥 apiclient_key.pem，而不是 apiclient_cert.pem / 平台证书 / 公钥${detail}`
+    );
+    configError.status = 500;
+    throw configError;
+  }
+}
+
 async function loadMerchantPrivateKey() {
   if (env.WECHAT_PRIVATE_KEY) {
-    return toPemPrivateKey(env.WECHAT_PRIVATE_KEY.replace(/\\n/g, "\n"));
+    return assertValidMerchantPrivateKey(toPemPrivateKey(env.WECHAT_PRIVATE_KEY.replace(/\\n/g, "\n")));
   }
   if (env.WECHAT_PRIVATE_KEY_PATH) {
     const content = await fs.readFile(env.WECHAT_PRIVATE_KEY_PATH, "utf8");
-    return toPemPrivateKey(content);
+    return assertValidMerchantPrivateKey(toPemPrivateKey(content));
   }
   return null;
 }

@@ -47,12 +47,35 @@ function getWeekDates(startDate) {
 function getMonthWeekStarts(startDate) {
   const base = new Date(`${startDate}T00:00:00+08:00`);
   const starts = [];
-  for (let week = 0; week < 4; week += 1) {
+  for (let week = 0; week < 5; week += 1) {
     const current = new Date(base);
     current.setDate(base.getDate() + (week * 7));
     starts.push(`${current.getFullYear()}-${pad2(current.getMonth() + 1)}-${pad2(current.getDate())}`);
   }
   return starts;
+}
+
+function clipText(value, maxLength, fallback = "") {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return fallback;
+  return text.slice(0, maxLength);
+}
+
+function uniqueItems(items) {
+  return Array.from(new Set(items.filter(Boolean)));
+}
+
+function isGenericText(value, genericTexts = []) {
+  const text = clipText(value, 200, "");
+  if (!text) return true;
+  return genericTexts.includes(text);
+}
+
+function classifyMonthMilestoneType(text) {
+  if (/发布|上线|交付/.test(text)) return "launch";
+  if (/测试|复盘|检查|修复|回顾/.test(text)) return "review";
+  if (/目标|规划|优先级/.test(text)) return "goal";
+  return "milestone";
 }
 
 function normalizeWeekEvent(event, weekDates) {
@@ -77,45 +100,7 @@ function normalizeWeekEvent(event, weekDates) {
   };
 }
 
-function normalizeWeekPlan(rawPlan, startDate, existingPlan) {
-  const weekDates = getWeekDates(startDate);
-  const base = isPlainObject(rawPlan) ? rawPlan : {};
-  const existing = isPlainObject(existingPlan) ? existingPlan : {};
-  const eventsSource = Array.isArray(base.events) && base.events.length > 0
-    ? base.events
-    : (Array.isArray(existing.events) ? existing.events : []);
-  const automationsSource = Array.isArray(base.automations) && base.automations.length > 0
-    ? base.automations
-    : (Array.isArray(existing.automations) ? existing.automations : []);
-
-  return {
-    plan_start_date: normalizeDateString(base.plan_start_date, startDate),
-    summary: String(base.summary || existing.summary || "本周围绕核心目标推进，兼顾专注、协作与恢复。").slice(0, 300),
-    theme: String(base.theme || existing.theme || "本周聚焦").slice(0, 80),
-    events: eventsSource.map((item) => normalizeWeekEvent(item, weekDates)).filter(Boolean),
-    device_strategies: isPlainObject(base.device_strategies)
-      ? base.device_strategies
-      : (isPlainObject(existing.device_strategies) ? existing.device_strategies : {
-        phone: "工作时段开启专注模式，集中处理即时沟通。",
-        watch: "在会议、通勤和健康提醒场景提供轻量提示。",
-        pc: "深度工作块优先处理核心任务，减少切换。"
-      }),
-    automations: automationsSource.map((item) => ({
-      title: String(item?.title || "自动化提醒").slice(0, 100),
-      description: String(item?.description || "根据周计划自动提醒与整理重点事项。").slice(0, 240),
-      icon: typeof item?.icon === "string" && item.icon.trim() ? item.icon.trim().slice(0, 4) : "⚙️",
-      status: item?.status === "active" ? "active" : "pending"
-    })),
-    stats: {
-      focus_hours: Number(base?.stats?.focus_hours ?? existing?.stats?.focus_hours ?? 12),
-      meetings: Number(base?.stats?.meetings ?? existing?.stats?.meetings ?? 2),
-      travel_days: Number(base?.stats?.travel_days ?? existing?.stats?.travel_days ?? 0)
-    }
-  };
-}
-
-function buildWeekFallbackPlan(input, startDate, existingPlan) {
-  const weekDates = getWeekDates(startDate);
+function buildWeekHintEvents(input, weekDates) {
   const keywords = String(input || "");
   const events = [];
 
@@ -133,11 +118,166 @@ function buildWeekFallbackPlan(input, startDate, existingPlan) {
     events.push({ date: weekDates[3], day_index: 3, title: "中段检查与调整", time: "16:00", type: "work", icon: "🧭" });
   }
 
+  return events;
+}
+
+function deriveWeekTheme(input, events) {
+  const text = String(input || "");
+  const types = new Set(events.map((item) => item.type));
+  if (/发布|上线/.test(text)) return "交付冲刺周";
+  if (types.has("travel")) return "差旅协同周";
+  if (types.has("meeting")) return "协同推进周";
+  if (/学习|备考|训练/.test(text)) return "成长进阶周";
+  return "专注推进周";
+}
+
+function deriveWeekSummary(input, events) {
+  const text = clipText(input, 80, "");
+  const eventTitles = uniqueItems(events.map((item) => clipText(item.title, 20, ""))).slice(0, 3);
+  if (eventTitles.length > 0) {
+    return clipText(`本周围绕${eventTitles.join("、")}展开，兼顾重点推进、协同沟通与节奏调整。`, 300, "本周围绕核心目标推进，兼顾专注、协作与恢复。");
+  }
+  if (text) {
+    return clipText(`本周将围绕“${text}”推进，安排专注推进、关键协同与恢复窗口。`, 300, "本周围绕核心目标推进，兼顾专注、协作与恢复。");
+  }
+  return "本周围绕核心目标推进，兼顾专注、协作与恢复。";
+}
+
+function buildWeekDeviceStrategies(input, events, existingStrategies = {}) {
+  const text = String(input || "");
+  const types = new Set(events.map((item) => item.type));
+  const derived = {
+    phone: types.has("meeting") || /沟通|拜访|对接/.test(text)
+      ? "集中处理即时沟通与会议变更，避免打断深度工作。"
+      : (types.has("travel")
+        ? "优先承接行程变更、导航提醒和移动场景下的即时沟通。"
+        : "工作时段开启专注模式，集中处理即时沟通。"),
+    watch: types.has("travel") || types.has("rest")
+      ? "在通勤、行程提醒和健康节奏场景提供轻量触达。"
+      : "在会议切换、喝水起身和关键提醒场景提供轻量提示。",
+    pc: /开发|研发|测试|发布|上线/.test(text) || types.has("focus")
+      ? "把核心开发、测试或交付事项放入深度工作块，减少多任务切换。"
+      : "深度工作块优先处理核心任务，减少切换。"
+  };
+
+  return {
+    ...derived,
+    ...(isPlainObject(existingStrategies) ? existingStrategies : {})
+  };
+}
+
+function isPlaceholderMilestoneTitle(title, index) {
+  const text = clipText(title, 120, "");
+  if (!text) return true;
+  return new RegExp(`^里程碑\\s*${index + 1}$`).test(text) || /^里程碑\s*\d+$/.test(text);
+}
+
+function buildMilestonesFromWeeks(weeks, startDate) {
+  const weekStarts = getMonthWeekStarts(startDate);
+  return weeks.slice(0, 5).map((week, index) => {
+    const focus = clipText(week?.focus, 120, "");
+    const firstEvent = Array.isArray(week?.key_events) ? clipText(week.key_events[0], 120, "") : "";
+    const title = clipText(focus || firstEvent || `${clipText(week?.week_label, 20, `第${index + 1}周`)}重点推进`, 120);
+    const combined = `${focus} ${firstEvent}`.trim();
+    return {
+      title,
+      deadline: normalizeDateString(week?.deadline, weekStarts[Math.min(index, weekStarts.length - 1)] || startDate),
+      type: classifyMonthMilestoneType(combined || title)
+    };
+  });
+}
+
+function deriveMonthTheme(input, weeks, milestones) {
+  const text = String(input || "");
+  const focusText = weeks.map((item) => item.focus).join(" ");
+  const milestoneText = milestones.map((item) => item.title).join(" ");
+  const combined = `${text} ${focusText} ${milestoneText}`;
+  if (/发布|上线|交付/.test(combined)) return "上线推进月";
+  if (/测试|修复|质量/.test(combined)) return "质量攻坚月";
+  if (/学习|备考|训练|读书/.test(combined)) return "成长提升月";
+  if (/出差|拜访|客户|沟通/.test(combined)) return "协同推进月";
+  const firstFocus = clipText(weeks[0]?.focus, 10, "");
+  return firstFocus ? clipText(`${firstFocus}推进月`, 80, "目标推进月") : "目标推进月";
+}
+
+function deriveMonthSummary(input, weeks, milestones) {
+  const focuses = uniqueItems(weeks.map((item) => clipText(item.focus, 20, ""))).slice(0, 3);
+  const milestoneTitles = uniqueItems(milestones.map((item) => clipText(item.title, 18, ""))).slice(0, 3);
+  const inputText = clipText(input, 40, "");
+  if (focuses.length > 0) {
+    return clipText(`本月将围绕${focuses.join("、")}展开推进，并以${milestoneTitles.join("、") || "关键节点达成"}作为阶段性检验。`, 400, "本月以关键目标拆解、节奏推进和阶段复盘为主。");
+  }
+  if (inputText) {
+    return clipText(`本月围绕“${inputText}”持续推进，按周拆解节奏并在关键节点完成复盘与收口。`, 400, "本月以关键目标拆解、节奏推进和阶段复盘为主。");
+  }
+  return "本月以关键目标拆解、节奏推进和阶段复盘为主。";
+}
+
+function normalizeWeekPlan(rawPlan, startDate, existingPlan) {
+  const weekDates = getWeekDates(startDate);
+  const base = isPlainObject(rawPlan) ? rawPlan : {};
+  const existing = isPlainObject(existingPlan) ? existingPlan : {};
+  const hintEvents = buildWeekHintEvents(base.planning_input || existing.planning_input || "", weekDates);
+  const primaryEventsSource = Array.isArray(base.events) && base.events.length > 0
+    ? base.events
+    : (Array.isArray(existing.events) ? existing.events : []);
+  const normalizedEvents = uniqueItems([
+    ...primaryEventsSource.map((item) => normalizeWeekEvent(item, weekDates)).filter(Boolean),
+    ...((primaryEventsSource.length < 3 || primaryEventsSource.every((item) => !item?.description))
+      ? hintEvents.map((item) => normalizeWeekEvent(item, weekDates)).filter(Boolean)
+      : [])
+  ].map((item) => JSON.stringify(item))).map((item) => JSON.parse(item));
+  const automationsSource = Array.isArray(base.automations) && base.automations.length > 0
+    ? base.automations
+    : (Array.isArray(existing.automations) ? existing.automations : []);
+  const genericWeekSummary = "本周围绕核心目标推进，兼顾专注、协作与恢复。";
+  const genericWeekTheme = "本周聚焦";
+
+  return {
+    plan_start_date: normalizeDateString(base.plan_start_date, startDate),
+    summary: clipText(
+      isGenericText(base.summary, [genericWeekSummary]) ? deriveWeekSummary(base.planning_input || existing.planning_input, normalizedEvents) : base.summary,
+      300,
+      clipText(existing.summary, 300, deriveWeekSummary(base.planning_input || existing.planning_input, normalizedEvents))
+    ),
+    theme: clipText(
+      isGenericText(base.theme, [genericWeekTheme]) ? deriveWeekTheme(base.planning_input || existing.planning_input, normalizedEvents) : base.theme,
+      80,
+      clipText(existing.theme, 80, deriveWeekTheme(base.planning_input || existing.planning_input, normalizedEvents))
+    ),
+    events: normalizedEvents,
+    device_strategies: buildWeekDeviceStrategies(
+      base.planning_input || existing.planning_input,
+      normalizedEvents,
+      isPlainObject(base.device_strategies)
+        ? base.device_strategies
+        : (isPlainObject(existing.device_strategies) ? existing.device_strategies : {})
+    ),
+    automations: automationsSource.map((item) => ({
+      title: String(item?.title || "自动化提醒").slice(0, 100),
+      description: String(item?.description || "根据周计划自动提醒与整理重点事项。").slice(0, 240),
+      icon: typeof item?.icon === "string" && item.icon.trim() ? item.icon.trim().slice(0, 4) : "⚙️",
+      status: item?.status === "active" ? "active" : "pending"
+    })),
+    stats: {
+      focus_hours: Number(base?.stats?.focus_hours ?? existing?.stats?.focus_hours ?? 12),
+      meetings: Number(base?.stats?.meetings ?? existing?.stats?.meetings ?? 2),
+      travel_days: Number(base?.stats?.travel_days ?? existing?.stats?.travel_days ?? 0)
+    }
+  };
+}
+
+function buildWeekFallbackPlan(input, startDate, existingPlan) {
+  const weekDates = getWeekDates(startDate);
+  const keywords = String(input || "");
+  const events = buildWeekHintEvents(input, weekDates);
+
   return normalizeWeekPlan({
     plan_start_date: startDate,
     summary: `已根据输入生成基础周计划：${String(input || "").slice(0, 40) || "围绕本周重点推进核心安排"}。`,
     theme: /出差|会议/.test(keywords) ? "协同推进周" : "专注推进周",
     events,
+    planning_input: input,
     automations: [
       { title: "每日重点回顾", description: "每天晚上回顾当日推进情况并整理明日重点。", icon: "✨", status: "active" }
     ],
@@ -158,21 +298,38 @@ function normalizeMonthlyPlan(rawPlan, startDate, existingPlan) {
   const weeksSource = Array.isArray(base.weeks_breakdown) && base.weeks_breakdown.length > 0
     ? base.weeks_breakdown
     : (Array.isArray(existing.weeks_breakdown) ? existing.weeks_breakdown : []);
+  const normalizedWeeks = weeksSource.map((item, index) => ({
+    week_label: clipText(item?.week_label, 40, `第${index + 1}周`),
+    focus: clipText(item?.focus, 120, "推进当周重点"),
+    key_events: Array.isArray(item?.key_events) ? item.key_events.slice(0, 6).map((entry) => clipText(entry, 120, "")).filter(Boolean) : []
+  }));
+  const rawMilestones = milestonesSource.map((item, index) => ({
+    title: clipText(item?.title, 120, `里程碑 ${index + 1}`),
+    deadline: normalizeDateString(item?.deadline, startDate),
+    type: clipText(item?.type, 40, "milestone")
+  }));
+  const derivedMilestones = buildMilestonesFromWeeks(normalizedWeeks, startDate);
+  const normalizedMilestones = (rawMilestones.length > 0 ? rawMilestones : derivedMilestones).map((item, index) => {
+    if (!isPlaceholderMilestoneTitle(item.title, index)) return item;
+    return derivedMilestones[index] || item;
+  });
+  const genericMonthSummary = "本月以关键目标拆解、节奏推进和阶段复盘为主。";
+  const genericMonthTheme = "月度蓝图";
 
   return {
     plan_start_date: normalizeDateString(base.plan_start_date, startDate),
-    summary: String(base.summary || existing.summary || "本月以关键目标拆解、节奏推进和阶段复盘为主。").slice(0, 400),
-    theme: String(base.theme || existing.theme || "月度蓝图").slice(0, 80),
-    key_milestones: milestonesSource.map((item, index) => ({
-      title: String(item?.title || `里程碑 ${index + 1}`).slice(0, 120),
-      deadline: normalizeDateString(item?.deadline, startDate),
-      type: String(item?.type || "milestone").slice(0, 40)
-    })),
-    weeks_breakdown: weeksSource.map((item, index) => ({
-      week_label: String(item?.week_label || `第 ${index + 1} 周`).slice(0, 40),
-      focus: String(item?.focus || "推进当周重点").slice(0, 120),
-      key_events: Array.isArray(item?.key_events) ? item.key_events.slice(0, 6).map((entry) => String(entry).slice(0, 120)) : []
-    })),
+    summary: clipText(
+      isGenericText(base.summary, [genericMonthSummary]) ? deriveMonthSummary(base.planning_input || existing.planning_input, normalizedWeeks, normalizedMilestones) : base.summary,
+      400,
+      clipText(existing.summary, 400, deriveMonthSummary(base.planning_input || existing.planning_input, normalizedWeeks, normalizedMilestones))
+    ),
+    theme: clipText(
+      isGenericText(base.theme, [genericMonthTheme]) ? deriveMonthTheme(base.planning_input || existing.planning_input, normalizedWeeks, normalizedMilestones) : base.theme,
+      80,
+      clipText(existing.theme, 80, deriveMonthTheme(base.planning_input || existing.planning_input, normalizedWeeks, normalizedMilestones))
+    ),
+    key_milestones: normalizedMilestones,
+    weeks_breakdown: normalizedWeeks,
     strategies: isPlainObject(base.strategies)
       ? base.strategies
       : (isPlainObject(existing.strategies) ? existing.strategies : {
@@ -181,7 +338,7 @@ function normalizeMonthlyPlan(rawPlan, startDate, existingPlan) {
       }),
     stats: {
       focus_hours: Number(base?.stats?.focus_hours ?? existing?.stats?.focus_hours ?? 36),
-      milestones_count: Number(base?.stats?.milestones_count ?? existing?.stats?.milestones_count ?? milestonesSource.length ?? 3)
+      milestones_count: Number(base?.stats?.milestones_count ?? existing?.stats?.milestones_count ?? normalizedMilestones.length ?? 3)
     }
   };
 }
@@ -207,6 +364,7 @@ function buildMonthFallbackPlan(input, startDate, existingPlan) {
     summary: `已根据输入生成基础月度蓝图：${String(input || "").slice(0, 50) || "聚焦本月核心目标与节奏安排"}。`,
     theme: /提升|学习|习惯/.test(keywords) ? "成长提升月" : "目标推进月",
     key_milestones: milestones,
+    planning_input: input,
     weeks_breakdown: [
       { week_label: "第 1 周", focus: "明确目标与拆解动作", key_events: ["梳理优先级", "建立执行节奏"] },
       { week_label: "第 2 周", focus: "集中推进核心事项", key_events: ["安排深度工作块", "同步关键协作"] },
@@ -234,9 +392,12 @@ async function generateWeekPlan(payload) {
         `当前查看周起始日期（周一）是：${startDate}。`,
         "输出必须是 JSON，不要输出解释。",
         "请返回完整周计划，而不是片段。",
+        "summary 和 theme 必须结合用户输入具体填写，不要写“本周聚焦”这类泛化占位词。",
         "events 中每条都要包含：date(YYYY-MM-DD)、day_index(0-6)、title、time(HH:MM)、type、icon。",
+        "events 至少返回 3-6 条，并尽量覆盖不同日期；不要只给笼统的 1-2 条事件。",
         "device_strategies 至少包含 phone/watch/pc 三项。",
-        "automations 仅保留 1-4 条最有价值的自动化动作。"
+        "automations 仅保留 1-4 条最有价值的自动化动作。",
+        "如果用户提到差旅、会议、发布、健身、学习等场景，请把这些信息体现在 events 和 summary 中。"
       ].join("\n"),
       prompt: [
         `用户输入：${payload.input || ""}`,
@@ -260,7 +421,7 @@ async function generateWeekPlan(payload) {
     });
 
     return {
-      ...normalizeWeekPlan(data, startDate, payload.existingPlan),
+      ...normalizeWeekPlan({ ...data, planning_input: payload.input }, startDate, payload.existingPlan),
       generation_mode: "ai"
     };
   } catch (error) {
@@ -283,8 +444,11 @@ async function generateMonthPlan(payload) {
         `当前查看月份起始日期是：${startDate}。`,
         "输出必须是 JSON，不要输出解释。",
         "请返回完整月度蓝图。",
-        "key_milestones 返回 3-6 个关键里程碑。",
-        "weeks_breakdown 返回 4-5 周拆解，每周包含 week_label、focus、key_events。"
+        "summary 和 theme 必须结合用户目标具体填写，不要写“月度蓝图”这类泛化占位词。",
+        "key_milestones 返回 3-6 个关键里程碑，每项都必须包含清晰中文标题、deadline、type，禁止使用“里程碑1/2/3”这种占位名。",
+        "weeks_breakdown 返回 4-5 周拆解，每周包含 week_label、focus、key_events。",
+        "weeks_breakdown 的 focus 要体现当周最关键推进方向，key_events 要写具体动作，不要写泛泛的空话。",
+        "如果用户提到开发、测试、发布、运动、学习、复盘等场景，请把这些内容体现在里程碑和周度拆解中。"
       ].join("\n"),
       prompt: [
         `用户输入：${payload.input || ""}`,
@@ -310,7 +474,7 @@ async function generateMonthPlan(payload) {
     });
 
     return {
-      ...normalizeMonthlyPlan(data, startDate, payload.existingPlan),
+      ...normalizeMonthlyPlan({ ...data, planning_input: payload.input }, startDate, payload.existingPlan),
       generation_mode: "ai"
     };
   } catch (error) {

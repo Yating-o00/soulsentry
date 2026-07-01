@@ -259,9 +259,17 @@ async function generateWeekPlan(payload) {
       temperature: 0.4
     });
 
-    return normalizeWeekPlan(data, startDate, payload.existingPlan);
-  } catch (_error) {
-    return buildWeekFallbackPlan(payload.input, startDate, payload.existingPlan);
+    return {
+      ...normalizeWeekPlan(data, startDate, payload.existingPlan),
+      generation_mode: "ai"
+    };
+  } catch (error) {
+    console.error("[generateWeekPlan] AI generation failed, using fallback:", error);
+    return {
+      ...buildWeekFallbackPlan(payload.input, startDate, payload.existingPlan),
+      generation_mode: "fallback",
+      generation_error: error?.message || "AI 生成失败，已切换为基础模板"
+    };
   }
 }
 
@@ -301,9 +309,17 @@ async function generateMonthPlan(payload) {
       temperature: 0.4
     });
 
-    return normalizeMonthlyPlan(data, startDate, payload.existingPlan);
-  } catch (_error) {
-    return buildMonthFallbackPlan(payload.input, startDate, payload.existingPlan);
+    return {
+      ...normalizeMonthlyPlan(data, startDate, payload.existingPlan),
+      generation_mode: "ai"
+    };
+  } catch (error) {
+    console.error("[generateMonthPlan] AI generation failed, using fallback:", error);
+    return {
+      ...buildMonthFallbackPlan(payload.input, startDate, payload.existingPlan),
+      generation_mode: "fallback",
+      generation_error: error?.message || "AI 生成失败，已切换为基础模板"
+    };
   }
 }
 

@@ -225,7 +225,11 @@ export default function SoulMonthPlanner({
             setTimeout(() => {
                 setStage('results');
                 setIsProcessing(false);
-                toast.success("已生成月度全景规划");
+                if (data.generation_mode === 'fallback') {
+                    toast.warning(`AI 未成功调用，当前显示基础模板${data.generation_error ? `：${data.generation_error}` : ''}`, { duration: 6000 });
+                } else {
+                    toast.success("已生成月度全景规划");
+                }
                 savePlanToDB(data, userInput, resolvedParentTaskId);
                 
                 setTimeout(() => {

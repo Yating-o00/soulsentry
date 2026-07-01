@@ -219,7 +219,9 @@ export default function SoulWeekPlanner({
                 setStage('results');
                 setIsProcessing(false);
                 
-                if (data.is_demo) {
+                if (data.generation_mode === 'fallback') {
+                    toast.warning(`AI 未成功调用，当前显示基础模板${data.generation_error ? `：${data.generation_error}` : ''}`, { duration: 6000 });
+                } else if (data.is_demo) {
                     toast.warning("AI服务不可用 (API Key无效)，已显示演示数据", { duration: 5000 });
                 } else {
                     toast.success("已生成全情境规划");

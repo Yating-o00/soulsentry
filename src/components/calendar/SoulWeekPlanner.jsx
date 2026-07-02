@@ -161,9 +161,13 @@ export default function SoulWeekPlanner({
     if (!existingPlanId) return;
     try {
       await base44.entities.WeeklyPlan.delete(existingPlanId);
+      queryClient.setQueryData(['weeklyPlan', currentWeekStartStr], []);
       setExistingPlanId(null);
+      setParentTaskId(null);
+      setAppendInput('');
+      setShowAppendInput(false);
       resetView();
-      queryClient.invalidateQueries({ queryKey: ['weeklyPlan'] });
+      queryClient.invalidateQueries({ queryKey: ['weeklyPlan', currentWeekStartStr] });
       toast.success("规划已删除");
     } catch (error) {
       console.error("Failed to delete plan:", error);

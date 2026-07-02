@@ -231,20 +231,31 @@ function extractExplicitWeekEvents(input, startDate) {
   if (!text) return [];
 
   const planningWeekOffset = inferWeekOffset(text, 0);
-  return text
+  const sentenceSegments = text
     .split(/[。；;\n]/)
-    .flatMap((segment) => segment.split(/，|,/))
     .map((item) => item.trim())
-    .filter(Boolean)
-    .map((clause) => {
-      const dayIndex = parseWeekdayIndex(clause);
-      if (dayIndex == null) return null;
-      const clauseWeekOffset = inferWeekOffset(clause, planningWeekOffset);
-      const clauseWeekStart = addDaysToDateString(startDate, clauseWeekOffset * 7);
+    .filter(Boolean);
+
+  const results = [];
+  sentenceSegments.forEach((segment) => {
+    const clauses = segment.split(/，|,/).map((item) => item.trim()).filter(Boolean);
+    let inheritedDayIndex = null;
+    let inheritedWeekOffset = planningWeekOffset;
+
+    clauses.forEach((clause) => {
+      const explicitDayIndex = parseWeekdayIndex(clause);
+      if (explicitDayIndex != null) inheritedDayIndex = explicitDayIndex;
+      const dayIndex = explicitDayIndex != null ? explicitDayIndex : inheritedDayIndex;
+      if (dayIndex == null) return;
+
+      const explicitWeekOffset = inferWeekOffset(clause, inheritedWeekOffset);
+      inheritedWeekOffset = explicitWeekOffset;
+      const clauseWeekStart = addDaysToDateString(startDate, explicitWeekOffset * 7);
       const clauseWeekDates = getWeekDates(clauseWeekStart);
       const meta = inferWeekEventMeta(clause);
       const title = cleanupWeekClauseTitle(clause);
-      return {
+
+      results.push({
         date: clauseWeekDates[dayIndex],
         day_index: dayIndex,
         title: title || (meta.type === "meeting" ? "关键会面安排" : "重点事项安排"),
@@ -252,9 +263,11 @@ function extractExplicitWeekEvents(input, startDate) {
         type: meta.type,
         icon: meta.icon,
         description: clipText(clause, 240, undefined)
-      };
-    })
-    .filter(Boolean);
+      });
+    });
+  });
+
+  return results;
 }
 
 function deriveWeekTheme(input, events) {

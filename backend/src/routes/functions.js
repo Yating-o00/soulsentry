@@ -302,6 +302,88 @@ function buildWeekDeviceStrategies(input, events, existingStrategies = {}) {
   };
 }
 
+function isGenericAutomation(item) {
+  const title = clipText(item?.title, 100, "");
+  const description = clipText(item?.description, 240, "");
+  return !title
+    || title === "自动化提醒"
+    || description === "根据周计划自动提醒与整理重点事项。";
+}
+
+function buildWeekAutomations(input, events, sourceAutomations = []) {
+  const text = String(input || "");
+  const suggestions = [];
+  const pushAutomation = (item) => {
+    if (!item?.title) return;
+    suggestions.push({
+      title: clipText(item.title, 100, "自动化提醒"),
+      description: clipText(item.description, 240, "根据周计划自动提醒与整理重点事项。"),
+      icon: typeof item.icon === "string" && item.icon.trim() ? item.icon.trim().slice(0, 4) : "⚙️",
+      status: item.status === "active" ? "active" : "pending"
+    });
+  };
+
+  const normalizedSource = Array.isArray(sourceAutomations) ? sourceAutomations : [];
+  const hasMeaningfulSource = normalizedSource.some((item) => !isGenericAutomation(item));
+  if (hasMeaningfulSource) {
+    normalizedSource.forEach(pushAutomation);
+  }
+
+  const eventTypes = new Set(events.map((item) => item.type));
+  const hasMeeting = eventTypes.has("meeting");
+  const hasTravel = eventTypes.has("travel");
+  const hasFocus = eventTypes.has("focus") || /开发|测试|复盘|材料|方案|总结|纪要/.test(text);
+  const hasRest = eventTypes.has("rest");
+
+  if (hasMeeting) {
+    const meetingTitles = uniqueItems(events.filter((item) => item.type === "meeting").map((item) => clipText(item.title, 20, ""))).slice(0, 2);
+    pushAutomation({
+      title: "会议前提醒",
+      description: `在会前 30 分钟提醒准备${meetingTitles.join("、") || "关键会面"}所需材料，并在会后提示整理纪要。`,
+      icon: "👥",
+      status: "active"
+    });
+  }
+
+  if (hasTravel) {
+    pushAutomation({
+      title: "行程出发检查",
+      description: "在出发前提醒确认交通、证件、地址与到达时间，避免差旅行程遗漏。",
+      icon: "✈️",
+      status: "active"
+    });
+  }
+
+  if (hasFocus) {
+    pushAutomation({
+      title: "深度工作块",
+      description: "自动为材料整理、测试复盘或重点输出预留专注时段，并减少消息打扰。",
+      icon: "🎯",
+      status: "active"
+    });
+  }
+
+  if (hasRest) {
+    pushAutomation({
+      title: "节奏恢复提醒",
+      description: "在高强度安排之间加入喝水、起身与恢复提醒，避免连续透支。",
+      icon: "💪",
+      status: "pending"
+    });
+  }
+
+  if (suggestions.length === 0) {
+    pushAutomation({
+      title: "本周节奏提醒",
+      description: "根据本周计划自动提醒关键节点，并在每天结束前整理次日重点。",
+      icon: "⚙️",
+      status: "active"
+    });
+  }
+
+  return uniqueItems(suggestions.map((item) => JSON.stringify(item))).map((item) => JSON.parse(item)).slice(0, 4);
+}
+
 function isPlaceholderMilestoneTitle(title, index) {
   const text = clipText(title, 120, "");
   if (!text) return true;
@@ -391,12 +473,7 @@ function normalizeWeekPlan(rawPlan, startDate, existingPlan) {
         ? base.device_strategies
         : (isPlainObject(existing.device_strategies) ? existing.device_strategies : {})
     ),
-    automations: automationsSource.map((item) => ({
-      title: String(item?.title || "自动化提醒").slice(0, 100),
-      description: String(item?.description || "根据周计划自动提醒与整理重点事项。").slice(0, 240),
-      icon: typeof item?.icon === "string" && item.icon.trim() ? item.icon.trim().slice(0, 4) : "⚙️",
-      status: item?.status === "active" ? "active" : "pending"
-    })),
+    automations: buildWeekAutomations(base.planning_input || existing.planning_input, normalizedEvents, automationsSource),
     stats: {
       focus_hours: Number(base?.stats?.focus_hours ?? existing?.stats?.focus_hours ?? 12),
       meetings: Number(base?.stats?.meetings ?? existing?.stats?.meetings ?? 2),

@@ -182,45 +182,8 @@ export default function SoulMonthPlanner({
             setMonthData(data);
             clearInterval(stepInterval);
             setProcessingStepIndex(PROCESSING_STEPS.length - 1);
-
             const monthStartStr = data.plan_start_date || format(start, 'yyyy-MM-dd');
-            let resolvedParentTaskId = parentTaskId || data?.parent_task_id || null;
-            try {
-              if (resolvedParentTaskId) {
-                const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
-                if (!parent?.id) resolvedParentTaskId = null;
-              }
-
-              if (!resolvedParentTaskId) {
-                const tasksCreated = await extractAndCreateTasks(userInput, monthStartStr);
-                const parent = tasksCreated?.[0];
-                resolvedParentTaskId = parent?.id || null;
-              }
-
-              if (resolvedParentTaskId) {
-                setParentTaskId(resolvedParentTaskId);
-                const childItems = [
-                  ...(data.key_milestones || []).map(m => ({
-                    title: m.title,
-                    description: ({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || '里程碑',
-                    date: m.deadline && /^\d{4}-\d{2}-\d{2}$/.test(m.deadline) ? m.deadline : undefined,
-                    tag: '月度里程碑',
-                  })),
-                  ...(data.weeks_breakdown || []).map(w => ({
-                    title: w.week_label ? `${w.week_label}：${w.focus || ''}`.trim() : (w.focus || '周节奏'),
-                    description: (w.key_events || []).join('、'),
-                    tag: '周度节奏',
-                  })),
-                ];
-                const n = await attachPlanItemsToParent(resolvedParentTaskId, childItems, '月度规划').catch(() => 0);
-                toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
-              }
-            } catch (_error) { void _error; }
-
-            // 同步到心签
-            syncPlanToNote(userInput, "month_plan", { dateRange: monthLabel, theme: data.theme }).then(note => {
-              if (note) toast.success("已同步到心签");
-            }).catch(e => console.error("Note sync failed", e));
+            const initialParentTaskId = parentTaskId || data?.parent_task_id || null;
             
             setTimeout(() => {
                 setStage('results');
@@ -230,7 +193,50 @@ export default function SoulMonthPlanner({
                 } else {
                     toast.success("已生成月度全景规划");
                 }
-                savePlanToDB(data, userInput, resolvedParentTaskId);
+                savePlanToDB(data, userInput, initialParentTaskId);
+                void (async () => {
+                  let resolvedParentTaskId = initialParentTaskId;
+                  try {
+                    if (resolvedParentTaskId) {
+                      const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
+                      if (!parent?.id) resolvedParentTaskId = null;
+                    }
+
+                    if (!resolvedParentTaskId) {
+                      const tasksCreated = await extractAndCreateTasks(userInput, monthStartStr);
+                      const parent = tasksCreated?.[0];
+                      resolvedParentTaskId = parent?.id || null;
+                    }
+
+                    if (resolvedParentTaskId) {
+                      setParentTaskId(resolvedParentTaskId);
+                      const childItems = [
+                        ...(data.key_milestones || []).map(m => ({
+                          title: m.title,
+                          description: ({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || '里程碑',
+                          date: m.deadline && /^\d{4}-\d{2}-\d{2}$/.test(m.deadline) ? m.deadline : undefined,
+                          tag: '月度里程碑',
+                        })),
+                        ...(data.weeks_breakdown || []).map(w => ({
+                          title: w.week_label ? `${w.week_label}：${w.focus || ''}`.trim() : (w.focus || '周节奏'),
+                          description: (w.key_events || []).join('、'),
+                          tag: '周度节奏',
+                        })),
+                      ];
+                      const n = await attachPlanItemsToParent(resolvedParentTaskId, childItems, '月度规划').catch(() => 0);
+                      if (n > 0) toast.success(`已生成 1 条约定，含 ${n} 项子约定`);
+                      await savePlanToDB(data, userInput, resolvedParentTaskId);
+                    }
+                  } catch (_error) {
+                    void _error;
+                  }
+
+                  syncPlanToNote(userInput, "month_plan", { dateRange: monthLabel, theme: data.theme })
+                    .then(note => {
+                      if (note) toast.success("已同步到心签");
+                    })
+                    .catch(e => console.error("Note sync failed", e));
+                })();
                 
                 setTimeout(() => {
                     resultsRef.current?.scrollIntoView({ behavior: 'smooth' });

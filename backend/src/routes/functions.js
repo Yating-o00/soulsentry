@@ -121,6 +121,100 @@ function buildWeekHintEvents(input, weekDates) {
   return events;
 }
 
+function parseWeekdayIndex(text) {
+  const matched = String(text || "").match(/(?:下周)?(?:周|星期|礼拜)([一二三四五六日天])/);
+  if (!matched) return null;
+  const map = { 一: 0, 二: 1, 三: 2, 四: 3, 五: 4, 六: 5, 日: 6, 天: 6 };
+  return map[matched[1]] ?? null;
+}
+
+function parseClauseTime(clause, fallbackType = "other") {
+  const text = String(clause || "");
+  const colonMatch = text.match(/(\d{1,2})[:：](\d{2})/);
+  if (colonMatch) {
+    const hour = Math.max(0, Math.min(23, Number(colonMatch[1])));
+    const minute = Math.max(0, Math.min(59, Number(colonMatch[2])));
+    return `${pad2(hour)}:${pad2(minute)}`;
+  }
+
+  const pointMatch = text.match(/(凌晨|早上|上午|中午|下午|晚上|傍晚)?\s*(\d{1,2})\s*点(?:(半)|(\d{1,2})分?)?/);
+  if (pointMatch) {
+    const period = pointMatch[1] || "";
+    let hour = Number(pointMatch[2]);
+    const minute = pointMatch[3] ? 30 : (pointMatch[4] ? Number(pointMatch[4]) : 0);
+
+    if (["下午", "晚上", "傍晚"].includes(period) && hour < 12) hour += 12;
+    if (period === "中午" && hour < 11) hour += 12;
+    if (period === "凌晨" && hour === 12) hour = 0;
+
+    return `${pad2(Math.max(0, Math.min(23, hour)))}:${pad2(Math.max(0, Math.min(59, minute)))}`;
+  }
+
+  if (fallbackType === "meeting") return "14:00";
+  if (fallbackType === "travel") return "09:00";
+  if (fallbackType === "rest") return "18:30";
+  if (fallbackType === "focus") return "09:30";
+  return "09:00";
+}
+
+function inferWeekEventMeta(text) {
+  const source = String(text || "");
+  if (/投资人|客户|会议|汇报|拜访|对接|沟通|路演|会面/.test(source)) {
+    return { type: "meeting", icon: "👥" };
+  }
+  if (/出差|飞|机场|高铁|酒店|返程|回京|行程|差旅/.test(source)) {
+    return { type: "travel", icon: "✈️" };
+  }
+  if (/跑步|健身|锻炼|体检|休息|作息|恢复/.test(source)) {
+    return { type: "rest", icon: "💪" };
+  }
+  if (/开发|研发|编程|编码|测试|复盘|学习|阅读|备考|方案|分析/.test(source)) {
+    return { type: "focus", icon: "🎯" };
+  }
+  return { type: "work", icon: "📅" };
+}
+
+function cleanupWeekClauseTitle(clause) {
+  return clipText(
+    String(clause || "")
+      .replace(/(?:下周)?(?:周|星期|礼拜)[一二三四五六日天]/g, "")
+      .replace(/(凌晨|早上|上午|中午|下午|晚上|傍晚)?\s*\d{1,2}(?::|：)?(?:\d{2})?\s*点?(?:半|\d{1,2}分?)?/g, "")
+      .replace(/^[，,。\s;；:：\-、]*(安排|计划|需要|要|有|准备|去|进行|参加)/, "")
+      .replace(/(的安排|安排|事项|行程)$/g, "")
+      .replace(/^[，,。\s;；:：\-、]+|[，,。\s;；:：\-、]+$/g, ""),
+    120,
+    ""
+  );
+}
+
+function extractExplicitWeekEvents(input, startDate) {
+  const text = String(input || "");
+  if (!text) return [];
+
+  const weekDates = getWeekDates(startDate);
+  return text
+    .split(/[。；;\n]/)
+    .flatMap((segment) => segment.split(/，|,/))
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((clause) => {
+      const dayIndex = parseWeekdayIndex(clause);
+      if (dayIndex == null) return null;
+      const meta = inferWeekEventMeta(clause);
+      const title = cleanupWeekClauseTitle(clause);
+      return {
+        date: weekDates[dayIndex],
+        day_index: dayIndex,
+        title: title || (meta.type === "meeting" ? "关键会面安排" : "重点事项安排"),
+        time: parseClauseTime(clause, meta.type),
+        type: meta.type,
+        icon: meta.icon,
+        description: clipText(clause, 240, undefined)
+      };
+    })
+    .filter(Boolean);
+}
+
 function deriveWeekTheme(input, events) {
   const text = String(input || "");
   const types = new Set(events.map((item) => item.type));
@@ -217,11 +311,13 @@ function normalizeWeekPlan(rawPlan, startDate, existingPlan) {
   const weekDates = getWeekDates(startDate);
   const base = isPlainObject(rawPlan) ? rawPlan : {};
   const existing = isPlainObject(existingPlan) ? existingPlan : {};
+  const explicitEvents = extractExplicitWeekEvents(base.planning_input || existing.planning_input || "", startDate);
   const hintEvents = buildWeekHintEvents(base.planning_input || existing.planning_input || "", weekDates);
   const primaryEventsSource = Array.isArray(base.events) && base.events.length > 0
     ? base.events
     : (Array.isArray(existing.events) ? existing.events : []);
   const normalizedEvents = uniqueItems([
+    ...explicitEvents.map((item) => normalizeWeekEvent(item, weekDates)).filter(Boolean),
     ...primaryEventsSource.map((item) => normalizeWeekEvent(item, weekDates)).filter(Boolean),
     ...((primaryEventsSource.length < 3 || primaryEventsSource.every((item) => !item?.description))
       ? hintEvents.map((item) => normalizeWeekEvent(item, weekDates)).filter(Boolean)
@@ -395,6 +491,7 @@ async function generateWeekPlan(payload) {
         "summary 和 theme 必须结合用户输入具体填写，不要写“本周聚焦”这类泛化占位词。",
         "events 中每条都要包含：date(YYYY-MM-DD)、day_index(0-6)、title、time(HH:MM)、type、icon。",
         "events 至少返回 3-6 条，并尽量覆盖不同日期；不要只给笼统的 1-2 条事件。",
+        "如果用户明确提到周几、时间、对象（如“周四见投资人”“周二下午3点拜访客户”），这些事件必须原样体现在 events 中，不能遗漏。",
         "device_strategies 至少包含 phone/watch/pc 三项。",
         "automations 仅保留 1-4 条最有价值的自动化动作。",
         "如果用户提到差旅、会议、发布、健身、学习等场景，请把这些信息体现在 events 和 summary 中。"
@@ -417,7 +514,8 @@ async function generateWeekPlan(payload) {
         },
         required: ["summary", "events"]
       },
-      temperature: 0.4
+      temperature: 0.2,
+      maxTokens: 1800
     });
 
     return {
@@ -470,7 +568,8 @@ async function generateMonthPlan(payload) {
         },
         required: ["summary", "key_milestones", "weeks_breakdown"]
       },
-      temperature: 0.4
+      temperature: 0.2,
+      maxTokens: 2200
     });
 
     return {

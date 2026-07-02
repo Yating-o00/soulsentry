@@ -161,7 +161,8 @@ export async function invokeKimiText({
   systemPrompt,
   responseJsonSchema,
   model,
-  temperature
+  temperature,
+  maxTokens
 }) {
   const messages = [];
   if (systemPrompt) {
@@ -173,7 +174,8 @@ export async function invokeKimiText({
     messages,
     responseJsonSchema,
     model,
-    temperature
+    temperature,
+    maxTokens
   });
 
   if (responseJsonSchema) {

@@ -226,44 +226,52 @@ export default function SoulWeekPlanner({
                 } else {
                     toast.success("已生成全情境规划");
                     const weekStart = data.plan_start_date || format(start, 'yyyy-MM-dd');
-                    let resolvedParentTaskId = parentTaskId || data?.parent_task_id || null;
-                    try {
-                      if (resolvedParentTaskId) {
-                        const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
-                        if (!parent?.id) resolvedParentTaskId = null;
+                    const initialParentTaskId = parentTaskId || data?.parent_task_id || null;
+                    savePlanToDB(data, userInput, initialParentTaskId);
+                    void (async () => {
+                      let resolvedParentTaskId = initialParentTaskId;
+                      try {
+                        if (resolvedParentTaskId) {
+                          const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
+                          if (!parent?.id) resolvedParentTaskId = null;
+                        }
+
+                        if (!resolvedParentTaskId) {
+                          const tasksCreated = await extractAndCreateTasks(userInput, weekStart);
+                          const parent = tasksCreated?.[0];
+                          resolvedParentTaskId = parent?.id || null;
+                        }
+
+                        if (resolvedParentTaskId) {
+                          setParentTaskId(resolvedParentTaskId);
+                          const childItems = [
+                            ...(data.events || []).map(e => ({
+                              title: e.title,
+                              description: e.description || '',
+                              date: e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : undefined,
+                              time: e.time,
+                              tag: '周事件',
+                            })),
+                            ...(data.automations || []).map(a => ({
+                              title: a.title,
+                              description: a.description || '',
+                              tag: 'AI自动执行',
+                            })),
+                          ];
+                          const n = await attachPlanItemsToParent(resolvedParentTaskId, childItems, '周度规划').catch(() => 0);
+                          if (n > 0) toast.success(`已生成 1 条约定，含 ${n} 项子约定`);
+                          await savePlanToDB(data, userInput, resolvedParentTaskId);
+                        }
+                      } catch (_error) {
+                        void _error;
                       }
 
-                      if (!resolvedParentTaskId) {
-                        const tasksCreated = await extractAndCreateTasks(userInput, weekStart);
-                        const parent = tasksCreated?.[0];
-                        resolvedParentTaskId = parent?.id || null;
-                      }
-
-                      if (resolvedParentTaskId) {
-                        setParentTaskId(resolvedParentTaskId);
-                        const childItems = [
-                          ...(data.events || []).map(e => ({
-                            title: e.title,
-                            description: e.description || '',
-                            date: e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : undefined,
-                            time: e.time,
-                            tag: '周事件',
-                          })),
-                          ...(data.automations || []).map(a => ({
-                            title: a.title,
-                            description: a.description || '',
-                            tag: 'AI自动执行',
-                          })),
-                        ];
-                        const n = await attachPlanItemsToParent(resolvedParentTaskId, childItems, '周度规划').catch(() => 0);
-                        toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
-                      }
-                    } catch (_error) { void _error; }
-
-                    savePlanToDB(data, userInput, resolvedParentTaskId);
-                    syncPlanToNote(userInput, "week_plan", { dateRange: weekRangeLabel, theme: data.theme }).then(note => {
-                      if (note) toast.success("已同步到心签");
-                    }).catch(e => console.error("Note sync failed", e));
+                      syncPlanToNote(userInput, "week_plan", { dateRange: weekRangeLabel, theme: data.theme })
+                        .then(note => {
+                          if (note) toast.success("已同步到心签");
+                        })
+                        .catch(e => console.error("Note sync failed", e));
+                    })();
                 }
                 
                 setTimeout(() => {

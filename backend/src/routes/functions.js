@@ -44,6 +44,34 @@ function getWeekDates(startDate) {
   });
 }
 
+function addDaysToDateString(dateString, days) {
+  const base = new Date(`${dateString}T00:00:00+08:00`);
+  base.setDate(base.getDate() + days);
+  return `${base.getFullYear()}-${pad2(base.getMonth() + 1)}-${pad2(base.getDate())}`;
+}
+
+function getWeekStartDate(dateLike) {
+  const date = new Date(`${normalizeDateString(dateLike, new Date().toISOString().slice(0, 10))}T00:00:00+08:00`);
+  const day = date.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diffToMonday);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function inferWeekOffset(text, fallbackOffset = 0) {
+  const source = String(text || "");
+  if (/(下周|下星期|下礼拜)/.test(source)) return 1;
+  if (/(本周|这周|这星期|本星期|这礼拜|本礼拜)/.test(source)) return 0;
+  if (/(上周|上星期|上礼拜)/.test(source)) return -1;
+  return fallbackOffset;
+}
+
+function resolvePlanningWeekStart(startDate, currentDate, input) {
+  const baseWeekStart = getWeekStartDate(startDate || currentDate || new Date().toISOString().slice(0, 10));
+  const offset = inferWeekOffset(input, 0);
+  return addDaysToDateString(baseWeekStart, offset * 7);
+}
+
 function getMonthWeekStarts(startDate) {
   const base = new Date(`${startDate}T00:00:00+08:00`);
   const starts = [];
@@ -85,7 +113,12 @@ function normalizeWeekEvent(event, weekDates) {
     event.date,
     typeof event.day_index === "number" ? weekDates[Math.max(0, Math.min(6, event.day_index))] : weekDates[0]
   );
-  const dayIndex = Math.max(0, weekDates.indexOf(normalizedDate));
+  const matchedIndex = weekDates.indexOf(normalizedDate);
+  const fallbackIndex = typeof event.day_index === "number" ? Math.max(0, Math.min(6, event.day_index)) : 0;
+  const derivedIndex = matchedIndex >= 0
+    ? matchedIndex
+    : Math.round((new Date(`${normalizedDate}T00:00:00+08:00`).getTime() - new Date(`${weekDates[0]}T00:00:00+08:00`).getTime()) / 86400000);
+  const dayIndex = Math.max(0, Math.min(6, Number.isFinite(derivedIndex) ? derivedIndex : fallbackIndex));
 
   return {
     date: normalizedDate,
@@ -122,7 +155,7 @@ function buildWeekHintEvents(input, weekDates) {
 }
 
 function parseWeekdayIndex(text) {
-  const matched = String(text || "").match(/(?:下周)?(?:周|星期|礼拜)([一二三四五六日天])/);
+  const matched = String(text || "").match(/(?:(?:本|这|下|上)周|(?:本|这|下|上)(?:星期|礼拜))?(?:周|星期|礼拜)([一二三四五六日天])/);
   if (!matched) return null;
   const map = { 一: 0, 二: 1, 三: 2, 四: 3, 五: 4, 六: 5, 日: 6, 天: 6 };
   return map[matched[1]] ?? null;
@@ -191,7 +224,7 @@ function extractExplicitWeekEvents(input, startDate) {
   const text = String(input || "");
   if (!text) return [];
 
-  const weekDates = getWeekDates(startDate);
+  const planningWeekOffset = inferWeekOffset(text, 0);
   return text
     .split(/[。；;\n]/)
     .flatMap((segment) => segment.split(/，|,/))
@@ -200,10 +233,13 @@ function extractExplicitWeekEvents(input, startDate) {
     .map((clause) => {
       const dayIndex = parseWeekdayIndex(clause);
       if (dayIndex == null) return null;
+      const clauseWeekOffset = inferWeekOffset(clause, planningWeekOffset);
+      const clauseWeekStart = addDaysToDateString(startDate, clauseWeekOffset * 7);
+      const clauseWeekDates = getWeekDates(clauseWeekStart);
       const meta = inferWeekEventMeta(clause);
       const title = cleanupWeekClauseTitle(clause);
       return {
-        date: weekDates[dayIndex],
+        date: clauseWeekDates[dayIndex],
         day_index: dayIndex,
         title: title || (meta.type === "meeting" ? "关键会面安排" : "重点事项安排"),
         time: parseClauseTime(clause, meta.type),
@@ -479,7 +515,8 @@ function buildMonthFallbackPlan(input, startDate, existingPlan) {
 }
 
 async function generateWeekPlan(payload) {
-  const startDate = normalizeDateString(payload.startDate, normalizeDateString(payload.currentDate, new Date().toISOString().slice(0, 10)));
+  const requestedDate = normalizeDateString(payload.startDate, normalizeDateString(payload.currentDate, new Date().toISOString().slice(0, 10)));
+  const startDate = resolvePlanningWeekStart(requestedDate, payload.currentDate, payload.input);
 
   try {
     const data = await invokeKimiText({

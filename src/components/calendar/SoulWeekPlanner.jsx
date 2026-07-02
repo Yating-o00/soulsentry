@@ -305,29 +305,17 @@ export default function SoulWeekPlanner({
     setIsAppending(true);
     try {
       const { data } = await base44.functions.invoke('generateWeekPlan', {
-        input: `现有规划摘要: ${weekData.summary}\n\n新增内容: ${appendInput}`,
+        input: appendInput,
+        appendInput,
+        appendMode: true,
+        existingInput: userInput,
         startDate: weekData.plan_start_date || currentWeekStartStr,
         currentDate: format(new Date(), 'yyyy-MM-dd'),
         existingPlan: weekData
       });
       if (data) {
-        // Merge: keep existing events and add new ones, merge strategies
-        const merged = {
-          ...weekData,
-          ...data,
-          events: [
-            ...(weekData.events || []),
-            ...(data.events || []).filter(newE =>
-              !(weekData.events || []).some(e => e.title === newE.title && e.date === newE.date)
-            )
-          ],
-          automations: [
-            ...(weekData.automations || []),
-            ...(data.automations || []).filter(newA =>
-              !(weekData.automations || []).some(a => a.title === newA.title)
-            )
-          ]
-        };
+        // 追加模式下直接采用后端返回的完整合并结果，避免前端重复拼接导致旧数据覆盖新安排
+        const merged = data;
         setWeekData(merged);
         const weekStart = merged.plan_start_date || currentWeekStartStr;
         let resolvedParentTaskId = parentTaskId || merged?.parent_task_id || null;
@@ -338,7 +326,7 @@ export default function SoulWeekPlanner({
           }
 
           if (!resolvedParentTaskId) {
-            const tasksCreated = await extractAndCreateTasks(userInput, weekStart);
+            const tasksCreated = await extractAndCreateTasks(`${userInput}\n${appendInput}`.trim(), weekStart);
             const parent = tasksCreated?.[0];
             resolvedParentTaskId = parent?.id || null;
           }
@@ -363,7 +351,9 @@ export default function SoulWeekPlanner({
           }
         } catch (_error) { void _error; }
 
-        savePlanToDB(merged, userInput + '\n' + appendInput, resolvedParentTaskId);
+        const mergedInput = `${userInput}\n${appendInput}`.trim();
+        setUserInput(mergedInput);
+        savePlanToDB(merged, mergedInput, resolvedParentTaskId);
         setAppendInput('');
         setShowAppendInput(false);
         toast.success('已将新内容智能融入本周规划');

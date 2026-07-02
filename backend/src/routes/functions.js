@@ -72,6 +72,12 @@ function resolvePlanningWeekStart(startDate, currentDate, input) {
   return addDaysToDateString(baseWeekStart, offset * 7);
 }
 
+function mergePlanningInputs(existingInput, nextInput) {
+  return [clipText(existingInput, 400, ""), clipText(nextInput, 400, "")]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function getMonthWeekStarts(startDate) {
   const base = new Date(`${startDate}T00:00:00+08:00`);
   const starts = [];
@@ -516,7 +522,14 @@ function buildMonthFallbackPlan(input, startDate, existingPlan) {
 
 async function generateWeekPlan(payload) {
   const requestedDate = normalizeDateString(payload.startDate, normalizeDateString(payload.currentDate, new Date().toISOString().slice(0, 10)));
-  const startDate = resolvePlanningWeekStart(requestedDate, payload.currentDate, payload.input);
+  const appendMode = Boolean(payload.appendMode);
+  const nextInput = payload.appendInput || payload.input || "";
+  const combinedPlanningInput = appendMode
+    ? mergePlanningInputs(payload.existingInput || payload.existingPlan?.planning_input, nextInput)
+    : nextInput;
+  const startDate = appendMode
+    ? getWeekStartDate(requestedDate)
+    : resolvePlanningWeekStart(requestedDate, payload.currentDate, combinedPlanningInput);
 
   try {
     const data = await invokeKimiText({
@@ -524,18 +537,21 @@ async function generateWeekPlan(payload) {
         "你是一名中文周计划规划助手。",
         `当前查看周起始日期（周一）是：${startDate}。`,
         "输出必须是 JSON，不要输出解释。",
-        "请返回完整周计划，而不是片段。",
+        appendMode ? "当前任务是把新增内容准确合并进现有周计划，并返回合并后的完整周计划。" : "请返回完整周计划，而不是片段。",
         "summary 和 theme 必须结合用户输入具体填写，不要写“本周聚焦”这类泛化占位词。",
         "events 中每条都要包含：date(YYYY-MM-DD)、day_index(0-6)、title、time(HH:MM)、type、icon。",
         "events 至少返回 3-6 条，并尽量覆盖不同日期；不要只给笼统的 1-2 条事件。",
         "如果用户明确提到周几、时间、对象（如“周四见投资人”“周二下午3点拜访客户”），这些事件必须原样体现在 events 中，不能遗漏。",
+        "如果用户提到地点、对象、事件目的，请优先写入对应事件标题或 description，不要丢失关键信息。",
+        appendMode ? "现有计划里未被新增内容修改的事件请保留；若新增内容与现有事件冲突，请返回更新后的最终安排。" : "请结合输入生成适合该周的完整安排。",
         "device_strategies 至少包含 phone/watch/pc 三项。",
-        "automations 仅保留 1-4 条最有价值的自动化动作。",
+        "automations 仅保留 1-4 条最有价值的自动化动作，必须结合本周真实事件，避免泛化占位文案。",
         "如果用户提到差旅、会议、发布、健身、学习等场景，请把这些信息体现在 events 和 summary 中。"
       ].join("\n"),
       prompt: [
-        `用户输入：${payload.input || ""}`,
-        payload.existingPlan ? `现有周计划（如需追加，请返回合并后的完整版本）：${JSON.stringify(payload.existingPlan)}` : "",
+        appendMode ? `新增内容：${nextInput}` : `用户输入：${combinedPlanningInput}`,
+        payload.existingPlan ? `现有周计划（请基于它合并更新）：${JSON.stringify(payload.existingPlan)}` : "",
+        appendMode && (payload.existingInput || payload.existingPlan?.planning_input) ? `现有周计划原始输入：${payload.existingInput || payload.existingPlan?.planning_input}` : "",
         `今天日期：${payload.currentDate || startDate}`
       ].filter(Boolean).join("\n\n"),
       responseJsonSchema: {
@@ -556,13 +572,13 @@ async function generateWeekPlan(payload) {
     });
 
     return {
-      ...normalizeWeekPlan({ ...data, planning_input: payload.input }, startDate, payload.existingPlan),
+      ...normalizeWeekPlan({ ...data, planning_input: combinedPlanningInput }, startDate, payload.existingPlan),
       generation_mode: "ai"
     };
   } catch (error) {
     console.error("[generateWeekPlan] AI generation failed, using fallback:", error);
     return {
-      ...buildWeekFallbackPlan(payload.input, startDate, payload.existingPlan),
+      ...buildWeekFallbackPlan(combinedPlanningInput, startDate, payload.existingPlan),
       generation_mode: "fallback",
       generation_error: error?.message || "AI 生成失败，已切换为基础模板"
     };

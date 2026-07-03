@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Sun, Compass, Coffee, RefreshCw, Moon, CloudSun } from "lucide-react";
+import { Sparkles, Sun, Compass, Coffee, RefreshCw, Moon, CloudSun, Heart } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DailyBriefing() {
@@ -12,12 +12,12 @@ export default function DailyBriefing() {
 
     const fetchBriefing = async (force = false) => {
         const today = new Date().toDateString();
-        const cacheKey = `daily_briefing_v2_${today}`;
+        const cacheKey = `daily_briefing_v3_${today}`;
 
-        // Clear old v1 caches
+        // Clear old caches
         try {
-            const oldKey = `daily_briefing_${today}`;
-            localStorage.removeItem(oldKey);
+            localStorage.removeItem(`daily_briefing_${today}`);
+            localStorage.removeItem(`daily_briefing_v2_${today}`);
         } catch (_) {}
 
         if (!force) {
@@ -138,6 +138,15 @@ export default function DailyBriefing() {
                         </p>
                     </div>
                 </div>
+
+                {briefing.value_guidance && (
+                    <div className="mt-4 md:mt-6 bg-gradient-to-r from-amber-50/80 to-orange-50/50 border border-amber-100 rounded-xl md:rounded-2xl px-4 py-3 md:px-5 md:py-4 flex items-start gap-2.5">
+                        <Heart className="w-4 h-4 text-rose-400 fill-rose-300 shrink-0 mt-0.5" />
+                        <p className="text-[13px] md:text-sm text-amber-900/80 leading-relaxed">
+                            {briefing.value_guidance}
+                        </p>
+                    </div>
+                )}
 
                 {briefing.mindful_tip && (
                     <div className="mt-4 md:mt-8 pt-4 md:pt-6 border-t border-slate-100/60 flex flex-col items-center gap-3">

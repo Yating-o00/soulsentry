@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
         const [activeTasks, recentCompleted, notes, memories] = await Promise.all([
             base44.entities.Task.filter({ status: ['pending', 'in_progress', 'blocked'] }, '-priority', 30),
             base44.entities.Task.filter({ status: 'completed' }, '-completed_at', 5),
-            base44.entities.Note.list('-created_date', 5),
+            base44.entities.Note.list('-created_date', 10),
             base44.entities.MemoryRecord.list('-created_date', 3).catch(() => []),
         ]);
 
@@ -78,8 +78,14 @@ ${overdueTasks.length > 0 ? overdueTasks.map(t => `- ${formatTask(t)}`).join('\n
 ### 近期已完成
 ${recentCompleted.length > 0 ? recentCompleted.map(t => `- 「${t.title}」 完成于 ${t.completed_at ? new Date(t.completed_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '最近'}`).join('\n') : '（暂无近期完成）'}
 
-### 最近心签/笔记
-${notes.length > 0 ? notes.map(n => `- ${(n.plain_text || n.content || '').substring(0, 120)}`).join('\n') : '（暂无笔记）'}
+### 最近心签/笔记（含标签与AI摘要）
+${notes.length > 0 ? notes.filter(n => !n.deleted_at).map(n => {
+            const parts = [(n.plain_text || (n.content || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim().substring(0, 150)];
+            if (n.tags && n.tags.length > 0) parts.push(`标签:${n.tags.join(',')}`);
+            if (n.ai_analysis && n.ai_analysis.summary) parts.push(`摘要:${n.ai_analysis.summary.substring(0, 60)}`);
+            if (n.ai_analysis && n.ai_analysis.is_emotional) parts.push('（偏感性/生活记录）');
+            return `- ${parts.join(' | ')}`;
+        }).join('\n') : '（暂无笔记）'}
 
 ### 最近记忆
 ${memories.length > 0 ? memories.map(m => `- [${m.memory_type}] ${m.title}: ${(m.content || '').substring(0, 80)}`).join('\n') : '（暂无记忆）'}
@@ -97,21 +103,22 @@ ${taskDataBlock}
 ## 生成要求（极其重要）
 
 1. **必须基于真实数据**：简报中提到的每一个任务名称、截止日期、优先级都必须来自上面的数据，禁止编造不存在的任务。
-2. **用「」引用任务名称**：提到具体任务时，用「任务名」的格式引用，让用户一眼就能对应到自己的任务。
+2. **用「」引用任务名称**：提到具体任务时，用「任务名」的格式引用，让用户一眼就能对应到自己的任务。心签内容也要具体引用（可概括其主题），不要泛泛而谈。
 3. **Short-Term（今日专注）**：
    - 聚焦今天最需要关注的任务（紧急的、今日到期的、已逾期的）
    - 明确指出哪些任务需要优先处理，给出具体的行动建议
    - 如果有逾期任务，温和地提醒
    - 语气温暖鼓励，但内容要具体实用
 4. **Long-Term（远见与思考）**：
-   - 基于用户的长期任务、笔记和记忆，给出战略性的思考
+   - 必须结合用户最近的心签/笔记内容，从中提炼用户真正在关心、思考的主题，并与长期任务呼应
    - 关注那些不紧急但重要的任务
-   - 如果笔记/记忆中有值得关注的长期目标，提及它们
-5. **mindful_tip**：一句简短的正念小贴士（15-30字），与用户当前状态相关
-6. **title**：格式为「{用户名}的{时段}心栈·{月}月{日}日」，时段根据当前时间选择（早安/午后/晚间）
+   - 如果心签中有情绪、灵感或长期目标的线索，温柔地回应它们
+5. **value_guidance（正向价值引导）**：一段 40-70 字的引导。必须基于用户真实的行动（已完成的任务、坚持的习惯、心签中记录的思考），肯定其中体现的品质（如坚持、自省、对家人朋友的用心、勇于面对困难），并引导一个正向的价值方向（成长、善待自己、专注当下、感恩）。禁止空洞的鸡汤，必须落到用户的具体行动上。
+6. **mindful_tip**：一句简短的正念小贴士（15-30字），与用户当前状态相关
+7. **title**：格式为「{用户名}的{时段}心栈·{月}月{日}日」，时段根据当前时间选择（早安/午后/晚间）
 
 返回严格JSON格式：
-{"title":"string","short_term_narrative":"string","long_term_narrative":"string","mindful_tip":"string"}
+{"title":"string","short_term_narrative":"string","long_term_narrative":"string","value_guidance":"string","mindful_tip":"string"}
 
 语言：简体中文。语气：温暖、平静、有力量感，像一个可靠的朋友在旁边轻声提醒。`;
 
@@ -128,6 +135,9 @@ ${taskDataBlock}
                 title: `${user.full_name || '旅行者'}的每日心栈`,
                 short_term_narrative: fallbackShort,
                 long_term_narrative: fallbackLong,
+                value_guidance: recentCompleted.length > 0
+                    ? `你最近完成了「${recentCompleted[0].title}」，每一次兑现约定都是对自己的一份信守，继续保持这份可靠。`
+                    : "把注意力放在你能掌控的事情上，认真对待每一个小约定，就是在认真对待自己的生活。",
                 mindful_tip: "深呼吸三次，专注于此刻最重要的那一件事。"
             });
         }
@@ -177,6 +187,9 @@ ${taskDataBlock}
                 title: `${user.full_name || '旅行者'}的每日心栈`,
                 short_term_narrative: shortNarrative,
                 long_term_narrative: '回顾你的笔记和记忆，找到长期目标的线索。',
+                value_guidance: recentCompleted.length > 0
+                    ? `你最近完成了「${recentCompleted[0].title}」，兑现约定本身就是一种力量，为自己的坚持点个赞。`
+                    : "认真对待每一个小约定，就是在认真对待自己的生活。",
                 mindful_tip: "此刻最重要的事只有一件，找到它。",
                 task_stats: {
                     active: activeTasks.length,

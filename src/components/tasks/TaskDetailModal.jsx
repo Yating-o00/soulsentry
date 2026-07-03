@@ -66,6 +66,7 @@ import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
+import RelatedKnowledgePanel from "@/components/knowledge/RelatedKnowledgePanel";
 import { invokeAI } from "@/components/utils/aiHelper";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
@@ -680,6 +681,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </ReactMarkdown>
             </div>
           )}
+
+          {/* 主动关联：自动吸附相关的历史心签与已完成约定 */}
+          <RelatedKnowledgePanel task={task} />
 
           <Tabs defaultValue={initialTab || "subtasks"} key={initialTab || "subtasks"} className="w-full">
             <TabsList className="flex w-full overflow-x-auto justify-start gap-1 p-0 bg-transparent h-auto scrollbar-hide border-b border-slate-100 rounded-none">

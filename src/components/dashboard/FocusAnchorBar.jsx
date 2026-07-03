@@ -10,19 +10,65 @@ function stripHtml(html) {
   return (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+const PRIO = { urgent: 0, high: 1, medium: 2, low: 3 };
+
+// 选取当下最应该专注的约定：
+// 进行中 > 正处于时间窗口内 > 即将开始（就近） > 今天已过时间未处理 > 全天任务（按优先级）
+function pickFocus(tasks) {
+  const now = new Date();
+  const candidates = (tasks || []).filter(
+    (t) => t.status === "in_progress" || t.status === "pending"
+  );
+  if (candidates.length === 0) return null;
+
+  const byPrioThenTime = (a, b) =>
+    (PRIO[a.priority] ?? 2) - (PRIO[b.priority] ?? 2) ||
+    new Date(a.reminder_time || 0) - new Date(b.reminder_time || 0);
+
+  const inProgress = candidates.filter((t) => t.status === "in_progress");
+  if (inProgress.length > 0) {
+    return { task: inProgress.sort(byPrioThenTime)[0], label: "进行中" };
+  }
+
+  // 有具体时刻的任务优先，避免全天/跨天背景任务抢占锚点
+  const timed = candidates.filter((t) => t.reminder_time && !t.is_all_day);
+
+  const ongoing = timed.filter((t) => {
+    const start = parseISO(t.reminder_time);
+    const end = t.end_time ? parseISO(t.end_time) : start;
+    return start <= now && now <= end;
+  });
+  if (ongoing.length > 0) {
+    return { task: ongoing.sort(byPrioThenTime)[0], label: "进行中" };
+  }
+
+  const upcoming = timed
+    .filter((t) => parseISO(t.reminder_time) > now)
+    .sort(
+      (a, b) =>
+        parseISO(a.reminder_time) - parseISO(b.reminder_time) ||
+        (PRIO[a.priority] ?? 2) - (PRIO[b.priority] ?? 2)
+    );
+  if (upcoming.length > 0) {
+    return { task: upcoming[0], label: "即将开始" };
+  }
+
+  const missed = timed.filter((t) => {
+    const start = parseISO(t.reminder_time);
+    const end = t.end_time ? parseISO(t.end_time) : start;
+    return end < now;
+  });
+  if (missed.length > 0) {
+    return { task: missed.sort(byPrioThenTime)[0], label: "已过时间，待处理" };
+  }
+
+  return { task: candidates.sort(byPrioThenTime)[0], label: "今日待办" };
+}
+
 // 当前专注锚点：串联今日最优先的约定与其相关心签，一点即达
 export default function FocusAnchorBar({ tasks, onTaskClick }) {
-  const focusTask = useMemo(() => {
-    const active = (tasks || []).filter(
-      (t) => t.status === "in_progress" || t.status === "pending"
-    );
-    if (active.length === 0) return null;
-    const inProgress = active.find((t) => t.status === "in_progress");
-    if (inProgress) return inProgress;
-    return [...active].sort(
-      (a, b) => new Date(a.reminder_time || 0) - new Date(b.reminder_time || 0)
-    )[0];
-  }, [tasks]);
+  const focus = useMemo(() => pickFocus(tasks), [tasks]);
+  const focusTask = focus?.task;
 
   const { data: notes = [] } = useQuery({
     queryKey: ["related-knowledge-notes"],
@@ -37,13 +83,15 @@ export default function FocusAnchorBar({ tasks, onTaskClick }) {
       `${focusTask.title || ""} ${(focusTask.tags || []).join(" ")}`
     );
     if (terms.length === 0) return [];
+    // 相关度阈值随关键词数量提升，避免仅命中 1-2 个通用词就误判为相关
+    const minScore = Math.min(4, Math.max(2, Math.ceil(terms.length * 0.3)));
     return notes
       .filter((n) => !n.deleted_at)
       .map((n) => {
         const text = n.plain_text || stripHtml(n.content);
         return { note: n, text, score: scoreText(terms, `${text} ${(n.tags || []).join(" ")}`) };
       })
-      .filter((m) => m.score >= 2)
+      .filter((m) => m.score >= minScore)
       .sort((a, b) => b.score - a.score)
       .slice(0, 2);
   }, [focusTask?.id, notes]);
@@ -61,10 +109,14 @@ export default function FocusAnchorBar({ tasks, onTaskClick }) {
       <div className="flex items-center gap-2 mb-1.5">
         <Crosshair className="w-3.5 h-3.5 text-blue-200" />
         <span className="text-[11px] font-semibold text-blue-200 uppercase tracking-wider">当前专注锚点</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/15 text-blue-100">
+          {focus.label}
+        </span>
         {focusTask.reminder_time && (
           <span className="ml-auto flex items-center gap-1 text-[11px] text-blue-200">
             <Clock className="w-3 h-3" />
             {format(parseISO(focusTask.reminder_time), "HH:mm")}
+            {focusTask.end_time && ` - ${format(parseISO(focusTask.end_time), "HH:mm")}`}
           </span>
         )}
       </div>

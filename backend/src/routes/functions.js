@@ -250,7 +250,8 @@ function extractExplicitWeekEvents(input, startDate) {
 
       const explicitWeekOffset = inferWeekOffset(clause, inheritedWeekOffset);
       inheritedWeekOffset = explicitWeekOffset;
-      const clauseWeekStart = addDaysToDateString(startDate, explicitWeekOffset * 7);
+      const relativeWeekOffset = explicitWeekOffset - planningWeekOffset;
+      const clauseWeekStart = addDaysToDateString(startDate, relativeWeekOffset * 7);
       const clauseWeekDates = getWeekDates(clauseWeekStart);
       const meta = inferWeekEventMeta(clause);
       const title = cleanupWeekClauseTitle(clause);
@@ -382,7 +383,7 @@ function buildWeekAutomations(input, events, sourceAutomations = [], weekStartDa
 
   const normalizedSource = Array.isArray(sourceAutomations) ? sourceAutomations : [];
   const meaningfulSource = normalizedSource.filter((item) => !isGenericAutomation(item));
-  meaningfulSource.forEach(pushAutomation);
+  // 先不急着 push 源数据，避免把最终输出又变回泛化清单；先推导，再合并源数据（去重）
 
   const eventTypes = new Set(events.map((item) => item.type));
   const eventText = events.map((item) => `${item?.title || ""} ${item?.description || ""}`).join(" ");
@@ -449,7 +450,12 @@ function buildWeekAutomations(input, events, sourceAutomations = [], weekStartDa
     });
   }
 
-  return uniqueItems(suggestions.map((item) => JSON.stringify(item))).map((item) => JSON.parse(item)).slice(0, 4);
+  // 再合并源 automations（如果源里有更具体的，例如用户自定义/AI 输出），去重后补足
+  meaningfulSource.forEach(pushAutomation);
+
+  const deduped = uniqueItems(suggestions.map((item) => JSON.stringify(item))).map((item) => JSON.parse(item));
+  const cleaned = deduped.filter((item) => !isGenericAutomation(item));
+  return (cleaned.length > 0 ? cleaned : deduped).slice(0, 4);
 }
 
 function isPlaceholderMilestoneTitle(title, index) {

@@ -379,7 +379,7 @@ export default function NotificationSettingsPage() {
                         <div className="flex items-center justify-between">
                           <div className="space-y-0.5">
                             <Label>静音通知</Label>
-                            <p className="text-xs text-slate-500">不发送弹窗和声音</p>
+                            <p className="text-xs text-slate-500">不推送弹窗和声音，应用内仍保留记录</p>
                           </div>
                           <Switch 
                             checked={newRule.action_mute}
@@ -429,7 +429,20 @@ export default function NotificationSettingsPage() {
                                     />
                                     <Label htmlFor="ch-email" className="font-normal text-sm">邮件</Label>
                                 </div>
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox 
+                                        id="ch-browser" 
+                                        checked={newRule.action_channels?.includes("browser")}
+                                        onCheckedChange={(c) => {
+                                            const current = newRule.action_channels || [];
+                                            const next = c ? [...current, "browser"] : current.filter(x => x !== "browser");
+                                            setNewRule({...newRule, action_channels: next});
+                                        }}
+                                    />
+                                    <Label htmlFor="ch-browser" className="font-normal text-sm">浏览器推送</Label>
+                                </div>
                             </div>
+                            <p className="text-[11px] text-slate-400 leading-relaxed">💡 应用内通知为保底渠道：无论规则如何，通知记录始终会保存在应用内，确保您不会错过任何通知。</p>
                         </div>
                       </div>
                     </div>

@@ -122,7 +122,7 @@ ${taskDataBlock}
 
 语言：简体中文。语气：温暖、平静、有力量感，像一个可靠的朋友在旁边轻声提醒。`;
 
-        const apiKey = Deno.env.get("MOONSHOT_API_KEY");
+        const apiKey = Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY");
         if (!apiKey) {
             // Fallback with real data references
             const fallbackShort = activeTasks.length > 0
@@ -143,24 +143,34 @@ ${taskDataBlock}
         }
 
         try {
-            const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
-                body: JSON.stringify({
-                    model: "kimi-k2-0905-preview",
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: "请根据我的真实任务数据生成今日简报。记住：只引用数据中真实存在的任务名称。" }
-                    ],
-                    temperature: 0.6,
-                    response_format: { type: "json_object" }
-                })
-            });
+            // 模型链自动降级：某个模型不可用/无权限时尝试下一个
+            const candidateModels = ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
+            let response = null;
+            let lastStatus = 0;
+            let lastErrText = '';
+            for (const m of candidateModels) {
+                response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
+                    body: JSON.stringify({
+                        model: m,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: "请根据我的真实任务数据生成今日简报。记住：只引用数据中真实存在的任务名称和心签内容。" }
+                        ],
+                        temperature: 0.6,
+                        response_format: { type: "json_object" }
+                    })
+                });
+                if (response.ok) break;
+                lastStatus = response.status;
+                lastErrText = await response.text();
+                console.error(`Kimi model ${m} failed:`, lastStatus, lastErrText.slice(0, 200));
+                if (![404, 403, 401, 429, 500, 502, 503].includes(lastStatus)) break;
+            }
 
-            if (!response.ok) {
-                const errText = await response.text();
-                console.error("Kimi API error:", response.status, errText);
-                throw new Error(`Kimi error: ${response.status}`);
+            if (!response || !response.ok) {
+                throw new Error(`Kimi error: ${lastStatus} ${lastErrText.slice(0, 200)}`);
             }
             const data = await response.json();
             const content = data.choices?.[0]?.message?.content || '';

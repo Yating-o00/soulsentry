@@ -100,6 +100,25 @@ export default function SoulWeekPlanner({
 
   const queryClient = useQueryClient();
 
+  const normalizeAutomationsForDisplay = (items) => {
+    const list = Array.isArray(items) ? items : [];
+    const meaningful = list.filter((item) => {
+      const title = String(item?.title || "").trim();
+      const description = String(item?.description || "").trim();
+      return title && title !== "自动化提醒" && description !== "根据周计划自动提醒与整理重点事项。";
+    });
+    if (meaningful.length > 0) return meaningful;
+    if (list.length > 0) {
+      return [{
+        title: "本周节奏提醒",
+        description: "根据本周计划自动提醒关键节点，并在每天结束前整理次日重点。",
+        icon: "⚙️",
+        status: "active"
+      }];
+    }
+    return [];
+  };
+
   // Load existing plan from DB with react-query caching
   const { data: weekPlans } = useQuery({
     queryKey: ['weeklyPlan', currentWeekStartStr],
@@ -111,10 +130,12 @@ export default function SoulWeekPlanner({
     if (weekPlans === undefined) return; // still loading
     if (weekPlans && weekPlans.length > 0) {
       const plan = weekPlans[0];
+      const planJson = plan.plan_json || {};
       setExistingPlanId(plan.id);
-      setParentTaskId(plan.plan_json?.parent_task_id || null);
+      setParentTaskId(planJson?.parent_task_id || null);
       setWeekData({
-        ...plan.plan_json,
+        ...planJson,
+        automations: normalizeAutomationsForDisplay(planJson.automations),
         theme: plan.theme,
         summary: plan.summary
       });
@@ -896,14 +917,14 @@ export default function SoulWeekPlanner({
              </section>
 
              {/* Automations List */}
-             {weekData.automations && weekData.automations.length > 0 && (
+             {normalizeAutomationsForDisplay(weekData.automations).length > 0 && (
                  <section>
                     <div className="flex items-center justify-between mb-6">
                        <h3 className="text-xl font-bold text-slate-900">自动执行清单</h3>
                     </div>
 
                     <div className="grid md:grid-cols-2 gap-4">
-                       {weekData.automations.map((task, idx) => (
+                       {normalizeAutomationsForDisplay(weekData.automations).map((task, idx) => (
                           <div key={idx} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
                              <div className="flex items-start gap-4">
                                 <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-xl">

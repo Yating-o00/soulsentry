@@ -370,10 +370,13 @@ function buildWeekAutomations(input, events, sourceAutomations = [], weekStartDa
   const text = String(input || "");
   const suggestions = [];
   const pushAutomation = (item) => {
-    if (!item?.title) return;
+    const title = clipText(item?.title, 100, "");
+    if (!title) return;
+    const rawDescription = clipText(item?.description, 240, "");
+    const description = rawDescription || `围绕“${clipText(title, 40, title)}”在关键节点提醒执行并整理输出。`;
     suggestions.push({
-      title: clipText(item.title, 100, "自动化提醒"),
-      description: clipText(item.description, 240, "根据周计划自动提醒与整理重点事项。"),
+      title,
+      description,
       icon: typeof item.icon === "string" && item.icon.trim() ? item.icon.trim().slice(0, 4) : "⚙️",
       status: item.status === "active" ? "active" : "pending",
       date: typeof item.date === "string" ? item.date : undefined,
@@ -387,13 +390,19 @@ function buildWeekAutomations(input, events, sourceAutomations = [], weekStartDa
 
   const eventTypes = new Set(events.map((item) => item.type));
   const eventText = events.map((item) => `${item?.title || ""} ${item?.description || ""}`).join(" ");
-  const hasMeeting = eventTypes.has("meeting") || /投资人|客户|会议|汇报|拜访|对接|沟通|路演|会面|面谈|签约|谈判/.test(eventText) || /投资人|客户|会议|汇报|拜访|对接|沟通|路演|会面|面谈|签约|谈判/.test(text);
-  const hasTravel = eventTypes.has("travel") || /出差|机场|高铁|酒店|航班|登机|返程|行程|差旅|打车|导航|到达/.test(eventText) || /出差|机场|高铁|酒店|航班|登机|返程|行程|差旅|打车|导航|到达/.test(text);
-  const hasRest = eventTypes.has("rest") || /健身|跑步|拉伸|冥想|恢复|休息|睡眠|喝水|起身/.test(eventText) || /健身|跑步|拉伸|冥想|恢复|休息|睡眠|喝水|起身/.test(text);
-  const hasFocus = eventTypes.has("focus") || /开发|测试|复盘|材料|方案|总结|纪要|写作|文档|报告|PPT|表格|邮件|对账/.test(eventText) || /开发|测试|复盘|材料|方案|总结|纪要|写作|文档|报告|PPT|表格|邮件|对账/.test(text);
-  const firstMeeting = events.find((item) => item.type === "meeting" && item.date);
-  const firstTravel = events.find((item) => item.type === "travel" && item.date);
-  const firstFocus = events.find((item) => (item.type === "focus" || item.type === "work") && item.date);
+  const meetingRegex = /投资人|客户|会议|汇报|拜访|对接|沟通|路演|会面|面谈|签约|谈判/;
+  const travelRegex = /出差|机场|高铁|酒店|航班|登机|返程|行程|差旅|打车|导航|到达/;
+  const restRegex = /健身|跑步|拉伸|冥想|恢复|休息|睡眠|喝水|起身/;
+  const focusRegex = /开发|测试|复盘|材料|方案|总结|纪要|写作|文档|报告|PPT|表格|邮件|对账/;
+
+  const hasMeeting = eventTypes.has("meeting") || meetingRegex.test(eventText) || meetingRegex.test(text);
+  const hasTravel = eventTypes.has("travel") || travelRegex.test(eventText) || travelRegex.test(text);
+  const hasRest = eventTypes.has("rest") || restRegex.test(eventText) || restRegex.test(text);
+  const hasFocus = eventTypes.has("focus") || focusRegex.test(eventText) || focusRegex.test(text);
+
+  const firstMeeting = events.find((item) => item?.date && (item.type === "meeting" || meetingRegex.test(`${item?.title || ""} ${item?.description || ""}`)));
+  const firstTravel = events.find((item) => item?.date && (item.type === "travel" || travelRegex.test(`${item?.title || ""} ${item?.description || ""}`)));
+  const firstFocus = events.find((item) => item?.date && ((item.type === "focus" || item.type === "work") || focusRegex.test(`${item?.title || ""} ${item?.description || ""}`)));
 
   if (hasMeeting) {
     const meetingTitles = uniqueItems(events.filter((item) => item.type === "meeting").map((item) => clipText(item.title, 20, ""))).slice(0, 2);
@@ -455,7 +464,7 @@ function buildWeekAutomations(input, events, sourceAutomations = [], weekStartDa
 
   const deduped = uniqueItems(suggestions.map((item) => JSON.stringify(item))).map((item) => JSON.parse(item));
   const cleaned = deduped.filter((item) => !isGenericAutomation(item));
-  return (cleaned.length > 0 ? cleaned : deduped).slice(0, 4);
+  return cleaned.slice(0, 4);
 }
 
 function isPlaceholderMilestoneTitle(title, index) {

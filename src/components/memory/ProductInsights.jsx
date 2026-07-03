@@ -35,24 +35,27 @@ function InsightCard({ icon: IconComp, iconColor, title, value, desc, action }) 
 
 export default function ProductInsights({ tasks, notes, behaviors, executions, relationships }) {
   const insights = useMemo(() => {
-    const last30Tasks = (tasks || []).filter(t => !t.deleted_at && moment().diff(moment(t.created_date), "days") <= 30);
+    // 全部近30天记录（含 AI 生成的子任务，用于打卡/节律等活跃度统计）
+    const allLast30 = (tasks || []).filter(t => !t.deleted_at && moment().diff(moment(t.created_date), "days") <= 30);
+    // 用户真实创建的顶层约定（排除 AI 拆解出的子任务，避免虚增数量、拉低完成率）
+    const last30Tasks = allLast30.filter(t => !t.parent_task_id);
     const completedTasks = last30Tasks.filter(t => t.status === "completed");
-    const pendingTasks = (tasks || []).filter(t => !t.deleted_at && t.status === "pending");
+    const allCompleted = allLast30.filter(t => t.status === "completed");
+    const pendingTasks = (tasks || []).filter(t => !t.deleted_at && !t.parent_task_id && t.status === "pending");
     const overdueTasks = pendingTasks.filter(t => t.reminder_time && new Date(t.reminder_time) < new Date());
     const last30Notes = (notes || []).filter(n => !n.deleted_at && moment().diff(moment(n.created_date), "days") <= 30);
 
     const completionRate = last30Tasks.length > 0
       ? Math.round((completedTasks.length / last30Tasks.length) * 100) : 0;
 
-    const tasksWithTime = completedTasks.filter(t => t.reminder_time && t.completed_at);
-    let avgDelay = 0;
-    if (tasksWithTime.length > 3) {
-      const delays = tasksWithTime.map(t => (new Date(t.completed_at) - new Date(t.reminder_time)) / (1000 * 60)).filter(d => d > 0 && d < 1440);
-      avgDelay = delays.length > 0 ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : 0;
-    }
+    // 时间估算校准：至少需要 5 条有效延迟样本才有统计意义，否则视为数据积累中
+    const tasksWithTime = allCompleted.filter(t => t.reminder_time && t.completed_at);
+    const delays = tasksWithTime.map(t => (new Date(t.completed_at) - new Date(t.reminder_time)) / (1000 * 60)).filter(d => d > 0 && d < 1440);
+    const delaySampleEnough = delays.length >= 5;
+    const avgDelay = delaySampleEnough ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : 0;
 
     const dayCompletions = {};
-    completedTasks.forEach(t => {
+    allCompleted.forEach(t => {
       if (!t.completed_at) return;
       const day = moment(t.completed_at).day();
       dayCompletions[day] = (dayCompletions[day] || 0) + 1;
@@ -70,7 +73,7 @@ export default function ProductInsights({ tasks, notes, behaviors, executions, r
     let streak = 0;
     for (let i = 0; i < 30; i++) {
       const day = moment().subtract(i, "days").format("YYYY-MM-DD");
-      if (completedTasks.some(t => t.completed_at && moment(t.completed_at).format("YYYY-MM-DD") === day)) streak++;
+      if (allCompleted.some(t => t.completed_at && moment(t.completed_at).format("YYYY-MM-DD") === day)) streak++;
       else break;
     }
 
@@ -82,7 +85,8 @@ export default function ProductInsights({ tasks, notes, behaviors, executions, r
     last30Notes.forEach(n => n.tags?.forEach(t => uniqueTags.add(t)));
 
     return {
-      completionRate, avgDelay, peakDay, lowDay,
+      completionRate, avgDelay, delaySampleEnough, peakDay, lowDay,
+      completedCount: completedTasks.length,
       topCategory: topCategory ? catMap[topCategory[0]] || topCategory[0] : null,
       topCategoryCount: topCategory ? topCategory[1] : 0,
       streak, overdueCount: overdueTasks.length,
@@ -95,14 +99,15 @@ export default function ProductInsights({ tasks, notes, behaviors, executions, r
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
         <InsightCard icon={Target} iconColor="bg-emerald-100 text-emerald-600" title="30天执行效率" value={`${insights.completionRate}%`}
-          desc={`近30天创建${insights.totalTasks}个约定，完成${Math.round(insights.totalTasks * insights.completionRate / 100)}个${insights.completionRate >= 70 ? "，表现出色" : "，建议适当减少任务量"}`}
+          desc={`近30天创建${insights.totalTasks}个约定，完成${insights.completedCount}个${insights.completionRate >= 70 ? "，表现出色" : "，建议适当减少任务量"}`}
           action={{ label: "查看约定", link: "/Tasks" }}
         />
         <InsightCard icon={Flame} iconColor="bg-orange-100 text-orange-600" title="连续打卡" value={insights.streak > 0 ? `${insights.streak}天` : "今日待开始"}
           desc={insights.streak >= 7 ? "连续一周高效执行，出色！" : insights.streak > 0 ? "保持每日完成至少一个约定" : "完成一个约定即可开始连续记录"}
         />
-        <InsightCard icon={Clock} iconColor="bg-amber-100 text-amber-600" title="时间估算校准" value={insights.avgDelay > 0 ? `+${insights.avgDelay}分钟` : "准时"}
-          desc={insights.avgDelay > 15 ? `约定平均延迟${insights.avgDelay}分钟完成，建议自动添加缓冲时间` : "你的时间把控很准确，继续保持"}
+        <InsightCard icon={Clock} iconColor="bg-amber-100 text-amber-600" title="时间估算校准"
+          value={!insights.delaySampleEnough ? "数据积累中" : insights.avgDelay > 0 ? `+${insights.avgDelay}分钟` : "准时"}
+          desc={!insights.delaySampleEnough ? "完成更多带提醒时间的约定后，将为你校准时间估算" : insights.avgDelay > 15 ? `约定平均延迟${insights.avgDelay}分钟完成，建议自动添加缓冲时间` : "你的时间把控很准确，继续保持"}
           action={insights.avgDelay > 15 ? { label: "优化规划", link: "/Dashboard" } : undefined}
         />
         <InsightCard icon={Activity} iconColor="bg-purple-100 text-purple-600" title="状态预测" value={insights.peakDay || "数据积累中"}

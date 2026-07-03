@@ -46,12 +46,37 @@ export function useTaskOperations() {
   const createTaskMutation = useMutation({
     mutationFn: async (taskData) => {
       // 入口去重：若已有同标题 + 同日（或 ±30 分钟）的活跃顶层任务，复用而不新建。
-      // 防止同一意图（包括 AI 拆解出的 automation 项）被反复创建为独立父约定。
-      const reuse = await findReusableTask(taskData);
+      // 性能优化：优先用本地缓存的任务列表做去重判断，省掉一次拉取 200 条的网络请求
+      const cachedTasks = queryClient.getQueryData(['tasks']);
+      const reuse = await findReusableTask(taskData, cachedTasks);
       if (reuse) return { ...reuse, _reused: true };
       return base44.entities.Task.create(taskData);
     },
-    onSuccess: (data) => {
+    onMutate: (taskData) => {
+      // 乐观上屏：点击提交后任务立即出现在列表中，不等服务器返回
+      const tempId = `temp-${Date.now()}`;
+      queryClient.setQueryData(['tasks'], (oldData) => {
+        if (!Array.isArray(oldData)) return oldData;
+        return [{ id: tempId, created_date: new Date().toISOString(), ...taskData, _optimistic: true }, ...oldData];
+      });
+      return { tempId };
+    },
+    onError: (err, taskData, context) => {
+      // 回滚乐观插入
+      if (context?.tempId) {
+        queryClient.setQueryData(['tasks'], (oldData) =>
+          Array.isArray(oldData) ? oldData.filter(t => t.id !== context.tempId) : oldData
+        );
+      }
+      feedback.error("创建任务失败");
+    },
+    onSuccess: (data, taskData, context) => {
+      // 用真实记录替换乐观占位
+      if (context?.tempId) {
+        queryClient.setQueryData(['tasks'], (oldData) =>
+          Array.isArray(oldData) ? oldData.map(t => t.id === context.tempId ? data : t) : oldData
+        );
+      }
       if (data?._reused) {
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
         feedback.info(`已合并到已有约定「${data.title}」，避免重复`);
@@ -96,9 +121,6 @@ export function useTaskOperations() {
         tags: data.tags || [],
         weight: data.priority === "urgent" ? 5 : data.priority === "high" ? 3 : 2,
       });
-    },
-    onError: () => {
-        feedback.error("创建任务失败");
     }
   });
 

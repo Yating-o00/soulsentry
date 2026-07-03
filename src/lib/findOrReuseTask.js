@@ -38,7 +38,7 @@ function isWithinMinutes(isoA, isoB, minutes = 30) {
  * @param {object} candidate { title, reminder_time, is_all_day, parent_task_id }
  * @returns 已存在的 Task 或 null
  */
-export async function findReusableTask(candidate) {
+export async function findReusableTask(candidate, existingTasks = null) {
   if (!candidate || !candidate.title) return null;
   // 已经显式声明为子任务的不参与去重（让子任务可以独立挂在不同父下）
   if (candidate.parent_task_id) return null;
@@ -47,7 +47,10 @@ export async function findReusableTask(candidate) {
   if (!targetKey) return null;
 
   try {
-    const recent = await base44.entities.Task.list("-created_date", 200);
+    // 性能优化：若调用方传入了本地缓存的任务列表，直接用缓存做去重，省掉一次网络请求
+    const recent = Array.isArray(existingTasks) && existingTasks.length > 0
+      ? existingTasks
+      : await base44.entities.Task.list("-created_date", 200);
     const reuse = (recent || []).find((t) => {
       if (!t || t.deleted_at) return false;
       // 仅对"活跃"顶层任务做复用，已完成/取消的不视为重复

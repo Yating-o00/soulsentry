@@ -164,14 +164,17 @@ Deno.serve(async (req) => {
     if (newBalance < 0) newBalance = 0;
 
     try {
-      await base44.asServiceRole.entities.User.update(userId, { ai_credits: newBalance });
-      await base44.asServiceRole.entities.AICreditTransaction.create({
+      // 性能优化：结算写库与流水记录并行执行，减少一次串行等待，加快响应返回
+      await Promise.all([
+        base44.asServiceRole.entities.User.update(userId, { ai_credits: newBalance }),
+        base44.asServiceRole.entities.AICreditTransaction.create({
         type: "consume",
         amount: -charge,
         balance_after: newBalance,
         feature: feature || "general_ai",
         description: `AI 调用消耗 ${charge} 点（${usage?.total_tokens || 0} tokens, 倍率 ${FEATURE_MULTIPLIERS[feature] || 1.0}x）`,
-      });
+        }),
+      ]);
     } catch (e) {
       console.warn('[callAI] settlement failed:', e?.message || e);
     }

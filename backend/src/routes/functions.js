@@ -292,27 +292,69 @@ function deriveWeekSummary(input, events) {
   return "本周围绕核心目标推进，兼顾专注、协作与恢复。";
 }
 
+function toWeekdayLabel(dateString) {
+  try {
+    const d = new Date(`${dateString}T00:00:00+08:00`);
+    const map = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    return map[d.getDay()] || "";
+  } catch {
+    return "";
+  }
+}
+
+function subtractMinutesFromHHmm(timeStr, minutes) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(timeStr || "").trim());
+  if (!m) return "";
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return "";
+  const total = hh * 60 + mm - minutes;
+  const normalized = (total + 24 * 60) % (24 * 60);
+  return `${pad2(Math.floor(normalized / 60))}:${pad2(normalized % 60)}`;
+}
+
 function buildWeekDeviceStrategies(input, events, existingStrategies = {}) {
   const text = String(input || "");
   const types = new Set(events.map((item) => item.type));
+  const meetings = events.filter((item) => item.type === "meeting");
+  const travels = events.filter((item) => item.type === "travel");
+  const focuses = events.filter((item) => item.type === "focus" || item.type === "work");
+  const meetingPreview = meetings.slice(0, 2).map((e) => `${toWeekdayLabel(e.date)}${e.time ? ` ${e.time}` : ""} ${clipText(e.title, 24, "")}`).filter(Boolean);
+  const travelPreview = travels.slice(0, 2).map((e) => `${toWeekdayLabel(e.date)}${e.time ? ` ${e.time}` : ""} ${clipText(e.title, 24, "")}`).filter(Boolean);
+  const focusPreview = focuses.slice(0, 2).map((e) => `${toWeekdayLabel(e.date)}${e.time ? ` ${e.time}` : ""} ${clipText(e.title, 24, "")}`).filter(Boolean);
   const derived = {
-    phone: types.has("meeting") || /沟通|拜访|对接/.test(text)
-      ? "集中处理即时沟通与会议变更，避免打断深度工作。"
-      : (types.has("travel")
-        ? "优先承接行程变更、导航提醒和移动场景下的即时沟通。"
-        : "工作时段开启专注模式，集中处理即时沟通。"),
-    watch: types.has("travel") || types.has("rest")
-      ? "在通勤、行程提醒和健康节奏场景提供轻量触达。"
-      : "在会议切换、喝水起身和关键提醒场景提供轻量提示。",
-    pc: /开发|研发|测试|发布|上线/.test(text) || types.has("focus")
-      ? "把核心开发、测试或交付事项放入深度工作块，减少多任务切换。"
-      : "深度工作块优先处理核心任务，减少切换。"
+    phone: meetingPreview.length > 0
+      ? `重点会面：${meetingPreview.join("；")}；会前 30 分钟提醒准备材料，会后提醒整理纪要。`
+      : (travelPreview.length > 0
+        ? `关键行程：${travelPreview.join("；")}；出发前 60 分钟提醒确认交通与地址。`
+        : `关键事项：${focusPreview.join("；") || "本周重点推进"}；移动场景承接即时沟通与变更。`),
+    watch: meetingPreview.length > 0
+      ? `关键时间锚点：${meetingPreview[0]}；仅在临近会面与重要节点时震动提示。`
+      : (travelPreview.length > 0
+        ? `行程锚点：${travelPreview[0]}；通勤/出发前轻量提醒。`
+        : "关键节点前轻量震动提示，避免频繁打扰。"),
+    pc: focusPreview.length > 0
+      ? `深度推进：${focusPreview.join("；")}；集中处理文档/材料/复盘输出，减少多任务切换。`
+      : (/开发|研发|测试|发布|上线/.test(text) || types.has("focus")
+        ? "把核心开发、测试或交付事项放入深度工作块，减少多任务切换。"
+        : "深度工作块优先处理核心任务，减少切换。")
   };
 
-  return {
-    ...derived,
-    ...(isPlainObject(existingStrategies) ? existingStrategies : {})
+  const existing = isPlainObject(existingStrategies) ? existingStrategies : {};
+  const isGenericStrategyText = (value) => {
+    const s = clipText(value, 300, "");
+    if (!s) return true;
+    if (/Enable:\s*true|Notification:\s*\d{1,2}:\d{2}|Type:\s*\w+/i.test(s)) return true;
+    if (s === "工作时段开启专注模式，集中处理即时沟通。") return true;
+    if (s === "在会议切换、喝水起身和关键提醒场景提供轻量提示。") return true;
+    if (s === "把核心开发、测试或交付事项放入深度工作块，减少多任务切换。") return true;
+    return false;
   };
+  const merged = { ...derived };
+  Object.entries(existing).forEach(([key, value]) => {
+    if (!isGenericStrategyText(value)) merged[key] = value;
+  });
+  return merged;
 }
 
 function isGenericAutomation(item) {
@@ -323,7 +365,7 @@ function isGenericAutomation(item) {
     || description === "根据周计划自动提醒与整理重点事项。";
 }
 
-function buildWeekAutomations(input, events, sourceAutomations = []) {
+function buildWeekAutomations(input, events, sourceAutomations = [], weekStartDate) {
   const text = String(input || "");
   const suggestions = [];
   const pushAutomation = (item) => {
@@ -332,7 +374,9 @@ function buildWeekAutomations(input, events, sourceAutomations = []) {
       title: clipText(item.title, 100, "自动化提醒"),
       description: clipText(item.description, 240, "根据周计划自动提醒与整理重点事项。"),
       icon: typeof item.icon === "string" && item.icon.trim() ? item.icon.trim().slice(0, 4) : "⚙️",
-      status: item.status === "active" ? "active" : "pending"
+      status: item.status === "active" ? "active" : "pending",
+      date: typeof item.date === "string" ? item.date : undefined,
+      time: typeof item.time === "string" ? item.time : undefined
     });
   };
 
@@ -347,32 +391,44 @@ function buildWeekAutomations(input, events, sourceAutomations = []) {
   const hasTravel = eventTypes.has("travel");
   const hasFocus = eventTypes.has("focus") || /开发|测试|复盘|材料|方案|总结|纪要/.test(text);
   const hasRest = eventTypes.has("rest");
+  const firstMeeting = events.find((item) => item.type === "meeting" && item.date);
+  const firstTravel = events.find((item) => item.type === "travel" && item.date);
+  const firstFocus = events.find((item) => (item.type === "focus" || item.type === "work") && item.date);
 
   if (hasMeeting) {
     const meetingTitles = uniqueItems(events.filter((item) => item.type === "meeting").map((item) => clipText(item.title, 20, ""))).slice(0, 2);
+    const triggerTime = firstMeeting?.time ? subtractMinutesFromHHmm(firstMeeting.time, 30) : "";
     pushAutomation({
-      title: "会议前提醒",
-      description: `在会前 30 分钟提醒准备${meetingTitles.join("、") || "关键会面"}所需材料，并在会后提示整理纪要。`,
+      title: firstMeeting?.title ? `会前提醒：${clipText(firstMeeting.title, 40, "")}` : "会议前提醒",
+      description: `在会前 30 分钟提醒准备${meetingTitles.join("、") || "关键会面"}所需材料，会后提醒整理纪要并同步关键结论。`,
       icon: "👥",
-      status: "active"
+      status: "active",
+      date: firstMeeting?.date,
+      time: triggerTime || firstMeeting?.time
     });
   }
 
   if (hasTravel) {
+    const triggerTime = firstTravel?.time ? subtractMinutesFromHHmm(firstTravel.time, 60) : "";
     pushAutomation({
-      title: "行程出发检查",
-      description: "在出发前提醒确认交通、证件、地址与到达时间，避免差旅行程遗漏。",
+      title: firstTravel?.title ? `行程检查：${clipText(firstTravel.title, 40, "")}` : "行程出发检查",
+      description: "出发前提醒确认交通、证件、地址与到达时间；如有变更优先同步给相关人员。",
       icon: "✈️",
-      status: "active"
+      status: "active",
+      date: firstTravel?.date,
+      time: triggerTime || firstTravel?.time
     });
   }
 
   if (hasFocus) {
+    const fallbackFocusDate = typeof weekStartDate === "string" ? weekStartDate : (firstFocus?.date || undefined);
     pushAutomation({
       title: "深度工作块",
-      description: "自动为材料整理、测试复盘或重点输出预留专注时段，并减少消息打扰。",
+      description: `为${clipText(firstFocus?.title, 30, "重点输出/材料整理")}预留专注时段，自动减少消息打扰。`,
       icon: "🎯",
-      status: "active"
+      status: "active",
+      date: fallbackFocusDate,
+      time: firstFocus?.time || "09:30"
     });
   }
 
@@ -486,7 +542,7 @@ function normalizeWeekPlan(rawPlan, startDate, existingPlan) {
         ? base.device_strategies
         : (isPlainObject(existing.device_strategies) ? existing.device_strategies : {})
     ),
-    automations: buildWeekAutomations(base.planning_input || existing.planning_input, normalizedEvents, automationsSource),
+    automations: buildWeekAutomations(base.planning_input || existing.planning_input, normalizedEvents, automationsSource, startDate),
     stats: {
       focus_hours: Number(base?.stats?.focus_hours ?? existing?.stats?.focus_hours ?? 12),
       meetings: Number(base?.stats?.meetings ?? existing?.stats?.meetings ?? 2),

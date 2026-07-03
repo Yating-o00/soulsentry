@@ -259,6 +259,8 @@ export default function SoulWeekPlanner({
                             ...(data.automations || []).map(a => ({
                               title: a.title,
                               description: a.description || '',
+                              date: a.date && /^\d{4}-\d{2}-\d{2}$/.test(a.date) ? a.date : undefined,
+                              time: a.time,
                               tag: 'AI自动执行',
                             })),
                           ];
@@ -348,6 +350,8 @@ export default function SoulWeekPlanner({
               ...(merged.automations || []).map(a => ({
                 title: a.title,
                 description: a.description || '',
+                date: a.date && /^\d{4}-\d{2}-\d{2}$/.test(a.date) ? a.date : undefined,
+                time: a.time,
                 tag: 'AI自动执行',
               })),
             ];

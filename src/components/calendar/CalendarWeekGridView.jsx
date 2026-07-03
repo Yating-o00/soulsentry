@@ -54,7 +54,7 @@ export default function CalendarWeekGridView({
     const dateStr = format(date, "yyyy-MM-dd");
 
     const dayTasks = tasks.filter((task) => {
-      if (!task.reminder_time || task.parent_task_id || task.deleted_at) return false;
+      if (!task.reminder_time || task.deleted_at) return false;
       const taskDate = format(new Date(task.reminder_time), "yyyy-MM-dd");
 
       if (task.end_time) {
@@ -70,6 +70,8 @@ export default function CalendarWeekGridView({
     });
 
     dayTasks.sort((a, b) => {
+      if (a.parent_task_id && !b.parent_task_id) return -1;
+      if (!a.parent_task_id && b.parent_task_id) return 1;
       if (a.status === "completed" && b.status !== "completed") return 1;
       if (a.status !== "completed" && b.status === "completed") return -1;
       return 0;

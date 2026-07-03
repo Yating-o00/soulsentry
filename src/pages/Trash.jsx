@@ -4,9 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Search, Trash2, ArrowLeft, RotateCcw, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import TaskCard from "../components/tasks/TaskCard";
+import TrashTaskCard from "../components/tasks/TrashTaskCard";
 import NotificationManager from "../components/notifications/NotificationManager";
-import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -31,19 +30,34 @@ export default function Trash() {
   });
 
   const restoreTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: null }),
+    mutationFn: async (id) => {
+      await base44.entities.Task.update(id, { deleted_at: null });
+      // 同时恢复被一并删除的子约定
+      const children = allTasks.filter(t => t.parent_task_id === id && t.deleted_at);
+      if (children.length > 0) {
+        await base44.entities.Task.bulkUpdate(children.map(c => ({ id: c.id, deleted_at: null })));
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success("约定已恢复");
     },
+    onError: () => toast.error("恢复失败，请重试"),
   });
 
   const permanentDeleteTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.delete(id),
+    mutationFn: async (id) => {
+      const children = allTasks.filter(t => t.parent_task_id === id);
+      for (const c of children) {
+        await base44.entities.Task.delete(c.id);
+      }
+      await base44.entities.Task.delete(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success("约定已永久删除");
     },
+    onError: () => toast.error("删除失败，请重试"),
   });
 
   return (
@@ -90,19 +104,18 @@ export default function Trash() {
       >
         <AnimatePresence mode="popLayout">
           {filteredTasks.map((task) => (
-            <TaskCard
+            <TrashTaskCard
               key={task.id}
               task={task}
               subtasks={allTasks.filter(t => t.parent_task_id === task.id)}
-              isTrash={true}
+              restoring={restoreTaskMutation.isPending}
+              deleting={permanentDeleteTaskMutation.isPending}
               onRestore={() => restoreTaskMutation.mutate(task.id)}
               onDeleteForever={() => {
                 if (window.confirm('确定要永久删除这个约定吗？此操作无法撤销。')) {
                   permanentDeleteTaskMutation.mutate(task.id);
                 }
               }}
-              onClick={() => {}}
-              onDelete={() => {}} // Placeholder
             />
           ))}
         </AnimatePresence>

@@ -68,6 +68,7 @@ import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import RelatedKnowledgePanel from "@/components/knowledge/RelatedKnowledgePanel";
 import TaskRescuePrompt from "@/components/tasks/TaskRescuePrompt";
+import ConvertToNoteButton from "@/components/tasks/ConvertToNoteButton";
 import { invokeAI } from "@/components/utils/aiHelper";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
@@ -612,6 +613,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 <span className="hidden md:inline text-xs font-medium">新一轮</span>
              </Button>
              <QuickAlertButton task={task} />
+             <ConvertToNoteButton task={task} onDone={onClose} />
              <Button 
                 variant="ghost" 
                 size="sm" 

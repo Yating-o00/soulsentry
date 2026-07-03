@@ -166,8 +166,9 @@ export default function Welcome({ onComplete }) {
     let currentStep = 0;
     const stepInterval = setInterval(() => {
         if (currentStep < steps.length) {
-            setParsingSteps(prev => [...prev, steps[currentStep]]);
+            const stepToAdd = steps[currentStep];
             currentStep++;
+            setParsingSteps(prev => (stepToAdd ? [...prev, stepToAdd] : prev));
         } else {
             clearInterval(stepInterval);
         }

@@ -5,6 +5,7 @@ import { differenceInMinutes, isPast, parseISO, isSameDay, isWithinInterval, sta
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Bell, Clock, X } from "lucide-react";
+import { getPersonalizedCopy } from "@/components/notifications/personalizedCopy";
 
 // 跨页面/跨 mount 持久化的"已通知"状态（避免移动端切换路由时重复弹窗）
 // key 形如 notified-<taskId>-<type>-<YYYY-MM-DD>，过期自动清理
@@ -133,7 +134,7 @@ export default function NotificationManager() {
     audioRef.current.play().catch(err => console.log("Sound play failed:", err));
   };
 
-  var sendNotification = function(task, isAdvanceReminder) {
+  var sendNotification = async function(task, isAdvanceReminder) {
     if (typeof isAdvanceReminder === 'undefined') isAdvanceReminder = false;
     if (!notificationSupported || permission !== "granted") return;
 
@@ -205,6 +206,15 @@ export default function NotificationManager() {
         if (messageType === 'urgent') title = `🚨 紧急提醒：${task.title}`;
         if (messageType === 'encouraging') title = `✨ 加油：${task.title}`;
         if (messageType === 'summary') title = `📊 状态摘要：${task.title}`;
+    } else {
+        // 个性化文案：类别风格模板 + AI 根据任务内容实时生成（超时/失败自动回退模板）
+        try {
+          const copy = await getPersonalizedCopy(task, !!isAdvanceReminder);
+          title = copy.title;
+          body = copy.body;
+        } catch (e) {
+          console.warn("[NotificationManager] personalized copy failed:", e?.message);
+        }
     }
 
     var notification;
@@ -244,7 +254,7 @@ export default function NotificationManager() {
             <Bell className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
-            <h4 className="font-semibold text-slate-800 mb-1">{task.title}</h4>
+            <h4 className="font-semibold text-slate-800 mb-1">{title}</h4>
             <p className="text-sm text-slate-600 mb-3">{body}</p>
             <div className="flex gap-2">
               <Button

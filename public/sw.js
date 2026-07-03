@@ -1,7 +1,7 @@
 // SoulSentry Service Worker
 // 负责：1) Web Push 接收 + 通知弹窗  2) 通知点击导航  3) 后台同步
 // 版本号变更会强制 SW 更新
-const SW_VERSION = 'v3-2026-05-24';
+const SW_VERSION = 'v4-2026-07-03';
 
 self.addEventListener('install', (event) => {
   // 立即激活新 SW，避免旧版本继续接管

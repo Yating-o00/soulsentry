@@ -152,10 +152,11 @@ export default function SoulWeekPlanner({
 
   const savePlanToDB = async (data, input, parentTaskIdValue) => {
     try {
+      const targetWeekStart = data.plan_start_date || currentWeekStartStr;
       const nextParentTaskId = parentTaskIdValue || data?.parent_task_id || parentTaskId || null;
       const planJson = nextParentTaskId ? { ...data, parent_task_id: nextParentTaskId } : data;
       const planData = {
-        week_start_date: data.plan_start_date || currentWeekStartStr,
+        week_start_date: targetWeekStart,
         original_input: input,
         theme: data.theme,
         summary: data.summary,
@@ -163,12 +164,28 @@ export default function SoulWeekPlanner({
         is_active: true
       };
 
-      if (existingPlanId) {
-        await base44.entities.WeeklyPlan.update(existingPlanId, planData);
+      let targetPlanId = targetWeekStart === currentWeekStartStr ? existingPlanId : null;
+      if (!targetPlanId) {
+        const existingTargetPlans = await base44.entities.WeeklyPlan.filter({ week_start_date: targetWeekStart });
+        targetPlanId = existingTargetPlans?.[0]?.id || null;
+      }
+
+      if (targetPlanId) {
+        await base44.entities.WeeklyPlan.update(targetPlanId, planData);
+        queryClient.setQueryData(['weeklyPlan', targetWeekStart], [{
+          id: targetPlanId,
+          ...planData
+        }]);
+        if (targetWeekStart === currentWeekStartStr) {
+          setExistingPlanId(targetPlanId);
+        }
         toast.success("规划已更新");
       } else {
         const newPlan = await base44.entities.WeeklyPlan.create(planData);
-        setExistingPlanId(newPlan.id);
+        queryClient.setQueryData(['weeklyPlan', targetWeekStart], [newPlan]);
+        if (targetWeekStart === currentWeekStartStr) {
+          setExistingPlanId(newPlan.id);
+        }
         toast.success("规划已保存");
       }
       queryClient.invalidateQueries({ queryKey: ['weeklyPlan'] });

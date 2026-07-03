@@ -8,22 +8,26 @@ export default function PWAUpdateNotification() {
   const [registration, setRegistration] = useState(null);
 
   useEffect(() => {
-    // Service Worker 仅在生产环境中注册（PWA standalone 模式）
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isStandalone && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js')
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
         .then((reg) => {
           setRegistration(reg);
+          reg.update().catch(() => {});
 
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
-            
+            if (!newWorker) return;
+
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                 setShowUpdate(true);
               }
             });
           });
+
+          if (reg.waiting) {
+            setShowUpdate(true);
+          }
         })
         .catch(() => {
           // Silently fail - service worker not available

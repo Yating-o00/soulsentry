@@ -19,12 +19,13 @@ const PRIORITY_LABELS = {
   low: "低"
 };
 
-export default function DayDetailDialog({ open, onOpenChange, date, tasks, notes, onTaskClick }) {
+export default function DayDetailDialog({ open, onOpenChange, date, tasks, notes, plannedEvents = [], onTaskClick }) {
   if (!date) return null;
 
   // Group subtasks under parent tasks
   const parentTasks = tasks.filter(t => !t.parent_task_id);
   const getSubtasks = (parentId) => tasks.filter(t => t.parent_task_id === parentId);
+  const safePlannedEvents = Array.isArray(plannedEvents) ? plannedEvents : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -40,6 +41,9 @@ export default function DayDetailDialog({ open, onOpenChange, date, tasks, notes
               </span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
+              <Badge variant="secondary" className="bg-indigo-50 text-indigo-700">
+                {safePlannedEvents.length} 个规划事件
+              </Badge>
               <Badge variant="secondary" className="bg-blue-50 text-blue-700">
                 {parentTasks.length} 个约定
               </Badge>
@@ -51,6 +55,33 @@ export default function DayDetailDialog({ open, onOpenChange, date, tasks, notes
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
+          {safePlannedEvents.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-4 h-4 text-indigo-600" />
+                <h3 className="font-semibold text-slate-800">AI 规划事件</h3>
+                <span className="text-xs text-slate-500">({safePlannedEvents.length})</span>
+              </div>
+              <div className="space-y-2">
+                {safePlannedEvents.map((event, index) => (
+                  <div
+                    key={`${event.title}-${event.time}-${index}`}
+                    className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-md"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-indigo-600 font-medium">
+                        {event.time || "AI"}
+                      </span>
+                      <span className="text-sm font-medium text-slate-800">
+                        {event.title}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 约定列表 */}
           {parentTasks.length > 0 && (
             <div>
@@ -194,7 +225,7 @@ export default function DayDetailDialog({ open, onOpenChange, date, tasks, notes
           )}
 
           {/* 空状态 */}
-          {parentTasks.length === 0 && notes.length === 0 && (
+          {safePlannedEvents.length === 0 && parentTasks.length === 0 && notes.length === 0 && (
             <div className="text-center py-12">
               <Circle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-500">这一天还没有约定和心签</p>

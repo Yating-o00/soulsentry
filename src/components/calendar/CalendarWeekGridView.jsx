@@ -32,6 +32,8 @@ export default function CalendarWeekGridView({
   currentDate,
   tasks = [],
   notes = [],
+  plannedEvents = [],
+  plannedWeekStart,
   onDateClick,
   onTaskDrop,
   onTaskClick,
@@ -40,9 +42,13 @@ export default function CalendarWeekGridView({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [hoveredDate, setHoveredDate] = useState(null);
 
-  const weekStart = startOfWeek(currentDate, { locale: zhCN });
+  const weekStart = startOfWeek(currentDate, { locale: zhCN, weekStartsOn: 1 });
   const days = [];
   for (let i = 0; i < 7; i++) days.push(addDays(weekStart, i));
+  const weekStartStr = format(weekStart, "yyyy-MM-dd");
+  const shouldShowPlannedEvents = typeof plannedWeekStart === "string"
+    ? plannedWeekStart === weekStartStr
+    : true;
 
   const getItemsForDate = (date) => {
     const dateStr = format(date, "yyyy-MM-dd");
@@ -72,6 +78,20 @@ export default function CalendarWeekGridView({
     return { tasks: dayTasks, notes: dayNotes };
   };
 
+  const getPlannedEventsForDate = (date) => {
+    if (!shouldShowPlannedEvents) return [];
+    if (!Array.isArray(plannedEvents) || plannedEvents.length === 0) return [];
+    const dateStr = format(date, "yyyy-MM-dd");
+    return plannedEvents
+      .filter((event) => event?.date === dateStr)
+      .map((event) => ({
+        title: String(event?.title || "规划事项").slice(0, 120),
+        time: typeof event?.time === "string" ? event.time : "",
+        icon: typeof event?.icon === "string" && event.icon.trim() ? event.icon.trim().slice(0, 4) : "📅",
+        type: typeof event?.type === "string" ? event.type : "other"
+      }));
+  };
+
   const handleDragEnd = (result) => {
     if (!result.destination || !onTaskDrop) return;
     const taskId = result.draggableId;
@@ -84,12 +104,12 @@ export default function CalendarWeekGridView({
       <DragDropContext onDragEnd={handleDragEnd}>
         {/* Header */}
         <div className="grid grid-cols-7 border-b border-slate-100">
-          {["周日", "周一", "周二", "周三", "周四", "周五", "周六"].map((day, i) => (
+          {["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((day, i) => (
             <div key={i} className="py-4 text-center">
               <span
                 className={cn(
                   "text-xs font-semibold tracking-wide uppercase",
-                  i === 0 || i === 6 ? "text-rose-400" : "text-slate-400"
+                  i === 5 || i === 6 ? "text-rose-400" : "text-slate-400"
                 )}
               >
                 {day}
@@ -102,6 +122,7 @@ export default function CalendarWeekGridView({
         <div className="grid grid-cols-7 auto-rows-[minmax(220px,auto)]">
           {days.map((day, dayIdx) => {
             const { tasks: dayTasks, notes: dayNotes } = getItemsForDate(day);
+            const dayPlannedEvents = getPlannedEventsForDate(day);
             const isCurrentDay = isToday(day);
             const dateKey = format(day, "yyyy-MM-dd");
             const isHovered = hoveredDate === dateKey;
@@ -156,6 +177,20 @@ export default function CalendarWeekGridView({
 
                     {/* Tasks List */}
                     <div className="flex-1 flex flex-col gap-1.5">
+                      {dayPlannedEvents.slice(0, 3).map((event, index) => (
+                        <div
+                          key={`${event.title}-${event.time}-${index}`}
+                          className={cn(
+                            "relative px-2 py-1.5 rounded-[6px] text-xs font-medium transition-all border shadow-sm flex items-center gap-2 bg-[#384877]/5 text-[#384877] border-[#384877]/10"
+                          )}
+                        >
+                          <span className="text-[10px] opacity-70 flex-shrink-0 font-normal">
+                            {event.time || "AI"}
+                          </span>
+                          <span className="truncate flex-1">{event.title}</span>
+                        </div>
+                      ))}
+
                       {visibleTasks.map((task, index) => (
                         <Draggable key={task.id} draggableId={task.id} index={index}>
                           {(provided, snapshot) => (
@@ -200,7 +235,7 @@ export default function CalendarWeekGridView({
                         </Draggable>
                       ))}
 
-                      {(hiddenCount > 0 || (visibleTasks.length === 0 && dayNotes.length > 0)) && (
+                      {(hiddenCount > 0 || (visibleTasks.length === 0 && (dayNotes.length > 0 || dayPlannedEvents.length > 0))) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -248,6 +283,7 @@ export default function CalendarWeekGridView({
           date={selectedDate}
           tasks={selectedDate ? getItemsForDate(selectedDate).tasks : []}
           notes={selectedDate ? getItemsForDate(selectedDate).notes : []}
+          plannedEvents={selectedDate ? getPlannedEventsForDate(selectedDate) : []}
           onTaskClick={onTaskClick}
         />
       </DragDropContext>

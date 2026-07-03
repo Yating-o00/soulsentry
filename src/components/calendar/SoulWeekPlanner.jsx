@@ -429,6 +429,8 @@ export default function SoulWeekPlanner({
               currentDate={currentWeekDate}
               tasks={tasks}
               notes={notes}
+              plannedEvents={weekData?.events || []}
+              plannedWeekStart={weekData?.plan_start_date}
               onDateClick={onDateClick}
               onTaskDrop={onTaskDrop}
               onTaskClick={onTaskClick}

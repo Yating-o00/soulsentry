@@ -48,7 +48,6 @@ import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
-import FocusAnchorBar from "../components/dashboard/FocusAnchorBar";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -411,9 +410,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </motion.div>
-
-      {/* 全局知识流动轴：当前专注锚点 */}
-      <FocusAnchorBar tasks={todayTasks} onTaskClick={setSelectedTask} />
 
       <DailyBriefing />
 

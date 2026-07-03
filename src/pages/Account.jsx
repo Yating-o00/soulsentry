@@ -35,19 +35,19 @@ export default function Account() {
 
   // 认知洞察所需数据
   const { data: tasks = [] } = useQuery({
-    queryKey: ["tasks"],
-    queryFn: () => base44.entities.Task.list("-created_date", 300),
+    queryKey: ["account-insight-tasks"],
+    queryFn: () => base44.entities.Task.list("-created_date", 500),
   });
   const { data: notes = [] } = useQuery({
-    queryKey: ["notes"],
+    queryKey: ["account-insight-notes"],
     queryFn: () => base44.entities.Note.list("-created_date", 200),
   });
   const { data: behaviors = [] } = useQuery({
-    queryKey: ["behaviors"],
+    queryKey: ["account-insight-behaviors"],
     queryFn: () => base44.entities.UserBehavior.list("-created_date", 500),
   });
   const { data: executions = [] } = useQuery({
-    queryKey: ["task-executions"],
+    queryKey: ["account-insight-executions"],
     queryFn: () => base44.entities.TaskExecution.list("-created_date", 100),
     initialData: [],
   });

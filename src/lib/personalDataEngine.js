@@ -67,6 +67,27 @@ export async function getPersonalSuggestion(args) {
   }
 }
 
+// 反思式反馈：任务顺延时让 AI 主动猜测原因
+export async function getDeferralGuess(task) {
+  if (!task) return null;
+  try {
+    const res = await base44.functions.invoke("kimiPersonalInsight", {
+      mode: "deferral_guess",
+      task: {
+        id: task.id,
+        title: task.title,
+        category: task.category,
+        priority: task.priority,
+        reminder_time: task.reminder_time,
+      },
+    });
+    return (res && res.data) || null;
+  } catch (e) {
+    console.warn("[personalDataEngine] getDeferralGuess failed:", e && e.message);
+    return null;
+  }
+}
+
 export async function getProfileInsight() {
   try {
     const res = await base44.functions.invoke("kimiPersonalInsight", { mode: "profile" });
@@ -83,4 +104,5 @@ export default {
   trackDecision: trackDecision,
   getPersonalSuggestion: getPersonalSuggestion,
   getProfileInsight: getProfileInsight,
+  getDeferralGuess: getDeferralGuess,
 };

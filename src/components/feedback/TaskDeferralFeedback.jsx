@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { getDeferralGuess, trackDecision } from "@/lib/personalDataEngine";
 
 /**
  * 任务落地反馈闭环 - 简短的"未按时完成"原因卡
@@ -57,13 +58,45 @@ export default function TaskDeferralFeedback({ task, onSubmit, onSkip }) {
   const [note, setNote] = useState("");
   const [defer, setDefer] = useState(DEFER_PRESETS[0]);
   const [loading, setLoading] = useState(false);
+  const [guess, setGuess] = useState(null);
+
+  // 反思式反馈：AI 主动猜测顺延原因
+  useEffect(() => {
+    let cancelled = false;
+    getDeferralGuess(task).then((g) => {
+      if (!cancelled && g?.guessed_reason && (g.confidence ?? 0) >= 0.4) setGuess(g);
+    });
+    return () => { cancelled = true; };
+  }, [task?.id]);
 
   const isDeviceIssue = reason === "device_not_ready";
+
+  const confirmGuess = () => {
+    setReason(guess.guessed_reason);
+    // 高权重认知校准：用户确认了 AI 的猜测
+    trackDecision({
+      subtype: "deferral_guess_confirm",
+      summary: `确认 AI 猜测的顺延原因「${guess.guessed_reason}」：${task?.title || ""}`,
+      weight: 8,
+      related_task_id: task?.id,
+      metadata: { guessed_reason: guess.guessed_reason, confidence: guess.confidence },
+    });
+  };
 
   const handleSubmit = async () => {
     if (!reason || loading) return;
     setLoading(true);
     try {
+      // 认知校准：用户纠正了 AI 的猜测（权重更高）
+      if (guess && reason !== guess.guessed_reason) {
+        trackDecision({
+          subtype: "deferral_guess_correct",
+          summary: `纠正 AI 猜测：实际原因是「${reason}」而非「${guess.guessed_reason}」：${task?.title || ""}`,
+          weight: 9,
+          related_task_id: task?.id,
+          metadata: { guessed_reason: guess.guessed_reason, actual_reason: reason },
+        });
+      }
       const target = computeDeferTarget(defer);
       await onSubmit?.({
         reason_category: reason,
@@ -113,6 +146,37 @@ export default function TaskDeferralFeedback({ task, onSubmit, onSkip }) {
 
       {/* Body */}
       <div className="p-4 space-y-3.5">
+        {/* AI 反思式猜测 */}
+        <AnimatePresence>
+          {guess && !reason && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="rounded-xl border border-indigo-200/70 bg-indigo-50/60 px-3 py-2.5"
+            >
+              <div className="flex items-start gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-500 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] text-indigo-900 leading-snug">
+                    AI 猜测：可能是<span className="font-semibold">「{(REASONS.find((r) => r.key === guess.guessed_reason) || {}).label || "其它"}」</span>
+                  </p>
+                  {guess.message && (
+                    <p className="text-[11px] text-indigo-600/80 mt-0.5">{guess.message}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={confirmGuess}
+                  className="no-min-size flex-shrink-0 px-2.5 py-1 rounded-lg bg-[#384877] text-white text-[11px] font-medium hover:bg-[#2d3a5f] transition-colors"
+                >
+                  对，就是这个
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Step 1: 原因 */}
         <div>
           <p className="text-[11px] font-medium text-stone-500 mb-2">主要原因（帮助哨兵下次更懂你）</p>

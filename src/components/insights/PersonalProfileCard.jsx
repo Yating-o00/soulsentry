@@ -84,6 +84,20 @@ export default function PersonalProfileCard({ compact = false }) {
             <p className="text-sm text-slate-700 leading-relaxed">{persona}</p>
           )}
 
+          {data.energy_pattern && (
+            <div className="flex items-start gap-2 text-xs text-slate-600 bg-white/60 rounded-lg px-2.5 py-2">
+              <Clock className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+              <span><span className="font-medium text-slate-700">能量模式：</span>{data.energy_pattern}</span>
+            </div>
+          )}
+
+          {Array.isArray(data.pressure_zones) && data.pressure_zones.length > 0 && (
+            <div className="flex items-start gap-2 text-xs text-slate-600 bg-white/60 rounded-lg px-2.5 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+              <span><span className="font-medium text-slate-700">压力区：</span>{data.pressure_zones.slice(0, 3).join("；")}</span>
+            </div>
+          )}
+
           {insights.length > 0 && (
             <div className="space-y-1.5">
               {insights.slice(0, compact ? 2 : 4).map((it, i) => (

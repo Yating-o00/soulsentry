@@ -381,16 +381,15 @@ function buildWeekAutomations(input, events, sourceAutomations = [], weekStartDa
   };
 
   const normalizedSource = Array.isArray(sourceAutomations) ? sourceAutomations : [];
-  const hasMeaningfulSource = normalizedSource.some((item) => !isGenericAutomation(item));
-  if (hasMeaningfulSource) {
-    normalizedSource.forEach(pushAutomation);
-  }
+  const meaningfulSource = normalizedSource.filter((item) => !isGenericAutomation(item));
+  meaningfulSource.forEach(pushAutomation);
 
   const eventTypes = new Set(events.map((item) => item.type));
-  const hasMeeting = eventTypes.has("meeting");
-  const hasTravel = eventTypes.has("travel");
-  const hasFocus = eventTypes.has("focus") || /开发|测试|复盘|材料|方案|总结|纪要/.test(text);
-  const hasRest = eventTypes.has("rest");
+  const eventText = events.map((item) => `${item?.title || ""} ${item?.description || ""}`).join(" ");
+  const hasMeeting = eventTypes.has("meeting") || /投资人|客户|会议|汇报|拜访|对接|沟通|路演|会面|面谈|签约|谈判/.test(eventText) || /投资人|客户|会议|汇报|拜访|对接|沟通|路演|会面|面谈|签约|谈判/.test(text);
+  const hasTravel = eventTypes.has("travel") || /出差|机场|高铁|酒店|航班|登机|返程|行程|差旅|打车|导航|到达/.test(eventText) || /出差|机场|高铁|酒店|航班|登机|返程|行程|差旅|打车|导航|到达/.test(text);
+  const hasRest = eventTypes.has("rest") || /健身|跑步|拉伸|冥想|恢复|休息|睡眠|喝水|起身/.test(eventText) || /健身|跑步|拉伸|冥想|恢复|休息|睡眠|喝水|起身/.test(text);
+  const hasFocus = eventTypes.has("focus") || /开发|测试|复盘|材料|方案|总结|纪要|写作|文档|报告|PPT|表格|邮件|对账/.test(eventText) || /开发|测试|复盘|材料|方案|总结|纪要|写作|文档|报告|PPT|表格|邮件|对账/.test(text);
   const firstMeeting = events.find((item) => item.type === "meeting" && item.date);
   const firstTravel = events.find((item) => item.type === "travel" && item.date);
   const firstFocus = events.find((item) => (item.type === "focus" || item.type === "work") && item.date);

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Sparkles, Loader2, ChevronRight, Send, ChevronDown, ChevronUp, Paperclip, X as XIcon, FileText } from "lucide-react";
+import { Zap, Sparkles, Loader2, ChevronRight, Send, ChevronDown, ChevronUp, Paperclip, X as XIcon, FileText, ThumbsUp, ThumbsDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
@@ -13,6 +13,7 @@ import { createPageUrl } from "@/utils";
 import { AUTOMATION_TYPES, QUICK_AUTOMATION_TEMPLATES } from "./automationConfig";
 import AutomationDetailDialog from "./AutomationDetailDialog";
 import AutomationCandidateGrid from "./AutomationCandidateGrid";
+import AutomationTrustStrip from "./AutomationTrustStrip";
 import { useAICreditGate } from "@/components/credits/useAICreditGate";
 import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { AUTOMATION_EXECUTE_COSTS } from "@/components/credits/creditConfig";
@@ -417,6 +418,9 @@ export default function AutoExecutionPanel() {
               </div>
             </div>
           )}
+
+          {/* 自动化信任度：基于历史成功率与用户评价 */}
+          <AutomationTrustStrip />
         </div>
       </Card>
 
@@ -448,9 +452,21 @@ export default function AutoExecutionPanel() {
 }
 
 function ExecRow({ exec, onClick }) {
+  const queryClient = useQueryClient();
   const cfg = AUTOMATION_TYPES[exec.automation_type] || AUTOMATION_TYPES.none;
   const Icon = cfg.icon;
   const status = exec.execution_status;
+  const rating = exec.user_feedback?.rating;
+
+  const handleRate = async (e, value) => {
+    e.stopPropagation();
+    await base44.entities.TaskExecution.update(exec.id, {
+      user_feedback: { rating: value, rated_at: new Date().toISOString() },
+    });
+    queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    queryClient.invalidateQueries({ queryKey: ['automation-trust'] });
+    toast.success(value >= 4 ? "已记录好评，AI 会提高此类自动化的信任度" : "已记录差评，AI 将对此类自动化更谨慎");
+  };
 
   const statusInfo = {
     parsing: { label: "规划中", color: "text-indigo-600 bg-indigo-50", pulse: true },
@@ -462,13 +478,15 @@ function ExecRow({ exec, onClick }) {
   }[status] || { label: status, color: "text-slate-500 bg-slate-50" };
 
   return (
-    <motion.button
+    <motion.div
       layout
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       onClick={onClick}
-      className="w-full flex items-center gap-2.5 p-2 rounded-lg bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all text-left"
+      role="button"
+      tabIndex={0}
+      className="w-full flex items-center gap-2.5 p-2 rounded-lg bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all text-left cursor-pointer"
     >
       <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.iconBg}`}>
         <Icon className="w-3.5 h-3.5" />
@@ -477,9 +495,33 @@ function ExecRow({ exec, onClick }) {
         <div className="text-xs font-medium text-slate-800 truncate">{exec.task_title}</div>
         <div className="text-[10px] text-slate-400 truncate">{cfg.label}</div>
       </div>
+      {status === 'completed' && (
+        rating ? (
+          <span className="text-[10px] text-slate-400 flex-shrink-0">
+            {rating >= 4 ? '👍 已好评' : '👎 已差评'}
+          </span>
+        ) : (
+          <span className="flex items-center gap-0.5 flex-shrink-0">
+            <button
+              onClick={(e) => handleRate(e, 5)}
+              className="no-min-size w-6 h-6 rounded-md hover:bg-emerald-50 flex items-center justify-center text-slate-300 hover:text-emerald-600 transition-colors"
+              title="结果满意"
+            >
+              <ThumbsUp className="w-3 h-3" />
+            </button>
+            <button
+              onClick={(e) => handleRate(e, 2)}
+              className="no-min-size w-6 h-6 rounded-md hover:bg-red-50 flex items-center justify-center text-slate-300 hover:text-red-500 transition-colors"
+              title="结果不满意"
+            >
+              <ThumbsDown className="w-3 h-3" />
+            </button>
+          </span>
+        )
+      )}
       <Badge variant="outline" className={`text-[10px] border-0 ${statusInfo.color} ${statusInfo.pulse ? 'animate-pulse' : ''}`}>
         {statusInfo.label}
       </Badge>
-    </motion.button>
+    </motion.div>
   );
 }

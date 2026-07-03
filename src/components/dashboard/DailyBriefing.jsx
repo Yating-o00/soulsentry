@@ -139,20 +139,13 @@ export default function DailyBriefing() {
                     </div>
                 </div>
 
-                {briefing.value_guidance && (
-                    <div className="mt-4 md:mt-6 bg-gradient-to-r from-amber-50/80 to-orange-50/50 border border-amber-100 rounded-xl md:rounded-2xl px-4 py-3 md:px-5 md:py-4 flex items-start gap-2.5">
-                        <Heart className="w-4 h-4 text-rose-400 fill-rose-300 shrink-0 mt-0.5" />
-                        <p className="text-[13px] md:text-sm text-amber-900/80 leading-relaxed">
-                            {briefing.value_guidance}
-                        </p>
-                    </div>
-                )}
-
-                {briefing.mindful_tip && (
+                {(briefing.value_guidance || briefing.mindful_tip) && (
                     <div className="mt-4 md:mt-8 pt-4 md:pt-6 border-t border-slate-100/60 flex flex-col items-center gap-3">
-                        <div className="inline-flex items-center gap-2 text-slate-500 text-xs md:text-sm italic bg-white px-3 md:px-5 py-2 md:py-2.5 rounded-full border border-slate-100 shadow-sm max-w-full">
-                            <Sparkles className="w-3 h-3 md:w-3.5 md:h-3.5 text-amber-400 fill-amber-400 shrink-0" />
-                            <span className="truncate">"{briefing.mindful_tip}"</span>
+                        <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/50 border border-amber-100 rounded-xl md:rounded-2xl px-4 py-3 md:px-5 md:py-4 flex items-start gap-2.5 w-full">
+                            <Heart className="w-4 h-4 text-rose-400 fill-rose-300 shrink-0 mt-0.5" />
+                            <p className="text-[13px] md:text-sm text-amber-900/80 leading-relaxed">
+                                {briefing.value_guidance || briefing.mindful_tip}
+                            </p>
                         </div>
                         {briefing.task_stats && (
                             <div className="flex items-center gap-3 text-[10px] md:text-xs text-slate-400">

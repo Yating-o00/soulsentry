@@ -113,12 +113,11 @@ ${taskDataBlock}
    - 必须结合用户最近的心签/笔记内容，从中提炼用户真正在关心、思考的主题，并与长期任务呼应
    - 关注那些不紧急但重要的任务
    - 如果心签中有情绪、灵感或长期目标的线索，温柔地回应它们
-5. **value_guidance（正向价值引导）**：一段 40-70 字的引导。必须基于用户真实的行动（已完成的任务、坚持的习惯、心签中记录的思考），肯定其中体现的品质（如坚持、自省、对家人朋友的用心、勇于面对困难），并引导一个正向的价值方向（成长、善待自己、专注当下、感恩）。禁止空洞的鸡汤，必须落到用户的具体行动上。
-6. **mindful_tip**：一句简短的正念小贴士（15-30字），与用户当前状态相关
-7. **title**：格式为「{用户名}的{时段}心栈·{月}月{日}日」，时段根据当前时间选择（早安/午后/晚间）
+5. **value_guidance（正向价值引导）**：一段 40-70 字的引导。必须基于用户真实的行动（已完成的任务、坚持的习惯、心签中记录的思考），肯定其中体现的品质（如坚持、自省、对家人朋友的用心、勇于面对困难），并以一句与用户当前状态相关的正念提醒收尾（如专注当下、善待自己）。禁止空洞的鸡汤，必须落到用户的具体行动上。
+6. **title**：格式为「{用户名}的{时段}心栈·{月}月{日}日」，时段根据当前时间选择（早安/午后/晚间）
 
 返回严格JSON格式：
-{"title":"string","short_term_narrative":"string","long_term_narrative":"string","value_guidance":"string","mindful_tip":"string"}
+{"title":"string","short_term_narrative":"string","long_term_narrative":"string","value_guidance":"string"}
 
 语言：简体中文。语气：温暖、平静、有力量感，像一个可靠的朋友在旁边轻声提醒。`;
 
@@ -136,9 +135,8 @@ ${taskDataBlock}
                 short_term_narrative: fallbackShort,
                 long_term_narrative: fallbackLong,
                 value_guidance: recentCompleted.length > 0
-                    ? `你最近完成了「${recentCompleted[0].title}」，每一次兑现约定都是对自己的一份信守，继续保持这份可靠。`
-                    : "把注意力放在你能掌控的事情上，认真对待每一个小约定，就是在认真对待自己的生活。",
-                mindful_tip: "深呼吸三次，专注于此刻最重要的那一件事。"
+                    ? `你最近完成了「${recentCompleted[0].title}」，每一次兑现约定都是对自己的一份信守。深呼吸，专注于此刻最重要的那一件事。`
+                    : "把注意力放在你能掌控的事情上，认真对待每一个小约定，就是在认真对待自己的生活。"
             });
         }
 
@@ -198,9 +196,8 @@ ${taskDataBlock}
                 short_term_narrative: shortNarrative,
                 long_term_narrative: '回顾你的笔记和记忆，找到长期目标的线索。',
                 value_guidance: recentCompleted.length > 0
-                    ? `你最近完成了「${recentCompleted[0].title}」，兑现约定本身就是一种力量，为自己的坚持点个赞。`
+                    ? `你最近完成了「${recentCompleted[0].title}」，兑现约定本身就是一种力量。此刻最重要的事只有一件，找到它。`
                     : "认真对待每一个小约定，就是在认真对待自己的生活。",
-                mindful_tip: "此刻最重要的事只有一件，找到它。",
                 task_stats: {
                     active: activeTasks.length,
                     urgent: urgentTasks.length,

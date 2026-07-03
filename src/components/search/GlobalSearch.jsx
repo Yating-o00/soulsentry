@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import _ from "lodash";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import AICommandRunner from "@/components/search/AICommandRunner";
 
 export default function GlobalSearch({ open, onOpenChange, initialQuery = "" }) {
   const [query, setQuery] = useState("");
@@ -126,6 +127,8 @@ export default function GlobalSearch({ open, onOpenChange, initialQuery = "" }) 
 
         {/* Results Area */}
         <div className="max-h-[65vh] overflow-y-auto p-2 scrollbar-hide">
+          {/* 动作召唤器：搜索词可直接作为 AI 命令执行 */}
+          {query.trim().length >= 4 && <AICommandRunner query={query.trim()} />}
           <AnimatePresence mode="wait">
             {!query && (
                <motion.div 

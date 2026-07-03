@@ -67,6 +67,7 @@ import ReminderStrategyEditor from "./ReminderStrategyEditor";
 import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import RelatedKnowledgePanel from "@/components/knowledge/RelatedKnowledgePanel";
+import TaskRescuePrompt from "@/components/tasks/TaskRescuePrompt";
 import { invokeAI } from "@/components/utils/aiHelper";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
@@ -639,6 +640,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             taskTitle={task.title} 
             currentDescription={task.description} 
             onApply={handleEnhanceApply} 
+          />
+
+          {/* 失败预防与平滑补偿：多次顺延/阻塞时主动提供降级规划 */}
+          <TaskRescuePrompt
+            task={task}
+            isGenerating={isGeneratingSubtasks}
+            onBreakdown={handleAutoGenerateSubtasks}
+            onUpdate={(data) => updateTaskMutation.mutate({ id: task.id, data })}
           />
 
 

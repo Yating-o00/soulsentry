@@ -63,6 +63,7 @@ export default function NotificationManager() {
     }
     return 'denied';
   });
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const checkedTasks = useRef(new Set());
   const audioRef = useRef(null);
   const queryClient = useQueryClient();
@@ -121,6 +122,34 @@ export default function NotificationManager() {
       }
     }
   }, [permission, notificationSupported]);
+
+  // 实时同步浏览器权限状态：用户在浏览器设置中开启通知后，无需刷新页面即可更新
+  useEffect(function() {
+    if (!notificationSupported) return;
+
+    const syncPermission = () => {
+      try { setPermission(Notification.permission); } catch (e) {}
+    };
+
+    // 1. 权限变化事件（Chrome/Edge 支持）
+    let permStatus = null;
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'notifications' }).then((status) => {
+        permStatus = status;
+        status.onchange = syncPermission;
+      }).catch(() => {});
+    }
+
+    // 2. 页面重新获得焦点/可见时兜底重查（覆盖 Safari 等不支持 onchange 的浏览器）
+    window.addEventListener('focus', syncPermission);
+    document.addEventListener('visibilitychange', syncPermission);
+
+    return () => {
+      if (permStatus) permStatus.onchange = null;
+      window.removeEventListener('focus', syncPermission);
+      document.removeEventListener('visibilitychange', syncPermission);
+    };
+  }, [notificationSupported]);
 
   const playSound = (soundType) => {
     const soundUrl = NOTIFICATION_SOUNDS[soundType];
@@ -612,17 +641,24 @@ export default function NotificationManager() {
     return null;
   }
 
-  if (permission === "denied") {
+  if (permission === "denied" && !bannerDismissed) {
     return (
-      <div className="fixed bottom-4 right-4 bg-red-50 border-2 border-red-200 rounded-xl p-4 shadow-xl max-w-sm">
+      <div className="fixed bottom-4 right-4 bg-red-50 border-2 border-red-200 rounded-xl p-4 shadow-xl max-w-sm z-50">
         <div className="flex items-start gap-3">
           <Bell className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <h4 className="font-semibold text-red-800 mb-1">通知已禁用</h4>
             <p className="text-sm text-red-600">
               请在浏览器设置中允许通知，以接收约定提醒。
             </p>
           </div>
+          <button
+            onClick={() => setBannerDismissed(true)}
+            aria-label="关闭"
+            className="text-red-400 hover:text-red-600 flex-shrink-0 no-min-size"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       </div>
     );

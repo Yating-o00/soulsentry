@@ -63,7 +63,20 @@ export default function NotificationManager() {
     }
     return 'denied';
   });
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const BANNER_DISMISS_KEY = 'ss_notif_banner_dismissed_v1';
+  const [bannerDismissed, setBannerDismissed] = useState(function() {
+    try { return localStorage.getItem(BANNER_DISMISS_KEY) === '1'; } catch (e) { return false; }
+  });
+  const dismissBanner = () => {
+    setBannerDismissed(true);
+    try { localStorage.setItem(BANNER_DISMISS_KEY, '1'); } catch (e) {}
+  };
+  // 权限恢复为允许后，清除关闭记录，未来若再次被禁用仍能提示一次
+  useEffect(function() {
+    if (permission === 'granted') {
+      try { localStorage.removeItem(BANNER_DISMISS_KEY); } catch (e) {}
+    }
+  }, [permission]);
   const checkedTasks = useRef(new Set());
   const audioRef = useRef(null);
   const queryClient = useQueryClient();
@@ -653,7 +666,7 @@ export default function NotificationManager() {
             </p>
           </div>
           <button
-            onClick={() => setBannerDismissed(true)}
+            onClick={dismissBanner}
             aria-label="关闭"
             className="text-red-400 hover:text-red-600 flex-shrink-0 no-min-size"
           >

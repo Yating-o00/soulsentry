@@ -6,7 +6,7 @@ import FloatingAssistantButton from "./components/assistant/FloatingAssistantBut
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
 import { useOfflineManager } from "./components/offline/OfflineManager";
-import WelcomeGuard from "@/components/WelcomeGuard";
+import OnboardingHost from "./components/onboarding/OnboardingHost";
 import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
@@ -357,6 +357,7 @@ function LayoutContent({ children }) {
         <PWAUpdateNotification />
         <NotificationManager />
         <DeferredCatchupHost />
+        <OnboardingHost />
         <GlobalTextTranslator />
         <GlobalVoiceInput />
         <GeofenceTracker />
@@ -390,9 +391,7 @@ function LayoutContent({ children }) {
     export default function Layout({ children }) {
       return (
         <TranslationProvider>
-          <WelcomeGuard>
-            <LayoutContent>{children}</LayoutContent>
-          </WelcomeGuard>
+          <LayoutContent>{children}</LayoutContent>
         </TranslationProvider>
       );
     }

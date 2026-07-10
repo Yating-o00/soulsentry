@@ -10,6 +10,7 @@ import WelcomeGuard from "@/components/WelcomeGuard";
 import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
+import DeferredCatchupHost from "./components/notifications/DeferredCatchupHost";
 import GlobalTextTranslator from "@/components/GlobalTextTranslator";
 import GlobalVoiceInput from "@/components/voice/GlobalVoiceInput";
 import GeofenceTracker from "./components/location/GeofenceTracker";
@@ -355,6 +356,7 @@ function LayoutContent({ children }) {
         <PWAInstallPrompt />
         <PWAUpdateNotification />
         <NotificationManager />
+        <DeferredCatchupHost />
         <GlobalTextTranslator />
         <GlobalVoiceInput />
         <GeofenceTracker />

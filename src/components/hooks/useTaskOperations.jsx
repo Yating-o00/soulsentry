@@ -53,7 +53,24 @@ export function useTaskOperations() {
         (t) => t && !t._optimistic && !String(t.id || "").startsWith("temp-")
       );
       const reuse = await findReusableTask(taskData, cachedTasks.length > 0 ? cachedTasks : null);
-      if (reuse) return { ...reuse, _reused: true };
+      if (reuse) {
+        // 合并时保留新输入的内容：不同的描述/时间作为备注追加到已有约定，来源可追溯
+        const extraLines = [];
+        const newDesc = (taskData.description || "").trim();
+        if (newDesc && newDesc !== (reuse.description || "").trim()) extraLines.push(`描述：${newDesc}`);
+        if (taskData.reminder_time && taskData.reminder_time !== reuse.reminder_time) {
+          extraLines.push(`时间：${new Date(taskData.reminder_time).toLocaleString("zh-CN")}`);
+        }
+        if (extraLines.length > 0) {
+          const notes = [...(reuse.notes || []), {
+            content: `🔀 合并自重复创建 ${new Date().toLocaleString("zh-CN")}\n${extraLines.join("\n")}`,
+            created_at: new Date().toISOString(),
+          }];
+          await base44.entities.Task.update(reuse.id, { notes });
+          return { ...reuse, notes, _reused: true, _mergedContent: true };
+        }
+        return { ...reuse, _reused: true };
+      }
       return base44.entities.Task.create(taskData);
     },
     onMutate: (taskData) => {
@@ -83,7 +100,9 @@ export function useTaskOperations() {
       }
       if (data?._reused) {
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        feedback.info(`已合并到已有约定「${data.title}」，避免重复`);
+        feedback.info(data._mergedContent
+          ? `已合并到已有约定「${data.title}」，新增内容已保留在备注中`
+          : `已合并到已有约定「${data.title}」，避免重复`);
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['tasks'] });

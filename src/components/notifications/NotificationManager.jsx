@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Bell, Clock, X } from "lucide-react";
 import { getPersonalizedCopy } from "@/components/notifications/personalizedCopy";
+import { buildGeoContextLine } from "@/components/notifications/geoContext";
+import { showAggregatedDueToast } from "@/components/notifications/AggregatedDueToast";
 
 // 跨页面/跨 mount 持久化的"已通知"状态（避免移动端切换路由时重复弹窗）
 // key 形如 notified-<taskId>-<type>-<YYYY-MM-DD>，过期自动清理
@@ -104,6 +106,13 @@ export default function NotificationManager() {
     queryKey: ['notificationRules'],
     queryFn: swallow(() => base44.entities.NotificationRule.list()),
     initialData: [],
+    retry: 1,
+  });
+
+  const { data: savedLocations = [] } = useQuery({
+    queryKey: ['savedLocations'],
+    queryFn: swallow(() => base44.entities.SavedLocation.list()),
+    staleTime: 30 * 60 * 1000,
     retry: 1,
   });
 
@@ -259,6 +268,10 @@ export default function NotificationManager() {
         }
     }
 
+    // 情境化：为工作/位置相关约定附加自然的地点上下文
+    const geoLine = buildGeoContextLine(task, savedLocations);
+    if (geoLine) body = body ? `${body}\n${geoLine}` : geoLine;
+
     var notification;
     try {
       notification = new Notification(title, {
@@ -412,9 +425,9 @@ export default function NotificationManager() {
   useEffect(() => {
     const now = new Date();
 
-    // 节流：本次 effect 最多弹 1 条到点 toast，避免多任务到点时连环弹窗
+    // 到点任务先收集，循环结束后统一派发：单条正常提醒，多条合并为一条聚合通知
     // 历史逾期任务在下方 isFreshlyDue 分支外会自动写 reminder_sent，不会涌入
-    let dueBudget = 1;
+    const freshlyDue = [];
 
     // 按 reminder_time 升序处理，让最早到点的任务优先获得名额
     const sortedTasks = [...tasks].sort((a, b) => {
@@ -495,16 +508,8 @@ export default function NotificationManager() {
           const minutesSinceDue = differenceInMinutes(now, reminderTime);
           const isFreshlyDue = minutesSinceDue >= 0 && minutesSinceDue <= 10;
           const singleKey = `${task.id}-single-${format(reminderTime, 'yyyy-MM-dd-HH-mm')}`;
-          if (isFreshlyDue && !task.reminder_sent && !checkedTasks.current.has(singleKey) && !isNotified(singleKey) && dueBudget > 0) {
-            sendNotification(task, false);
-            checkedTasks.current.add(singleKey);
-            markNotified(singleKey);
-            dueBudget -= 1;
-
-            // 如果是持续提醒，设置定时器
-            if (task.persistent_reminder) {
-              setupPersistentReminder(task);
-            }
+          if (isFreshlyDue && !task.reminder_sent && !checkedTasks.current.has(singleKey) && !isNotified(singleKey)) {
+            freshlyDue.push({ task, singleKey });
           } else if (isPast(reminderTime) && !task.reminder_sent && minutesSinceDue > 10) {
             // 已严重逾期：真正写库 reminder_sent，避免每次打开 App 时同时涌出一堆历史 toast
             // 真正的"高优先级长时逾期"由下方 proactive-nag 逻辑兜底（仅 high/urgent 且 24h+）
@@ -629,6 +634,34 @@ export default function NotificationManager() {
           }
       }
     });
+
+    // 到点任务统一派发：单条正常提醒；多条合并为一条聚合通知，避免连环弹窗
+    if (freshlyDue.length === 1) {
+      const { task, singleKey } = freshlyDue[0];
+      sendNotification(task, false);
+      checkedTasks.current.add(singleKey);
+      markNotified(singleKey);
+      if (task.persistent_reminder) setupPersistentReminder(task);
+    } else if (freshlyDue.length > 1) {
+      freshlyDue.forEach(({ task, singleKey }) => {
+        checkedTasks.current.add(singleKey);
+        markNotified(singleKey);
+        updateTaskMutation.mutate({ id: task.id, data: { reminder_sent: true } });
+      });
+      showAggregatedDueToast({
+        tasks: freshlyDue.map(f => f.task),
+        onSnoozeAll: (minutes) => freshlyDue.forEach(({ task }) => handleSnooze(task, minutes)),
+      });
+      if (notificationSupported && permission === "granted") {
+        try {
+          new Notification(`⏰ ${freshlyDue.length} 个约定同时到点`, {
+            body: freshlyDue.slice(0, 5).map(f => f.task.title).join("、"),
+            icon: "/favicon.ico",
+            tag: "aggregated-due",
+          });
+        } catch (e) {}
+      }
+    }
 
     // 清理已完成约定的检查记录
     const currentTaskIds = new Set(tasks.map(t => t.id));

@@ -508,11 +508,13 @@ export default function Notes() {
               )}
             </div>
 
-            <HeartSignInput
-              onSend={async (payload) => {
-                await createNoteMutation.mutateAsync(payload);
-              }}
-            />
+            <div data-tour="note-input">
+              <HeartSignInput
+                onSend={async (payload) => {
+                  await createNoteMutation.mutateAsync(payload);
+                }}
+              />
+            </div>
           </div>
         </>
       )}

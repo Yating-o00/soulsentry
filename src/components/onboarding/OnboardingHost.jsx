@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import OnboardingTour from "./OnboardingTour";
 
-const TOUR_KEY = "ss_tour_completed_v1";
+const TOUR_KEY = "ss_tour_completed_v2";
 
 export default function OnboardingHost() {
   const [show, setShow] = useState(() => {

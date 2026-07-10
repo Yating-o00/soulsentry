@@ -336,6 +336,7 @@ export default function Dashboard() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         className="grid grid-cols-3 gap-2 md:gap-4"
+        data-tour="dashboard-stats"
       >
         <Card className="bg-[#384877] border-none shadow-xl text-white relative overflow-hidden group">
           <div className="absolute top-1 right-1 md:top-2 md:right-2 p-2 md:p-4 opacity-[0.1] group-hover:opacity-[0.15] transition-opacity">
@@ -418,6 +419,7 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
+        data-tour="daily-planner"
       >
         <SmartDailyPlanner />
       </motion.div>
@@ -427,12 +429,15 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.18 }}
+        data-tour="auto-exec"
       >
         <AutoExecutionPanel />
       </motion.div>
 
       {/* 时空感知守护 - 独立模块 */}
-      <SpatioTemporalGuardModule />
+      <div data-tour="geo-guard">
+        <SpatioTemporalGuardModule />
+      </div>
 
       {/* 全设备智能协同 - 独立模块 */}
       <DeviceCollaborationModule />

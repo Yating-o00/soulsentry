@@ -504,7 +504,7 @@ export default function Tasks() {
         </div>
 
         {/* Task Creation Panel */}
-        <section id="mobile-task-create-anchor" className="mb-10 scroll-mt-20">
+        <section id="mobile-task-create-anchor" className="mb-10 scroll-mt-20" data-tour="task-create">
           <TaskCreationPanel
             onAddTask={handleAddTask}
             onOpenManual={() => setSelectedTask({ status: 'pending', priority: 'medium' })}
@@ -615,7 +615,7 @@ export default function Tasks() {
 
           {/* Overview Mode: 4 Smart Groups */}
           {viewMode === 'overview' && (
-            <div className="space-y-10">
+            <div className="space-y-10" data-tour="task-groups">
               <SmartGroupSection
                 title="现在能做"
                 description="长期计划且当下可执行"

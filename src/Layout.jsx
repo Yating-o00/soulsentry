@@ -11,6 +11,7 @@ import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
 import GlobalTextTranslator from "@/components/GlobalTextTranslator";
+import GlobalVoiceInput from "@/components/voice/GlobalVoiceInput";
 import GeofenceTracker from "./components/location/GeofenceTracker";
 import SentinelGeoWatcher from "./components/location/SentinelGeoWatcher";
 import OnTheWayReminderHost from "./components/location/OnTheWayReminderHost";
@@ -355,6 +356,7 @@ function LayoutContent({ children }) {
         <PWAUpdateNotification />
         <NotificationManager />
         <GlobalTextTranslator />
+        <GlobalVoiceInput />
         <GeofenceTracker />
         <SentinelGeoWatcher />
         <OnTheWayReminderHost />

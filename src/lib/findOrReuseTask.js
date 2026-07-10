@@ -58,13 +58,14 @@ export async function findReusableTask(candidate, existingTasks = null) {
       if (t.parent_task_id) return false;
       if (normTitle(t.title) !== targetKey) return false;
 
-      // 标题完全一致：
-      //   - 若候选无时间，则任意已存在的同名活跃任务都视为重复
-      //   - 若候选有时间，则要求同日（容差 30 分钟内更稳）
-      if (!candidate.reminder_time) return true;
-      if (!t.reminder_time) return true;
-      if (isWithinMinutes(t.reminder_time, candidate.reminder_time, 30)) return true;
-      if (isSameDayBJ(t.reminder_time, candidate.reminder_time)) return true;
+      // 标题完全一致时，仅在以下情况视为重复（避免误合并用户有意新建的约定）：
+      //   1) 已存在任务是"刚刚创建"的（10分钟内）→ 防止同一句输入被重复提交
+      //   2) 双方都有提醒时间且相差在 30 分钟内 → 明确是同一件事
+      const createdRecently = t.created_date &&
+        (Date.now() - new Date(t.created_date).getTime()) <= 10 * 60 * 1000;
+      if (createdRecently) return true;
+      if (candidate.reminder_time && t.reminder_time &&
+          isWithinMinutes(t.reminder_time, candidate.reminder_time, 30)) return true;
       return false;
     });
     return reuse || null;

@@ -5,7 +5,7 @@ export const TOUR_STEPS = [
   {
     icon: Sparkles,
     path: "/",
-    title: "欢迎来到心灵哨兵",
+    title: "欢迎来到心栈SoulSentry",
     description: "用一句话记下约定，AI 会在对的时间、对的地点提醒你。接下来带你逛一圈核心功能，随时可跳过。",
   },
   {

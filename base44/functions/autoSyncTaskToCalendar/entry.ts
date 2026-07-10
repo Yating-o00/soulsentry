@@ -53,14 +53,19 @@ Deno.serve(async (req) => {
     const startTime = new Date(freshTask.reminder_time);
     const endTime = freshTask.end_time ? new Date(freshTask.end_time) : new Date(startTime.getTime() + 3600000);
 
+    // 全天事件：按 Asia/Shanghai 时区取日期（避免 UTC 换算导致差一天）；Google 全天 end.date 为排他，需 +1 天
+    const shDate = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+    const allDayStart = shDate(startTime);
+    const allDayEnd = shDate(new Date(endTime.getTime() + 24 * 60 * 60 * 1000));
+
     const calEvent = {
       summary: freshTask.title,
       description: freshTask.description || '',
       start: freshTask.is_all_day
-        ? { date: startTime.toISOString().split('T')[0] }
+        ? { date: allDayStart }
         : { dateTime: startTime.toISOString(), timeZone: 'Asia/Shanghai' },
       end: freshTask.is_all_day
-        ? { date: endTime.toISOString().split('T')[0] }
+        ? { date: allDayEnd > allDayStart ? allDayEnd : allDayStart }
         : { dateTime: endTime.toISOString(), timeZone: 'Asia/Shanghai' },
       reminders: { useDefault: true },
     };

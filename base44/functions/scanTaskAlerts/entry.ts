@@ -165,7 +165,8 @@ Deno.serve(async (req) => {
       const recipients = await collectRecipients(base44, task);
       if (recipients.length === 0) continue;
 
-      let anyOk = false;
+      let sentDue = false;
+      let sentAdvance = false;
 
       for (const email of recipients) {
         const users = await base44.asServiceRole.entities.User.filter({ email });
@@ -215,22 +216,22 @@ Deno.serve(async (req) => {
                   kind: 'task_due',
                   urgent: task.priority === 'urgent' || task.priority === 'high',
                 });
-                anyOk = true;
+                sentDue = true;
               } else if (ch === 'wework' && u.wework_webhook_url) {
                 const md = `## 🔔 任务提醒\n**${task.title}**\n> ${new Date(reminderMs).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
                 await sendWework(u.wework_webhook_url, md);
-                anyOk = true;
+                sentDue = true;
               }
             } catch (e) {
               errors.push({ task_id: task.id, email, channel: ch, error: e.message });
             }
           }
-          if (anyOk) processedDue++;
+          if (sentDue) processedDue++;
           continue;
         }
 
         // 截止预警：只有用户显式开启了 auto_alert_enabled 才推（保留原逻辑）
-        if (isInAdvanceWindow && settings.auto_alert_enabled) {
+        if (isInAdvanceWindow && settings.auto_alert_enabled && !task.advance_alert_sent) {
           const hoursBefore = settings.alert_hours_before ?? 2;
           const triggerAt = reminderMs - hoursBefore * 3600 * 1000;
           if (now < triggerAt) continue;
@@ -240,7 +241,7 @@ Deno.serve(async (req) => {
             try {
               if (ch === 'wework' && u.wework_webhook_url) {
                 await sendWework(u.wework_webhook_url, buildWeworkMarkdown(task, hoursLeft));
-                anyOk = true;
+                sentAdvance = true;
               } else if (ch === 'web_push') {
                 await sendWebPushTo(base44, email, task, {
                   title: `⚡ 即将截止：${task.title}`,
@@ -248,18 +249,22 @@ Deno.serve(async (req) => {
                   kind: 'task_alert',
                   urgent: hoursLeft <= 2,
                 });
-                anyOk = true;
+                sentAdvance = true;
               }
             } catch (e) {
               errors.push({ task_id: task.id, email, channel: ch, error: e.message });
             }
           }
-          if (anyOk) processedAdvance++;
+          if (sentAdvance) processedAdvance++;
         }
       }
 
-      if (anyOk) {
+      // 关键修复：截止预警与到点提醒分开打标——预警不再消耗 reminder_sent，
+      // 否则提前 N 小时的预警发出后，真正到点的提醒会被跳过（漏提醒）
+      if (sentDue) {
         await base44.asServiceRole.entities.Task.update(task.id, { reminder_sent: true });
+      } else if (sentAdvance) {
+        await base44.asServiceRole.entities.Task.update(task.id, { advance_alert_sent: true });
       }
     }
 

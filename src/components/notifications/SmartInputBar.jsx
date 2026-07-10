@@ -89,49 +89,44 @@ export default function SmartInputBar() {
         queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       }
 
+      // 🔧 真正落库的是 system_actions（create_task/set_reminder 等），
+      // execution_steps 只是展示给用户的"现实事项链路"，两者不能混用。
+      // 之前的 bug：遍历 execution_steps 执行（无 action_key → 全部空转），约定从未被创建。
       let taskId = null;
-      const confirmsNeeded = [];
-      const completedSteps = [];
+      let actionFailed = false;
+      const systemActions = plan._system_actions || plan.system_actions || [];
+      if (!systemActions.some(a => a && a.action_key === "create_task")) {
+        systemActions.unshift({ action_key: "create_task", params: {} });
+      }
 
-      for (let i = 0; i < plan.execution_steps.length; i++) {
-        const step = plan.execution_steps[i];
-
-        if (step.action_type === "confirm") {
-          confirmsNeeded.push(step);
-          completedSteps.push({
-            step_name: step.step_name,
-            status: "pending",
-            detail: "⏸ 待确认: " + step.detail,
-            timestamp: null,
-          });
-          continue;
-        }
-
+      for (const action of systemActions) {
         try {
-          const result = await executeStep(step, taskId, mergedTaskData, execution);
+          const result = await executeStep(
+            { ...action, step_name: action.action_key },
+            taskId, mergedTaskData, execution
+          );
           if (result.taskId) taskId = result.taskId;
-          completedSteps.push({
-            step_name: step.step_name,
-            status: result.success ? "completed" : "failed",
-            detail: result.detail,
-            timestamp: new Date().toISOString(),
-          });
+          if (!result.success) actionFailed = true;
         } catch (err) {
-          completedSteps.push({
-            step_name: step.step_name,
-            status: "failed",
-            detail: err.message || "执行失败",
-            timestamp: new Date().toISOString(),
-          });
+          console.error("System action failed:", action.action_key, err);
+          if (action.action_key === "create_task") actionFailed = true;
         }
+      }
 
-        if (execution) {
-          await base44.entities.TaskExecution.update(execution.id, {
-            task_id: taskId || "",
-            execution_steps: completedSteps,
-          });
-          queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-        }
+      // 展示链路：约定创建成功后将事项链路标记为已规划完成
+      const completedSteps = plan.execution_steps.map(s => ({
+        step_name: s.step_name,
+        status: taskId ? "completed" : "failed",
+        detail: (s.detail || "") + (s.when_hint ? `（⏱ ${s.when_hint}）` : ""),
+        timestamp: new Date().toISOString(),
+      }));
+
+      if (execution) {
+        await base44.entities.TaskExecution.update(execution.id, {
+          task_id: taskId || "",
+          execution_steps: completedSteps,
+        });
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       }
 
       // 🆕 把 AI 规划的"情境感知事项链路"作为子约定挂到父约定下
@@ -164,8 +159,8 @@ export default function SmartInputBar() {
         }
       }
 
-      const hasFailures = completedSteps.some(s => s.status === "failed");
-      const hasConfirms = confirmsNeeded.length > 0;
+      const hasFailures = actionFailed || !taskId;
+      const hasConfirms = false;
 
       if (execution) {
         await base44.entities.TaskExecution.update(execution.id, {
@@ -194,9 +189,7 @@ export default function SmartInputBar() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
 
-      if (hasConfirms) {
-        toast(plan.intent_summary + " — " + confirmsNeeded.length + "项需要确认", { icon: "⚡" });
-      } else if (hasFailures) {
+      if (hasFailures) {
         toast.error("部分步骤执行失败，请查看详情");
       } else {
         toast.success("执行完成: " + plan.intent_summary, { icon: "✅" });

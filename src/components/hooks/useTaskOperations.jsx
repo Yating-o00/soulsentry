@@ -47,8 +47,12 @@ export function useTaskOperations() {
     mutationFn: async (taskData) => {
       // 入口去重：若已有同标题 + 同日（或 ±30 分钟）的活跃顶层任务，复用而不新建。
       // 性能优化：优先用本地缓存的任务列表做去重判断，省掉一次拉取 200 条的网络请求
-      const cachedTasks = queryClient.getQueryData(['tasks']);
-      const reuse = await findReusableTask(taskData, cachedTasks);
+      // 注意：onMutate 先于此处执行，缓存里已插入本次提交的乐观占位记录，
+      // 必须排除掉，否则新约定会"合并到自己"而永远不被真正创建
+      const cachedTasks = (queryClient.getQueryData(['tasks']) || []).filter(
+        (t) => t && !t._optimistic && !String(t.id || "").startsWith("temp-")
+      );
+      const reuse = await findReusableTask(taskData, cachedTasks.length > 0 ? cachedTasks : null);
       if (reuse) return { ...reuse, _reused: true };
       return base44.entities.Task.create(taskData);
     },

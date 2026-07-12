@@ -70,6 +70,7 @@ import RelatedKnowledgePanel from "@/components/knowledge/RelatedKnowledgePanel"
 import TaskRescuePrompt from "@/components/tasks/TaskRescuePrompt";
 import ConvertToNoteButton from "@/components/tasks/ConvertToNoteButton";
 import { invokeAI } from "@/components/utils/aiHelper";
+import TaskLocationBinder from "@/components/tasks/TaskLocationBinder";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
@@ -860,6 +861,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                           </div>
                       </div>
                   </div>
+
+                  {/* 位置提醒：到达设定地点时自动触发 */}
+                  <TaskLocationBinder
+                      task={task}
+                      onUpdate={(data) => updateTaskMutation.mutate({ id: task.id, data })}
+                  />
               </TabsContent>
 
               {/* AI Strategy Tab */}

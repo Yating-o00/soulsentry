@@ -303,9 +303,9 @@ export default function NotificationManager() {
 
     // 显示toast通知
     toast.custom((t) => (
-      <div className="bg-white rounded-xl shadow-2xl border-2 border-purple-200 p-4 min-w-[300px]">
+      <div className="bg-white rounded-xl shadow-2xl border border-[#384877]/20 p-4 min-w-[300px]">
         <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center flex-shrink-0">
             <Bell className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
@@ -330,7 +330,7 @@ export default function NotificationManager() {
                   handleComplete(task);
                   toast.dismiss(t);
                 }}
-                className="text-xs bg-gradient-to-r from-green-500 to-emerald-600"
+                className="text-xs bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
               >
                 标记完成
               </Button>
@@ -566,7 +566,16 @@ export default function NotificationManager() {
 
       // Proactive: 检查是否为遗漏的重要约定 (High/Urgent, Overdue > 24h, Not Completed)
       // 且未被Snooze, 且未交互过
-      if (['high', 'urgent'].includes(task.priority) && 
+      // 去重：若存在 ≥2 条被推迟/逾期的约定，它们已由「聚合待处理」卡片统一展示，
+      // 不再对其中的逾期约定单独弹「紧急提醒」，避免同一约定重复弹窗
+      const deferredCount = tasks.filter((t) => t && !t.deleted_at && !t.parent_task_id && (
+        t.status === "snoozed" ||
+        (t.status === "pending" && t.reminder_sent && t.reminder_time && isPast(parseISO(t.reminder_time)))
+      )).length;
+      const coveredByCatchup = deferredCount >= 2 && task.reminder_sent;
+
+      if (!coveredByCatchup &&
+          ['high', 'urgent'].includes(task.priority) && 
           task.status === 'pending' && 
           !task.snooze_until &&
           isPast(reminderTime)) {

@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 // 多个约定同时到点时，合并为一条聚合通知，避免连环弹窗
 export function showAggregatedDueToast({ tasks, onSnoozeAll }) {
   toast.custom((t) => (
-    <div className="bg-white rounded-xl shadow-2xl border-2 border-indigo-200 p-4 min-w-[300px] max-w-[380px]">
+    <div className="bg-white rounded-xl shadow-2xl border border-[#384877]/20 p-4 min-w-[300px] max-w-[380px]">
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center flex-shrink-0">
           <Bell className="w-5 h-5 text-white" />
         </div>
         <div className="flex-1 min-w-0">

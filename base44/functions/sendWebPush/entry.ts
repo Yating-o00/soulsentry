@@ -85,13 +85,18 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'User has no active push subscription' }, { status: 404 });
     }
 
+    // 手表模式：精简文案（适配小屏）+ 强震动 + 高优先级即时送达，
+    // 手机收到后系统会自动把通知镜像到配对的手表（Apple Watch / Wear OS）
+    const watchMode = !!pref.watch_mode;
+    const finalBody = watchMode && body.length > 60 ? body.slice(0, 57) + '…' : body;
+
     const payload = JSON.stringify({
       title,
-      body,
+      body: finalBody,
       url: url || '/',
       tag: tag || `soulsentry-${Date.now()}`,
-      requireInteraction: !!requireInteraction,
-      vibrate: vibrate || [200, 100, 200],
+      requireInteraction: watchMode ? true : !!requireInteraction,
+      vibrate: vibrate || (watchMode ? [300, 100, 300, 100, 300] : [200, 100, 200]),
       actions: actions || undefined,
       data: data || {}
     });
@@ -102,7 +107,7 @@ Deno.serve(async (req) => {
         payload,
         {
           TTL: 60 * 60 * 4,        // 4 小时内送达有效（设备离线时给更长重试窗口）
-          urgency: requireInteraction ? 'high' : 'normal'
+          urgency: (watchMode || requireInteraction) ? 'high' : 'normal'
         }
       );
       return Response.json({ success: true, statusCode: result.statusCode });

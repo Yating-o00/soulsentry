@@ -21,6 +21,7 @@ import AlertChannelSettings from "@/components/account/AlertChannelSettings";
 import PWAInstallGuide from "@/components/account/PWAInstallGuide";
 import EnableBackgroundPush from "@/components/account/EnableBackgroundPush";
 import DeleteAccountSection from "@/components/account/DeleteAccountSection";
+import WatchNotificationSettings from "@/components/account/WatchNotificationSettings";
 
 export default function Account() {
   const [user, setUser] = useState(null);
@@ -453,6 +454,15 @@ export default function Account() {
         transition={{ delay: 0.175 }}
       >
         <EnableBackgroundPush />
+      </motion.div>
+
+      {/* 手表实时通知 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.177 }}
+      >
+        <WatchNotificationSettings />
       </motion.div>
 
       {/* 预警通道设置 */}

@@ -81,7 +81,25 @@ Deno.serve(async (req) => {
     }
     const sub = pref?.push_subscription;
 
+    // 手表邮件备援：网页推送在部分系统上不会镜像到手表，邮件通知是系统级支持、必定同步到手表。
+    // 开启后每条推送同时发一封邮件（与推送成功与否无关）。
+    let emailSent = false;
+    if (pref?.watch_email_fallback) {
+      try {
+        await base44.asServiceRole.integrations.Core.SendEmail({
+          to: targetEmail,
+          from_name: '心栈提醒',
+          subject: `⌚ ${title}`,
+          body: body + (url ? `\n\n打开应用查看：${url}` : '')
+        });
+        emailSent = true;
+      } catch (_) { /* 邮件备援失败不影响推送主流程 */ }
+    }
+
     if (!pref?.push_enabled || !sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
+      if (emailSent) {
+        return Response.json({ success: true, channel: 'email_only', emailSent });
+      }
       return Response.json({ error: 'User has no active push subscription' }, { status: 404 });
     }
 
@@ -118,7 +136,7 @@ Deno.serve(async (req) => {
           urgency: (watchMode || requireInteraction) ? 'high' : 'normal'
         }
       );
-      return Response.json({ success: true, statusCode: result.statusCode });
+      return Response.json({ success: true, statusCode: result.statusCode, emailSent });
     } catch (pushErr) {
       // 410 / 404 = 订阅失效；403 = VAPID 密钥与订阅不匹配（如更换了 VAPID 密钥后旧订阅作废）。
       // 这些情况都说明该订阅已不可用，清除它并提示用户重新开启推送。

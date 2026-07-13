@@ -26,20 +26,30 @@ export default function WatchNotificationSettings() {
 
   const watchMode = !!pref?.watch_mode;
   const pushEnabled = !!pref?.push_enabled;
+  const emailFallback = !!pref?.watch_email_fallback;
 
-  const handleToggle = async (checked) => {
+  const savePref = async (patch, successMsg) => {
     try {
       if (pref) {
-        await base44.entities.UserPreference.update(pref.id, { watch_mode: checked });
+        await base44.entities.UserPreference.update(pref.id, patch);
       } else {
-        await base44.entities.UserPreference.create({ watch_mode: checked });
+        await base44.entities.UserPreference.create(patch);
       }
       queryClient.invalidateQueries({ queryKey: ["user-preference-watch"] });
-      toast.success(checked ? "手表模式已开启 ⌚" : "手表模式已关闭");
+      toast.success(successMsg);
     } catch (e) {
       toast.error("保存失败，请重试");
     }
   };
+
+  const handleToggle = (checked) =>
+    savePref({ watch_mode: checked }, checked ? "手表模式已开启 ⌚" : "手表模式已关闭");
+
+  const handleEmailFallbackToggle = (checked) =>
+    savePref(
+      { watch_email_fallback: checked },
+      checked ? "邮件备援已开启 📧 提醒将同步发送到您的邮箱" : "邮件备援已关闭"
+    );
 
   const sendTestPush = async (delaySeconds = 0) => {
     setTesting(true);
@@ -85,6 +95,16 @@ export default function WatchNotificationSettings() {
             </p>
           </div>
           <Switch checked={watchMode} onCheckedChange={handleToggle} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-100">
+          <div>
+            <p className="font-medium text-slate-800">邮件备援 <span className="text-xs font-normal text-emerald-600">推荐</span></p>
+            <p className="text-sm text-slate-500 mt-0.5">
+              每条提醒同时发送邮件。邮件通知在手表上是系统级支持、必定同步震动——当网页推送无法镜像到手表时的可靠补救
+            </p>
+          </div>
+          <Switch checked={emailFallback} onCheckedChange={handleEmailFallbackToggle} />
         </div>
 
         {!pushEnabled && (

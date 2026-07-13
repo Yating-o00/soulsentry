@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
 
     webpush.setVapidDetails(subject, publicKey, privateKey);
 
-    const { user_email, title, body, url, tag, data, requireInteraction, vibrate, actions } = await req.json();
+    const { user_email, title, body, url, tag, data, requireInteraction, vibrate, actions, delaySeconds } = await req.json();
     if (!title || !body) {
       return Response.json({ error: 'title and body are required' }, { status: 400 });
     }
@@ -98,8 +98,16 @@ Deno.serve(async (req) => {
       requireInteraction: watchMode ? true : !!requireInteraction,
       vibrate: vibrate || (watchMode ? [300, 100, 300, 100, 300] : [200, 100, 200]),
       actions: actions || undefined,
+      renotify: true,   // 同 tag 重发时也重新提醒（否则被静默替换，手表不会震动）
+      silent: false,
       data: data || {}
     });
+
+    // 延迟发送（用于锁屏测试：Apple Watch 仅在 iPhone 锁屏/息屏时镜像通知）
+    const delay = Math.min(Number(delaySeconds) || 0, 20);
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+    }
 
     try {
       const result = await webpush.sendNotification(

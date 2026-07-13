@@ -41,17 +41,21 @@ export default function WatchNotificationSettings() {
     }
   };
 
-  const sendTestPush = async () => {
+  const sendTestPush = async (delaySeconds = 0) => {
     setTesting(true);
+    if (delaySeconds > 0) {
+      toast.info(`将在 ${delaySeconds} 秒后送达，请立即锁屏/息屏 iPhone ⏳`, { duration: delaySeconds * 1000 });
+    }
     try {
       await base44.functions.invoke("sendWebPush", {
         title: "⌚ 手表通知测试",
         body: "如果手表震动并显示此消息，说明实时通知已就绪",
-        tag: "watch-test",
+        tag: `watch-test-${Date.now()}`,
         requireInteraction: true,
         vibrate: [300, 100, 300, 100, 300],
+        delaySeconds,
       });
-      toast.success("测试通知已发送，请查看手表");
+      if (delaySeconds === 0) toast.success("测试通知已发送，请查看手表");
     } catch (e) {
       const msg = e?.response?.data?.error || e.message;
       if (/no active push subscription/i.test(msg)) {
@@ -89,20 +93,36 @@ export default function WatchNotificationSettings() {
           </p>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={sendTestPush}
-          disabled={testing || !pushEnabled}
-          className="border-emerald-200 hover:bg-emerald-50 text-emerald-700"
-        >
-          {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <BellRing className="w-4 h-4 mr-2" />}
-          发送测试通知到手表
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => sendTestPush(0)}
+            disabled={testing || !pushEnabled}
+            className="border-emerald-200 hover:bg-emerald-50 text-emerald-700"
+          >
+            {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <BellRing className="w-4 h-4 mr-2" />}
+            立即测试
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => sendTestPush(10)}
+            disabled={testing || !pushEnabled}
+            className="border-emerald-200 hover:bg-emerald-50 text-emerald-700"
+          >
+            <Watch className="w-4 h-4 mr-2" />
+            锁屏测试（10 秒后送达）
+          </Button>
+        </div>
 
-        <div className="text-xs text-slate-400 space-y-1 pt-1">
-          <p>· Apple Watch：iPhone 锁屏或熄屏时，通知自动转发到手表</p>
-          <p>· Wear OS：手机通知默认镜像到手表，可在手表设置中管理</p>
+        <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 space-y-1.5">
+          <p className="font-medium text-slate-700">⌚ 手表收不到通知？请检查：</p>
+          <p>1. <b>iPhone 必须锁屏/息屏</b>——手机亮屏解锁时，系统只在手机上显示通知，不会转发到 Apple Watch。请点「锁屏测试」并立即锁屏验证</p>
+          <p>2. 本应用需<b>添加到 iPhone 主屏幕</b>（从主屏幕图标打开），Safari 内打开的网页推送不会镜像到手表</p>
+          <p>3. iPhone「Watch」App → 通知 → 确认「镜像 iPhone 提醒」中包含本应用</p>
+          <p>4. 手表需佩戴在手腕上且已解锁，未开启剧院模式/勿扰</p>
+          <p>5. Wear OS：手表「设置 → 通知」中确认未屏蔽手机通知镜像</p>
         </div>
       </CardContent>
     </Card>

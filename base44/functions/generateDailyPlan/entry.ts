@@ -49,6 +49,39 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("MOONSHOT_API_KEY");
     if (!apiKey) return Response.json({ error: 'MOONSHOT_API_KEY not set' }, { status: 500 });
 
+    // 反脆弱排程：注入用户认知画像与作息，让 AI 主动规避疲劳敏感区
+    let antiFragile = '';
+    try {
+      const prefs = await base44.entities.UserPreference.list('-updated_date', 1);
+      const p = prefs?.[0];
+      const cp = p?.cognition_profile || {};
+      const dr = p?.daily_routine || {};
+      const lines = [];
+      if (cp.persona) lines.push(`- 用户画像: ${cp.persona}`);
+      if (cp.energy_pattern) lines.push(`- 能量模式: ${cp.energy_pattern}`);
+      if (Array.isArray(cp.pressure_zones) && cp.pressure_zones.length > 0) lines.push(`- 已知压力区/易顺延软肋: ${cp.pressure_zones.join('；')}`);
+      if (Array.isArray(cp.principles) && cp.principles.length > 0) lines.push(`- 用户核心原则: ${cp.principles.join('；')}`);
+      if (dr.wake_up || dr.sleep) lines.push(`- 作息: 起床 ${dr.wake_up || '?'} / 出门 ${dr.leave_home || '?'} / 到岗 ${dr.arrive_office || '?'} / 下班 ${dr.leave_office || '?'} / 睡觉 ${dr.sleep || '?'}`);
+      // 顺延历史：最近未消费的顺延记录 → 疲劳敏感区证据
+      const logs = await base44.entities.TaskDeferralLog.list('-created_date', 20);
+      const fresh = (logs || []).filter((l) => l.carry_to_next_plan && !l.consumed_in_replan_at);
+      if (fresh.length > 0) {
+        const reasons = {};
+        fresh.forEach((l) => { reasons[l.reason_category] = (reasons[l.reason_category] || 0) + 1; });
+        lines.push(`- 近期顺延原因分布: ${Object.entries(reasons).map(([k, v]) => `${k}×${v}`).join('，')}`);
+        lines.push(`- 待优先补排的顺延任务: ${fresh.slice(0, 5).map((l) => l.task_title).filter(Boolean).join('；')}`);
+      }
+      if (lines.length > 0) {
+        antiFragile = `
+【反脆弱排程 - 基于用户认知画像的主动规避】
+${lines.join('\n')}
+- 规则1: 若某任务类型在用户的"压力区/顺延原因"中频繁出现，主动将该类任务拆小、前置到能量高峰时段，或在其前面预留缓冲。
+- 规则2: 不要把高认知负荷任务安排在用户能量低谷时段；低谷期只排轻量事务。
+- 规则3: 若有待补排的顺延任务，优先融入今日规划并在 summary 中说明补排理由。
+- 规则4: 违背作息的时段（起床前/睡觉后）不排任何任务。`.trim();
+      }
+    } catch (_) { /* 画像缺失不阻塞规划 */ }
+
     const timeRules = `
 【时间输出规则 - 严格遵守】
 - 用户时区: Asia/Shanghai (UTC+8)
@@ -70,8 +103,8 @@ Deno.serve(async (req) => {
 - 在每个 focus_block 之间预留短暂缓冲，但不要用碎事填满，保护专注节奏。`.trim();
 
     const baseSystem = existingPlan
-      ? `你是一个智能日程助手。用户已有当日规划，现在想追加新内容。请将新内容智能融入现有规划中，避免时间冲突，保持合理节奏。\n现有规划: ${JSON.stringify(existingPlan)}\n\n${focusStrategy}\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`
-      : `你是一个智能日程助手。请根据用户输入，为 ${planDate} 生成一份详细的日规划。\n\n${focusStrategy}\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`;
+      ? `你是一个智能日程助手。用户已有当日规划，现在想追加新内容。请将新内容智能融入现有规划中，避免时间冲突，保持合理节奏。\n现有规划: ${JSON.stringify(existingPlan)}\n\n${focusStrategy}\n\n${antiFragile}\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`
+      : `你是一个智能日程助手。请根据用户输入，为 ${planDate} 生成一份详细的日规划。\n\n${focusStrategy}\n\n${antiFragile}\n\n${timeRules}\n\n严格按照给定 JSON Schema 输出 JSON 对象，不要包含多余文本。`;
 
     const content = await callKimi(apiKey.trim(), baseSystem, input);
     const planData = parseJSON(content);

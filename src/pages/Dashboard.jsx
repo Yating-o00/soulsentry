@@ -47,6 +47,8 @@ import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
 import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
+import SceneTaskPack from "../components/dashboard/SceneTaskPack";
+import FlowCaptureBar from "../components/dashboard/FlowCaptureBar";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
 
 export default function Dashboard() {
@@ -411,6 +413,18 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* 场景任务包：到达关键地点后 AI 重组当前场景最顺手的行动 */}
+      <SceneTaskPack onTaskClick={(taskId) => {
+        const t = allTasks.find((x) => x.id === taskId);
+        if (t) setSelectedTask(t);
+      }} />
+
+      {/* 流式行动输入：碎片想法实时编织进任务链 */}
+      <FlowCaptureBar onTaskClick={(taskId) => {
+        const t = queryClient.getQueryData(['tasks'])?.find((x) => x.id === taskId) || allTasks.find((x) => x.id === taskId);
+        if (t) setSelectedTask(t);
+      }} />
 
       <DailyBriefing />
 

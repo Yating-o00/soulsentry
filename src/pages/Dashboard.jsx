@@ -293,76 +293,86 @@ export default function Dashboard() {
         className="grid grid-cols-3 gap-2 md:gap-4"
         data-tour="dashboard-stats"
       >
-        <Card className="bg-[#384877] border-none shadow-xl text-white relative overflow-hidden group">
-          <div className="absolute top-1 right-1 md:top-2 md:right-2 p-2 md:p-4 opacity-[0.1] group-hover:opacity-[0.15] transition-opacity">
-            <ListTodo className="w-16 h-16 md:w-28 md:h-28 transform rotate-12 text-white" />
+        <button
+          type="button"
+          onClick={() => setTaskListDialog({
+            open: true,
+            title: "今日待办",
+            tasks: todayTasks.filter(t => t.status === 'pending')
+          })}
+          className="group relative overflow-hidden rounded-2xl md:rounded-3xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white text-left p-4 md:p-5 shadow-lg shadow-[#384877]/20 hover:shadow-xl hover:shadow-[#384877]/30 hover:-translate-y-0.5 active:scale-[0.98] transition-all"
+        >
+          <div className="absolute -top-4 -right-4 opacity-[0.08] group-hover:opacity-[0.14] transition-opacity">
+            <ListTodo className="w-20 h-20 md:w-24 md:h-24 rotate-12" />
           </div>
-          <CardHeader className="pb-1 md:pb-2 relative z-10 p-3 md:p-6">
-            <CardTitle className="text-blue-100 font-medium text-xs md:text-sm">今日待办</CardTitle>
-          </CardHeader>
-          <CardContent className="relative z-10 p-3 pt-0 md:p-6 md:pt-0">
-            <div 
-              className="text-3xl md:text-5xl font-bold mb-3 md:mb-6 cursor-pointer hover:opacity-80 transition-opacity w-fit active:scale-95"
-              onClick={() => setTaskListDialog({
-                open: true,
-                title: "今日待办",
-                tasks: todayTasks.filter(t => t.status === 'pending')
-              })}
-            >
+          <div className="relative z-10 flex flex-col h-full min-h-[104px] md:min-h-[120px]">
+            <div className="flex items-center gap-1.5 text-blue-100 text-xs md:text-sm font-medium">
+              <ListTodo className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              今日待办
+            </div>
+            <div className="text-3xl md:text-4xl font-bold mt-2 md:mt-3 tabular-nums">
               {todayTasks.filter(t => t.status === 'pending').length}
             </div>
-            <div className="flex items-center gap-2 md:gap-3 text-blue-100 text-xs md:text-sm">
-              <Progress 
-                value={completionRate} 
-                className="h-1.5 md:h-2 bg-[#2a3659] flex-1" 
-                indicatorClassName="bg-[#5a7bd6]" 
+            <div className="flex items-center gap-2 md:gap-3 text-blue-100 text-[11px] md:text-xs mt-auto pt-3">
+              <Progress
+                value={completionRate}
+                className="h-1.5 bg-white/15 flex-1"
+                indicatorClassName="bg-white/90"
               />
-              <span className="font-medium">{completionRate}%</span>
+              <span className="font-semibold tabular-nums">{completionRate}%</span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </button>
 
-        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
-          <CardHeader className="pb-1 md:pb-2 p-3 md:p-6">
-            <CardTitle className="text-slate-500 font-medium text-xs md:text-sm flex items-center justify-between">
-              <span className="truncate">逾期约定</span>
-              <AlertCircle className="w-3.5 h-3.5 md:w-4 md:h-4 text-red-500 shrink-0" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div 
-              className="text-2xl md:text-3xl font-bold text-slate-800 mb-0.5 md:mb-1 group-hover:text-red-600 transition-colors cursor-pointer w-fit active:scale-95"
-              onClick={() => setTaskListDialog({
-                open: true,
-                title: "逾期约定",
-                tasks: overdueTasks
-              })}
-            >
+        <button
+          type="button"
+          onClick={() => setTaskListDialog({
+            open: true,
+            title: "逾期约定",
+            tasks: overdueTasks
+          })}
+          className="group rounded-2xl md:rounded-3xl bg-white border border-slate-200/80 text-left p-4 md:p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-rose-200 active:scale-[0.98] transition-all"
+        >
+          <div className="flex flex-col h-full min-h-[104px] md:min-h-[120px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-slate-500 text-xs md:text-sm font-medium truncate">逾期约定</span>
+              <div className="w-7 h-7 md:w-8 md:h-8 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-500" />
+              </div>
+            </div>
+            <div className="text-3xl md:text-4xl font-bold text-slate-800 group-hover:text-rose-600 transition-colors mt-1.5 md:mt-2 tabular-nums">
               {overdueTasks.length}
             </div>
-          </CardContent>
-        </Card>
+            <p className="text-[11px] md:text-xs text-slate-400 mt-auto pt-3">
+              {overdueTasks.length > 0 ? "点击查看并处理" : "没有逾期，很棒"}
+            </p>
+          </div>
+        </button>
 
-        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
-          <CardHeader className="pb-1 md:pb-2 p-3 md:p-6">
-            <CardTitle className="text-slate-500 font-medium text-xs md:text-sm flex items-center justify-between">
-              <span className="truncate">今日已完成</span>
-              <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-green-500 shrink-0" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div 
-              className="text-2xl md:text-3xl font-bold text-slate-800 mb-0.5 md:mb-1 group-hover:text-green-600 transition-colors cursor-pointer w-fit active:scale-95"
-              onClick={() => setTaskListDialog({
-                open: true,
-                title: "今日已完成",
-                tasks: completedToday
-              })}
-            >
+        <button
+          type="button"
+          onClick={() => setTaskListDialog({
+            open: true,
+            title: "今日已完成",
+            tasks: completedToday
+          })}
+          className="group rounded-2xl md:rounded-3xl bg-white border border-slate-200/80 text-left p-4 md:p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-emerald-200 active:scale-[0.98] transition-all"
+        >
+          <div className="flex flex-col h-full min-h-[104px] md:min-h-[120px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-slate-500 text-xs md:text-sm font-medium truncate">今日已完成</span>
+              <div className="w-7 h-7 md:w-8 md:h-8 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-500" />
+              </div>
+            </div>
+            <div className="text-3xl md:text-4xl font-bold text-slate-800 group-hover:text-emerald-600 transition-colors mt-1.5 md:mt-2 tabular-nums">
               {completedToday.length}
             </div>
-          </CardContent>
-        </Card>
+            <p className="text-[11px] md:text-xs text-slate-400 mt-auto pt-3">
+              {completedToday.length > 0 ? `完成率 ${completionRate}%` : "开始今天的第一件事"}
+            </p>
+          </div>
+        </button>
       </motion.div>
 
       {/* 场景任务包：到达关键地点后 AI 重组当前场景最顺手的行动 */}

@@ -31,7 +31,6 @@ import SoulWeekPlanner from "../components/calendar/SoulWeekPlanner";
 import CalendarDayView from "../components/calendar/CalendarDayView";
 import TaskCard from "../components/tasks/TaskCard";
 import UserBehaviorInsights from "../components/insights/UserBehaviorInsights";
-import NotificationManager from "../components/notifications/NotificationManager";
 import TeamOnboardingProgress from "../components/dashboard/TeamOnboardingProgress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,6 +49,7 @@ import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborati
 import SceneTaskPack from "../components/dashboard/SceneTaskPack";
 import FlowCaptureBar from "../components/dashboard/FlowCaptureBar";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
+import ModuleDrawer from "../components/dashboard/ModuleDrawer";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -250,56 +250,9 @@ export default function Dashboard() {
     queryFn: () => base44.entities.Note.list('-created_date'),
     initialData: [],
   });
-  
-  // Calculate notesOnSelectedDate for dashboard stats
-  // Using today as selectedDate for stats context if not explicitly tracking a selected date in state for stats (stats cards use todayTasks, etc.)
-  // Actually dashboard stats card uses 'todayTasks' etc.
-  // The '便签' card was showing notesOnSelectedDate. Dashboard has no 'selectedDate' state for the top cards, it implies Today.
-  // Wait, in CalendarView it has selectedDate. In Dashboard...
-  // In Dashboard.js read earlier:
-  // It uses `notesOnSelectedDate.length` in the card. But `notesOnSelectedDate` is NOT defined in Dashboard.js!
-  // Ah! `notesOnSelectedDate` was in `CalendarView.js`.
-  // In `Dashboard.js` the card with "便签" is NOT present in the code I read in step 3?
-  // Let me re-read step 3's Dashboard.js content.
-  
-  // Lines 267-318: Stats Cards
-  // Card 1: Today Tasks
-  // Card 2: Overdue
-  // Card 3: Completed Today
-  // There is NO "便签" card in the top stats of Dashboard.js!
-  
-  // Where did I see `notesOnSelectedDate`? 
-  // It was in `CalendarView.js`!
-  // Step 3 read file `CalendarView.js` lines 432-433: `<span className="text-sm opacity-90">便签</span>`
-  // But `CalendarView.js` find_replace SUCCEEDED in step 1.
-  
-  // So why did I think `Dashboard.js` had it?
-  // In step 1 I tried to replace in `Dashboard.js` and it failed.
-  // Maybe `Dashboard.js` DOES NOT HAVE "便签" at all?
-  // Let's check the code of `Dashboard.js` again.
-  // It has `StickyNote` icon imported.
-  // It does NOT seem to have the text "便签".
-  // Let me search for "便签" in the `Dashboard.js` content from step 3.
-  // I am scanning...
-  // I don't see it.
-  
-  // So `Dashboard.js` find_replace failed because the text wasn't there!
-  // And `CalendarView.js` succeeded.
-  
-  // So I am likely done.
-  
-  // Let me double check `layout.js` - success.
-  // `pages/Notes.js` - success.
-  // `CalendarView.js` - success.
-  
-  // So the failures were false positives (me trying to replace something that wasn't there).
-  
-  // I will just return success then.
-  
+
   return (
     <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto min-h-screen">
-      <NotificationManager />
-      
       <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
@@ -387,7 +340,6 @@ export default function Dashboard() {
             >
               {overdueTasks.length}
             </div>
-            <p className="text-[10px] md:text-xs text-slate-400 truncate">需要尽快处理</p>
           </CardContent>
         </Card>
 
@@ -409,7 +361,6 @@ export default function Dashboard() {
             >
               {completedToday.length}
             </div>
-            <p className="text-[10px] md:text-xs text-slate-400 truncate">保持这个节奏！</p>
           </CardContent>
         </Card>
       </motion.div>
@@ -426,45 +377,38 @@ export default function Dashboard() {
         if (t) setSelectedTask(t);
       }} />
 
-      <DailyBriefing />
+      {/* 非核心模块：折叠收纳，按需展开（状态记忆在本地） */}
+      <div className="pt-2">
+        <ModuleDrawer id="planner" title="智能规划" defaultOpen>
+          <div data-tour="daily-planner">
+            <SmartDailyPlanner />
+          </div>
+        </ModuleDrawer>
 
-      {/* Smart Daily Planner */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
-        data-tour="daily-planner"
-      >
-        <SmartDailyPlanner />
-      </motion.div>
+        <ModuleDrawer id="briefing" title="今日简报">
+          <DailyBriefing />
+        </ModuleDrawer>
 
-      {/* 自动执行清单 - 输入场景 → AI 拆解候选 → 单条授权执行 */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.18 }}
-        data-tour="auto-exec"
-      >
-        <AutoExecutionPanel />
-      </motion.div>
+        <ModuleDrawer id="autoexec" title="自动执行">
+          <div data-tour="auto-exec">
+            <AutoExecutionPanel />
+          </div>
+        </ModuleDrawer>
 
-      {/* 时空感知守护 - 独立模块 */}
-      <div data-tour="geo-guard">
-        <SpatioTemporalGuardModule />
+        <ModuleDrawer id="geoguard" title="时空守护">
+          <div data-tour="geo-guard">
+            <SpatioTemporalGuardModule />
+          </div>
+        </ModuleDrawer>
+
+        <ModuleDrawer id="devices" title="设备协同">
+          <DeviceCollaborationModule />
+        </ModuleDrawer>
+
+        <ModuleDrawer id="hub" title="心栈中枢" forceOpen={!!soulSentryData}>
+          <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
+        </ModuleDrawer>
       </div>
-
-      {/* 全设备智能协同 - 独立模块 */}
-      <DeviceCollaborationModule />
-
-      {/* Main Content: SoulSentry Hub - 放在页面最下方 */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="mt-6"
-      >
-        <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
-      </motion.div>
       </TabsContent>
 
       <TabsContent value="calendar" className="space-y-4 md:space-y-6">

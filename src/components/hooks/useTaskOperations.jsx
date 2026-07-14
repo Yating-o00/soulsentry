@@ -44,7 +44,24 @@ export function useTaskOperations() {
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: async (taskData) => {
+    mutationFn: async (rawTaskData) => {
+      // 子约定不是 Task 实体字段：抽出来，父约定创建后作为子记录（parent_task_id）落库
+      const { subtasks, ...taskData } = rawTaskData || {};
+      const createSubtasks = async (parentId) => {
+        const subs = (subtasks || []).filter(st => st && st.title && String(st.title).trim());
+        if (subs.length === 0) return;
+        await base44.entities.Task.bulkCreate(subs.map(st => ({
+          title: String(st.title).trim(),
+          description: st.description || "",
+          parent_task_id: parentId,
+          status: "pending",
+          priority: st.priority || taskData.priority || "medium",
+          category: st.category || taskData.category || "personal",
+          reminder_time: st.reminder_time
+            ? new Date(st.reminder_time).toISOString()
+            : (taskData.reminder_time ? new Date(taskData.reminder_time).toISOString() : undefined),
+        })));
+      };
       // 入口去重：若已有同标题 + 同日（或 ±30 分钟）的活跃顶层任务，复用而不新建。
       // 性能优化：优先用本地缓存的任务列表做去重判断，省掉一次拉取 200 条的网络请求
       // 注意：onMutate 先于此处执行，缓存里已插入本次提交的乐观占位记录，
@@ -67,11 +84,15 @@ export function useTaskOperations() {
             created_at: new Date().toISOString(),
           }];
           await base44.entities.Task.update(reuse.id, { notes });
+          await createSubtasks(reuse.id);
           return { ...reuse, notes, _reused: true, _mergedContent: true };
         }
+        await createSubtasks(reuse.id);
         return { ...reuse, _reused: true };
       }
-      return base44.entities.Task.create(taskData);
+      const created = await base44.entities.Task.create(taskData);
+      await createSubtasks(created.id);
+      return created;
     },
     onMutate: (taskData) => {
       // 乐观上屏：点击提交后任务立即出现在列表中，不等服务器返回
@@ -106,6 +127,7 @@ export function useTaskOperations() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       
       // Google Calendar 同步由实体自动化 autoSyncTaskToCalendar 统一处理，
       // 此处不再手动触发，避免重复创建日历事件。

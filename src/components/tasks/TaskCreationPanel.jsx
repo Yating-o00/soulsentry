@@ -567,7 +567,8 @@ Return JSON.`,
                       priority: parsed.priority || "medium",
                       category: parsed.category || "personal",
                       tags: parsed.tags || [],
-                      status: "pending"
+                      status: "pending",
+                      subtasks: (parsed.subtasks || []).filter(st => st?.title?.trim())
                     };
 
                     try {

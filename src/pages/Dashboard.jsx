@@ -50,7 +50,6 @@ import SceneTaskPack from "../components/dashboard/SceneTaskPack";
 import FlowCaptureBar from "../components/dashboard/FlowCaptureBar";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
 import ModuleDrawer from "../components/dashboard/ModuleDrawer";
-import StatStrip from "../components/dashboard/StatStrip";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -285,23 +284,86 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <TabsContent value="overview" className="space-y-4 md:space-y-5">
-      {/* ── 焦点层：编织输入是唯一主交互入口 ── */}
-      <FlowCaptureBar onTaskClick={(taskId) => {
-        const t = queryClient.getQueryData(['tasks'])?.find((x) => x.id === taskId) || allTasks.find((x) => x.id === taskId);
-        if (t) setSelectedTask(t);
-      }} />
+        <TabsContent value="overview" className="space-y-6">
+          {/* Stats Cards */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="grid grid-cols-3 gap-2 md:gap-4"
+        data-tour="dashboard-stats"
+      >
+        <Card className="bg-[#384877] border-none shadow-xl text-white relative overflow-hidden group">
+          <div className="absolute top-1 right-1 md:top-2 md:right-2 p-2 md:p-4 opacity-[0.1] group-hover:opacity-[0.15] transition-opacity">
+            <ListTodo className="w-16 h-16 md:w-28 md:h-28 transform rotate-12 text-white" />
+          </div>
+          <CardHeader className="pb-1 md:pb-2 relative z-10 p-3 md:p-6">
+            <CardTitle className="text-blue-100 font-medium text-xs md:text-sm">今日待办</CardTitle>
+          </CardHeader>
+          <CardContent className="relative z-10 p-3 pt-0 md:p-6 md:pt-0">
+            <div 
+              className="text-3xl md:text-5xl font-bold mb-3 md:mb-6 cursor-pointer hover:opacity-80 transition-opacity w-fit active:scale-95"
+              onClick={() => setTaskListDialog({
+                open: true,
+                title: "今日待办",
+                tasks: todayTasks.filter(t => t.status === 'pending')
+              })}
+            >
+              {todayTasks.filter(t => t.status === 'pending').length}
+            </div>
+            <div className="flex items-center gap-2 md:gap-3 text-blue-100 text-xs md:text-sm">
+              <Progress 
+                value={completionRate} 
+                className="h-1.5 md:h-2 bg-[#2a3659] flex-1" 
+                indicatorClassName="bg-[#5a7bd6]" 
+              />
+              <span className="font-medium">{completionRate}%</span>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* 极简状态条：三卡合一，一行读完今天 */}
-      <div data-tour="dashboard-stats">
-        <StatStrip
-          pendingTasks={todayTasks.filter(t => t.status === 'pending')}
-          overdueTasks={overdueTasks}
-          completedToday={completedToday}
-          completionRate={completionRate}
-          onOpenList={(title, tasks) => setTaskListDialog({ open: true, title, tasks })}
-        />
-      </div>
+        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-6">
+            <CardTitle className="text-slate-500 font-medium text-xs md:text-sm flex items-center justify-between">
+              <span className="truncate">逾期约定</span>
+              <AlertCircle className="w-3.5 h-3.5 md:w-4 md:h-4 text-red-500 shrink-0" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div 
+              className="text-2xl md:text-3xl font-bold text-slate-800 mb-0.5 md:mb-1 group-hover:text-red-600 transition-colors cursor-pointer w-fit active:scale-95"
+              onClick={() => setTaskListDialog({
+                open: true,
+                title: "逾期约定",
+                tasks: overdueTasks
+              })}
+            >
+              {overdueTasks.length}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+          <CardHeader className="pb-1 md:pb-2 p-3 md:p-6">
+            <CardTitle className="text-slate-500 font-medium text-xs md:text-sm flex items-center justify-between">
+              <span className="truncate">今日已完成</span>
+              <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-green-500 shrink-0" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div 
+              className="text-2xl md:text-3xl font-bold text-slate-800 mb-0.5 md:mb-1 group-hover:text-green-600 transition-colors cursor-pointer w-fit active:scale-95"
+              onClick={() => setTaskListDialog({
+                open: true,
+                title: "今日已完成",
+                tasks: completedToday
+              })}
+            >
+              {completedToday.length}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* 场景任务包：到达关键地点后 AI 重组当前场景最顺手的行动 */}
       <SceneTaskPack onTaskClick={(taskId) => {
@@ -309,31 +371,30 @@ export default function Dashboard() {
         if (t) setSelectedTask(t);
       }} />
 
+      {/* 流式行动输入：碎片想法实时编织进任务链 */}
+      <FlowCaptureBar onTaskClick={(taskId) => {
+        const t = queryClient.getQueryData(['tasks'])?.find((x) => x.id === taskId) || allTasks.find((x) => x.id === taskId);
+        if (t) setSelectedTask(t);
+      }} />
+
       <DailyBriefing />
 
-      {/* ── 中景层：日程规划 ── */}
       <div data-tour="daily-planner">
         <SmartDailyPlanner />
       </div>
 
-      {/* ── 背景层：辅助模块折叠收纳，按需展开 ── */}
-      <div className="pt-2 space-y-2">
-        <ModuleDrawer id="auto-exec" title="自动执行">
-          <div data-tour="auto-exec">
-            <AutoExecutionPanel />
-          </div>
-        </ModuleDrawer>
+      <div data-tour="auto-exec">
+        <AutoExecutionPanel />
+      </div>
 
-        <ModuleDrawer id="geo-guard" title="时空守护">
-          <div data-tour="geo-guard">
-            <SpatioTemporalGuardModule />
-          </div>
-        </ModuleDrawer>
+      <div data-tour="geo-guard">
+        <SpatioTemporalGuardModule />
+      </div>
 
-        <ModuleDrawer id="devices" title="设备协同">
-          <DeviceCollaborationModule />
-        </ModuleDrawer>
+      <DeviceCollaborationModule />
 
+      {/* 心栈中枢：折叠收纳，按需展开 */}
+      <div className="pt-2">
         <ModuleDrawer id="hub" title="心栈中枢" forceOpen={!!soulSentryData}>
           <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
         </ModuleDrawer>

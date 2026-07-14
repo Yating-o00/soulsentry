@@ -377,11 +377,11 @@ export default function Dashboard() {
         if (t) setSelectedTask(t);
       }} />
 
+      <DailyBriefing />
+
       <div data-tour="daily-planner">
         <SmartDailyPlanner />
       </div>
-
-      <DailyBriefing />
 
       <div data-tour="auto-exec">
         <AutoExecutionPanel />

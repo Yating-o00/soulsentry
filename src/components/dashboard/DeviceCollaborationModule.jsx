@@ -244,8 +244,9 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies, r
     case "phone": {
       // 手机优势:随身、随时震动、可定位、社交触达
       // → 收:移动/社交/外出类 + 所有 high/urgent(随身兜底,关键事不能漏)
+      // 手机是主控终端：除各设备优势场景外，还兜底接收未被明确分类的普通任务，保证约定不"消失"
       const picks = tagged.filter(
-        (s) => s._scene === "mobile" || s._scene === "meeting" || s.priority === "high"
+        (s) => s._scene === "mobile" || s._scene === "meeting" || s._scene === "general" || s.priority === "high"
       );
       out.push(...picks.map((s) => ({
         ...s,
@@ -609,9 +610,14 @@ export default function DeviceCollaborationModule() {
     ? normalizeTypeKey(resolveDeviceBrand(effectiveSelected).deviceType || effectiveSelected.device_type)
     : null;
 
-  const rawSelectedStrategies = effectiveSelectedType
+  const matchedStrategies = effectiveSelectedType
     ? (strategiesByType[effectiveSelectedType] || [])
     : [];
+  // 兜底：形态过滤后该设备一条都没分到，但确有待办任务时，直接展示全部即将到来的任务，
+  // 避免"有任务却显示暂无策略分配"
+  const rawSelectedStrategies = matchedStrategies.length > 0
+    ? matchedStrategies
+    : consolidateStrategies(taskStrategies);
 
   // 选中设备变化或原始策略变化时,触发 Kimi 改写(命中缓存则极快返回)
   // 注意:必须放在任何 early return 之前,以保证每次渲染 hooks 顺序一致

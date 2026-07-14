@@ -377,34 +377,24 @@ export default function Dashboard() {
         if (t) setSelectedTask(t);
       }} />
 
-      {/* 非核心模块：折叠收纳，按需展开（状态记忆在本地） */}
+      <div data-tour="daily-planner">
+        <SmartDailyPlanner />
+      </div>
+
+      <DailyBriefing />
+
+      <div data-tour="auto-exec">
+        <AutoExecutionPanel />
+      </div>
+
+      <div data-tour="geo-guard">
+        <SpatioTemporalGuardModule />
+      </div>
+
+      <DeviceCollaborationModule />
+
+      {/* 心栈中枢：折叠收纳，按需展开 */}
       <div className="pt-2">
-        <ModuleDrawer id="planner" title="智能规划" defaultOpen>
-          <div data-tour="daily-planner">
-            <SmartDailyPlanner />
-          </div>
-        </ModuleDrawer>
-
-        <ModuleDrawer id="briefing" title="今日简报">
-          <DailyBriefing />
-        </ModuleDrawer>
-
-        <ModuleDrawer id="autoexec" title="自动执行">
-          <div data-tour="auto-exec">
-            <AutoExecutionPanel />
-          </div>
-        </ModuleDrawer>
-
-        <ModuleDrawer id="geoguard" title="时空守护">
-          <div data-tour="geo-guard">
-            <SpatioTemporalGuardModule />
-          </div>
-        </ModuleDrawer>
-
-        <ModuleDrawer id="devices" title="设备协同">
-          <DeviceCollaborationModule />
-        </ModuleDrawer>
-
         <ModuleDrawer id="hub" title="心栈中枢" forceOpen={!!soulSentryData}>
           <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
         </ModuleDrawer>

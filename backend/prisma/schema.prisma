@@ -42,8 +42,9 @@ enum CreditTransactionType {
 
 model User {
   id                String                @id @default(cuid())
-  email             String                @unique
-  passwordHash      String
+  email             String?               @unique
+  phone             String?               @unique
+  passwordHash      String?
   displayName       String?
   role              UserRole              @default(USER)
   subscriptionPlan  String                @default("free")
@@ -55,72 +56,67 @@ model User {
   notes             Note[]
   preferences       UserPreference?
   notifications     Notification[]
-  notificationRules NotificationRule[]
   creditTxs         AICreditTransaction[]
   taskExecutions    TaskExecution[]
-<<<<<<< HEAD
   dailyPlans        DailyPlan[]
   weeklyPlans       WeeklyPlan[]
   monthlyPlans      MonthlyPlan[]
-<<<<<<< HEAD
+  wechatOrders      WechatOrder[]
+  knowledgeItems    KnowledgeBase[]
+  devices           Device[]
+  savedLocations    SavedLocation[]
+  taskDeferralLogs  TaskDeferralLog[]
+  notificationRules NotificationRule[]
+  behaviors         UserBehavior[]
+  relationships     Relationship[]
   comments          Comment[]
-  noteComments      NoteComment[]
   taskCompletions   TaskCompletion[]
   taskChangeLogs    TaskChangeLog[]
-  savedLocations    SavedLocation[]
-  relationships     Relationship[]
-  userBehaviors     UserBehavior[]
-  memoryRecords     MemoryRecord[]
-  knowledgeBases    KnowledgeBase[]
+  taskTemplates     TaskTemplate[]
+  feedbacks         Feedback[]
   externalFeeds     ExternalFeed[]
-=======
-  weeklyPlans       WeeklyPlan[]
-  monthlyPlans      MonthlyPlan[]
->>>>>>> a4f998e (feat: 呈现产品页面)
-=======
-  wechatOrders      WechatOrder[]
->>>>>>> 8338621 (feat: 呈现产品页面)
+  userDataPoints    UserDataPoint[]
 }
 
 model UserPreference {
-  id                      String   @id @default(cuid())
-  userId                  String   @unique
-  quietHoursStart         String?
-  quietHoursEnd           String?
-  emailNotifications      Boolean  @default(true)
-  pushNotifications       Boolean  @default(true)
-  locationReminders       Boolean  @default(false)
-  locale                  String   @default("zh-CN")
-  timezone                String   @default("Asia/Shanghai")
-  metadata                Json?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  quietHoursStart    String?
+  quietHoursEnd      String?
+  emailNotifications Boolean  @default(true)
+  pushNotifications  Boolean  @default(true)
+  locationReminders  Boolean  @default(false)
+  locale             String   @default("zh-CN")
+  timezone           String   @default("Asia/Shanghai")
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Task {
-  id                String       @id @default(cuid())
-  userId            String
-  title             String
-  description       String?
-  status            TaskStatus   @default(TODO)
-  priority          String       @default("medium")
-  category          String?
-  dueAt             DateTime?
-  reminderTime      DateTime?
-  endTime           DateTime?
-  isAllDay          Boolean      @default(false)
-  parentTaskId      String?
-  gcalSyncEnabled   Boolean      @default(false)
-  progress          Int          @default(0)
-  completedAt       DateTime?
-  deletedAt         DateTime?
-  tags              Json?
-  reminderStrategy  Json?
-  metadata          Json?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String     @id @default(cuid())
+  userId           String
+  title            String
+  description      String?
+  status           TaskStatus @default(TODO)
+  priority         String     @default("medium")
+  category         String?
+  dueAt            DateTime?
+  reminderTime     DateTime?
+  endTime          DateTime?
+  isAllDay         Boolean    @default(false)
+  parentTaskId     String?
+  gcalSyncEnabled  Boolean    @default(false)
+  progress         Int        @default(0)
+  completedAt      DateTime?
+  deletedAt        DateTime?
+  tags             Json?
+  reminderStrategy Json?
+  metadata         Json?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([userId, dueAt])
@@ -129,110 +125,58 @@ model Task {
 }
 
 model Note {
-  id          String     @id @default(cuid())
-  userId      String
-  title       String?
-  content     String
-  plainText   String?
-  status      NoteStatus @default(ACTIVE)
-  color       String?
-  sourceType  String?
-  aiStatus    String?
-  deletedAt   DateTime?
-  tags        Json?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  noteComments NoteComment[]
+  id         String     @id @default(cuid())
+  userId     String
+  title      String?
+  content    String
+  plainText  String?
+  status     NoteStatus @default(ACTIVE)
+  color      String?
+  sourceType String?
+  aiStatus   String?
+  deletedAt  DateTime?
+  tags       Json?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([userId, deletedAt])
 }
 
 model Notification {
-  id          String             @id @default(cuid())
-  userId      String
-  title       String
-  body        String
-  channel     String             @default("in_app")
-  status      NotificationStatus @default(PENDING)
-  payload     Json?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String             @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  channel   String             @default("in_app")
+  status    NotificationStatus @default(PENDING)
+  payload   Json?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
 }
 
 model NotificationRule {
-  id                String   @id @default(cuid())
-  userId            String
-  title             String
-  conditionCategory String   @default("all")
-  conditionPriority String   @default("all")
-  actionMute        Boolean  @default(false)
-  actionSound       String   @default("default")
-  actionChannels    Json?
-  isEnabled         Boolean  @default(true)
-  metadata          Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([userId, isEnabled])
-}
-
-model SavedLocation {
-  id                String   @id @default(cuid())
-  userId            String
-  name              String
-  locationType      String   @default("other")
-  latitude          Float
-  longitude         Float
-  radius            Int      @default(200)
-  address           String?
-  icon              String   @default("📍")
-  isActive          Boolean  @default(true)
-  triggerOn         String   @default("enter")
-  lastEnteredAt     DateTime?
-  lastExitedAt      DateTime?
-  quietMinutes      Int      @default(30)
-  quietPolicy       Json?
-  notificationStats Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([userId, updatedAt])
-  @@index([userId, isActive])
-  @@index([userId, locationType])
-}
-
-model Relationship {
   id                   String   @id @default(cuid())
   userId               String
-  name                 String
-  nickname             String?
-  relationshipType     String   @default("friend")
-  closeness            Int      @default(5)
-  interactionCount     Int      @default(0)
-  lastInteractionDate  DateTime?
-  favors               Json?
-  notes                String?
-  tags                 Json?
-  preferredContactTime String?
-  contactFrequencyDays Int      @default(30)
-  avatarColor          String   @default("#384877")
+  title                String
+  isEnabled            Boolean  @default(true)
+  conditionCategory    String   @default("all")
+  conditionPriority    String   @default("all")
+  actionMute           Boolean  @default(false)
+  actionSound          String   @default("default")
+  actionChannels       Json?
+  actionAdvanceMinutes Json?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, isEnabled])
+  @@index([userId, conditionCategory, conditionPriority])
   @@index([userId, createdAt])
-  @@index([userId, updatedAt])
-  @@index([userId, relationshipType])
-  @@index([userId, lastInteractionDate])
 }
 
 model UserBehavior {
@@ -249,98 +193,22 @@ model UserBehavior {
   updatedAt           DateTime @updatedAt
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, createdAt])
   @@index([userId, eventType])
   @@index([userId, taskId])
-}
-
-model MemoryRecord {
-  id           String   @id @default(cuid())
-  userId       String
-  title        String
-  content      String?
-  memoryType   String   @default("personal")
-  emotion      String   @default("neutral")
-  eventDate    DateTime?
-  people       Json?
-  locations    Json?
-  tags         Json?
-  aiInsight    Json?
-  sourceTaskId String?
-  sourceNoteId String?
-  isPinned     Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId, createdAt])
-  @@index([userId, updatedAt])
-  @@index([userId, memoryType])
-  @@index([userId, eventDate])
-}
-
-model KnowledgeBase {
-  id               String   @id @default(cuid())
-  userId           String
-  title            String
-  content          String
-  sourceType       String   @default("manual")
-  sourceId         String?
-  tags             Json?
-  category         String?
-  summary          String?
-  keyPoints        Json?
-  embeddings       Json?
-  accessCount      Int      @default(0)
-  lastAccessed     DateTime?
-  importance       Int      @default(3)
-  embeddingSummary String?
-  metadata         Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([userId, updatedAt])
-  @@index([userId, sourceType])
   @@index([userId, category])
-  @@index([userId, importance])
-}
-
-model ExternalFeed {
-  id                     String   @id @default(cuid())
-  userId                 String
-  name                   String
-  feedType               String   @default("rss")
-  url                    String?
-  description            String?
-  icon                   String   @default("📡")
-  isActive               Boolean  @default(true)
-  fetchFrequencyHours    Int      @default(24)
-  lastFetchedAt          DateTime?
-  lastItemCount          Int      @default(0)
-  autoArchiveToHeartsign Boolean  @default(true)
-  metadata               Json?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([userId, updatedAt])
-  @@index([userId, isActive])
-  @@index([userId, feedType])
 }
 
 model AICreditTransaction {
-  id            String                @id @default(cuid())
-  userId        String
-  type          CreditTransactionType
-  amount        Int
-  balanceAfter  Int
-  feature       String?
-  description   String?
-  createdAt     DateTime              @default(now())
-  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String                @id @default(cuid())
+  userId       String
+  type         CreditTransactionType
+  amount       Int
+  balanceAfter Int
+  feature      String?
+  description  String?
+  createdAt    DateTime              @default(now())
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }
@@ -372,7 +240,6 @@ model TaskExecution {
   @@index([userId, completedAt])
 }
 
-<<<<<<< HEAD
 model DailyPlan {
   id            String   @id @default(cuid())
   userId        String
@@ -389,11 +256,8 @@ model DailyPlan {
   @@index([userId, planDate])
   @@index([userId, isActive])
   @@index([userId, createdAt])
-  @@index([userId, updatedAt])
 }
 
-=======
->>>>>>> a4f998e (feat: 呈现产品页面)
 model WeeklyPlan {
   id            String   @id @default(cuid())
   userId        String
@@ -409,11 +273,6 @@ model WeeklyPlan {
 
   @@index([userId, weekStartDate])
   @@index([userId, isActive])
-<<<<<<< HEAD
-  @@index([userId, createdAt])
-  @@index([userId, updatedAt])
-=======
->>>>>>> a4f998e (feat: 呈现产品页面)
 }
 
 model MonthlyPlan {
@@ -431,74 +290,6 @@ model MonthlyPlan {
 
   @@index([userId, monthStartDate])
   @@index([userId, isActive])
-<<<<<<< HEAD
-  @@index([userId, createdAt])
-  @@index([userId, updatedAt])
-}
-
-model Comment {
-  id          String   @id @default(cuid())
-  userId      String
-  taskId      String
-  content     String
-  mentions    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([taskId, createdAt])
-}
-
-model NoteComment {
-  id        String   @id @default(cuid())
-  userId    String
-  noteId    String
-  content   String
-  mentions  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([noteId, createdAt])
-}
-
-model TaskCompletion {
-  id          String   @id @default(cuid())
-  userId      String
-  taskId      String
-  status      String   @default("completed")
-  completedAt DateTime?
-  note        String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([taskId, createdAt])
-  @@index([taskId, completedAt])
-}
-
-model TaskChangeLog {
-  id            String   @id @default(cuid())
-  userId        String
-  taskId        String
-  parentTaskId  String?
-  changeType    String
-  taskTitle     String?
-  changedFields Json?
-  changesDetail Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([taskId, createdAt])
-  @@index([parentTaskId, createdAt])
-=======
->>>>>>> a4f998e (feat: 呈现产品页面)
 }
 
 model WechatOrder {
@@ -519,4 +310,272 @@ model WechatOrder {
 
   @@index([userId, status])
   @@index([userId, createdAt])
+}
+
+model KnowledgeBase {
+  id               String   @id @default(cuid())
+  userId           String
+  title            String
+  content          String
+  summary          String?
+  category         String?
+  importance       Int      @default(3)
+  tags             Json?
+  keyPoints        Json?
+  sourceType       String?
+  sourceId         String?
+  embeddingSummary String?
+  accessCount      Int      @default(0)
+  lastAccessed     DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+  @@index([userId, category])
+  @@index([userId, importance])
+  @@index([userId, accessCount])
+  @@index([userId, lastAccessed])
+}
+
+model Device {
+  id               String   @id @default(cuid())
+  userId           String
+  deviceId         String
+  name             String?
+  nameCustomized   Boolean  @default(false)
+  deviceType       String   @default("other")
+  role             String   @default("secondary")
+  platform         String?
+  browser          String?
+  userAgent        String?
+  screenSize       String?
+  isOnline         Boolean  @default(false)
+  lastSeenAt       DateTime?
+  pushSubscription Json?
+  capabilities     Json?
+  isCurrent        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId, deviceId])
+  @@index([userId, lastSeenAt])
+  @@index([userId, isOnline])
+}
+
+model SavedLocation {
+  id                String   @id @default(cuid())
+  userId            String
+  name              String
+  locationType      String   @default("other")
+  latitude          Float
+  longitude         Float
+  radius            Int      @default(200)
+  address           String?
+  icon              String?  @default("📍")
+  isActive          Boolean  @default(true)
+  triggerOn         String   @default("enter")
+  lastEnteredAt     DateTime?
+  lastExitedAt      DateTime?
+  quietMinutes      Int      @default(30)
+  quietPolicy       Json?
+  notificationStats Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([userId, locationType])
+  @@index([userId, updatedAt])
+}
+
+model TaskDeferralLog {
+  id                  String   @id @default(cuid())
+  userId              String
+  taskId              String
+  taskTitle           String?
+  originalTime        DateTime?
+  deferredTo          DateTime?
+  reasonCategory      String   @default("other")
+  missingPrerequisite String?
+  reasonNote          String?
+  carryToNextPlan     Boolean  @default(true)
+  consumedInReplanAt  DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, taskId])
+  @@index([userId, carryToNextPlan])
+  @@index([userId, createdAt])
+  @@index([userId, consumedInReplanAt])
+}
+
+model Relationship {
+  id                   String   @id @default(cuid())
+  userId               String
+  name                 String
+  nickname             String?
+  relationshipType     String   @default("friend")
+  closeness            Int      @default(5)
+  interactionCount     Int      @default(0)
+  lastInteractionDate  DateTime?
+  favors               Json?
+  notes                String?
+  tags                 Json?
+  preferredContactTime String?
+  contactFrequencyDays Int      @default(30)
+  avatarColor          String?  @default("#384877")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, relationshipType])
+  @@index([userId, lastInteractionDate])
+  @@index([userId, createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  taskId    String?
+  noteId    String?
+  content   String
+  mentions  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([noteId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model TaskCompletion {
+  id          String   @id @default(cuid())
+  userId      String
+  taskId      String
+  status      String   @default("completed")
+  completedAt DateTime?
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, completedAt])
+  @@index([userId, createdAt])
+  @@index([userId, status])
+}
+
+model TaskChangeLog {
+  id            String   @id @default(cuid())
+  userId        String
+  taskId        String
+  parentTaskId  String?
+  changeType    String
+  taskTitle     String?
+  changedFields Json?
+  changesDetail Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([parentTaskId, createdAt])
+  @@index([userId, changeType])
+}
+
+model TaskTemplate {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  description  String?
+  templateData Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  userId      String?
+  type        String   @default("other")
+  status      String   @default("pending")
+  content     String
+  contactInfo String
+  adminReply  String?
+  images      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ExternalFeed {
+  id                     String   @id @default(cuid())
+  userId                 String
+  name                   String
+  feedType               String   @default("rss")
+  url                    String?
+  description            String?
+  icon                   String?  @default("📡")
+  isActive               Boolean  @default(true)
+  fetchFrequencyHours    Int      @default(24)
+  lastFetchedAt          DateTime?
+  lastItemCount          Int      @default(0)
+  autoArchiveToHeartsign Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, lastFetchedAt])
+}
+
+model UserDataPoint {
+  id            String   @id @default(cuid())
+  userId        String
+  dataType      String
+  subtype       String?
+  summary       String
+  category      String?
+  weight        Int      @default(1)
+  tags          Json?
+  occurredAt    DateTime @default(now())
+  hourOfDay     Int?
+  dayOfWeek     Int?
+  relatedTaskId String?
+  relatedNoteId String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dataType, createdAt])
+  @@index([userId, occurredAt])
+  @@index([userId, category])
+}
+
+
+model SmsVerification {
+  id          String   @id @default(cuid())
+  phone       String
+  code        String
+  purpose     String   @default("login")
+  attempts    Int      @default(0)
+  verifiedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([phone, purpose, createdAt])
 }

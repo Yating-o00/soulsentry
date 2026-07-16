@@ -1,3 +1,4 @@
+import Login from "./pages/Login";
 import './App.css'
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "sonner"
@@ -50,6 +51,7 @@ const AuthenticatedApp = () => {
   return (
     <LayoutWrapper currentPageName={mainPageKey}>
       <Routes>
+        <Route path="/login" element={<Login />} />
         <Route path="/" element={<MainPage />} />
         {Object.entries(Pages).flatMap(([path, Page]) => {
           const normalizedPath = createPageUrl(path);

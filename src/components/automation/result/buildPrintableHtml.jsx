@@ -3,6 +3,7 @@
 // 风格的 cover/section HTML 模板 + CSS 来自 pdfStyles.js,本文件只负责数据装配与公共骨架
 
 import { getPdfStyle } from "./pdfStyles";
+import { extractImagesAndText } from "./researchTemplates";
 
 function escapeHtml(s) {
   return String(s || "")
@@ -72,6 +73,33 @@ function renderMarkdownBlock(src) {
   return out.join("\n");
 }
 
+// 按排版模板(经典/杂志双栏/图片画廊/卡片堆叠/极简)装配章节内容 HTML
+function renderSectionBody(content, layoutTemplate) {
+  if (!layoutTemplate || layoutTemplate === "classic") return renderMarkdownBlock(content);
+  const { images, text } = extractImagesAndText(content);
+  const textHtml = renderMarkdownBlock(text);
+  if (!images.length) return textHtml;
+  const figs = images.map(im =>
+    `<figure class="rr-fig"><img src="${im.url}" alt="${escapeHtml(im.alt)}"/>${im.alt ? `<figcaption>${escapeHtml(im.alt)}</figcaption>` : ""}</figure>`
+  ).join("");
+  if (layoutTemplate === "magazine") {
+    return `<div class="rr-mag"><div class="rr-mag-text">${textHtml}</div><div class="rr-mag-imgs">${figs}</div></div>`;
+  }
+  if (layoutTemplate === "gallery") {
+    return `<div class="rr-gal" style="grid-template-columns:repeat(${Math.min(images.length, 3)},1fr)">${figs}</div>${textHtml}`;
+  }
+  if (layoutTemplate === "card") {
+    const cards = images.map(im =>
+      `<div class="rr-card"><img src="${im.url}" alt="${escapeHtml(im.alt)}"/>${im.alt ? `<div class="rr-card-cap">${escapeHtml(im.alt)}</div>` : ""}</div>`
+    ).join("");
+    return `<div class="rr-cards">${cards}</div>${textHtml}`;
+  }
+  if (layoutTemplate === "minimal") {
+    return `${textHtml}<div class="rr-min-imgs">${figs}</div>`;
+  }
+  return renderMarkdownBlock(content);
+}
+
 // 公共基础样式(所有风格共用 — 重置、表格骨架、图片等)
 const BASE_CSS = `
   @page { size: A4 portrait; margin: 12mm; }
@@ -91,18 +119,34 @@ const BASE_CSS = `
   tr:last-child td { border-bottom: 0; }
   blockquote p { margin: 4px 0; }
   .rr-section { page-break-inside: auto; }
+  /* 排版模板布局 */
+  .rr-fig { margin: 0 0 8px; text-align: center; }
+  .rr-fig figcaption { font-size: 11px; color: #64748b; margin-top: 3px; font-style: italic; }
+  .rr-mag { display: flex; gap: 14px; align-items: flex-start; }
+  .rr-mag-text { flex: 1.4; min-width: 0; }
+  .rr-mag-imgs { flex: 1; min-width: 0; }
+  .rr-mag-imgs img { margin: 0; }
+  .rr-gal { display: grid; gap: 10px; margin-bottom: 10px; }
+  .rr-gal .rr-fig img { width: 100%; height: 150px; object-fit: cover; margin: 0; }
+  .rr-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px; }
+  .rr-card { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; background: #fff; page-break-inside: avoid; }
+  .rr-card img { width: 100%; height: 140px; object-fit: cover; margin: 0; border: 0; border-radius: 0; }
+  .rr-card-cap { padding: 6px 8px; font-size: 11px; color: #475569; }
+  .rr-min-imgs img { max-height: 180px; }
 `;
 
-export function buildPrintableHtml({ title, sections, body, styleId }) {
+export function buildPrintableHtml({ title, sections, body, styleId, layoutTemplate, summary }) {
   const style = getPdfStyle(styleId);
   const safeTitle = escapeHtml(title || "调研报告");
   const today = new Date();
   const dateStr = `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()}`;
   const sectionCount = Array.isArray(sections) ? sections.length : 1;
 
-  // 从首章节取一句话作副标题
+  // 副标题:优先用 AI 生成的摘要,否则从首章节取一句话
   let subtitle = "";
-  if (Array.isArray(sections) && sections.length > 0) {
+  if (summary && String(summary).trim()) {
+    subtitle = String(summary).trim().slice(0, 160);
+  } else if (Array.isArray(sections) && sections.length > 0) {
     const firstBody = sections[0].body || sections[0].content || "";
     subtitle = String(firstBody)
       .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -127,7 +171,7 @@ export function buildPrintableHtml({ title, sections, body, styleId }) {
         const headingKey = s.heading !== undefined ? "heading" : "title";
         const contentKey = s.body !== undefined ? "body" : "content";
         const heading = escapeHtml(s[headingKey] || `章节 ${idx + 1}`);
-        const bodyHtml = renderMarkdownBlock(s[contentKey] || "");
+        const bodyHtml = renderSectionBody(s[contentKey] || "", layoutTemplate);
         const num = String(idx + 1).padStart(2, "0");
         return style.section({ num, heading, body: bodyHtml });
       }).join("\n")

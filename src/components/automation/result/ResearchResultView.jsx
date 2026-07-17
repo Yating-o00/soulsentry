@@ -7,6 +7,7 @@ import TemplateThumbnail from "./TemplateThumbnail";
 import PdfExportPreviewDialog from "./PdfExportPreviewDialog";
 import { TEMPLATES, extractImagesAndText, autoPickTemplate } from "./researchTemplates";
 import { buildPrintableHtml } from "./buildPrintableHtml";
+import { base44 } from "@/api/base44Client";
 // 轻量 Markdown 渲染器：处理标题 / 加粗 / 图片 / 列表 / GFM 表格 / 段落，无需额外依赖
 function renderInline(text, keyPrefix = "") {
   // 先把字面 <br> / &lt;br&gt; 转成换行，再在 ①②③ 等带圈数字前补换行（让 AI 输出的脏排版自动恢复）
@@ -329,11 +330,31 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
   const [isEditing, setIsEditing] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false);
+  const [aiSummary, setAiSummary] = React.useState(null);
 
-  // 让 PDF 预览对话框按需用任意风格重新生成 HTML —— 切换风格无需重新打开对话框
+  // 打开 PDF 导出时,用 AI 为封面副标题生成一段摘要（只生成一次）
+  React.useEffect(() => {
+    if (!pdfPreviewOpen || aiSummary) return;
+    const source = (
+      sections?.map(s => `${s.heading || s.title || ""}\n${s.body || s.content || ""}`).join("\n\n") || body || ""
+    )
+      .replace(/<[^>]+>/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .slice(0, 4000);
+    if (!source.trim()) return;
+    let cancelled = false;
+    base44.integrations.Core.InvokeLLM({
+      prompt: `请为以下调研报告写一段 60-90 字的中文摘要,概括核心结论与关键要点,直接输出摘要正文,不要任何前缀或引号:\n\n标题:${title}\n\n${source}`,
+    }).then((res) => {
+      if (!cancelled && typeof res === "string" && res.trim()) setAiSummary(res.trim());
+    }).catch(() => { /* 摘要失败时封面回退到首段截取 */ });
+    return () => { cancelled = true; };
+  }, [pdfPreviewOpen, aiSummary, sections, body, title]);
+
+  // 让 PDF 预览对话框按需用任意风格重新生成 HTML —— 切换风格/排版模板/摘要就绪时自动重渲染
   const buildHtmlForStyle = React.useCallback((styleId) => {
-    return buildPrintableHtml({ title, sections, body, styleId });
-  }, [title, sections, body]);
+    return buildPrintableHtml({ title, sections, body, styleId, layoutTemplate: template, summary: aiSummary });
+  }, [title, sections, body, template, aiSummary]);
 
   // 点"完成"：把当前编辑结果持久化到后端（若父级提供 onSave），然后切回预览
   const handleDone = async () => {

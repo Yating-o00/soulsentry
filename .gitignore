@@ -29,3 +29,6 @@ dist-ssr
 
 .env
 base44/.app.jsonc
+server/data/*.json
+server/uploads/*
+!server/uploads/.gitkeep

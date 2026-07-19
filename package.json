@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:selfhost": "VITE_BACKEND_MODE=self-host VITE_SELF_HOST_BACKEND_URL=http://localhost:8787 vite --host 0.0.0.0",
+    "backend:selfhost": "node ./server/selfhost-backend.mjs",
     "build": "vite build",
+    "build:selfhost": "VITE_BACKEND_MODE=self-host vite build",
     "lint": "eslint .",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"

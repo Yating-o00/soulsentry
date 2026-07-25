@@ -232,7 +232,7 @@ export const standaloneClient = {
     async login(email, password) {
       const result = await httpRequest("/api/auth/login", {
         method: "POST",
-        body: { email, password }
+        body: { type: "email", email, password }
       });
       setAccessToken(result.token);
       return result.user;
@@ -240,7 +240,7 @@ export const standaloneClient = {
     async register(payload) {
       const result = await httpRequest("/api/auth/register", {
         method: "POST",
-        body: payload
+        body: { type: "email", ...payload }
       });
       setAccessToken(result.token);
       return result.user;
@@ -262,9 +262,7 @@ export const standaloneClient = {
     },
     logout(redirectUrl) {
       setAccessToken(null);
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
-      }
+      window.location.href = redirectUrl || "/login";
     },
     redirectToLogin(redirectUrl) {
       const target = redirectUrl ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : "/login";

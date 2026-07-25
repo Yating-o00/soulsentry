@@ -24,8 +24,8 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
   const [editedData, setEditedData] = useState(null);
   const [savingEdits, setSavingEdits] = useState(false);
   const hasUnsavedEdits = !!editedData;
-  // 弹层尺寸档位：md(默认) / lg / xl
-  const [size, setSize] = useState("lg");
+  // 弹层尺寸档位：md / lg / xl（默认 xl，给自动化结果更充裕的展示空间）
+  const [size, setSize] = useState("xl");
   // 同任务下其它已完成自动化产生的可挂载附件候选
   const [availableAttachments, setAvailableAttachments] = useState([]);
   // 本地副本：调整后能立即覆盖父级 prop，让预览同步更新
@@ -61,6 +61,13 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
       return fresh;
     } catch { return null; }
   };
+
+  // 弹窗打开时，若已有 execution id，拉取最新数据（避免从列表点进来时 plan/result 缺失或过时）
+  useEffect(() => {
+    if (open && executionProp?.id && !hasDraftRef.current) {
+      reloadExecution();
+    }
+  }, [open, executionProp?.id]);
 
   // 当切换到不同 execution 时（id 变化）重置本地草稿与邮件状态。
   // 注意：依赖项只用 execution?.id —— 否则父组件 4 秒一次的列表重拉会让 automation_result.data

@@ -55,13 +55,15 @@ function normalizeStatus(s) {
 }
 
 // 从 automation_result 中提炼一段可在卡片内直接展示的摘要文本
-function extractPreview(ar) {
+function extractPreview(ar, automationType = "") {
   if (!ar) return "";
-  if (ar.preview && typeof ar.preview === "string") return ar.preview.trim();
+  if (ar.preview && typeof ar.preview === "string" && ar.preview.trim()) return ar.preview.trim();
   if (ar.data) {
     const d = ar.data;
+    const t = (automationType || "").toLowerCase();
+
     // 邮件：主题 + 收件人 + 正文片段
-    if (d.subject || d.body || d.to) {
+    if (t.includes("email") || d.subject || d.body || d.to) {
       const lines = [];
       if (d.subject) lines.push(`📧 ${d.subject}`);
       if (d.to) lines.push(`收件人：${d.to}`);
@@ -69,16 +71,76 @@ function extractPreview(ar) {
       if (d.body) lines.push(String(d.body));
       return lines.join("\n").trim();
     }
-    // 会议纪要 / 文档：title + summary / content
-    if (d.title || d.summary || d.content) {
+
+    // 调研报告
+    if (t.includes("research") || t.includes("web")) {
+      const lines = [];
+      if (d.title || d.topic) lines.push(`📊 ${d.title || d.topic}`);
+      if (d.executive_summary) lines.push(String(d.executive_summary));
+      else if (d.markdown) lines.push(String(d.markdown).slice(0, 300));
+      if (Array.isArray(d.key_findings) && d.key_findings.length > 0) {
+        lines.push("");
+        d.key_findings.slice(0, 5).forEach((k, i) => lines.push(`${i + 1}. ${k}`));
+      }
+      return lines.join("\n").trim();
+    }
+
+    // 日历约定
+    if (t.includes("calendar") || t.includes("event") || d.start_time) {
+      const lines = [];
+      if (d.title) lines.push(`📅 ${d.title}`);
+      if (d.start_time) {
+        try {
+          const start = new Date(d.start_time);
+          const end = d.end_time ? new Date(d.end_time) : null;
+          lines.push(`${start.toLocaleString("zh-CN")}${end ? ` - ${end.toLocaleTimeString("zh-CN")}` : ""}`);
+        } catch {}
+      }
+      if (d.location) lines.push(`地点：${d.location}`);
+      if (d.description) lines.push(d.description);
+      return lines.join("\n").trim();
+    }
+
+    // PPT
+    if (t.includes("ppt") || t.includes("slide") || Array.isArray(d.slides) || Array.isArray(d.outline)) {
+      const lines = [];
+      if (d.title) lines.push(`📽 ${d.title}`);
+      const items = d.slides || d.outline || [];
+      items.slice(0, 5).forEach((s, i) => {
+        const text = typeof s === "string" ? s : (s.heading || s.title || "");
+        if (text) lines.push(`${i + 1}. ${text}`);
+      });
+      return lines.join("\n").trim();
+    }
+
+    // 文件整理
+    if (t.includes("file") || t.includes("organize") || Array.isArray(d.plan)) {
+      return d.summary || `整理方案共 ${Array.isArray(d.plan) ? d.plan.length : 0} 项`;
+    }
+
+    // 账本
+    if (t.includes("ledger") || Array.isArray(d.entries)) {
+      const stats = d.stats || {};
+      return d.preview || `共 ${Array.isArray(d.entries) ? d.entries.length : 0} 条账目 · 收入 ${stats.total_income ?? 0} · 支出 ${stats.total_expense ?? 0}`;
+    }
+
+    // 会议纪要 / 文档 / 笔记：title + summary / content
+    if (d.title || d.summary || d.content || d.executive_summary) {
       const lines = [];
       if (d.title) lines.push(d.title);
       if (d.summary) lines.push(d.summary);
-      if (d.content) lines.push(String(d.content));
+      if (d.executive_summary) lines.push(d.executive_summary);
+      if (d.content) lines.push(String(d.content).slice(0, 500));
       return lines.join("\n").trim();
     }
+
     if (typeof d === "string") return d;
-    return JSON.stringify(d, null, 2);
+    // 兜底：返回对象的第一段文本值，而不是原始 JSON
+    for (const v of Object.values(d)) {
+      if (typeof v === "string" && v.trim()) return v.trim();
+      if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return v.join("\n");
+    }
+    return "";
   }
   return "";
 }
@@ -130,7 +192,7 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
       for (const it of targets) {
         const exec = await base44.entities.TaskExecution.get(it.execution_id).catch(() => null);
         if (cancelled || !exec) continue;
-        const preview = extractPreview(exec.automation_result);
+        const preview = extractPreview(exec.automation_result, it.automation_type);
         if (preview) updateItem(it._id, { result_preview: preview });
       }
     })();
@@ -229,7 +291,7 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
 
       // 成功反馈：拉取最终 execution 并取 preview 作为摘要
       const finalExec = await base44.entities.TaskExecution.get(exec.id).catch(() => null);
-      const preview = extractPreview(finalExec?.automation_result);
+      const preview = extractPreview(finalExec?.automation_result, item.automation_type);
 
       // 邮件类型：execute 仅生成草稿，弹出预览窗让用户编辑并确认发送
       if (item.automation_type === "email_draft" && finalExec?.automation_result?.data) {
@@ -529,55 +591,23 @@ function ExecCard({ item, onAuthorize, onOpen, onFillInput, onResolveGaps }) {
         </div>
       )}
 
-      {/* 已执行：文件下载按钮（如果产物含 URL） */}
-      {isDone && item.result_preview && (() => {
-        const urlMatch = item.result_preview.match(/https?:\/\/[^\s)）"】>]+/);
-        const fileUrl = urlMatch ? urlMatch[0] : null;
-        const fileNameMatch = item.result_preview.match(/《([^》]+)》/);
-        const fileName = fileNameMatch ? fileNameMatch[1] : (fileUrl ? fileUrl.split('/').pop() : null);
-        return fileUrl ? (
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            download
-            className="ml-8 mb-2 flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 hover:shadow-sm px-2.5 py-1.5 transition-all group/file"
-          >
-            <div className="w-6 h-6 rounded-md bg-white border border-emerald-200 flex items-center justify-center flex-shrink-0 group-hover/file:scale-110 transition-transform">
-              <FileText className="w-3 h-3 text-emerald-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[10.5px] font-semibold text-emerald-800 truncate">{fileName || '点击下载文件'}</div>
-              <div className="text-[9px] text-emerald-600/70 truncate">AI 已生成 · 点击下载</div>
-            </div>
-            <ChevronRight className="w-3 h-3 text-emerald-500 flex-shrink-0" />
-          </a>
-        ) : null;
-      })()}
-
-      {/* 已执行：内嵌结果预览（AI 产物） */}
-      {isDone && item.result_preview && (() => {
-        // 如果 preview 是 HTML 片段（AI 经常直接吐 <div>/<h1>/<p>/<table>），用 HTML 渲染避免标签变字面文本
-        const looksHtml = /<(div|section|article|header|footer|h[1-6]|p|table|ul|ol|li|blockquote|figure|img|br|span|strong)(\s|>|\/)/i.test(item.result_preview);
-        return (
-          <div className="ml-8 mb-2 rounded-lg bg-emerald-50/40 border border-emerald-100 px-2.5 py-2 max-h-32 overflow-y-auto">
-            <div className="flex items-center gap-1 text-[9.5px] font-semibold text-emerald-700 mb-1">
-              <Sparkles className="w-2.5 h-2.5" />
-              AI 执行结果
-            </div>
-            {looksHtml ? (
-              <div
-                className="text-[11px] text-slate-700 leading-[1.5] [&_*]:!text-[11px] [&_h1]:!font-semibold [&_h2]:!font-semibold [&_h3]:!font-semibold [&_p]:my-0.5 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_table]:hidden [&_img]:hidden [&_div]:!block"
-                dangerouslySetInnerHTML={{ __html: item.result_preview }}
-              />
-            ) : (
-              <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans leading-[1.5] line-clamp-5">
-                {item.result_preview}
-              </pre>
-            )}
+      {/* 已执行：内嵌结果预览（AI 产物），点击可打开完整详情 */}
+      {isDone && item.result_preview && (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="ml-8 mb-2 w-[calc(100%-2rem)] text-left rounded-lg bg-emerald-50/40 border border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50/70 px-2.5 py-2 max-h-32 overflow-y-auto transition-colors group"
+        >
+          <div className="flex items-center gap-1 text-[9.5px] font-semibold text-emerald-700 mb-1">
+            <Sparkles className="w-2.5 h-2.5" />
+            AI 执行结果
+            <span className="ml-auto text-[9px] text-emerald-600/70 group-hover:text-emerald-700">点击查看完整详情</span>
           </div>
-        );
-      })()}
+          <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans leading-[1.5] line-clamp-5">
+            {item.result_preview}
+          </pre>
+        </button>
+      )}
       {isDone && !item.result_preview && item.execution_id && (
         <div className="ml-8 mb-2 text-[10.5px] text-slate-400 italic">
           正在加载执行结果…
@@ -616,9 +646,8 @@ function ExecCard({ item, onAuthorize, onOpen, onFillInput, onResolveGaps }) {
         {isDone && item.execution_id && (
           <Button
             size="sm"
-            variant="ghost"
             onClick={onOpen}
-            className="h-6 px-2 text-[10.5px] text-emerald-600 hover:bg-emerald-50 rounded-md font-medium"
+            className="h-6 px-2.5 text-[10.5px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium shadow-sm"
           >
             <Check className="w-2.5 h-2.5 mr-0.5" />
             查看完整结果

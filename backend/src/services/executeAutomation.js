@@ -175,6 +175,41 @@ function inferReminderOffsetMs(text) {
   return Math.round(n * 60 * 1000);
 }
 
+const AUTOMATION_TYPE_ALIASES = {
+  总结笔记: "summary_note",
+  笔记: "summary_note",
+  总结: "summary_note",
+  邮件草稿: "email_draft",
+  邮件: "email_draft",
+  写邮件: "email_draft",
+  联网调研: "web_research",
+  调研: "web_research",
+  网络调研: "web_research",
+  办公文档: "office_doc",
+  文档: "office_doc",
+  word文档: "office_doc",
+  日历事件: "calendar_event",
+  日程: "calendar_event",
+  日历: "calendar_event",
+  约定: "calendar_event",
+  整理账本: "ledger_organize",
+  账本: "ledger_organize",
+  记账: "ledger_organize",
+  文件整理: "file_organize",
+  文件归档: "file_organize",
+  整理文件: "file_organize",
+  演示稿: "ppt_doc",
+  ppt: "ppt_doc",
+  幻灯片: "ppt_doc",
+};
+
+function normalizeAutomationType(value) {
+  if (!value) return null;
+  const v = String(value).trim().toLowerCase();
+  if (SUPPORTED_TYPES.includes(v)) return v;
+  return AUTOMATION_TYPE_ALIASES[v] || null;
+}
+
 async function generateAutomationPlan(execution) {
   const planSchema = {
     type: "object",
@@ -183,18 +218,21 @@ async function generateAutomationPlan(execution) {
       plan: {
         type: "object",
         properties: {
-          title: { type: "string" },
-          description: { type: "string" },
+          title: { type: "string", description: "方案标题，必须非空" },
+          description: { type: "string", description: "方案描述，必须非空" },
           steps: {
             type: "array",
             items: {
               type: "object",
-              properties: { name: { type: "string" }, detail: { type: "string" } },
+              properties: {
+                name: { type: "string", description: "步骤名称，必须非空" },
+                detail: { type: "string", description: "步骤详情，必须非空" },
+              },
               required: ["name", "detail"],
             },
           },
-          risk_warning: { type: "string" },
-          estimated_duration: { type: "string" },
+          risk_warning: { type: "string", description: "风险提示，必须非空" },
+          estimated_duration: { type: "string", description: "预计耗时，必须非空" },
         },
         required: ["title", "description", "steps", "risk_warning", "estimated_duration"],
       },
@@ -208,7 +246,9 @@ async function generateAutomationPlan(execution) {
       "你是一名中文任务自动执行分类与规划助手。",
       "请根据用户的自然语言输入，判断最适合的自动化类型，并给出可执行方案。",
       "支持的类型：summary_note（总结/笔记）、email_draft（邮件草稿）、web_research（联网调研）、office_doc（办公文档）、calendar_event（日历事件）、ledger_organize（整理账本）、file_organize（文件整理）、ppt_doc（演示稿）。",
-      "输出必须是 JSON，不要输出解释。",
+      "输出必须是 JSON，且 automation_type 必须是上述英文标识之一，不要返回中文类型名。",
+      "plan 的 title/description/steps/risk_warning/estimated_duration 必须为非空字符串。",
+      "不要输出解释。",
     ].join("\n"),
     prompt: [
       `用户输入：${execution.originalInput || ""}`,
@@ -220,16 +260,27 @@ async function generateAutomationPlan(execution) {
     temperature: 0.3,
   });
 
-  const automationType = SUPPORTED_TYPES.includes(data.automation_type)
-    ? data.automation_type
-    : "summary_note";
+  const automationType = normalizeAutomationType(data.automation_type)
+    || (SUPPORTED_TYPES.includes(execution.automationType) ? execution.automationType : "summary_note");
 
   // 中国大陆部署：除邮件草稿外默认不需要二次确认
   const requiresApproval = automationType === "email_draft" ? true : Boolean(data.requires_approval);
 
+  const rawPlan = data.plan || {};
+  const steps = Array.isArray(rawPlan.steps)
+    ? rawPlan.steps.filter((s) => s?.name && s?.detail)
+    : [];
+  const plan = {
+    title: String(rawPlan.title || execution.taskTitle || "自动执行方案").trim(),
+    description: String(rawPlan.description || execution.originalInput || "根据用户输入自动生成执行方案").trim(),
+    steps: steps.length > 0 ? steps : [{ name: "执行", detail: "根据用户输入完成自动化任务" }],
+    risk_warning: String(rawPlan.risk_warning || "请确认生成结果后再使用").trim(),
+    estimated_duration: String(rawPlan.estimated_duration || "约 1-3 分钟").trim(),
+  };
+
   return {
     automation_type: automationType,
-    plan: data.plan || { title: "", description: "", steps: [], risk_warning: "", estimated_duration: "" },
+    plan,
     requires_approval: requiresApproval,
   };
 }
@@ -325,8 +376,61 @@ async function handleEmailDraft(execution) {
   };
 }
 
+// 将联网搜索答案里 [^N]: [title](url) 形式的引用提取为 {title, url} 列表
+function extractInlineReferences(answerText) {
+  if (typeof answerText !== "string" || !answerText.trim()) return [];
+  const refs = [];
+  const seen = new Set();
+  const re = /\[\^(\d+)\]:\s*(.+?)(?=\n\[\^|\n*$)/gs;
+  let m;
+  while ((m = re.exec(answerText)) !== null) {
+    const line = m[2].trim();
+    const linkMatch = line.match(/\[([^\]]*)\]\(([^)]+)\)/);
+    if (linkMatch) {
+      const title = linkMatch[1].trim();
+      const url = linkMatch[2].trim();
+      if (url && !seen.has(url)) {
+        seen.add(url);
+        refs.push({ title: title || url, url });
+      }
+    }
+  }
+  return refs;
+}
+
+// AI 经常把 JSON key 写成中文，这里做兼容映射
+function normalizeResearchData(raw) {
+  const keyMap = {
+    调研主题: "topic",
+    主题: "topic",
+    标题: "topic",
+    执行摘要: "executive_summary",
+    摘要: "executive_summary",
+    关键结论: "key_findings",
+    核心发现: "key_findings",
+    主要发现: "key_findings",
+    关键发现: "key_findings",
+    建议: "recommendations",
+    行动建议: "recommendations",
+    参考链接: "references",
+    参考资料: "references",
+    参考文献: "references",
+    章节: "sections",
+    报告正文: "markdown",
+    正文: "markdown",
+    完整报告: "markdown",
+  };
+  const normalized = {};
+  for (const [k, v] of Object.entries(raw || {})) {
+    const enKey = keyMap[k] || k;
+    normalized[enKey] = v;
+  }
+  return normalized;
+}
+
 async function handleWebResearch(execution) {
   const search = await invokeKimiWebSearch({ query: execution.originalInput || "" });
+  const inlineRefs = extractInlineReferences(search.answer);
 
   const schema = {
     type: "object",
@@ -349,40 +453,61 @@ async function handleWebResearch(execution) {
     required: ["topic", "executive_summary", "markdown"],
   };
 
-  const data = await invokeKimiText({
-    systemPrompt: "你是一名中文研究助理。请根据联网搜索结果撰写结构化调研报告。输出必须是 JSON。",
+  const dataRaw = await invokeKimiText({
+    systemPrompt: [
+      "你是一名中文研究助理。请根据联网搜索结果撰写结构化调研报告。",
+      "输出必须是 JSON，且顶层字段必须是英文：topic、executive_summary、key_findings、recommendations、sections、references、markdown。",
+      "sections 每个元素包含 heading 和 body（body 为 Markdown 格式）。",
+      "references 为 URL 字符串数组。",
+      "markdown 为完整报告正文（Markdown 格式），必须包含实质性内容，不要为空。"
+    ].join("\n"),
     prompt: [
       `研究主题：${execution.originalInput || ""}`,
       "联网搜索摘要：",
       search.answer || "",
       "参考链接：",
-      ...(Array.isArray(search.references) ? search.references.map((r) => `- ${r.title || ""}: ${r.url || ""}`) : []),
+      ...inlineRefs.map((r) => `- ${r.title || ""}: ${r.url || ""}`),
     ].join("\n"),
     responseJsonSchema: schema,
     temperature: 0.3,
   });
 
-  const title = String(data.topic || execution.taskTitle || "调研报告");
-  const markdown = String(
-    data.markdown || `# ${title}\n\n## 执行摘要\n${data.executive_summary || ""}`
-  );
+  const data = normalizeResearchData(dataRaw);
+
+  const title = String(data.topic || execution.taskTitle || "调研报告").trim();
+  let markdown = String(data.markdown || "").trim();
+  const summary = String(data.executive_summary || "").trim();
+
+  if (!title || (!summary && !markdown)) {
+    throw new Error("AI 未生成有效调研内容，请重试");
+  }
+
+  if (!markdown) {
+    markdown = [`# ${title}`, "", "## 执行摘要", summary].join("\n");
+    if (Array.isArray(data.sections) && data.sections.length > 0) {
+      for (const s of data.sections) {
+        markdown += `\n\n## ${s.heading}\n${s.body || ""}`;
+      }
+    }
+  }
+
   const { fileName, fileUrl } = saveMarkdownAsHtml({ title, markdown, execution, type: "web_research" });
+
+  const references = Array.isArray(data.references)
+    ? data.references
+    : (inlineRefs.length > 0 ? inlineRefs.map((r) => r.url).filter(Boolean) : []);
 
   return {
     type: "web_research",
-    preview: String(data.executive_summary || "").slice(0, 120),
+    preview: summary.slice(0, 120),
     data: {
       title,
       topic: title,
-      executive_summary: String(data.executive_summary || ""),
-      key_findings: Array.isArray(data.key_findings) ? data.key_findings : [],
-      recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
-      sections: Array.isArray(data.sections) ? data.sections : [],
-      references: Array.isArray(data.references)
-        ? data.references
-        : Array.isArray(search.references)
-          ? search.references.map((r) => r.url).filter(Boolean)
-          : [],
+      executive_summary: summary,
+      key_findings: Array.isArray(data.key_findings) ? data.key_findings.filter(Boolean) : [],
+      recommendations: Array.isArray(data.recommendations) ? data.recommendations.filter(Boolean) : [],
+      sections: Array.isArray(data.sections) ? data.sections.filter((s) => s?.heading && s?.body) : [],
+      references,
       file_name: fileName,
       file_url: fileUrl,
       markdown,

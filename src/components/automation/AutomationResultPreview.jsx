@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRight, Plus, Trash2, Edit3, Download, ExternalLink } from "lucide-react";
+import { ArrowRight, Plus, Trash2, Edit3, ExternalLink } from "lucide-react";
 import EmailResultView from "./result/EmailResultView";
 import ResearchResultView from "./result/ResearchResultView";
 import PptResultView from "./result/PptResultView";
@@ -26,6 +26,10 @@ function resolveFileUrl(result, diffItem) {
   }
   if (d.file_url && Array.isArray(result.diff) && result.diff.length === 1 && diffItem.action === "create") {
     return d.file_url;
+  }
+  // 兼容相对路径文件链接（如 /uploads/xxx.html）
+  if (typeof diffItem.target === "string" && diffItem.target.startsWith("/uploads/")) {
+    return diffItem.target;
   }
   return null;
 }
@@ -88,38 +92,37 @@ export default function AutomationResultPreview({ result, automationType, onData
               const cfg = diffIcons[d.action] || diffIcons.update;
               const Icon = cfg.icon;
               const fileUrl = resolveFileUrl(result, d) || previewFileUrl;
-              const isHttpUrl = fileUrl && /^https?:\/\//.test(fileUrl);
+              const isFileUrl = fileUrl && (/^https?:\/\//.test(fileUrl) || fileUrl.startsWith("/uploads/"));
 
               const inner = (
                 <>
                   <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${cfg.color}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <div className={`text-xs font-medium truncate ${isHttpUrl ? 'text-[#384877] group-hover:underline' : 'text-slate-800'}`}>
+                      <div className={`text-xs font-medium truncate ${isFileUrl ? 'text-[#384877] group-hover:underline' : 'text-slate-800'}`}>
                         {d.target}
                       </div>
-                      {isHttpUrl && (
+                      {isFileUrl && (
                         <span className="flex-shrink-0 inline-flex items-center gap-0.5 text-[9.5px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
-                          <Download className="w-2.5 h-2.5" />
-                          下载
+                          <ExternalLink className="w-2.5 h-2.5" />
+                          打开
                         </span>
                       )}
                     </div>
                     {d.detail && <div className="text-[11px] text-slate-500 line-clamp-2">{d.detail}</div>}
                   </div>
-                  {isHttpUrl && (
+                  {isFileUrl && (
                     <ExternalLink className={`w-3 h-3 flex-shrink-0 mt-1 ${cfg.color} opacity-60 group-hover:opacity-100`} />
                   )}
                 </>
               );
 
-              return isHttpUrl ? (
+              return isFileUrl ? (
                 <a
                   key={i}
                   href={fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  download
                   className={`group flex items-start gap-2 p-2 rounded-md ${cfg.bg} ${cfg.hover} transition-colors cursor-pointer`}
                 >
                   {inner}

@@ -29,3 +29,4 @@ dist-ssr
 
 .env
 backend/prisma/dev.db
+backend/uploads/

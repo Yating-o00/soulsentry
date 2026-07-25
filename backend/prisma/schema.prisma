@@ -70,6 +70,7 @@ model User {
   behaviors         UserBehavior[]
   relationships     Relationship[]
   comments          Comment[]
+  noteComments      NoteComment[]
   taskCompletions   TaskCompletion[]
   taskChangeLogs    TaskChangeLog[]
   taskTemplates     TaskTemplate[]
@@ -135,10 +136,11 @@ model Note {
   sourceType String?
   aiStatus   String?
   deletedAt  DateTime?
-  tags       Json?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags         Json?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  noteComments NoteComment[]
 
   @@index([userId, status])
   @@index([userId, deletedAt])
@@ -273,6 +275,8 @@ model WeeklyPlan {
 
   @@index([userId, weekStartDate])
   @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
 }
 
 model MonthlyPlan {
@@ -290,7 +294,27 @@ model MonthlyPlan {
 
   @@index([userId, monthStartDate])
   @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
 }
+
+
+model NoteComment {
+  id        String   @id @default(cuid())
+  userId    String
+  noteId    String
+  content   String
+  mentions  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([noteId, createdAt])
+}
+
+
 
 model WechatOrder {
   id            String   @id @default(cuid())

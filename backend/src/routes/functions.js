@@ -8,6 +8,7 @@ import { executeAutomation } from "../services/executeAutomation.js";
 import { getCreditPack } from "../config/creditPacks.js";
 import { createWechatNativeOrder, generateOutTradeNo, getWechatMerchantConfig, queryWechatOrder as wechatQueryOrder } from "../lib/wechatPay.js";
 import { markWechatOrderPaid } from "../services/wechatOrders.js";
+import { savePptHtml } from "../lib/renderPpt.js";
 
 export const functionsRouter = Router();
 
@@ -1103,6 +1104,18 @@ functionsRouter.post("/:name", async (req, res) => {
         prisma
       });
       return res.json(result);
+    }
+
+    if (name === "renderPpt") {
+      const pptData = payload.data || payload;
+      if (!pptData || !Array.isArray(pptData.slides) || pptData.slides.length === 0) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少有效的 slides 数据" });
+      }
+      const { fileName, fileUrl } = savePptHtml({
+        data: pptData,
+        fileBaseName: payload.file_base_name || pptData.title
+      });
+      return res.json({ file_url: fileUrl, file_name: fileName });
     }
 
     if (name === "createStripeCheckout") {

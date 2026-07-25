@@ -24,6 +24,14 @@ function fmtAmount(n) {
   return v.toFixed(v % 1 === 0 ? 0 : 2);
 }
 
+function safeString(value, fallback = "") {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(safeString).join(", ");
+  return fallback;
+}
+
 export default function LedgerResultView({ data = {}, preview }) {
   const entries = Array.isArray(data.entries) ? data.entries : [];
   const stats = data.stats || {};
@@ -36,7 +44,7 @@ export default function LedgerResultView({ data = {}, preview }) {
   const groups = useMemo(() => {
     const map = {};
     for (const e of entries) {
-      const k = e.date || "未分类";
+      const k = safeString(e.date, "未分类") || "未分类";
       if (!map[k]) map[k] = [];
       map[k].push(e);
     }
@@ -105,7 +113,7 @@ export default function LedgerResultView({ data = {}, preview }) {
             return (
               <div key={date}>
                 <div className="flex items-baseline justify-between pb-1.5 mb-1 border-b border-slate-100">
-                  <div className="text-xs font-semibold text-slate-700">{date}</div>
+                  <div className="text-xs font-semibold text-slate-700">{safeString(date)}</div>
                   <div className="text-[11px] text-slate-400 tabular-nums">
                     {dayExp > 0 && <span className="text-red-500">-¥{fmtAmount(dayExp)}</span>}
                     {dayExp > 0 && dayInc > 0 && " · "}
@@ -114,7 +122,8 @@ export default function LedgerResultView({ data = {}, preview }) {
                 </div>
                 <div className="space-y-1">
                   {items.map((e, idx) => {
-                    const meta = CAT_META[e.category] || CAT_META.其他;
+                    const category = safeString(e.category, "其他");
+                    const meta = CAT_META[category] || CAT_META.其他;
                     const isInc = e.type === "income";
                     const sign = isInc ? "+" : "-";
                     return (
@@ -124,11 +133,11 @@ export default function LedgerResultView({ data = {}, preview }) {
                           style={{ background: meta.bg, color: meta.color }}
                         >{meta.icon}</div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs text-slate-800 truncate">{e.item || "未命名"}</div>
+                          <div className="text-xs text-slate-800 truncate">{safeString(e.item, "未命名")}</div>
                           <div className="text-[10px] text-slate-400 flex gap-1.5 items-center">
-                            <span>{e.category}</span>
+                            <span>{category}</span>
                             {Array.isArray(e.tags) && e.tags.length > 0 && e.tags.map((t, i) => (
-                              <span key={i} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{t}</span>
+                              <span key={i} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{safeString(t)}</span>
                             ))}
                           </div>
                         </div>
@@ -192,8 +201,8 @@ export default function LedgerResultView({ data = {}, preview }) {
               <div className="space-y-1">
                 {stats.recurring.map((r, i) => (
                   <div key={i} className="text-xs text-slate-600 flex justify-between">
-                    <span>{r.item}</span>
-                    <span className="tabular-nums text-slate-500">¥{fmtAmount(r.amount)} / {r.cycle || "月"}</span>
+                    <span>{safeString(r.item)}</span>
+                    <span className="tabular-nums text-slate-500">¥{fmtAmount(r.amount)} / {safeString(r.cycle, "月")}</span>
                   </div>
                 ))}
               </div>

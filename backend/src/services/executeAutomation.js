@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
+import { renderPptHtml, savePptHtml } from "../lib/renderPpt.js";
 import { env } from "../config/env.js";
 
 const AUTOMATION_EXECUTE_COSTS = {
@@ -210,6 +211,144 @@ function normalizeAutomationType(value) {
   return AUTOMATION_TYPE_ALIASES[v] || null;
 }
 
+function buildDefaultPlan(automationType, execution) {
+  const input = String(execution.originalInput || execution.taskTitle || "").slice(0, 80);
+  const taskTitle = String(execution.taskTitle || "").slice(0, 60);
+  const maps = {
+    email_draft: {
+      title: taskTitle || "邮件草稿方案",
+      description: `根据用户输入起草一封专业邮件：${input || "未提供具体内容"}`,
+      steps: [
+        { name: "识别收件人与主题", detail: "从输入中提取收件人、抄送及邮件主题" },
+        { name: "生成正文", detail: "撰写含称呼、正文、署名的完整邮件内容" },
+        { name: "确认发送", detail: "用户二次确认后通过 Gmail 发送" }
+      ],
+      risk_warning: "请确认收件人、主题与正文内容，避免误发。",
+      estimated_duration: "约 30 秒"
+    },
+    web_research: {
+      title: taskTitle || "联网调研方案",
+      description: `针对主题进行联网搜索并生成结构化调研报告：${input || ""}`,
+      steps: [
+        { name: "联网搜索", detail: "调用 Kimi 联网能力检索最新相关信息" },
+        { name: "提炼结论", detail: "总结执行摘要、关键发现与建议" },
+        { name: "生成报告", detail: "输出带章节与参考链接的 HTML 报告" }
+      ],
+      risk_warning: "报告内容基于公开网络信息，关键数据请再次核实。",
+      estimated_duration: "约 1-2 分钟"
+    },
+    ppt_doc: {
+      title: taskTitle || "演示稿方案",
+      description: `根据主题生成可在线预览的幻灯片：${input || ""}`,
+      steps: [
+        { name: "梳理大纲", detail: "将主题拆分为封面、章节与内容页" },
+        { name: "设计版式", detail: "自动选择封面、卡片、图文、结尾等版式" },
+        { name: "渲染演示稿", detail: "生成可全屏播放的 HTML 演示稿" }
+      ],
+      risk_warning: "生成结果仅供参考，正式演示前请检查内容与排版。",
+      estimated_duration: "约 1-2 分钟"
+    },
+    office_doc: {
+      title: taskTitle || "办公文档方案",
+      description: `根据需求生成结构化办公文档：${input || ""}`,
+      steps: [
+        { name: "明确文档结构", detail: "确定标题、章节与核心论点" },
+        { name: "撰写内容", detail: "按章节生成 Markdown 格式正文" },
+        { name: "导出 HTML", detail: "生成可在线预览的文档文件" }
+      ],
+      risk_warning: "请核对文档中的事实与数据。",
+      estimated_duration: "约 1-2 分钟"
+    },
+    calendar_event: {
+      title: taskTitle || "日程安排方案",
+      description: `从输入中提取事件信息并创建提醒：${input || ""}`,
+      steps: [
+        { name: "解析时间", detail: "识别开始/结束时间与提醒偏移" },
+        { name: "提取地点与参与人", detail: "补全地点、描述与参与人信息" },
+        { name: "创建约定", detail: "在任务系统中创建待提醒事件" }
+      ],
+      risk_warning: "请确认时间解析结果，避免错过重要日程。",
+      estimated_duration: "约 20 秒"
+    },
+    ledger_organize: {
+      title: taskTitle || "账本整理方案",
+      description: `从输入中提取收支记录并分类统计：${input || ""}`,
+      steps: [
+        { name: "识别账目", detail: "逐条提取日期、项目、金额与收支类型" },
+        { name: "自动分类", detail: "按餐饮、交通、居住等维度归类" },
+        { name: "汇总分析", detail: "计算总收入、总支出与结余" }
+      ],
+      risk_warning: "AI 分类可能存在偏差，请核对金额与类别。",
+      estimated_duration: "约 30 秒"
+    },
+    file_organize: {
+      title: taskTitle || "文件整理方案",
+      description: `根据描述给出文件归档与整理建议：${input || ""}`,
+      steps: [
+        { name: "分析文件", detail: "识别需要整理的文件/文件夹" },
+        { name: "规划归档", detail: "给出目标路径、分类与操作" },
+        { name: "输出方案", detail: "生成可执行的整理清单" }
+      ],
+      risk_warning: "删除/移动操作前请确认，避免误删重要文件。",
+      estimated_duration: "约 30 秒"
+    },
+    summary_note: {
+      title: taskTitle || "总结笔记方案",
+      description: `将输入整理为结构化笔记：${input || ""}`,
+      steps: [
+        { name: "提取关键信息", detail: "识别输入中的主题、要点与标签" },
+        { name: "组织内容", detail: "生成 Markdown 笔记与核心要点" },
+        { name: "保存结果", detail: "输出可编辑的笔记内容" }
+      ],
+      risk_warning: "请核对总结是否遗漏重要信息。",
+      estimated_duration: "约 30 秒"
+    }
+  };
+  return maps[automationType] || {
+    title: taskTitle || "自动执行方案",
+    description: `根据用户输入完成自动化任务：${input || ""}`,
+    steps: [
+      { name: "分析需求", detail: "理解用户输入并确定执行方向" },
+      { name: "执行处理", detail: "调用 AI 完成内容生成或信息提取" },
+      { name: "返回结果", detail: "以可视化方式展示生成结果" }
+    ],
+    risk_warning: "请确认生成结果后再使用。",
+    estimated_duration: "约 1-3 分钟"
+  };
+}
+
+function sanitizeResearchTitle(title, originalInput, taskTitle) {
+  let t = String(title || "").trim();
+  const input = String(originalInput || "").trim();
+  const fallback = String(taskTitle || "").trim() || "调研报告";
+  if (!t) return fallback;
+
+  // 若标题与用户原输入完全一致，则换成任务标题/去重
+  if (input && (t === input || t.replace(/\s+/g, "") === input.replace(/\s+/g, ""))) {
+    return fallback !== input ? fallback : `${fallback} · 调研报告`;
+  }
+
+  // 去除连续重复片段（AI 经常把同一句重复 2-3 次）
+  const parts = t.split(/[，。；！？,;!?]/).map((s) => s.trim()).filter(Boolean);
+  const unique = [];
+  const seen = new Set();
+  for (const p of parts) {
+    const key = p.replace(/\s+/g, "").toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(p);
+  }
+  if (unique.length > 0 && unique.join("").length >= t.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "").length * 0.5) {
+    t = unique.join("，");
+  }
+
+  // 截断并清理首尾标点
+  t = t.replace(/^[\s，。；！？,:;!?]+|[\s，。；！？,:;!?]+$/g, "").trim();
+  if (t.length > 60) t = t.slice(0, 60).replace(/[^\u4e00-\u9fa5a-zA-Z0-9]$/, "").trim();
+  if (!t) return fallback;
+  return t;
+}
+
 async function generateAutomationPlan(execution) {
   const planSchema = {
     type: "object",
@@ -248,6 +387,7 @@ async function generateAutomationPlan(execution) {
       "支持的类型：summary_note（总结/笔记）、email_draft（邮件草稿）、web_research（联网调研）、office_doc（办公文档）、calendar_event（日历事件）、ledger_organize（整理账本）、file_organize（文件整理）、ppt_doc（演示稿）。",
       "输出必须是 JSON，且 automation_type 必须是上述英文标识之一，不要返回中文类型名。",
       "plan 的 title/description/steps/risk_warning/estimated_duration 必须为非空字符串。",
+      "steps 必须针对具体自动化类型给出 3 条有实质内容的执行步骤，不要返回空泛的\"执行\"步骤。",
       "不要输出解释。",
     ].join("\n"),
     prompt: [
@@ -270,12 +410,14 @@ async function generateAutomationPlan(execution) {
   const steps = Array.isArray(rawPlan.steps)
     ? rawPlan.steps.filter((s) => s?.name && s?.detail)
     : [];
+
+  const fallback = buildDefaultPlan(automationType, execution);
   const plan = {
-    title: String(rawPlan.title || execution.taskTitle || "自动执行方案").trim(),
-    description: String(rawPlan.description || execution.originalInput || "根据用户输入自动生成执行方案").trim(),
-    steps: steps.length > 0 ? steps : [{ name: "执行", detail: "根据用户输入完成自动化任务" }],
-    risk_warning: String(rawPlan.risk_warning || "请确认生成结果后再使用").trim(),
-    estimated_duration: String(rawPlan.estimated_duration || "约 1-3 分钟").trim(),
+    title: String(rawPlan.title || fallback.title).trim(),
+    description: String(rawPlan.description || fallback.description).trim(),
+    steps: steps.length > 0 ? steps : fallback.steps,
+    risk_warning: String(rawPlan.risk_warning || fallback.risk_warning).trim(),
+    estimated_duration: String(rawPlan.estimated_duration || fallback.estimated_duration).trim(),
   };
 
   return {
@@ -474,7 +616,11 @@ async function handleWebResearch(execution) {
 
   const data = normalizeResearchData(dataRaw);
 
-  const title = String(data.topic || execution.taskTitle || "调研报告").trim();
+  const title = sanitizeResearchTitle(
+    data.topic || execution.taskTitle || "调研报告",
+    execution.originalInput,
+    execution.taskTitle
+  );
   let markdown = String(data.markdown || "").trim();
   const summary = String(data.executive_summary || "").trim();
 
@@ -799,16 +945,21 @@ async function handlePptDoc(execution) {
   const schema = {
     type: "object",
     properties: {
-      title: { type: "string" },
+      title: { type: "string", description: "演示稿标题" },
+      subtitle: { type: "string", description: "副标题" },
+      theme: { type: "string", enum: ["business", "minimal", "tech"], description: "主题风格" },
       slides: {
         type: "array",
         items: {
           type: "object",
           properties: {
-            title: { type: "string" },
-            bullets: { type: "array", items: { type: "string" } },
+            heading: { type: "string", description: "幻灯片标题" },
+            title: { type: "string", description: "幻灯片标题（与 heading 兼容）" },
+            bullets: { type: "array", items: { type: "string" }, description: "要点列表" },
+            body: { type: "string", description: "正文段落" },
+            images: { type: "array", items: { type: "object", properties: { url: { type: "string" }, caption: { type: "string" } } }, description: "图片" },
+            layout: { type: "string", enum: ["cover", "agenda", "section-divider", "quote", "stats", "timeline", "comparison", "image-full", "image-left", "image-right", "cards", "two-column", "closing"], description: "版式" }
           },
-          required: ["title", "bullets"],
         },
       },
     },
@@ -816,18 +967,47 @@ async function handlePptDoc(execution) {
   };
 
   const data = await invokeKimiText({
-    systemPrompt: "你是一名中文演示稿助手。请根据用户输入生成幻灯片大纲。输出必须是 JSON。",
+    systemPrompt: [
+      "你是一名中文演示稿助手。请根据用户输入生成可直接渲染的幻灯片数据。",
+      "要求：1) title 必须是非空标题；2) slides 至少包含 3 页，第一页为封面，最后一页为结尾；3) 每页建议包含 heading（或 title）、bullets 要点；4) 输出必须是 JSON。"
+    ].join("\n"),
     prompt: `用户输入：${execution.originalInput || ""}${buildAttachmentContext(execution)}`,
     responseJsonSchema: schema,
     temperature: 0.3,
   });
 
-  const title = String(data.title || "");
-  const slides = Array.isArray(data.slides) ? data.slides : [];
+  const title = String(data.title || execution.taskTitle || "演示文稿").trim();
+  const subtitle = String(data.subtitle || "").trim();
+  const theme = ["business", "minimal", "tech"].includes(data.theme) ? data.theme : "business";
+  const rawSlides = Array.isArray(data.slides) ? data.slides : [];
+  if (rawSlides.length === 0) {
+    throw new Error("AI 未生成有效幻灯片内容，请重试");
+  }
+
+  // 兼容 title/heading 字段，并确保每页有基本结构
+  const slides = rawSlides.map((s) => ({
+    heading: String(s.heading || s.title || "").trim(),
+    bullets: Array.isArray(s.bullets) ? s.bullets.filter((b) => typeof b === "string" && b.trim()) : [],
+    body: String(s.body || "").trim(),
+    images: Array.isArray(s.images) ? s.images.filter((im) => im?.url) : [],
+    layout: s.layout || undefined,
+  }));
+
+  const pptData = { title, subtitle, theme, slides };
+  const { fileName, fileUrl } = savePptHtml({ data: pptData, execution, fileBaseName: title });
+
   return {
     type: "ppt_doc",
     preview: title,
-    data: { title, slides },
+    data: {
+      title,
+      subtitle,
+      theme,
+      slides,
+      file_name: fileName,
+      file_url: fileUrl,
+    },
+    diff: [{ action: "create", target: fileName, detail: "已生成演示稿 HTML" }],
   };
 }
 

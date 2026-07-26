@@ -211,6 +211,30 @@ function normalizeAutomationType(value) {
   return AUTOMATION_TYPE_ALIASES[v] || null;
 }
 
+// 当用户没有指定有效类型（或 AI 默认 summary_note）时，从自然语言输入里兜底推断类型
+function detectAutomationTypeFromInput(text) {
+  if (typeof text !== "string" || !text.trim()) return null;
+  const t = text.trim();
+  const lower = t.toLowerCase();
+
+  // 按优先级匹配：更具体的短语先匹配
+  const patterns = [
+    { type: "email_draft", regex: /写邮件|发邮件|邮件草稿|给.*写.*信|致.*的.*信|邮件主题|邮件正文/ },
+    { type: "ppt_doc", regex: /做ppt|做PPT|生成ppt|生成PPT|幻灯片|演示稿|演示文稿|演讲稿|路演|pitch deck/ },
+    { type: "web_research", regex: /做调研|市场调研|行业调研|竞品调研|调研报告|联网搜索|查.*资料|了解一下|研究一下|分析报告/ },
+    { type: "ledger_organize", regex: /整理账本|记账|账本|收支|报销|账单|记账本|支出.*收入|统计.*钱/ },
+    { type: "calendar_event", regex: /加约定|添加约定|创建约定|日程|会议.*时间|约.*时间|提醒.*时间|本周.*周五|下周一|约见/ },
+    { type: "file_organize", regex: /整理文件|文件归档|归档|整理.*资料|整理.*文件夹|清理文件/ },
+    { type: "office_doc", regex: /写报告|写方案|写文档|写计划书|写说明书|写proposal|写备忘录|word文档|办公文档/ },
+    { type: "summary_note", regex: /总结笔记|总结|笔记|会议纪要|会议记录|心签/ },
+  ];
+
+  for (const { type, regex } of patterns) {
+    if (regex.test(t) || regex.test(lower)) return type;
+  }
+  return null;
+}
+
 function buildDefaultPlan(automationType, execution) {
   const input = String(execution.originalInput || execution.taskTitle || "").slice(0, 80);
   const taskTitle = String(execution.taskTitle || "").slice(0, 60);
@@ -380,6 +404,16 @@ async function generateAutomationPlan(execution) {
     required: ["automation_type", "plan", "requires_approval"],
   };
 
+  // 用户明确指定了非 summary_note 的有效类型时优先采用（快捷模板场景）
+  const explicitUserType = normalizeAutomationType(execution.automationType);
+  const isExplicitSpecificType = explicitUserType && explicitUserType !== "summary_note";
+
+  // 兜底：当用户没有明确指定具体类型，或只给了 summary_note 时，从输入里再推断一次
+  const detectedTypeFromInput = detectAutomationTypeFromInput(execution.originalInput);
+  const preferredType = isExplicitSpecificType
+    ? explicitUserType
+    : (detectedTypeFromInput || explicitUserType || "summary_note");
+
   const data = await invokeKimiText({
     systemPrompt: [
       "你是一名中文任务自动执行分类与规划助手。",
@@ -388,22 +422,35 @@ async function generateAutomationPlan(execution) {
       "输出必须是 JSON，且 automation_type 必须是上述英文标识之一，不要返回中文类型名。",
       "plan 的 title/description/steps/risk_warning/estimated_duration 必须为非空字符串。",
       "steps 必须针对具体自动化类型给出 3 条有实质内容的执行步骤，不要返回空泛的\"执行\"步骤。",
+      "不要默认 summary_note：如果用户输入包含邮件/调研/PPT/演示/约定/账本/文件/报告/方案等具体意图，必须返回对应的具体类型，不要统一归类为 summary_note。",
       "不要输出解释。",
     ].join("\n"),
     prompt: [
       `用户输入：${execution.originalInput || ""}`,
-      `用户已指定的执行类型（如无把握可优先采用）：${execution.automationType || "未指定"}`,
+      `建议采用的执行类型：${preferredType}`,
       buildAttachmentContext(execution),
       "请返回 automation_type、plan（title/description/steps/risk_warning/estimated_duration）以及 requires_approval。",
-    ].join("\n"),
+      preferredType && preferredType !== "summary_note"
+        ? `注意：本次输入明显属于 ${preferredType} 类型，请务必将 automation_type 设为 ${preferredType}，并给出对应类型的执行方案。`
+        : "",
+    ].filter(Boolean).join("\n"),
     responseJsonSchema: planSchema,
     temperature: 0.3,
   });
 
-  // 用户已明确指定类型时优先采用，避免 AI 把快捷模板重新分类成 summary_note
-  const userSpecifiedType = SUPPORTED_TYPES.includes(execution.automationType) ? execution.automationType : null;
-  const detectedType = normalizeAutomationType(data.automation_type);
-  const automationType = userSpecifiedType || detectedType || "summary_note";
+  const aiType = normalizeAutomationType(data.automation_type);
+
+  // 如果 AI 仍然返回 summary_note，但输入里能检测到更具体的类型，则强制覆盖
+  let automationType;
+  if (isExplicitSpecificType) {
+    automationType = explicitUserType;
+  } else if (aiType && aiType !== "summary_note") {
+    automationType = aiType;
+  } else if (detectedTypeFromInput) {
+    automationType = detectedTypeFromInput;
+  } else {
+    automationType = aiType || "summary_note";
+  }
 
   // 中国大陆部署：除邮件草稿外默认不需要二次确认
   const requiresApproval = automationType === "email_draft" ? true : Boolean(data.requires_approval);

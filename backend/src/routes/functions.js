@@ -1003,10 +1003,8 @@ functionsRouter.post("/:name", async (req, res) => {
 
       if (existing?.codeUrl) {
         return res.json({
-          data: {
-            code_url: existing.codeUrl,
-            order_no: existing.orderNo
-          }
+          code_url: existing.codeUrl,
+          order_no: existing.orderNo
         });
       }
 
@@ -1042,7 +1040,7 @@ functionsRouter.post("/:name", async (req, res) => {
         }
       });
 
-      return res.json({ data: { code_url: codeUrl, order_no: outTradeNo } });
+      return res.json({ code_url: codeUrl, order_no: outTradeNo });
     }
 
     if (name === "queryWechatOrder") {
@@ -1060,12 +1058,12 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       if (order.status === "PAID") {
-        return res.json({ data: { paid: true, order_no: order.orderNo } });
+        return res.json({ paid: true, order_no: order.orderNo });
       }
 
       const cfg = await getWechatMerchantConfig();
       if (!cfg) {
-        return res.json({ data: { paid: false, order_no: order.orderNo } });
+        return res.json({ paid: false, order_no: order.orderNo });
       }
 
       try {
@@ -1080,7 +1078,7 @@ functionsRouter.post("/:name", async (req, res) => {
             transactionId,
             paidAt: successTime ? new Date(successTime) : null
           });
-          return res.json({ data: { paid: true, order_no: order.orderNo } });
+          return res.json({ paid: true, order_no: order.orderNo });
         }
 
         if (tradeState && tradeState !== order.status) {
@@ -1093,7 +1091,7 @@ functionsRouter.post("/:name", async (req, res) => {
         void _error;
       }
 
-      return res.json({ data: { paid: false, order_no: order.orderNo } });
+      return res.json({ paid: false, order_no: order.orderNo });
     }
 
     if (name === "executeAutomation") {

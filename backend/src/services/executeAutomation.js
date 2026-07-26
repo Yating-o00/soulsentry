@@ -400,8 +400,10 @@ async function generateAutomationPlan(execution) {
     temperature: 0.3,
   });
 
-  const automationType = normalizeAutomationType(data.automation_type)
-    || (SUPPORTED_TYPES.includes(execution.automationType) ? execution.automationType : "summary_note");
+  // 用户已明确指定类型时优先采用，避免 AI 把快捷模板重新分类成 summary_note
+  const userSpecifiedType = SUPPORTED_TYPES.includes(execution.automationType) ? execution.automationType : null;
+  const detectedType = normalizeAutomationType(data.automation_type);
+  const automationType = userSpecifiedType || detectedType || "summary_note";
 
   // 中国大陆部署：除邮件草稿外默认不需要二次确认
   const requiresApproval = automationType === "email_draft" ? true : Boolean(data.requires_approval);

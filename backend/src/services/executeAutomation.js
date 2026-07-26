@@ -211,6 +211,20 @@ function normalizeAutomationType(value) {
   return AUTOMATION_TYPE_ALIASES[v] || null;
 }
 
+// 判断一段文本是否像账目流水（多条金额 + 消费/收支场景词）
+function looksLikeLedger(text) {
+  const direct = /整理账本|记账|账本|收支|报销|账单|记账本|支出.*收入|统计.*钱|记一笔|开销|花销/;
+  if (direct.test(text)) return true;
+
+  // 至少包含 2 个金额数字
+  const amounts = text.match(/\d+(?:\.\d+)?/g) || [];
+  if (amounts.length < 2) return false;
+
+  // 包含常见的消费/收支/账目场景词
+  const scene = /早饭|午餐|晚餐|吃饭|地铁|公交|打车|出租车|滴滴|咖啡|奶茶|饮料|超市|便利店|水果|外卖|房租|水电|燃气|物业费|宽带|话费|工资|奖金|补贴|报销|收入|支出|花费|消费|买了|红包|转账|还款|贷款|利息|理财|收益|退款|定金|尾款/;
+  return scene.test(text);
+}
+
 // 当用户没有指定有效类型（或 AI 默认 summary_note）时，从自然语言输入里兜底推断类型
 function detectAutomationTypeFromInput(text) {
   if (typeof text !== "string" || !text.trim()) return null;
@@ -232,6 +246,10 @@ function detectAutomationTypeFromInput(text) {
   for (const { type, regex } of patterns) {
     if (regex.test(t) || regex.test(lower)) return type;
   }
+
+  // 兜底：纯金额流水列表也识别为账本
+  if (looksLikeLedger(t)) return "ledger_organize";
+
   return null;
 }
 

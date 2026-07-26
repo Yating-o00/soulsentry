@@ -28,14 +28,16 @@ export function buildApiUrl(path) {
 
 export async function httpRequest(path, { method = "GET", body, headers = {} } = {}) {
   const token = getAccessToken();
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+
   const response = await fetch(buildApiUrl(path), {
     method,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers
     },
-    body: body ? JSON.stringify(body) : undefined
+    body: isFormData ? body : (body ? JSON.stringify(body) : undefined)
   });
 
   const raw = await response.text();

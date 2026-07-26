@@ -305,8 +305,17 @@ export const standaloneClient = {
       async SendSMS() {
         unsupported("integrations.Core", "SendSMS");
       },
-      async UploadFile() {
-        unsupported("integrations.Core", "UploadFile");
+      async UploadFile({ file }) {
+        if (!file) {
+          throw new Error("UploadFile 缺少 file 参数");
+        }
+        const formData = new FormData();
+        formData.append("file", file);
+        const result = await httpRequest("/api/uploads", {
+          method: "POST",
+          body: formData
+        });
+        return result;
       },
       async GenerateImage() {
         unsupported("integrations.Core", "GenerateImage");

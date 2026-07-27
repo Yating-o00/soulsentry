@@ -231,16 +231,28 @@ function detectAutomationTypeFromInput(text) {
   const t = text.trim();
   const lower = t.toLowerCase();
 
-  // 按优先级匹配：更具体的短语先匹配
+  // 金额流水账本优先于所有类型：避免"晚上/昨天/今天"等时间词把账本误判为约定
+  if (looksLikeLedger(t)) return "ledger_organize";
+
+  // 按优先级匹配：内容生产/整理意图优先于时间约定，避免"会议跟进邮件"
+  // "会议要点整理"等被 calendar_event 的"会议"误触发。
   const patterns = [
-    { type: "email_draft", regex: /写邮件|发邮件|邮件草稿|给.*写.*信|致.*的.*信|邮件主题|邮件正文/ },
-    { type: "ppt_doc", regex: /做ppt|做PPT|生成ppt|生成PPT|幻灯片|演示稿|演示文稿|演讲稿|路演|pitch deck/ },
-    { type: "web_research", regex: /做调研|市场调研|行业调研|竞品调研|调研报告|联网搜索|查.*资料|了解一下|研究一下|分析报告/ },
+    // 1. 邮件：必须优先，"给张总发一封会议跟进邮件"不应被 calendar 截胡
+    { type: "email_draft", regex: /写邮件|发邮件|邮件草稿|回复邮件|跟进邮件|邮件主题|邮件正文|给.*(?:发|写).*邮|致.*的.*邮|写.*邮|发.*邮/ },
+    // 2. PPT / 演示
+    { type: "ppt_doc", regex: /做ppt|做PPT|生成ppt|生成PPT|做.*ppt|做.*PPT|生成.*ppt|生成.*PPT|幻灯片|演示稿|演示文稿|演讲稿|路演|pitch deck/ },
+    // 3. 调研
+    { type: "web_research", regex: /做调研|市场调研|行业调研|竞品调研|调研报告|联网搜索|查.*资料|了解一下|研究一下|分析报告|调研一下/ },
+    // 4. 账本：明确关键词兜底
     { type: "ledger_organize", regex: /整理账本|记账|账本|收支|报销|账单|记账本|支出.*收入|统计.*钱/ },
-    { type: "calendar_event", regex: /加约定|添加约定|创建约定|日程|会议.*时间|约.*时间|提醒.*时间|本周.*周五|下周一|约见|开会|会议|约饭|见面|聚餐|约会|活动|周[一二三四五六日]|明天|后天|下午|晚上|几点/ },
+    // 5. 文件整理
     { type: "file_organize", regex: /整理文件|文件归档|归档|整理.*资料|整理.*文件夹|清理文件/ },
-    { type: "office_doc", regex: /写报告|写方案|写文档|写计划书|写说明书|写proposal|写备忘录|word文档|办公文档/ },
-    { type: "summary_note", regex: /总结笔记|总结|笔记|会议纪要|会议记录|心签/ },
+    // 6. 办公文档
+    { type: "office_doc", regex: /写报告|写方案|写文档|写计划书|写说明书|写proposal|写备忘录|word文档|办公文档|写.*报告|写.*方案|写.*文档/ },
+    // 7. 笔记/总结：在 calendar_event 之前，"会议要点整理成心签"优先于心签/总结
+    { type: "summary_note", regex: /整理笔记|总结笔记|会议纪要|会议记录|心签|复盘|整理成.*(?:笔记|心签)|总结成.*(?:笔记|心签)/ },
+    // 8. 日历约定：只保留明确的约定/日程/时间意图，避免宽泛词覆盖其他类型
+    { type: "calendar_event", regex: /加约定|添加约定|创建约定|日程|会议.*时间|约.*时间|提醒.*时间|本周.*周五|下周一|约见|约饭|见面|聚餐|约会|活动|开会|会议|下周[一二三四五六日]|周[一二三四五六日]|明天|后天|今天下午|今晚|早上|上午|下午|晚上|几点/ },
   ];
 
   for (const { type, regex } of patterns) {

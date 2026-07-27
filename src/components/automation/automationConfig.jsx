@@ -31,7 +31,15 @@ export const AUTOMATION_TYPES = {
     icon: FileText,
     color: "bg-purple-50 text-purple-600 border-purple-200",
     iconBg: "bg-purple-100 text-purple-600",
-    description: "生成 PPT/Word/Excel 文档大纲",
+    description: "生成 Word/Excel 文档大纲",
+  },
+  ppt_doc: {
+    label: "PPT 报告",
+    emoji: "📽️",
+    icon: FileText,
+    color: "bg-purple-50 text-purple-600 border-purple-200",
+    iconBg: "bg-purple-100 text-purple-600",
+    description: "生成 PPT 演示文稿大纲",
   },
   calendar_event: {
     label: "日历事件",
@@ -58,11 +66,11 @@ export const AUTOMATION_TYPES = {
     description: "把混乱的记账内容整理成结构化账本",
   },
   none: {
-    label: "PPT报告",
-    emoji: "📊",
+    label: "其他",
+    emoji: "📋",
     icon: FileText,
-    color: "bg-purple-50 text-purple-600 border-purple-200",
-    iconBg: "bg-purple-100 text-purple-600",
+    color: "bg-slate-50 text-slate-600 border-slate-200",
+    iconBg: "bg-slate-100 text-slate-600",
     description: "",
   },
 };
@@ -70,7 +78,7 @@ export const AUTOMATION_TYPES = {
 export const QUICK_AUTOMATION_TEMPLATES = [
   { type: "email_draft", emoji: "📧", label: "写邮件", example: "给张总发一封会议跟进邮件" },
   { type: "web_research", emoji: "🌐", label: "做调研", example: "调研一下国内 AI Agent 平台的现状" },
-  { type: "office_doc", emoji: "📊", label: "做PPT", example: "做一份本周工作汇报 PPT 大纲" },
+  { type: "ppt_doc", emoji: "📊", label: "做PPT", example: "做一份本周工作汇报 PPT 大纲" },
   { type: "summary_note", emoji: "📝", label: "整理笔记", example: "把刚才会议要点整理成心签" },
   { type: "calendar_event", emoji: "📅", label: "加约定", example: "下周三下午两点产品评审会" },
   { type: "file_organize", emoji: "📁", label: "整理文件", example: "把下载文件夹按类型分类" },

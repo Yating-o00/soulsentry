@@ -12,19 +12,22 @@ import { detectAutomationGaps, mergeGapAnswers } from "@/lib/automationGaps";
 import { Input } from "@/components/ui/input";
 import { AlertCircle } from "lucide-react";
 
-// 从标题/描述粗略推断 automation_type，让单条卡片直接走 executeAutomation
-function inferAutomationType(title = "", desc = "") {
-  const t = `${title} ${desc}`.toLowerCase();
-  if (/邮件|email|mail|发信|回邮/.test(t)) return "email_draft";
-  if (/调研|research|查|搜索|网|资讯|分析报告/.test(t)) return "web_research";
-  if (/ppt|演示稿|幻灯片|slide|presentation|做ppt|做 ppt/.test(t)) return "ppt_doc";
-  if (/excel|word|文档|表格|方案/.test(t)) return "office_doc";
+// 从标题/描述/原始输入粗略推断 automation_type，让单条卡片直接走 executeAutomation
+// 原始输入 userText 通常比 AI 生成的标题更准确，优先纳入判断
+function inferAutomationType(title = "", desc = "", userText = "") {
+  const t = `${title} ${desc} ${userText}`.toLowerCase();
+  if (/写邮件|发邮件|邮件草稿|邮件主题|邮件正文|email|mail/.test(t)) return "email_draft";
+  if (/做调研|市场调研|行业调研|竞品调研|调研报告|联网搜索|查.*资料|research|分析报告/.test(t)) return "web_research";
+  if (/做ppt|生成ppt|演示稿|幻灯片|slide|presentation/.test(t)) return "ppt_doc";
+  if (/写报告|写方案|写文档|word文档|excel表格|办公文档|office doc/.test(t)) return "office_doc";
   // 账本优先于文件整理，避免"整理账本"被误判为文件整理
-  if (/账本|记账|收支|报销|账单|花销|开销|生活费|房租|水电|工资/.test(t)) return "ledger_organize";
-  if (/文件|归档|分类|目录/.test(t)) return "file_organize";
-  // 约定优先于心签，"加约定"必须命中
+  if (/整理账本|记账|账本|收支|报销|账单|花销|开销|生活费|房租|水电|工资/.test(t)) return "ledger_organize";
+  if (/整理文件|文件归档|文件整理|分类归档|目录整理/.test(t)) return "file_organize";
+  // 约定优先于心签，"加约定"必须命中；但"整理笔记/写邮件/做调研"等明确内容生产意图不应被"安排"等词覆盖
+  if (/加约定|添加约定|创建约定|日历事件|日程安排|会议.*时间|约.*时间|提醒.*时间/.test(t)) return "calendar_event";
+  if (/整理笔记|会议纪要|会议记录|总结笔记|note|summary|心签|复盘/.test(t)) return "summary_note";
+  // 兜底：如果 AI 标题里写了"安排邮件沟通"这类，原始输入里没有邮件/调研等词，再按泛化词判断
   if (/约定|日历|会议|预约|安排|事件|开会|约饭|约见|见面|聚餐|约会|活动/.test(t)) return "calendar_event";
-  if (/笔记|总结|心签|note|summary|复盘/.test(t)) return "summary_note";
   return "summary_note";
 }
 
@@ -176,7 +179,7 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
           title: t.title || `自动项 ${i + 1}`,
           desc: t.desc || t.description || "根据规划自动派生",
           status: mergedStatus,
-          automation_type: inferAutomationType(t.title, t.desc || t.description),
+          automation_type: inferAutomationType(t.title, t.desc || t.description, userText),
           // 优先用本地已写入的 execution_id / result_preview（执行过的状态不被刷掉）
           execution_id: local?.execution_id || t.execution_id || null,
           result_preview: local?.result_preview || t.result_preview || null,

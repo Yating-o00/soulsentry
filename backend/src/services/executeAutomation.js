@@ -458,16 +458,17 @@ async function generateAutomationPlan(execution) {
 
   const aiType = normalizeAutomationType(data.automation_type);
 
-  // 如果 AI 仍然返回 summary_note，但输入里能检测到更具体的类型，则强制覆盖
+  // 类型优先级：用户明确指定 > 输入关键词兜底 > AI 返回类型
+  // 这样即使 AI 把"早饭12 地铁4..."误判为 calendar_event，关键词兜底仍会纠正为 ledger_organize
   let automationType;
   if (isExplicitSpecificType) {
     automationType = explicitUserType;
+  } else if (detectedTypeFromInput && detectedTypeFromInput !== "summary_note") {
+    automationType = detectedTypeFromInput;
   } else if (aiType && aiType !== "summary_note") {
     automationType = aiType;
-  } else if (detectedTypeFromInput) {
-    automationType = detectedTypeFromInput;
   } else {
-    automationType = aiType || "summary_note";
+    automationType = aiType || detectedTypeFromInput || "summary_note";
   }
 
   // 中国大陆部署：除邮件草稿外默认不需要二次确认

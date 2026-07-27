@@ -19,8 +19,11 @@ function inferAutomationType(title = "", desc = "") {
   if (/调研|research|查|搜索|网|资讯|分析报告/.test(t)) return "web_research";
   if (/ppt|演示稿|幻灯片|slide|presentation|做ppt|做 ppt/.test(t)) return "ppt_doc";
   if (/excel|word|文档|表格|方案/.test(t)) return "office_doc";
-  if (/文件|整理|归档|分类|目录/.test(t)) return "file_organize";
-  if (/日历|会议|预约|安排|事件/.test(t)) return "calendar_event";
+  // 账本优先于文件整理，避免"整理账本"被误判为文件整理
+  if (/账本|记账|收支|报销|账单|花销|开销|生活费|房租|水电|工资/.test(t)) return "ledger_organize";
+  if (/文件|归档|分类|目录/.test(t)) return "file_organize";
+  // 约定优先于心签，"加约定"必须命中
+  if (/约定|日历|会议|预约|安排|事件|开会|约饭|约见|见面|聚餐|约会|活动/.test(t)) return "calendar_event";
   if (/笔记|总结|心签|note|summary|复盘/.test(t)) return "summary_note";
   return "summary_note";
 }

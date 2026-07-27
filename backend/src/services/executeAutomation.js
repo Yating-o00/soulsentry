@@ -237,7 +237,7 @@ function detectAutomationTypeFromInput(text) {
     { type: "ppt_doc", regex: /做ppt|做PPT|生成ppt|生成PPT|幻灯片|演示稿|演示文稿|演讲稿|路演|pitch deck/ },
     { type: "web_research", regex: /做调研|市场调研|行业调研|竞品调研|调研报告|联网搜索|查.*资料|了解一下|研究一下|分析报告/ },
     { type: "ledger_organize", regex: /整理账本|记账|账本|收支|报销|账单|记账本|支出.*收入|统计.*钱/ },
-    { type: "calendar_event", regex: /加约定|添加约定|创建约定|日程|会议.*时间|约.*时间|提醒.*时间|本周.*周五|下周一|约见/ },
+    { type: "calendar_event", regex: /加约定|添加约定|创建约定|日程|会议.*时间|约.*时间|提醒.*时间|本周.*周五|下周一|约见|开会|会议|约饭|见面|聚餐|约会|活动|周[一二三四五六日]|明天|后天|下午|晚上|几点/ },
     { type: "file_organize", regex: /整理文件|文件归档|归档|整理.*资料|整理.*文件夹|清理文件/ },
     { type: "office_doc", regex: /写报告|写方案|写文档|写计划书|写说明书|写proposal|写备忘录|word文档|办公文档/ },
     { type: "summary_note", regex: /总结笔记|总结|笔记|会议纪要|会议记录|心签/ },

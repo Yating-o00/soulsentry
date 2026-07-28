@@ -222,43 +222,6 @@ export default function AutoExecutionPanel() {
     handleAuthorize(item);
   };
 
-  // 4) 点击快捷模板：不走 AI 候选拆解，而是把示例填入输入框，
-  //    直接按模板的 automation_type 创建一条执行，结果对话框中可直接编辑/发送
-  const handleQuickTemplate = async (template) => {
-    setInput(template.example);
-    setCandidates([]);
-    setSceneSummary("");
-    const allowed = await gate("automation_plan");
-    if (!allowed) return;
-    try {
-      const exec = await base44.entities.TaskExecution.create({
-        task_title: template.label,
-        original_input: template.example,
-        category: "task",
-        execution_status: "parsing",
-        automation_type: template.type,
-        ai_parsed_result: {
-          source: "quick_template",
-          summary: template.example,
-          attached_files: attachedFiles,
-        },
-      });
-      setAttachedFiles([]);
-      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-      // 立即打开结果对话框，用户能看到规划与产物
-      setOpenExec(exec);
-
-      await runPlanThenExecute(exec.id);
-
-      // 拉取最新执行结果，刷新对话框内容
-      const updated = await base44.entities.TaskExecution.filter({ id: exec.id });
-      if (updated?.[0]) setOpenExec(updated[0]);
-      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-    } catch (e) {
-      toast.error("执行失败：" + e.message);
-    }
-  };
-
   return (
     <>
       <Card ref={panelRef} className="border-none shadow-sm bg-gradient-to-br from-white to-indigo-50/30 overflow-hidden">
@@ -352,12 +315,18 @@ export default function AutoExecutionPanel() {
             </div>
           )}
 
-          {/* 快捷模板 */}
+          {/* 快捷模板：点击后把示例填入输入框并全选，方便用户编辑后再确认执行 */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
             {QUICK_AUTOMATION_TEMPLATES.map(t => (
               <button
                 key={t.type}
-                onClick={() => handleQuickTemplate(t)}
+                onClick={() => {
+                  setInput(t.example);
+                  setTimeout(() => {
+                    inputElRef.current?.focus();
+                    try { inputElRef.current?.setSelectionRange(0, t.example.length); } catch (_) {}
+                  }, 80);
+                }}
                 disabled={submitting}
                 className="flex-shrink-0 px-2.5 py-1.5 rounded-full bg-white border border-slate-200 text-[11px] text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
                 title={t.example}

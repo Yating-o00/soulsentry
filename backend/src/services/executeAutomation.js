@@ -3,6 +3,9 @@ import path from "node:path";
 import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { renderPptHtml, savePptHtml } from "../lib/renderPpt.js";
 import { env } from "../config/env.js";
+import pdfParse from "pdf-parse";
+import mammoth from "mammoth";
+import * as XLSX from "xlsx";
 
 const AUTOMATION_EXECUTE_COSTS = {
   plan: 5,
@@ -28,11 +31,68 @@ const SUPPORTED_TYPES = [
   "ppt_doc",
 ];
 
-function buildAttachmentContext(execution) {
+const MAX_ATTACHMENT_CHARS = 8000;
+
+async function extractFileText(fileUrl, fileName) {
+  try {
+    const relativePath = fileUrl?.startsWith("/") ? fileUrl.slice(1) : fileUrl;
+    if (!relativePath) return null;
+    const filePath = path.resolve(process.cwd(), relativePath);
+    if (!fs.existsSync(filePath)) return null;
+
+    const ext = path.extname(fileName || filePath).toLowerCase();
+    const stat = fs.statSync(filePath);
+    if (stat.size > 20 * 1024 * 1024) {
+      return `【${fileName}】文件过大，仅作为背景参考`;
+    }
+
+    let text = "";
+    if ([".txt", ".md", ".csv", ".json", ".js", ".jsx", ".ts", ".tsx", ".log"].includes(ext)) {
+      text = fs.readFileSync(filePath, "utf8");
+    } else if ([".html", ".htm"].includes(ext)) {
+      text = fs.readFileSync(filePath, "utf8").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    } else if (ext === ".pdf") {
+      const buffer = fs.readFileSync(filePath);
+      const parsed = await pdfParse(buffer);
+      text = parsed.text || "";
+    } else if (ext === ".docx") {
+      const buffer = fs.readFileSync(filePath);
+      const result = await mammoth.extractRawText({ buffer });
+      text = result.value || "";
+    } else if ([".xlsx", ".xls"].includes(ext)) {
+      const buffer = fs.readFileSync(filePath);
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      text = workbook.SheetNames.map((name) => {
+        const sheet = workbook.Sheets[name];
+        return `【工作表：${name}】\n${XLSX.utils.sheet_to_csv(sheet)}`;
+      }).join("\n\n");
+    } else {
+      return `【${fileName}】不支持的文件类型，仅作为背景参考`;
+    }
+
+    text = text.replace(/\s+/g, " ").trim();
+    if (text.length > MAX_ATTACHMENT_CHARS) {
+      text = text.slice(0, MAX_ATTACHMENT_CHARS) + `\n...（已截断，原文件共 ${stat.size} 字节）`;
+    }
+    if (!text) return `【${fileName}】文件内容为空，仅作为背景参考`;
+    return `【${fileName}】\n${text}`;
+  } catch (err) {
+    console.error("extractFileText error:", err?.message || err);
+    return `【${fileName}】文件内容提取失败，仅作为背景参考`;
+  }
+}
+
+async function buildAttachmentContext(execution) {
   const attached = execution.aiParsedResult?.attached_files;
   if (!Array.isArray(attached) || attached.length === 0) return "";
-  const names = attached.map((f) => f?.file_name || "未知文件").filter(Boolean);
-  return `\n用户还附带了以下参考文件（本次暂不解析内容，仅作为背景）：${names.join("、")}`;
+  const contexts = await Promise.all(
+    attached.map(async (f) => {
+      const name = f?.file_name || "未知文件";
+      const content = await extractFileText(f?.file_url, name);
+      return content || `【${name}】（仅作为背景参考）`;
+    })
+  );
+  return `\n\n用户附带了以下参考文件，请结合文件内容进行整理/分析：\n${contexts.join("\n\n---\n\n")}`;
 }
 
 function escapeHtml(text) {
@@ -458,7 +518,7 @@ async function generateAutomationPlan(execution) {
     prompt: [
       `用户输入：${execution.originalInput || ""}`,
       `建议采用的执行类型：${preferredType}`,
-      buildAttachmentContext(execution),
+      await buildAttachmentContext(execution),
       "请返回 automation_type、plan（title/description/steps/risk_warning/estimated_duration）以及 requires_approval。",
       preferredType && preferredType !== "summary_note"
         ? `注意：本次输入明显属于 ${preferredType} 类型，请务必将 automation_type 设为 ${preferredType}，并给出对应类型的执行方案。`
@@ -529,7 +589,7 @@ async function handleSummaryNote(execution) {
       "3. key_points 至少包含 2 条核心要点；",
       "4. 输出必须是 JSON，不要输出解释。"
     ].join("\n"),
-    prompt: `用户输入：${userInput}${buildAttachmentContext(execution)}`,
+    prompt: `用户输入：${userInput}${await buildAttachmentContext(execution)}`,
     responseJsonSchema: schema,
     temperature: 0.3,
   });
@@ -573,7 +633,7 @@ async function handleEmailDraft(execution) {
       "你是一名中文商务邮件助手。请根据用户输入起草一封专业邮件。",
       "要求：1) subject 必须是非空主题；2) body 必须是非空正文，含称呼、正文、署名；3) 语气根据用户意图选择 formal/friendly/neutral/urgent；4) 输出必须是 JSON。"
     ].join("\n"),
-    prompt: `当前日期：${todayCN}\n\n用户输入：${execution.originalInput || ""}${buildAttachmentContext(execution)}`,
+    prompt: `当前日期：${todayCN}\n\n用户输入：${execution.originalInput || ""}${await buildAttachmentContext(execution)}`,
     responseJsonSchema: schema,
     temperature: 0.4,
   });
@@ -768,7 +828,7 @@ async function handleOfficeDoc(execution) {
       "你是一名中文办公文档助手。请根据用户输入生成一份结构化的办公文档（方案、报告、说明书等）。",
       "要求：1) title 必须非空；2) sections 至少包含 2 个章节，每个章节 heading 和 body 必须非空；3) 输出必须是 JSON。"
     ].join("\n"),
-    prompt: `用户输入：${execution.originalInput || ""}${buildAttachmentContext(execution)}`,
+    prompt: `用户输入：${execution.originalInput || ""}${await buildAttachmentContext(execution)}`,
     responseJsonSchema: schema,
     temperature: 0.3,
   });
@@ -828,7 +888,7 @@ async function handleCalendarEvent(execution, prisma) {
       "5. 提取 location（地点）、participants（参会人）；",
       "6. 输出必须是 JSON，不要解释。"
     ].join("\n"),
-    prompt: `今天日期：${today}\n\n用户输入：${execution.originalInput || ""}${buildAttachmentContext(execution)}`,
+    prompt: `今天日期：${today}\n\n用户输入：${execution.originalInput || ""}${await buildAttachmentContext(execution)}`,
     responseJsonSchema: schema,
     temperature: 0.2,
   });
@@ -936,7 +996,7 @@ async function handleLedgerOrganize(execution) {
       "你是一名中文账目整理助手。请从用户输入中提取每一笔收支记录，并给出分类统计。",
       "要求：1) entries 至少包含 1 条记录；2) 每条记录包含 date、category、item、amount、type（income/expense）；3) 输出必须是 JSON。"
     ].join("\n"),
-    prompt: `用户输入：${execution.originalInput || ""}${buildAttachmentContext(execution)}`,
+    prompt: `用户输入：${execution.originalInput || ""}${await buildAttachmentContext(execution)}`,
     responseJsonSchema: schema,
     temperature: 0.2,
   });
@@ -1000,7 +1060,7 @@ async function handleFileOrganize(execution) {
       "3. 如果用户提到删除、清理，可使用 action=delete；",
       "4. 输出必须是 JSON，不要解释。"
     ].join("\n"),
-    prompt: `用户输入：${execution.originalInput || ""}${buildAttachmentContext(execution)}`,
+    prompt: `用户输入：${execution.originalInput || ""}${await buildAttachmentContext(execution)}`,
     responseJsonSchema: schema,
     temperature: 0.3,
   });
@@ -1051,7 +1111,7 @@ async function handlePptDoc(execution) {
       "你是一名中文演示稿助手。请根据用户输入生成可直接渲染的幻灯片数据。",
       "要求：1) title 必须是非空标题；2) slides 至少包含 3 页，第一页为封面，最后一页为结尾；3) 每页建议包含 heading（或 title）、bullets 要点；4) 输出必须是 JSON。"
     ].join("\n"),
-    prompt: `用户输入：${execution.originalInput || ""}${buildAttachmentContext(execution)}`,
+    prompt: `用户输入：${execution.originalInput || ""}${await buildAttachmentContext(execution)}`,
     responseJsonSchema: schema,
     temperature: 0.3,
   });

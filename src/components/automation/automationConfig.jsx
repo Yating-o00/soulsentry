@@ -81,6 +81,5 @@ export const QUICK_AUTOMATION_TEMPLATES = [
   { type: "ppt_doc", emoji: "📊", label: "做PPT", example: "做一份本周工作汇报 PPT 大纲" },
   { type: "summary_note", emoji: "📝", label: "整理笔记", example: "把刚才会议要点整理成心签" },
   { type: "calendar_event", emoji: "📅", label: "加约定", example: "下周三下午两点产品评审会" },
-  { type: "file_organize", emoji: "📁", label: "整理文件", example: "把下载文件夹按类型分类" },
   { type: "ledger_organize", emoji: "💰", label: "整理账本", example: "今天早饭12 地铁4 中午58 咖啡9.9 晚上超市186 昨天房租2500" },
 ];

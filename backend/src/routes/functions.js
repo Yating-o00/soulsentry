@@ -660,6 +660,25 @@ functionsRouter.post("/:name", async (req, res) => {
       });
     }
 
+    if (name === "kimiMemoryInsight") {
+      const schema = {
+        type: "object",
+        properties: {
+          insight: { type: "string", description: "1-2句话的记忆洞察，自然亲切、具体有针对性" }
+        },
+        required: ["insight"]
+      };
+
+      const data = await invokeKimiText({
+        prompt: payload.prompt,
+        systemPrompt: "你是一个中文记忆洞察助手。请基于用户提供的约定内容和行为数据，生成一条自然、有针对性的简短洞察。必须直接返回 JSON 对象，不要输出 markdown、代码块或任何解释文字。",
+        responseJsonSchema: schema,
+        temperature: 0.5
+      });
+
+      return res.json(data);
+    }
+
     if (name === "getVapidPublicKey") {
       return res.json({
         publicKey: env.VAPID_PUBLIC_KEY || null

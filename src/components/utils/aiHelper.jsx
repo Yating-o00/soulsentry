@@ -10,10 +10,17 @@ import { updateCachedUser } from "@/lib/userCache";
  * @returns {Promise<any>} - AI response (parsed JSON if schema provided, string otherwise)
  */
 export async function invokeAI(params, featureKey) {
+  // 若要求 JSON schema 输出但未提供 system_prompt，自动追加约束，
+  // 避免模型输出 markdown 代码块或解释文字导致前端解析失败。
+  const needsJsonSystemPrompt = params.response_json_schema && !params.system_prompt;
+  const systemPrompt = needsJsonSystemPrompt
+    ? "你必须直接返回 JSON 对象，不要输出 markdown 代码块、解释文字或额外内容。"
+    : params.system_prompt;
+
   const response = await base44.functions.invoke('callAI', {
     prompt: params.prompt,
     response_json_schema: params.response_json_schema,
-    system_prompt: params.system_prompt,
+    system_prompt: systemPrompt,
     feature: featureKey,
   });
 

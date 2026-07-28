@@ -131,10 +131,11 @@ function buildPrompt(task, ctx) {
   return prompt;
 }
 
-export default function TaskMemoryInsight({ task }) {
+export default function TaskMemoryInsight({ task, compact = false }) {
   const [expanded, setExpanded] = useState(false);
   const [insight, setInsight] = useState(null);
   const [loading, setLoading] = useState(false);
+  const autoTriggeredRef = useRef(false);
 
   // Fetch all context data
   const { data: allTasks = [] } = useQuery({
@@ -161,22 +162,57 @@ export default function TaskMemoryInsight({ task }) {
     staleTime: 60000,
   });
 
+  const generateInsight = async () => {
+    if (loading || insight) return;
+    setLoading(true);
+    setExpanded(true);
+
+    try {
+      const ctx = buildTaskContext(task, allTasks, relationships, behaviors, completions);
+      const prompt = buildPrompt(task, ctx);
+
+      const response = await base44.functions.invoke("kimiMemoryInsight", { prompt });
+      setInsight(response.data);
+    } catch (error) {
+      console.error("记忆洞察生成失败:", error);
+    }
+    setLoading(false);
+  };
+
   const handleGenerate = async (e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     if (insight) {
       setExpanded(!expanded);
       return;
     }
-    setLoading(true);
-    setExpanded(true);
-
-    const ctx = buildTaskContext(task, allTasks, relationships, behaviors, completions);
-    const prompt = buildPrompt(task, ctx);
-
-    const response = await base44.functions.invoke("kimiMemoryInsight", { prompt });
-    setInsight(response.data);
-    setLoading(false);
+    await generateInsight();
   };
+
+  // compact 模式下挂载后自动触发一次
+  useEffect(() => {
+    if (compact && !autoTriggeredRef.current) {
+      autoTriggeredRef.current = true;
+      generateInsight();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compact, task?.id]);
+
+  // compact 模式：只展示一行简短洞察，无展开交互
+  if (compact) {
+    return (
+      <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+        {loading ? (
+          <p className="text-[11px] text-stone-400 truncate">分析中...</p>
+        ) : insight?.insight ? (
+          <p className="text-[11px] text-stone-600 truncate leading-relaxed">
+            {insight.insight}
+          </p>
+        ) : (
+          <p className="text-[11px] text-stone-400 truncate">智能助手守护中</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>

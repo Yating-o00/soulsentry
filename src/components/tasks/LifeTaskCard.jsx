@@ -725,7 +725,7 @@ export default function LifeTaskCard({
                         return (
                             <button
                                 type="button"
-                                className="flex items-center gap-3 flex-1 text-left"
+                                className="flex items-center gap-3 flex-1 text-left min-w-0"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setExpanded(true);
@@ -737,9 +737,7 @@ export default function LifeTaskCard({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>
-                                    <p className="text-[11px] text-stone-500 truncate leading-relaxed">
-                                        点击获取基于历史数据的执行建议
-                                    </p>
+                                    <TaskMemoryInsight task={task} compact />
                                 </div>
                             </button>
                         );

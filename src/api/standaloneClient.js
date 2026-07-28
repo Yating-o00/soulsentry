@@ -273,6 +273,51 @@ function createSavedLocationEntity() {
   };
 }
 
+function createNotificationRuleEntity() {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notification-rules?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = String(value);
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`/api/notification-rules?${params.toString()}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest("/api/notification-rules", {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notification-rules/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`/api/notification-rules/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported("entities.NotificationRule", "subscribe");
+    }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -292,6 +337,10 @@ function createEntityProxy() {
 
         if (entityName === "SavedLocation") {
           return createSavedLocationEntity();
+        }
+
+        if (entityName === "NotificationRule") {
+          return createNotificationRuleEntity();
         }
 
         if (entityName === "DailyPlan") {

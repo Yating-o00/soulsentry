@@ -8,17 +8,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-export default function AITaskAssistant({ task, onApplySuggestion }) {
+export default function AITaskAssistant({ task, onApplySuggestion, autoAnalyze = true }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     // Auto-analyze on mount if task is not completed
-    if (task && task.status !== 'completed' && !suggestions) {
+    if (autoAnalyze && task && task.status !== 'completed' && !suggestions) {
       analyzeTasks();
     }
-  }, [task?.id]);
+  }, [task?.id, autoAnalyze]);
 
   const analyzeTasks = async () => {
     if (!task) return;

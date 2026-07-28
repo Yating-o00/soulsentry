@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
+import AITaskAssistant from "@/components/tasks/AITaskAssistant";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 import SnoozePopover from "@/components/tasks/SnoozePopover";
 import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
@@ -47,6 +48,7 @@ export default function LifeTaskCard({
   const [expanded, setExpanded] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   const dragEnabled = !isSelectionMode && !!onReparent;
 
@@ -513,6 +515,21 @@ export default function LifeTaskCard({
                     {/* AI Memory Insight */}
                     <TaskMemoryInsight task={task} />
 
+                    {/* AI Assistant */}
+                    {showAIAssistant && (
+                        <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                            <AITaskAssistant
+                                task={task}
+                                autoAnalyze={false}
+                                onApplySuggestion={(type, data) => {
+                                    if (type === 'priority' && onEdit) {
+                                        onEdit({ ...task, priority: data });
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+
                     {/* Long-horizon Plan Progress (周/月/季/年 约定) - Work tasks only, above status bar */}
                     {task.category === 'work' && (
                         <HorizonProgressBadge task={task} subtasks={subtasks} />
@@ -706,17 +723,25 @@ export default function LifeTaskCard({
 
                         // Default
                         return (
-                            <>
+                            <button
+                                type="button"
+                                className="flex items-center gap-3 flex-1 text-left"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpanded(true);
+                                    setShowAIAssistant(true);
+                                }}
+                            >
                                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-stone-200 to-stone-300 flex items-center justify-center flex-shrink-0">
                                     <Lightbulb className="w-4 h-4 text-stone-600" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>
                                     <p className="text-[11px] text-stone-500 truncate leading-relaxed">
-                                        建议在 {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '稍后'} 处理
+                                        点击获取基于历史数据的执行建议
                                     </p>
                                 </div>
-                            </>
+                            </button>
                         );
                     })()}
 

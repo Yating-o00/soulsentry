@@ -318,6 +318,85 @@ function createNotificationRuleEntity() {
   };
 }
 
+// 通用 REST 实体工厂：映射标准 list/filter/get/create/update/delete 到 /api/{basePath}
+function createStandardEntity(basePath, { includeGet = true, includeBulkCreate = false } = {}) {
+  const entity = {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = typeof value === "boolean" ? String(value) : String(value).trim();
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`${basePath}?${params.toString()}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest(basePath, {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported(`entities.${basePath}`, "subscribe");
+    }
+  };
+
+  if (includeGet) {
+    entity.get = async (id) => {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}/${id}`);
+    };
+  }
+
+  if (includeBulkCreate) {
+    entity.bulkCreate = async (items = []) => {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}/batch`, {
+        method: "POST",
+        body: items
+      });
+    };
+  }
+
+  return entity;
+}
+
+// 后端尚未提供独立路由的实体，返回静默空实现，避免前端因 "未实现" 抛错而卡死
+function createMockEntity(entityName) {
+  return {
+    async list() { return []; },
+    async filter() { return []; },
+    async get() { return null; },
+    async create(data) { return { id: `mock-${Date.now()}`, ...data }; },
+    async update(id, data) { return { id, ...data }; },
+    async delete() { return true; },
+    async bulkCreate(items = []) { return items.map((item, i) => ({ id: `mock-${Date.now()}-${i}`, ...item })); },
+    subscribe() { return () => {}; }
+  };
+}
+
 function createEntityProxy() {
   return new Proxy(
     {},
@@ -353,6 +432,43 @@ function createEntityProxy() {
 
         if (entityName === "MonthlyPlan") {
           return createPlanEntity("/api/monthly-plans");
+        }
+
+        // 已有后端 REST 路由的实体
+        if (entityName === "UserPreference") {
+          return createStandardEntity("/api/user-preferences", { includeGet: true });
+        }
+        if (entityName === "UserBehavior") {
+          return createStandardEntity("/api/user-behaviors");
+        }
+        if (entityName === "Relationship") {
+          return createStandardEntity("/api/relationships");
+        }
+        if (entityName === "KnowledgeBase") {
+          return createStandardEntity("/api/knowledge-bases");
+        }
+        if (entityName === "ExternalFeed") {
+          return createStandardEntity("/api/external-feeds");
+        }
+        if (entityName === "Comment") {
+          return createStandardEntity("/api/comments");
+        }
+        if (entityName === "TaskCompletion") {
+          return createStandardEntity("/api/task-completions");
+        }
+        if (entityName === "TaskChangeLog") {
+          return createStandardEntity("/api/task-change-logs");
+        }
+        if (entityName === "MemoryRecord") {
+          return createStandardEntity("/api/memory-records");
+        }
+        if (entityName === "Notification") {
+          return createStandardEntity("/api/notifications");
+        }
+
+        // 后端暂无独立路由的实体：先给静默空实现，避免前端崩溃
+        if (["Device", "UserDataPoint", "Feedback", "TaskDeferralLog", "TaskTemplate"].includes(entityName)) {
+          return createMockEntity(entityName);
         }
 
         if (entityName === "AICreditTransaction") {

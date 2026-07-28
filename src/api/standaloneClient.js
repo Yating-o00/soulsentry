@@ -27,6 +27,55 @@ async function ensureStandaloneSession() {
   return false;
 }
 
+function createPlanEntity(basePath) {
+  return {
+    async list(sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+    },
+    async filter(filters = {}, sort = "-created_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = String(value);
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return httpRequest(`${basePath}?${params.toString()}`);
+    },
+    async get(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}/${id}`);
+    },
+    async create(data) {
+      await ensureStandaloneSession();
+      return httpRequest(basePath, {
+        method: "POST",
+        body: data
+      });
+    },
+    async update(id, data) {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}/${id}`, {
+        method: "PATCH",
+        body: data
+      });
+    },
+    async delete(id) {
+      await ensureStandaloneSession();
+      return httpRequest(`${basePath}/${id}`, {
+        method: "DELETE"
+      });
+    },
+    subscribe() {
+      unsupported(`entities.${basePath}`, "subscribe");
+    }
+  };
+}
+
 function createTaskEntity() {
   return {
     async list(sort = "-created_date", limit = 100) {
@@ -183,6 +232,10 @@ function createEntityProxy() {
 
         if (entityName === "TaskExecution") {
           return createTaskExecutionEntity();
+        }
+
+        if (entityName === "DailyPlan") {
+          return createPlanEntity("/api/daily-plans");
         }
 
         if (entityName === "WeeklyPlan") {

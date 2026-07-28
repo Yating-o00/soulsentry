@@ -54,6 +54,32 @@ function getTaskLocationReminder(task) {
   return isPlainObject(reminder) ? reminder : null;
 }
 
+const FORGETTING_CURVE = [
+  { days: 1, retention: 44 },
+  { days: 2, retention: 28 },
+  { days: 3, retention: 22 },
+  { days: 7, retention: 15 },
+  { days: 14, retention: 10 },
+  { days: 30, retention: 5 }
+];
+
+function getForgetRate(days) {
+  if (days < 1) return 0;
+  const hit = FORGETTING_CURVE.find((c) => days <= c.days);
+  const retention = hit ? hit.retention : 3;
+  return Math.min(95, 100 - retention);
+}
+
+function daysBetween(from, to = new Date()) {
+  if (!from) return 0;
+  return Math.floor((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24));
+}
+
+const CATEGORY_LABEL = {
+  work: "工作", personal: "个人", health: "健康", study: "学习",
+  family: "家庭", shopping: "购物", finance: "财务", other: "其他"
+};
+
 function startOfLocalDay(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -835,20 +861,420 @@ functionsRouter.post("/:name", async (req, res) => {
     }
 
     if (name === "getSentinelGuard") {
+      const coords = (typeof payload.latitude === "number" && typeof payload.longitude === "number")
+        ? { latitude: payload.latitude, longitude: payload.longitude }
+        : null;
+
+      // ========== 1) 地理感知 ==========
+      const locations = await prisma.savedLocation.findMany({
+        where: { userId: req.user.id, isActive: true }
+      });
+
+      let geoContext = null;
+      const now = new Date();
+      const todayStart = startOfLocalDay(now);
+      const todayEnd = endOfLocalDay(now);
+
+      let hitLocation = null;
+      let hitDistance = null;
+      let hitEvent = "enter";
+
+      if (coords && locations.length > 0) {
+        for (const loc of locations) {
+          const dist = haversineMeters(coords, { latitude: loc.latitude, longitude: loc.longitude });
+          if (dist <= (loc.radius || 200) + 100) {
+            if (!hitLocation || dist < hitDistance) {
+              hitLocation = loc;
+              hitDistance = dist;
+              hitEvent = "enter";
+            }
+          }
+        }
+      }
+
+      // 降级：使用最近进入/离开的地点
+      if (!hitLocation && locations.length > 0) {
+        const recent = locations
+          .filter((l) => l.lastEnteredAt || l.lastExitedAt)
+          .sort((a, b) => {
+            const ta = new Date(a.lastEnteredAt || a.lastExitedAt || 0).getTime();
+            const tb = new Date(b.lastEnteredAt || b.lastExitedAt || 0).getTime();
+            return tb - ta;
+          })[0];
+        if (recent) {
+          const enterT = recent.lastEnteredAt ? new Date(recent.lastEnteredAt).getTime() : 0;
+          const exitT = recent.lastExitedAt ? new Date(recent.lastExitedAt).getTime() : 0;
+          hitLocation = recent;
+          hitEvent = enterT >= exitT ? "enter" : "exit";
+          const lastTime = Math.max(enterT, exitT);
+          if (now.getTime() - lastTime < 2 * 60 * 60 * 1000) {
+            hitDistance = recent.radius || 200;
+          } else {
+            hitLocation = null;
+          }
+        }
+      }
+
+      if (hitLocation) {
+        const allActive = await prisma.task.findMany({
+          where: {
+            userId: req.user.id,
+            deletedAt: null,
+            status: { in: ["TODO", "IN_PROGRESS"] }
+          },
+          orderBy: { priority: "desc" },
+          take: 30
+        });
+
+        const CATEGORY_MAP = {
+          office: ["work"], home: ["personal", "family", "health"],
+          gym: ["health"], school: ["study"], shopping: ["shopping"],
+          hospital: ["health"], restaurant: ["personal"]
+        };
+        const related = CATEGORY_MAP[hitLocation.locationType] || [];
+
+        const parentIdsGeo = [...new Set(allActive.map((t) => t.parentTaskId).filter(Boolean))];
+        const aliveParentsGeo = parentIdsGeo.length > 0
+          ? await prisma.task.findMany({ where: { id: { in: parentIdsGeo } } })
+          : [];
+        const aliveParentIdSetGeo = new Set(
+          aliveParentsGeo
+            .filter((p) => !p.deletedAt && p.status !== "DONE" && p.status !== "ARCHIVED")
+            .map((p) => p.id)
+        );
+        const isParentClosedGeo = (t) => t.parentTaskId && !aliveParentIdSetGeo.has(t.parentTaskId);
+
+        const relevantTasks = allActive
+          .filter((t) => !isParentClosedGeo(t))
+          .map((t) => {
+            let score = 0;
+            if (t.reminderTime) {
+              const rt = new Date(t.reminderTime);
+              if (rt >= todayStart && rt <= todayEnd) score += 40;
+              if (rt < now) score += 25;
+            }
+            if (related.includes(t.category)) score += 20;
+            if (t.priority === "urgent") score += 30;
+            else if (t.priority === "high") score += 20;
+            const lr = getTaskLocationReminder(t);
+            if (lr?.enabled && typeof lr.latitude === "number") {
+              const d = haversineMeters(
+                { latitude: hitLocation.latitude, longitude: hitLocation.longitude },
+                { latitude: lr.latitude, longitude: lr.longitude }
+              );
+              if (d < (hitLocation.radius || 300) + 500) score += 35;
+            }
+            return { task: t, score };
+          })
+          .filter((x) => x.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3)
+          .map((x) => ({
+            id: x.task.id,
+            title: x.task.title,
+            time: x.task.reminderTime,
+            priority: x.task.priority,
+            overdue: x.task.reminderTime ? new Date(x.task.reminderTime) < now : false
+          }));
+
+        if (relevantTasks.length > 0) {
+          geoContext = {
+            location_id: hitLocation.id,
+            location_name: hitLocation.name,
+            location_type: hitLocation.locationType,
+            icon: hitLocation.icon || "📍",
+            event: hitEvent,
+            distance: Math.round(hitDistance || hitLocation.radius || 200),
+            tasks: relevantTasks
+          };
+        }
+      }
+
+      // ========== 2) 遗忘拯救 ==========
+      const allTasks = await prisma.task.findMany({
+        where: {
+          userId: req.user.id,
+          deletedAt: null,
+          status: { in: ["TODO", "IN_PROGRESS"] }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 80
+      });
+
+      const parentIds = [...new Set(allTasks.map((t) => t.parentTaskId).filter(Boolean))];
+      const aliveParents = parentIds.length > 0
+        ? await prisma.task.findMany({ where: { id: { in: parentIds } } })
+        : [];
+      const aliveParentIdSet = new Set(
+        aliveParents
+          .filter((p) => !p.deletedAt && p.status !== "DONE" && p.status !== "ARCHIVED")
+          .map((p) => p.id)
+      );
+      const isParentClosed = (t) => t.parentTaskId && !aliveParentIdSet.has(t.parentTaskId);
+
+      const silentTasks = allTasks
+        .filter((t) => !isParentClosed(t))
+        .map((t) => {
+          const refDate = t.reminderTime || t.createdAt;
+          const days = daysBetween(refDate);
+          return { task: t, days, forgetRate: getForgetRate(days) };
+        })
+        .filter((x) => x.days >= 3 && x.forgetRate >= 60)
+        .sort((a, b) => b.forgetRate - a.forgetRate)
+        .slice(0, 3);
+
+      const notes = await prisma.note.findMany({
+        where: { userId: req.user.id, deletedAt: null },
+        orderBy: { updatedAt: "desc" },
+        take: 30
+      });
+      const silentNotes = notes
+        .map((n) => {
+          const refDate = n.updatedAt || n.createdAt;
+          return { note: n, days: daysBetween(refDate) };
+        })
+        .filter((x) => x.days >= 14)
+        .sort((a, b) => b.days - a.days)
+        .slice(0, 2);
+
+      const forgettingRescue = silentTasks.length > 0 ? {
+        primary: {
+          id: silentTasks[0].task.id,
+          title: silentTasks[0].task.title,
+          days: silentTasks[0].days,
+          forget_rate: silentTasks[0].forgetRate,
+          context: silentTasks[0].task.description
+            || `${silentTasks[0].days}天前创建，至今未处理`,
+          overdue_days: silentTasks[0].task.reminderTime
+            ? Math.max(0, daysBetween(silentTasks[0].task.reminderTime))
+            : 0
+        },
+        others: silentTasks.slice(1).map((x) => ({
+          id: x.task.id, title: x.task.title, days: x.days, forget_rate: x.forgetRate
+        })),
+        silent_notes: silentNotes.map((x) => ({
+          id: x.note.id,
+          title: (x.note.plainText || x.note.content || "").slice(0, 30) || "未命名心签",
+          days: x.days
+        }))
+      } : null;
+
       return res.json({
         success: true,
-        geo_context: null,
-        forgetting_rescue: null,
+        geo_context: geoContext,
+        forgetting_rescue: forgettingRescue,
         generated_at: new Date().toISOString()
       });
     }
 
     if (name === "getAssociationRecommendations") {
+      const coords = (typeof payload.latitude === "number" && typeof payload.longitude === "number")
+        ? { latitude: payload.latitude, longitude: payload.longitude }
+        : null;
+
+      const completedTasks = await prisma.task.findMany({
+        where: {
+          userId: req.user.id,
+          deletedAt: null,
+          status: "DONE"
+        },
+        orderBy: { completedAt: "desc" },
+        take: 180
+      });
+
+      const completed = completedTasks.filter((t) => t.completedAt);
+
+      // ========== 1) 序贯规则挖掘 ==========
+      const asc = [...completed].sort(
+        (a, b) => new Date(a.completedAt) - new Date(b.completedAt)
+      );
+
+      const WINDOW_MS = 24 * 60 * 60 * 1000;
+      const pairCount = new Map();
+      const aCount = new Map();
+
+      for (let i = 0; i < asc.length; i++) {
+        const a = asc[i];
+        if (!a.category) continue;
+        aCount.set(a.category, (aCount.get(a.category) || 0) + 1);
+        const aT = new Date(a.completedAt).getTime();
+
+        const seenBForThisA = new Set();
+        for (let j = i + 1; j < asc.length; j++) {
+          const b = asc[j];
+          const bT = new Date(b.completedAt).getTime();
+          if (bT - aT > WINDOW_MS) break;
+          if (!b.category || b.category === a.category) continue;
+          if (seenBForThisA.has(b.category)) continue;
+          seenBForThisA.add(b.category);
+          const key = `${a.category}|${b.category}`;
+          pairCount.set(key, (pairCount.get(key) || 0) + 1);
+        }
+      }
+
+      const allRules = [];
+      for (const [key, support] of pairCount.entries()) {
+        const [a, b] = key.split("|");
+        const base = aCount.get(a) || 1;
+        const confidence = support / base;
+        if (support >= 2 && confidence >= 0.3) {
+          allRules.push({
+            from: a, to: b, support, confidence,
+            from_label: CATEGORY_LABEL[a] || a,
+            to_label: CATEGORY_LABEL[b] || b
+          });
+        }
+      }
+      allRules.sort((x, y) => (y.confidence - x.confidence) || (y.support - x.support));
+
+      let sequentialRecommendation = null;
+      const lastDone = asc[asc.length - 1];
+      if (lastDone?.category) {
+        const candidateRules = allRules
+          .filter((r) => r.from === lastDone.category)
+          .slice(0, 2);
+
+        if (candidateRules.length > 0) {
+          const pending = await prisma.task.findMany({
+            where: {
+              userId: req.user.id,
+              deletedAt: null,
+              status: { in: ["TODO", "IN_PROGRESS"] }
+            },
+            orderBy: { priority: "desc" },
+            take: 40
+          });
+
+          const suggestions = candidateRules.map((rule) => {
+            const matches = pending
+              .filter((t) => t.category === rule.to)
+              .slice(0, 2)
+              .map((t) => ({ id: t.id, title: t.title, priority: t.priority }));
+            return {
+              from_label: rule.from_label,
+              to_label: rule.to_label,
+              confidence: Math.round(rule.confidence * 100),
+              support: rule.support,
+              tasks: matches
+            };
+          }).filter((s) => s.tasks.length > 0);
+
+          if (suggestions.length > 0) {
+            sequentialRecommendation = {
+              trigger_task: {
+                id: lastDone.id,
+                title: lastDone.title,
+                category_label: CATEGORY_LABEL[lastDone.category] || lastDone.category,
+                completed_at: lastDone.completedAt
+              },
+              suggestions
+            };
+          }
+        }
+      }
+
+      // ========== 2) 地点情境推荐 ==========
+      let locationPattern = null;
+
+      if (coords) {
+        const locations = await prisma.savedLocation.findMany({
+          where: { userId: req.user.id, isActive: true }
+        });
+
+        let nearLocation = null;
+        let nearDist = null;
+        for (const loc of locations) {
+          if (typeof loc.latitude !== "number" || typeof loc.longitude !== "number") continue;
+          const d = haversineMeters(coords, { latitude: loc.latitude, longitude: loc.longitude });
+          const threshold = (loc.radius || 200) + 200;
+          if (d <= threshold && (!nearLocation || d < nearDist)) {
+            nearLocation = loc;
+            nearDist = d;
+          }
+        }
+
+        if (nearLocation) {
+          const histTasks = completed.filter((t) => {
+            const lr = getTaskLocationReminder(t);
+            if (!lr?.enabled) return false;
+            if (typeof lr.latitude !== "number" || typeof lr.longitude !== "number") return false;
+            const d = haversineMeters(
+              { latitude: nearLocation.latitude, longitude: nearLocation.longitude },
+              { latitude: lr.latitude, longitude: lr.longitude }
+            );
+            return d <= (nearLocation.radius || 300) + 300;
+          });
+
+          const CATEGORY_MAP = {
+            office: "work", home: "personal", gym: "health",
+            school: "study", shopping: "shopping",
+            hospital: "health", restaurant: "personal"
+          };
+          const fallbackCat = CATEGORY_MAP[nearLocation.locationType];
+          const sample = histTasks.length > 0
+            ? histTasks
+            : (fallbackCat ? completed.filter((t) => t.category === fallbackCat) : []);
+
+          if (sample.length >= 2) {
+            const catCount = new Map();
+            const titleFreq = new Map();
+            for (const t of sample) {
+              if (t.category) catCount.set(t.category, (catCount.get(t.category) || 0) + 1);
+              if (t.title) titleFreq.set(t.title, (titleFreq.get(t.title) || 0) + 1);
+            }
+            const topCategories = [...catCount.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 2)
+              .map(([cat, cnt]) => ({
+                category: cat,
+                label: CATEGORY_LABEL[cat] || cat,
+                count: cnt
+              }));
+            const topTitles = [...titleFreq.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 3)
+              .map(([title, cnt]) => ({ title, count: cnt }));
+
+            const pending = await prisma.task.findMany({
+              where: {
+                userId: req.user.id,
+                deletedAt: null,
+                status: { in: ["TODO", "IN_PROGRESS"] }
+              },
+              orderBy: { priority: "desc" },
+              take: 30
+            });
+
+            const topCatSet = new Set(topCategories.map((c) => c.category));
+            const suggestedTasks = pending
+              .filter((t) => topCatSet.has(t.category))
+              .slice(0, 3)
+              .map((t) => ({
+                id: t.id,
+                title: t.title,
+                category_label: CATEGORY_LABEL[t.category] || t.category,
+                priority: t.priority
+              }));
+
+            locationPattern = {
+              location_id: nearLocation.id,
+              location_name: nearLocation.name,
+              icon: nearLocation.icon || "📍",
+              distance: Math.round(nearDist),
+              history_sample_size: sample.length,
+              top_categories: topCategories,
+              top_titles: topTitles,
+              suggested_tasks: suggestedTasks
+            };
+          }
+        }
+      }
+
       return res.json({
         success: true,
-        sequential_recommendation: null,
-        location_pattern: null,
-        rules_count: 0,
+        sequential_recommendation: sequentialRecommendation,
+        location_pattern: locationPattern,
+        rules_count: allRules.length,
         generated_at: new Date().toISOString()
       });
     }

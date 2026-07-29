@@ -520,7 +520,7 @@ export default function LifeTaskCard({
                         <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                             <AITaskAssistant
                                 task={task}
-                                autoAnalyze={false}
+                                autoAnalyze={true}
                                 onApplySuggestion={(type, data) => {
                                     if (type === 'priority' && onEdit) {
                                         onEdit({ ...task, priority: data });

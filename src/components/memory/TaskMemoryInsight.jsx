@@ -200,7 +200,7 @@ export default function TaskMemoryInsight({ task, compact = false }) {
   // compact 模式：只展示一行简短洞察，无展开交互
   if (compact) {
     return (
-      <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+      <div className="flex-1 min-w-0 pointer-events-none">
         {loading ? (
           <p className="text-[11px] text-stone-400 truncate">分析中...</p>
         ) : insight?.insight ? (

@@ -186,7 +186,7 @@ export default function LedgerResultView({ data = {}, preview }) {
                 {stats.alerts.map((a, i) => (
                   <div key={i} className="flex items-start gap-2 text-xs">
                     <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-amber-500" />
-                    <div className="text-slate-700 leading-relaxed">{a}</div>
+                    <div className="text-slate-700 leading-relaxed">{safeString(a)}</div>
                   </div>
                 ))}
               </div>

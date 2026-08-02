@@ -456,11 +456,43 @@ function sanitizeResearchTitle(title, originalInput, taskTitle) {
     t = unique.join("，");
   }
 
+  // 去除由空格拆分的连续重复词/短语（如 "A A A"）
+  t = collapseRepeatedTokens(t);
+
   // 截断并清理首尾标点
   t = t.replace(/^[\s，。；！？,:;!?]+|[\s，。；！？,:;!?]+$/g, "").trim();
   if (t.length > 60) t = t.slice(0, 60).replace(/[^\u4e00-\u9fa5a-zA-Z0-9]$/, "").trim();
   if (!t) return fallback;
   return t;
+}
+
+// 按空格切分后去除连续重复的完整词/短语（处理 "A A A" 这类重复）
+function collapseRepeatedTokens(text) {
+  const tokens = String(text || "").split(/\s+/);
+  const out = [];
+  let prev = null;
+  for (const tok of tokens) {
+    if (tok === prev) continue;
+    out.push(tok);
+    prev = tok;
+  }
+  return out.join(" ").trim();
+}
+
+// 对调研报告的章节进行去重：完全重复的 heading/body 只保留一条
+function dedupeResearchSections(sections) {
+  if (!Array.isArray(sections)) return [];
+  const seen = new Set();
+  return sections.filter((s) => {
+    if (!s || typeof s !== "object") return false;
+    const heading = String(s.heading || s.title || "").trim();
+    const body = String(s.body || s.content || "").trim();
+    const key = `${heading.replace(/\s+/g, "")}|${body.replace(/\s+/g, "").slice(0, 200)}`;
+    if (!heading && !body) return false;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function generateAutomationPlan(execution) {
@@ -741,7 +773,9 @@ async function handleWebResearch(execution) {
       "输出必须是 JSON，且顶层字段必须是英文：topic、executive_summary、key_findings、recommendations、sections、references、markdown。",
       "sections 每个元素包含 heading 和 body（body 为 Markdown 格式）。",
       "references 为 URL 字符串数组。",
-      "markdown 为完整报告正文（Markdown 格式），必须包含实质性内容，不要为空。"
+      "markdown 为完整报告正文（Markdown 格式），必须包含实质性内容，不要为空。",
+      "重要：sections 与 markdown 不要重复相同内容；如果已提供 sections，markdown 中不要再重复展开每个章节，只需给出精简概述即可。",
+      "不要连续重复同样的标题或段落；每个章节 heading 必须唯一。"
     ].join("\n"),
     prompt: [
       `研究主题：${execution.originalInput || ""}`,
@@ -761,20 +795,24 @@ async function handleWebResearch(execution) {
     execution.originalInput,
     execution.taskTitle
   );
-  let markdown = String(data.markdown || "").trim();
   const summary = String(data.executive_summary || "").trim();
+  let sections = dedupeResearchSections(data.sections);
 
-  if (!title || (!summary && !markdown)) {
+  if (!title || (!summary && sections.length === 0)) {
     throw new Error("AI 未生成有效调研内容，请重试");
   }
 
-  if (!markdown) {
-    markdown = [`# ${title}`, "", "## 执行摘要", summary].join("\n");
-    if (Array.isArray(data.sections) && data.sections.length > 0) {
-      for (const s of data.sections) {
-        markdown += `\n\n## ${s.heading}\n${s.body || ""}`;
-      }
+  // 优先使用去重后的 sections 重新构建 markdown，保证在线预览与下载文件内容一致且不重复
+  let markdown = String(data.markdown || "").trim();
+  if (sections.length > 0) {
+    markdown = [`# ${title}`, "", "## 执行摘要", summary || sections[0]?.body?.slice(0, 200) || ""].join("\n");
+    for (const s of sections) {
+      const heading = String(s.heading || "").trim();
+      const body = String(s.body || "").trim();
+      if (heading && body) markdown += `\n\n## ${heading}\n${body}`;
     }
+  } else if (!markdown) {
+    markdown = [`# ${title}`, "", "## 执行摘要", summary].join("\n");
   }
 
   const { fileName, fileUrl } = saveMarkdownAsHtml({ title, markdown, execution, type: "web_research" });
@@ -792,7 +830,7 @@ async function handleWebResearch(execution) {
       executive_summary: summary,
       key_findings: Array.isArray(data.key_findings) ? data.key_findings.filter(Boolean) : [],
       recommendations: Array.isArray(data.recommendations) ? data.recommendations.filter(Boolean) : [],
-      sections: Array.isArray(data.sections) ? data.sections.filter((s) => s?.heading && s?.body) : [],
+      sections,
       references,
       file_name: fileName,
       file_url: fileUrl,

@@ -187,9 +187,124 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
 
   const cfg = AUTOMATION_TYPES[execution.automation_type] || AUTOMATION_TYPES.none;
   const Icon = cfg.icon;
-  const plan = execution.automation_plan;
+  const rawPlan = execution.automation_plan;
   const result = execution.automation_result;
   const status = execution.execution_status;
+
+  // 判断执行方案是否包含实质内容（避免空对象/空字符串仍渲染空白卡片）
+  function isPlanMeaningful(p) {
+    if (!p || typeof p !== "object") return false;
+    return !!(String(p.title || "").trim() || String(p.description || "").trim() || (Array.isArray(p.steps) && p.steps.length > 0));
+  }
+
+  // 当后端未返回有效方案时，按类型给出前端兜底方案，避免用户看到"执行方案为空"
+  function getDefaultPlan(automationType, taskTitle, originalInput) {
+    const input = String(originalInput || taskTitle || "").slice(0, 80);
+    const title = String(taskTitle || "").slice(0, 60);
+    const maps = {
+      email_draft: {
+        title: title || "邮件草稿方案",
+        description: `根据用户输入起草一封专业邮件：${input || "未提供具体内容"}`,
+        steps: [
+          { name: "识别收件人与主题", detail: "从输入中提取收件人、抄送及邮件主题" },
+          { name: "生成正文", detail: "撰写含称呼、正文、署名的完整邮件内容" },
+          { name: "确认发送", detail: "用户二次确认后通过 Gmail 发送" }
+        ],
+        risk_warning: "请确认收件人、主题与正文内容，避免误发。",
+        estimated_duration: "约 30 秒"
+      },
+      web_research: {
+        title: title || "联网调研方案",
+        description: `针对主题进行联网搜索并生成结构化调研报告：${input || ""}`,
+        steps: [
+          { name: "联网搜索", detail: "调用 Kimi 联网能力检索最新相关信息" },
+          { name: "提炼结论", detail: "总结执行摘要、关键发现与建议" },
+          { name: "生成报告", detail: "输出带章节与参考链接的 HTML 报告" }
+        ],
+        risk_warning: "报告内容基于公开网络信息，关键数据请再次核实。",
+        estimated_duration: "约 1-2 分钟"
+      },
+      ppt_doc: {
+        title: title || "演示稿方案",
+        description: `根据主题生成可在线预览的幻灯片：${input || ""}`,
+        steps: [
+          { name: "梳理大纲", detail: "将主题拆分为封面、章节与内容页" },
+          { name: "设计版式", detail: "自动选择封面、卡片、图文、结尾等版式" },
+          { name: "渲染演示稿", detail: "生成可全屏播放的 HTML 演示稿" }
+        ],
+        risk_warning: "生成结果仅供参考，正式演示前请检查内容与排版。",
+        estimated_duration: "约 1-2 分钟"
+      },
+      office_doc: {
+        title: title || "办公文档方案",
+        description: `根据需求生成结构化办公文档：${input || ""}`,
+        steps: [
+          { name: "明确文档结构", detail: "确定标题、章节与核心论点" },
+          { name: "撰写内容", detail: "按章节生成 Markdown 格式正文" },
+          { name: "导出 HTML", detail: "生成可在线预览的文档文件" }
+        ],
+        risk_warning: "请核对文档中的事实与数据。",
+        estimated_duration: "约 1-2 分钟"
+      },
+      calendar_event: {
+        title: title || "日程安排方案",
+        description: `从输入中提取事件信息并创建提醒：${input || ""}`,
+        steps: [
+          { name: "解析时间", detail: "识别开始/结束时间与提醒偏移" },
+          { name: "提取地点与参与人", detail: "补全地点、描述与参与人信息" },
+          { name: "创建约定", detail: "在任务系统中创建待提醒事件" }
+        ],
+        risk_warning: "请确认时间解析结果，避免错过重要日程。",
+        estimated_duration: "约 20 秒"
+      },
+      ledger_organize: {
+        title: title || "账本整理方案",
+        description: `从输入中提取收支记录并分类统计：${input || ""}`,
+        steps: [
+          { name: "识别账目", detail: "逐条提取日期、项目、金额与收支类型" },
+          { name: "自动分类", detail: "按餐饮、交通、居住等维度归类" },
+          { name: "汇总分析", detail: "计算总收入、总支出与结余" }
+        ],
+        risk_warning: "AI 分类可能存在偏差，请核对金额与类别。",
+        estimated_duration: "约 30 秒"
+      },
+      file_organize: {
+        title: title || "文件整理方案",
+        description: `根据描述给出文件归档与整理建议：${input || ""}`,
+        steps: [
+          { name: "分析文件", detail: "识别需要整理的文件/文件夹" },
+          { name: "规划归档", detail: "给出目标路径、分类与操作" },
+          { name: "输出方案", detail: "生成可执行的整理清单" }
+        ],
+        risk_warning: "删除/移动操作前请确认，避免误删重要文件。",
+        estimated_duration: "约 30 秒"
+      },
+      summary_note: {
+        title: title || "总结笔记方案",
+        description: `将输入整理为结构化笔记：${input || ""}`,
+        steps: [
+          { name: "提取关键信息", detail: "识别输入中的主题、要点与标签" },
+          { name: "组织内容", detail: "生成 Markdown 笔记与核心要点" },
+          { name: "保存结果", detail: "输出可编辑的笔记内容" }
+        ],
+        risk_warning: "请核对总结是否遗漏重要信息。",
+        estimated_duration: "约 30 秒"
+      }
+    };
+    return maps[automationType] || {
+      title: title || "自动执行方案",
+      description: `根据用户输入完成自动化任务：${input || ""}`,
+      steps: [
+        { name: "分析需求", detail: "理解用户输入并确定执行方向" },
+        { name: "执行处理", detail: "调用 AI 完成内容生成或信息提取" },
+        { name: "返回结果", detail: "以可视化方式展示生成结果" }
+      ],
+      risk_warning: "请确认生成结果后再使用。",
+      estimated_duration: "约 1-3 分钟"
+    };
+  }
+
+  const plan = isPlanMeaningful(rawPlan) ? rawPlan : getDefaultPlan(execution.automation_type, execution.task_title, execution.original_input);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['task-executions'] });
 

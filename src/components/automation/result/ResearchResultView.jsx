@@ -302,12 +302,37 @@ function MarkdownLite({ source }) {
   return <div>{blocks}</div>;
 }
 
+// 章节去重：相同 heading+body 只保留一条
+function dedupeSections(sections) {
+  if (!Array.isArray(sections)) return [];
+  const seen = new Set();
+  return sections.filter((s) => {
+    if (!s || typeof s !== "object") return false;
+    const heading = String(s.heading || s.title || "").trim();
+    const body = String(s.body || s.content || "").trim();
+    const key = heading.replace(/\s+/g, "") + "|" + body.replace(/\s+/g, "").slice(0, 200);
+    if (!heading && !body) return false;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // 调研类结果视图：标题/正文/章节均可编辑 + 下载按钮
 export default function ResearchResultView({ data, preview, onChange, onSave, editable = true }) {
   const fileUrl = data?.file_url;
   const fileName = data?.file_name || "调研报告.md";
   const title = data?.topic || data?.title || data?.subject || "调研报告";
-  const sections = Array.isArray(data?.sections) ? data.sections : null;
+  const rawSections = Array.isArray(data?.sections) ? data.sections : null;
+  const sections = React.useMemo(() => {
+    if (!rawSections) return null;
+    const deduped = dedupeSections(rawSections);
+    // 若第一节标题与报告总标题完全一致，则在线预览中隐藏，避免标题重复出现
+    if (deduped.length > 1 && String(deduped[0]?.heading || deduped[0]?.title || "").trim() === String(title).trim()) {
+      return deduped.slice(1);
+    }
+    return deduped;
+  }, [rawSections, title]);
   const body = data?.executive_summary || data?.content || data?.summary || preview || "";
 
   const titleKey = data?.topic !== undefined ? "topic" : (data?.title !== undefined ? "title" : (data?.subject !== undefined ? "subject" : "title"));

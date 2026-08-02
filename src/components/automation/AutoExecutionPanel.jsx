@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Zap, Sparkles, Loader2, ChevronRight, Send, ChevronDown, ChevronUp, Paperclip, X as XIcon, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -35,6 +36,13 @@ export default function AutoExecutionPanel() {
   const fileInputRef = React.useRef(null);
   const inputElRef = React.useRef(null);
   const panelRef = React.useRef(null);
+
+  // 快捷模板前置页状态
+  const [prePage, setPrePage] = useState({ open: false, template: null });
+  const [prePageInput, setPrePageInput] = useState("");
+  const [prePageFiles, setPrePageFiles] = useState([]);
+  const [prePageUploading, setPrePageUploading] = useState(false);
+  const prePageFileInputRef = React.useRef(null);
 
   // 监听「自动执行清单」点击「确认执行」时派发的事件 → 把卡片内容填入输入框并聚焦
   React.useEffect(() => {
@@ -136,8 +144,9 @@ export default function AutoExecutionPanel() {
   const recentDone = recentExpanded ? allDone : allDone.slice(0, 3);
 
   // 1) 发送：跳过候选清单，直接 plan → execute，结果对话框中查看产物
-  const handleAnalyze = async (text) => {
+  const handleAnalyze = async (text, filesOverride) => {
     const content = (text || input).trim();
+    const files = filesOverride !== undefined ? filesOverride : attachedFiles;
     if (!content) return;
     const trialAllowed = checkTrial("auto_execution", "自动执行");
     if (!trialAllowed) return;
@@ -157,7 +166,7 @@ export default function AutoExecutionPanel() {
         ai_parsed_result: {
           source: "dashboard_direct",
           summary: content,
-          attached_files: attachedFiles,
+          attached_files: files,
         },
       });
       // 提交后清空已附加文件
@@ -225,6 +234,57 @@ export default function AutoExecutionPanel() {
     const item = { ...custom, _id: `cand-${Date.now()}-custom` };
     setCandidates(prev => [...prev, item]);
     handleAuthorize(item);
+  };
+
+  // 快捷模板前置页
+  const openPrePage = (template) => {
+    setPrePage({ open: true, template });
+    setPrePageInput(template.example);
+    setPrePageFiles([]);
+    setPrePageUploading(false);
+  };
+  const closePrePage = () => {
+    setPrePage({ open: false, template: null });
+  };
+  const handlePrePageFilePick = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setPrePageUploading(true);
+    try {
+      const uploaded = [];
+      for (const f of files) {
+        const resp = await base44.integrations.Core.UploadFile({ file: f });
+        const url = resp?.file_url || resp?.data?.file_url;
+        if (url) {
+          uploaded.push({
+            file_name: f.name,
+            file_url: url,
+            file_size: f.size,
+            file_type: f.type || f.name.split('.').pop(),
+          });
+        }
+      }
+      setPrePageFiles(prev => [...prev, ...uploaded]);
+      toast.success(`已上传 ${uploaded.length} 个文件`);
+    } catch (err) {
+      toast.error("文件上传失败：" + err.message);
+    } finally {
+      setPrePageUploading(false);
+      if (prePageFileInputRef.current) prePageFileInputRef.current.value = "";
+    }
+  };
+  const removePrePageFile = (idx) => {
+    setPrePageFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+  const confirmPrePage = async () => {
+    const content = prePageInput.trim();
+    if (!content) return;
+    closePrePage();
+    // 同步到全局输入框并执行
+    setInput(content);
+    setAttachedFiles(prePageFiles);
+    // 使用 setTimeout 让状态同步后再执行；同时把文件直接透传避免异步状态竞态
+    setTimeout(() => handleAnalyze(content, prePageFiles), 0);
   };
 
   return (
@@ -320,19 +380,13 @@ export default function AutoExecutionPanel() {
             </div>
           )}
 
-          {/* 快捷模板：点击后把示例填入输入框并全选，方便用户编辑后再确认执行 */}
+          {/* 快捷模板：点击后打开独立前置页，用户可编辑需求、上传附件后再确认执行 */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
             {QUICK_AUTOMATION_TEMPLATES.map(t => (
               <button
                 key={t.type}
-                onClick={() => {
-                  setInput(t.example);
-                  setTimeout(() => {
-                    inputElRef.current?.focus();
-                    try { inputElRef.current?.setSelectionRange(0, t.example.length); } catch (_) {}
-                  }, 80);
-                }}
-                disabled={submitting}
+                onClick={() => openPrePage(t)}
+                disabled={submitting || prePage.open}
                 className="flex-shrink-0 px-2.5 py-1.5 rounded-full bg-white border border-slate-200 text-[11px] text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
                 title={t.example}
               >
@@ -399,6 +453,88 @@ export default function AutoExecutionPanel() {
         open={!!openExec}
         onOpenChange={(o) => !o && setOpenExec(null)}
       />
+
+      {/* 快捷模板前置页：让用户在独立弹窗中编辑需求、上传附件后确认执行 */}
+      <Dialog open={prePage.open} onOpenChange={(o) => !o && closePrePage()}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <span className="text-xl">{prePage.template?.emoji}</span>
+              {prePage.template?.label}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              在下面补充或修改具体需求，确认后 AI 将直接生成对应内容。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-1">
+            <textarea
+              value={prePageInput}
+              onChange={(e) => {
+                setPrePageInput(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = Math.min(e.target.scrollHeight, 240) + "px";
+              }}
+              placeholder="补充你的具体需求..."
+              rows={3}
+              className="w-full text-sm bg-white border border-slate-200 rounded-md px-3 py-2 resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 leading-relaxed"
+              style={{ minHeight: "80px", maxHeight: "240px" }}
+            />
+
+            <input
+              ref={prePageFileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handlePrePageFilePick}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg"
+            />
+
+            {prePageFiles.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {prePageFiles.map((f, idx) => (
+                  <div
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-[11px] text-indigo-700 max-w-[200px]"
+                    title={f.file_name}
+                  >
+                    <FileText className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate">{f.file_name}</span>
+                    <button
+                      onClick={() => removePrePageFile(idx)}
+                      className="w-4 h-4 rounded-full hover:bg-indigo-200 flex items-center justify-center flex-shrink-0"
+                    >
+                      <XIcon className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => prePageFileInputRef.current?.click()}
+                disabled={prePageUploading}
+                className="flex-1"
+              >
+                {prePageUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                添加参考文件
+              </Button>
+              <Button
+                type="button"
+                onClick={confirmPrePage}
+                disabled={!prePageInput.trim() || submitting}
+                className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                确认执行
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 前置 gate（余额 < 1 点）触发的弹窗 */}
       <InsufficientCreditsDialog

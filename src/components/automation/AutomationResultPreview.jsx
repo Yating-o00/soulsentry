@@ -8,6 +8,7 @@ import MinutesResultView from "./result/MinutesResultView";
 import CalendarResultView from "./result/CalendarResultView";
 import FileResultView from "./result/FileResultView";
 import LedgerResultView from "./result/LedgerResultView";
+import MarkdownLite from "./result/MarkdownLite";
 
 const diffIcons = {
   create: { icon: Plus, color: "text-emerald-600", bg: "bg-emerald-50", hover: "hover:bg-emerald-100" },
@@ -34,24 +35,52 @@ function resolveFileUrl(result, diffItem) {
   return null;
 }
 
+// 判断一段文本是否像文件 URL
+function looksLikeFileUrl(text) {
+  return typeof text === "string" && (/^https?:\/\//.test(text) || text.startsWith("/uploads/"));
+}
+
 // 根据 result.type / 字段特征推断该用哪个视图
+// 优先级：result.type（后端返回的真实产物类型）> automationType（执行记录上的类型）> 字段特征
 function pickView(result, automationType) {
-  const t = (automationType || result?.type || "").toLowerCase();
   const d = result?.data || {};
+  const rt = String(result?.type || "").toLowerCase();
+  const at = String(automationType || "").toLowerCase();
+
   // 整理账本（必须放在 email/research 等之前，因为 d.entries 是它独有的特征）
-  if (t.includes("ledger") || Array.isArray(d.entries)) return "ledger";
-  if (t.includes("email") || d.to || d.subject) return "email";
-  // office_doc：有 sections（章节式 Markdown 文档），无 slides → 走 research 视图（支持 Markdown 图片渲染）
-  if (t.includes("office") && Array.isArray(d.sections) && !Array.isArray(d.slides)) return "research";
-  if (t.includes("research") || t.includes("web")) return "research";
-  if (t.includes("ppt") || t.includes("slide") || Array.isArray(d.slides) || Array.isArray(d.outline)) return "ppt";
-  if (t.includes("calendar") || t.includes("event") || d.start_time || d.reminder_time) return "calendar";
-  if (t.includes("file") || t.includes("organize")) return "file";
-  // 会议纪要专用预览：variant=minutes 或 sections 是 items 结构（带 type 字段）
+  if (rt.includes("ledger") || at.includes("ledger") || Array.isArray(d.entries)) return "ledger";
+
+  // 邮件：result.type 或 automationType 为 email_draft，或数据含邮件字段
+  if (rt.includes("email") || at.includes("email") || d.to || d.subject || d.body) return "email";
+
+  // PPT/演示：有 slides/outline 或类型明确
+  if (rt.includes("ppt") || rt.includes("slide") || at.includes("ppt") || at.includes("slide") || Array.isArray(d.slides) || Array.isArray(d.outline)) return "ppt";
+
+  // 联网调研 / 办公文档 / 长文总结：有 heading/body 章节结构 → 走 research 视图
+  const hasResearchSections = Array.isArray(d.sections) && d.sections.length > 0 && (d.sections[0]?.heading || d.sections[0]?.body || d.sections[0]?.content);
+  if (rt.includes("research") || rt.includes("web") || at.includes("research") || at.includes("web")) {
+    if (hasResearchSections || d.markdown || d.executive_summary) return "research";
+    // 即使没有章节，也优先走 research 兜底而不是 note
+    return "research";
+  }
+  // office_doc：有 sections（章节式 Markdown 文档），无 slides → 走 research 视图
+  if ((rt.includes("office") || at.includes("office")) && hasResearchSections && !Array.isArray(d.slides)) return "research";
+
+  // 日历约定
+  if (rt.includes("calendar") || rt.includes("event") || at.includes("calendar") || at.includes("event") || d.start_time || d.reminder_time) return "calendar";
+
+  // 文件整理
+  if (rt.includes("file") || at.includes("file") || (Array.isArray(d.plan) && d.plan[0]?.source_path)) return "file";
+
+  // 会议纪要：variant=minutes 或 sections 是 items 结构（带 type 字段）
   if (d.variant === "minutes" || (Array.isArray(d.sections) && d.sections[0]?.items && d.file_url)) return "minutes";
-  // 长文总结心签：有 heading/body 章节结构（非 items），心签视图渲染不了 → 走 research 视图（支持章节+Markdown+图片）
-  if (Array.isArray(d.sections) && d.sections.length > 0 && d.sections[0]?.heading) return "research";
-  if (t.includes("note") || t.includes("summary") || Array.isArray(d.tags) || Array.isArray(d.key_points)) return "note";
+
+  // 长文总结心签：有 heading/body 章节结构（非 items），心签视图渲染不了 → 走 research 视图
+  if (hasResearchSections) return "research";
+
+  // 笔记/总结
+  if (rt.includes("note") || rt.includes("summary") || at.includes("note") || at.includes("summary") || Array.isArray(d.tags) || Array.isArray(d.key_points)) return "note";
+
   return null;
 }
 
@@ -70,17 +99,15 @@ export default function AutomationResultPreview({ result, automationType, onData
   if (view === "file")     return <FileResultView     result={result} />;
   if (view === "ledger")   return <LedgerResultView   data={result.data} preview={result.preview} />;
 
-  // ---- 通用兜底视图：保留原 preview + diff 列表 ----
+  // ---- 通用兜底视图：不再把 preview 当原始代码显示，而是按 Markdown 渲染 + 产物卡片 ----
   const previewUrlMatch = result.preview && result.preview.match(/https?:\/\/[^\s)）"】>]+/);
   const previewFileUrl = previewUrlMatch ? previewUrlMatch[0] : null;
 
   return (
     <div className="space-y-3">
       {result.preview && (
-        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-64 overflow-y-auto">
-          <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
-            {result.preview}
-          </pre>
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-96 overflow-y-auto">
+          <MarkdownLite source={result.preview} />
         </div>
       )}
 
@@ -92,7 +119,7 @@ export default function AutomationResultPreview({ result, automationType, onData
               const cfg = diffIcons[d.action] || diffIcons.update;
               const Icon = cfg.icon;
               const fileUrl = resolveFileUrl(result, d) || previewFileUrl;
-              const isFileUrl = fileUrl && (/^https?:\/\//.test(fileUrl) || fileUrl.startsWith("/uploads/"));
+              const isFileUrl = looksLikeFileUrl(fileUrl);
 
               const inner = (
                 <>

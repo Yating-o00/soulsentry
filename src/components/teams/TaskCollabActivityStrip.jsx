@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { MessageSquare, CheckCircle2, BellRing, RotateCcw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { parseServerDate } from "@/lib/serverTime";
 
 const ICONS = {
   comment: {
@@ -99,7 +100,7 @@ export default function TaskCollabActivityStrip({ taskId }) {
                 {describe(a)}
               </p>
               <p className="text-[10px] text-[#9aa5b5] mt-0.5">
-                {formatDistanceToNow(new Date(a.created_date), { addSuffix: true, locale: zhCN })}
+                {formatDistanceToNow(parseServerDate(a.created_date), { addSuffix: true, locale: zhCN })}
               </p>
             </div>
           </div>

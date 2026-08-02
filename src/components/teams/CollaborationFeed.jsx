@@ -2,6 +2,7 @@ import React from "react";
 import { MessageSquare, CheckCircle2, BellRing, UserPlus, RotateCcw, PencilLine } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { parseServerDate } from "@/lib/serverTime";
 
 const ICONS = {
   comment: { icon: MessageSquare, color: "text-[#384877]" },
@@ -42,7 +43,7 @@ export default function CollaborationFeed({ activities = [], emptyText = "还没
               </p>
               {a.created_date && (
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  {formatDistanceToNow(new Date(a.created_date), { addSuffix: true, locale: zhCN })}
+                  {formatDistanceToNow(parseServerDate(a.created_date), { addSuffix: true, locale: zhCN })}
                 </p>
               )}
             </div>

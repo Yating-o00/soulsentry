@@ -19,7 +19,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import AITaskAssistant from "@/components/tasks/AITaskAssistant";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 import SnoozePopover from "@/components/tasks/SnoozePopover";
@@ -512,9 +511,6 @@ export default function LifeTaskCard({
                     {/* Long-term horizon: progress + concise summary */}
                     <LongTermProgressBar task={task} subtasks={subtasks} />
 
-                    {/* AI Memory Insight */}
-                    <TaskMemoryInsight task={task} />
-
                     {/* AI Assistant */}
                     {showAIAssistant && (
                         <div className="mt-3" onClick={(e) => e.stopPropagation()}>
@@ -737,7 +733,9 @@ export default function LifeTaskCard({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>
-                                    <TaskMemoryInsight task={task} compact />
+                                    <p className="text-[11px] text-stone-500 truncate leading-relaxed">
+                                        点击获取基于历史数据的执行建议
+                                    </p>
                                 </div>
                             </button>
                         );

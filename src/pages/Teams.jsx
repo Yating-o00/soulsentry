@@ -7,17 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Users, Clock, CheckCircle2, Filter } from "lucide-react";
+import { Search, Users, Clock, CheckCircle2, Filter, UserPlus, HeartHandshake } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import TaskCard from "../components/tasks/TaskCard";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import InvitePartnerDialog from "../components/teams/InvitePartnerDialog";
 
 export default function Teams() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterView, setFilterView] = useState("all");
   const [selectedTask, setSelectedTask] = useState(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteTask, setInviteTask] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
@@ -64,6 +67,13 @@ export default function Teams() {
   const myCreatedTasks = React.useMemo(() => sharedTasks.filter((task) =>
   task.created_by === currentUser?.email
   ), [sharedTasks, currentUser?.email]);
+
+  // 可共享的约定：我创建的、未完成的顶级约定（含未共享的，邀请后自动变为共享）
+  const myInvitableTasks = React.useMemo(() => allTasks.filter((t) =>
+    t && !t.parent_task_id && !t.deleted_at &&
+    t.created_by === currentUser?.email &&
+    t.status !== "completed" && t.status !== "cancelled"
+  ), [allTasks, currentUser?.email]);
 
   const filteredTasks = React.useMemo(() => sharedTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -138,10 +148,19 @@ export default function Teams() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}>
 
-        <h1 className="bg-slate-50 text-[#2d60ac] text-base font-bold md:text-4xl from-[#5a647d] to-[#1e3a5f]">聚是一团火，散是满天星
-
-        </h1>
-        <p className="text-slate-600">查看和管理团队共享的约定</p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="bg-slate-50 text-[#2d60ac] text-base font-bold md:text-4xl from-[#5a647d] to-[#1e3a5f]">聚是一团火，散是满天星</h1>
+            <p className="text-slate-600">查看和管理团队共享的约定</p>
+          </div>
+          <Button
+            onClick={() => { setInviteTask(null); setInviteOpen(true); }}
+            className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white gap-2 rounded-xl shadow-md hover:shadow-lg transition-shadow"
+          >
+            <HeartHandshake className="w-4 h-4" />
+            一键邀请伙伴
+          </Button>
+        </div>
       </motion.div>
 
       {/* 统计卡片 */}
@@ -275,9 +294,19 @@ export default function Teams() {
               onClick={() => setSelectedTask(task)}
               onSubtaskToggle={handleSubtaskToggle} />
 
-              {/* 显示分配的成员 */}
-              {task.assigned_to && task.assigned_to.length > 0 &&
-            <div className="absolute top-4 right-4 flex -space-x-2">
+              {/* 邀请伙伴 + 显示分配的成员 */}
+              <div className="absolute top-4 right-4 flex items-center gap-2">
+                {task.created_by === currentUser?.email && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setInviteTask(task); setInviteOpen(true); }}
+                    title="邀请伙伴共同完成"
+                    className="h-8 w-8 rounded-full bg-white border border-[#dce4ed] shadow-md flex items-center justify-center text-[#384877] hover:bg-[#384877] hover:text-white transition-colors no-min-size"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                  </button>
+                )}
+                {task.assigned_to && task.assigned_to.length > 0 &&
+            <div className="flex -space-x-2">
                   {task.assigned_to.slice(0, 3).map((userId) => {
                 const user = getUserById(userId);
                 return user ?
@@ -299,6 +328,7 @@ export default function Teams() {
               }
                 </div>
             }
+              </div>
             </div>
           )}
         </AnimatePresence>
@@ -322,6 +352,14 @@ export default function Teams() {
         task={selectedTask}
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)} />
+
+      <InvitePartnerDialog
+        open={inviteOpen}
+        onClose={() => { setInviteOpen(false); setInviteTask(null); }}
+        task={inviteTask}
+        tasks={myInvitableTasks}
+        allUsers={allUsers}
+        currentUser={currentUser} />
 
     </div>);
 

@@ -30,6 +30,8 @@ Deno.serve(async (req) => {
         id: a.id,
         task_id: a.task_id,
         actor_name: a.actor_name,
+        actor_id: a.actor_id || '',
+        guest_key: a.guest_key || '',
         activity_type: a.activity_type,
         content: a.content,
         subtask_title: a.subtask_title,

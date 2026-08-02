@@ -6,14 +6,18 @@ import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { setupIframeMessaging } from './lib/iframe-messaging';
 import { installNetworkErrorGuard } from './lib/networkErrorGuard';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Collaborate from '@/pages/Collaborate';
 import ShareNote from '@/pages/ShareNote';
+import Login from '@/pages/Login';
+import Register from '@/pages/Register';
+import ForgotPassword from '@/pages/ForgotPassword';
+import ResetPassword from '@/pages/ResetPassword';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -27,20 +31,9 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
+  const { isLoadingPublicSettings } = useAuth();
 
-  // 协作分享页：未注册/未登录也可打开并参与
-  if (window.location.pathname.startsWith('/Collaborate') || window.location.pathname.startsWith('/ShareNote')) {
-    return (
-      <Routes>
-        <Route path="/Collaborate" element={<Collaborate />} />
-        <Route path="/ShareNote" element={<ShareNote />} />
-      </Routes>
-    );
-  }
-
-  // Show loading spinner while checking app public settings or auth
-  if (isLoadingPublicSettings || isLoadingAuth) {
+  if (isLoadingPublicSettings) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
@@ -48,36 +41,34 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Handle authentication errors
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
-      navigateToLogin();
-      return null;
-    }
-  }
-
-  // 应用设为「公开」后：除分享页外，其余页面仍要求登录
-  if (!isAuthenticated) {
-    navigateToLogin();
-    return null;
-  }
-
-  // Render the main app
   return (
-    <LayoutWrapper currentPageName={mainPageKey}>
-      <Routes>
-        <Route path="/" element={<MainPage />} />
-        <Route path="/Collaborate" element={<Collaborate />} />
-        <Route path="/ShareNote" element={<ShareNote />} />
+    <Routes>
+      {/* 认证页（公开） */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* 协作分享页：未注册/未登录也可打开并参与 */}
+      <Route path="/Collaborate" element={<Collaborate />} />
+      <Route path="/ShareNote" element={<ShareNote />} />
+
+      {/* 其余全部页面均需登录 */}
+      <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
+        <Route
+          path="/"
+          element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>}
+        />
         {Object.entries(Pages).map(([path, Page]) => (
-          <Route key={path} path={`/${path}`} element={<Page />} />
+          <Route
+            key={path}
+            path={`/${path}`}
+            element={<LayoutWrapper currentPageName={path}><Page /></LayoutWrapper>}
+          />
         ))}
-        <Route path="*" element={<PageNotFound />} />
-      </Routes>
-    </LayoutWrapper>
+        <Route path="*" element={<LayoutWrapper currentPageName={mainPageKey}><PageNotFound /></LayoutWrapper>} />
+      </Route>
+    </Routes>
   );
 };
 

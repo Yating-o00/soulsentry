@@ -2,6 +2,7 @@ import React from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { UserPlus } from "lucide-react";
 import TaskCard from "@/components/tasks/TaskCard";
+import TaskCollabActivityStrip from "./TaskCollabActivityStrip";
 
 const getInitials = (name) => {
   if (!name || typeof name !== "string") return "?";
@@ -26,6 +27,8 @@ export default function TeamTaskRow({
         onClick={onClick}
         onSubtaskToggle={onSubtaskToggle}
         autoAnalyze={autoAnalyze} />
+
+      <TaskCollabActivityStrip taskId={task.id} />
 
       <div className="absolute top-4 right-4 flex items-center gap-2">
         {task.created_by === currentUser?.email && (

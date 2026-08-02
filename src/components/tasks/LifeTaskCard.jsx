@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import GuardianInsightLine from "@/components/tasks/GuardianInsightLine";
+import SubtaskUpdatedBadge, { isSubtaskUpdated } from "@/components/tasks/SubtaskUpdatedBadge";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 import SnoozePopover from "@/components/tasks/SnoozePopover";
 import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
@@ -786,6 +787,7 @@ export default function LifeTaskCard({
                         )}>
                           {subtask.title}
                         </span>
+                        <SubtaskUpdatedBadge subtask={subtask} />
                         <SubtaskContextBadges subtask={subtask} />
                       </div>
                     </div>
@@ -820,6 +822,11 @@ export default function LifeTaskCard({
                     <span className="ml-1 text-stone-400">
                       ({subtasks.filter(s => s.status === 'completed').length}/{subtasks.length})
                     </span>
+                    {!expanded && subtasks.filter(isSubtaskUpdated).length > 0 && (
+                      <span className="ml-1.5 text-amber-600 font-medium">
+                        · {subtasks.filter(isSubtaskUpdated).length} 项有更新
+                      </span>
+                    )}
                   </span>
                   <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
                 </button>

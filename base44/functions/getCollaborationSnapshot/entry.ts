@@ -26,6 +26,10 @@ Deno.serve(async (req) => {
       view_count: (invite.view_count || 0) + 1
     }).catch(() => null);
 
+    const activities = await base44.asServiceRole.entities.CollaborationActivity
+      .filter({ task_id: task.id }, '-created_date', 30)
+      .catch(() => []);
+
     let viewer = null;
     try {
       const me = await base44.auth.me();
@@ -63,6 +67,14 @@ Deno.serve(async (req) => {
         id: s.id,
         title: s.title,
         status: s.status
+      })),
+      activities: (activities || []).map((a) => ({
+        id: a.id,
+        actor_name: a.actor_name,
+        activity_type: a.activity_type,
+        content: a.content,
+        subtask_title: a.subtask_title,
+        created_date: a.created_date
       })),
       viewer
     });

@@ -1,0 +1,75 @@
+{
+  "name": "CollaborationActivity",
+  "type": "object",
+  "description": "\u534f\u4f5c\u52a8\u6001\uff1a\u88ab\u5206\u4eab\u8005\uff08\u542b\u672a\u6ce8\u518c\u8bbf\u5ba2\uff09\u5728\u5206\u4eab\u9875\u7684\u53c2\u4e0e\u8bb0\u5f55 \u2014\u2014 \u7559\u8a00\u3001\u52fe\u9009\u5b50\u7ea6\u5b9a\u3001\u8ba2\u9605\u63d0\u9192\u3001\u52a0\u5165\u534f\u4f5c",
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "\u5173\u8054\u7684\u7ea6\u5b9a ID"
+    },
+    "invite_token": {
+      "type": "string",
+      "description": "\u6765\u6e90\u9080\u8bf7\u94fe\u63a5 token"
+    },
+    "owner_id": {
+      "type": "string",
+      "description": "\u7ea6\u5b9a\u5206\u4eab\u8005\uff08\u521b\u5efa\u4eba\uff09\u7528\u6237 ID\uff0c\u7528\u4e8e\u5206\u4eab\u8005\u67e5\u770b\u52a8\u6001"
+    },
+    "actor_name": {
+      "type": "string",
+      "description": "\u53c2\u4e0e\u8005\u6635\u79f0\uff08\u8bbf\u5ba2\u81ea\u586b\u6216\u6ce8\u518c\u7528\u6237\u59d3\u540d\uff09"
+    },
+    "actor_id": {
+      "type": "string",
+      "description": "\u6ce8\u518c\u7528\u6237 ID\uff08\u8bbf\u5ba2\u4e3a\u7a7a\uff09"
+    },
+    "guest_key": {
+      "type": "string",
+      "description": "\u8bbf\u5ba2\u672c\u5730\u6807\u8bc6\uff0c\u7528\u4e8e\u533a\u5206\u4e0d\u540c\u8bbf\u5ba2"
+    },
+    "activity_type": {
+      "type": "string",
+      "enum": [
+        "comment",
+        "subtask_check",
+        "subtask_uncheck",
+        "reminder_subscribe",
+        "join",
+        "view"
+      ],
+      "description": "\u53c2\u4e0e\u7c7b\u578b"
+    },
+    "content": {
+      "type": "string",
+      "description": "\u7559\u8a00\u5185\u5bb9\u6216\u8bf4\u660e\u6587\u5b57"
+    },
+    "subtask_id": {
+      "type": "string",
+      "description": "\u88ab\u52fe\u9009\u7684\u5b50\u7ea6\u5b9a ID"
+    },
+    "subtask_title": {
+      "type": "string",
+      "description": "\u5b50\u7ea6\u5b9a\u6807\u9898\u5feb\u7167"
+    },
+    "seen_by_owner": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u5206\u4eab\u8005\u662f\u5426\u5df2\u67e5\u770b"
+    }
+  },
+  "required": [
+    "task_id",
+    "activity_type"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

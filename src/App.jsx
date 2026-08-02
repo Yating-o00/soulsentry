@@ -28,6 +28,15 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
 
+  // 协作分享页：未注册/未登录也可打开并参与
+  if (window.location.pathname.startsWith('/Collaborate')) {
+    return (
+      <Routes>
+        <Route path="/Collaborate" element={<Collaborate />} />
+      </Routes>
+    );
+  }
+
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (

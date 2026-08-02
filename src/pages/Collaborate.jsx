@@ -5,6 +5,8 @@ import { HeartHandshake, Loader2, CheckCircle2, AlertCircle } from "lucide-react
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import CollaborationSnapshot from "@/components/teams/CollaborationSnapshot";
+import GuestParticipationPanel from "@/components/teams/GuestParticipationPanel";
+import CollaborationFeed from "@/components/teams/CollaborationFeed";
 
 export default function Collaborate() {
   const token = new URLSearchParams(window.location.search).get("token");
@@ -14,16 +16,18 @@ export default function Collaborate() {
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
 
+  const load = React.useCallback(async () => {
+    const res = await base44.functions.invoke("getCollaborationSnapshot", { token });
+    setData(res.data);
+    setJoined(!!res.data?.viewer?.already_joined);
+  }, [token]);
+
   useEffect(() => {
     if (!token) { setError("链接缺少邀请码"); setLoading(false); return; }
-    base44.functions.invoke("getCollaborationSnapshot", { token })
-      .then((res) => {
-        setData(res.data);
-        setJoined(!!res.data?.viewer?.already_joined);
-      })
+    load()
       .catch((e) => setError(e?.response?.data?.error || "邀请链接无效或已过期"))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, load]);
 
   const bumpCloseness = async (inviterName) => {
     const existing = await base44.entities.Relationship.filter({ name: inviterName }).catch(() => []);
@@ -85,6 +89,19 @@ export default function Collaborate() {
               inviterName={data.invite.inviter_name}
               message={data.invite.message}
             />
+
+            <GuestParticipationPanel
+              token={token}
+              task={data.task}
+              subtasks={data.subtasks}
+              viewer={data.viewer}
+              onChanged={load}
+            />
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <p className="text-sm font-semibold text-slate-800 mb-3">协作动态</p>
+              <CollaborationFeed activities={data.activities || []} emptyText="还没有人参与，你可以第一个响应" />
+            </div>
 
             {joined ? (
               <div className="bg-green-50 border border-green-200 rounded-2xl p-5 text-center space-y-3">

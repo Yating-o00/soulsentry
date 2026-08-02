@@ -14,6 +14,7 @@ import { zhCN } from "date-fns/locale";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import TeamTaskRow from "../components/teams/TeamTaskRow";
 import InvitePartnerDialog from "../components/teams/InvitePartnerDialog";
+import TeamActivityFeedCard from "../components/teams/TeamActivityFeedCard";
 
 export default function Teams() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -220,6 +221,8 @@ export default function Teams() {
 
 
       </div>
+
+      <TeamActivityFeedCard />
 
       {/* 团队成员 */}
       <Card className="border border-[#e5e9ef] shadow-md rounded-[16px]">

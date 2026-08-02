@@ -46,6 +46,8 @@ import { persistExtraDaysFromTimeline } from "@/components/utils/persistMultiDay
 import { inferDatesForBlocks, detectSpanDaysFromInput } from "@/components/utils/inferBlockDate";
 import { detectMultiDayContext, fixDayPrefixForBlocks } from "@/components/utils/aggregateMultiDayPlans";
 import CleanupDirtyPlansButton from "./planner/CleanupDirtyPlansButton";
+import { useTrialGate } from "@/hooks/useTrialGate";
+import RegisterPromptModal from "@/components/auth/RegisterPromptModal";
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -135,6 +137,7 @@ export default function SmartDailyPlanner() {
   const resultsRef = useRef(null);
   const lastSubmittedRef = useRef(""); // 防止重复提交同一内容
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
+  const { checkTrial, showPrompt, promptFeature, closePrompt } = useTrialGate();
   // 撤销快照：保存上一次修改前的 plan_json 与 analysis（用于一键回退）
   const [undoSnapshot, setUndoSnapshot] = useState(null); // { planJson, analysis, label, ts }
   const [isUndoing, setIsUndoing] = useState(false);
@@ -207,6 +210,9 @@ export default function SmartDailyPlanner() {
       toast.info("该内容已提交，请输入新的安排");
       return;
     }
+
+    const trialAllowed = checkTrial("schedule_optimize", "智能日程规划");
+    if (!trialAllowed) return;
 
     const allowed = await gate("schedule_optimize", "智能日程规划");
     if (!allowed) return;
@@ -528,6 +534,8 @@ export default function SmartDailyPlanner() {
   // 整体重新规划：基于现有规划 + 用户修改意见，让 AI 重排当日方案，并替换持久化数据
   const handleReplan = useCallback(async ({ feedback }) => {
     if (!feedback || !feedback.trim()) return;
+    const trialAllowed = checkTrial("schedule_optimize", "智能日程规划");
+    if (!trialAllowed) return;
     const allowed = await gate("schedule_optimize", "智能日程规划");
     if (!allowed) return;
 
@@ -1289,6 +1297,11 @@ export default function SmartDailyPlanner() {
         </motion.div>
       )}
     </AnimatePresence>
+    <RegisterPromptModal
+      open={showPrompt}
+      onOpenChange={closePrompt}
+      featureName={promptFeature}
+    />
     </>
   );
 }

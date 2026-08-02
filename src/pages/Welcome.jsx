@@ -11,6 +11,8 @@ import { createExecutionRecord } from "@/components/utils/trackExecution";
 import { deepSemanticParse } from "@/components/utils/semanticParser";
 import { detectEmailIntent } from "@/components/gmail/detectEmailIntent";
 import EmailSendConfirmDialog from "@/components/gmail/EmailSendConfirmDialog";
+import { useTrialGate } from "@/hooks/useTrialGate";
+import RegisterPromptModal from "@/components/auth/RegisterPromptModal";
 
 export default function Welcome({ onComplete }) {
   const [input, setInput] = useState("");
@@ -147,9 +149,14 @@ export default function Welcome({ onComplete }) {
     }
   };
 
+  const { checkTrial, showPrompt, promptFeature, closePrompt } = useTrialGate();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if ((!input.trim() && !imageFile) || isProcessing) return;
+
+    const allowed = checkTrial("smart_input", "智能输入");
+    if (!allowed) return;
 
     setIsProcessing(true);
     setParsingSteps([]);
@@ -609,6 +616,11 @@ ${textToAnalyze}
         open={showEmailDialog}
         onOpenChange={setShowEmailDialog}
         suggestion={emailSuggestion}
+      />
+      <RegisterPromptModal
+        open={showPrompt}
+        onOpenChange={closePrompt}
+        featureName={promptFeature}
       />
     </div>
   );

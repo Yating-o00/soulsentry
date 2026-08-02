@@ -16,6 +16,8 @@ import AutomationCandidateGrid from "./AutomationCandidateGrid";
 import { useAICreditGate } from "@/components/credits/useAICreditGate";
 import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
 import { AUTOMATION_EXECUTE_COSTS } from "@/components/credits/creditConfig";
+import { useTrialGate } from "@/hooks/useTrialGate";
+import RegisterPromptModal from "@/components/auth/RegisterPromptModal";
 
 // 把后端 402 INSUFFICIENT_CREDITS 错误转成弹充值卡
 function isInsufficientCreditsError(res) {
@@ -51,6 +53,7 @@ export default function AutoExecutionPanel() {
     return () => window.removeEventListener('auto-exec-fill-input', handler);
   }, []);
   const { gate, showInsufficientDialog, insufficientProps, dismissDialog, refreshCredits } = useAICreditGate();
+  const { checkTrial, showPrompt, promptFeature, closePrompt } = useTrialGate();
   const [creditsDialog, setCreditsDialog] = React.useState({ open: false, cost: 0, balance: 0, featureName: '' });
 
   // 统一执行：plan → execute，识别 402 INSUFFICIENT_CREDITS 弹充值卡
@@ -136,6 +139,8 @@ export default function AutoExecutionPanel() {
   const handleAnalyze = async (text) => {
     const content = (text || input).trim();
     if (!content) return;
+    const trialAllowed = checkTrial("auto_execution", "自动执行");
+    if (!trialAllowed) return;
     // 预校验余额（≥1 点）
     const allowed = await gate("automation_plan");
     if (!allowed) return;
@@ -411,6 +416,11 @@ export default function AutoExecutionPanel() {
         cost={creditsDialog.cost}
         balance={creditsDialog.balance}
         featureName={creditsDialog.featureName}
+      />
+      <RegisterPromptModal
+        open={showPrompt}
+        onOpenChange={closePrompt}
+        featureName={promptFeature}
       />
     </>
   );

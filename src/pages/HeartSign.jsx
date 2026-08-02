@@ -7,6 +7,8 @@ import HeartSignInsightPanel from "@/components/heartsign/HeartSignInsightPanel"
 import ExternalFeedDialog from "@/components/heartsign/ExternalFeedDialog";
 import { format, isToday, isYesterday } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { useTrialGate } from "@/hooks/useTrialGate";
+import RegisterPromptModal from "@/components/auth/RegisterPromptModal";
 
 function dayLabel(d) {
   const date = new Date(d);
@@ -45,6 +47,7 @@ export default function HeartSign() {
   const [feedDialogOpen, setFeedDialogOpen] = useState(false);
   const [onlyMine, setOnlyMine] = useState(false);
   const streamRef = useRef(null);
+  const { checkTrial, showPrompt, promptFeature, closePrompt } = useTrialGate();
 
   // 纯外部信息来源（外部订阅源 / 网页链接 / 微信转发）
   const EXTERNAL_SOURCES = ['external_feed', 'web_link', 'wechat_share'];
@@ -90,6 +93,9 @@ export default function HeartSign() {
   }, [notes.length]);
 
   const handleSend = async (payload) => {
+    const allowed = checkTrial("heart_sign", "心签");
+    if (!allowed) return;
+
     // 乐观插入
     const optimistic = { ...payload, id: `tmp-${Date.now()}`, created_date: new Date().toISOString(), ai_status: 'pending' };
     setNotes(prev => sortByTimeAsc([...prev, optimistic]));
@@ -221,6 +227,11 @@ export default function HeartSign() {
 
       {/* 右侧洞察面板 */}
       <HeartSignInsightPanel notes={notes} />
+      <RegisterPromptModal
+        open={showPrompt}
+        onOpenChange={closePrompt}
+        featureName={promptFeature}
+      />
     </div>
   );
 }

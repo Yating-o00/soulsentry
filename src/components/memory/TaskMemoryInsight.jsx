@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import moment from "moment";
 
 // Build rich context from all real user data for a specific task
-function buildTaskContext(task, allTasks, relationships, behaviors, completions) {
+export function buildTaskContext(task, allTasks, relationships, behaviors, completions) {
   const ctx = {};
 
   // Lv1: 记录层 — 时间偏好 & 日程模式
@@ -87,7 +87,7 @@ function buildTaskContext(task, allTasks, relationships, behaviors, completions)
   return ctx;
 }
 
-function buildPrompt(task, ctx) {
+export function buildPrompt(task, ctx) {
   let prompt = `你是用户的私人效率顾问。请先深入理解这个约定的具体内容和意图，再结合用户的行为数据，给出一条自然、有针对性的建议。
 
 ## 约定内容

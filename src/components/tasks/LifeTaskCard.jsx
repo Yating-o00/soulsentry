@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
+import GuardianInsightLine from "@/components/tasks/GuardianInsightLine";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 import SnoozePopover from "@/components/tasks/SnoozePopover";
 import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
@@ -511,9 +511,6 @@ export default function LifeTaskCard({
                     {/* Long-term horizon: progress + concise summary */}
                     <LongTermProgressBar task={task} subtasks={subtasks} />
 
-                    {/* AI Memory Insight */}
-                    <TaskMemoryInsight task={task} />
-
                     {/* Long-horizon Plan Progress (周/月/季/年 约定) - Work tasks only, above status bar */}
                     {task.category === 'work' && (
                         <HorizonProgressBadge task={task} subtasks={subtasks} />
@@ -713,9 +710,10 @@ export default function LifeTaskCard({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>
-                                    <p className="text-[11px] text-stone-500 truncate leading-relaxed">
-                                        建议在 {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '稍后'} 处理
-                                    </p>
+                                    <GuardianInsightLine
+                                        task={task}
+                                        fallbackText={`建议在 ${task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '稍后'} 处理`}
+                                    />
                                 </div>
                             </>
                         );

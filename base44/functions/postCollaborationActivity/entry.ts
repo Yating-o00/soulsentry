@@ -65,6 +65,7 @@ Deno.serve(async (req) => {
       seen_by_owner: false
     });
 
+    let notified = false;
     if (invite.inviter_id) {
       const label = activityType === 'comment'
         ? `留言：${(body.content || '').trim().slice(0, 60)}`
@@ -73,18 +74,23 @@ Deno.serve(async (req) => {
           : activityType === 'subtask_uncheck'
             ? `取消了「${subtaskTitle}」的完成`
             : '订阅了这个约定的时间提醒';
-      await base44.asServiceRole.entities.Notification.create({
-        recipient_id: invite.inviter_id,
-        type: 'comment',
-        title: `💬 ${actorName} 参与了你的共同约定`,
-        content: `「${task.title}」— ${label}`,
-        link: `/Teams?taskId=${task.id}`,
-        related_entity_id: task.id,
-        sender_id: actorId || undefined
-      }).catch(() => null);
+      try {
+        await base44.asServiceRole.entities.Notification.create({
+          recipient_id: invite.inviter_id,
+          type: 'comment',
+          title: `💬 ${actorName} 参与了你的共同约定`,
+          content: `「${task.title}」— ${label}`,
+          link: `/Teams?taskId=${task.id}`,
+          related_entity_id: task.id,
+          sender_id: actorId || ''
+        });
+        notified = true;
+      } catch (_e) {
+        notified = false;
+      }
     }
 
-    return Response.json({ success: true, activity_id: activity.id });
+    return Response.json({ success: true, activity_id: activity.id, notified });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

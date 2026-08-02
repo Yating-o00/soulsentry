@@ -1,0 +1,81 @@
+{
+  "name": "CollaborationInvite",
+  "type": "object",
+  "description": "\u534f\u4f5c\u9080\u8bf7\uff1a\u4e3a\u67d0\u4e2a\u7ea6\u5b9a\u751f\u6210\u53ef\u5206\u4eab\u7684\u534f\u4f5c\u94fe\u63a5\uff08token\uff09\uff0c\u63a5\u6536\u8005\u6253\u5f00\u540e\u53ef\u67e5\u770b\u534f\u4f5c\u5feb\u7167\u5e76\u4e00\u952e\u52a0\u5165",
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "\u5206\u4eab\u94fe\u63a5\u7684\u968f\u673a token"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "\u88ab\u5206\u4eab\u7684\u7ea6\u5b9a ID"
+    },
+    "task_title": {
+      "type": "string",
+      "description": "\u7ea6\u5b9a\u6807\u9898\u5feb\u7167"
+    },
+    "inviter_name": {
+      "type": "string",
+      "description": "\u9080\u8bf7\u4eba\u59d3\u540d\u5feb\u7167"
+    },
+    "inviter_id": {
+      "type": "string",
+      "description": "\u9080\u8bf7\u4eba\u7528\u6237 ID"
+    },
+    "message": {
+      "type": "string",
+      "description": "\u9080\u8bf7\u9644\u8a00"
+    },
+    "permission": {
+      "type": "string",
+      "enum": [
+        "view",
+        "collaborate"
+      ],
+      "default": "collaborate",
+      "description": "\u6743\u9650\uff1a\u4ec5\u67e5\u770b / \u53ef\u534f\u4f5c"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u8fc7\u671f\u65f6\u95f4"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "revoked"
+      ],
+      "default": "active"
+    },
+    "accepted_by_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "\u5df2\u901a\u8fc7\u6b64\u94fe\u63a5\u52a0\u5165\u534f\u4f5c\u7684\u7528\u6237 ID"
+    },
+    "view_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u94fe\u63a5\u88ab\u6253\u5f00\u7684\u6b21\u6570"
+    }
+  },
+  "required": [
+    "token",
+    "task_id"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

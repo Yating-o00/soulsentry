@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { HeartHandshake, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
+import CollaborationLinkBox from "./CollaborationLinkBox";
 
 // 利他式共享：一键邀请伙伴参与约定，共同完成目标
 // 已注册用户 → 直接加入协作并收到站内通知；未注册 → 发送加入邀请邮件
@@ -136,6 +137,8 @@ export default function InvitePartnerDialog({ open, onClose, task, tasks = [], a
               ? <><Loader2 className="w-4 h-4 animate-spin" /> 发送中…</>
               : <><Send className="w-4 h-4" /> 一键邀请</>}
           </Button>
+          <CollaborationLinkBox task={targetTask} message={message} currentUser={currentUser} />
+
           <p className="text-[11px] text-slate-400 leading-relaxed text-center">
             已注册的伙伴会立即收到站内通知；未注册的伙伴将收到加入邀请邮件。
           </p>

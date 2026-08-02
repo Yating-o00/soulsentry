@@ -14,7 +14,7 @@ const getInitials = (name) => {
 // 团队约定行：约定卡片 + 邀请伙伴快捷入口 + 协作成员头像
 export default function TeamTaskRow({
   task, currentUser, getUserById,
-  onComplete, onDelete, onClick, onSubtaskToggle, onInvite,
+  onComplete, onDelete, onClick, onSubtaskToggle, onInvite, autoAnalyze = false,
 }) {
   return (
     <div className="relative">
@@ -24,7 +24,8 @@ export default function TeamTaskRow({
         onDelete={onDelete}
         onEdit={() => {}}
         onClick={onClick}
-        onSubtaskToggle={onSubtaskToggle} />
+        onSubtaskToggle={onSubtaskToggle}
+        autoAnalyze={autoAnalyze} />
 
       <div className="absolute top-4 right-4 flex items-center gap-2">
         {task.created_by === currentUser?.email && (

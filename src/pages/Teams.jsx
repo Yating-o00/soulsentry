@@ -295,10 +295,11 @@ export default function Teams() {
       {/* 约定列表（进行中） */}
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
-          {activeTasks.map((task) =>
+          {activeTasks.map((task, index) =>
             <TeamTaskRow
               key={task.id}
               task={task}
+              autoAnalyze={index === 0}
               currentUser={currentUser}
               getUserById={getUserById}
               onComplete={() => handleComplete(task)}

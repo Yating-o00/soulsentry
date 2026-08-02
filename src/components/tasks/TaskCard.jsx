@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import AITaskAssistant from "./AITaskAssistant";
 
-export default function TaskCard({ task, onComplete, onEdit }) {
+export default function TaskCard({ task, onComplete, onEdit, autoAnalyze = true }) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
@@ -287,7 +287,8 @@ export default function TaskCard({ task, onComplete, onEdit }) {
       {/* AI Assistant Section */}
       <div className="mt-4 pt-3 border-t border-slate-100">
         <AITaskAssistant 
-          task={task} 
+          task={task}
+          autoAnalyze={autoAnalyze} 
           onApplySuggestion={(type, data) => {
             // Handle applying AI suggestions
             if (type === 'priority' && onEdit) {

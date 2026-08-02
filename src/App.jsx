@@ -59,6 +59,12 @@ const AuthenticatedApp = () => {
     }
   }
 
+  // 应用设为「公开」后：除分享页外，其余页面仍要求登录
+  if (!isAuthenticated) {
+    navigateToLogin();
+    return null;
+  }
+
   // Render the main app
   return (
     <LayoutWrapper currentPageName={mainPageKey}>

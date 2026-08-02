@@ -38,8 +38,6 @@ export default function ShareNote() {
     return () => clearInterval(id);
   }, [token, load]);
 
-  const canEdit = data?.invite?.permission !== "view";
-
   return (
     <div className="min-h-full bg-gradient-to-br from-[#f9fafb] to-[#eef2f7] p-4 md:p-10">
       <div className="max-w-lg mx-auto space-y-5">
@@ -73,12 +71,7 @@ export default function ShareNote() {
             </div>
 
             <div onFocusCapture={() => { editing.current = true; }} onBlurCapture={() => { editing.current = false; }}>
-              <GuestNotePanel
-                token={token}
-                note={data.note}
-                canEdit={canEdit}
-                onChanged={load}
-              />
+              <GuestNotePanel token={token} onChanged={load} />
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
@@ -87,7 +80,7 @@ export default function ShareNote() {
             </div>
 
             <p className="text-[11px] text-slate-400 text-center leading-relaxed">
-              你的修改与留言会实时同步给分享者，无需注册。
+              你的留言会实时同步给分享者，无需注册。心签内容仅分享者可修改。
             </p>
           </>
         )}

@@ -1,16 +1,13 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-// 公开端点：未注册访客在心签分享页参与 —— 编辑内容 / 留言
+// 公开端点：未注册访客在心签分享页留言（不可修改原内容）
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json().catch(() => ({}));
     const token = (body.token || '').trim();
     const activityType = (body.activity_type || '').trim();
-    if (!token || ['comment', 'note_edit'].indexOf(activityType) === -1) {
+    if (!token || activityType !== 'comment') {
       return Response.json({ error: '参数不合法' }, { status: 400 });
     }
 
@@ -42,18 +39,7 @@ Deno.serve(async (req) => {
 
     const text = (body.content || '').trim();
 
-    if (activityType === 'note_edit') {
-      if (invite.permission === 'view') {
-        return Response.json({ error: '这条分享是只读的' }, { status: 403 });
-      }
-      if (!text) return Response.json({ error: '内容不能为空' }, { status: 400 });
-      const html = text.split('\n').map((line) => `<p>${escapeHtml(line) || '<br>'}</p>`).join('');
-      await base44.asServiceRole.entities.Note.update(note.id, {
-        content: html,
-        plain_text: text,
-        last_active_at: new Date().toISOString()
-      });
-    }
+    if (!text) return Response.json({ error: '留言内容不能为空' }, { status: 400 });
 
     const activity = await base44.asServiceRole.entities.CollaborationActivity.create({
       resource_type: 'note',
@@ -63,13 +49,13 @@ Deno.serve(async (req) => {
       actor_name: actorName,
       actor_id: actorId,
       guest_key: body.guest_key || '',
-      activity_type: activityType,
-      content: activityType === 'comment' ? text : text.slice(0, 80),
+      activity_type: 'comment',
+      content: text,
       seen_by_owner: false
     });
 
     if (invite.inviter_id) {
-      const label = activityType === 'comment' ? `留言：${text.slice(0, 60)}` : '修改了这条心签的内容';
+      const label = `留言：${text.slice(0, 60)}`;
       await base44.asServiceRole.entities.Notification.create({
         recipient_id: invite.inviter_id,
         type: 'comment',

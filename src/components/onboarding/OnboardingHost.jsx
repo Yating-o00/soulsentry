@@ -17,12 +17,12 @@ export default function OnboardingHost() {
     if (!isAuthenticated || !user) return;
 
     const isDemo = user.email === "demo@soulsentry.local" || user.role === "demo";
-    if (isDemo) return;
 
     const createdAt = user.created_date ? new Date(user.created_date).getTime() : 0;
     const isNewUser = Date.now() - createdAt < NEW_USER_WINDOW_MS;
 
-    if (isNewUser) {
+    // demo 用户（访客试用）和 48 小时内新注册用户都显示引导
+    if (isDemo || isNewUser) {
       setShow(true);
     } else {
       try { window.localStorage.setItem(TOUR_KEY, "1"); } catch {}

@@ -1,11 +1,24 @@
 {
   "name": "CollaborationActivity",
   "type": "object",
-  "description": "\u534f\u4f5c\u52a8\u6001\uff1a\u88ab\u5206\u4eab\u8005\uff08\u542b\u672a\u6ce8\u518c\u8bbf\u5ba2\uff09\u5728\u5206\u4eab\u9875\u7684\u53c2\u4e0e\u8bb0\u5f55 \u2014\u2014 \u7559\u8a00\u3001\u52fe\u9009\u5b50\u7ea6\u5b9a\u3001\u8ba2\u9605\u63d0\u9192\u3001\u52a0\u5165\u534f\u4f5c",
+  "description": "\u534f\u4f5c\u52a8\u6001\uff1a\u88ab\u5206\u4eab\u8005\uff08\u542b\u672a\u6ce8\u518c\u8bbf\u5ba2\uff09\u5728\u5206\u4eab\u9875\u7684\u53c2\u4e0e\u8bb0\u5f55 \u2014\u2014 \u7559\u8a00\u3001\u52fe\u9009\u5b50\u7ea6\u5b9a\u3001\u7f16\u8f91\u5fc3\u7b7e\u3001\u8ba2\u9605\u63d0\u9192\u3001\u52a0\u5165\u534f\u4f5c",
   "properties": {
+    "resource_type": {
+      "type": "string",
+      "enum": [
+        "task",
+        "note"
+      ],
+      "default": "task",
+      "description": "\u53c2\u4e0e\u7684\u5185\u5bb9\u7c7b\u578b"
+    },
     "task_id": {
       "type": "string",
       "description": "\u5173\u8054\u7684\u7ea6\u5b9a ID"
+    },
+    "note_id": {
+      "type": "string",
+      "description": "\u5173\u8054\u7684\u5fc3\u7b7e ID"
     },
     "invite_token": {
       "type": "string",
@@ -13,7 +26,7 @@
     },
     "owner_id": {
       "type": "string",
-      "description": "\u7ea6\u5b9a\u5206\u4eab\u8005\uff08\u521b\u5efa\u4eba\uff09\u7528\u6237 ID\uff0c\u7528\u4e8e\u5206\u4eab\u8005\u67e5\u770b\u52a8\u6001"
+      "description": "\u5185\u5bb9\u5206\u4eab\u8005\uff08\u521b\u5efa\u4eba\uff09\u7528\u6237 ID"
     },
     "actor_name": {
       "type": "string",
@@ -33,6 +46,7 @@
         "comment",
         "subtask_check",
         "subtask_uncheck",
+        "note_edit",
         "reminder_subscribe",
         "join",
         "view"
@@ -58,7 +72,6 @@
     }
   },
   "required": [
-    "task_id",
     "activity_type"
   ],
   "rls": {

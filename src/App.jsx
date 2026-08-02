@@ -13,6 +13,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import Collaborate from '@/pages/Collaborate';
+import ShareNote from '@/pages/ShareNote';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -29,10 +30,11 @@ const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
 
   // 协作分享页：未注册/未登录也可打开并参与
-  if (window.location.pathname.startsWith('/Collaborate')) {
+  if (window.location.pathname.startsWith('/Collaborate') || window.location.pathname.startsWith('/ShareNote')) {
     return (
       <Routes>
         <Route path="/Collaborate" element={<Collaborate />} />
+        <Route path="/ShareNote" element={<ShareNote />} />
       </Routes>
     );
   }
@@ -63,6 +65,7 @@ const AuthenticatedApp = () => {
       <Routes>
         <Route path="/" element={<MainPage />} />
         <Route path="/Collaborate" element={<Collaborate />} />
+        <Route path="/ShareNote" element={<ShareNote />} />
         {Object.entries(Pages).map(([path, Page]) => (
           <Route key={path} path={`/${path}`} element={<Page />} />
         ))}

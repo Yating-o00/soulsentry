@@ -1,5 +1,5 @@
 import React from "react";
-import { MessageSquare, CheckCircle2, BellRing, UserPlus, RotateCcw } from "lucide-react";
+import { MessageSquare, CheckCircle2, BellRing, UserPlus, RotateCcw, PencilLine } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
@@ -7,6 +7,7 @@ const ICONS = {
   comment: { icon: MessageSquare, color: "text-[#384877]" },
   subtask_check: { icon: CheckCircle2, color: "text-green-600" },
   subtask_uncheck: { icon: RotateCcw, color: "text-slate-400" },
+  note_edit: { icon: PencilLine, color: "text-[#3b5aa2]" },
   reminder_subscribe: { icon: BellRing, color: "text-amber-500" },
   join: { icon: UserPlus, color: "text-[#0A7EA4]" },
 };
@@ -15,6 +16,7 @@ const describe = (a) => {
   if (a.activity_type === "comment") return a.content;
   if (a.activity_type === "subtask_check") return `完成了「${a.subtask_title}」`;
   if (a.activity_type === "subtask_uncheck") return `取消完成「${a.subtask_title}」`;
+  if (a.activity_type === "note_edit") return `修改了内容：${(a.content || "").slice(0, 40)}`;
   if (a.activity_type === "reminder_subscribe") return "订阅了这个约定的时间提醒";
   return "加入了协作";
 };

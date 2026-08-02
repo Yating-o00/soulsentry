@@ -29,6 +29,13 @@ export default function Collaborate() {
       .finally(() => setLoading(false));
   }, [token, load]);
 
+  // 轮询：分享者那边的进度与留言会自动出现在被分享者页面上
+  useEffect(() => {
+    if (!token) return;
+    const id = setInterval(() => { load().catch(() => {}); }, 20000);
+    return () => clearInterval(id);
+  }, [token, load]);
+
   const bumpCloseness = async (inviterName) => {
     const existing = await base44.entities.Relationship.filter({ name: inviterName }).catch(() => []);
     if (existing && existing.length > 0) {

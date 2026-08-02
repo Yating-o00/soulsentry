@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Share2, Users, Eye, Edit3, Trash2, Check, Globe, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import NoteCollabLinkBox from "./NoteCollabLinkBox";
 
 export default function NoteShareDialog({ note, open, onOpenChange }) {
   const queryClient = useQueryClient();
@@ -117,6 +118,8 @@ export default function NoteShareDialog({ note, open, onOpenChange }) {
             </div>
             <Switch checked={isPublic} onCheckedChange={setIsPublic} />
           </div>
+
+          {note?.id && <NoteCollabLinkBox note={note} permission="collaborate" />}
 
           {/* Share Permission Select */}
           <div className="flex items-center gap-2">

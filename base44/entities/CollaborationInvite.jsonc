@@ -1,19 +1,32 @@
 {
   "name": "CollaborationInvite",
   "type": "object",
-  "description": "\u534f\u4f5c\u9080\u8bf7\uff1a\u4e3a\u67d0\u4e2a\u7ea6\u5b9a\u751f\u6210\u53ef\u5206\u4eab\u7684\u534f\u4f5c\u94fe\u63a5\uff08token\uff09\uff0c\u63a5\u6536\u8005\u6253\u5f00\u540e\u53ef\u67e5\u770b\u534f\u4f5c\u5feb\u7167\u5e76\u4e00\u952e\u52a0\u5165",
+  "description": "\u534f\u4f5c\u9080\u8bf7\uff1a\u4e3a\u7ea6\u5b9a\u6216\u5fc3\u7b7e\u751f\u6210\u53ef\u5206\u4eab\u7684\u534f\u4f5c\u94fe\u63a5\uff08token\uff09\uff0c\u63a5\u6536\u8005\u6253\u5f00\u540e\u53ef\u67e5\u770b\u5feb\u7167\u5e76\u53c2\u4e0e\uff08\u65e0\u9700\u6ce8\u518c\uff09",
   "properties": {
     "token": {
       "type": "string",
       "description": "\u5206\u4eab\u94fe\u63a5\u7684\u968f\u673a token"
     },
+    "resource_type": {
+      "type": "string",
+      "enum": [
+        "task",
+        "note"
+      ],
+      "default": "task",
+      "description": "\u88ab\u5206\u4eab\u7684\u5185\u5bb9\u7c7b\u578b\uff1a\u7ea6\u5b9a / \u5fc3\u7b7e"
+    },
     "task_id": {
       "type": "string",
       "description": "\u88ab\u5206\u4eab\u7684\u7ea6\u5b9a ID"
     },
+    "note_id": {
+      "type": "string",
+      "description": "\u88ab\u5206\u4eab\u7684\u5fc3\u7b7e ID"
+    },
     "task_title": {
       "type": "string",
-      "description": "\u7ea6\u5b9a\u6807\u9898\u5feb\u7167"
+      "description": "\u6807\u9898\u5feb\u7167"
     },
     "inviter_name": {
       "type": "string",
@@ -64,8 +77,7 @@
     }
   },
   "required": [
-    "token",
-    "task_id"
+    "token"
   ],
   "rls": {
     "read": {

@@ -15,6 +15,14 @@ export default function Collaborate() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(false);
+
+  useEffect(() => {
+    base44.auth.isAuthenticated().then(setIsAuthed).catch(() => setIsAuthed(false));
+  }, []);
+
+  const authUrl = (path) =>
+    `${path}?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`;
 
   const load = React.useCallback(async () => {
     const res = await base44.functions.invoke("getCollaborationSnapshot", { token });
@@ -117,6 +125,29 @@ export default function Collaborate() {
                 <Link to="/Teams">
                   <Button variant="outline" className="gap-2">去团队页查看进度</Button>
                 </Link>
+              </div>
+            ) : !isAuthed ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 text-center space-y-3">
+                <HeartHandshake className="w-8 h-8 text-[#384877] mx-auto" />
+                <p className="text-sm font-semibold text-slate-800">加入共同约定需要先登录</p>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  登录后，这个约定会同步进入你的列表，双方的进度、留言与附件都会实时共享。
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    onClick={() => { window.location.href = authUrl("/register"); }}
+                    className="flex-1 h-11 bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white rounded-xl"
+                  >
+                    注册并加入
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => { window.location.href = authUrl("/login"); }}
+                    className="flex-1 h-11 rounded-xl"
+                  >
+                    已有账号，登录
+                  </Button>
+                </div>
               </div>
             ) : (
               <Button

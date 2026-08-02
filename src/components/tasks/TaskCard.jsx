@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import AITaskAssistant from "./AITaskAssistant";
+import TaskCollabActivityStrip from "@/components/teams/TaskCollabActivityStrip";
 
 export default function TaskCard({ task, onComplete, onEdit, autoAnalyze = true }) {
   const [isCompleted, setIsCompleted] = useState(false);
@@ -283,6 +284,11 @@ export default function TaskCard({ task, onComplete, onEdit, autoAnalyze = true 
           </button>
         </div>
       )}
+
+      {/* 被分享者参与动态回流 */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <TaskCollabActivityStrip taskId={task.id} />
+      </div>
 
       {/* AI Assistant Section */}
       <div className="mt-4 pt-3 border-t border-slate-100">

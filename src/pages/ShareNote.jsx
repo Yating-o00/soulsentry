@@ -19,7 +19,11 @@ export default function ShareNote() {
   }, [token]);
 
   useEffect(() => {
-    if (!token) { setError("链接缺少邀请码"); setLoading(false); return; }
+    if (!token) {
+      setError("这个页面需要通过分享链接打开。请在心签的「分享」弹窗中点击「生成协作链接」，把生成的完整链接发给对方。");
+      setLoading(false);
+      return;
+    }
     load()
       .catch((e) => setError(e?.response?.data?.error || "邀请链接无效或已过期"))
       .finally(() => setLoading(false));

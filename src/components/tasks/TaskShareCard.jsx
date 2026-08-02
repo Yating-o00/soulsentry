@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
+import useCollabInviteUrl from "@/lib/useCollabInviteUrl";
 
 const CATEGORY_COLORS = {
   work: { accent: "#1D4ED8", bg: "#EFF6FF" },
@@ -103,9 +104,11 @@ export default function TaskShareCard({ task, open, onClose }) {
   const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
   const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 100;
 
-  const taskUrl = typeof window !== 'undefined' 
+  // 二维码指向免注册协作页：对方扫码即可勾选、留言、订阅提醒，动态回流给分享者
+  const collabUrl = useCollabInviteUrl({ resourceType: "task", resource: task, enabled: open });
+  const taskUrl = collabUrl || (typeof window !== 'undefined'
     ? `${window.location.origin}${createPageUrl("Tasks")}?taskId=${task.id}`
-    : "";
+    : "");
 
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(taskUrl)}&bgcolor=ffffff`;
 
@@ -716,7 +719,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     {/* 二维码区域 */}
                     <div className="flex items-center gap-2">
                        <div className="text-right hidden sm:block">
-                         <p className="text-[10px] text-slate-400">{isEnglish ? "Scan to view" : "扫码查看"}</p>
+                         <p className="text-[10px] text-slate-400">{isEnglish ? "Scan to join" : "扫码参与"}</p>
                          <p className="text-[10px] text-slate-400 font-mono">ID: {task.id.slice(0,4)}</p>
                        </div>
                        <div className="w-12 h-12 bg-white rounded-md p-0.5 shadow-sm border border-slate-100">

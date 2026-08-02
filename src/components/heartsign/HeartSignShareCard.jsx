@@ -10,6 +10,7 @@ import { Download, Copy, Share2, Heart, Quote } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import html2canvas from "html2canvas";
+import useCollabInviteUrl from "@/lib/useCollabInviteUrl";
 
 const ENCOURAGEMENTS = [
 "你已经做得很好了，请对自己温柔一点。",
@@ -61,10 +62,8 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     () => ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
   );
 
-  // 二维码固定指向正式域名，避免微信将预览沙箱链接判定为风险站点而拦截
-  const noteUrl = note?.id ?
-  `https://xinzhan-soulsentry.com${createPageUrl("HeartSign")}?noteId=${note.id}` :
-  "";
+  // 二维码指向免注册协作页：对方扫码即可直接修改内容、留言，动态回流给分享者
+  const noteUrl = useCollabInviteUrl({ resourceType: "note", resource: note, enabled: open });
   const qrCodeUrl = noteUrl ?
   `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(noteUrl)}&bgcolor=ffffff` :
   "";
@@ -194,7 +193,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
                     </div>
                     {qrCodeUrl &&
                     <div className="flex items-center gap-2">
-                        <span className="text-[9.5px] text-slate-400 text-right leading-tight">扫码<br />查看</span>
+                        <span className="text-[9.5px] text-slate-400 text-right leading-tight">扫码<br />参与</span>
                         <div className="w-9 h-9 bg-white rounded-md p-0.5 border border-slate-100">
                           <img src={qrCodeUrl} alt="QR" crossOrigin="anonymous" className="w-full h-full object-contain" />
                         </div>

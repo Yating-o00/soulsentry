@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Users, Clock, CheckCircle2, Filter, UserPlus, HeartHandshake } from "lucide-react";
+import { Search, Users, Clock, CheckCircle2, Filter, UserPlus, HeartHandshake, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import TaskCard from "../components/tasks/TaskCard";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import TeamTaskRow from "../components/teams/TeamTaskRow";
 import InvitePartnerDialog from "../components/teams/InvitePartnerDialog";
 
 export default function Teams() {
@@ -21,6 +21,7 @@ export default function Teams() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteTask, setInviteTask] = useState(null);
+  const [showCompleted, setShowCompleted] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: currentUser } = useQuery({
@@ -86,6 +87,16 @@ export default function Teams() {
     }
     return matchesSearch;
   }), [sharedTasks, searchQuery, filterView, currentUser?.id, currentUser?.email]);
+
+  // 勾选完成的约定自动归入"已完成"列表
+  const activeTasks = React.useMemo(
+    () => filteredTasks.filter((t) => t.status !== "completed"),
+    [filteredTasks]
+  );
+  const completedTasks = React.useMemo(
+    () => filteredTasks.filter((t) => t.status === "completed"),
+    [filteredTasks]
+  );
 
   const handleComplete = async (task) => {
     const newStatus = task.status === "completed" ? "pending" : "completed";
@@ -281,57 +292,51 @@ export default function Teams() {
         </Tabs>
       </motion.div>
 
-      {/* 约定列表 */}
+      {/* 约定列表（进行中） */}
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
-          {filteredTasks.map((task) =>
-          <div key={task.id} className="relative">
-              <TaskCard
+          {activeTasks.map((task) =>
+            <TeamTaskRow
+              key={task.id}
               task={task}
+              currentUser={currentUser}
+              getUserById={getUserById}
               onComplete={() => handleComplete(task)}
               onDelete={() => deleteTaskMutation.mutate(task.id)}
-              onEdit={() => {}}
               onClick={() => setSelectedTask(task)}
-              onSubtaskToggle={handleSubtaskToggle} />
-
-              {/* 邀请伙伴 + 显示分配的成员 */}
-              <div className="absolute top-4 right-4 flex items-center gap-2">
-                {task.created_by === currentUser?.email && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setInviteTask(task); setInviteOpen(true); }}
-                    title="邀请伙伴共同完成"
-                    className="h-8 w-8 rounded-full bg-white border border-[#dce4ed] shadow-md flex items-center justify-center text-[#384877] hover:bg-[#384877] hover:text-white transition-colors no-min-size"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                  </button>
-                )}
-                {task.assigned_to && task.assigned_to.length > 0 &&
-            <div className="flex -space-x-2">
-                  {task.assigned_to.slice(0, 3).map((userId) => {
-                const user = getUserById(userId);
-                return user ?
-                <Avatar
-                  key={userId}
-                  className="h-8 w-8 border-2 border-white bg-gradient-to-br from-[#1BA1CD] to-[#0D8AB5] text-white text-xs shadow-md"
-                  title={user.full_name}>
-
-                        <AvatarFallback className="bg-transparent">
-                          {getInitials(user.full_name)}
-                        </AvatarFallback>
-                      </Avatar> :
-                null;
-              })}
-                  {task.assigned_to.length > 3 &&
-              <div className="h-8 w-8 rounded-full bg-[#e5e9ef] border-2 border-white flex items-center justify-center text-xs font-medium text-[#5a647d] shadow-md">
-                      +{task.assigned_to.length - 3}
-                    </div>
-              }
-                </div>
-            }
-              </div>
-            </div>
+              onSubtaskToggle={handleSubtaskToggle}
+              onInvite={(t) => { setInviteTask(t); setInviteOpen(true); }} />
           )}
         </AnimatePresence>
+
+        {/* 已完成列表 */}
+        {completedTasks.length > 0 &&
+        <div className="pt-4">
+            <button
+              onClick={() => setShowCompleted((v) => !v)}
+              className="w-full flex items-center gap-2 px-4 py-3 bg-white border border-[#e5e9ef] rounded-[12px] shadow-sm hover:bg-[#f9fafb] transition-colors">
+              <CheckCircle2 className="w-4 h-4 text-[#43A047]" />
+              <span className="text-sm font-semibold text-[#222222]">已完成 ({completedTasks.length})</span>
+              <ChevronDown className={`w-4 h-4 text-slate-400 ml-auto transition-transform ${showCompleted ? 'rotate-180' : ''}`} />
+            </button>
+            {showCompleted &&
+            <div className="space-y-3 mt-3 opacity-75">
+                {completedTasks.map((task) =>
+                <TeamTaskRow
+                  key={task.id}
+                  task={task}
+                  currentUser={currentUser}
+                  getUserById={getUserById}
+                  onComplete={() => handleComplete(task)}
+                  onDelete={() => deleteTaskMutation.mutate(task.id)}
+                  onClick={() => setSelectedTask(task)}
+                  onSubtaskToggle={handleSubtaskToggle}
+                  onInvite={(t) => { setInviteTask(t); setInviteOpen(true); }} />
+                )}
+              </div>
+            }
+          </div>
+        }
 
         {filteredTasks.length === 0 &&
         <motion.div

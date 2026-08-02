@@ -53,7 +53,7 @@ export default function DeferredCatchupHost() {
       <DeferredCatchupCard
         tasks={sorted.slice(0, 5)}
         total={sorted.length}
-        onSnoozeAll={() => { snoozeAll(); toast.dismiss(tst); }}
+        onSnoozeAll={() => { snoozeAll().catch((e) => console.warn("[DeferredCatchup] snoozeAll failed:", e?.message)); toast.dismiss(tst); }}
         onDismiss={() => toast.dismiss(tst)}
       />
     ), {

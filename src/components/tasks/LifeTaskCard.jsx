@@ -11,6 +11,7 @@ import {
   Share2, Edit, Trash2, Calendar, ChevronDown, MessageSquare,
   Link2, StickyNote, Paperclip, Bell, CornerDownRight
 } from "lucide-react";
+import TaskCollabActivityStrip from "@/components/teams/TaskCollabActivityStrip";
 import AttachToParentDialog from "@/components/tasks/AttachToParentDialog";
 import {
   DropdownMenu,
@@ -826,6 +827,11 @@ export default function LifeTaskCard({
                 </button>
               </div>
             )}
+        </div>
+
+        {/* 被分享者参与动态回流 */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <TaskCollabActivityStrip taskId={task.id} />
         </div>
 
         <div onClick={(e) => e.stopPropagation()}>

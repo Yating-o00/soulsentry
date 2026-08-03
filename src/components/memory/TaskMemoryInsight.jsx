@@ -87,6 +87,39 @@ function buildTaskContext(task, allTasks, relationships, behaviors, completions)
   return ctx;
 }
 
+// 当 Kimi 不可用/失败时，基于本地数据生成一条简短洞察兜底
+function generateFallbackInsight(task, ctx) {
+  const title = String(task?.title || "").trim();
+  const category = task?.category || "其他";
+  const related = ctx?.relatedPeople?.[0];
+
+  if (related && related.daysSinceContact !== null && related.daysSinceContact > 0) {
+    return `已 ${related.daysSinceContact} 天没和 ${related.name} 联系，处理「${title}」时顺道问候一下。`;
+  }
+  if (ctx?.overdueCount > 3) {
+    return `当前有 ${ctx.overdueCount} 项约定逾期，建议先清掉一件小事再处理「${title}」。`;
+  }
+  if (ctx?.streak > 3) {
+    return `已连续执行 ${ctx.streak} 天，把「${title}」安排在惯性时段更容易保持。`;
+  }
+  if (ctx?.categoryCompletionRate !== undefined && ctx.categoryTotal > 0) {
+    if (ctx.categoryCompletionRate >= 80) {
+      return `这类${category}约定完成率高达 ${ctx.categoryCompletionRate}%，「${title}」应该也能顺利拿下。`;
+    }
+    if (ctx.categoryCompletionRate <= 40) {
+      return `这类${category}约定完成率只有 ${ctx.categoryCompletionRate}%，建议把「${title}」拆成更小的步骤。`;
+    }
+  }
+  if (ctx?.peakHour && ctx?.peakDay) {
+    return `你常在 ${ctx.peakDay}${ctx.peakHour} 完成类似事项，不妨把「${title}」也安排到那个时段。`;
+  }
+  if (task?.reminder_time) {
+    const t = moment(task.reminder_time).format("M月D日 HH:mm");
+    return `「${title}」已安排在 ${t}，提前 5 分钟准备即可。`;
+  }
+  return `「${title}」是${category}类约定，建议先明确第一步行动。`;
+}
+
 function buildPrompt(task, ctx) {
   let prompt = `你是用户的私人效率顾问。请先深入理解这个约定的具体内容和意图，再结合用户的行为数据，给出一条自然、有针对性的建议。
 
@@ -131,11 +164,12 @@ function buildPrompt(task, ctx) {
   return prompt;
 }
 
-export default function TaskMemoryInsight({ task, compact = false }) {
+export default function TaskMemoryInsight({ task, compact = false, onClick }) {
   const [expanded, setExpanded] = useState(false);
   const [insight, setInsight] = useState(null);
   const [loading, setLoading] = useState(false);
   const autoTriggeredRef = useRef(false);
+  const [hasError, setHasError] = useState(false);
 
   // Fetch all context data
   const { data: allTasks = [] } = useQuery({
@@ -166,15 +200,30 @@ export default function TaskMemoryInsight({ task, compact = false }) {
     if (loading || insight) return;
     setLoading(true);
     setExpanded(true);
+    setHasError(false);
 
     try {
       const ctx = buildTaskContext(task, allTasks, relationships, behaviors, completions);
       const prompt = buildPrompt(task, ctx);
 
       const response = await base44.functions.invoke("kimiMemoryInsight", { prompt });
-      setInsight(response.data);
+      const data = response?.data;
+      if (data?.insight) {
+        setInsight(data);
+      } else {
+        // AI 返回了空洞察，用本地数据兜底
+        setInsight({ insight: generateFallbackInsight(task, ctx), fallback: true });
+        setHasError(true);
+      }
     } catch (error) {
       console.error("记忆洞察生成失败:", error);
+      try {
+        const ctx = buildTaskContext(task, allTasks, relationships, behaviors, completions);
+        setInsight({ insight: generateFallbackInsight(task, ctx), fallback: true });
+      } catch (ctxError) {
+        console.error("兜底洞察生成失败:", ctxError);
+      }
+      setHasError(true);
     }
     setLoading(false);
   };
@@ -188,24 +237,39 @@ export default function TaskMemoryInsight({ task, compact = false }) {
     await generateInsight();
   };
 
-  // compact 模式下挂载后自动触发一次
+  // compact 模式下挂载后立即展示本地兜底洞察，再后台尝试 Kimi 优化
   useEffect(() => {
     if (compact && !autoTriggeredRef.current) {
       autoTriggeredRef.current = true;
+      try {
+        const ctx = buildTaskContext(task, allTasks, relationships, behaviors, completions);
+        setInsight({ insight: generateFallbackInsight(task, ctx), fallback: true });
+      } catch (_) {
+        // ignore
+      }
       generateInsight();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compact, task?.id]);
 
-  // compact 模式：只展示一行简短洞察，无展开交互
+  // compact 模式：展示一行简短洞察；可点击展开 AI 助手
   if (compact) {
+    const text = insight?.insight;
+    const clickable = !!onClick;
     return (
-      <div className="flex-1 min-w-0 pointer-events-none">
+      <div
+        className={`flex-1 min-w-0 ${clickable ? "cursor-pointer" : ""}`}
+        onClick={(e) => {
+          e?.stopPropagation();
+          if (clickable) onClick(e);
+        }}
+      >
         {loading ? (
           <p className="text-[11px] text-stone-400 truncate">分析中...</p>
-        ) : insight?.insight ? (
+        ) : text ? (
           <p className="text-[11px] text-stone-600 truncate leading-relaxed">
-            {insight.insight}
+            {text}
+            {insight?.fallback && <span className="text-stone-400 ml-1">· 本地洞察</span>}
           </p>
         ) : (
           <p className="text-[11px] text-stone-400 truncate">智能助手守护中</p>

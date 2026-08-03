@@ -26,6 +26,7 @@ import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
 import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
 import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
 import PriorityQuickMenu from "@/components/tasks/PriorityQuickMenu";
+import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 
 export default function LifeTaskCard({ 
   task, 
@@ -717,7 +718,7 @@ export default function LifeTaskCard({
                             );
                         }
 
-                        // Default
+                        // Default: 展示基于历史数据的简短洞察，点击展开 AI 助手
                         return (
                             <button
                                 type="button"
@@ -733,9 +734,7 @@ export default function LifeTaskCard({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>
-                                    <p className="text-[11px] text-stone-500 truncate leading-relaxed">
-                                        点击获取基于历史数据的执行建议
-                                    </p>
+                                    <TaskMemoryInsight task={task} compact />
                                 </div>
                             </button>
                         );

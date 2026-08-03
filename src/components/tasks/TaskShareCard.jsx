@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
 import useCollabInviteUrl from "@/lib/useCollabInviteUrl";
+import ShareCardAIIcon from "@/components/tasks/ShareCardAIIcon";
 
 const CATEGORY_COLORS = {
   work: { accent: "#1D4ED8", bg: "#EFF6FF" },
@@ -475,12 +476,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         className="w-12 h-12 rounded-xl flex items-center justify-center bg-white shadow-lg"
                         style={{ color: categoryColor.accent }}
                       >
-                         <img 
-                            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/6909eb4cffc0d0cc8e4c8442/e19e5553e_image.png"
-                            alt="Logo"
-                            crossOrigin="anonymous"
-                            className="w-10 h-10 object-contain"
-                         />
+                         <ShareCardAIIcon task={task} />
                       </div>
                     </div>
                   </div>

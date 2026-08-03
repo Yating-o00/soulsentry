@@ -164,7 +164,7 @@ function buildPrompt(task, ctx) {
   return prompt;
 }
 
-export default function TaskMemoryInsight({ task, compact = false, onClick }) {
+export default function TaskMemoryInsight({ task, compact = false, onClick, enableAICall = true }) {
   const [expanded, setExpanded] = useState(false);
   const [insight, setInsight] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -237,7 +237,7 @@ export default function TaskMemoryInsight({ task, compact = false, onClick }) {
     await generateInsight();
   };
 
-  // compact 模式下挂载后立即展示本地兜底洞察，再后台尝试 Kimi 优化
+  // compact 模式下挂载后立即展示本地兜底洞察；仅在 enableAICall=true 时后台尝试 Kimi 优化
   useEffect(() => {
     if (compact && !autoTriggeredRef.current) {
       autoTriggeredRef.current = true;
@@ -247,10 +247,10 @@ export default function TaskMemoryInsight({ task, compact = false, onClick }) {
       } catch (_) {
         // ignore
       }
-      generateInsight();
+      if (enableAICall) generateInsight();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, task?.id]);
+  }, [compact, task?.id, enableAICall]);
 
   // compact 模式：展示一行简短洞察；可点击展开 AI 助手
   if (compact) {
@@ -269,7 +269,6 @@ export default function TaskMemoryInsight({ task, compact = false, onClick }) {
         ) : text ? (
           <p className="text-[11px] text-stone-600 truncate leading-relaxed">
             {text}
-            {insight?.fallback && <span className="text-stone-400 ml-1">· 本地洞察</span>}
           </p>
         ) : (
           <p className="text-[11px] text-stone-400 truncate">智能助手守护中</p>

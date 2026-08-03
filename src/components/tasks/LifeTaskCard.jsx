@@ -8,7 +8,7 @@ import {
   Droplets, Leaf, Flower, Coffee, Utensils,
   Car, Store, Home, AlertCircle, Timer,
   Sparkles, Lightbulb, CheckCircle2, Flag,
-  Share2, Edit, Trash2, Calendar, ChevronDown, MessageSquare,
+  Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
   Link2, StickyNote, Paperclip, Bell, CornerDownRight
 } from "lucide-react";
 import AttachToParentDialog from "@/components/tasks/AttachToParentDialog";
@@ -722,7 +722,7 @@ export default function LifeTaskCard({
                         return (
                             <button
                                 type="button"
-                                className="flex items-center gap-3 flex-1 text-left min-w-0"
+                                className="flex items-center gap-3 flex-1 text-left min-w-0 group"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setExpanded(true);
@@ -734,8 +734,9 @@ export default function LifeTaskCard({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>
-                                    <TaskMemoryInsight task={task} compact />
+                                    <TaskMemoryInsight task={task} compact enableAICall={false} />
                                 </div>
+                                <ChevronRight className="w-4 h-4 text-stone-300 group-hover:text-stone-500 flex-shrink-0 transition-colors" />
                             </button>
                         );
                     })()}

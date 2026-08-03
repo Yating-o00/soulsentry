@@ -783,22 +783,22 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
               <Sparkles className="w-5 h-5 text-blue-700 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-blue-900 mb-1">
-                  {isEnglish ? "Smart Generation Tips" : "智能生成提示"}
+                  {isEnglish ? "What is this card for?" : "这张卡片能做什么"}
                 </p>
                 <ul className="text-xs text-blue-800 space-y-1">
                   {isEnglish ? (
                     <>
-                      <li>• Long task lists are automatically optimized for clarity</li>
-                      <li>• Enable "Show All Subtasks" to generate a complete long image</li>
-                      <li>• Copy text function includes all subtask information</li>
-                      <li>• Click the expand button for a larger preview</li>
+                      <li>• Download or copy the image, then send it in chat apps or post it — friends see your promise at a glance</li>
+                      <li>• Scanning the QR code opens the collaboration page: no signup needed to check items, leave notes, or subscribe to reminders</li>
+                      <li>• "Copy text" gives a plain-text version with every subtask, handy where images aren't allowed</li>
+                      <li>• Turn on "Show All Subtasks" for a full-length image; the expand button gives a bigger preview</li>
                     </>
                   ) : (
                     <>
-                      <li>• 长约定列表将自动优化图片质量以保证清晰度</li>
-                      <li>• 开启"显示所有子约定"可以生成包含完整列表的长图</li>
-                      <li>• 复制文本功能会包含所有子约定信息</li>
-                      <li>• 点击右上角展开按钮可以获得更大的预览视图</li>
+                      <li>• 下载或复制图片后，可直接发到微信/朋友圈等，让朋友一眼看到你的约定</li>
+                      <li>• 对方扫描卡片上的二维码即可进入协作页，无需注册就能勾选进度、留言、订阅提醒</li>
+                      <li>•「复制文本」生成含全部子约定的纯文字版，适合不方便发图的场景</li>
+                      <li>• 开启「显示所有子约定」可生成完整长图；点右上角展开可放大预览</li>
                     </>
                   )}
                 </ul>

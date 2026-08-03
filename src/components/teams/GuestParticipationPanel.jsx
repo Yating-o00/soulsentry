@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, Circle, Send, CalendarPlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadTaskIcs } from "@/lib/ics";
+import { appParams } from "@/lib/app-params";
 
 const guestKey = () => {
   let k = localStorage.getItem("soul_guest_key");
@@ -56,9 +57,22 @@ export default function GuestParticipationPanel({ token, task, subtasks, viewer,
   };
 
   const subscribeReminder = async () => {
-    downloadTaskIcs(task);
+    // 直接打开后端 .ics 链接：手机浏览器会弹出「添加到日历」，比 blob 下载在移动端可靠
+    const { appId, serverUrl } = appParams;
+    const base = (serverUrl || "https://base44.app").replace(/\/$/, "");
+    const icsUrl = `${base}/api/apps/${appId}/functions/getTaskIcs?token=${encodeURIComponent(token)}`;
+    const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+    if (isWeChat) {
+      toast.info("微信内无法直接加入日历，请点右上角「…」选择在浏览器中打开后再试", { duration: 6000 });
+    } else {
+      try {
+        window.location.href = icsUrl;
+      } catch (_e) {
+        downloadTaskIcs(task);
+      }
+      toast.success("已为你打开日历提醒文件，确认添加后会在约定时间提醒你");
+    }
     await post({ activity_type: "reminder_subscribe" }, "reminder");
-    toast.success("已生成日历提醒文件，打开即可加入你的日历");
   };
 
   return (

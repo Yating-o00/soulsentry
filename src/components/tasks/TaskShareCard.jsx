@@ -31,6 +31,9 @@ const CATEGORY_COLORS = {
   other: { accent: "#6B7280", bg: "#F9FAFB" },
 };
 
+// 品牌基础色（分享卡片统一使用）
+const BRAND_COLOR = { accent: "#384877", bg: "#EEF1F8" };
+
 const CATEGORY_LABELS = {
   work: { zh: "工作", en: "Work" },
   personal: { zh: "个人", en: "Personal" },
@@ -313,7 +316,8 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
 
   if (!task) return null;
 
-  const categoryColor = CATEGORY_COLORS[task.category] || CATEGORY_COLORS.other;
+  // 分享卡片基础色统一使用品牌色，保证对外视觉一致
+  const categoryColor = BRAND_COLOR;
   
   // 决定显示多少子约定
   const displayedSubtasks = showAllSubtasks || expandedView ? subtasks : subtasks.slice(0, 6);

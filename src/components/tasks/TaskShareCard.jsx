@@ -791,6 +791,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                       <li>• Download or copy the image, then send it in chat apps or post it — friends see your promise at a glance</li>
                       <li>• Scanning the QR code opens the collaboration page: no signup needed to check items, leave notes, or subscribe to reminders</li>
                       <li>• "Copy text" gives a plain-text version with every subtask, handy where images aren't allowed</li>
+                      <li>• After signing up or logging in, the shared promise syncs into their own list so you can build it together</li>
                       <li>• Turn on "Show All Subtasks" for a full-length image; the expand button gives a bigger preview</li>
                     </>
                   ) : (
@@ -798,6 +799,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                       <li>• 下载或复制图片后，可直接发到微信/朋友圈、X、Facebook、小红书等，让朋友一眼看到你的约定</li>
                       <li>• 对方扫描卡片上的二维码即可进入协作页，无需注册就能勾选进度、留言、订阅提醒，操作内容实时反馈给分享者</li>
                       <li>•「复制文本」生成含全部子约定的纯文字版，适合不方便发图的场景</li>
+                      <li>• 被分享者注册或登录后，该约定会同步到其约定列表中，双方可一起构建内容、协作推进</li>
                       <li>• 开启「显示所有子约定」可生成完整长图；点右上角展开可放大预览</li>
                     </>
                   )}

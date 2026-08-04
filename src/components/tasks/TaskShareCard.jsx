@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check, Paperclip, FileText, Link as LinkIcon, StickyNote, Palette, RefreshCw, Wand2, Image as ImageIcon, Globe, Lock } from "lucide-react";
+import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check, Paperclip, FileText, Link as LinkIcon, StickyNote, Palette, RefreshCw, Wand2, Image as ImageIcon, Globe, Lock, Users, MessageSquare, CheckSquare } from "lucide-react";
 import { format } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { zhCN } from "date-fns/locale";
@@ -64,6 +64,21 @@ export default function TaskShareCard({ task, open, onClose }) {
       : ""
   );
   const [publicShareLoading, setPublicShareLoading] = useState(false);
+  const [collabLogs, setCollabLogs] = useState(null);
+  const [collabLoading, setCollabLoading] = useState(false);
+
+  // Fetch collaboration summary when public share is enabled
+  React.useEffect(() => {
+    if (!publicShareEnabled || !task?.share_token) {
+      setCollabLogs(null);
+      return;
+    }
+    setCollabLoading(true);
+    httpRequest(`/api/public/share/${task.share_token}/logs`)
+      .then(setCollabLogs)
+      .catch(() => setCollabLogs(null))
+      .finally(() => setCollabLoading(false));
+  }, [publicShareEnabled, task?.share_token]);
 
   const PRESET_HEADERS = [
     "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&q=80", // Landscape
@@ -116,7 +131,7 @@ export default function TaskShareCard({ task, open, onClose }) {
     ? `${window.location.origin}${createPageUrl("Tasks")}?taskId=${task.id}`
     : "";
 
-  const qrCodeValue = taskUrl;
+  const qrCodeValue = publicShareEnabled && publicShareUrl ? publicShareUrl : taskUrl;
 
   // Detect language
   const isEnglish = React.useMemo(() => {
@@ -290,8 +305,15 @@ export default function TaskShareCard({ task, open, onClose }) {
       setPublicShareEnabled(result.enabled);
       if (result.enabled && result.url) {
         setPublicShareUrl(result.url);
+        // Refresh collaboration summary after enabling
+        setCollabLoading(true);
+        httpRequest(`/api/public/share/${result.token}/logs`)
+          .then(setCollabLogs)
+          .catch(() => setCollabLogs(null))
+          .finally(() => setCollabLoading(false));
       } else {
         setPublicShareUrl("");
+        setCollabLogs(null);
       }
       toast.success(enabled ? "公开分享已开启" : "公开分享已关闭");
     } catch (error) {
@@ -820,6 +842,52 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     </Button>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {publicShareEnabled && collabLogs && (
+              <div className="pt-3 border-t border-slate-200">
+                <p className="text-xs font-medium text-slate-600 mb-2">合作动态</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-white rounded-lg p-2 text-center border border-slate-200">
+                    <Users className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+                    <p className="text-lg font-semibold text-slate-800">{collabLogs.visitor_count}</p>
+                    <p className="text-[10px] text-slate-500">访客</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 text-center border border-slate-200">
+                    <MessageSquare className="w-4 h-4 text-indigo-500 mx-auto mb-1" />
+                    <p className="text-lg font-semibold text-slate-800">{collabLogs.comment_count}</p>
+                    <p className="text-[10px] text-slate-500">评论</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 text-center border border-slate-200">
+                    <CheckSquare className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+                    <p className="text-lg font-semibold text-slate-800">{collabLogs.toggle_count + collabLogs.import_count}</p>
+                    <p className="text-[10px] text-slate-500">互动</p>
+                  </div>
+                </div>
+                {collabLogs.recent_logs?.length > 0 && (
+                  <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
+                    {collabLogs.recent_logs.slice(0, 5).map((log) => (
+                      <div key={log.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-2 border border-slate-200">
+                        <span className="text-slate-600">
+                          <span className="font-medium text-slate-800">{log.visitor_name || "访客"}</span>
+                          {" "}
+                          {log.action_type === "comment" ? "评论了" : log.action_type === "toggle" ? "更新了状态" : log.action_type === "import" ? "保存到个人列表" : "订阅了更新"}
+                        </span>
+                        <span className="text-slate-400">
+                          {format(new Date(log.created_date), "M/d HH:mm", { locale: zhCN })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {publicShareEnabled && collabLoading && (
+              <div className="flex items-center justify-center py-2 text-xs text-slate-400">
+                <Sparkles className="w-3 h-3 animate-spin mr-1.5" />
+                加载合作动态...
               </div>
             )}
           </div>

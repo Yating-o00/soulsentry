@@ -442,3 +442,137 @@ publicShareRouter.post("/:token/subscribe", async (req, res) => {
     return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
   }
 });
+
+// POST /api/public/share/:token/import - 登录用户导入分享内容到个人列表
+publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
+  const result = await findSharedItem(req.params.token);
+  if (!result) return res.status(404).json({ error: "NOT_FOUND" });
+
+  const { type, item } = result;
+  if (isShareExpired(item)) return res.status(410).json({ error: "SHARE_EXPIRED" });
+
+  try {
+    let imported;
+    if (type === "task") {
+      imported = await prisma.task.create({
+        data: {
+          userId: req.user.id,
+          title: `[来自分享] ${item.title}`,
+          description: item.description,
+          status: "TODO",
+          priority: item.priority || "medium",
+          category: item.category || "other",
+          dueAt: item.dueAt,
+          reminderTime: item.reminderTime,
+          endTime: item.endTime,
+          isAllDay: item.isAllDay,
+          tags: item.tags,
+          reminderStrategy: item.reminderStrategy,
+          metadata: {
+            ...(item.metadata || {}),
+            importedFromShare: true,
+            originalTaskId: item.id,
+            originalOwnerId: item.userId
+          }
+        }
+      });
+    } else {
+      imported = await prisma.note.create({
+        data: {
+          userId: req.user.id,
+          title: `[来自分享] ${item.title || ""}`,
+          content: item.content,
+          plainText: item.plainText,
+          tags: item.tags,
+          metadata: {
+            ...(item.metadata || {}),
+            importedFromShare: true,
+            originalNoteId: item.id,
+            originalOwnerId: item.userId
+          }
+        }
+      });
+    }
+
+    await prisma.sharedActionLog.create({
+      data: {
+        shareToken: req.params.token,
+        targetType: type,
+        targetId: item.id,
+        visitorToken: req.user.id,
+        visitorName: req.user.displayName || req.user.email || "注册用户",
+        actionType: "import",
+        payload: { importedId: imported.id, importerId: req.user.id }
+      }
+    });
+
+    await notifyOwner(item.userId, {
+      type: "public_share_import",
+      title: `有人把${type === "task" ? "约定" : "心签"}添加到了个人列表`,
+      body: `${req.user.displayName || req.user.email || "某用户"} 保存了「${type === "task" ? item.title : (item.title || "心签")}」`,
+      shareToken: req.params.token,
+      targetType: type,
+      targetId: item.id,
+      link: type === "task" ? `/tasks?taskId=${item.id}` : `/notes?noteId=${item.id}`
+    });
+
+    return res.json({
+      type,
+      item: type === "task" ? serializeTask(imported) : serializeNote(imported)
+    });
+  } catch (error) {
+    console.error("[publicShare] import failed:", error);
+    return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
+  }
+});
+
+// GET /api/public/share/:token/logs - 获取分享的合作动态（仅分享者）
+publicShareRouter.get("/:token/logs", requireAuth, async (req, res) => {
+  const result = await findSharedItem(req.params.token);
+  if (!result) return res.status(404).json({ error: "NOT_FOUND" });
+
+  const { type, item } = result;
+  if (item.userId !== req.user.id) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "仅分享者可查看合作动态" });
+  }
+
+  try {
+    const logs = await prisma.sharedActionLog.findMany({
+      where: { shareToken: req.params.token },
+      orderBy: { createdAt: "desc" },
+      take: 100
+    });
+
+    const uniqueVisitors = new Set();
+    const comments = [];
+    const toggles = [];
+    const imports = [];
+
+    for (const log of logs) {
+      uniqueVisitors.add(log.visitorToken);
+      if (log.actionType === "comment") comments.push(log);
+      else if (log.actionType === "toggle") toggles.push(log);
+      else if (log.actionType === "import") imports.push(log);
+    }
+
+    return res.json({
+      type,
+      item_id: item.id,
+      visitor_count: uniqueVisitors.size,
+      comment_count: comments.length,
+      toggle_count: toggles.length,
+      import_count: imports.length,
+      recent_logs: logs.slice(0, 20).map((log) => ({
+        id: log.id,
+        action_type: log.actionType,
+        visitor_name: log.visitorName,
+        visitor_token: log.visitorToken,
+        payload: log.payload,
+        created_date: log.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error("[publicShare] get logs failed:", error);
+    return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
+  }
+});

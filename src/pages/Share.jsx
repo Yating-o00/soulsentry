@@ -17,6 +17,8 @@ import {
   Share2,
   Bell,
   CalendarClock,
+  CalendarPlus,
+  UserPlus,
   Tag,
   AlertCircle,
   Loader2,
@@ -27,6 +29,14 @@ import {
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import QRCodeImage from "@/components/ui/QRCode";
+import { httpRequest } from "@/api/httpClient";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "@/components/ui/dialog";
 
 const CATEGORY_LABELS = {
   work: "工作",
@@ -74,16 +84,67 @@ function setVisitorName(name) {
 }
 
 function api(path, options = {}) {
-  return fetch(path, {
+  return httpRequest(path, {
     headers: { "Content-Type": "application/json" },
     ...options,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  }).then(async (res) => {
-    const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!res.ok) throw data || { error: "REQUEST_FAILED" };
-    return data;
+    body: options.body
+  }).catch((error) => {
+    throw error.data || { error: error.message || "REQUEST_FAILED" };
   });
+}
+
+function escapeICS(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "");
+}
+
+function toICSDate(date) {
+  const d = date ? new Date(date) : new Date();
+  return d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+}
+
+function generateICS(item, type) {
+  const title = escapeICS(item.title || "未命名");
+  const description = escapeICS(item.description || item.plain_text || "");
+  const uid = `${item.id}@soulsentry.cn`;
+  const now = toICSDate(new Date());
+  const start = item.reminder_time ? toICSDate(item.reminder_time) : now;
+  const end = item.end_time ? toICSDate(item.end_time) : toICSDate(new Date(new Date(start).getTime() + 60 * 60 * 1000));
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//SoulSentry//CN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${now}`,
+    `DTSTART:${start}`,
+    `DTEND:${end}`,
+    `SUMMARY:${title}`,
+    `DESCRIPTION:${description}`,
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ].join("\r\n");
+}
+
+function downloadICS(item, type) {
+  const ics = generateICS(item, type);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${type === "task" ? "约定" : "心签"}-${(item.title || "未命名").slice(0, 20)}.ics`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export default function Share() {
@@ -96,6 +157,9 @@ export default function Share() {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
+  const [currentUser, setCurrentUser] = useState(undefined);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const visitorToken = useMemo(() => getVisitorToken(token), [token]);
   const shareUrl = useMemo(() => typeof window !== "undefined" ? `${window.location.origin}/share/${token}` : "", [token]);
@@ -116,6 +180,27 @@ export default function Share() {
   useEffect(() => {
     fetchShare();
   }, [token]);
+
+  useEffect(() => {
+    // Try to detect if the visitor is already logged in.
+    // AuthContext skips auth for /share paths, so we check directly.
+    api("/api/users/me")
+      .then((user) => {
+        setCurrentUser(user);
+        // If the user just logged in to import this share, do it automatically.
+        try {
+          const pending = window.localStorage.getItem("ss_pending_import_share");
+          if (pending) {
+            const parsed = JSON.parse(pending);
+            if (parsed.token === token) {
+              window.localStorage.removeItem("ss_pending_import_share");
+              setTimeout(() => handleImportToMine(), 0);
+            }
+          }
+        } catch (e) {}
+      })
+      .catch(() => setCurrentUser(null));
+  }, []);
 
   const handleToggleTask = async (checked) => {
     if (data?.type !== "task") return;
@@ -179,6 +264,47 @@ export default function Share() {
     } catch (err) {
       toast.error(err?.message || "订阅失败");
     }
+  };
+
+  const handleAddToCalendar = () => {
+    if (!item) return;
+    downloadICS(item, data.type);
+    toast.success("日历文件已下载，可导入系统日历");
+  };
+
+  const handleImportToMine = async () => {
+    if (!currentUser) {
+      // Remember the share so we can import after login.
+      try {
+        window.localStorage.setItem("ss_pending_import_share", JSON.stringify({ token, type: data?.type }));
+      } catch (e) {}
+      setImportDialogOpen(true);
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const result = await api(`/api/public/share/${token}/import`, {
+        method: "POST",
+        body: { visitor_token: visitorToken }
+      });
+      toast.success(result.type === "task" ? "已添加到你的约定" : "已添加你的心签");
+      // Navigate to the imported item
+      if (result.type === "task") {
+        navigate(`/tasks?taskId=${result.item.id}`);
+      } else {
+        navigate(`/notes?noteId=${result.item.id}`);
+      }
+    } catch (err) {
+      toast.error(err?.message || "导入失败");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleLoginRedirect = () => {
+    const returnUrl = encodeURIComponent(`/share/${token}`);
+    navigate(`/login?redirect=${returnUrl}`);
   };
 
   const handleNameChange = (value) => {
@@ -349,6 +475,46 @@ export default function Share() {
           </CardContent>
         </Card>
 
+        {/* 操作入口 */}
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="justify-start gap-2 h-auto py-3 px-4 border-slate-200 hover:bg-slate-50"
+                onClick={handleAddToCalendar}
+              >
+                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <CalendarPlus className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-slate-800">添加到日历</p>
+                  <p className="text-xs text-slate-500">下载 .ics 文件导入系统日历</p>
+                </div>
+              </Button>
+
+              <Button
+                variant="outline"
+                className="justify-start gap-2 h-auto py-3 px-4 border-slate-200 hover:bg-slate-50"
+                onClick={handleImportToMine}
+                disabled={importing || currentUser === undefined}
+              >
+                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <UserPlus className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-slate-800">
+                    {currentUser === undefined ? "检查中..." : currentUser ? "添加至我的列表" : "登录后添加至我的列表"}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {currentUser ? "导入到你的约定/心签" : "登录/注册后即可保存"}
+                  </p>
+                </div>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* 订阅通知 */}
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="py-4">
@@ -449,6 +615,26 @@ export default function Share() {
             </div>
           </CardContent>
         </Card>
+
+        {/* 登录/导入提示 */}
+        <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-base">登录/注册以保存</DialogTitle>
+              <DialogDescription className="text-sm text-slate-500">
+                添加至个人列表需要先登录。登录后我们会自动把这个{isTask ? "约定" : "心签"}导入你的账户。
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex gap-3 pt-2">
+              <Button onClick={handleLoginRedirect} className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]">
+                去登录
+              </Button>
+              <Button variant="outline" onClick={() => setImportDialogOpen(false)} className="flex-1">
+                稍后再说
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

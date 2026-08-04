@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -119,8 +119,34 @@ export default function Share() {
   const [currentUser, setCurrentUser] = useState(undefined);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [namePromptOpen, setNamePromptOpen] = useState(false);
+  const pendingActionRef = useRef(null);
 
   const visitorToken = useMemo(() => getVisitorToken(token), [token]);
+
+  const ensureNameThen = (action) => {
+    const name = visitorName.trim();
+    if (!name) {
+      pendingActionRef.current = action;
+      setNamePromptOpen(true);
+      return;
+    }
+    action();
+  };
+
+  const confirmVisitorName = () => {
+    const name = visitorName.trim();
+    if (!name) {
+      toast.error("请先填写你的称呼");
+      return;
+    }
+    setVisitorName(name);
+    setNamePromptOpen(false);
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    if (action) action();
+  };
 
   const fetchShare = async () => {
     try {
@@ -150,14 +176,14 @@ export default function Share() {
           return;
         }
         setCurrentUser(user);
-        // If the user just logged in to import this share, do it automatically.
+        // If the user just logged in to import this share, ask for confirmation first.
         try {
           const pending = window.localStorage.getItem("ss_pending_import_share");
           if (pending) {
             const parsed = JSON.parse(pending);
             if (parsed.token === token) {
               window.localStorage.removeItem("ss_pending_import_share");
-              setTimeout(() => handleImportToMine(), 0);
+              setTimeout(() => setImportConfirmOpen(true), 0);
             }
           }
         } catch (e) {}
@@ -196,8 +222,7 @@ export default function Share() {
     }
   };
 
-  const handleComment = async (e) => {
-    e.preventDefault();
+  const handleComment = async () => {
     if (!commentText.trim()) return;
     setSubmitting(true);
     try {
@@ -246,7 +271,7 @@ export default function Share() {
     toast.success("正在打开日历…");
   };
 
-  const handleImportToMine = async () => {
+  const handleImportToMine = () => {
     if (!currentUser || isDemoUser(currentUser)) {
       // Remember the share so we can import after login.
       try {
@@ -255,7 +280,10 @@ export default function Share() {
       setImportDialogOpen(true);
       return;
     }
+    setImportConfirmOpen(true);
+  };
 
+  const runImport = async () => {
     setImporting(true);
     try {
       const result = await api(`/api/public/share/${token}/import`, {
@@ -263,6 +291,7 @@ export default function Share() {
         body: { visitor_token: visitorToken }
       });
       toast.success(result.type === "task" ? "已添加到你的约定" : "已添加你的心签");
+      setImportConfirmOpen(false);
       // Navigate to the imported item
       if (result.type === "task") {
         navigate(`/tasks?taskId=${result.item.id}`);
@@ -405,7 +434,7 @@ export default function Share() {
                     <Checkbox
                       id="main-task"
                       checked={item.status === "completed"}
-                      onCheckedChange={handleToggleTask}
+                      onCheckedChange={(checked) => ensureNameThen(() => handleToggleTask(checked))}
                       disabled={submitting}
                     />
                     <label htmlFor="main-task" className={`text-sm font-medium ${item.status === "completed" ? "text-slate-400 line-through" : "text-slate-800"}`}>
@@ -423,7 +452,7 @@ export default function Share() {
                         <Checkbox
                           id={`subtask-${sub.id}`}
                           checked={sub.status === "completed"}
-                          onCheckedChange={(checked) => handleToggleTask(!!checked, sub.id)}
+                          onCheckedChange={(checked) => ensureNameThen(() => handleToggleTask(!!checked, sub.id))}
                           disabled={submitting}
                         />
                         <label
@@ -441,14 +470,17 @@ export default function Share() {
 
             {/* 访客身份 */}
             <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
-              <label className="text-xs font-medium text-blue-800 block mb-1.5">你的昵称（可选）</label>
+              <label className="text-xs font-medium text-blue-800 block mb-1.5">你的称呼</label>
               <Input
                 value={visitorName}
                 onChange={(e) => handleNameChange(e.target.value)}
-                placeholder="访客"
+                placeholder="如：小林"
                 className="h-9 bg-white border-blue-200 text-sm"
                 maxLength={50}
               />
+              <p className="text-xs text-blue-600 mt-1.5">
+                不注册也可以勾选进度、留言，对方会立刻收到。
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -510,7 +542,7 @@ export default function Share() {
                 size="sm"
                 variant={subscribed ? "outline" : "default"}
                 disabled={subscribed}
-                onClick={handleSubscribe}
+                onClick={() => ensureNameThen(handleSubscribe)}
                 className={subscribed ? "" : "bg-gradient-to-r from-[#384877] to-[#3b5aa2]"}
               >
                 {subscribed ? "已订阅" : "订阅"}
@@ -528,7 +560,14 @@ export default function Share() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form onSubmit={handleComment} className="space-y-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!commentText.trim()) return;
+                ensureNameThen(handleComment);
+              }}
+              className="space-y-3"
+            >
               <Textarea
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
@@ -594,6 +633,65 @@ export default function Share() {
               <Button variant="outline" onClick={() => setImportDialogOpen(false)} className="flex-1">
                 稍后再说
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 导入前确认 */}
+        <Dialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-base">加入个人列表？</DialogTitle>
+              <DialogDescription className="text-sm text-slate-500">
+                是否将该{isTask ? "约定" : "心签"}《{item?.title || "未命名"}》加入你的列表？确认后将立刻导入。
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={runImport}
+                disabled={importing}
+                className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+              >
+                {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : "确认加入"}
+              </Button>
+              <Button variant="outline" onClick={() => setImportConfirmOpen(false)} disabled={importing} className="flex-1">
+                取消
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 称呼输入提示 */}
+        <Dialog open={namePromptOpen} onOpenChange={(open) => {
+          setNamePromptOpen(open);
+          if (!open) pendingActionRef.current = null;
+        }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-base">你的称呼</DialogTitle>
+              <DialogDescription className="text-sm text-slate-500">
+                不注册也可以勾选进度、留言，对方会立刻收到。
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 pt-1">
+              <Input
+                value={visitorName}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="如：小林"
+                maxLength={50}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmVisitorName();
+                }}
+              />
+              <div className="flex gap-3">
+                <Button onClick={confirmVisitorName} className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]">
+                  确认
+                </Button>
+                <Button variant="outline" onClick={() => { setNamePromptOpen(false); pendingActionRef.current = null; }} className="flex-1">
+                  取消
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

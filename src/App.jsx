@@ -18,6 +18,7 @@ import { createPageUrl } from '@/utils';
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
+const SharePage = Pages.Share;
 
 setupIframeMessaging();
 
@@ -54,6 +55,7 @@ const AuthenticatedApp = () => {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<MainPage />} />
+        <Route path="/share/:token" element={<SharePage />} />
         {Object.entries(Pages).flatMap(([path, Page]) => {
           const normalizedPath = createPageUrl(path);
           const legacyPath = `/${path}`;

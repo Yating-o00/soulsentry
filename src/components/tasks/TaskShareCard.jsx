@@ -779,8 +779,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     {/* 二维码区域 */}
                     <div className="flex items-center gap-2">
                        <div className="text-right hidden sm:block">
-                         <p className="text-[10px] text-slate-400">{isEnglish ? "Scan to view" : "扫码查看"}</p>
-                         <p className="text-[10px] text-slate-400 font-mono">ID: {task.id.slice(0,4)}</p>
+                         <p className="text-[10px] text-slate-400">{isEnglish ? "Scan to join" : "扫码参与"}</p>
                        </div>
                        <div className="w-12 h-12 bg-white rounded-md p-0.5 shadow-sm border border-slate-100">
                          <QRCodeImage value={qrCodeValue} size={96} alt="QR Code" className="w-full h-full object-contain" />
@@ -825,23 +824,12 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
             </div>
 
             {publicShareEnabled && publicShareUrl && (
-              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2 border-t border-slate-200">
-                <div className="p-2 bg-white rounded-lg border border-slate-200">
-                  <QRCodeImage value={publicShareUrl} size={128} alt="公开分享二维码" />
-                </div>
-                <div className="flex-1 w-full space-y-2">
-                  <p className="text-xs text-slate-500">公开链接</p>
-                  <div className="flex gap-2">
-                    <input
-                      readOnly
-                      value={publicShareUrl}
-                      className="flex-1 text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 truncate"
-                    />
-                    <Button size="sm" variant="outline" onClick={handleCopyPublicLink}>
-                      <Copy className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200">
+                <p className="text-xs text-slate-500 truncate flex-1">{publicShareUrl}</p>
+                <Button size="sm" variant="outline" onClick={handleCopyPublicLink}>
+                  <Copy className="w-4 h-4 mr-1.5" />
+                  复制链接
+                </Button>
               </div>
             )}
 

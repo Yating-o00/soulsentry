@@ -13,8 +13,6 @@ import {
   MessageSquare,
   Send,
   CheckCircle2,
-  Circle,
-  Share2,
   Bell,
   CalendarClock,
   CalendarPlus,
@@ -28,7 +26,6 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import QRCodeImage from "@/components/ui/QRCode";
 import { httpRequest } from "@/api/httpClient";
 import {
   Dialog,
@@ -162,7 +159,6 @@ export default function Share() {
   const [importing, setImporting] = useState(false);
 
   const visitorToken = useMemo(() => getVisitorToken(token), [token]);
-  const shareUrl = useMemo(() => typeof window !== "undefined" ? `${window.location.origin}/share/${token}` : "", [token]);
 
   const fetchShare = async () => {
     try {
@@ -202,7 +198,7 @@ export default function Share() {
       .catch(() => setCurrentUser(null));
   }, []);
 
-  const handleToggleTask = async (checked) => {
+  const handleToggleTask = async (checked, subtaskId) => {
     if (data?.type !== "task") return;
     setSubmitting(true);
     try {
@@ -210,11 +206,21 @@ export default function Share() {
         method: "POST",
         body: {
           checked,
+          subtask_id: subtaskId || undefined,
           visitor_token: visitorToken,
           visitor_name: visitorName || undefined
         }
       });
-      setData((prev) => ({ ...prev, item: result.task }));
+      if (subtaskId) {
+        setData((prev) => ({
+          ...prev,
+          subtasks: prev.subtasks.map((s) =>
+            s.id === subtaskId ? result.task : s
+          )
+        }));
+      } else {
+        setData((prev) => ({ ...prev, item: result.task }));
+      }
       toast.success(checked ? "已勾选" : "已取消勾选");
     } catch (err) {
       toast.error(err?.message || "操作失败");
@@ -446,14 +452,18 @@ export default function Share() {
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">子约定</p>
                     {subtasks.map((sub) => (
                       <div key={sub.id} className="flex items-center gap-3">
-                        {sub.status === "completed" ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-slate-300" />
-                        )}
-                        <span className={`text-sm ${sub.status === "completed" ? "text-slate-400 line-through" : "text-slate-700"}`}>
+                        <Checkbox
+                          id={`subtask-${sub.id}`}
+                          checked={sub.status === "completed"}
+                          onCheckedChange={(checked) => handleToggleTask(!!checked, sub.id)}
+                          disabled={submitting}
+                        />
+                        <label
+                          htmlFor={`subtask-${sub.id}`}
+                          className={`text-sm ${sub.status === "completed" ? "text-slate-400 line-through" : "text-slate-700"}`}
+                        >
                           {sub.title}
-                        </span>
+                        </label>
                       </div>
                     ))}
                   </div>
@@ -597,22 +607,6 @@ export default function Share() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* 二维码 */}
-        <Card className="border-slate-200 shadow-sm">
-          <CardContent className="py-6">
-            <div className="flex flex-col items-center text-center gap-3">
-              <p className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                <Share2 className="w-4 h-4" />
-                扫码查看此分享
-              </p>
-              <div className="p-2 bg-white rounded-xl border border-slate-200">
-                <QRCodeImage value={shareUrl} size={160} alt="分享二维码" />
-              </div>
-              <p className="text-xs text-slate-400 break-all max-w-xs">{shareUrl}</p>
-            </div>
           </CardContent>
         </Card>
 

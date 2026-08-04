@@ -326,10 +326,11 @@ publicShareRouter.post("/:token/comments", async (req, res) => {
   }
 });
 
-// POST /api/public/share/:token/toggle - 匿名勾选/取消勾选（仅 task）
+// POST /api/public/share/:token/toggle - 匿名勾选/取消勾选（仅 task，支持子约定）
 publicShareRouter.post("/:token/toggle", async (req, res) => {
   const schema = z.object({
     checked: z.boolean(),
+    subtask_id: z.string().optional().nullable(),
     visitor_token: z.string().min(8).optional(),
     visitor_name: z.string().max(50).optional().nullable()
   });
@@ -349,16 +350,39 @@ publicShareRouter.post("/:token/toggle", async (req, res) => {
   const visitorToken = ensureVisitorToken(req);
   const visitorName = (parsed.data.visitor_name || "访客").slice(0, 50);
   const checked = parsed.data.checked;
+  const subtaskId = parsed.data.subtask_id;
   const nextStatus = checked ? "DONE" : "TODO";
 
   try {
-    const updated = await prisma.task.update({
-      where: { id: item.id },
-      data: {
-        status: nextStatus,
-        completedAt: checked ? new Date() : null
+    let updated;
+    let targetTitle = item.title;
+    let payload = { checked, status: nextStatus };
+
+    if (subtaskId) {
+      const subtask = await prisma.task.findFirst({
+        where: { id: subtaskId, parentTaskId: item.id, deletedAt: null }
+      });
+      if (!subtask) {
+        return res.status(400).json({ error: "INVALID_SUBTASK", message: "子约定不存在" });
       }
-    });
+      updated = await prisma.task.update({
+        where: { id: subtaskId },
+        data: {
+          status: nextStatus,
+          completedAt: checked ? new Date() : null
+        }
+      });
+      targetTitle = subtask.title;
+      payload = { checked, status: nextStatus, subtaskId, parentTaskId: item.id };
+    } else {
+      updated = await prisma.task.update({
+        where: { id: item.id },
+        data: {
+          status: nextStatus,
+          completedAt: checked ? new Date() : null
+        }
+      });
+    }
 
     await prisma.sharedActionLog.create({
       data: {
@@ -368,14 +392,14 @@ publicShareRouter.post("/:token/toggle", async (req, res) => {
         visitorToken,
         visitorName,
         actionType: "toggle",
-        payload: { checked, status: nextStatus }
+        payload
       }
     });
 
     await notifyOwner(item.userId, {
       type: "public_share_toggle",
-      title: "有人更新了约定的完成状态",
-      body: `${visitorName} ${checked ? "勾选了" : "取消了"}「${item.title}」`,
+      title: subtaskId ? "有人更新了子约定的完成状态" : "有人更新了约定的完成状态",
+      body: `${visitorName} ${checked ? "勾选了" : "取消了"}「${targetTitle}」`,
       shareToken: req.params.token,
       targetType: "task",
       targetId: item.id,
@@ -386,6 +410,7 @@ publicShareRouter.post("/:token/toggle", async (req, res) => {
 
     return res.json({
       task: serializeTask(updated),
+      subtask_id: subtaskId || null,
       visitor_token: visitorToken
     });
   } catch (error) {

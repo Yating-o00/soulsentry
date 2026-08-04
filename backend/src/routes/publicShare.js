@@ -59,13 +59,14 @@ function serializeNote(note) {
 }
 
 function serializeComment(comment) {
+  const visitorName = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
   return {
     id: comment.id,
     task_id: comment.taskId,
     note_id: comment.noteId,
     content: comment.content,
     mentions: comment.mentions || [],
-    created_by: comment.user?.email || comment.visitorName || "访客",
+    created_by: comment.user?.email || visitorName || "访客",
     created_by_id: comment.user?.id || null,
     visitor_token: comment.visitorToken,
     visitor_name: comment.visitorName,
@@ -76,6 +77,56 @@ function serializeComment(comment) {
 
 function generateToken() {
   return crypto.randomBytes(16).toString("hex");
+}
+
+function escapeICS(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "");
+}
+
+function toICSDate(date) {
+  const d = date ? new Date(date) : new Date();
+  return d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+}
+
+function generateICS(item, type) {
+  const title = escapeICS(item.title || "未命名");
+  const description = escapeICS(item.description || item.plainText || "");
+  const uid = `${item.id}@soulsentry.cn`;
+  const now = toICSDate(new Date());
+  const start = item.reminderTime ? toICSDate(item.reminderTime) : now;
+  const end = item.endTime
+    ? toICSDate(item.endTime)
+    : toICSDate(new Date(new Date(start).getTime() + 60 * 60 * 1000));
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//SoulSentry//CN",
+    "CALSCALE:GREGORIAN",
+    "X-WR-CALNAME:SoulSentry",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${now}`,
+    `DTSTART:${start}`,
+    `DTEND:${end}`,
+    `SUMMARY:${title}`,
+    `DESCRIPTION:${description}`,
+    "STATUS:CONFIRMED",
+    "TRANSP:OPAQUE",
+    "BEGIN:VALARM",
+    "TRIGGER:-PT15M",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${title}`,
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ].join("\r\n");
 }
 
 function isShareExpired(item) {
@@ -240,6 +291,33 @@ publicShareRouter.get("/:token", async (req, res) => {
   } catch (error) {
     console.error("[publicShare] get share failed:", error);
     return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
+  }
+});
+
+// GET /api/public/share/:token/ics - 下载日历事件文件
+publicShareRouter.get("/:token/ics", async (req, res) => {
+  const result = await findSharedItem(req.params.token);
+  if (!result) {
+    return res.status(404).type("text/plain").send("分享不存在");
+  }
+  if (isShareExpired(result.item)) {
+    return res.status(410).type("text/plain").send("分享链接已失效");
+  }
+
+  try {
+    const { type, item } = result;
+    const ics = generateICS(item, type);
+    const filename = `${type === "task" ? "约定" : "心签"}-${(item.title || "未命名").slice(0, 20)}.ics`;
+
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="soulsentry.ics"; filename*=UTF-8''${encodeURIComponent(filename)}`
+    );
+    return res.send(ics);
+  } catch (error) {
+    console.error("[publicShare] generate ics failed:", error);
+    return res.status(500).type("text/plain").send("生成日历文件失败");
   }
 });
 

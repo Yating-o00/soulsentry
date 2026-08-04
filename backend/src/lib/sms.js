@@ -83,7 +83,21 @@ export async function sendVerificationSms(phone, code, _purpose) {
 
   const url = `https://dysmsapi.aliyuncs.com/?${query}`;
 
-  const response = await fetch(url, { method: "GET" });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  let response;
+  try {
+    response = await fetch(url, { method: "GET", signal: controller.signal });
+  } catch (fetchError) {
+    clearTimeout(timeout);
+    console.error("[sms] fetch timeout or network error:", fetchError);
+    const error = new Error("短信发送请求超时，请检查网络或稍后重试");
+    error.code = "SMS_TIMEOUT";
+    throw error;
+  }
+  clearTimeout(timeout);
+
   const text = await response.text();
   let data;
   try {

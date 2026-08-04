@@ -867,7 +867,10 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         detailText = payload.preview || "";
                       } else if (log.action_type === "toggle") {
                         actionText = payload.checked ? "勾选" : "取消勾选";
-                        detailText = payload.subtaskTitle || task.title || "约定";
+                        const subtaskIdShort = payload.subtaskId ? `#${String(payload.subtaskId).slice(0, 6)}` : "";
+                        detailText = payload.subtaskTitle
+                          ? `${payload.subtaskTitle} ${subtaskIdShort}`
+                          : task.title || "约定";
                       } else if (log.action_type === "import") {
                         actionText = "保存到个人列表";
                       } else if (log.action_type === "subscribe") {

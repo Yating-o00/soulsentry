@@ -95,77 +95,15 @@ function isDemoUser(user) {
   return user.email === "demo@soulsentry.local" || String(user.role || "").toLowerCase() === "demo";
 }
 
-function escapeICS(text) {
-  if (!text) return "";
-  return String(text)
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "");
-}
-
-function toICSDate(date) {
-  const d = date ? new Date(date) : new Date();
-  return d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-}
-
-function generateICS(item, type) {
-  const title = escapeICS(item.title || "未命名");
-  const description = escapeICS(item.description || item.plain_text || "");
-  const uid = `${item.id}@soulsentry.cn`;
-  const now = toICSDate(new Date());
-  const start = item.reminder_time ? toICSDate(item.reminder_time) : now;
-  const end = item.end_time ? toICSDate(item.end_time) : toICSDate(new Date(new Date(start).getTime() + 60 * 60 * 1000));
-
-  return [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//SoulSentry//CN",
-    "CALSCALE:GREGORIAN",
-    "X-WR-CALNAME:SoulSentry",
-    "BEGIN:VEVENT",
-    `UID:${uid}`,
-    `DTSTAMP:${now}`,
-    `DTSTART:${start}`,
-    `DTEND:${end}`,
-    `SUMMARY:${title}`,
-    `DESCRIPTION:${description}`,
-    "STATUS:CONFIRMED",
-    "TRANSP:OPAQUE",
-    "BEGIN:VALARM",
-    "TRIGGER:-PT15M",
-    "ACTION:DISPLAY",
-    `DESCRIPTION:${title}`,
-    "END:VALARM",
-    "END:VEVENT",
-    "END:VCALENDAR"
-  ].join("\r\n");
-}
-
-function downloadICS(item, type) {
-  const ics = generateICS(item, type);
-  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+function openCalendar(icsUrl) {
+  // Open the .ics endpoint directly; mobile browsers will hand it off to the calendar app.
   const link = document.createElement("a");
-  link.href = url;
-  link.download = `${type === "task" ? "约定" : "心签"}-${(item.title || "未命名").slice(0, 20)}.ics`;
+  link.href = icsUrl;
+  link.target = "_blank";
+  link.rel = "noopener";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-function openICSInCalendar(item, type) {
-  const ics = generateICS(item, type);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  if (isIOS) {
-    // iOS: open data URI so Calendar app handles it directly
-    const dataUrl = `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
-    window.open(dataUrl, "_blank");
-  } else {
-    downloadICS(item, type);
-  }
 }
 
 export default function Share() {
@@ -303,9 +241,9 @@ export default function Share() {
 
   const handleAddToCalendar = () => {
     if (!item) return;
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    openICSInCalendar(item, data.type);
-    toast.success(isIOS ? "正在打开系统日历…" : "日历文件已下载，可导入系统日历");
+    const icsUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/api/public/share/${token}/ics`;
+    openCalendar(icsUrl);
+    toast.success("正在打开日历…");
   };
 
   const handleImportToMine = async () => {

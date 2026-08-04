@@ -854,19 +854,45 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                   </div>
                 </div>
                 {collabLogs.recent_logs?.length > 0 && (
-                  <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
-                    {collabLogs.recent_logs.slice(0, 5).map((log) => (
-                      <div key={log.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-2 border border-slate-200">
-                        <span className="text-slate-600">
-                          <span className="font-medium text-slate-800">{log.visitor_name || "访客"}</span>
-                          {" "}
-                          {log.action_type === "comment" ? "评论了" : log.action_type === "toggle" ? "更新了状态" : log.action_type === "import" ? "保存到个人列表" : "订阅了更新"}
-                        </span>
-                        <span className="text-slate-400">
-                          {format(new Date(log.created_date), "M/d HH:mm", { locale: zhCN })}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="mt-3 space-y-2 max-h-40 overflow-y-auto">
+                    {collabLogs.recent_logs.slice(0, 5).map((log) => {
+                      const visitorLabel = log.visitor_name || "访客";
+                      const visitorId = (log.visitor_token || "").slice(0, 6);
+                      const timeText = format(new Date(log.created_date), "M月d日 HH:mm", { locale: zhCN });
+                      const payload = log.payload || {};
+                      let actionText = "";
+                      let detailText = "";
+                      if (log.action_type === "comment") {
+                        actionText = "评论";
+                        detailText = payload.preview || "";
+                      } else if (log.action_type === "toggle") {
+                        actionText = payload.checked ? "勾选" : "取消勾选";
+                        detailText = payload.subtaskTitle || item.title || "约定";
+                      } else if (log.action_type === "import") {
+                        actionText = "保存到个人列表";
+                      } else if (log.action_type === "subscribe") {
+                        actionText = "订阅更新";
+                      }
+                      return (
+                        <div key={log.id} className="text-xs bg-white rounded-lg px-3 py-2 border border-slate-200">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="font-medium text-slate-800">
+                              {visitorLabel}
+                              <span className="ml-1 text-[10px] font-mono text-slate-400">#{visitorId}</span>
+                            </span>
+                            <span className="text-slate-400">{timeText}</span>
+                          </div>
+                          <div className="text-slate-600">
+                            <span className="text-slate-500">{actionText}</span>
+                            {detailText && (
+                              <span className="ml-1 font-medium text-slate-700 truncate block">
+                                {detailText}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

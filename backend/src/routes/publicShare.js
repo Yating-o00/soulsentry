@@ -373,7 +373,7 @@ publicShareRouter.post("/:token/toggle", async (req, res) => {
         }
       });
       targetTitle = subtask.title;
-      payload = { checked, status: nextStatus, subtaskId, parentTaskId: item.id };
+      payload = { checked, status: nextStatus, subtaskId, subtaskTitle: subtask.title, parentTaskId: item.id };
     } else {
       updated = await prisma.task.update({
         where: { id: item.id },

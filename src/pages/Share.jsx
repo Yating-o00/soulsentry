@@ -90,6 +90,11 @@ function api(path, options = {}) {
   });
 }
 
+function isDemoUser(user) {
+  if (!user) return false;
+  return user.email === "demo@soulsentry.local" || String(user.role || "").toLowerCase() === "demo";
+}
+
 function escapeICS(text) {
   if (!text) return "";
   return String(text)
@@ -118,7 +123,7 @@ function generateICS(item, type) {
     "VERSION:2.0",
     "PRODID:-//SoulSentry//CN",
     "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
+    "X-WR-CALNAME:SoulSentry",
     "BEGIN:VEVENT",
     `UID:${uid}`,
     `DTSTAMP:${now}`,
@@ -126,6 +131,13 @@ function generateICS(item, type) {
     `DTEND:${end}`,
     `SUMMARY:${title}`,
     `DESCRIPTION:${description}`,
+    "STATUS:CONFIRMED",
+    "TRANSP:OPAQUE",
+    "BEGIN:VALARM",
+    "TRIGGER:-PT15M",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${title}`,
+    "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR"
   ].join("\r\n");
@@ -142,6 +154,18 @@ function downloadICS(item, type) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function openICSInCalendar(item, type) {
+  const ics = generateICS(item, type);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (isIOS) {
+    // iOS: open data URI so Calendar app handles it directly
+    const dataUrl = `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
+    window.open(dataUrl, "_blank");
+  } else {
+    downloadICS(item, type);
+  }
 }
 
 export default function Share() {
@@ -182,6 +206,11 @@ export default function Share() {
     // AuthContext skips auth for /share paths, so we check directly.
     api("/api/users/me")
       .then((user) => {
+        // Demo user should not be treated as a real logged-in user for import.
+        if (isDemoUser(user)) {
+          setCurrentUser(null);
+          return;
+        }
         setCurrentUser(user);
         // If the user just logged in to import this share, do it automatically.
         try {
@@ -274,12 +303,13 @@ export default function Share() {
 
   const handleAddToCalendar = () => {
     if (!item) return;
-    downloadICS(item, data.type);
-    toast.success("日历文件已下载，可导入系统日历");
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    openICSInCalendar(item, data.type);
+    toast.success(isIOS ? "正在打开系统日历…" : "日历文件已下载，可导入系统日历");
   };
 
   const handleImportToMine = async () => {
-    if (!currentUser) {
+    if (!currentUser || isDemoUser(currentUser)) {
       // Remember the share so we can import after login.
       try {
         window.localStorage.setItem("ss_pending_import_share", JSON.stringify({ token, type: data?.type }));

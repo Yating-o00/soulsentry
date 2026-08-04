@@ -38,6 +38,7 @@ export default function WelcomeGuard({ children }) {
   };
 
   // Only gate the landing page so direct page previews can render as expected.
+  // Public share pages should never show the welcome screen.
   if (showWelcome && location.pathname === "/") {
     return <Welcome onComplete={handleComplete} />;
   }

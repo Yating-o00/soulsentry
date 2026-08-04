@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check, Paperclip, FileText, Link as LinkIcon, StickyNote, Palette, RefreshCw, Wand2, Image as ImageIcon } from "lucide-react";
+import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check, Paperclip, FileText, Link as LinkIcon, StickyNote, Palette, RefreshCw, Wand2, Image as ImageIcon, Globe, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { zhCN } from "date-fns/locale";
@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
 import QRCodeImage from "@/components/ui/QRCode";
+import { httpRequest } from "@/api/httpClient";
 
 const CATEGORY_COLORS = {
   work: { accent: "#1D4ED8", bg: "#EFF6FF" },
@@ -56,6 +57,13 @@ export default function TaskShareCard({ task, open, onClose }) {
   const [expandedView, setExpandedView] = useState(false);
   const [headerImage, setHeaderImage] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [publicShareEnabled, setPublicShareEnabled] = useState(task?.share_enabled || false);
+  const [publicShareUrl, setPublicShareUrl] = useState(
+    task?.share_token && typeof window !== "undefined"
+      ? `${window.location.origin}/share/${task.share_token}`
+      : ""
+  );
+  const [publicShareLoading, setPublicShareLoading] = useState(false);
 
   const PRESET_HEADERS = [
     "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&q=80", // Landscape
@@ -269,6 +277,38 @@ export default function TaskShareCard({ task, open, onClose }) {
       }
       setGenerating(false);
     }
+  };
+
+  const handleTogglePublicShare = async (enabled) => {
+    if (!task?.id) return;
+    setPublicShareLoading(true);
+    try {
+      const result = await httpRequest(`/api/public/share/generate/task/${task.id}`, {
+        method: "POST",
+        body: { enabled }
+      });
+      setPublicShareEnabled(result.enabled);
+      if (result.enabled && result.url) {
+        setPublicShareUrl(result.url);
+      } else {
+        setPublicShareUrl("");
+      }
+      toast.success(enabled ? "公开分享已开启" : "公开分享已关闭");
+    } catch (error) {
+      console.error("Toggle public share failed:", error);
+      toast.error(error?.message || "分享设置失败");
+    } finally {
+      setPublicShareLoading(false);
+    }
+  };
+
+  const handleCopyPublicLink = () => {
+    if (!publicShareUrl) return;
+    navigator.clipboard.writeText(publicShareUrl).then(() => {
+      toast.success("公开链接已复制");
+    }).catch(() => {
+      toast.error("复制失败");
+    });
   };
 
   const handleCopyText = () => {
@@ -742,6 +782,46 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* 公开分享 */}
+          <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {publicShareEnabled ? <Globe className="w-4 h-4 text-blue-600" /> : <Lock className="w-4 h-4 text-slate-400" />}
+                <div>
+                  <Label className="text-sm font-medium text-slate-700">公开分享</Label>
+                  <p className="text-xs text-slate-500">任何人通过链接或二维码即可查看、评论和勾选</p>
+                </div>
+              </div>
+              <Switch
+                checked={publicShareEnabled}
+                onCheckedChange={handleTogglePublicShare}
+                disabled={publicShareLoading}
+                className="data-[state=checked]:bg-blue-700"
+              />
+            </div>
+
+            {publicShareEnabled && publicShareUrl && (
+              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2 border-t border-slate-200">
+                <div className="p-2 bg-white rounded-lg border border-slate-200">
+                  <QRCodeImage value={publicShareUrl} size={128} alt="公开分享二维码" />
+                </div>
+                <div className="flex-1 w-full space-y-2">
+                  <p className="text-xs text-slate-500">公开链接</p>
+                  <div className="flex gap-2">
+                    <input
+                      readOnly
+                      value={publicShareUrl}
+                      className="flex-1 text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 truncate"
+                    />
+                    <Button size="sm" variant="outline" onClick={handleCopyPublicLink}>
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 操作按钮 */}

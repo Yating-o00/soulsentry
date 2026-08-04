@@ -13,15 +13,19 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Share2, Users, Eye, Edit3, Trash2, Check, Globe, Lock } from "lucide-react";
+import { Share2, Users, Eye, Edit3, Trash2, Check, Globe, Lock, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { httpRequest } from "@/api/httpClient";
+import QRCodeImage from "@/components/ui/QRCode";
 
 export default function NoteShareDialog({ note, open, onOpenChange }) {
   const queryClient = useQueryClient();
   const [selectedUsers, setSelectedUsers] = useState(note?.shared_with || []);
   const [sharePermission, setSharePermission] = useState("view");
   const [isPublic, setIsPublic] = useState(note?.is_public || false);
+  const [publicShareUrl, setPublicShareUrl] = useState(note?.share_token ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/${note.share_token}` : "");
+  const [publicShareLoading, setPublicShareLoading] = useState(false);
 
   const { data: allUsers = [] } = useQuery({
     queryKey: ['users'],
@@ -54,6 +58,38 @@ export default function NoteShareDialog({ note, open, onOpenChange }) {
     setSelectedUsers(selectedUsers.map(u => 
       u.user_id === userId ? { ...u, permission } : u
     ));
+  };
+
+  const handleTogglePublic = async (enabled) => {
+    setIsPublic(enabled);
+    if (!note?.id) return;
+    setPublicShareLoading(true);
+    try {
+      const result = await httpRequest(`/api/public/share/generate/note/${note.id}`, {
+        method: "POST",
+        body: { enabled }
+      });
+      if (result.enabled && result.url) {
+        setPublicShareUrl(result.url);
+      } else {
+        setPublicShareUrl("");
+      }
+    } catch (error) {
+      console.error("Toggle public share failed:", error);
+      toast.error(error?.message || "公开分享设置失败");
+      setIsPublic(!enabled);
+    } finally {
+      setPublicShareLoading(false);
+    }
+  };
+
+  const handleCopyPublicLink = () => {
+    if (!publicShareUrl) return;
+    navigator.clipboard.writeText(publicShareUrl).then(() => {
+      toast.success("公开链接已复制");
+    }).catch(() => {
+      toast.error("复制失败");
+    });
   };
 
   const handleSave = async () => {
@@ -112,11 +148,46 @@ export default function NoteShareDialog({ note, open, onOpenChange }) {
               {isPublic ? <Globe className="w-4 h-4 text-blue-600" /> : <Lock className="w-4 h-4 text-slate-400" />}
               <div>
                 <Label className="text-sm font-medium">公开访问</Label>
-                <p className="text-xs text-slate-500">任何人都可以查看此心签</p>
+                <p className="text-xs text-slate-500">任何人通过链接或二维码即可查看、评论此心签</p>
               </div>
             </div>
-            <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+            <Switch
+              checked={isPublic}
+              onCheckedChange={handleTogglePublic}
+              disabled={publicShareLoading}
+            />
           </div>
+
+          {/* Public Link & QR */}
+          <AnimatePresence>
+            {isPublic && publicShareUrl && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-blue-50/50 rounded-lg border border-blue-100">
+                  <div className="p-2 bg-white rounded-lg border border-slate-200">
+                    <QRCodeImage value={publicShareUrl} size={120} alt="公开分享二维码" />
+                  </div>
+                  <div className="flex-1 w-full space-y-2">
+                    <p className="text-xs text-slate-500">公开链接</p>
+                    <div className="flex gap-2">
+                      <input
+                        readOnly
+                        value={publicShareUrl}
+                        className="flex-1 text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 truncate"
+                      />
+                      <Button size="sm" variant="outline" onClick={handleCopyPublicLink}>
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Share Permission Select */}
           <div className="flex items-center gap-2">

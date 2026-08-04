@@ -37,6 +37,9 @@ function serializeNote(note) {
     ai_status: note.aiStatus,
     deleted_at: note.deletedAt,
     tags: note.tags,
+    share_token: note.shareToken,
+    share_enabled: note.shareEnabled,
+    share_expires_at: note.shareExpiresAt,
     created_date: note.createdAt,
     updated_date: note.updatedAt
   };

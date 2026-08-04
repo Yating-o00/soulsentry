@@ -115,6 +115,9 @@ model Task {
   tags             Json?
   reminderStrategy Json?
   metadata         Json?
+  shareToken       String?    @unique
+  shareEnabled     Boolean    @default(false)
+  shareExpiresAt   DateTime?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -123,27 +126,32 @@ model Task {
   @@index([userId, dueAt])
   @@index([userId, reminderTime])
   @@index([userId, deletedAt])
+  @@index([shareEnabled, shareExpiresAt])
 }
 
 model Note {
-  id         String     @id @default(cuid())
-  userId     String
-  title      String?
-  content    String
-  plainText  String?
-  status     NoteStatus @default(ACTIVE)
-  color      String?
-  sourceType String?
-  aiStatus   String?
-  deletedAt  DateTime?
+  id           String        @id @default(cuid())
+  userId       String
+  title        String?
+  content      String
+  plainText    String?
+  status       NoteStatus    @default(ACTIVE)
+  color        String?
+  sourceType   String?
+  aiStatus     String?
+  deletedAt    DateTime?
   tags         Json?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shareToken   String?       @unique
+  shareEnabled Boolean       @default(false)
+  shareExpiresAt DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   noteComments NoteComment[]
 
   @@index([userId, status])
   @@index([userId, deletedAt])
+  @@index([shareEnabled, shareExpiresAt])
 }
 
 model Notification {
@@ -300,18 +308,21 @@ model MonthlyPlan {
 
 
 model NoteComment {
-  id        String   @id @default(cuid())
-  userId    String
-  noteId    String
-  content   String
-  mentions  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  userId       String?
+  visitorToken String?
+  visitorName  String?
+  noteId       String
+  content      String
+  mentions     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note         Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([noteId, createdAt])
+  @@index([visitorToken, createdAt])
 }
 
 
@@ -463,19 +474,38 @@ model Relationship {
 }
 
 model Comment {
-  id        String   @id @default(cuid())
-  userId    String
-  taskId    String?
-  noteId    String?
-  content   String
-  mentions  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  userId       String?
+  visitorToken String?
+  visitorName  String?
+  taskId       String?
+  noteId       String?
+  content      String
+  mentions     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([taskId, createdAt])
   @@index([noteId, createdAt])
   @@index([userId, createdAt])
+  @@index([visitorToken, createdAt])
+}
+
+model SharedActionLog {
+  id           String   @id @default(cuid())
+  shareToken   String
+  targetType   String
+  targetId     String
+  visitorToken String
+  visitorName  String?
+  actionType   String
+  payload      Json?
+  createdAt    DateTime @default(now())
+
+  @@index([shareToken, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([visitorToken, createdAt])
 }
 
 model TaskCompletion {

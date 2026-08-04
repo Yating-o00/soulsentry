@@ -8,6 +8,11 @@ const isStandalonePricingPreview = () => {
   if (typeof window === "undefined") return false;
   return ["/pricing", "/Pricing"].includes(window.location.pathname);
 };
+const isPublicSharePage = () => {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname;
+  return path.startsWith("/share/") || path.startsWith("/Share/");
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -18,7 +23,7 @@ export const AuthProvider = ({ children }) => {
   const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
 
   useEffect(() => {
-    if (isStandalonePricingPreview()) {
+    if (isStandalonePricingPreview() || isPublicSharePage()) {
       setIsLoadingPublicSettings(false);
       setIsLoadingAuth(false);
       setIsAuthenticated(false);

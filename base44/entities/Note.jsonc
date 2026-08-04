@@ -135,6 +135,17 @@
       "type": "boolean",
       "default": false
     },
+    "share_token": {
+      "type": "string"
+    },
+    "share_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "share_expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "is_burn_after_reading": {
       "type": "boolean",
       "default": false

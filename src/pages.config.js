@@ -59,6 +59,7 @@ import NotificationSettings from './pages/NotificationSettings';
 import Notifications from './pages/Notifications';
 import Pricing from './pages/Pricing';
 import ReminderSettings from './pages/ReminderSettings';
+import Share from './pages/Share';
 import Tasks from './pages/Tasks';
 import Teams from './pages/Teams';
 import Templates from './pages/Templates';
@@ -81,6 +82,7 @@ export const PAGES = {
     "Notifications": Notifications,
     "Pricing": Pricing,
     "ReminderSettings": ReminderSettings,
+    "Share": Share,
     "Tasks": Tasks,
     "Teams": Teams,
     "Templates": Templates,

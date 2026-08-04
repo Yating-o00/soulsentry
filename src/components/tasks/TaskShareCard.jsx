@@ -19,6 +19,7 @@ import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
 import useCollabInviteUrl from "@/lib/useCollabInviteUrl";
 import ShareCardAIIcon from "@/components/tasks/ShareCardAIIcon";
+import { SHARE_CARD_SCENES, getScene } from "@/components/tasks/shareCardScenes";
 
 const CATEGORY_COLORS = {
   work: { accent: "#1D4ED8", bg: "#EFF6FF" },
@@ -60,6 +61,8 @@ export default function TaskShareCard({ task, open, onClose }) {
   const [expandedView, setExpandedView] = useState(false);
   const [headerImage, setHeaderImage] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [sceneId, setSceneId] = useState("brand");
+  const scene = getScene(sceneId);
 
   const PRESET_HEADERS = [
     "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&q=80", // Landscape
@@ -73,7 +76,7 @@ export default function TaskShareCard({ task, open, onClose }) {
     setIsGeneratingImage(true);
     try {
       const { url } = await base44.integrations.Core.GenerateImage({
-        prompt: `A beautiful abstract wallpaper background for a task named "${task.title}". minimalist, artistic, high quality, 4k, suitable for card header.`,
+        prompt: `A beautiful abstract wallpaper background for a task named "${task.title}". ${scene.aiStyle}, high quality, 4k, suitable for card header.`,
       });
       setHeaderImage(url);
       toast.success(isEnglish ? "Header image generated" : "顶图已生成");
@@ -124,34 +127,11 @@ export default function TaskShareCard({ task, open, onClose }) {
     return chineseChars < totalChars * 0.3; // English if less than 30% Chinese
   }, [task]);
 
-  const [quote] = useState(() => {
-    const quotesZh = [
-      "每一个不曾起舞的日子，都是对生命的辜负。",
-      "坚持不是因为看到了希望，而是因为坚持了才有希望。",
-      "今日的努力，是明日的惊喜。",
-      "自律给我自由。",
-      "星光不问赶路人，时光不负有心人。",
-      "做难事必有所得。",
-      "种一棵树最好的时间是十年前，其次是现在。",
-      "不积跬步，无以至千里。",
-      "每天进步一点点，坚持带来大改变。",
-      "专注当下，未来可期。"
-    ];
-    const quotesEn = [
-      "The only way to do great work is to love what you do.",
-      "Success is not final, failure is not fatal: it is the courage to continue that counts.",
-      "Believe you can and you're halfway there.",
-      "The future belongs to those who believe in the beauty of their dreams.",
-      "Don't watch the clock; do what it does. Keep going.",
-      "The secret of getting ahead is getting started.",
-      "It always seems impossible until it's done.",
-      "Small daily improvements are the key to staggering long-term results.",
-      "Focus on being productive instead of busy.",
-      "Your limitation—it's only your imagination."
-    ];
-    const quotes = isEnglish ? quotesEn : quotesZh;
+  // 金句跟随场景风格切换
+  const quote = React.useMemo(() => {
+    const quotes = scene.quotes[isEnglish ? "en" : "zh"];
     return quotes[Math.floor(Math.random() * quotes.length)];
-  });
+  }, [sceneId, isEnglish]);
 
   // html2canvas is now imported directly for better performance
 
@@ -316,8 +296,8 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
 
   if (!task) return null;
 
-  // 分享卡片基础色统一使用品牌色，保证对外视觉一致
-  const categoryColor = BRAND_COLOR;
+  // 分享卡片基础色跟随场景风格（默认为品牌色）
+  const categoryColor = { accent: scene.accent, bg: scene.bg };
   
   // 决定显示多少子约定
   const displayedSubtasks = showAllSubtasks || expandedView ? subtasks : subtasks.slice(0, 6);
@@ -344,6 +324,34 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* 场景风格选择 */}
+          <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <Sparkles className="w-4 h-4" />
+              <span>{isEnglish ? "Scene Style" : "场景风格"}</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {SHARE_CARD_SCENES.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    setSceneId(s.id);
+                    setHeaderImage(s.headerImage);
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 text-xs font-semibold flex-shrink-0 transition-all ${
+                    sceneId === s.id
+                      ? "bg-white shadow-sm"
+                      : "border-transparent bg-white/60 text-slate-500 hover:bg-white"
+                  }`}
+                  style={sceneId === s.id ? { borderColor: s.accent, color: s.accent } : {}}
+                >
+                  <span>{s.emoji}</span>
+                  {s.name[isEnglish ? "en" : "zh"]}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* 样式控制选项 */}
           <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200 space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
@@ -466,7 +474,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     <div className="text-white">
                       <div className="flex items-center gap-2 mb-1 opacity-90">
                         <Calendar className="w-4 h-4" />
-                        <span className="text-sm font-medium tracking-wide">{isEnglish ? "DAILY CHECK-IN" : "每日打卡"}</span>
+                        <span className="text-sm font-medium tracking-wide">{scene.headerLabel[isEnglish ? "en" : "zh"]}</span>
                       </div>
                       <h3 className="text-3xl font-bold tracking-tight">
                         {format(new Date(), "dd")}
@@ -712,7 +720,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                        </div>
                        <div>
                          <p className="text-xs font-bold text-slate-900">{isEnglish ? "SoulSentry" : "心灵存放站"}</p>
-                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">{isEnglish ? "Focus & Achieve" : "坚定守护 · 适时轻唤"}</p>
+                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">{scene.tagline[isEnglish ? "en" : "zh"]}</p>
                        </div>
                     </div>
                     

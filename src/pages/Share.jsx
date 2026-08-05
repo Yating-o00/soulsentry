@@ -623,7 +623,7 @@ export default function Share() {
             <DialogHeader>
               <DialogTitle className="text-base">登录/注册以保存</DialogTitle>
               <DialogDescription className="text-sm text-slate-500">
-                添加至个人列表需要先登录。登录后我们会自动把这个{isTask ? "约定" : "心签"}导入你的账户。
+                添加至个人列表需要先登录。登录后你可以确认是否将该{isTask ? "约定" : "心签"}加入个人列表。
               </DialogDescription>
             </DialogHeader>
             <div className="flex gap-3 pt-2">

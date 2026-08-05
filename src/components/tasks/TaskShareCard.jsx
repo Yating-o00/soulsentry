@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -83,6 +83,13 @@ export default function TaskShareCard({ task, open, onClose }) {
       .catch(() => setCollabLogs(null))
       .finally(() => setCollabLoading(false));
   }, [publicShareEnabled, task?.share_token]);
+
+  const getSubtaskLastLog = (subtaskId) => {
+    if (!collabLogs?.recent_logs) return null;
+    return collabLogs.recent_logs.find(
+      (log) => log.action_type === "toggle" && log.payload?.subtaskId === subtaskId
+    );
+  };
 
   const PRESET_HEADERS = [
     "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&q=80", // Landscape
@@ -730,14 +737,24 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                             const isCompleted = subtask.status === "completed";
                             const title = subtask.title || '';
                             const cleanTitle = title.replace(/^\d+\.\s*/, '');
+                            const lastLog = getSubtaskLastLog(subtask.id);
                             return (
-                              <div key={subtask.id} className="flex items-center gap-3">
-                                 <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>
+                              <div key={subtask.id} className="flex items-start gap-3">
+                                 <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>
                                    {isCompleted && <Check className="w-3 h-3" />}
                                  </div>
-                                 <span className={`text-sm ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                                   {cleanTitle}
-                                 </span>
+                                 <div className="flex-1 min-w-0">
+                                   <span className={`text-sm ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                     {cleanTitle}
+                                   </span>
+                                   {lastLog && (
+                                     <div className="text-[10px] text-slate-400 mt-0.5">
+                                       {lastLog.visitor_name || "访客"}
+                                       <span className="ml-1 font-mono">#{String(lastLog.visitor_token || "").slice(0, 6)}</span>
+                                       <span className="ml-1">· {format(new Date(lastLog.created_date), "M月d日 HH:mm", { locale: zhCN })}</span>
+                                     </div>
+                                   )}
+                                 </div>
                               </div>
                             );
                          })}

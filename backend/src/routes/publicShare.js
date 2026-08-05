@@ -91,6 +91,9 @@ function escapeICS(text) {
 
 function toICSDate(date) {
   const d = date ? new Date(date) : new Date();
+  if (isNaN(d.getTime())) {
+    return new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  }
   return d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 }
 
@@ -99,10 +102,16 @@ function generateICS(item, type) {
   const description = escapeICS(item.description || item.plainText || "");
   const uid = `${item.id}@soulsentry.cn`;
   const now = toICSDate(new Date());
-  const start = item.reminderTime ? toICSDate(item.reminderTime) : now;
-  const end = item.endTime
-    ? toICSDate(item.endTime)
-    : toICSDate(new Date(new Date(start).getTime() + 60 * 60 * 1000));
+
+  const startRaw = item.reminderTime || item.dueAt || null;
+  const startDate = startRaw ? new Date(startRaw) : new Date();
+  if (isNaN(startDate.getTime())) startDate.setTime(Date.now());
+  const start = toICSDate(startDate);
+
+  const endRaw = item.endTime || null;
+  let endDate = endRaw ? new Date(endRaw) : new Date(startDate.getTime() + 60 * 60 * 1000);
+  if (isNaN(endDate.getTime())) endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+  const end = toICSDate(endDate);
 
   return [
     "BEGIN:VCALENDAR",
@@ -311,10 +320,7 @@ publicShareRouter.get("/:token/ics", async (req, res) => {
 
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
     // inline 让手机浏览器直接把 .ics 交给系统日历；桌面端会回退为下载
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="soulsentry.ics"; filename*=UTF-8''${encodeURIComponent(filename)}`
-    );
+    res.setHeader("Content-Disposition", 'inline; filename="soulsentry.ics"');
     return res.send(ics);
   } catch (error) {
     console.error("[publicShare] generate ics failed:", error);
@@ -556,13 +562,15 @@ publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
   if (isShareExpired(item)) return res.status(410).json({ error: "SHARE_EXPIRED" });
 
   try {
+    const ownerName = item.user?.displayName || item.user?.email || "未知分享者";
+    const sharedFromTag = `来自 ${ownerName} 的分享`;
     let imported;
     if (type === "task") {
       imported = await prisma.task.create({
         data: {
           userId: req.user.id,
-          title: `[来自分享] ${item.title}`,
-          description: item.description,
+          title: `[${sharedFromTag}] ${item.title}`,
+          description: [item.description || "", `（${sharedFromTag}）`].filter(Boolean).join("\n\n"),
           status: "TODO",
           priority: item.priority || "medium",
           category: item.category || "other",
@@ -575,6 +583,8 @@ publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
           metadata: {
             ...(item.metadata || {}),
             importedFromShare: true,
+            sharedByName: ownerName,
+            sharedByUserId: item.userId,
             originalTaskId: item.id,
             originalOwnerId: item.userId
           }
@@ -584,13 +594,15 @@ publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
       imported = await prisma.note.create({
         data: {
           userId: req.user.id,
-          title: `[来自分享] ${item.title || ""}`,
+          title: `[${sharedFromTag}] ${item.title || ""}`,
           content: item.content,
-          plainText: item.plainText,
+          plainText: [item.plainText || "", `（${sharedFromTag}）`].filter(Boolean).join("\n\n"),
           tags: item.tags,
           metadata: {
             ...(item.metadata || {}),
             importedFromShare: true,
+            sharedByName: ownerName,
+            sharedByUserId: item.userId,
             originalNoteId: item.id,
             originalOwnerId: item.userId
           }

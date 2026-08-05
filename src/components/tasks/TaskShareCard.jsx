@@ -20,15 +20,19 @@ import html2canvas from "html2canvas";
 import QRCodeImage from "@/components/ui/QRCode";
 import { httpRequest } from "@/api/httpClient";
 
+const THEME_PRIMARY = "#384877";
+const THEME_SECONDARY = "#3b5aa2";
+const THEME_TINT = "#EEF2FF";
+
 const CATEGORY_COLORS = {
-  work: { accent: "#1D4ED8", bg: "#EFF6FF" },
-  personal: { accent: "#8B5CF6", bg: "#F5F3FF" },
-  health: { accent: "#10B981", bg: "#ECFDF5" },
-  study: { accent: "#F59E0B", bg: "#FFFBEB" },
-  family: { accent: "#EC4899", bg: "#FDF2F8" },
-  shopping: { accent: "#F97316", bg: "#FFF7ED" },
-  finance: { accent: "#EF4444", bg: "#FEF2F2" },
-  other: { accent: "#6B7280", bg: "#F9FAFB" },
+  work: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  personal: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  health: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  study: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  family: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  shopping: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  finance: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  other: { accent: THEME_PRIMARY, bg: THEME_TINT },
 };
 
 const CATEGORY_LABELS = {
@@ -873,8 +877,10 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                           : task.title || "约定";
                       } else if (log.action_type === "import") {
                         actionText = "保存到个人列表";
+                        detailText = task.title || "约定";
                       } else if (log.action_type === "subscribe") {
                         actionText = "订阅更新";
+                        detailText = payload.email ? `邮箱：${payload.email}` : "";
                       }
                       return (
                         <div key={log.id} className="text-xs bg-white rounded-lg px-3 py-2 border border-slate-200">
@@ -939,7 +945,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
             </Button>
           </div>
 
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
+          <div className="bg-gradient-to-r from-[#384877]/10 to-[#3b5aa2]/10 rounded-xl p-4 border border-[#384877]/20">
             <div className="flex gap-3">
               <Sparkles className="w-5 h-5 text-blue-700 flex-shrink-0 mt-0.5" />
               <div>

@@ -310,9 +310,10 @@ publicShareRouter.get("/:token/ics", async (req, res) => {
     const filename = `${type === "task" ? "约定" : "心签"}-${(item.title || "未命名").slice(0, 20)}.ics`;
 
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    // inline 让手机浏览器直接把 .ics 交给系统日历；桌面端会回退为下载
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="soulsentry.ics"; filename*=UTF-8''${encodeURIComponent(filename)}`
+      `inline; filename="soulsentry.ics"; filename*=UTF-8''${encodeURIComponent(filename)}`
     );
     return res.send(ics);
   } catch (error) {

@@ -127,6 +127,8 @@ export default function NoteComments({ noteId }) {
           {comments.map((comment) => {
             const user = getUserByEmail(comment.created_by);
             const isOwn = comment.created_by === currentUser?.email;
+            const visitorDisplay = comment.visitor_name || (comment.visitor_token ? `访客 #${comment.visitor_token.slice(0, 6)}` : null);
+            const displayName = user?.full_name || visitorDisplay || '未知用户';
 
             return (
               <motion.div
@@ -138,13 +140,13 @@ export default function NoteComments({ noteId }) {
               >
                 <Avatar className="h-8 w-8 flex-shrink-0">
                   <AvatarFallback className="bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white text-xs">
-                    {getInitials(user?.full_name)}
+                    {getInitials(displayName)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-medium text-sm text-slate-800">
-                      {user?.full_name || '未知用户'}
+                      {displayName}
                     </span>
                     <span className="text-xs text-slate-400">
                       {format(new Date(comment.created_date), "MM月dd日 HH:mm", { locale: zhCN })}

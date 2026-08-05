@@ -14,12 +14,16 @@ const noteCommentInputSchema = z.object({
 noteCommentsRouter.use(requireAuth);
 
 function serializeNoteComment(comment) {
+  const visitorLabel = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
   return {
     id: comment.id,
     note_id: comment.noteId,
     content: comment.content,
     mentions: comment.mentions,
     created_by: comment.user?.email || null,
+    visitor_token: comment.visitorToken,
+    visitor_name: comment.visitorName,
+    visitor_label: visitorLabel,
     created_date: comment.createdAt,
     updated_date: comment.updatedAt
   };

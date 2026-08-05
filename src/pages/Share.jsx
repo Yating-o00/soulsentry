@@ -490,17 +490,22 @@ export default function Share() {
           <CardContent className="py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button
+                asChild
                 variant="outline"
                 className="justify-start gap-2 h-auto py-3 px-4 border-slate-200 hover:bg-slate-50"
-                onClick={handleAddToCalendar}
               >
-                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                  <CalendarPlus className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-medium text-slate-800">添加到日历</p>
-                  <p className="text-xs text-slate-500">下载 .ics 文件导入系统日历</p>
-                </div>
+                <a
+                  href={`${typeof window !== "undefined" ? window.location.origin : ""}/api/public/share/${token}/ics`}
+                  className="no-underline"
+                >
+                  <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                    <CalendarPlus className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-slate-800">添加到日历</p>
+                    <p className="text-xs text-slate-500">手机上会直接打开日历 App</p>
+                  </div>
+                </a>
               </Button>
 
               <Button

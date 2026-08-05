@@ -25,6 +25,7 @@ function parseSort(sort = "-created_date") {
 }
 
 function serializeComment(comment) {
+  const visitorLabel = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
   return {
     id: comment.id,
     task_id: comment.taskId,
@@ -32,6 +33,9 @@ function serializeComment(comment) {
     mentions: comment.mentions || [],
     created_by: comment.user?.email || "",
     created_by_id: comment.userId,
+    visitor_token: comment.visitorToken,
+    visitor_name: comment.visitorName,
+    visitor_label: visitorLabel,
     created_date: comment.createdAt,
     updated_date: comment.updatedAt
   };

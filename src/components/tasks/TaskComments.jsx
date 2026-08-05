@@ -123,6 +123,8 @@ export default function TaskComments({ task }) {
           {comments.map((comment) => {
             const user = getUserByEmail(comment.created_by);
             const isOwnComment = comment.created_by === currentUser?.email;
+            const visitorDisplay = comment.visitor_name || (comment.visitor_token ? `访客 #${comment.visitor_token.slice(0, 6)}` : null);
+            const displayName = user?.full_name || visitorDisplay || "未知用户";
 
             return (
               <motion.div
@@ -135,14 +137,14 @@ export default function TaskComments({ task }) {
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs">
                       <AvatarFallback className="bg-transparent">
-                        {getInitials(user?.full_name)}
+                        {getInitials(displayName)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-slate-800">
-                            {user?.full_name || "未知用户"}
+                            {displayName}
                           </p>
                           {isOwnComment && (
                             <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">

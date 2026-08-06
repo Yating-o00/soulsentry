@@ -1,13 +1,7 @@
-import { Sparkles, LayoutDashboard, CalendarClock, Zap, MapPin, ListTodo, Layers, StickyNote, Rocket } from "lucide-react";
+import { LayoutDashboard, CalendarClock, Zap, MapPin, ListTodo, Layers, StickyNote, Rocket } from "lucide-react";
 
 // 跨页面新手引导：path 指定步骤所在页面，targetSelector 高亮真实功能模块（找不到时自动居中展示）
 export const TOUR_STEPS = [
-  {
-    icon: Sparkles,
-    path: "/",
-    title: "欢迎来到心栈SoulSentry",
-    description: "用一句话记下约定，AI 会在对的时间、对的地点提醒你。接下来带你逛一圈核心功能，随时可跳过。",
-  },
   {
     icon: LayoutDashboard,
     path: "/",

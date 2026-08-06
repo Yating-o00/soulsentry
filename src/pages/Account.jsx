@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight, Brain } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight, Brain, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
@@ -185,6 +185,8 @@ export default function Account() {
       .slice(0, 2) || "U";
   };
 
+  const isDemo = user?.email === "demo@soulsentry.local" || String(user?.role || "").toLowerCase() === "demo";
+
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-4xl mx-auto">
       <motion.div
@@ -197,7 +199,39 @@ export default function Account() {
         <p className="text-slate-600">管理您的个人信息和账户设置</p>
       </motion.div>
 
-
+      {isDemo && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">当前为 Demo 账户体验模式</p>
+              <p className="text-xs text-amber-700 mt-1">
+                你尚未登录/注册。Demo 中的数据不会保存到个人账户，退出后可能丢失。如需使用完整功能，请退出后重新登录或注册。
+              </p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    base44.auth.logout();
+                    base44.auth.redirectToLogin();
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  退出并登录 / 注册
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleLogout}
+                  className="border-amber-300 text-amber-700 hover:bg-amber-100"
+                >
+                  退出 Demo
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 用户信息卡片 */}
       <motion.div

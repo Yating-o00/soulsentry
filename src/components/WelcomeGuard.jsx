@@ -25,23 +25,6 @@ const setStorageItem = (key, value) => {
 };
 
 export default function WelcomeGuard({ children }) {
-  const location = useLocation();
-  // Initialize state synchronously to avoid white flash
-  const [showWelcome, setShowWelcome] = useState(() => {
-    const completed = getStorageItem("soul_sentry_welcome_completed_v1");
-    return !completed;
-  });
-
-  const handleComplete = () => {
-    setStorageItem("soul_sentry_welcome_completed_v1", "true");
-    setShowWelcome(false);
-  };
-
-  // Only gate the landing page so direct page previews can render as expected.
-  // Public share pages should never show the welcome screen.
-  if (showWelcome && location.pathname === "/") {
-    return <Welcome onComplete={handleComplete} />;
-  }
-
+  // 暂时关闭 Welcome 页面，后续可通过开启下方逻辑恢复
   return children;
 }

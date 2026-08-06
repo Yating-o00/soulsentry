@@ -22,11 +22,16 @@ import {
   Loader2,
   ChevronLeft,
   StickyNote,
-  ListTodo
+  ListTodo,
+  ExternalLink,
+  Copy,
+  Share2
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { httpRequest } from "@/api/httpClient";
+import QRCodeImage from "@/components/ui/QRCode";
+import html2canvas from "html2canvas";
 import {
   Dialog,
   DialogContent,
@@ -95,15 +100,41 @@ function isDemoUser(user) {
   return user.email === "demo@soulsentry.local" || String(user.role || "").toLowerCase() === "demo";
 }
 
-function openCalendar(icsUrl) {
-  // Open the .ics endpoint directly; mobile browsers will hand it off to the calendar app.
-  const link = document.createElement("a");
-  link.href = icsUrl;
-  link.target = "_blank";
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+function isWechatBrowser() {
+  if (typeof window === "undefined") return false;
+  return /MicroMessenger|WeChat/i.test(window.navigator.userAgent);
+}
+
+function toCalendarUTC(date) {
+  const d = date ? new Date(date) : new Date();
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+}
+
+function getCalendarEventData(item) {
+  const startRaw = item?.reminder_time || item?.due_at || item?.reminderTime || item?.dueAt;
+  const startDate = startRaw ? new Date(startRaw) : new Date();
+  if (isNaN(startDate.getTime())) startDate.setTime(Date.now());
+  const start = toCalendarUTC(startDate);
+
+  const endRaw = item?.end_time || item?.endTime;
+  let endDate = endRaw ? new Date(endRaw) : new Date(startDate.getTime() + 60 * 60 * 1000);
+  if (isNaN(endDate.getTime())) endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+  const end = toCalendarUTC(endDate);
+
+  const title = encodeURIComponent(item?.title || "未命名");
+  const details = encodeURIComponent(item?.description || item?.plain_text || "");
+  return { start, end, title, details };
+}
+
+function getGoogleCalendarUrl(item) {
+  const { start, end, title, details } = getCalendarEventData(item);
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}`;
+}
+
+function getOutlookCalendarUrl(item) {
+  const { start, end, title, details } = getCalendarEventData(item);
+  return `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&body=${details}&startdt=${start}&enddt=${end}`;
 }
 
 export default function Share() {
@@ -122,6 +153,8 @@ export default function Share() {
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [namePromptOpen, setNamePromptOpen] = useState(false);
   const pendingActionRef = useRef(null);
+  const snapshotRef = useRef(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
 
   const visitorToken = useMemo(() => getVisitorToken(token), [token]);
 
@@ -305,6 +338,33 @@ export default function Share() {
     }
   };
 
+  const handleGenerateSnapshot = async () => {
+    if (!snapshotRef.current) return;
+    setSnapshotLoading(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const canvas = await html2canvas(snapshotRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        windowWidth: snapshotRef.current.scrollWidth,
+        windowHeight: snapshotRef.current.scrollHeight
+      });
+      const link = document.createElement("a");
+      link.download = `约定分享-${item?.title || "未命名"}-${Date.now()}.png`;
+      link.href = canvas.toDataURL("image/png", 0.95);
+      link.click();
+      toast.success("分享快照已生成，可发送给好友");
+    } catch (err) {
+      console.error("snapshot error:", err);
+      toast.error("生成快照失败，请重试");
+    } finally {
+      setSnapshotLoading(false);
+    }
+  };
+
   const handleLoginRedirect = () => {
     const returnUrl = encodeURIComponent(`/share/${token}`);
     navigate(`/login?redirect=${returnUrl}`);
@@ -348,6 +408,10 @@ export default function Share() {
   const item = data?.item;
   const comments = data?.comments || [];
   const subtasks = data?.subtasks || [];
+  const icsUrl = typeof window !== "undefined" ? `${window.location.origin}/api/public/share/${token}/ics` : "";
+  const googleUrl = item ? getGoogleCalendarUrl(item) : "";
+  const outlookUrl = item ? getOutlookCalendarUrl(item) : "";
+  const inWechat = isWechatBrowser();
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
@@ -366,6 +430,18 @@ export default function Share() {
           </div>
         </div>
       </header>
+
+      {inWechat && (
+        <div className="bg-amber-50 border-b border-amber-100">
+          <div className="max-w-3xl mx-auto px-4 py-2.5 flex items-start gap-2 text-sm text-amber-800">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <p>
+              你正在微信内打开。为保证日历、评论等功能正常，请点击右上角 ⋯ 选择
+              <strong>“在浏览器打开”</strong>。
+            </p>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         {/* 拥有者信息 */}
@@ -487,26 +563,46 @@ export default function Share() {
 
         {/* 操作入口 */}
         <Card className="border-slate-200 shadow-sm">
-          <CardContent className="py-4">
+          <CardContent className="py-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Button
-                asChild
-                variant="outline"
-                className="justify-start gap-2 h-auto py-3 px-4 border-slate-200 hover:bg-slate-50"
-              >
-                <a
-                  href={`${typeof window !== "undefined" ? window.location.origin : ""}/api/public/share/${token}/ics`}
-                  className="no-underline"
+              {inWechat ? (
+                <Button
+                  variant="outline"
+                  className="justify-start gap-2 h-auto py-3 px-4 border-slate-200 hover:bg-slate-50"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(icsUrl);
+                      toast.success("日历链接已复制，请在浏览器中粘贴打开");
+                    } catch {
+                      toast.error("复制失败，请长按手动复制链接");
+                    }
+                  }}
                 >
                   <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                    <CalendarPlus className="w-4 h-4 text-emerald-600" />
+                    <Copy className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-medium text-slate-800">添加到日历</p>
-                    <p className="text-xs text-slate-500">手机上会直接打开日历 App</p>
+                    <p className="text-sm font-medium text-slate-800">复制日历链接</p>
+                    <p className="text-xs text-slate-500">去浏览器打开即可添加</p>
                   </div>
-                </a>
-              </Button>
+                </Button>
+              ) : (
+                <Button
+                  asChild
+                  variant="outline"
+                  className="justify-start gap-2 h-auto py-3 px-4 border-slate-200 hover:bg-slate-50"
+                >
+                  <a href={icsUrl} className="no-underline">
+                    <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                      <CalendarPlus className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-slate-800">添加到日历</p>
+                      <p className="text-xs text-slate-500">手机上会直接打开日历 App</p>
+                    </div>
+                  </a>
+                </Button>
+              )}
 
               <Button
                 variant="outline"
@@ -525,6 +621,64 @@ export default function Share() {
                     {currentUser ? "导入到你的约定/心签" : "登录/注册后即可保存"}
                   </p>
                 </div>
+              </Button>
+            </div>
+
+            {/* 日历兜底链接 */}
+            {item && (
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-xs text-slate-500 mb-2">如果无法直接打开日历，可使用以下方式：</p>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={googleUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                  >
+                    Google 日历 <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href={outlookUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                  >
+                    Outlook 日历 <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href={icsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                  >
+                    下载 .ics <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 生成分享快照 */}
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#384877]/10 flex items-center justify-center">
+                  <Share2 className="w-5 h-5 text-[#384877]" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-800">生成分享快照</p>
+                  <p className="text-xs text-slate-500">下载带二维码的卡片图片，扫码即可参与</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleGenerateSnapshot}
+                disabled={snapshotLoading}
+                className="bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+              >
+                {snapshotLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "生成图片"}
               </Button>
             </div>
           </CardContent>
@@ -621,6 +775,61 @@ export default function Share() {
             )}
           </CardContent>
         </Card>
+
+        {/* 隐藏：分享快照渲染区 */}
+        <div
+          ref={snapshotRef}
+          className="fixed left-[-9999px] top-0 bg-white"
+          style={{ width: "375px", padding: "24px" }}
+        >
+          <div className="bg-gradient-to-br from-[#384877] to-[#3b5aa2] rounded-2xl p-5 text-white mb-5">
+            <div className="flex items-center gap-2 mb-3 opacity-90">
+              {isTask ? <ListTodo className="w-5 h-5" /> : <StickyNote className="w-5 h-5" />}
+              <span className="text-sm font-medium">{isTask ? "公开约定" : "公开心签"}</span>
+            </div>
+            <h2 className="text-xl font-bold leading-snug mb-2">{item?.title || "未命名"}</h2>
+            <p className="text-sm opacity-80">
+              来自 {data?.owner_name || "分享者"} 的分享
+            </p>
+          </div>
+
+          {isTask && subtasks.length > 0 && (
+            <div className="mb-5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">子约定</p>
+              <div className="space-y-2">
+                {subtasks.slice(0, 8).map((sub) => (
+                  <div key={sub.id} className="flex items-start gap-2">
+                    <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${sub.status === "completed" ? "bg-[#384877] border-[#384877] text-white" : "border-slate-300"}`}>
+                      {sub.status === "completed" && <CheckCircle2 className="w-3 h-3" />}
+                    </div>
+                    <span className={`text-sm ${sub.status === "completed" ? "text-slate-400 line-through" : "text-slate-700"}`}>
+                      {sub.title}
+                    </span>
+                  </div>
+                ))}
+                {subtasks.length > 8 && (
+                  <p className="text-xs text-slate-400 pl-6">+ 还有 {subtasks.length - 8} 项</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col items-center justify-center bg-slate-50 rounded-2xl p-5 border border-slate-100">
+            <QRCodeImage
+              value={typeof window !== "undefined" ? `${window.location.origin}/share/${token}` : ""}
+              size={160}
+              className="w-40 h-40 mb-3"
+            />
+            <p className="text-sm font-medium text-slate-800">扫码参与</p>
+            <p className="text-xs text-slate-500 text-center mt-1">
+              匿名勾选 · 评论 · 订阅更新
+            </p>
+          </div>
+
+          <div className="mt-5 text-center">
+            <p className="text-xs text-slate-400">SoulSentry · 心栈</p>
+          </div>
+        </div>
 
         {/* 登录/导入提示 */}
         <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>

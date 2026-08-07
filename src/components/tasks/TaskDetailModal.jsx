@@ -71,6 +71,7 @@ import TaskRescuePrompt from "@/components/tasks/TaskRescuePrompt";
 import ConvertToNoteButton from "@/components/tasks/ConvertToNoteButton";
 import { invokeAI } from "@/components/utils/aiHelper";
 import TaskLocationBinder from "@/components/tasks/TaskLocationBinder";
+import SubtaskChildCount from "@/components/tasks/SubtaskChildCount";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
@@ -85,6 +86,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [isTranslating, setIsTranslating] = useState(false);
   const [showReviseDialog, setShowReviseDialog] = useState(false);
   const [revisingSubtask, setRevisingSubtask] = useState(null);
+  const [viewingSubtask, setViewingSubtask] = useState(null);
   const queryClient = useQueryClient();
 
   // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
@@ -994,7 +996,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                         />
                       </div>
                       <span
-                        className={`flex-1 text-[15px] ${
+                        onClick={() => setViewingSubtask(subtask)}
+                        title="点击打开子约定，可在其中继续添加二级子约定"
+                        className={`flex-1 text-[15px] cursor-pointer hover:text-[#384877] hover:underline underline-offset-2 transition-colors ${
                           subtask.status === "completed"
                             ? "line-through text-slate-400"
                             : "text-slate-900"
@@ -1002,6 +1006,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                       >
                         {subtask.title}
                       </span>
+                      <SubtaskChildCount taskId={subtask.id} />
                       {subtask.revisions?.length > 0 && (
                         <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5">
                           <GitBranch className="w-3 h-3" />
@@ -1290,6 +1295,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
         open={showReviseDialog}
         onOpenChange={setShowReviseDialog}
       />
+
+      {/* 打开子约定详情：支持在其中继续添加二级子约定 */}
+      {viewingSubtask && (
+        <TaskDetailModal
+          task={viewingSubtask}
+          open={!!viewingSubtask}
+          onClose={() => setViewingSubtask(null)}
+        />
+      )}
 
       <TaskReviseDialog
         task={revisingSubtask}

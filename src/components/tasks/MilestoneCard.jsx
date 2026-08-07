@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
+import SubtaskChildren from "@/components/tasks/SubtaskChildren";
 
 export default function MilestoneCard({
   task,
@@ -481,6 +482,7 @@ export default function MilestoneCard({
                     {subtask.title}
                   </span>
                   <SubtaskContextBadges subtask={subtask} />
+                  <SubtaskChildren subtask={subtask} onToggle={!isSelectionMode ? onToggleSubtask : undefined} />
                 </div>
               </div>
               );

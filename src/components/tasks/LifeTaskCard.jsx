@@ -28,6 +28,7 @@ import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
 import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
 import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
 import PriorityQuickMenu from "@/components/tasks/PriorityQuickMenu";
+import SubtaskChildren from "@/components/tasks/SubtaskChildren";
 
 export default function LifeTaskCard({ 
   task, 
@@ -789,6 +790,7 @@ export default function LifeTaskCard({
                         </span>
                         <SubtaskUpdatedBadge subtask={subtask} />
                         <SubtaskContextBadges subtask={subtask} />
+                        <SubtaskChildren subtask={subtask} onToggle={!isSelectionMode ? onToggleSubtask : undefined} />
                       </div>
                     </div>
                     );

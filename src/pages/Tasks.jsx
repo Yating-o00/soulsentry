@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers } from "lucide-react";
+import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -827,6 +827,26 @@ export default function Tasks() {
                 });
               };
 
+              const handleRestore = (task) => {
+                updateTaskAsync({
+                  id: task.id,
+                  data: { status: 'pending', completed_at: null, progress: 0 }
+                });
+              };
+
+              const RestoreButton = ({ task }) => (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); handleRestore(task); }}
+                  title="恢复为未完成"
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-500 hover:text-[#384877] hover:bg-[#eef2ff] transition-colors flex-shrink-0 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  恢复
+                </span>
+              );
+
               const renderSubRow = (task) => (
                 <div
                   key={task.id}
@@ -846,6 +866,7 @@ export default function Tasks() {
                       {task.completed_at ? `完成于 ${new Date(task.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
                     </p>
                   </div>
+                  <RestoreButton task={task} />
                 </div>
               );
 
@@ -879,6 +900,7 @@ export default function Tasks() {
                         {parent.completed_at ? `完成于 ${new Date(parent.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
                       </p>
                     </div>
+                    <RestoreButton task={parent} />
                     {hasChildren && (
                       <ChevronDown className={cn(
                         "w-4 h-4 text-slate-400 flex-shrink-0 mt-1 transition-transform",

@@ -72,8 +72,7 @@ import ConvertToNoteButton from "@/components/tasks/ConvertToNoteButton";
 import { invokeAI } from "@/components/utils/aiHelper";
 import TaskLocationBinder from "@/components/tasks/TaskLocationBinder";
 import SubtaskChildren from "@/components/tasks/SubtaskChildren";
-import TaskMetaEditor from "@/components/tasks/TaskMetaEditor";
-import { Pencil } from "lucide-react";
+import InlineEditableText from "@/components/tasks/InlineEditableText";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
@@ -88,7 +87,6 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [isTranslating, setIsTranslating] = useState(false);
   const [showReviseDialog, setShowReviseDialog] = useState(false);
   const [revisingSubtask, setRevisingSubtask] = useState(null);
-  const [isEditingMeta, setIsEditingMeta] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
@@ -613,23 +611,21 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             >
               {task.status === 'completed' && <CheckCircle2 className="w-5 h-5" strokeWidth={2.5} />}
             </button>
-            <DialogTitle className={`text-lg md:text-[22px] font-bold tracking-tight line-clamp-2 leading-snug flex-1 transition-colors ${
+            <DialogTitle className={`text-lg md:text-[22px] font-bold tracking-tight leading-snug flex-1 transition-colors ${
               task.status === 'completed' ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-900'
             }`}>
-              {task.title}
+              <InlineEditableText
+                value={task.title}
+                required
+                placeholder="约定标题"
+                inputClassName="text-lg md:text-[22px] font-bold"
+                onSave={(v) => updateTaskMutation.mutateAsync({ id: task.id, data: { title: v } })}
+              >
+                {task.title}
+              </InlineEditableText>
             </DialogTitle>
           </div>
           <div className="flex items-center gap-2 md:absolute md:right-12 md:top-5">
-             <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsEditingMeta(true)}
-                className="h-9 px-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 gap-1.5"
-                title="编辑标题与说明"
-             >
-                <Pencil className="w-4 h-4" />
-                <span className="hidden md:inline text-xs font-medium">编辑</span>
-             </Button>
              <Button
                 variant="ghost"
                 size="sm"
@@ -699,17 +695,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             </div>
           )}
 
-          {isEditingMeta && (
-            <TaskMetaEditor
-              task={task}
-              onSave={(data) => updateTaskMutation.mutateAsync({ id: task.id, data })}
-              onCancel={() => setIsEditingMeta(false)}
-            />
-          )}
-
-          {!isEditingMeta && task.description && (
-            <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-slate-100">
-              <ReactMarkdown 
+          <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-slate-100">
+            <InlineEditableText
+              value={task.description}
+              multiline
+              placeholder="点击添加说明内容..."
+              inputClassName="text-[15px] leading-relaxed"
+              onSave={(v) => updateTaskMutation.mutateAsync({ id: task.id, data: { description: v } })}
+            >
+              <ReactMarkdown
                 className="prose prose-sm max-w-none text-[15px] text-slate-900 leading-relaxed
                   prose-headings:text-slate-900 prose-headings:font-semibold prose-headings:mb-2 prose-headings:mt-3 first:prose-headings:mt-0
                   prose-p:my-2 prose-p:leading-relaxed first:prose-p:mt-0 last:prose-p:mb-0
@@ -726,8 +720,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               >
                 {task.description}
               </ReactMarkdown>
-            </div>
-          )}
+            </InlineEditableText>
+          </div>
 
           {/* 主动关联：自动吸附相关的历史心签与已完成约定 */}
           <RelatedKnowledgePanel task={task} />

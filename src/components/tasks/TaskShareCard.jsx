@@ -58,6 +58,7 @@ export default function TaskShareCard({ task, open, onClose }) {
   const cardRef = useRef(null);
   const [generating, setGenerating] = useState(false);
   const [showAllSubtasks, setShowAllSubtasks] = useState(false);
+  const [showSubLevels, setShowSubLevels] = useState(true);
   const [expandedView, setExpandedView] = useState(false);
   const [headerImage, setHeaderImage] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -93,6 +94,17 @@ export default function TaskShareCard({ task, open, onClose }) {
     queryKey: ['subtasks', task?.id],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: task.id }),
     enabled: !!task?.id,
+    initialData: [],
+  });
+
+  // 二级子约定（展开所有层级时使用）
+  const { data: grandChildren = [] } = useQuery({
+    queryKey: ['shareCardGrandChildren', task?.id, subtasks.map(s => s.id).join(',')],
+    queryFn: async () => {
+      const lists = await Promise.all(subtasks.map(s => base44.entities.Task.filter({ parent_task_id: s.id })));
+      return lists.flat().filter(c => !c.deleted_at);
+    },
+    enabled: subtasks.length > 0,
     initialData: [],
   });
 
@@ -276,7 +288,9 @@ ${subtasks.length > 0 ? `\n📌 子约定清单 (${completedSubtasks}/${subtasks
   const title = s.title || '';
   const titleMatch = title.match(/^(\d+)\.\s*/);
   const cleanTitle = titleMatch ? title.replace(/^\d+\.\s*/, '') : title;
-  return `${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`;
+  const kids = showSubLevels ? grandChildren.filter(c => c.parent_task_id === s.id) : [];
+  const kidLines = kids.map(c => `    - ${(c.title || '').replace(/^\d+\.\s*/, '')} ${c.status === "completed" ? "✅" : "⭕"}`).join('\n');
+  return `${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}${kidLines ? `\n${kidLines}` : ''}`;
 }).join('\n')}` : ''}
 
 🔗 查看详情：
@@ -300,7 +314,11 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
   const categoryColor = { accent: scene.accent, bg: scene.bg };
   
   // 决定显示多少子约定
-  const displayedSubtasks = showAllSubtasks || expandedView ? subtasks : subtasks.slice(0, 6);
+  const baseSubtasks = showAllSubtasks || expandedView ? subtasks : subtasks.slice(0, 6);
+  const displayedSubtasks = baseSubtasks.map(s => ({
+    ...s,
+    children: showSubLevels ? grandChildren.filter(c => c.parent_task_id === s.id) : [],
+  }));
   const hasMoreSubtasks = subtasks.length > 6 && !showAllSubtasks && !expandedView;
 
   return (
@@ -396,6 +414,30 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                </button>
             </div>
           </div>
+
+          {/* 展开所有层级 */}
+          {grandChildren.length > 0 && (
+            <div className="flex items-center justify-between p-4 bg-slate-50/80 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-3">
+                <Target className="w-5 h-5 text-slate-500" />
+                <div>
+                  <Label className="text-sm font-semibold text-slate-800">
+                    {isEnglish ? "Expand All Levels" : "展开所有子约定层级"}
+                  </Label>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {isEnglish
+                      ? `${grandChildren.length} nested items will be shown`
+                      : `共 ${grandChildren.length} 个二级子约定，展开后一并显示在卡片中`}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={showSubLevels}
+                onCheckedChange={setShowSubLevels}
+                className="data-[state=checked]:bg-[#384877]"
+              />
+            </div>
+          )}
 
           {/* 列表控制选项 */}
           {subtasks.length > 6 && (

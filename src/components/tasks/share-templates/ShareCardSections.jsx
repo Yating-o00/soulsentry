@@ -35,7 +35,15 @@ export function Checklist({ items, hasMore, remaining, accent, numbered = false 
   return <div className="space-y-2.5">
     {items.map((item, index) => { const done = item.status === "completed"; return <div key={item.id} className="flex items-start gap-3 text-sm">
       <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border" style={done ? { backgroundColor: accent, borderColor: accent, color: "white" } : { borderColor: `${accent}55`, color: accent }}>{done ? <Check className="h-3 w-3" /> : numbered ? index + 1 : null}</div>
-      <span className={done ? "text-slate-400 line-through" : "text-slate-700"}>{(item.title || "").replace(/^\d+\.\s*/, "")}</span>
+      <div className="min-w-0 flex-1">
+        <span className={done ? "text-slate-400 line-through" : "text-slate-700"}>{(item.title || "").replace(/^\d+\.\s*/, "")}</span>
+        {(item.children || []).length > 0 && <div className="mt-1.5 space-y-1.5 border-l-2 pl-3" style={{ borderColor: `${accent}30` }}>
+          {item.children.map((child) => { const cdone = child.status === "completed"; return <div key={child.id} className="flex items-start gap-2 text-xs">
+            <div className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border" style={cdone ? { backgroundColor: accent, borderColor: accent, color: "white" } : { borderColor: `${accent}55` }}>{cdone ? <Check className="h-2 w-2" /> : null}</div>
+            <span className={cdone ? "text-slate-400 line-through" : "text-slate-600"}>{(child.title || "").replace(/^\d+\.\s*/, "")}</span>
+          </div>; })}
+        </div>}
+      </div>
     </div>; })}
     {hasMore && <p className="pl-8 text-xs italic text-slate-400">+ {remaining}</p>}
   </div>;

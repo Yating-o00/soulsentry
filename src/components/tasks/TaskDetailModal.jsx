@@ -71,7 +71,7 @@ import TaskRescuePrompt from "@/components/tasks/TaskRescuePrompt";
 import ConvertToNoteButton from "@/components/tasks/ConvertToNoteButton";
 import { invokeAI } from "@/components/utils/aiHelper";
 import TaskLocationBinder from "@/components/tasks/TaskLocationBinder";
-import SubtaskChildCount from "@/components/tasks/SubtaskChildCount";
+import SubtaskChildren from "@/components/tasks/SubtaskChildren";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
@@ -86,7 +86,6 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [isTranslating, setIsTranslating] = useState(false);
   const [showReviseDialog, setShowReviseDialog] = useState(false);
   const [revisingSubtask, setRevisingSubtask] = useState(null);
-  const [viewingSubtask, setViewingSubtask] = useState(null);
   const queryClient = useQueryClient();
 
   // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
@@ -161,6 +160,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const createSubtaskMutation = useMutation({
     mutationFn: (data) => base44.entities.Task.create(data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subtasks', task?.id] });
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       setNewSubtask("");
@@ -357,6 +357,18 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     await updateTaskMutation.mutateAsync({
       id: task.id,
       data: { progress }
+    });
+  };
+
+  // 二级子约定：仅切换自身完成状态，不影响主约定进度
+  const handleToggleChild = async (child) => {
+    const newStatus = child.status === "completed" ? "pending" : "completed";
+    await updateTaskMutation.mutateAsync({
+      id: child.id,
+      data: {
+        status: newStatus,
+        completed_at: newStatus === "completed" ? new Date().toISOString() : null
+      }
     });
   };
 
@@ -981,55 +993,59 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -100 }}
-                      className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all hover:shadow-sm ${
+                      className={`p-3.5 rounded-xl border transition-all hover:shadow-sm ${
                         subtask.status === "completed"
                           ? "bg-slate-50 border-slate-200"
                           : "bg-white border-[#d6dcf0] hover:border-[#384877]/40"
                       }`}
                     >
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={subtask.status === "completed"}
-                          onCheckedChange={() => handleToggleSubtask(subtask)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-5 w-5"
-                        />
-                      </div>
-                      <span
-                        onClick={() => setViewingSubtask(subtask)}
-                        title="点击打开子约定，可在其中继续添加二级子约定"
-                        className={`flex-1 text-[15px] cursor-pointer hover:text-[#384877] hover:underline underline-offset-2 transition-colors ${
-                          subtask.status === "completed"
-                            ? "line-through text-slate-400"
-                            : "text-slate-900"
-                        }`}
-                      >
-                        {subtask.title}
-                      </span>
-                      <SubtaskChildCount taskId={subtask.id} />
-                      {subtask.revisions?.length > 0 && (
-                        <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5">
-                          <GitBranch className="w-3 h-3" />
-                          v{subtask.revisions.length + 1}
+                      <div className="flex items-center gap-3">
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={subtask.status === "completed"}
+                            onCheckedChange={() => handleToggleSubtask(subtask)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-5 w-5"
+                          />
+                        </div>
+                        <span
+                          className={`flex-1 text-[15px] ${
+                            subtask.status === "completed"
+                              ? "line-through text-slate-400"
+                              : "text-slate-900"
+                          }`}
+                        >
+                          {subtask.title}
                         </span>
-                      )}
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setRevisingSubtask(subtask)}
-                        title="新一轮更新"
-                        className="h-8 w-8 hover:bg-amber-100 hover:text-amber-600"
-                      >
-                        <GitBranch className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => deleteSubtaskMutation.mutate(subtask.id)}
-                        className="h-8 w-8 hover:bg-red-100 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        {subtask.revisions?.length > 0 && (
+                          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5">
+                            <GitBranch className="w-3 h-3" />
+                            v{subtask.revisions.length + 1}
+                          </span>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setRevisingSubtask(subtask)}
+                          title="新一轮更新"
+                          className="h-8 w-8 hover:bg-amber-100 hover:text-amber-600"
+                        >
+                          <GitBranch className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteSubtaskMutation.mutate(subtask.id)}
+                          className="h-8 w-8 hover:bg-red-100 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {/* 二级子约定：缩进挂在一级子约定下，直接内联添加 */}
+                      <div className="pl-8">
+                        <SubtaskChildren subtask={subtask} onToggle={handleToggleChild} />
+                      </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -1295,15 +1311,6 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
         open={showReviseDialog}
         onOpenChange={setShowReviseDialog}
       />
-
-      {/* 打开子约定详情：支持在其中继续添加二级子约定 */}
-      {viewingSubtask && (
-        <TaskDetailModal
-          task={viewingSubtask}
-          open={!!viewingSubtask}
-          onClose={() => setViewingSubtask(null)}
-        />
-      )}
 
       <TaskReviseDialog
         task={revisingSubtask}

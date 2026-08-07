@@ -52,7 +52,7 @@ export default function SubtaskChildren({ subtask, onToggle }) {
             className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 px-1 py-0.5 -ml-1 rounded hover:bg-stone-100/70 transition-colors"
           >
             <ChevronRight className={cn("w-3 h-3 transition-transform", open && "rotate-90")} />
-            {done}/{children.length} 二级子约定
+            {done}/{children.length}
           </button>
         )}
         <button
@@ -66,7 +66,6 @@ export default function SubtaskChildren({ subtask, onToggle }) {
           )}
         >
           <Plus className="w-3 h-3" />
-          {children.length > 0 ? "添加" : "二级子约定"}
         </button>
       </div>
 

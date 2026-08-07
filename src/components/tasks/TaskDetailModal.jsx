@@ -72,6 +72,8 @@ import ConvertToNoteButton from "@/components/tasks/ConvertToNoteButton";
 import { invokeAI } from "@/components/utils/aiHelper";
 import TaskLocationBinder from "@/components/tasks/TaskLocationBinder";
 import SubtaskChildren from "@/components/tasks/SubtaskChildren";
+import TaskMetaEditor from "@/components/tasks/TaskMetaEditor";
+import { Pencil } from "lucide-react";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
@@ -86,6 +88,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [isTranslating, setIsTranslating] = useState(false);
   const [showReviseDialog, setShowReviseDialog] = useState(false);
   const [revisingSubtask, setRevisingSubtask] = useState(null);
+  const [isEditingMeta, setIsEditingMeta] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
@@ -620,6 +623,16 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
              <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => setIsEditingMeta(true)}
+                className="h-9 px-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 gap-1.5"
+                title="编辑标题与说明"
+             >
+                <Pencil className="w-4 h-4" />
+                <span className="hidden md:inline text-xs font-medium">编辑</span>
+             </Button>
+             <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowReviseDialog(true)}
                 className="h-9 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 gap-1.5"
                 title="新一轮更新"
@@ -686,7 +699,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             </div>
           )}
 
-          {task.description && (
+          {isEditingMeta && (
+            <TaskMetaEditor
+              task={task}
+              onSave={(data) => updateTaskMutation.mutateAsync({ id: task.id, data })}
+              onCancel={() => setIsEditingMeta(false)}
+            />
+          )}
+
+          {!isEditingMeta && task.description && (
             <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-slate-100">
               <ReactMarkdown 
                 className="prose prose-sm max-w-none text-[15px] text-slate-900 leading-relaxed

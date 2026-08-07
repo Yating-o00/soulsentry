@@ -1,15 +1,18 @@
 import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * 二级子约定：在任务卡片的一级子约定下，以缩进 + 折叠的方式展示其子级。
- * 默认折叠，只显示一行进度摘要，点击展开缩进列表，避免卡片杂乱。
+ * 二级子约定：在任务卡片的一级子约定下，以缩进 + 折叠的方式展示其子级，
+ * 并提供最简的内联添加入口（+ 二级子约定 → 输入 → 回车/确认）。
  */
 export default function SubtaskChildren({ subtask, onToggle }) {
   const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [title, setTitle] = useState("");
+  const queryClient = useQueryClient();
 
   const { data: children = [] } = useQuery({
     queryKey: ['subtasks', subtask?.id],
@@ -17,24 +20,59 @@ export default function SubtaskChildren({ subtask, onToggle }) {
     enabled: !!subtask?.id,
   });
 
-  if (children.length === 0) return null;
+  const createMutation = useMutation({
+    mutationFn: (t) => base44.entities.Task.create({
+      title: t,
+      parent_task_id: subtask.id,
+      status: 'pending',
+      category: subtask.category || 'personal',
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subtasks', subtask.id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setTitle("");
+    },
+  });
+
+  const submit = () => {
+    const t = title.trim();
+    if (!t || createMutation.isPending) return;
+    createMutation.mutate(t);
+  };
 
   const done = children.filter(c => c.status === 'completed').length;
 
   return (
     <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 px-1 py-0.5 -ml-1 rounded hover:bg-stone-100/70 transition-colors"
-      >
-        <ChevronRight className={cn("w-3 h-3 transition-transform", open && "rotate-90")} />
-        {done}/{children.length} 二级子约定
-      </button>
+      <div className="flex items-center gap-2">
+        {children.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 px-1 py-0.5 -ml-1 rounded hover:bg-stone-100/70 transition-colors"
+          >
+            <ChevronRight className={cn("w-3 h-3 transition-transform", open && "rotate-90")} />
+            {done}/{children.length} 二级子约定
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => { setAdding(true); setOpen(true); }}
+          className={cn(
+            "flex items-center gap-0.5 text-[11px] px-1 py-0.5 rounded transition-colors",
+            children.length > 0
+              ? "text-stone-300 hover:text-stone-600 hover:bg-stone-100/70"
+              : "text-stone-400 hover:text-stone-600 hover:bg-stone-100/70 -ml-1"
+          )}
+        >
+          <Plus className="w-3 h-3" />
+          {children.length > 0 ? "添加" : "二级子约定"}
+        </button>
+      </div>
 
-      {open && (
+      {(open || adding) && (
         <div className="mt-1 ml-1.5 pl-3 border-l-2 border-stone-200 space-y-1">
-          {children.map((child) => (
+          {open && children.map((child) => (
             <div
               key={child.id}
               onClick={() => onToggle && onToggle(child)}
@@ -59,6 +97,30 @@ export default function SubtaskChildren({ subtask, onToggle }) {
               </span>
             </div>
           ))}
+
+          {adding && (
+            <div className="flex items-center gap-1.5 py-0.5">
+              <input
+                autoFocus
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submit();
+                  if (e.key === 'Escape') { setAdding(false); setTitle(""); }
+                }}
+                placeholder="输入二级子约定，回车添加"
+                className="flex-1 min-w-0 text-xs px-2 py-1 rounded-lg border border-stone-200 focus:border-[#384877] focus:outline-none bg-white placeholder:text-stone-300"
+              />
+              <button
+                type="button"
+                onClick={submit}
+                disabled={!title.trim() || createMutation.isPending}
+                className="text-[11px] px-2 py-1 rounded-lg bg-[#384877] text-white disabled:opacity-40 transition-opacity"
+              >
+                添加
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

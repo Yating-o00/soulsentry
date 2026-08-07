@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Check, ChevronRight, Plus } from "lucide-react";
+import { Check, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,10 +14,19 @@ export default function SubtaskChildren({ subtask, onToggle }) {
   const [title, setTitle] = useState("");
   const queryClient = useQueryClient();
 
-  const { data: children = [] } = useQuery({
+  const { data: allChildren = [] } = useQuery({
     queryKey: ['subtasks', subtask?.id],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: subtask.id }),
     enabled: !!subtask?.id,
+  });
+  const children = allChildren.filter(c => !c.deleted_at);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subtasks', subtask.id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
   });
 
   const createMutation = useMutation({
@@ -76,7 +85,7 @@ export default function SubtaskChildren({ subtask, onToggle }) {
               key={child.id}
               onClick={() => onToggle && onToggle(child)}
               className={cn(
-                "flex items-start gap-2 py-1 px-1.5 rounded-lg transition-colors",
+                "group flex items-start gap-2 py-1 px-1.5 rounded-lg transition-colors",
                 onToggle && "cursor-pointer hover:bg-stone-100/70"
               )}
             >
@@ -89,11 +98,19 @@ export default function SubtaskChildren({ subtask, onToggle }) {
                 {child.status === 'completed' && <Check className="w-2.5 h-2.5" />}
               </div>
               <span className={cn(
-                "text-xs leading-relaxed",
+                "flex-1 min-w-0 text-xs leading-relaxed",
                 child.status === 'completed' ? "text-stone-400 line-through" : "text-stone-600"
               )}>
                 {child.title}
               </span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(child.id); }}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-stone-300 hover:text-rose-500 p-0.5 rounded transition-all flex-shrink-0"
+                aria-label="删除二级子约定"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
             </div>
           ))}
 

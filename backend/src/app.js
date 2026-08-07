@@ -36,7 +36,14 @@ export const app = express();
 
 app.use(helmet());
 app.use(cors({
-  origin: env.CORS_ORIGIN.split(",").map((item) => item.trim()),
+  origin: (origin, callback) => {
+    const allowedOrigins = env.CORS_ORIGIN.split(",").map((item) => item.trim());
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith("https://servicewechat.com")) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
 app.use(morgan("dev"));

@@ -1,0 +1,48 @@
+{
+  "name": "soulsentry-weapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SoulSentry 微信小程序",
+  "templateInfo": {
+    "name": "default",
+    "typescript": false,
+    "css": "sass"
+  },
+  "scripts": {
+    "dev:weapp": "npm run build:weapp -- --watch",
+    "build:weapp": "taro build --type weapp",
+    "preview:weapp": "taro build --type weapp --preview"
+  },
+  "browserslist": [
+    "last 3 versions",
+    "Android >= 4.1",
+    "ios >= 8"
+  ],
+  "dependencies": {
+    "@babel/runtime": "^7.24.0",
+    "@tarojs/components": "3.6.35",
+    "@tarojs/helper": "3.6.35",
+    "@tarojs/plugin-framework-react": "3.6.35",
+    "@tarojs/plugin-platform-weapp": "3.6.35",
+    "@tarojs/react": "3.6.35",
+    "@tarojs/runtime": "3.6.35",
+    "@tarojs/service": "3.6.35",
+    "@tarojs/shared": "3.6.35",
+    "@tarojs/taro": "3.6.35",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@pmmmwh/react-refresh-webpack-plugin": "^0.5.0",
+    "@tarojs/cli": "3.6.35",
+    "@tarojs/webpack5-runner": "3.6.35",
+    "babel-preset-taro": "3.6.35",
+    "sass": "^1.72.0"
+  },
+  "overrides": {
+    "webpack": "5.78.0"
+  }
+}

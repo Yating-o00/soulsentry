@@ -1,0 +1,182 @@
+import { useState, useEffect } from "react";
+import Taro, { useDidShow } from "@tarojs/taro";
+import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
+import { get, patch, post } from "@/utils/api";
+
+const statusLabel = {
+  pending: "待办",
+  todo: "待办",
+  in_progress: "进行中",
+  completed: "已完成",
+  done: "已完成",
+  archived: "已归档"
+};
+
+export default function TaskDetail() {
+  const [task, setTask] = useState(null);
+  const [subtasks, setSubtasks] = useState([]);
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const taskId = Taro.getCurrentInstance().router.params.id;
+
+  const fetchAll = async () => {
+    if (!taskId) return;
+    setLoading(true);
+    try {
+      const taskData = await get(`/tasks/${taskId}`);
+      setTask(taskData);
+
+      const subs = await get("/tasks", { parent_task_id: taskId, limit: 200 });
+      setSubtasks(Array.isArray(subs) ? subs : []);
+
+      const cmt = await get("/comments", { task_id: taskId, sort: "-created_date", limit: 100 });
+      setComments(Array.isArray(cmt) ? cmt : []);
+    } catch (err) {
+      // handled globally
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useDidShow(() => {
+    fetchAll();
+  });
+
+  useEffect(() => {
+    fetchAll();
+  }, [taskId]);
+
+  const toggleTaskStatus = async (targetId, nextStatus) => {
+    try {
+      await patch(`/tasks/${targetId}`, { status: nextStatus });
+      fetchAll();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  const submitComment = async () => {
+    if (!commentText.trim()) {
+      Taro.showToast({ title: "请输入评论内容", icon: "none" });
+      return;
+    }
+    try {
+      await post("/comments", { task_id: taskId, content: commentText.trim() });
+      setCommentText("");
+      fetchAll();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  if (loading && !task) {
+    return (
+      <View className="ss-page">
+        <View className="ss-empty">加载中...</View>
+      </View>
+    );
+  }
+
+  if (!task) {
+    return (
+      <View className="ss-page">
+        <View className="ss-empty">约定不存在或已删除</View>
+      </View>
+    );
+  }
+
+  const isCompleted = task.status === "completed" || task.status === "done";
+
+  return (
+    <View className="ss-page">
+      <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
+        <View className="ss-card">
+          <View className="ss-title">{task.title}</View>
+          <Text className="ss-tag ss-tag-primary">{statusLabel[task.status] || task.status}</Text>
+          {task.description ? (
+            <View style={{ marginTop: "20rpx" }}>
+              <Text style={{ fontSize: "30rpx", color: "#333", lineHeight: "48rpx" }}>{task.description}</Text>
+            </View>
+          ) : null}
+
+          <Button
+            className={`ss-btn ${isCompleted ? "ss-btn-plain" : ""}`}
+            onClick={() => toggleTaskStatus(task.id, isCompleted ? "pending" : "completed")}
+          >
+            {isCompleted ? "标记为未完成" : "标记为已完成"}
+          </Button>
+        </View>
+
+        {subtasks.length > 0 && (
+          <View className="ss-card">
+            <View className="ss-section-title">子约定</View>
+            {subtasks.map((sub) => {
+              const done = sub.status === "completed" || sub.status === "done";
+              return (
+                <View
+                  key={sub.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "16rpx 0",
+                    borderBottom: "1rpx solid #e5e6eb"
+                  }}
+                >
+                  <Text
+                    style={{
+                      width: "40rpx",
+                      height: "40rpx",
+                      borderRadius: "50%",
+                      border: "2rpx solid #384877",
+                      background: done ? "#384877" : "#fff",
+                      color: "#fff",
+                      textAlign: "center",
+                      lineHeight: "40rpx",
+                      marginRight: "16rpx",
+                      fontSize: "24rpx"
+                    }}
+                    onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
+                  >
+                    {done ? "✓" : ""}
+                  </Text>
+                  <Text style={{ flex: 1, fontSize: "30rpx", color: done ? "#999" : "#333", textDecoration: done ? "line-through" : "none" }}>
+                    {sub.title}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        <View className="ss-card">
+          <View className="ss-section-title">评论</View>
+          {comments.length === 0 && <View className="ss-empty">暂无评论</View>}
+          {comments.map((c) => (
+            <View key={c.id} style={{ marginBottom: "20rpx", paddingBottom: "20rpx", borderBottom: "1rpx solid #e5e6eb" }}>
+              <View style={{ display: "flex", justifyContent: "space-between", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "28rpx", color: "#384877", fontWeight: 500 }}>{c.created_by || c.visitor_name || "访客"}</Text>
+                <Text className="ss-muted">{new Date(c.created_date).toLocaleString("zh-CN")}</Text>
+              </View>
+              <Text style={{ fontSize: "30rpx", color: "#333" }}>{c.content}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View className="ss-card">
+          <View className="ss-section-title">发表评论</View>
+          <Input
+            className="ss-input"
+            placeholder="写下你的评论"
+            value={commentText}
+            onInput={(e) => setCommentText(e.detail.value)}
+          />
+          <Button className="ss-btn" onClick={submitComment}>发送</Button>
+        </View>
+
+        <View style={{ height: "40rpx" }} />
+      </ScrollView>
+    </View>
+  );
+}

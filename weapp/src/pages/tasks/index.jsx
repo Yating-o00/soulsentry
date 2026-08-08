@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useMemo } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, ScrollView, Button } from "@tarojs/components";
+import { View, Text, ScrollView, Button, MovableArea, MovableView } from "@tarojs/components";
 import { get, post, del, patch } from "@/utils/api";
 
 const statusMap = {
@@ -30,21 +30,27 @@ const categoryMap = {
   other: "其他"
 };
 
-const ACTION_WIDTH = 360; // rpx
+function getActionWidthPx() {
+  try {
+    const sys = Taro.getSystemInfoSync();
+    return Math.round((360 / 750) * sys.windowWidth);
+  } catch (e) {
+    return 180;
+  }
+}
 
 export default function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState(null);
+  const [dragId, setDragId] = useState(null);
+  const [dragX, setDragX] = useState({});
 
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-  const currentOffset = useRef(0);
+  const ACTION_WIDTH = useMemo(() => getActionWidthPx(), []);
 
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      // 只查询顶层约定，不返回子约定
       const data = await get("/tasks", { parent_task_id: "", sort: "-created_date", limit: 200 });
       setTasks(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -109,8 +115,7 @@ export default function Tasks() {
     }
   };
 
-  const handleQuickComplete = async (task, e) => {
-    e?.stopPropagation?.();
+  const handleQuickComplete = async (task) => {
     const nextStatus = task.status === "completed" || task.status === "done" ? "pending" : "completed";
     try {
       await patch(`/tasks/${task.id}`, { status: nextStatus });
@@ -120,51 +125,32 @@ export default function Tasks() {
     }
   };
 
-  const onTouchStart = (taskId, e) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-    currentOffset.current = openId === taskId ? -ACTION_WIDTH : 0;
+  const onMovableChange = (taskId, e) => {
+    setDragX((prev) => ({ ...prev, [taskId]: e.detail.x }));
   };
 
-  const onTouchMove = (taskId, e) => {
-    const dx = e.touches[0].clientX - touchStartX.current;
-    const dy = e.touches[0].clientY - touchStartY.current;
+  const onMovableEnd = (taskId, e) => {
+    const x = e.detail.x;
+    const task = tasks.find((t) => t.id === taskId);
 
-    // 如果纵向滑动占优，不处理横向滑动
-    if (Math.abs(dy) > Math.abs(dx)) return;
-
-    // 阻止默认滚动
-    // e.preventDefault?.(); // 小程序中可能无效
-
-    let offset = currentOffset.current + dx;
-    if (offset > 0) offset = 0;
-    if (offset < -ACTION_WIDTH) offset = -ACTION_WIDTH;
-
-    const el = e.currentTarget;
-    if (el) {
-      el.style.transform = `translateX(${offset}rpx)`;
-      el.style.transition = "none";
+    // 右划超过一半 -> 快速完成
+    if (x > ACTION_WIDTH * 0.5) {
+      if (task) handleQuickComplete(task);
+      setDragId(null);
+      setOpenId(null);
+      setDragX((prev) => ({ ...prev, [taskId]: 0 }));
+      return;
     }
-  };
 
-  const onTouchEnd = (taskId, e) => {
-    const el = e.currentTarget;
-    if (!el) return;
-
-    const transform = el.style.transform || "";
-    const match = transform.match(/translateX\(([-\d.]+)rpx\)/);
-    const offset = match ? Number(match[1]) : 0;
-
-    const shouldOpen = offset < -ACTION_WIDTH / 2;
-
-    if (shouldOpen) {
+    // 左划超过一半 -> 打开
+    if (x < -ACTION_WIDTH / 2) {
       setOpenId(taskId);
-      el.style.transform = `translateX(${-ACTION_WIDTH}rpx)`;
+      setDragX((prev) => ({ ...prev, [taskId]: -ACTION_WIDTH }));
     } else {
       setOpenId(null);
-      el.style.transform = "translateX(0rpx)";
+      setDragX((prev) => ({ ...prev, [taskId]: 0 }));
     }
-    el.style.transition = "transform 0.2s ease";
+    setDragId(null);
   };
 
   return (
@@ -181,12 +167,16 @@ export default function Tasks() {
         {tasks.map((task) => {
           const status = statusMap[task.status] || statusMap.pending;
           const done = task.status === "completed" || task.status === "done";
+          const targetX = dragId === task.id ? dragX[task.id] : openId === task.id ? -ACTION_WIDTH : 0;
+
           return (
-            <View
+            <MovableArea
               key={task.id}
               style={{
-                position: "relative",
+                width: "100%",
+                height: "200rpx",
                 marginBottom: "20rpx",
+                position: "relative",
                 overflow: "hidden",
                 borderRadius: "16rpx"
               }}
@@ -247,45 +237,53 @@ export default function Tasks() {
                 </View>
               </View>
 
-              {/* 前景卡片 */}
-              <View
-                className="ss-card"
+              {/* 可滑动卡片 */}
+              <MovableView
                 style={{
-                  marginBottom: 0,
-                  position: "relative",
+                  width: "100%",
+                  height: "100%",
                   zIndex: 2,
-                  transform: openId === task.id ? `translateX(${-ACTION_WIDTH}rpx)` : "translateX(0rpx)",
-                  transition: "transform 0.2s ease"
+                  background: "#fff"
                 }}
-                onClick={() => goDetail(task.id)}
-                onTouchStart={(e) => onTouchStart(task.id, e)}
-                onTouchMove={(e) => onTouchMove(task.id, e)}
-                onTouchEnd={(e) => onTouchEnd(task.id, e)}
+                direction="horizontal"
+                damping={40}
+                friction={4}
+                x={targetX}
+                outOfBounds={false}
+                onChange={(e) => onMovableChange(task.id, e)}
+                onTouchEnd={(e) => onMovableEnd(task.id, e)}
+                onTouchStart={() => setDragId(task.id)}
               >
-                <View className="ss-row">
-                  <Text style={{ fontSize: "32rpx", fontWeight: 600, color: "#333", flex: 1, textDecoration: done ? "line-through" : "none" }}>
-                    {task.title}
-                  </Text>
-                  <Text className={`ss-tag ${status.className}`}>{status.text}</Text>
-                </View>
-                <View style={{ marginTop: "12rpx" }}>
-                  {task.priority && (
-                    <Text className="ss-tag ss-tag-primary">优先级：{priorityMap[task.priority] || task.priority}</Text>
-                  )}
-                  {task.category && (
-                    <Text className="ss-tag ss-tag-primary">{categoryMap[task.category] || task.category}</Text>
-                  )}
-                  {task.end_time && (
-                    <Text className="ss-tag ss-tag-warning">截止 {formatDate(task.end_time)}</Text>
-                  )}
-                </View>
-                {task.description ? (
-                  <View style={{ marginTop: "12rpx" }}>
-                    <Text className="ss-muted">{task.description.slice(0, 60)}</Text>
+                <View
+                  className="ss-card"
+                  style={{ marginBottom: 0, height: "100%", boxSizing: "border-box" }}
+                  onClick={() => goDetail(task.id)}
+                >
+                  <View className="ss-row">
+                    <Text style={{ fontSize: "32rpx", fontWeight: 600, color: "#333", flex: 1, textDecoration: done ? "line-through" : "none" }}>
+                      {task.title}
+                    </Text>
+                    <Text className={`ss-tag ${status.className}`}>{status.text}</Text>
                   </View>
-                ) : null}
-              </View>
-            </View>
+                  <View style={{ marginTop: "12rpx" }}>
+                    {task.priority && (
+                      <Text className="ss-tag ss-tag-primary">优先级：{priorityMap[task.priority] || task.priority}</Text>
+                    )}
+                    {task.category && (
+                      <Text className="ss-tag ss-tag-primary">{categoryMap[task.category] || task.category}</Text>
+                    )}
+                    {task.end_time && (
+                      <Text className="ss-tag ss-tag-warning">截止 {formatDate(task.end_time)}</Text>
+                    )}
+                  </View>
+                  {task.description ? (
+                    <View style={{ marginTop: "12rpx" }}>
+                      <Text className="ss-muted">{task.description.slice(0, 60)}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </MovableView>
+            </MovableArea>
           );
         })}
 

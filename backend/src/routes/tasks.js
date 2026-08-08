@@ -240,7 +240,14 @@ tasksRouter.get("/", async (req, res) => {
   if (req.query.id) where.id = String(req.query.id);
   if (req.query.parent_task_id !== undefined) {
     const value = String(req.query.parent_task_id).trim();
-    where.parentTaskId = value ? value : null;
+    if (value === "all") {
+      // 不过滤
+    } else {
+      where.parentTaskId = value ? value : null;
+    }
+  } else {
+    // 默认只返回顶层约定，避免子约定出现在列表中
+    where.parentTaskId = null;
   }
   if (req.query.category) where.category = String(req.query.category);
   if (req.query.status) where.status = toPrismaTaskStatus(req.query.status);

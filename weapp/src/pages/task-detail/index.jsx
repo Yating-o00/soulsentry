@@ -77,17 +77,24 @@ export default function TaskDetail() {
       Taro.showToast({ title: "请输入子约定内容", icon: "none" });
       return;
     }
+    if (!taskId) {
+      Taro.showToast({ title: "页面参数错误，请重新进入", icon: "none" });
+      return;
+    }
     try {
-      await post("/tasks", {
+      const payload = {
         title: subtaskText.trim(),
         parent_task_id: taskId,
         priority: "medium",
-        category: task.category || "other"
-      });
+        category: task?.category || "other"
+      };
+      await post("/tasks", payload);
       setSubtaskText("");
+      Taro.showToast({ title: "子约定已添加", icon: "success" });
       fetchAll();
     } catch (err) {
-      // handled globally
+      console.error("add subtask failed", err);
+      Taro.showToast({ title: "添加失败，请重试", icon: "none" });
     }
   };
 

@@ -107,14 +107,19 @@ export async function callKimiChat({
         body.tools = tools;
       }
 
+      let response;
+      let timeoutId;
       try {
-        const response = await fetch(`${endpoint.baseUrl}/chat/completions`, {
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), 25000);
+        response = await fetch(`${endpoint.baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${endpoint.apiKey}`
           },
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
+          signal: controller.signal
         });
 
         if (response.ok) {
@@ -143,6 +148,8 @@ export async function callKimiChat({
         lastError = error;
         lastStatus = error?.status || 0;
         lastErrorText = error?.message || "Unknown request failure";
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
     }
   }

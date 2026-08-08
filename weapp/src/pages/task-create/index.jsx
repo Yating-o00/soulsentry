@@ -158,6 +158,31 @@ export default function TaskCreate() {
     }
   };
 
+  const buildLocalAnalysis = () => {
+    const input = [title, description].filter(Boolean).join("\n");
+    const steps = [
+      { text: "梳理约定目标与关键交付物" },
+      { text: "拆解可执行的步骤与检查点" },
+      { text: "设置提醒，确保按时推进" }
+    ];
+    const timeline = [
+      { time: "09:00", date: endDate || todayStr(), title: "开始处理", description: input.slice(0, 40) }
+    ];
+    if (endDate) {
+      timeline.push({ time: endTime || "23:59", date: endDate, title: "截止交付", description: "完成并检查约定" });
+    }
+    return {
+      resolved_date: endDate || todayStr(),
+      steps,
+      timeline,
+      devices: {
+        phone: { name: "手机", strategies: [{ time: "到期前", content: "发送提醒推送" }] }
+      },
+      automations: buildFallbackAutomations(timeline, { phone: { strategies: [] } }),
+      parsed: { times: endDate ? [endDate] : [], intents: [title], locations: [] }
+    };
+  };
+
   const analyze = async () => {
     if (!isFormValid) {
       Taro.showToast({ title: "请先输入约定内容", icon: "none" });
@@ -165,12 +190,21 @@ export default function TaskCreate() {
     }
 
     setLoading(true);
+    let timeoutId = null;
     try {
       const input = [title, description].filter(Boolean).join("\n");
-      const data = await post("/functions/analyzeIntent", {
+
+      const requestPromise = post("/functions/analyzeIntent", {
         input,
         date: endDate || new Date().toISOString().slice(0, 10)
       });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("AI 分析超时")), 25000);
+      });
+
+      const data = await Promise.race([requestPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
 
       // 兜底：如果后端未返回 automations，根据时间线和设备生成默认建议
       if (!Array.isArray(data.automations) || data.automations.length === 0) {
@@ -180,7 +214,12 @@ export default function TaskCreate() {
       setAnalysis(data);
       setStep("analysis");
     } catch (err) {
-      // handled globally
+      clearTimeout(timeoutId);
+      console.error("analyze failed", err);
+      // 超时或失败时使用本地兜底分析
+      setAnalysis(buildLocalAnalysis());
+      setStep("analysis");
+      Taro.showToast({ title: "AI 分析响应较慢，已展示基础建议", icon: "none", duration: 2500 });
     } finally {
       setLoading(false);
     }

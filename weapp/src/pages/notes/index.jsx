@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useMemo } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, ScrollView, Button } from "@tarojs/components";
+import { View, Text, ScrollView, Button, MovableArea, MovableView } from "@tarojs/components";
 import { get, post, del } from "@/utils/api";
 
 const statusMap = {
@@ -9,16 +9,23 @@ const statusMap = {
   deleted: { text: "已删除", className: "ss-tag-danger" }
 };
 
-const ACTION_WIDTH = 360; // rpx
+function getActionWidthPx() {
+  try {
+    const sys = Taro.getSystemInfoSync();
+    return Math.round((360 / 750) * sys.windowWidth);
+  } catch (e) {
+    return 180;
+  }
+}
 
 export default function Notes() {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState(null);
+  const [dragId, setDragId] = useState(null);
+  const [dragX, setDragX] = useState({});
 
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-  const currentOffset = useRef(0);
+  const ACTION_WIDTH = useMemo(() => getActionWidthPx(), []);
 
   const fetchNotes = async () => {
     setLoading(true);
@@ -87,46 +94,20 @@ export default function Notes() {
     }
   };
 
-  const onTouchStart = (noteId, e) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-    currentOffset.current = openId === noteId ? -ACTION_WIDTH : 0;
+  const onMovableChange = (noteId, e) => {
+    setDragX((prev) => ({ ...prev, [noteId]: e.detail.x }));
   };
 
-  const onTouchMove = (noteId, e) => {
-    const dx = e.touches[0].clientX - touchStartX.current;
-    const dy = e.touches[0].clientY - touchStartY.current;
-    if (Math.abs(dy) > Math.abs(dx)) return;
-
-    let offset = currentOffset.current + dx;
-    if (offset > 0) offset = 0;
-    if (offset < -ACTION_WIDTH) offset = -ACTION_WIDTH;
-
-    const el = e.currentTarget;
-    if (el) {
-      el.style.transform = `translateX(${offset}rpx)`;
-      el.style.transition = "none";
-    }
-  };
-
-  const onTouchEnd = (noteId, e) => {
-    const el = e.currentTarget;
-    if (!el) return;
-
-    const transform = el.style.transform || "";
-    const match = transform.match(/translateX\(([-\d.]+)rpx\)/);
-    const offset = match ? Number(match[1]) : 0;
-
-    const shouldOpen = offset < -ACTION_WIDTH / 2;
-
-    if (shouldOpen) {
+  const onMovableEnd = (noteId, e) => {
+    const x = e.detail.x;
+    if (x < -ACTION_WIDTH / 2) {
       setOpenId(noteId);
-      el.style.transform = `translateX(${-ACTION_WIDTH}rpx)`;
+      setDragX((prev) => ({ ...prev, [noteId]: -ACTION_WIDTH }));
     } else {
       setOpenId(null);
-      el.style.transform = "translateX(0rpx)";
+      setDragX((prev) => ({ ...prev, [noteId]: 0 }));
     }
-    el.style.transition = "transform 0.2s ease";
+    setDragId(null);
   };
 
   return (
@@ -138,12 +119,16 @@ export default function Notes() {
         {notes.map((note) => {
           const status = statusMap[note.status] || statusMap.active;
           const text = note.plain_text || note.content || "";
+          const targetX = dragId === note.id ? dragX[note.id] : openId === note.id ? -ACTION_WIDTH : 0;
+
           return (
-            <View
+            <MovableArea
               key={note.id}
               style={{
-                position: "relative",
+                width: "100%",
+                height: "180rpx",
                 marginBottom: "20rpx",
+                position: "relative",
                 overflow: "hidden",
                 borderRadius: "16rpx"
               }}
@@ -204,32 +189,40 @@ export default function Notes() {
                 </View>
               </View>
 
-              {/* 前景卡片 */}
-              <View
-                className="ss-card"
+              {/* 可滑动卡片 */}
+              <MovableView
                 style={{
-                  marginBottom: 0,
-                  position: "relative",
+                  width: "100%",
+                  height: "100%",
                   zIndex: 2,
-                  transform: openId === note.id ? `translateX(${-ACTION_WIDTH}rpx)` : "translateX(0rpx)",
-                  transition: "transform 0.2s ease"
+                  background: "#fff"
                 }}
-                onClick={() => goDetail(note.id)}
-                onTouchStart={(e) => onTouchStart(note.id, e)}
-                onTouchMove={(e) => onTouchMove(note.id, e)}
-                onTouchEnd={(e) => onTouchEnd(note.id, e)}
+                direction="horizontal"
+                damping={40}
+                friction={4}
+                x={targetX}
+                outOfBounds={false}
+                onChange={(e) => onMovableChange(note.id, e)}
+                onTouchEnd={(e) => onMovableEnd(note.id, e)}
+                onTouchStart={() => setDragId(note.id)}
               >
-                <View className="ss-row">
-                  <Text style={{ fontSize: "32rpx", fontWeight: 600, color: "#333", flex: 1 }}>
-                    {note.title || "未命名心签"}
-                  </Text>
-                  <Text className={`ss-tag ${status.className}`}>{status.text}</Text>
+                <View
+                  className="ss-card"
+                  style={{ marginBottom: 0, height: "100%", boxSizing: "border-box" }}
+                  onClick={() => goDetail(note.id)}
+                >
+                  <View className="ss-row">
+                    <Text style={{ fontSize: "32rpx", fontWeight: 600, color: "#333", flex: 1 }}>
+                      {note.title || "未命名心签"}
+                    </Text>
+                    <Text className={`ss-tag ${status.className}`}>{status.text}</Text>
+                  </View>
+                  <View style={{ marginTop: "12rpx" }}>
+                    <Text className="ss-muted">{text.slice(0, 120)}</Text>
+                  </View>
                 </View>
-                <View style={{ marginTop: "12rpx" }}>
-                  <Text className="ss-muted">{text.slice(0, 120)}</Text>
-                </View>
-              </View>
-            </View>
+              </MovableView>
+            </MovableArea>
           );
         })}
 

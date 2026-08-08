@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Taro from "@tarojs/taro";
-import { View, Text, Input, Textarea, Picker, Button, ScrollView } from "@tarojs/components";
-import { post } from "@/utils/api";
+import { View, Text, Input, Textarea, Picker, Button, ScrollView, Canvas } from "@tarojs/components";
+import { get, post, patch } from "@/utils/api";
 
 const priorities = [
   { value: "urgent", label: "紧急" },
@@ -37,11 +37,73 @@ const STATUS_LABEL = {
   pending: "待触发"
 };
 
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function toISODate(date, time) {
+  if (!date) return "";
+  const t = time || "00:00";
+  return `${date}T${t}:00`;
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function buildFallbackAutomations(timeline, devices) {
+  const list = [];
+  if (Array.isArray(timeline) && timeline.length > 0) {
+    const first = timeline[0];
+    list.push({
+      title: "关键节点提醒",
+      desc: `在 ${first.date || ""} ${first.time || ""} 提醒「${first.title}」`,
+      status: "ready",
+      device_id: "phone"
+    });
+  }
+  if (devices?.phone?.strategies?.length) {
+    list.push({
+      title: "手机协同推送",
+      desc: "通过手机推送保持约定进度同步",
+      status: "active",
+      device_id: "phone"
+    });
+  }
+  if (devices?.watch?.strategies?.length) {
+    list.push({
+      title: "手表轻提醒",
+      desc: "在手表上发送轻量提醒，避免打扰",
+      status: "ready",
+      device_id: "watch"
+    });
+  }
+  if (list.length === 0) {
+    list.push({
+      title: "到期前提醒",
+      desc: "在约定截止前自动发送提醒",
+      status: "ready",
+      device_id: "phone"
+    });
+  }
+  return list;
+}
+
 export default function TaskCreate() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [reminderTime, setReminderTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [endTime, setEndTime] = useState("23:59");
+  const [reminderDate, setReminderDate] = useState("");
+  const [reminderTime, setReminderTime] = useState("09:00");
   const [priorityIndex, setPriorityIndex] = useState(2);
   const [categoryIndex, setCategoryIndex] = useState(7);
   const [analysis, setAnalysis] = useState(null);
@@ -49,8 +111,52 @@ export default function TaskCreate() {
   const [step, setStep] = useState("form");
   const [loading, setLoading] = useState(false);
   const [createdTask, setCreatedTask] = useState(null);
+  const [posterUrl, setPosterUrl] = useState("");
+  const [editId, setEditId] = useState("");
+  const [isEdit, setIsEdit] = useState(false);
 
   const isFormValid = title.trim().length > 0;
+
+  useEffect(() => {
+    const params = Taro.getCurrentInstance().router.params || {};
+    const id = params.id;
+    const mode = params.mode;
+    if (id && mode === "edit") {
+      setEditId(id);
+      setIsEdit(true);
+      loadTask(id);
+    }
+  }, []);
+
+  const loadTask = async (id) => {
+    setLoading(true);
+    try {
+      const task = await get(`/tasks/${id}`);
+      setTitle(task.title || "");
+      setDescription(task.description || "");
+      setPriorityIndex(Math.max(0, priorities.findIndex((p) => p.value === task.priority)));
+      setCategoryIndex(Math.max(0, categories.findIndex((c) => c.value === task.category)));
+
+      if (task.end_time) {
+        const d = new Date(task.end_time);
+        if (!isNaN(d.getTime())) {
+          setEndDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+          setEndTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+        }
+      }
+      if (task.reminder_time) {
+        const d = new Date(task.reminder_time);
+        if (!isNaN(d.getTime())) {
+          setReminderDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+          setReminderTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+        }
+      }
+    } catch (err) {
+      // handled globally
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const analyze = async () => {
     if (!isFormValid) {
@@ -63,8 +169,14 @@ export default function TaskCreate() {
       const input = [title, description].filter(Boolean).join("\n");
       const data = await post("/functions/analyzeIntent", {
         input,
-        date: new Date().toISOString().slice(0, 10)
+        date: endDate || new Date().toISOString().slice(0, 10)
       });
+
+      // 兜底：如果后端未返回 automations，根据时间线和设备生成默认建议
+      if (!Array.isArray(data.automations) || data.automations.length === 0) {
+        data.automations = buildFallbackAutomations(data.timeline, data.devices);
+      }
+
       setAnalysis(data);
       setStep("analysis");
     } catch (err) {
@@ -74,7 +186,7 @@ export default function TaskCreate() {
     }
   };
 
-  const createTask = async () => {
+  const saveTask = async () => {
     if (!isFormValid) {
       Taro.showToast({ title: "请输入标题", icon: "none" });
       return;
@@ -87,15 +199,24 @@ export default function TaskCreate() {
       category: categories[categoryIndex].value
     };
 
-    if (reminderTime.trim()) payload.reminder_time = reminderTime.trim();
-    if (endTime.trim()) payload.end_time = endTime.trim();
+    const reminderISO = toISODate(reminderDate, reminderTime);
+    const endISO = toISODate(endDate, endTime);
+
+    if (reminderISO) payload.reminder_time = reminderISO;
+    if (endISO) payload.end_time = endISO;
 
     setLoading(true);
     try {
+      if (isEdit && editId) {
+        await patch(`/tasks/${editId}`, payload);
+        Taro.showToast({ title: "更新成功", icon: "success" });
+        setTimeout(() => Taro.navigateBack(), 500);
+        return;
+      }
+
       const task = await post("/tasks", payload);
       setCreatedTask(task);
 
-      // 生成分享 token
       try {
         const share = await post(`/public/share/generate/task/${task.id}`);
         setShareToken(share.token || "");
@@ -111,6 +232,111 @@ export default function TaskCreate() {
     }
   };
 
+  const generatePoster = () => {
+    if (!shareToken) {
+      Taro.showToast({ title: "分享链接未生成", icon: "none" });
+      return;
+    }
+
+    const ctx = Taro.createCanvasContext("shareCanvas");
+    const width = 600;
+    const height = 840;
+
+    // 背景
+    const grd = ctx.createLinearGradient(0, 0, 0, height);
+    grd.addColorStop(0, "#384877");
+    grd.addColorStop(1, "#4a5d8f");
+    ctx.setFillStyle(grd);
+    ctx.fillRect(0, 0, width, height);
+
+    // 顶部品牌
+    ctx.setFillStyle("#ffffff");
+    ctx.setFontSize(28);
+    ctx.fillText("SoulSentry", 40, 60);
+
+    // 标题
+    ctx.setFontSize(40);
+    ctx.setFontStyle("bold");
+    const displayTitle = title.length > 14 ? title.slice(0, 14) + "…" : title;
+    ctx.fillText(displayTitle, 40, 140);
+
+    // 描述
+    ctx.setFontSize(26);
+    ctx.setFontStyle("normal");
+    const desc = description || "与你一起守护这个约定";
+    const displayDesc = desc.length > 60 ? desc.slice(0, 60) + "…" : desc;
+    ctx.fillText(displayDesc, 40, 200);
+
+    // 时间
+    const endISO = toISODate(endDate, endTime);
+    if (endISO) {
+      ctx.setFontSize(24);
+      ctx.fillText(`截止时间：${formatDateTime(endISO)}`, 40, 270);
+    }
+
+    // 白色内容区
+    ctx.setFillStyle("#ffffff");
+    ctx.fillRect(40, 320, 520, 360);
+
+    // 内容区文字
+    ctx.setFillStyle("#384877");
+    ctx.setFontSize(28);
+    ctx.fillText("扫码参与约定", 70, 380);
+
+    ctx.setFillStyle("#666666");
+    ctx.setFontSize(22);
+    ctx.fillText("对方可匿名勾选进度、留言", 70, 420);
+
+    // 链接
+    const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
+    ctx.setFillStyle("#384877");
+    ctx.setFontSize(20);
+    const shortLink = link.length > 48 ? link.slice(0, 48) + "…" : link;
+    ctx.fillText(shortLink, 70, 620);
+
+    // 底部提示
+    ctx.setFillStyle("rgba(255,255,255,0.8)");
+    ctx.setFontSize(22);
+    ctx.fillText("长按识别 · 共同守护", 40, 780);
+
+    ctx.draw(false, () => {
+      Taro.canvasToTempFilePath({
+        canvasId: "shareCanvas",
+        width,
+        height,
+        destWidth: width,
+        destHeight: height,
+        success: (res) => {
+          setPosterUrl(res.tempFilePath);
+          Taro.showToast({ title: "卡片已生成", icon: "success" });
+        },
+        fail: () => {
+          Taro.showToast({ title: "卡片生成失败", icon: "none" });
+        }
+      });
+    });
+  };
+
+  const savePoster = () => {
+    if (!posterUrl) {
+      generatePoster();
+      return;
+    }
+    Taro.saveImageToPhotosAlbum({
+      filePath: posterUrl,
+      success: () => Taro.showToast({ title: "已保存到相册", icon: "success" }),
+      fail: (err) => {
+        if (err.errMsg?.includes("auth deny")) {
+          Taro.showModal({
+            title: "需要授权",
+            content: "请允许保存图片到相册",
+            showCancel: false
+          });
+        }
+      }
+    });
+  };
+
   const copyShareLink = () => {
     if (!shareToken) return;
     const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
@@ -124,10 +350,26 @@ export default function TaskCreate() {
     Taro.navigateBack();
   };
 
+  const onShareAppMessage = () => {
+    if (!shareToken) return { title: "SoulSentry 约定" };
+    return {
+      title: `邀你一起守护：${title}`,
+      path: `/pages/share/index?token=${shareToken}`
+    };
+  };
+
+  useEffect(() => {
+    if (step === "created" && shareToken && !posterUrl) {
+      // 延迟生成，确保 canvas 已渲染
+      const timer = setTimeout(generatePoster, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [step, shareToken, posterUrl]);
+
   const renderForm = () => (
     <View className="ss-card">
-      <View className="ss-title">新建约定</View>
-      <View className="ss-subtitle">输入约定后，可先让 SoulSentry 帮你分析时间线与执行策略。</View>
+      <View className="ss-title">{isEdit ? "编辑约定" : "新建约定"}</View>
+      <View className="ss-subtitle">{isEdit ? "修改约定信息" : "输入约定后，可先让 SoulSentry 帮你分析时间线与执行策略。"}</View>
 
       <View style={{ marginTop: "24rpx" }}>
         <View className="ss-label">标题 *</View>
@@ -178,30 +420,44 @@ export default function TaskCreate() {
       </View>
 
       <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">提醒时间（ISO 格式，可选）</View>
-        <Input
-          className="ss-input"
-          placeholder="2026-08-07T09:00:00"
-          value={reminderTime}
-          onInput={(e) => setReminderTime(e.detail.value)}
-        />
+        <View className="ss-label">截止时间</View>
+        <View style={{ display: "flex" }}>
+          <Picker mode="date" value={endDate || todayStr()} onChange={(e) => setEndDate(e.detail.value)}>
+            <View className="ss-input" style={{ display: "flex", alignItems: "center", marginRight: "16rpx" }}>
+              <Text>{endDate || "选择日期"}</Text>
+            </View>
+          </Picker>
+          <Picker mode="time" value={endTime} onChange={(e) => setEndTime(e.detail.value)}>
+            <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+              <Text>{endTime}</Text>
+            </View>
+          </Picker>
+        </View>
       </View>
 
       <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">结束时间（ISO 格式，可选）</View>
-        <Input
-          className="ss-input"
-          placeholder="2026-08-07T18:00:00"
-          value={endTime}
-          onInput={(e) => setEndTime(e.detail.value)}
-        />
+        <View className="ss-label">提醒时间</View>
+        <View style={{ display: "flex" }}>
+          <Picker mode="date" value={reminderDate || todayStr()} onChange={(e) => setReminderDate(e.detail.value)}>
+            <View className="ss-input" style={{ display: "flex", alignItems: "center", marginRight: "16rpx" }}>
+              <Text>{reminderDate || "选择日期"}</Text>
+            </View>
+          </Picker>
+          <Picker mode="time" value={reminderTime} onChange={(e) => setReminderTime(e.detail.value)}>
+            <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+              <Text>{reminderTime}</Text>
+            </View>
+          </Picker>
+        </View>
       </View>
 
-      <Button className="ss-btn ss-btn-plain" loading={loading} disabled={loading || !isFormValid} onClick={analyze}>
-        🤖 AI 分析并预览
-      </Button>
-      <Button className="ss-btn" loading={loading} disabled={loading || !isFormValid} onClick={createTask}>
-        直接创建
+      {!isEdit && (
+        <Button className="ss-btn ss-btn-plain" loading={loading} disabled={loading || !isFormValid} onClick={analyze}>
+          🤖 AI 分析并预览
+        </Button>
+      )}
+      <Button className="ss-btn" loading={loading} disabled={loading || !isFormValid} onClick={saveTask}>
+        {isEdit ? "保存修改" : "直接创建"}
       </Button>
     </View>
   );
@@ -305,25 +561,24 @@ export default function TaskCreate() {
       </View>
 
       <View className="ss-card">
-        <View className="ss-title">分享给伙伴</View>
-        <Text className="ss-subtitle">把约定分享给朋友，对方可以匿名勾选进度、留言。</Text>
+        <View className="ss-title">分享卡片</View>
+        <Text className="ss-subtitle">生成分享卡片，保存到相册或转发给伙伴。</Text>
 
         {shareToken ? (
           <View>
-            <View
+            <Canvas
+              canvasId="shareCanvas"
               style={{
-                background: "#f8f9fb",
-                borderRadius: "12rpx",
-                padding: "20rpx",
-                marginTop: "24rpx",
-                wordBreak: "break-all"
+                width: "600rpx",
+                height: "840rpx",
+                margin: "24rpx auto",
+                borderRadius: "16rpx",
+                boxShadow: "0 4rpx 20rpx rgba(0,0,0,0.1)"
               }}
-            >
-              <Text style={{ fontSize: "28rpx", color: "#384877" }}>
-                https://www.xinzhan-soulsentry.cn/share/{shareToken}
-              </Text>
-            </View>
-            <Button className="ss-btn" onClick={copyShareLink}>复制分享链接</Button>
+            />
+            <Button className="ss-btn" onClick={savePoster}>保存分享卡片</Button>
+            <Button className="ss-btn ss-btn-plain" openType="share">微信转发</Button>
+            <Button className="ss-btn ss-btn-plain" onClick={copyShareLink}>复制链接</Button>
           </View>
         ) : (
           <Text className="ss-muted" style={{ marginTop: "24rpx" }}>分享链接生成失败，可在约定详情页重试。</Text>

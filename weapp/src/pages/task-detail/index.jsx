@@ -17,6 +17,7 @@ export default function TaskDetail() {
   const [subtasks, setSubtasks] = useState([]);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState("");
+  const [subtaskText, setSubtaskText] = useState("");
   const [loading, setLoading] = useState(true);
 
   const taskId = Taro.getCurrentInstance().router.params.id;
@@ -71,6 +72,25 @@ export default function TaskDetail() {
     }
   };
 
+  const addSubtask = async () => {
+    if (!subtaskText.trim()) {
+      Taro.showToast({ title: "请输入子约定内容", icon: "none" });
+      return;
+    }
+    try {
+      await post("/tasks", {
+        title: subtaskText.trim(),
+        parent_task_id: taskId,
+        priority: "medium",
+        category: task.category || "other"
+      });
+      setSubtaskText("");
+      fetchAll();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
   if (loading && !task) {
     return (
       <View className="ss-page">
@@ -109,46 +129,56 @@ export default function TaskDetail() {
           </Button>
         </View>
 
-        {subtasks.length > 0 && (
-          <View className="ss-card">
-            <View className="ss-section-title">子约定</View>
-            {subtasks.map((sub) => {
-              const done = sub.status === "completed" || sub.status === "done";
-              return (
-                <View
-                  key={sub.id}
+        <View className="ss-card">
+          <View className="ss-section-title">子约定</View>
+          {subtasks.length === 0 && <View className="ss-empty">暂无子约定</View>}
+          {subtasks.map((sub) => {
+            const done = sub.status === "completed" || sub.status === "done";
+            return (
+              <View
+                key={sub.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "16rpx 0",
+                  borderBottom: "1rpx solid #e5e6eb"
+                }}
+              >
+                <Text
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "16rpx 0",
-                    borderBottom: "1rpx solid #e5e6eb"
+                    width: "40rpx",
+                    height: "40rpx",
+                    borderRadius: "50%",
+                    border: "2rpx solid #384877",
+                    background: done ? "#384877" : "#fff",
+                    color: "#fff",
+                    textAlign: "center",
+                    lineHeight: "40rpx",
+                    marginRight: "16rpx",
+                    fontSize: "24rpx"
                   }}
+                  onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
                 >
-                  <Text
-                    style={{
-                      width: "40rpx",
-                      height: "40rpx",
-                      borderRadius: "50%",
-                      border: "2rpx solid #384877",
-                      background: done ? "#384877" : "#fff",
-                      color: "#fff",
-                      textAlign: "center",
-                      lineHeight: "40rpx",
-                      marginRight: "16rpx",
-                      fontSize: "24rpx"
-                    }}
-                    onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
-                  >
-                    {done ? "✓" : ""}
-                  </Text>
-                  <Text style={{ flex: 1, fontSize: "30rpx", color: done ? "#999" : "#333", textDecoration: done ? "line-through" : "none" }}>
-                    {sub.title}
-                  </Text>
-                </View>
-              );
-            })}
+                  {done ? "✓" : ""}
+                </Text>
+                <Text style={{ flex: 1, fontSize: "30rpx", color: done ? "#999" : "#333", textDecoration: done ? "line-through" : "none" }}>
+                  {sub.title}
+                </Text>
+              </View>
+            );
+          })}
+
+          <View style={{ marginTop: "24rpx", display: "flex", alignItems: "center" }}>
+            <Input
+              className="ss-input"
+              placeholder="添加一个子约定"
+              value={subtaskText}
+              onInput={(e) => setSubtaskText(e.detail.value)}
+              style={{ flex: 1, marginRight: "16rpx" }}
+            />
+            <Button className="ss-btn ss-btn-sm" onClick={addSubtask}>添加</Button>
           </View>
-        )}
+        </View>
 
         <View className="ss-card">
           <View className="ss-section-title">评论</View>

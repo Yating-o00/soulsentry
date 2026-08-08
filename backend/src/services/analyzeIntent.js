@@ -125,7 +125,7 @@ export async function analyzeIntentWithKimi({
 2. timeline 中每项包含 time/date/title，date 使用 YYYY-MM-DD。
 3. devices 必须是对象，且只允许包含 ${DEVICE_IDS.join(", ")} 这些 key。
 4. 每个设备项包含 name 和 strategies；strategies 是数组，每项包含 time/method/content/priority。
-5. automations 是可执行建议，status 只能是 active/ready/monitoring/pending。
+5. automations 是可执行建议，必须包含 2 到 4 条。每条包含 title（动作标题）、desc（一句话说明）、status（active/ready/monitoring/pending 之一）、device_id（可选，对应设备 key）。例如 {"title": "到期前 1 小时手机提醒", "desc": "在约定截止时间前 1 小时通过手机推送提醒", "status": "ready", "device_id": "phone"}。
 6. 如果用户输入缺少明确日期，resolved_date 默认使用 ${fallbackDate}。
 7. steps 用中文给出 3 到 5 个简短分析步骤。`;
 

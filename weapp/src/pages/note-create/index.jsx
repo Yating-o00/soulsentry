@@ -1,11 +1,14 @@
 import { useState } from "react";
 import Taro from "@tarojs/taro";
-import { View, Input, Textarea, Button } from "@tarojs/components";
+import { View, Input, Textarea, Button, ScrollView } from "@tarojs/components";
 import { post } from "@/utils/api";
 
 export default function NoteCreate() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [createdNote, setCreatedNote] = useState(null);
+  const [step, setStep] = useState("form");
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
@@ -16,14 +19,40 @@ export default function NoteCreate() {
 
     setLoading(true);
     try {
-      await post("/notes", {
+      const note = await post("/notes", {
         title: title.trim() || undefined,
         content: content.trim()
       });
-      Taro.showToast({ title: "创建成功", icon: "success" });
-      setTimeout(() => {
-        Taro.navigateBack();
-      }, 500);
+      setCreatedNote(note);
+
+      // 获取 AI 正反馈
+      try {
+        const fb = await post("/functions/callAI", {
+          prompt: `用户刚刚写下了一段心签：\n\n${content.trim()}\n\n请给出一段温暖、真诚、积极的回应，让用户感到被看见和被鼓励。`,
+          system_prompt:
+            "你是一位温暖、真诚的正反馈助手。用户写下的是一段'心签'（心情、感悟或目标），请给出一段简短、走心、积极的回应。只返回 JSON 对象，不要输出 markdown、代码块或任何解释文字。格式：{\"feedback\": \"你的回应\"}",
+          response_json_schema: {
+            type: "object",
+            properties: {
+              feedback: { type: "string", description: "给用户的温暖正反馈，50-120字" }
+            },
+            required: ["feedback"]
+          },
+          temperature: 0.7
+        });
+        if (fb?.data?.feedback) {
+          setFeedback(fb.data.feedback);
+        } else if (typeof fb?.data === "string") {
+          setFeedback(fb.data);
+        } else {
+          setFeedback("你的心签已被温柔接住。愿这一份记录，成为你前行的微光。");
+        }
+      } catch (fbErr) {
+        console.error("feedback failed", fbErr);
+        setFeedback("你的心签已被温柔接住。愿这一份记录，成为你前行的微光。");
+      }
+
+      setStep("feedback");
     } catch (err) {
       // handled globally
     } finally {
@@ -31,35 +60,81 @@ export default function NoteCreate() {
     }
   };
 
+  const goBack = () => {
+    Taro.navigateBack();
+  };
+
+  const renderForm = () => (
+    <View className="ss-card">
+      <View className="ss-title">新建心签</View>
+      <View className="ss-subtitle">写下心情、感悟或目标，SoulSentry 会给你温暖的回应。</View>
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">标题</View>
+        <Input
+          className="ss-input"
+          placeholder="给心签起个名字（可选）"
+          value={title}
+          onInput={(e) => setTitle(e.detail.value)}
+        />
+      </View>
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">内容 *</View>
+        <Textarea
+          className="ss-textarea"
+          placeholder="写下你的心签..."
+          value={content}
+          onInput={(e) => setContent(e.detail.value)}
+        />
+      </View>
+
+      <Button className="ss-btn" loading={loading} disabled={loading || !content.trim()} onClick={submit}>
+        发布心签
+      </Button>
+    </View>
+  );
+
+  const renderFeedback = () => (
+    <View>
+      <View className="ss-card" style={{ textAlign: "center", padding: "48rpx 24rpx" }}>
+        <View style={{ fontSize: "64rpx", marginBottom: "16rpx" }}>💌</View>
+        <View className="ss-title">心签已收到</View>
+        <Text className="ss-muted">{createdNote?.title || "未命名心签"}</Text>
+      </View>
+
+      <View className="ss-card">
+        <View style={{ fontSize: "32rpx", color: "#384877", fontWeight: 600, marginBottom: "16rpx" }}>
+          SoulSentry 想对你说
+        </View>
+        <View
+          style={{
+            background: "linear-gradient(135deg, #f5f7fa 0%, #eef1f7 100%)",
+            borderRadius: "16rpx",
+            padding: "32rpx",
+            borderLeft: "8rpx solid #384877"
+          }}
+        >
+          <Text style={{ fontSize: "32rpx", color: "#333", lineHeight: "56rpx" }}>{feedback}</Text>
+        </View>
+      </View>
+
+      <View className="ss-card">
+        <View className="ss-section-title">你的心签</View>
+        <Text style={{ fontSize: "30rpx", color: "#333", lineHeight: "52rpx" }}>{createdNote?.content}</Text>
+      </View>
+
+      <Button className="ss-btn" onClick={goBack}>完成</Button>
+    </View>
+  );
+
   return (
     <View className="ss-page">
-      <View className="ss-card">
-        <View className="ss-title">新建心签</View>
-
-        <View style={{ marginTop: "24rpx" }}>
-          <View className="ss-label">标题</View>
-          <Input
-            className="ss-input"
-            placeholder="给心签起个名字（可选）"
-            value={title}
-            onInput={(e) => setTitle(e.detail.value)}
-          />
-        </View>
-
-        <View style={{ marginTop: "24rpx" }}>
-          <View className="ss-label">内容 *</View>
-          <Textarea
-            className="ss-textarea"
-            placeholder="写下你的心签..."
-            value={content}
-            onInput={(e) => setContent(e.detail.value)}
-          />
-        </View>
-
-        <Button className="ss-btn" loading={loading} disabled={loading} onClick={submit}>
-          创建
-        </Button>
-      </View>
+      <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
+        {step === "form" && renderForm()}
+        {step === "feedback" && renderFeedback()}
+        <View style={{ height: "40rpx" }} />
+      </ScrollView>
     </View>
   );
 }

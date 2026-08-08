@@ -109,6 +109,7 @@ export default function Collaborate() {
               token={token}
               task={data.task}
               subtasks={data.subtasks}
+              activities={data.activities || []}
               viewer={data.viewer}
               onChanged={load}
             />

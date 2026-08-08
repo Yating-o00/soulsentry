@@ -40,7 +40,13 @@ Deno.serve(async (req) => {
     let subtaskTitle = '';
     if (activityType === 'subtask_check' || activityType === 'subtask_uncheck') {
       const subtask = await base44.asServiceRole.entities.Task.get(body.subtask_id).catch(() => null);
-      if (!subtask || subtask.parent_task_id !== task.id) {
+      let belongs = !!subtask && subtask.parent_task_id === task.id;
+      if (!belongs && subtask && subtask.parent_task_id) {
+        // 二级子约定：父级的父级是这个约定
+        const parent = await base44.asServiceRole.entities.Task.get(subtask.parent_task_id).catch(() => null);
+        belongs = !!parent && parent.parent_task_id === task.id;
+      }
+      if (!belongs) {
         return Response.json({ error: '子约定不存在' }, { status: 404 });
       }
       subtaskTitle = subtask.title;

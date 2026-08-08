@@ -1,6 +1,6 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Circle, Users, Clock } from "lucide-react";
+import { Users, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 // 协作快照：被邀请者看到的约定内容概览
@@ -35,19 +35,7 @@ export default function CollaborationSnapshot({ task, subtasks = [], inviterName
           <Badge variant="outline" className="text-xs">进度 {task.progress || 0}%</Badge>
         </div>
 
-        {subtasks.length > 0 && (
-          <div className="space-y-1.5 pt-1">
-            <p className="text-xs font-semibold text-slate-500">拆解步骤</p>
-            {subtasks.map((s) => (
-              <div key={s.id} className="flex items-center gap-2 text-sm text-slate-700">
-                {s.status === "completed"
-                  ? <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                  : <Circle className="w-4 h-4 text-slate-300 shrink-0" />}
-                <span className={s.status === "completed" ? "line-through text-slate-400" : ""}>{s.title}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* 拆解步骤统一放在下方「参与这个约定」中呈现并可勾选，避免重复 */}
       </div>
     </div>
   );

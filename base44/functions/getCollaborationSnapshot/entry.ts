@@ -18,9 +18,26 @@ Deno.serve(async (req) => {
     const task = await base44.asServiceRole.entities.Task.get(invite.task_id).catch(() => null);
     if (!task) return Response.json({ error: '这个约定已不存在' }, { status: 404 });
 
-    const subtasks = await base44.asServiceRole.entities.Task
+    const subtasksRaw = await base44.asServiceRole.entities.Task
       .filter({ parent_task_id: task.id })
       .catch(() => []);
+    const subtasks = (subtasksRaw || []).filter((s) => !s.deleted_at);
+    // 二级子约定
+    const subtasksWithChildren = await Promise.all(subtasks.map(async (s) => {
+      const kids = await base44.asServiceRole.entities.Task
+        .filter({ parent_task_id: s.id })
+        .catch(() => []);
+      return {
+        id: s.id,
+        title: s.title,
+        status: s.status,
+        children: (kids || []).filter((k) => !k.deleted_at).map((k) => ({
+          id: k.id,
+          title: k.title,
+          status: k.status
+        }))
+      };
+    }));
 
     await base44.asServiceRole.entities.CollaborationInvite.update(invite.id, {
       view_count: (invite.view_count || 0) + 1
@@ -63,16 +80,15 @@ Deno.serve(async (req) => {
         reminder_time: task.reminder_time || null,
         collaborator_count: (task.assigned_to || []).length
       },
-      subtasks: (subtasks || []).map((s) => ({
-        id: s.id,
-        title: s.title,
-        status: s.status
-      })),
+      subtasks: subtasksWithChildren,
       activities: (activities || []).map((a) => ({
         id: a.id,
         actor_name: a.actor_name,
+        actor_id: a.actor_id || null,
+        guest_key: a.guest_key || '',
         activity_type: a.activity_type,
         content: a.content,
+        subtask_id: a.subtask_id || '',
         subtask_title: a.subtask_title,
         created_date: a.created_date
       })),

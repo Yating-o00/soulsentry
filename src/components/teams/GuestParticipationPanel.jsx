@@ -3,7 +3,8 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, Circle, Send, CalendarPlus, Loader2 } from "lucide-react";
+import { Send, CalendarPlus, Loader2 } from "lucide-react";
+import GuestSubtaskChecklist from "@/components/teams/GuestSubtaskChecklist";
 import { toast } from "sonner";
 import { downloadTaskIcs } from "@/lib/ics";
 import { appParams } from "@/lib/app-params";
@@ -18,7 +19,7 @@ const guestKey = () => {
 };
 
 // 未注册的被分享者也能参与：勾选子约定、留言、把约定时间加进自己的日历
-export default function GuestParticipationPanel({ token, task, subtasks, viewer, onChanged }) {
+export default function GuestParticipationPanel({ token, task, subtasks, activities = [], viewer, onChanged }) {
   const [name, setName] = useState(viewer?.full_name || localStorage.getItem("soul_guest_name") || "");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState("");
@@ -91,24 +92,15 @@ export default function GuestParticipationPanel({ token, task, subtasks, viewer,
 
       {subtasks.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-slate-500">勾选你已完成的部分</p>
-          {subtasks.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => toggleSubtask(s)}
-              disabled={!!busy}
-              className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors"
-            >
-              {busy === s.id
-                ? <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" />
-                : s.status === "completed"
-                  ? <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                  : <Circle className="w-4 h-4 text-slate-300 shrink-0" />}
-              <span className={`text-sm ${s.status === "completed" ? "line-through text-slate-400" : "text-slate-700"}`}>
-                {s.title}
-              </span>
-            </button>
-          ))}
+          <p className="text-xs font-semibold text-slate-500">拆解步骤 · 点击勾选你完成的部分</p>
+          <GuestSubtaskChecklist
+            subtasks={subtasks}
+            activities={activities}
+            myGuestKey={guestKey()}
+            viewerId={viewer?.id || null}
+            busy={busy}
+            onToggle={toggleSubtask}
+          />
         </div>
       )}
 

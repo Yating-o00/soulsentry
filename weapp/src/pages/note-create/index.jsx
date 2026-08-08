@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Taro from "@tarojs/taro";
 import { View, Input, Textarea, Button, ScrollView } from "@tarojs/components";
-import { post } from "@/utils/api";
+import { get, post, patch } from "@/utils/api";
 
 export default function NoteCreate() {
   const [title, setTitle] = useState("");
@@ -10,6 +10,32 @@ export default function NoteCreate() {
   const [createdNote, setCreatedNote] = useState(null);
   const [step, setStep] = useState("form");
   const [loading, setLoading] = useState(false);
+  const [editId, setEditId] = useState("");
+  const [isEdit, setIsEdit] = useState(false);
+
+  useEffect(() => {
+    const params = Taro.getCurrentInstance().router.params || {};
+    const id = params.id;
+    const mode = params.mode;
+    if (id && mode === "edit") {
+      setEditId(id);
+      setIsEdit(true);
+      loadNote(id);
+    }
+  }, []);
+
+  const loadNote = async (id) => {
+    setLoading(true);
+    try {
+      const note = await get(`/notes/${id}`);
+      setTitle(note.title || "");
+      setContent(note.content || "");
+    } catch (err) {
+      // handled globally
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const submit = async () => {
     if (!content.trim()) {
@@ -19,6 +45,16 @@ export default function NoteCreate() {
 
     setLoading(true);
     try {
+      if (isEdit && editId) {
+        await patch(`/notes/${editId}`, {
+          title: title.trim() || undefined,
+          content: content.trim()
+        });
+        Taro.showToast({ title: "更新成功", icon: "success" });
+        setTimeout(() => Taro.navigateBack(), 500);
+        return;
+      }
+
       const note = await post("/notes", {
         title: title.trim() || undefined,
         content: content.trim()
@@ -66,8 +102,8 @@ export default function NoteCreate() {
 
   const renderForm = () => (
     <View className="ss-card">
-      <View className="ss-title">新建心签</View>
-      <View className="ss-subtitle">写下心情、感悟或目标，SoulSentry 会给你温暖的回应。</View>
+      <View className="ss-title">{isEdit ? "编辑心签" : "新建心签"}</View>
+      <View className="ss-subtitle">{isEdit ? "修改心签内容" : "写下心情、感悟或目标，SoulSentry 会给你温暖的回应。"}</View>
 
       <View style={{ marginTop: "24rpx" }}>
         <View className="ss-label">标题</View>
@@ -90,7 +126,7 @@ export default function NoteCreate() {
       </View>
 
       <Button className="ss-btn" loading={loading} disabled={loading || !content.trim()} onClick={submit}>
-        发布心签
+        {isEdit ? "保存修改" : "发布心签"}
       </Button>
     </View>
   );

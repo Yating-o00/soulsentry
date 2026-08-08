@@ -21,7 +21,7 @@ export function request(options = {}) {
     ...options,
     url,
     header: headers,
-    timeout: options.timeout || 20000
+    timeout: options.timeout || 60000
   })
     .then((res) => {
       const { statusCode, data } = res;

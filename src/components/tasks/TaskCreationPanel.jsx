@@ -11,6 +11,14 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import {
+  composeShanghaiISO,
+  formatShanghai,
+  formatShanghaiTime,
+  normalizeTaskTime,
+  parseAsShanghai,
+  toShanghaiTimeStr,
+} from "@/lib/timeCore";
 import { OfflineStorage } from "../offline/OfflineManager";
 import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, BookTemplate, CheckSquare, X, GitMerge, ImagePlus, FileText, ScanText } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -120,10 +128,10 @@ export default function TaskCreationPanel({ onAddTask, initialData = null, onCan
     id: initialData?.id || null,
     title: initialData?.title || "",
     description: initialData?.description || "",
-    reminder_time: initialData?.reminder_time ? new Date(initialData.reminder_time) : new Date(),
-    time: initialData?.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : "09:00",
-    end_time: initialData?.end_time ? new Date(initialData.end_time) : null,
-    end_time_str: initialData?.end_time ? format(new Date(initialData.end_time), "HH:mm") : "10:00",
+    reminder_time: initialData?.reminder_time ? parseAsShanghai(initialData.reminder_time) : new Date(),
+    time: initialData?.reminder_time ? toShanghaiTimeStr(initialData.reminder_time) : "09:00",
+    end_time: initialData?.end_time ? parseAsShanghai(initialData.end_time) : null,
+    end_time_str: initialData?.end_time ? toShanghaiTimeStr(initialData.end_time) : "10:00",
     has_end_time: !!initialData?.end_time,
     priority: initialData?.priority || "medium",
     category: initialData?.category || "personal",
@@ -330,13 +338,13 @@ Return JSON.`,
       });
 
       if (result?.title) {
-        const reminderDate = result.reminder_time ? new Date(result.reminder_time) : (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0); return d; })();
+        const reminderDate = result.reminder_time ? parseAsShanghai(result.reminder_time) : (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0); return d; })();
         setTask(prev => ({
           ...prev,
           title: result.title,
           description: result.description || (result.extracted_text ? `原文:\n${result.extracted_text}` : ""),
           reminder_time: reminderDate,
-          time: format(reminderDate, "HH:mm"),
+          time: toShanghaiTimeStr(reminderDate) || "09:00",
           priority: result.priority || "medium",
           category: result.category || "personal",
           subtasks: [
@@ -345,7 +353,7 @@ Return JSON.`,
               ...st,
               priority: st.priority || result.priority || "medium",
               category: st.category || result.category || "personal",
-              time: st.time || format(reminderDate, "HH:mm")
+              time: st.time || (toShanghaiTimeStr(reminderDate) || "09:00")
             }))
           ]
         }));
@@ -398,12 +406,13 @@ Return JSON.`,
         
         // Populate form with first task
         const first = response.tasks[0];
+        const voiceReminderDate = parseAsShanghai(first.reminder_time);
         setTask(prev => ({
             ...prev,
             title: first.title,
             description: first.description || "",
-            reminder_time: new Date(first.reminder_time),
-            time: format(new Date(first.reminder_time), "HH:mm"),
+            reminder_time: voiceReminderDate,
+            time: toShanghaiTimeStr(voiceReminderDate) || "09:00",
             priority: first.priority || "medium",
             category: first.category || "personal"
         }));
@@ -437,24 +446,20 @@ Return JSON.`,
     setIsSubmitting(true);
     triggerHaptic('light');
 
-    const reminderDateTime = new Date(task.reminder_time);
-    let endDateTime = task.end_time ? new Date(task.end_time) : null;
-
-    if (!task.is_all_day) {
-      const [hours = '09', minutes = '00'] = task.time.split(':');
-      reminderDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
-      
-      if (task.has_end_time && task.end_time_str) {
-         if (!endDateTime) endDateTime = new Date(reminderDateTime);
-         const [eh, em] = task.end_time_str.split(':');
-         endDateTime.setHours(parseInt(eh), parseInt(em), 0);
-      }
-    }
+    // 使用北京时间统一组合日期+时间，避免手机端因设备时区不同导致时间偏移
+    const reminderISO = task.is_all_day
+      ? composeShanghaiISO(task.reminder_time, "00:00")
+      : composeShanghaiISO(task.reminder_time, task.time);
+    const endISO = task.is_all_day
+      ? reminderISO
+      : (task.has_end_time && task.end_time_str)
+        ? composeShanghaiISO(task.end_time || task.reminder_time, task.end_time_str)
+        : null;
 
     const taskToSubmit = {
       ...task,
-      reminder_time: reminderDateTime.toISOString(),
-      end_time: endDateTime ? endDateTime.toISOString() : null,
+      reminder_time: reminderISO,
+      end_time: endISO,
       status: 'pending'
     };
 
@@ -471,10 +476,7 @@ Return JSON.`,
            await Promise.all(subtasks.filter(st => st.title.trim()).map(st => {
              let stReminderTime = createdTask.reminder_time;
              if (st.time) {
-                const parentDate = new Date(createdTask.reminder_time);
-                const [h, m] = st.time.split(':');
-                parentDate.setHours(parseInt(h), parseInt(m), 0);
-                stReminderTime = parentDate.toISOString();
+                stReminderTime = composeShanghaiISO(createdTask.reminder_time, st.time);
              }
 
              return base44.entities.Task.create({
@@ -554,16 +556,17 @@ Return JSON.`,
                       toast.error("缺少标题，无法生成约定");
                       return;
                     }
-                    const reminderDate = parsed.reminder_time ? new Date(parsed.reminder_time) : (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; })();
-                    const endDate = parsed.end_time ? new Date(parsed.end_time) : null;
-                    const validReminder = !isNaN(reminderDate.getTime()) ? reminderDate : new Date();
-                    const validEnd = endDate && !isNaN(endDate.getTime()) ? endDate : null;
+                    // 统一按北京时间解析 AI 返回的时间
+                    const fallbackDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+                    const normalized = normalizeTaskTime(parsed, fallbackDate);
+                    const reminderISO = normalized.reminder_time;
+                    const endISO = normalized.end_time;
 
                     const taskToSubmit = {
                       title: parsed.title,
                       description: parsed.description || "",
-                      reminder_time: validReminder.toISOString(),
-                      end_time: validEnd ? validEnd.toISOString() : null,
+                      reminder_time: reminderISO,
+                      end_time: endISO,
                       priority: parsed.priority || "medium",
                       category: parsed.category || "personal",
                       tags: parsed.tags || [],
@@ -583,7 +586,7 @@ Return JSON.`,
                             status: "pending",
                             priority: st.priority || taskToSubmit.priority,
                             category: taskToSubmit.category,
-                            reminder_time: validReminder.toISOString()
+                            reminder_time: reminderISO
                           })));
                         }
                       }
@@ -680,20 +683,20 @@ Return JSON.`,
                     
                     const processedSuggestions = { ...otherSuggestions };
                     
-                    // Ensure dates are Date objects and sync time strings
+                    // Ensure dates are Date objects and sync time strings (统一北京时间)
                     if (processedSuggestions.reminder_time) {
-                        const dateObj = new Date(processedSuggestions.reminder_time);
-                        if (!isNaN(dateObj.getTime())) {
+                        const dateObj = parseAsShanghai(processedSuggestions.reminder_time);
+                        if (dateObj) {
                             processedSuggestions.reminder_time = dateObj;
-                            processedSuggestions.time = format(dateObj, "HH:mm");
+                            processedSuggestions.time = toShanghaiTimeStr(dateObj) || "09:00";
                         }
                     }
                     
                     if (processedSuggestions.end_time) {
-                        const endDateObj = new Date(processedSuggestions.end_time);
-                        if (!isNaN(endDateObj.getTime())) {
+                        const endDateObj = parseAsShanghai(processedSuggestions.end_time);
+                        if (endDateObj) {
                             processedSuggestions.end_time = endDateObj;
-                            processedSuggestions.end_time_str = format(endDateObj, "HH:mm");
+                            processedSuggestions.end_time_str = toShanghaiTimeStr(endDateObj) || "10:00";
                             processedSuggestions.has_end_time = true;
                         }
                     }
@@ -836,7 +839,7 @@ Return JSON.`,
                             <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium text-slate-500 mb-0.5">约定日期</p>
                                 <div className="text-sm font-bold text-slate-700 truncate">
-                                     {task.reminder_time ? format(task.reminder_time, "M月d日", { locale: zhCN }) : "点击选择"}
+                                     {task.reminder_time ? formatShanghai(task.reminder_time.toISOString(), "M月d日") : "点击选择"}
                                 </div>
                             </div>
                          </div>

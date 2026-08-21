@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { format } from "date-fns";
+import { formatShanghaiTime } from "@/lib/timeCore";
 import { 
   Clock, MapPin, Zap, Check, CheckCircle2, MoreHorizontal, 
   Sun, Repeat, Heart, AlertCircle, Package, Flag, Calendar,
@@ -231,7 +232,7 @@ export default function TaskCard({ task, onComplete, onEdit }) {
             {hasTimeContext && !hasLocationContext && (
               <span className="flex items-center gap-1 text-slate-400">
                 <Clock className="w-3 h-3" />
-                {task.reminder_time ? format(new Date(task.reminder_time), "HH:mm") : "全天"}
+                {task.reminder_time ? formatShanghaiTime(task.reminder_time) : "全天"}
               </span>
             )}
             

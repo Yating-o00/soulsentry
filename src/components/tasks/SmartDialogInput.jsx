@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles, Send, Loader2, Check, RotateCcw, Bot, User, CalendarIcon, Clock, Tag, Flag, ListTodo, MapPin, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { formatShanghai, formatShanghaiDateTime, formatShanghaiTime, parseAsShanghai, toShanghaiTimeStr } from "@/lib/timeCore";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { getCurrentLocationContext } from "@/lib/locationContext";
@@ -100,7 +101,7 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 
 其他规则：
 1. 合并/修正字段（用户新的具体输入优先覆盖旧值）
-2. 时间表达解析为 ISO 字符串
+2. 时间表达解析为 ISO 8601 字符串，必须带 +08:00 时区，例如 "2026-08-21T15:00:00+08:00"
 3. 只有用户明确说**多个具体动作**才拆 subtasks
 4. confidence 表示当前解析完整度（0-100），>=80 表示信息已完整
 
@@ -119,8 +120,8 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
             properties: {
               title: { type: "string" },
               description: { type: "string" },
-              reminder_time: { type: "string", description: "ISO 时间" },
-              end_time: { type: "string" },
+              reminder_time: { type: "string", description: "ISO 8601 时间，必须带 +08:00 时区" },
+              end_time: { type: "string", description: "ISO 8601 时间，必须带 +08:00 时区" },
               time_reasoning: { type: "string", description: "为什么定在这个时间（中文一句话）" },
               priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
               category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
@@ -317,13 +318,13 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
                 {draft.reminder_time && (
                   <Badge variant="outline" className="bg-white gap-1">
                     <CalendarIcon className="w-3 h-3" />
-                    {(() => { try { return format(new Date(draft.reminder_time), "M月d日 HH:mm", { locale: zhCN }); } catch { return draft.reminder_time; } })()}
+                    {formatShanghaiDateTime(draft.reminder_time)}
                   </Badge>
                 )}
                 {draft.end_time && (
                   <Badge variant="outline" className="bg-white gap-1">
                     <Clock className="w-3 h-3" />
-                    至 {(() => { try { return format(new Date(draft.end_time), "HH:mm"); } catch { return draft.end_time; } })()}
+                    至 {formatShanghaiTime(draft.end_time)}
                   </Badge>
                 )}
                 {draft.category && (

@@ -33,7 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
-import { normalizeTimeRange } from "@/lib/timeCore";
+import { composeShanghaiISO, formatShanghai, formatShanghaiTime, normalizeTimeRange, parseAsShanghai, toShanghaiTimeStr } from "@/lib/timeCore";
 import AIText from "@/components/AIText";
 
 const CATEGORIES = [
@@ -87,10 +87,10 @@ export default function QuickAddTask({ onAdd, initialData = null }) {
   const [task, setTask] = useState({
     title: initialData?.title || "",
     description: initialData?.description || "",
-    reminder_time: initialData?.reminder_time ? new Date(initialData.reminder_time) : null,
-    time: initialData?.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : "09:00",
-    end_time: initialData?.end_time ? new Date(initialData.end_time) : null,
-    end_time_str: initialData?.end_time ? format(new Date(initialData.end_time), "HH:mm") : "10:00",
+    reminder_time: initialData?.reminder_time ? parseAsShanghai(initialData.reminder_time) : null,
+    time: initialData?.reminder_time ? toShanghaiTimeStr(initialData.reminder_time) : "09:00",
+    end_time: initialData?.end_time ? parseAsShanghai(initialData.end_time) : null,
+    end_time_str: initialData?.end_time ? toShanghaiTimeStr(initialData.end_time) : "10:00",
     has_end_time: !!initialData?.end_time,
     priority: initialData?.priority || "medium",
     category: initialData?.category || "personal",
@@ -501,44 +501,20 @@ ${task.description ? `描述: "${task.description}"` : ''}
     setIsSubmitting(true);
     triggerHaptic('light');
 
-    const reminderDateTime = new Date(task.reminder_time);
-    let endDateTime = task.end_time ? new Date(task.end_time) : null;
-
-    if (!task.is_all_day) {
-      const timeValue = task.time;
-      const timeParts = (timeValue && typeof timeValue === 'string' && timeValue.includes(':')) ? timeValue.split(':') : ['09', '00'];
-      const [hours = '09', minutes = '00'] = (timeParts && timeParts.length >= 2) ? timeParts : ['09', '00'];
-      reminderDateTime.setHours(parseInt(hours) || 9, parseInt(minutes) || 0, 0);
-
-      if (task.has_end_time || (task.end_time && task.end_time.getTime() !== task.reminder_time.getTime())) {
-        // If end_time date is present (from range), use it. Otherwise default to reminder_time (same day).
-        const baseEndDate = task.end_time || task.reminder_time;
-        endDateTime = new Date(baseEndDate);
-        
-        // If has_end_time is true, use the specified end time. 
-        // Otherwise (multi-day range without specific end time), default to same time as start or end of day? 
-        // Using start time for consistency if not specified.
-        const timeStr = task.has_end_time ? task.end_time_str : task.time;
-        const endTimeParts = (timeStr && typeof timeStr === 'string' && timeStr.includes(':')) ? timeStr.split(':') : ['10', '00'];
-        const [endHours = '10', endMinutes = '00'] = (endTimeParts && endTimeParts.length >= 2) ? endTimeParts : ['10', '00'];
-        endDateTime.setHours(parseInt(endHours) || 10, parseInt(endMinutes) || 0, 0);
-      } else {
-        // Single day, no specific end time
-        endDateTime = null;
-      }
-    } else {
-        // All day task - keep dates as is (usually 00:00)
-        // If we have an end date, ensure it's set
-        if (endDateTime) {
-            // Optional: set to end of day? Or just keep date part. 
-            // Keeping date part (00:00) is standard for date-only comparison often.
-        }
-    }
+    // 统一按北京时间组合日期+时间，避免设备时区影响
+    const reminderISO = task.is_all_day
+      ? composeShanghaiISO(task.reminder_time, "00:00")
+      : composeShanghaiISO(task.reminder_time, task.time);
+    const endISO = task.is_all_day
+      ? reminderISO
+      : (task.has_end_time || task.end_time)
+        ? composeShanghaiISO(task.end_time || task.reminder_time, task.has_end_time ? task.end_time_str : task.time)
+        : null;
 
     // 统一时间规范化：确保 reminder_time/end_time/is_all_day 一致，并自动补全
     const normalized = normalizeTimeRange({
-      reminder_time: reminderDateTime,
-      end_time: endDateTime,
+      reminder_time: reminderISO,
+      end_time: endISO,
       is_all_day: task.is_all_day,
     });
 

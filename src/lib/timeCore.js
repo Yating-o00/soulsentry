@@ -13,9 +13,100 @@
  *   4. is_all_day / end_time 推断一致
  */
 
+import { format } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
+
 export const USER_TIMEZONE = "Asia/Shanghai";
 export const DEFAULT_TIME = "09:00";          // 未指定时间时的默认时刻
 export const DEFAULT_DURATION_MINUTES = 60;   // 未指定结束时间时的默认时长
+
+/**
+ * 将任意时间输入按北京时间解析为 Date 对象（表示同一时刻）。
+ * 与原生 new Date() 的区别：能正确处理 +08:00 时区标记，
+ * 且对无时区字符串不会误按设备本地时区解析。
+ */
+export function parseAsShanghai(input) {
+  if (!input) return null;
+  try {
+    if (input instanceof Date) return new Date(input.getTime());
+    if (typeof input !== "string") return null;
+    // 已带时区 → 直接解析
+    if (/[+-]\d{2}:\d{2}|Z$/.test(input)) {
+      const d = new Date(input);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // 无时间部分 → 作为北京时间 00:00
+    if (isDateOnly(input)) {
+      const d = new Date(`${input}T00:00:00+08:00`);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // 有日期时间但无时区 → 视为北京时间
+    const d = new Date(`${input}+08:00`);
+    return isNaN(d.getTime()) ? null : d;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** 获取 Date 对象在北京时间下的 YYYY-MM-DD */
+export function toShanghaiDateStr(input) {
+  const d = input instanceof Date ? input : parseAsShanghai(input);
+  if (!d) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: USER_TIMEZONE });
+}
+
+/** 获取 Date 对象在北京时间下的 HH:mm */
+export function toShanghaiTimeStr(input) {
+  const d = input instanceof Date ? input : parseAsShanghai(input);
+  if (!d) return "";
+  return d.toLocaleTimeString("en-GB", {
+    timeZone: USER_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+/**
+ * 把用户选择的日期（Date 对象，通常来自日历组件）和时间字符串（HH:mm，北京时间）
+ * 组合成 UTC ISO 字符串。
+ *
+ * 例：用户选 2026-08-21 + 14:30（北京时间）→ 返回 "2026-08-21T06:30:00.000Z"
+ */
+export function composeShanghaiISO(dateObj, timeStr = DEFAULT_TIME) {
+  if (!dateObj) return null;
+  const datePart = toShanghaiDateStr(dateObj);
+  if (!datePart) return null;
+  const [hours = "09", minutes = "00"] = String(timeStr || DEFAULT_TIME).split(":");
+  const iso = `${datePart}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+08:00`;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** 将 UTC ISO 字符串按北京时间格式化为指定格式（date-fns format 语法） */
+export function formatShanghai(isoString, formatStr) {
+  if (!isoString) return "";
+  const d = parseAsShanghai(isoString);
+  if (!d) return "";
+  const zoned = toZonedTime(d, USER_TIMEZONE);
+  return format(zoned, formatStr);
+}
+
+/** 将 UTC ISO 字符串按北京时间格式化为简短日期时间 */
+export function formatShanghaiDateTime(isoString) {
+  return formatShanghai(isoString, "M月d日 HH:mm");
+}
+
+/** 将 UTC ISO 字符串按北京时间格式化为时间 */
+export function formatShanghaiTime(isoString) {
+  return formatShanghai(isoString, "HH:mm");
+}
+
+/** 判断两个 ISO 时间是否在同一天（按北京时间） */
+export function isSameShanghaiDay(a, b) {
+  if (!a || !b) return false;
+  return toShanghaiDateStr(a) === toShanghaiDateStr(b);
+}
 
 /**
  * 判断字符串是否为纯日期（YYYY-MM-DD 格式，无时间部分）

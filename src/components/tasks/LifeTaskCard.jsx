@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { format, isToday, isTomorrow, formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { formatShanghai, formatShanghaiTime, isSameShanghaiDay, parseAsShanghai } from "@/lib/timeCore";
 import { 
   Check, Clock, MapPin, Repeat, MoreHorizontal, 
   ShoppingBag, Zap, Navigation, 
@@ -465,15 +466,15 @@ export default function LifeTaskCard({
                                         title="点击调整时间"
                                     >
                                         <Clock className="w-3 h-3 text-stone-400" />
-                                        {task.reminder_time ? format(new Date(task.reminder_time), 'MM月dd日 HH:mm') : '待定'}
-                                        {task.end_time && ` - ${format(new Date(task.end_time), 'MM月dd日 HH:mm')}`}
+                                        {task.reminder_time ? formatShanghai(task.reminder_time, 'MM月dd日 HH:mm') : '待定'}
+                                        {task.end_time && ` - ${formatShanghai(task.end_time, 'MM月dd日 HH:mm')}`}
                                     </button>
                                 </MilestoneTimeEditor>
                             ) : (
                                 <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-50 text-stone-600 text-xs border border-stone-100">
                                     <Clock className="w-3 h-3 text-stone-400" />
-                                    {task.reminder_time ? format(new Date(task.reminder_time), 'MM月dd日 HH:mm') : '待定'}
-                                    {task.end_time && ` - ${format(new Date(task.end_time), 'MM月dd日 HH:mm')}`}
+                                    {task.reminder_time ? formatShanghai(task.reminder_time, 'MM月dd日 HH:mm') : '待定'}
+                                    {task.end_time && ` - ${formatShanghai(task.end_time, 'MM月dd日 HH:mm')}`}
                                 </span>
                             )}
 
@@ -563,15 +564,15 @@ export default function LifeTaskCard({
                                         }
                                         {(() => {
                                             if (task.reminder_time && task.end_time) {
-                                                const start = new Date(task.reminder_time);
-                                                const end = new Date(task.end_time);
-                                                const sameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate();
+                                                const start = parseAsShanghai(task.reminder_time);
+                                                const end = parseAsShanghai(task.end_time);
+                                                const sameDay = isSameShanghaiDay(task.reminder_time, task.end_time);
                                                 return sameDay
-                                                    ? `${format(start, 'MM-dd HH:mm')} → ${format(end, 'HH:mm')}`
-                                                    : `${format(start, 'MM-dd HH:mm')} → ${format(end, 'MM-dd HH:mm')}`;
+                                                    ? `${formatShanghai(task.reminder_time, 'MM-dd HH:mm')} → ${formatShanghai(task.end_time, 'HH:mm')}`
+                                                    : `${formatShanghai(task.reminder_time, 'MM-dd HH:mm')} → ${formatShanghai(task.end_time, 'MM-dd HH:mm')}`;
                                             }
-                                            if (task.end_time) return `截止 ${format(new Date(task.end_time), 'MM-dd HH:mm')}`;
-                                            if (task.reminder_time) return format(new Date(task.reminder_time), 'HH:mm');
+                                            if (task.end_time) return `截止 ${formatShanghai(task.end_time, 'MM-dd HH:mm')}`;
+                                            if (task.reminder_time) return formatShanghaiTime(task.reminder_time);
                                             return '全天';
                                         })()}
                                         {task.tags?.includes('ai_suggested_time') && (
@@ -582,7 +583,7 @@ export default function LifeTaskCard({
                              ) : (
                                 <span className="flex items-center gap-1.5 text-stone-500 bg-stone-50 px-2 py-0.5 rounded-md">
                                     <Clock className="w-3.5 h-3.5 text-stone-400" />
-                                    {task.reminder_time ? format(new Date(task.reminder_time), 'HH:mm') : '全天'}
+                                    {task.reminder_time ? formatShanghaiTime(task.reminder_time) : '全天'}
                                 </span>
                              )}
                              

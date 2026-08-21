@@ -5,27 +5,60 @@ import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { toast } from "sonner";
+import { getTimeContextForAI, normalizeTaskTime } from "@/lib/timeCore";
 
 /**
  * 移动端「+ → 新建约定」语音一键生成弹窗。
  * 录音 → AI 解析 → 直接创建约定，无需跳转或手动填表。
+ *
+ * 注意：移动端 Web Speech API 必须由用户手势触发，因此弹窗打开后
+ * 不自动录音，需要用户点击麦克风按钮才开始。每次点击都创建新的
+ * recognition 实例，避免旧实例状态腐烂导致首次点击无响应。
  */
 export default function VoiceQuickCreate({ open, onClose }) {
   const queryClient = useQueryClient();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [interim, setInterim] = useState("");
   const [supported, setSupported] = useState(true);
   const recognitionRef = useRef(null);
-  const recordingRef = useRef(false);
 
-  // 初始化语音识别
+  // 只检测设备是否支持语音识别，不预先创建实例
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setSupported(!!SpeechRecognition);
+  }, []);
+
+  // 关闭弹窗时停止录音并清空文案
+  useEffect(() => {
+    if (!open) {
+      stopRecognition();
+      setTranscript("");
+      setIsProcessing(false);
+    }
+  }, [open]);
+
+  const stopRecognition = () => {
+    setIsRecording(false);
+    try {
+      recognitionRef.current?.stop();
+    } catch (e) { /* noop */ }
+    recognitionRef.current = null;
+  };
+
+  const startRecording = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setSupported(false);
+      toast.error("当前浏览器不支持语音识别");
       return;
     }
+
+    // 每次点击都新建实例，避免旧实例的 onend/onerror 状态残留
+    stopRecognition();
+    setTranscript("");
+    setInterim("");
+
     const recognition = new SpeechRecognition();
     recognition.lang = "zh-CN";
     recognition.continuous = true;
@@ -39,50 +72,41 @@ export default function VoiceQuickCreate({ open, onClose }) {
         if (event.results[i].isFinal) finalText += text;
         else interimText += text;
       }
-      if (finalText) setTranscript((prev) => prev + finalText);
-    };
-    recognition.onerror = (event) => {
-      if (event.error === "not-allowed") toast.error("请允许麦克风权限");
-      recordingRef.current = false;
-      setIsRecording(false);
-    };
-    recognition.onend = () => {
-      if (recordingRef.current) {
-        try { recognition.start(); } catch (e) { /* already started */ }
+      if (finalText) {
+        setTranscript((prev) => prev + finalText);
+        setInterim("");
+      } else if (interimText) {
+        setInterim(interimText);
       }
     };
-    recognitionRef.current = recognition;
-    return () => {
-      recordingRef.current = false;
-      try { recognition.stop(); } catch (e) { /* noop */ }
+
+    recognition.onerror = (event) => {
+      if (event.error === "not-allowed") toast.error("请允许麦克风权限");
+      if (event.error === "aborted") return;
+      setIsRecording(false);
     };
-  }, []);
 
-  // 弹窗打开时自动开始录音
-  useEffect(() => {
-    if (open && supported) {
-      setTranscript("");
-      const timer = setTimeout(() => startRecording(), 350);
-      return () => clearTimeout(timer);
-    }
-    if (!open) {
-      stopRecognition();
-    }
-  }, [open, supported]);
+    recognition.onend = () => {
+      // 用户手动停止时 isRecording 已为 false；若识别自己断了则同步状态
+      setIsRecording((rec) => {
+        if (rec) {
+          // 意外中断：如果已有内容则保留，不自动重启
+          toast.info("语音识别已结束");
+        }
+        return false;
+      });
+    };
 
-  const startRecording = () => {
-    recordingRef.current = true;
-    setIsRecording(true);
+    recognitionRef.current = recognition;
+
     try {
-      recognitionRef.current?.start();
+      recognition.start();
+      setIsRecording(true);
       toast.success("🎤 开始说话…");
-    } catch (e) { /* already started */ }
-  };
-
-  const stopRecognition = () => {
-    recordingRef.current = false;
-    setIsRecording(false);
-    try { recognitionRef.current?.stop(); } catch (e) { /* noop */ }
+    } catch (e) {
+      toast.error("麦克风启动失败，请重试");
+      setIsRecording(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -94,18 +118,22 @@ export default function VoiceQuickCreate({ open, onClose }) {
     }
     setIsProcessing(true);
     try {
-      const now = new Date().toISOString();
+      const timeCtx = getTimeContextForAI();
       const result = await invokeAI({
         prompt: `从以下语音文字中解析出约定/任务信息，生成结构化数据。
-当前时间: ${now}（时区 Asia/Shanghai）
+${timeCtx.promptSnippet}
+
 语音内容: "${text}"
-请推断标题、时间、优先级、类别。如未提及时间，默认明天上午9点。返回 JSON。`,
+
+请推断标题、描述、时间、优先级、类别。返回 JSON。`,
         response_json_schema: {
           type: "object",
           properties: {
             title: { type: "string" },
             description: { type: "string" },
-            reminder_time: { type: "string", description: "ISO 时间" },
+            reminder_time: { type: "string", description: "ISO 时间，优先使用带 +08:00 的格式" },
+            end_time: { type: "string", description: "可选，带 +08:00 的 ISO 时间" },
+            is_all_day: { type: "boolean", description: "是否为全天事件" },
             priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
             category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] }
           },
@@ -119,18 +147,18 @@ export default function VoiceQuickCreate({ open, onClose }) {
         return;
       }
 
-      const reminderDate = result.reminder_time && !isNaN(new Date(result.reminder_time).getTime())
-        ? new Date(result.reminder_time)
-        : (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; })();
-
-      await base44.entities.Task.create({
+      const normalized = normalizeTaskTime({
         title: result.title,
         description: result.description || "",
-        reminder_time: reminderDate.toISOString(),
+        reminder_time: result.reminder_time,
+        end_time: result.end_time,
+        is_all_day: result.is_all_day,
         priority: result.priority || "medium",
         category: result.category || "personal",
         status: "pending"
       });
+
+      await base44.entities.Task.create(normalized);
 
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       toast.success("✨ 已为你创建约定");
@@ -200,7 +228,14 @@ export default function VoiceQuickCreate({ open, onClose }) {
                 </button>
 
                 <div className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 min-h-[80px] text-center text-slate-600 text-sm">
-                  {transcript || (isRecording ? "正在聆听，请说出你的约定…" : "点击麦克风开始说话")}
+                  {transcript || interim ? (
+                    <>
+                      {transcript}
+                      {interim && <span className="text-slate-400"> {interim}</span>}
+                    </>
+                  ) : (
+                    isRecording ? "正在聆听，请说出你的约定…" : "点击麦克风开始说话"
+                  )}
                 </div>
 
                 <button

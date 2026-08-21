@@ -145,7 +145,8 @@ export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 
   return toast.custom(
     (id) => (
       // 蓝紫色标题条 + 白色卡身 + 斜体灰字脚注,无外层光晕
-      <div className="w-[320px] rounded-2xl overflow-hidden bg-white">
+      // 宽度自适应小屏，确保在手机上不被截断
+      <div className="w-[min(320px,92vw)] rounded-2xl overflow-hidden bg-white">
         <div
           className="px-4 py-2.5 flex items-center gap-2"
           style={{ background: `linear-gradient(90deg, ${BRAND_PRIMARY} 0%, ${BRAND_SECONDARY} 100%)` }}

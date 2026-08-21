@@ -10,6 +10,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   UPLOAD_DIR: z.string().default("uploads"),
   VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
   WECHAT_APPID: z.string().optional(),
   WECHAT_MCHID: z.string().optional(),
   WECHAT_SERIAL_NO: z.string().optional(),
@@ -17,6 +18,10 @@ const envSchema = z.object({
   WECHAT_PRIVATE_KEY: z.string().optional(),
   WECHAT_PRIVATE_KEY_PATH: z.string().optional(),
   WECHAT_NOTIFY_URL: z.string().optional(),
+
+  // Kimi / Moonshot AI（可选，未配置时 callAI 等接口会提示未配置）
+  KIMI_API_KEY: z.string().optional(),
+  MOONSHOT_API_KEY: z.string().optional(),
 
   // 阿里云短信（可选，未配置时短信登录/注册走 mock）
   // 兼容多种命名：生产 env 中使用的 SMS_* / ALIYUN_SMS_* / ALIYUN_*

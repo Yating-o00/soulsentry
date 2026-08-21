@@ -19,8 +19,20 @@ export default function TaskDetail() {
   const [commentText, setCommentText] = useState("");
   const [subtaskText, setSubtaskText] = useState("");
   const [loading, setLoading] = useState(true);
+  const [expandedIds, setExpandedIds] = useState(new Set());
 
   const taskId = Taro.getCurrentInstance().router.params.id;
+
+  const fetchSubtasksRecursive = async (parentId) => {
+    const subs = await get("/tasks", { parent_task_id: parentId, limit: 200 });
+    let result = [];
+    for (const sub of subs || []) {
+      result.push(sub);
+      const children = await fetchSubtasksRecursive(sub.id);
+      result = result.concat(children);
+    }
+    return result;
+  };
 
   const fetchAll = async () => {
     if (!taskId) return;
@@ -29,8 +41,8 @@ export default function TaskDetail() {
       const taskData = await get(`/tasks/${taskId}`);
       setTask(taskData);
 
-      const subs = await get("/tasks", { parent_task_id: taskId, limit: 200 });
-      setSubtasks(Array.isArray(subs) ? subs : []);
+      const allSubs = await fetchSubtasksRecursive(taskId);
+      setSubtasks(allSubs);
 
       const cmt = await get("/comments", { task_id: taskId, sort: "-created_date", limit: 100 });
       setComments(Array.isArray(cmt) ? cmt : []);
@@ -98,6 +110,53 @@ export default function TaskDetail() {
     }
   };
 
+  const addChildSubtask = async (parentId) => {
+    if (!subtaskText.trim()) {
+      Taro.showToast({ title: "请输入子约定内容", icon: "none" });
+      return;
+    }
+    try {
+      await post("/tasks", {
+        title: subtaskText.trim(),
+        parent_task_id: parentId,
+        priority: "medium",
+        category: task?.category || "other"
+      });
+      setSubtaskText("");
+      setExpandedIds((prev) => new Set(prev).add(parentId));
+      Taro.showToast({ title: "已添加", icon: "success" });
+      fetchAll();
+    } catch (err) {
+      console.error("add child subtask failed", err);
+      Taro.showToast({ title: "添加失败", icon: "none" });
+    }
+  };
+
+  const deleteSubtask = async (id) => {
+    const res = await Taro.showModal({
+      title: "确认删除",
+      content: "删除该子约定？其下内容也会被删除。",
+      confirmColor: "#e53935"
+    });
+    if (!res.confirm) return;
+    try {
+      await del(`/tasks/${id}`);
+      Taro.showToast({ title: "已删除", icon: "success" });
+      fetchAll();
+    } catch (err) {
+      console.error("delete subtask failed", err);
+    }
+  };
+
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   if (loading && !task) {
     return (
       <View className="ss-page">
@@ -138,42 +197,123 @@ export default function TaskDetail() {
 
         <View className="ss-card">
           <View className="ss-section-title">子约定</View>
-          {subtasks.length === 0 && <View className="ss-empty">暂无子约定</View>}
-          {subtasks.map((sub) => {
-            const done = sub.status === "completed" || sub.status === "done";
-            return (
-              <View
-                key={sub.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  padding: "16rpx 0",
-                  borderBottom: "1rpx solid #e5e6eb"
-                }}
-              >
-                <Text
-                  style={{
-                    width: "40rpx",
-                    height: "40rpx",
-                    borderRadius: "50%",
-                    border: "2rpx solid #384877",
-                    background: done ? "#384877" : "#fff",
-                    color: "#fff",
-                    textAlign: "center",
-                    lineHeight: "40rpx",
-                    marginRight: "16rpx",
-                    fontSize: "24rpx"
-                  }}
-                  onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
-                >
-                  {done ? "✓" : ""}
-                </Text>
-                <Text style={{ flex: 1, fontSize: "30rpx", color: done ? "#999" : "#333", textDecoration: done ? "line-through" : "none" }}>
-                  {sub.title}
-                </Text>
-              </View>
-            );
-          })}
+
+          {(() => {
+            const tops = subtasks.filter((s) => s.parent_task_id === taskId);
+            const childrenOf = (id) => subtasks.filter((s) => s.parent_task_id === id);
+
+            const renderSub = (sub, depth = 0) => {
+              const done = sub.status === "completed" || sub.status === "done";
+              const kids = childrenOf(sub.id);
+              const hasKids = kids.length > 0;
+              const expanded = expandedIds.has(sub.id);
+
+              return (
+                <View key={sub.id}>
+                  <View
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "16rpx 0",
+                      paddingLeft: `${depth * 40}rpx`,
+                      borderBottom: "1rpx solid #e5e6eb"
+                    }}
+                  >
+                    <View
+                      onClick={() => toggleExpand(sub.id)}
+                      style={{
+                        width: "44rpx",
+                        height: "44rpx",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: "4rpx"
+                      }}
+                    >
+                      <Text style={{ color: "#384877", fontSize: "28rpx", fontWeight: 300 }}>
+                        {expanded ? "−" : "+"}
+                      </Text>
+                    </View>
+
+                    <Text
+                      style={{
+                        width: "40rpx",
+                        height: "40rpx",
+                        borderRadius: "50%",
+                        border: "2rpx solid #384877",
+                        background: done ? "#384877" : "#fff",
+                        color: "#fff",
+                        textAlign: "center",
+                        lineHeight: "40rpx",
+                        marginRight: "16rpx",
+                        fontSize: "24rpx"
+                      }}
+                      onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
+                    >
+                      {done ? "✓" : ""}
+                    </Text>
+
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontSize: "30rpx",
+                        color: done ? "#999" : "#333",
+                        textDecoration: done ? "line-through" : "none"
+                      }}
+                      onClick={() => toggleExpand(sub.id)}
+                    >
+                      {sub.title}
+                    </Text>
+
+                    <View
+                      onClick={() => deleteSubtask(sub.id)}
+                      style={{
+                        width: "48rpx",
+                        height: "48rpx",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <Text style={{ color: "#e53935", fontSize: "40rpx", lineHeight: "40rpx" }}>×</Text>
+                    </View>
+                  </View>
+
+                  {expanded && (
+                    <View>
+                      {hasKids && kids.map((child) => renderSub(child, depth + 1))}
+                      <View
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "12rpx 0",
+                          paddingLeft: `${(depth + 1) * 40 + 44}rpx`,
+                          borderBottom: "1rpx solid #e5e6eb"
+                        }}
+                      >
+                        <Input
+                          className="ss-input"
+                          placeholder="添加二级子约定"
+                          value={subtaskText}
+                          onInput={(e) => setSubtaskText(e.detail.value)}
+                          style={{ flex: 1, marginRight: "16rpx", height: "64rpx" }}
+                        />
+                        <Button className="ss-btn ss-btn-sm" onClick={() => addChildSubtask(sub.id)}>
+                          添加
+                        </Button>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            };
+
+            if (tops.length === 0) {
+              return <View className="ss-empty" style={{ padding: "24rpx 0" }}>暂无子约定</View>;
+            }
+
+            return <View>{tops.map((sub) => renderSub(sub, 0))}</View>;
+          })()}
 
           <View style={{ marginTop: "24rpx", display: "flex", alignItems: "center" }}>
             <Input
@@ -181,7 +321,7 @@ export default function TaskDetail() {
               placeholder="添加一个子约定"
               value={subtaskText}
               onInput={(e) => setSubtaskText(e.detail.value)}
-              style={{ flex: 1, marginRight: "16rpx" }}
+              style={{ flex: 1, marginRight: "16rpx", height: "64rpx" }}
             />
             <Button className="ss-btn ss-btn-sm" onClick={addSubtask}>添加</Button>
           </View>

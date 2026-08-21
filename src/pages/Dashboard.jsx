@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, isToday, isPast, isFuture, parseISO, isWithinInterval, startOfDay, endOfDay, addDays, addMonths, addWeeks, startOfWeek, endOfWeek } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -15,7 +16,8 @@ import {
   Edit,
   StickyNote,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  User
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -61,6 +63,7 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const location = useLocation();
   const soulSentryData = location.state?.soulSentryData;
+  const { isAuthenticated } = useAuth();
 
   // Get current user
   const { data: user } = useQuery({
@@ -297,7 +300,39 @@ export default function Dashboard() {
   return (
     <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto min-h-screen">
       <NotificationManager />
-      
+
+      {!isAuthenticated && (
+        <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <User className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-amber-900">当前为 Demo 体验模式</p>
+                <p className="text-xs text-amber-700/80 mt-0.5">
+                  数据仅保存在当前设备，退出后可能丢失。如需完整功能，请登录或注册账号。
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+              <button
+                onClick={() => window.location.href = "/login"}
+                className="px-4 py-2 text-xs font-medium rounded-xl bg-white border border-amber-200 text-amber-800 hover:bg-amber-50 transition-colors"
+              >
+                登录
+              </button>
+              <button
+                onClick={() => window.location.href = "/login?mode=register"}
+                className="px-4 py-2 text-xs font-medium rounded-xl bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white hover:shadow-md transition-shadow"
+              >
+                注册
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">

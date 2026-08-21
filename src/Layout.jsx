@@ -10,6 +10,7 @@ import WelcomeGuard from "@/components/WelcomeGuard";
 import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
+import PushNotificationPrompt from "./components/notifications/PushNotificationPrompt";
 import GlobalTextTranslator from "@/components/GlobalTextTranslator";
 import GeofenceTracker from "./components/location/GeofenceTracker";
 import SentinelGeoWatcher from "./components/location/SentinelGeoWatcher";
@@ -354,6 +355,7 @@ function LayoutContent({ children }) {
         <PWAInstallPrompt />
         <PWAUpdateNotification />
         <NotificationManager />
+        <PushNotificationPrompt />
         <GlobalTextTranslator />
         <GeofenceTracker />
         <SentinelGeoWatcher />

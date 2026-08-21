@@ -132,10 +132,12 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
                   properties: {
                     title: { type: "string" },
                     priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
-                  }
+                  },
+                  required: ["title"]
                 }
               }
-            }
+            },
+            required: ["title"]
           }
         },
         required: ["reply", "task"]
@@ -163,7 +165,18 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 
       const lastAiMsg = [...messages].reverse().find(m => m.role === "ai");
       const res = await callAI(text, draft, lastAiMsg?.content, locationCtx);
-      if (res?.task) setDraft(res.task);
+
+      // 兼容 AI 可能未按 schema 返回 task 或遗漏 title 的情况
+      let nextTask = res?.task;
+      if (!nextTask || typeof nextTask !== "object") {
+        nextTask = { title: text };
+      }
+      if (!nextTask.title || typeof nextTask.title !== "string" || !nextTask.title.trim()) {
+        // 优先从用户原文提取第一句作为标题兜底
+        nextTask.title = text.split(/[。，,；;!！?？\n]/)[0].trim().slice(0, 120) || text.slice(0, 120);
+      }
+
+      setDraft(nextTask);
       setMessages(prev => [...prev, {
         role: "ai",
         content: res?.reply || "已理解，请确认下方信息。",
@@ -171,8 +184,9 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
       }]);
     } catch (e) {
       console.error(e);
-      toast.error("AI 解析失败，请重试");
-      setMessages(prev => [...prev, { role: "ai", content: "抱歉，解析失败了，请换个说法再试一次。" }]);
+      const errMsg = e?.message || "AI 解析失败，请重试";
+      toast.error(errMsg);
+      setMessages(prev => [...prev, { role: "ai", content: `抱歉，${errMsg}` }]);
     } finally {
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -187,14 +201,26 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
   };
 
   const handleConfirm = async () => {
+    const userText = (value || "").trim();
     if (!draft?.title) {
-      toast.error("请先描述任务标题");
-      return;
+      if (userText) {
+        setDraft(prev => ({
+          ...prev,
+          title: userText.split(/[。，,；;!！?？\n]/)[0].trim().slice(0, 120)
+        }));
+        // 让状态更新后再继续，这里直接构造提交对象
+      } else {
+        toast.error("请先描述任务标题");
+        return;
+      }
     }
+
+    const finalTitle = draft?.title || userText.split(/[。，,；;!！?？\n]/)[0].trim().slice(0, 120);
     // 把 time_reasoning 作为 ai_context_summary 透传，让灵魂哨兵卡片能展示
     const enriched = {
       ...draft,
-      ai_context_summary: draft.time_reasoning || draft.ai_context_summary,
+      title: finalTitle,
+      ai_context_summary: draft?.time_reasoning || draft?.ai_context_summary,
     };
     await onConfirm(enriched);
     setMessages([]);

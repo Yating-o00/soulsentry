@@ -112,6 +112,7 @@ model Task {
   progress         Int        @default(0)
   completedAt      DateTime?
   deletedAt        DateTime?
+  reminderSentAt   DateTime?
   tags             Json?
   reminderStrategy Json?
   metadata         Json?

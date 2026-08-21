@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import Taro from "@tarojs/taro";
+import Taro, { useShareAppMessage } from "@tarojs/taro";
 import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
 import { get, post } from "@/utils/api";
 import { isLoggedIn } from "@/utils/auth";
@@ -33,6 +33,7 @@ export default function Share() {
   useEffect(() => {
     const params = Taro.getCurrentInstance().router.params || {};
     const t = params.token || "";
+    const taskId = params.taskId || "";
     setToken(t);
     setAutoImport(params.autoImport === "1");
 
@@ -45,16 +46,43 @@ export default function Share() {
 
     if (t) {
       loadShare(t, storedToken);
+    } else if (taskId) {
+      generateShareFromTask(taskId, storedToken);
     } else {
       setLoading(false);
     }
   }, []);
+
+  const generateShareFromTask = async (taskId, vToken) => {
+    setLoading(true);
+    try {
+      const shareData = await post(`/public/share/generate/task/${taskId}`);
+      if (shareData.token) {
+        setToken(shareData.token);
+        loadShare(shareData.token, vToken);
+      } else {
+        setShare(null);
+        setLoading(false);
+      }
+    } catch (err) {
+      setShare(null);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!loading && share && autoImport && isLoggedIn()) {
       handleImport();
     }
   }, [loading, share, autoImport]);
+
+  useShareAppMessage(() => {
+    const item = share?.item || {};
+    return {
+      title: item.title ? `邀你一起守护：${item.title}` : "SoulSentry 分享",
+      path: `/pages/share/index?token=${token}`
+    };
+  });
 
   const loadShare = async (t, vToken) => {
     setLoading(true);
@@ -106,6 +134,13 @@ export default function Share() {
     }
   };
 
+  const buildVisitorPayload = () => {
+    const payload = { visitor_name: currentVisitorName() };
+    const vToken = currentVisitorToken();
+    if (vToken) payload.visitor_token = vToken;
+    return payload;
+  };
+
   const handleToggle = async (checked, subtaskId) => {
     if (!ensureVisitorName(() => handleToggle(checked, subtaskId))) return;
 
@@ -113,8 +148,7 @@ export default function Share() {
       const data = await post(`/public/share/${token}/toggle`, {
         checked,
         subtask_id: subtaskId || null,
-        visitor_token: currentVisitorToken(),
-        visitor_name: currentVisitorName()
+        ...buildVisitorPayload()
       });
       updateVisitorToken(data.visitor_token);
       loadShare(token, currentVisitorToken());
@@ -133,8 +167,7 @@ export default function Share() {
     try {
       const data = await post(`/public/share/${token}/comments`, {
         content: commentText.trim(),
-        visitor_token: currentVisitorToken(),
-        visitor_name: currentVisitorName()
+        ...buildVisitorPayload()
       });
       updateVisitorToken(data.visitor_token);
       setCommentText("");
@@ -149,8 +182,7 @@ export default function Share() {
 
     try {
       await post(`/public/share/${token}/subscribe`, {
-        visitor_token: currentVisitorToken(),
-        visitor_name: currentVisitorName()
+        ...buildVisitorPayload()
       });
       Taro.showToast({ title: "订阅成功", icon: "success" });
     } catch (err) {
@@ -273,6 +305,7 @@ export default function Share() {
         <View className="ss-card">
           <View className="ss-section-title">参与操作</View>
           <View style={{ display: "flex", flexWrap: "wrap" }}>
+            <Button className="ss-btn ss-btn-sm ss-btn-plain" style={{ marginRight: "16rpx", marginBottom: "16rpx" }} openType="share">微信转发</Button>
             <Button className="ss-btn ss-btn-sm ss-btn-plain" style={{ marginRight: "16rpx", marginBottom: "16rpx" }} onClick={handleSubscribe}>订阅更新</Button>
             <Button className="ss-btn ss-btn-sm ss-btn-plain" style={{ marginRight: "16rpx", marginBottom: "16rpx" }} onClick={handleCalendar}>添加到日历</Button>
             <Button className="ss-btn ss-btn-sm" style={{ marginBottom: "16rpx" }} onClick={handleImport}>导入到我的列表</Button>

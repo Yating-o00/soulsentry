@@ -13,6 +13,20 @@ const isPublicSharePage = () => {
   const path = window.location.pathname;
   return path.startsWith("/share/") || path.startsWith("/Share/");
 };
+const isLoginPage = () => {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname;
+  return path === "/login" || path === "/Login";
+};
+const safeLoginRedirectUrl = () => {
+  if (typeof window === "undefined") return "/";
+  const url = new URL(window.location.href);
+  // 避免把登录页本身作为 redirect，防止递归拼接 URI
+  if (url.pathname === "/login" || url.pathname === "/Login") {
+    return "/";
+  }
+  return url.pathname + url.search + url.hash;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -23,7 +37,7 @@ export const AuthProvider = ({ children }) => {
   const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
 
   useEffect(() => {
-    if (isStandalonePricingPreview() || isPublicSharePage()) {
+    if (isStandalonePricingPreview() || isPublicSharePage() || isLoginPage()) {
       setIsLoadingPublicSettings(false);
       setIsLoadingAuth(false);
       setIsAuthenticated(false);
@@ -41,11 +55,20 @@ export const AuthProvider = ({ children }) => {
 
       try {
         if (!base44.auth.isAuthenticated() && typeof base44.auth.bootstrapDevSession === "function") {
-          const bootstrapUser = await base44.auth.bootstrapDevSession();
-          setUser(bootstrapUser.user || bootstrapUser);
-          setIsAuthenticated(true);
-          setIsLoadingAuth(false);
-          return;
+          try {
+            const bootstrapUser = await base44.auth.bootstrapDevSession();
+            setUser(bootstrapUser.user || bootstrapUser);
+            setIsAuthenticated(true);
+            setIsLoadingAuth(false);
+            return;
+          } catch (bootstrapError) {
+            // 独立部署下允许未登录游客访问首页，避免网络/存储异常时循环跳登录
+            console.warn("Standalone auth bootstrap failed (allowing guest):", bootstrapError);
+            setUser(null);
+            setIsAuthenticated(false);
+            setIsLoadingAuth(false);
+            return;
+          }
         }
 
         if (base44.auth.isAuthenticated()) {
@@ -152,10 +175,14 @@ export const AuthProvider = ({ children }) => {
       
       // If user auth fails, it might be an expired token
       if (error.status === 401 || error.status === 403) {
-        setAuthError({
-          type: 'auth_required',
-          message: 'Authentication required'
-        });
+        // 独立部署下不再因 token 失效自动跳登录，避免微信内置浏览器等场景循环刷新。
+        // 页面层面会根据 isAuthenticated 提示用户登录。
+        if (!isStandaloneMode) {
+          setAuthError({
+            type: 'auth_required',
+            message: 'Authentication required'
+          });
+        }
       }
     }
   };
@@ -175,7 +202,7 @@ export const AuthProvider = ({ children }) => {
 
   const navigateToLogin = () => {
     // Use the SDK's redirectToLogin method
-    base44.auth.redirectToLogin(window.location.href);
+    base44.auth.redirectToLogin(safeLoginRedirectUrl());
   };
 
   return (

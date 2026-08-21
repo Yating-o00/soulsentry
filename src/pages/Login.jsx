@@ -1,6 +1,28 @@
 import { useState } from "react";
 import { standaloneClient } from "../api/standaloneClient";
 
+function getPostLoginRedirect() {
+  if (typeof window === "undefined") return "/";
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const redirect = params.get("redirect");
+    if (redirect) {
+      const url = new URL(redirect, window.location.origin);
+      // 仅允许同站路径，避免开放重定向；也不允许跳回登录页
+      if (
+        url.origin === window.location.origin &&
+        url.pathname !== "/login" &&
+        url.pathname !== "/Login"
+      ) {
+        return url.pathname + url.search + url.hash;
+      }
+    }
+  } catch (e) {
+    // 忽略非法 redirect
+  }
+  return "/";
+}
+
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
   const [mode, setMode] = useState("phone");
@@ -80,7 +102,7 @@ export default function Login() {
         const data = await result.json();
         if (!result.ok) throw new Error(data?.message || "注册失败");
         localStorage.setItem("soulsentry_access_token", data.token);
-        window.location.href = "/";
+        window.location.href = getPostLoginRedirect();
       } else {
         const result = await fetch("/api/auth/login", {
           method: "POST",
@@ -90,7 +112,7 @@ export default function Login() {
         const data = await result.json();
         if (!result.ok) throw new Error(data?.message || "登录失败");
         localStorage.setItem("soulsentry_access_token", data.token);
-        window.location.href = "/";
+        window.location.href = getPostLoginRedirect();
       }
     } catch (error) {
       setMessage(error.message || (isRegister ? "注册失败" : "登录失败"));
@@ -125,7 +147,7 @@ export default function Login() {
       } else {
         await standaloneClient.auth.login(email, password);
       }
-      window.location.href = "/";
+      window.location.href = getPostLoginRedirect();
     } catch (error) {
       setMessage(error.message || (isRegister ? "注册失败" : "登录失败"));
     } finally {

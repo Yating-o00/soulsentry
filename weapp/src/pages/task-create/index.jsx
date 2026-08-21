@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import Taro from "@tarojs/taro";
+import Taro, { useShareAppMessage } from "@tarojs/taro";
 import { View, Text, Input, Textarea, Picker, Button, ScrollView, Canvas } from "@tarojs/components";
-import { get, post, patch } from "@/utils/api";
+import { get, post, patch, del } from "@/utils/api";
 
 const priorities = [
   { value: "urgent", label: "紧急" },
@@ -49,7 +49,8 @@ function todayStr() {
 function toISODate(date, time) {
   if (!date) return "";
   const t = time || "00:00";
-  return `${date}T${t}:00`;
+  // 后端 zod .datetime() 要求带 Z 的 ISO 8601，这里按 Asia/Shanghai 时区转成 UTC 返回
+  return new Date(`${date}T${t}:00+08:00`).toISOString();
 }
 
 function formatDateTime(iso) {
@@ -115,6 +116,11 @@ export default function TaskCreate() {
   const [editId, setEditId] = useState("");
   const [isEdit, setIsEdit] = useState(false);
 
+  const [subtaskList, setSubtaskList] = useState([]);
+  const [newSubtaskText, setNewSubtaskText] = useState("");
+  const [newChildText, setNewChildText] = useState({});
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
   const isFormValid = title.trim().length > 0;
 
   useEffect(() => {
@@ -127,6 +133,17 @@ export default function TaskCreate() {
       loadTask(id);
     }
   }, []);
+
+  const loadSubtasksRecursive = async (parentId) => {
+    const subs = await get("/tasks", { parent_task_id: parentId, limit: 200 });
+    let result = [];
+    for (const sub of subs || []) {
+      result.push({ ...sub, _isNew: false, _isDeleted: false, _isModified: false });
+      const children = await loadSubtasksRecursive(sub.id);
+      result = result.concat(children);
+    }
+    return result;
+  };
 
   const loadTask = async (id) => {
     setLoading(true);
@@ -151,10 +168,120 @@ export default function TaskCreate() {
           setReminderTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
         }
       }
+
+      const allSubs = await loadSubtasksRecursive(id);
+      setSubtaskList(allSubs);
+      setExpandedIds(new Set());
     } catch (err) {
       // handled globally
     } finally {
       setLoading(false);
+    }
+  };
+
+  const topSubtasks = () => subtaskList.filter((s) => s.parent_task_id === editId && !s._isDeleted);
+  const childSubtasks = (parentId) => subtaskList.filter((s) => s.parent_task_id === parentId && !s._isDeleted);
+
+  const updateSubtask = (id, nextTitle) => {
+    setSubtaskList((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, title: nextTitle, _isModified: !s._isNew } : s))
+    );
+  };
+
+  const deleteSubtask = (id) => {
+    setSubtaskList((prev) =>
+      prev.map((s) => {
+        if (s.id === id) return { ...s, _isDeleted: true };
+        // 删除父约定时，同步删除其下所有二级子约定
+        if (s.parent_task_id === id) return { ...s, _isDeleted: true };
+        return s;
+      })
+    );
+  };
+
+  const restoreSubtask = (id) => {
+    setSubtaskList((prev) =>
+      prev.map((s) => {
+        if (s.id === id) return { ...s, _isDeleted: false };
+        if (s.parent_task_id === id) return { ...s, _isDeleted: false };
+        return s;
+      })
+    );
+  };
+
+  const addSubtask = () => {
+    const text = newSubtaskText.trim();
+    if (!text) return;
+    const tempId = `new-${Date.now()}`;
+    setSubtaskList((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        title: text,
+        parent_task_id: editId,
+        priority: priorities[priorityIndex].value,
+        category: categories[categoryIndex].value,
+        status: "pending",
+        _isNew: true,
+        _isDeleted: false,
+        _isModified: false
+      }
+    ]);
+    setNewSubtaskText("");
+  };
+
+  const addChildSubtask = (parentId) => {
+    const text = (newChildText[parentId] || "").trim();
+    if (!text) return;
+    const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setSubtaskList((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        title: text,
+        parent_task_id: parentId,
+        priority: priorities[priorityIndex].value,
+        category: categories[categoryIndex].value,
+        status: "pending",
+        _isNew: true,
+        _isDeleted: false,
+        _isModified: false
+      }
+    ]);
+    setNewChildText((prev) => ({ ...prev, [parentId]: "" }));
+    setExpandedIds((prev) => new Set(prev).add(parentId));
+  };
+
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const saveSubtasks = async () => {
+    for (const s of subtaskList) {
+      if (s._isDeleted) {
+        if (!s._isNew) {
+          await del(`/tasks/${s.id}`);
+        }
+        continue;
+      }
+      if (s._isNew) {
+        await post("/tasks", {
+          title: s.title.trim(),
+          parent_task_id: s.parent_task_id,
+          priority: s.priority,
+          category: s.category,
+          status: s.status
+        });
+        continue;
+      }
+      if (s._isModified) {
+        await patch(`/tasks/${s.id}`, { title: s.title.trim() });
+      }
     }
   };
 
@@ -248,6 +375,9 @@ export default function TaskCreate() {
     try {
       if (isEdit && editId) {
         await patch(`/tasks/${editId}`, payload);
+        if (subtaskList.length > 0) {
+          await saveSubtasks();
+        }
         Taro.showToast({ title: "更新成功", icon: "success" });
         setTimeout(() => Taro.navigateBack(), 500);
         return;
@@ -295,13 +425,11 @@ export default function TaskCreate() {
 
     // 标题
     ctx.setFontSize(40);
-    ctx.setFontStyle("bold");
     const displayTitle = title.length > 14 ? title.slice(0, 14) + "…" : title;
     ctx.fillText(displayTitle, 40, 140);
 
     // 描述
     ctx.setFontSize(26);
-    ctx.setFontStyle("normal");
     const desc = description || "与你一起守护这个约定";
     const displayDesc = desc.length > 60 ? desc.slice(0, 60) + "…" : desc;
     ctx.fillText(displayDesc, 40, 200);
@@ -389,13 +517,13 @@ export default function TaskCreate() {
     Taro.navigateBack();
   };
 
-  const onShareAppMessage = () => {
+  useShareAppMessage(() => {
     if (!shareToken) return { title: "SoulSentry 约定" };
     return {
       title: `邀你一起守护：${title}`,
       path: `/pages/share/index?token=${shareToken}`
     };
-  };
+  });
 
   useEffect(() => {
     if (step === "created" && shareToken && !posterUrl) {
@@ -404,6 +532,114 @@ export default function TaskCreate() {
       return () => clearTimeout(timer);
     }
   }, [step, shareToken, posterUrl]);
+
+  const renderSubtaskEditor = () => {
+    if (!isEdit) return null;
+
+    const renderItem = (sub, depth = 0) => {
+      const isDeleted = sub._isDeleted;
+      const children = childSubtasks(sub.id);
+      const isExpanded = expandedIds.has(sub.id);
+
+      return (
+        <View key={sub.id} style={{ marginBottom: "12rpx" }}>
+          <View style={{ display: "flex", alignItems: "center", paddingLeft: `${depth * 36}rpx` }}>
+            <View
+              onClick={() => toggleExpand(sub.id)}
+              style={{
+                width: "36rpx",
+                height: "36rpx",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+            >
+              <Text style={{ color: "#384877", fontSize: "26rpx" }}>{isExpanded ? "−" : "+"}</Text>
+            </View>
+            <Input
+              className="ss-input"
+              style={{
+                flex: 1,
+                height: "68rpx",
+                marginRight: "12rpx",
+                textDecoration: isDeleted ? "line-through" : "none",
+                color: isDeleted ? "#999" : "#333",
+                background: isDeleted ? "#f0f0f0" : "#f8f9fb"
+              }}
+              value={sub.title}
+              disabled={isDeleted}
+              onInput={(e) => updateSubtask(sub.id, e.detail.value)}
+            />
+            {isDeleted ? (
+              <Text
+                onClick={() => restoreSubtask(sub.id)}
+                style={{ color: "#384877", fontSize: "24rpx", padding: "0 8rpx" }}
+              >
+                恢复
+              </Text>
+            ) : (
+              <View
+                onClick={() => deleteSubtask(sub.id)}
+                style={{
+                  width: "44rpx",
+                  height: "44rpx",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                <Text style={{ color: "#e53935", fontSize: "36rpx", lineHeight: "36rpx" }}>×</Text>
+              </View>
+            )}
+          </View>
+
+          {isExpanded && (
+            <View style={{ marginTop: "8rpx", paddingLeft: `${(depth + 1) * 36}rpx` }}>
+              {children.map((child) => renderItem(child, depth + 1))}
+              <View style={{ display: "flex", alignItems: "center", marginTop: "8rpx" }}>
+                <Input
+                  className="ss-input"
+                  style={{ flex: 1, height: "60rpx", marginRight: "12rpx" }}
+                  placeholder="二级子约定"
+                  value={newChildText[sub.id] || ""}
+                  onInput={(e) => setNewChildText((prev) => ({ ...prev, [sub.id]: e.detail.value }))}
+                />
+                <Button className="ss-btn ss-btn-sm" style={{ height: "56rpx", lineHeight: "56rpx" }} onClick={() => addChildSubtask(sub.id)}>
+                  添加
+                </Button>
+              </View>
+            </View>
+          )}
+        </View>
+      );
+    };
+
+    return (
+      <View style={{ marginTop: "32rpx" }}>
+        <View className="ss-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Text>子约定</Text>
+          <Text className="ss-muted" style={{ fontSize: "22rpx" }}>{topSubtasks().length} 个</Text>
+        </View>
+        {topSubtasks().length === 0 && (
+          <View className="ss-empty" style={{ padding: "16rpx 0" }}>暂无子约定</View>
+        )}
+        {topSubtasks().map((sub) => renderItem(sub, 0))}
+
+        <View style={{ display: "flex", alignItems: "center", marginTop: "16rpx" }}>
+          <Input
+            className="ss-input"
+            style={{ flex: 1, height: "68rpx", marginRight: "12rpx" }}
+            placeholder="添加一个子约定"
+            value={newSubtaskText}
+            onInput={(e) => setNewSubtaskText(e.detail.value)}
+          />
+          <Button className="ss-btn ss-btn-sm" style={{ height: "56rpx", lineHeight: "56rpx" }} onClick={addSubtask}>
+            添加
+          </Button>
+        </View>
+      </View>
+    );
+  };
 
   const renderForm = () => (
     <View className="ss-card">
@@ -429,6 +665,8 @@ export default function TaskCreate() {
           onInput={(e) => setDescription(e.detail.value)}
         />
       </View>
+
+      {isEdit && renderSubtaskEditor()}
 
       <View style={{ marginTop: "24rpx" }}>
         <View className="ss-label">优先级</View>
@@ -581,7 +819,7 @@ export default function TaskCreate() {
       )}
 
       <View className="ss-card">
-        <Button className="ss-btn" loading={loading} disabled={loading} onClick={createTask}>
+        <Button className="ss-btn" loading={loading} disabled={loading} onClick={saveTask}>
           创建约定
         </Button>
         <Button className="ss-btn ss-btn-plain" onClick={() => setStep("form")}>

@@ -543,7 +543,22 @@ export const standaloneClient = {
       window.location.href = redirectUrl || "/login";
     },
     redirectToLogin(redirectUrl) {
-      const target = redirectUrl ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : "/login";
+      let safeRedirect = redirectUrl;
+      if (safeRedirect) {
+        try {
+          const url = new URL(safeRedirect, window.location.origin);
+          // 不要把登录页本身作为回调，避免 /login?redirect=/login?redirect=... 递归导致 URI 过长
+          if (url.pathname === "/login" || url.pathname === "/Login") {
+            safeRedirect = "/";
+          } else {
+            safeRedirect = url.pathname + url.search + url.hash;
+          }
+        } catch (e) {
+          // 非法 URL 时降级到首页
+          safeRedirect = "/";
+        }
+      }
+      const target = safeRedirect ? `/login?redirect=${encodeURIComponent(safeRedirect)}` : "/login";
       window.location.href = target;
     },
     async bootstrapDevSession() {

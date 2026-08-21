@@ -37,12 +37,18 @@ export async function invokeAI(params, featureKey) {
     throw err;
   }
 
+  if (response?.data?.error === 'AI_SERVICE_NOT_CONFIGURED') {
+    const err = new Error(response.data.message || 'AI 服务未配置');
+    err.code = "AI_SERVICE_NOT_CONFIGURED";
+    throw err;
+  }
+
   if (response?.data?.data !== undefined) {
     return response.data.data;
   }
 
   if (response?.data?.error) {
-    throw new Error(response.data.error);
+    throw new Error(response.data.message || response.data.error);
   }
 
   throw new Error('AI service unavailable');

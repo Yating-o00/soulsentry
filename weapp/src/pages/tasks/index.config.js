@@ -1,3 +1,4 @@
 export default {
-  navigationBarTitleText: "约定"
+  navigationBarTitleText: "约定",
+  enableShareAppMessage: true
 };

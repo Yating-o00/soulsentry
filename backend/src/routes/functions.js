@@ -646,18 +646,32 @@ functionsRouter.post("/:name", async (req, res) => {
     }
 
     if (name === "callAI") {
-      const data = await invokeKimiText({
-        prompt: payload.prompt,
-        systemPrompt: payload.system_prompt,
-        responseJsonSchema: payload.response_json_schema,
-        model: payload.model,
-        temperature: payload.temperature
-      });
+      try {
+        const data = await invokeKimiText({
+          prompt: payload.prompt,
+          systemPrompt: payload.system_prompt,
+          responseJsonSchema: payload.response_json_schema,
+          model: payload.model,
+          temperature: payload.temperature
+        });
 
-      return res.json({
-        data,
-        balance: req.user.aiCredits
-      });
+        return res.json({
+          data,
+          balance: req.user.aiCredits
+        });
+      } catch (error) {
+        const message = error?.message || String(error);
+        if (message.includes("KIMI_API_KEY") || message.includes("MOONSHOT_API_KEY") || message.includes("未配置")) {
+          return res.status(503).json({
+            error: "AI_SERVICE_NOT_CONFIGURED",
+            message: "AI 服务尚未配置（缺少 KIMI_API_KEY / MOONSHOT_API_KEY），请联系管理员配置后重试。"
+          });
+        }
+        return res.status(502).json({
+          error: "AI_SERVICE_ERROR",
+          message: `AI 服务调用失败：${message}`
+        });
+      }
     }
 
     if (name === "kimiMemoryInsight") {

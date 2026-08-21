@@ -11,6 +11,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { setupIframeMessaging } from './lib/iframe-messaging';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { isStandaloneMode } from '@/api/platformConfig';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import OnboardingHost from '@/components/onboarding/OnboardingHost';
 import { createPageUrl } from '@/utils';
@@ -43,9 +44,9 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
-      navigateToLogin();
-      return null;
+      // 独立部署下直接渲染登录页，避免微信内置浏览器循环刷新
+      if (!isStandaloneMode) navigateToLogin();
+      return isStandaloneMode ? <Login /> : null;
     }
   }
 

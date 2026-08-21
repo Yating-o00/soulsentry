@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles, Send, Loader2, Check, RotateCcw, Bot, User, CalendarIcon, Clock, Tag, Flag, ListTodo, MapPin, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { formatShanghai, formatShanghaiDateTime, formatShanghaiTime, parseAsShanghai, toShanghaiTimeStr } from "@/lib/timeCore";
+import { formatShanghai, formatShanghaiDateTime, formatShanghaiTime, getTimeContextForAI, parseAsShanghai, toShanghaiTimeStr } from "@/lib/timeCore";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { getCurrentLocationContext } from "@/lib/locationContext";
@@ -19,6 +19,30 @@ const CATEGORY_LABELS = {
 const PRIORITY_LABELS = {
   low: "低", medium: "中", high: "高", urgent: "紧急"
 };
+
+/**
+ * 解析用户输入中的相对时间，返回需要加的分钟数。
+ * 支持：X分钟后、几分钟后、半小时后、一刻钟后、马上/立刻
+ */
+function parseRelativeMinutes(text) {
+  if (!text) return null;
+  const t = text.trim();
+  if (/马上|立刻|立即|现在就/.test(t)) return 1;
+  if (/半小时后/.test(t)) return 30;
+  if (/一刻钟后/.test(t)) return 15;
+  const match = t.match(/(\d+)\s*分钟后?/);
+  if (match) return parseInt(match[1], 10);
+  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*分钟后?/);
+  if (cnMatch) {
+    const map = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+    const s = cnMatch[1];
+    if (s === "十") return 10;
+    if (s.startsWith("十")) return 10 + (map[s[1]] || 0);
+    if (s.endsWith("十")) return (map[s[0]] || 1) * 10;
+    return map[s] || null;
+  }
+  return null;
+}
 
 /**
  * 多轮对话式任务输入
@@ -41,7 +65,9 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
   }, [messages, draft, isLoading]);
 
   const callAI = async (userText, prevDraft, lastAiReply, locationCtx) => {
-    const now = new Date();
+    const timeCtx = getTimeContextForAI();
+    const nowISO = timeCtx.now_iso;
+    const nowLocal = timeCtx.now_local;
 
     // 构建位置/作息上下文区块
     let ctxBlock = "";
@@ -70,11 +96,20 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
 
     const prompt = `你是一个任务结构化助手。用户用自然语言描述任务，可能分多轮补充修正。请基于"已有解析"、"上一轮 AI 提问"和"本轮用户输入"，更新结构化任务。
 
-当前时间：${now.toISOString()}（用户时区 Asia/Shanghai）${ctxBlock}
+${timeCtx.promptSnippet}
+当前时间（ISO/UTC）: ${nowISO}
+当前时间（北京时间显示）: ${nowLocal}${ctxBlock}
 ${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首轮，无已有解析）"}
 ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 
 本轮用户输入："${userText}"
+
+⏰ 相对时间处理（最高优先级）：
+- "X分钟后" / "几分钟后" / "马上" / "立刻" → 必须基于"当前时间"精确加 X 分钟
+  - 例：当前 14:30，用户说"两分钟后提醒我" → reminder_time = "2026-08-21T14:32:00+08:00"
+- "X小时后" → 当前时间加 X 小时
+- "半小时后" → 加 30 分钟
+- "一刻钟后" → 加 15 分钟
 
 ⚠️ 极其重要的对话规则：
 - 如果"上一轮 AI 提问"是一个**是/否问题**，用户的简短回答（"是/好/要/对/嗯/否/不/不用"）是对该问题的**回答**，绝不可当作任务标题或子任务！
@@ -83,7 +118,7 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 - 用户输入是具体内容时，才作为新字段或新子任务处理
 - 不确定时宁可再问一次，也不乱填
 
-🧠 智能时间推断（极重要）：
+🧠 智能时间推断：
 当用户**没有明确说出时间**（如"路过加油站提醒我加油"、"出门买菜"），你必须结合【当前位置】+【当前时间】+【用户作息】综合推断 reminder_time，不要简单默认 09:00：
 
 ★ 顺路型 / 位置触发型任务（含"路过"、"顺便"、"出门"、"下班路上"等）：
@@ -175,6 +210,21 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
       if (!nextTask.title || typeof nextTask.title !== "string" || !nextTask.title.trim()) {
         // 优先从用户原文提取第一句作为标题兜底
         nextTask.title = text.split(/[。，,；;!！?？\n]/)[0].trim().slice(0, 120) || text.slice(0, 120);
+      }
+
+      // 客户端兜底：如果用户明确说了"X分钟后"，但 AI 没按相对时间解析，直接修正
+      const relativeMinutes = parseRelativeMinutes(text);
+      if (relativeMinutes != null && relativeMinutes > 0) {
+        const base = new Date();
+        base.setMinutes(base.getMinutes() + relativeMinutes);
+        const fallbackISO = base.toLocaleString("en-CA", { timeZone: "Asia/Shanghai", hour12: false }).replace(", ", "T") + ":00+08:00";
+        // 仅在 AI 返回的时间与预期相差超过 5 分钟时才覆盖
+        const aiTime = nextTask.reminder_time ? parseAsShanghai(nextTask.reminder_time) : null;
+        const expectedTime = parseAsShanghai(fallbackISO);
+        if (!aiTime || Math.abs(aiTime.getTime() - expectedTime.getTime()) > 5 * 60 * 1000) {
+          nextTask.reminder_time = fallbackISO;
+          nextTask.time_reasoning = `用户要求 ${relativeMinutes} 分钟后提醒`;
+        }
       }
 
       setDraft(nextTask);

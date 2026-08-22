@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, Clock, Flag, ArrowRight, Hash, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toDatetimeLocalValue, fromDatetimeLocalValue } from "@/lib/timeCore";
 
 /**
  * 时间编辑模式：
@@ -21,19 +22,9 @@ const MODES = [
   { key: "range", label: "时间段", icon: ArrowRight, hint: "起止时间" },
 ];
 
-const toLocalInput = (iso) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+const toLocalInput = (iso) => toDatetimeLocalValue(iso);
 
-const fromLocalInput = (val) => {
-  if (!val) return null;
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? null : d.toISOString();
-};
+const fromLocalInput = (val) => fromDatetimeLocalValue(val);
 
 const detectMode = (task) => {
   if (task?.reminder_time && task?.end_time) return "range";

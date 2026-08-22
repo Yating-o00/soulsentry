@@ -102,6 +102,11 @@ export function formatShanghaiTime(isoString) {
   return formatShanghai(isoString, "HH:mm");
 }
 
+/** 获取当前时刻按北京时间解析的 Date 对象（推荐替代裸用 new Date()） */
+export function getShanghaiNow() {
+  return parseAsShanghai(new Date().toISOString());
+}
+
 /** 判断两个 ISO 时间是否在同一天（按北京时间） */
 export function isSameShanghaiDay(a, b) {
   if (!a || !b) return false;
@@ -138,8 +143,8 @@ export function normalizeToISO(input, options = {}) {
       return new Date(`${input}T${time}+08:00`).toISOString();
     }
 
-    const d = input instanceof Date ? input : new Date(input);
-    if (isNaN(d.getTime())) return null;
+    const d = input instanceof Date ? input : parseAsShanghai(input);
+    if (!d || isNaN(d.getTime())) return null;
     return d.toISOString();
   } catch (_) {
     return null;
@@ -179,7 +184,7 @@ export function inferIsAllDay({ is_all_day, reminder_time, end_time }) {
  */
 export function normalizeTimeRange(raw = {}, fallbackDate = null) {
   const isAllDay = inferIsAllDay(raw);
-  const today = fallbackDate || new Date().toISOString().slice(0, 10);
+  const today = fallbackDate || toShanghaiDateStr(getShanghaiNow());
 
   let start = normalizeToISO(raw.reminder_time, {
     defaultTime: DEFAULT_TIME,
@@ -349,24 +354,30 @@ export function getTimeContextForAI() {
 - 下个月第一个周一=${firstOfNextMonth['周一']} 周二=${firstOfNextMonth['周二']} 周三=${firstOfNextMonth['周三']} 周四=${firstOfNextMonth['周四']} 周五=${firstOfNextMonth['周五']} 周六=${firstOfNextMonth['周六']} 周日=${firstOfNextMonth['周日']}
 - 下月月底 = ${nextMonthEnd}
 
-【相对时间段映射】
-- 早上/上午 = 09:00    中午 = 12:00    下午 = 15:00    傍晚 = 18:00    晚上 = 20:00    深夜 = 22:00
-- "X分钟后"/"X小时后" = 基于上方"当前时间"精确累加，结果用 ISO 8601 带 +08:00
+【相对时间段映射 - 基于当前时刻精确计算】
+- "马上/立刻/现在" = 当前时刻 + 1 分钟
+- "X分钟后" / "X分钟之后" / "X分钟以后" = 当前时刻加 X 分钟
+- "X小时后" / "X小时之后" / "X小时以后" = 当前时刻加 X 小时
+- "半小时后" = 当前时刻 + 30 分钟；"一刻钟后" = 当前时刻 + 15 分钟
+- "早上/上午" = 09:00；"中午" = 12:00；"下午" = 15:00；"傍晚" = 18:00；"晚上/今晚" = 20:00；"深夜/半夜" = 22:00；"凌晨" = 00:00
 
 【时间输出规则 - 严格遵守】
 1. 所有带时刻的时间字段必须输出为 ISO 8601 格式，带 +08:00 时区，例如："2025-04-22T15:00:00+08:00"
 2. 全天事件使用纯日期格式 "YYYY-MM-DD"，并设置 is_all_day: true
 3. 未指定具体时间的任务，默认为当天 09:00
 4. 未指定结束时间的非全天任务，end_time 可以省略（调用方默认 +1 小时）
-5. 解析"后天下午3点"这类表达时：直接使用"后天=${dayAfterTomorrow}"加上"下午=15:00" → "${dayAfterTomorrow}T15:00:00+08:00"
-6. 解析"十分钟后"：基于当前时刻（${hourStr}）精确加 10 分钟
-7. 解析"下个月第一个周一"：直接使用"下个月第一个周一=${firstOfNextMonth['周一']}"
+5. 解析"后天下午3点"：直接使用"后天=${dayAfterTomorrow}" + "下午=15:00" → "${dayAfterTomorrow}T15:00:00+08:00"
+6. 解析"十分钟后"：基于当前时刻（${hourStr}）精确加 10 分钟，输出带 +08:00 的 ISO
+7. 解析"两小时后"：基于当前时刻（${hourStr}）精确加 2 小时，输出带 +08:00 的 ISO
+8. 解析"下个月第一个周一"：直接使用"下个月第一个周一=${firstOfNextMonth['周一']}"
+9. "X点前" / "截止X点" / "X点前提醒"：reminder_time 取 X 点整（不是 X 点前的任意时刻）。例如"5点前"→"今天/明天T17:00:00+08:00"，"1点前"→"今天/明天T13:00:00+08:00"
 `.trim();
 
   return {
     now_iso: isoNow,
     now_local: shanghaiStr,
     today_date: todayDate,
+    current_time: hourStr,
     timezone: USER_TIMEZONE,
     anchors,
     promptSnippet,
@@ -392,7 +403,7 @@ export function parseRelativeMinutes(text) {
   if (match) return parseInt(match[1], 10);
   // "几分钟后" / "几分钟之后"
   if (/几\s*分钟(?:之?后|以后)?/.test(t)) return 5;
-  // 中文数字
+  // 中文数字："五分钟后"、"十五分钟后"、"一个半钟头"中的分钟部分
   const cnPassMatch = t.match(/(?:过|等|再等)\s*([一二两三四五六七八九十百千万]+)\s*分钟/);
   if (cnPassMatch) return parseCnNumber(cnPassMatch[1]);
   const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*分钟(?:之?后|以后)?/);
@@ -400,13 +411,182 @@ export function parseRelativeMinutes(text) {
   return null;
 }
 
+/**
+ * 解析中文相对小时表达，返回需要加的小时数。
+ * 支持：X小时后/之后/以后、过X小时、等X小时、一小时后、两小时后、半个钟头后、一个半钟头后。
+ */
+export function parseRelativeHours(text) {
+  if (!text) return null;
+  const t = text.trim();
+  if (/半小时(?:之?后|以后)|过半小时|等半小时|半个钟头(?:之?后|以后)|过半个钟头|等半个钟头/.test(t)) return 0.5;
+  if (/一小时(?:之?后|以后)|一个钟头(?:之?后|以后)|过一小时|等一小时/.test(t)) return 1;
+  if (/两小时(?:之?后|以后)|两个钟头(?:之?后|以后)|过两小时|等两小时/.test(t)) return 2;
+  // "一个半小时后" / "一个半钟头后" / "一小时半后"
+  if (/一个半(?:小时|钟头)(?:之?后|以后)|一小时半(?:之?后|以后)|一钟头半(?:之?后|以后)/.test(t)) return 1.5;
+  // "X个半小时后" / "X个半钟头后"
+  const halfMatch = t.match(/(\d+|半|[一二两三四五六七八九十]+)个半(?:小时|钟头)(?:之?后|以后)?/);
+  if (halfMatch) {
+    const n = halfMatch[1] === "半" ? 0 : (parseInt(halfMatch[1], 10) || parseCnNumber(halfMatch[1]) || 0);
+    return n + 0.5;
+  }
+  // "过2小时" / "等3小时"
+  const passMatch = t.match(/(?:过|等|再等)\s*(\d+(?:\.5)?)\s*(?:小时|钟头)/);
+  if (passMatch) return parseFloat(passMatch[1]);
+  // "2小时后" / "2小时之后"
+  const match = t.match(/(\d+(?:\.5)?)\s*(?:小时|钟头)(?:之?后|以后)?/);
+  if (match) return parseFloat(match[1]);
+  // 中文数字
+  const cnPassMatch = t.match(/(?:过|等|再等)\s*([一二两三四五六七八九十百千万]+)\s*(?:小时|钟头)/);
+  if (cnPassMatch) return parseCnNumber(cnPassMatch[1]);
+  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*(?:小时|钟头)(?:之?后|以后)?/);
+  if (cnMatch) return parseCnNumber(cnMatch[1]);
+  return null;
+}
+
+/**
+ * 解析一天中的时段表达，返回 HH:mm 字符串（北京时间）。
+ * 支持：早上/上午→09:00、中午→12:00、下午→15:00、傍晚→18:00、晚上/今晚→20:00、深夜/半夜→22:00、凌晨→00:00。
+ * 若文本中包含具体时刻如"3点"、"15:00"，优先返回该时刻。
+ */
+export function parseTimeOfDay(text) {
+  if (!text) return null;
+  const t = text.trim();
+
+  // 优先识别具体时刻："3点"、"3:00"、"15:00"、"下午3点"
+  const hourMatch = t.match(/(\d{1,2})\s*[点:：]\s*(\d{1,2})?\s*(?:分)?/);
+  if (hourMatch) {
+    let hour = parseInt(hourMatch[1], 10);
+    const minute = parseInt(hourMatch[2] || "0", 10);
+    // 下午/晚上 3点 → 15:00；凌晨/早上 3点 → 03:00
+    if (/下午|傍晚|晚上|今晚|深夜|半夜/.test(t) && hour < 12) hour += 12;
+    if (/凌晨/.test(t) && hour === 12) hour = 0;
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  // 时段映射
+  if (/凌晨/.test(t)) return "00:00";
+  if (/早上|上午/.test(t)) return "09:00";
+  if (/中午/.test(t)) return "12:00";
+  if (/下午/.test(t)) return "15:00";
+  if (/傍晚/.test(t)) return "18:00";
+  if (/晚上|今晚/.test(t)) return "20:00";
+  if (/深夜|半夜/.test(t)) return "22:00";
+  return null;
+}
+
+/**
+ * 解析"X点前"、"截止X点"、"X点前完成/提醒"等截止/提醒语义。
+ * 返回 { type: 'before', timeStr, dateStr?, source }；dateStr 为可选的日期锚点（如"周五"、"明天"）。
+ * 目前主要把 "X点前" 解析为当天的 X:00，供调用方根据当前时间决定是否顺延到第二天。
+ */
+export function parseBeforeTime(text) {
+  if (!text) return null;
+  const t = text.trim();
+
+  // 匹配 "X点前"、"截止X点"、"X点之前"
+  const hourMatch = t.match(/(?:截止|在|于)?\s*(\d{1,2})\s*[点:：]\s*(\d{1,2})?\s*(?:分)?\s*(?:前|之前|以前)/);
+  if (hourMatch) {
+    let hour = parseInt(hourMatch[1], 10);
+    const minute = parseInt(hourMatch[2] || "0", 10);
+    if (/下午|傍晚|晚上|今晚/.test(t) && hour < 12) hour += 12;
+    return {
+      type: "before",
+      timeStr: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+      source: hourMatch[0],
+    };
+  }
+
+  // "明天下午3点前"、"周五前"：先尝试在 getTimeContextForAI / parseHybridTime 中处理，这里只识别是否有"前"字
+  if (/前|之前|以前/.test(t) && parseTimeOfDay(t)) {
+    return {
+      type: "before",
+      timeStr: parseTimeOfDay(t),
+      source: "time_of_day",
+    };
+  }
+
+  return null;
+}
+
+/**
+ * 解析组合时间表达，如 "明天下午3点"、"后天上午"、"下周一晚上"。
+ * 返回 ISO 8601 字符串（UTC）或 null。
+ */
+export function parseHybridTime(text) {
+  if (!text) return null;
+  const t = text.trim();
+
+  // 提取日期锚点
+  let dateStr = "";
+  const now = getShanghaiNow();
+  const today = toShanghaiDateStr(now);
+
+  if (/今天|今/.test(t)) dateStr = today;
+  else if (/明天|明/.test(t)) dateStr = addDaysToDateStr(today, 1);
+  else if (/后天/.test(t)) dateStr = addDaysToDateStr(today, 2);
+  else if (/大后天/.test(t)) dateStr = addDaysToDateStr(today, 3);
+  else if (/一周后|下周这?时候|七天后/.test(t)) dateStr = addDaysToDateStr(today, 7);
+  else {
+    // 本周/下周X
+    const weekdayMap = { 日: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 天: 0 };
+    const weekMatch = t.match(/(本|下)周([一二三四五六日天])/);
+    if (weekMatch) {
+      const targetDow = weekdayMap[weekMatch[2]];
+      const base = new Date(`${today}T00:00:00+08:00`);
+      const curDow = base.getUTCDay();
+      let diff = (targetDow - curDow + 7) % 7;
+      if (weekMatch[1] === "下" || (diff === 0 && /下周/.test(t))) {
+        diff = diff === 0 ? 7 : diff;
+      }
+      if (weekMatch[1] === "下") diff += 7;
+      dateStr = addDaysToDateStr(today, diff);
+    }
+  }
+
+  if (!dateStr) return null;
+
+  // 提取时刻，无则默认 09:00
+  const timeStr = parseTimeOfDay(t) || DEFAULT_TIME;
+  return composeShanghaiISO(new Date(`${dateStr}T00:00:00+08:00`), timeStr);
+}
+
+/** 在 YYYY-MM-DD 上加 n 天 */
+function addDaysToDateStr(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00+08:00`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toLocaleDateString("en-CA", { timeZone: USER_TIMEZONE });
+}
+
+/**
+ * 把 ISO 时间转换为 <input type="datetime-local"> 需要的本地格式（YYYY-MM-DDTHH:mm）。
+ * 由于 input 不带时区，这里按北京时间显示，避免浏览器本地时区漂移。
+ */
+export function toDatetimeLocalValue(isoString) {
+  if (!isoString) return "";
+  const d = parseAsShanghai(isoString);
+  if (!d) return "";
+  const date = toShanghaiDateStr(d);
+  const time = toShanghaiTimeStr(d);
+  return `${date}T${time}`;
+}
+
+/**
+ * 把 <input type="datetime-local"> 的值（按北京时间理解）转回 UTC ISO 字符串。
+ */
+export function fromDatetimeLocalValue(localString) {
+  if (!localString) return null;
+  const [datePart, timePart] = localString.split("T");
+  if (!datePart || !timePart) return null;
+  return composeShanghaiISO(new Date(`${datePart}T00:00:00+08:00`), timePart);
+}
+
 function parseCnNumber(s) {
+  if (!s) return null;
   const map = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10, 百: 100, 千: 1000, 万: 10000 };
   if (s === "十") return 10;
   if (s.startsWith("十")) return 10 + (map[s[1]] || 0);
   if (s.endsWith("十")) return (map[s[0]] || 1) * 10;
   if (/^[一二两三四五六七八九十]+$/.test(s)) {
-    // 简单组合：十进制内
     let n = 0;
     for (const ch of s) n = n * 10 + (map[ch] || 0);
     return n || null;

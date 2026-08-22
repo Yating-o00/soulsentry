@@ -7,7 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles, Send, Loader2, Check, RotateCcw, Bot, User, CalendarIcon, Clock, Tag, Flag, ListTodo, MapPin, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { formatShanghai, formatShanghaiDateTime, formatShanghaiTime, getTimeContextForAI, parseAsShanghai, parseRelativeMinutes, toShanghaiTimeStr } from "@/lib/timeCore";
+import {
+  formatShanghai, formatShanghaiDateTime, formatShanghaiTime,
+  getTimeContextForAI, parseAsShanghai, parseRelativeMinutes,
+  parseRelativeHours, parseTimeOfDay, parseBeforeTime, parseHybridTime,
+  getShanghaiNow, normalizeTaskTime, toShanghaiTimeStr
+} from "@/lib/timeCore";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { getCurrentLocationContext } from "@/lib/locationContext";
@@ -19,6 +24,76 @@ const CATEGORY_LABELS = {
 const PRIORITY_LABELS = {
   low: "低", medium: "中", high: "高", urgent: "紧急"
 };
+
+/**
+ * 综合解析用户自然语言中的时间意图，返回兜底 ISO。
+ * 覆盖：X分钟后/小时后、X点前、明天下午3点、今晚等 AI 容易漏算或算错的表达。
+ * 若 AI 返回的时间与兜底时间相差在 5 分钟内，优先保留 AI 结果。
+ */
+function resolveNaturalLanguageTime(text, aiReminderTime) {
+  if (!text) return null;
+
+  const aiTime = aiReminderTime ? parseAsShanghai(aiReminderTime) : null;
+  const withinTolerance = (expected) => {
+    if (!aiTime || !expected) return false;
+    return Math.abs(aiTime.getTime() - expected.getTime()) <= 5 * 60 * 1000;
+  };
+
+  // 1. 相对分钟
+  const relativeMinutes = parseRelativeMinutes(text);
+  if (relativeMinutes != null && relativeMinutes > 0) {
+    const base = getShanghaiNow();
+    base.setMinutes(base.getMinutes() + relativeMinutes);
+    if (!withinTolerance(base)) {
+      return { iso: base.toISOString(), reasoning: `用户要求 ${relativeMinutes} 分钟后提醒` };
+    }
+    return null;
+  }
+
+  // 2. 相对小时
+  const relativeHours = parseRelativeHours(text);
+  if (relativeHours != null && relativeHours > 0) {
+    const base = getShanghaiNow();
+    base.setMinutes(base.getMinutes() + Math.round(relativeHours * 60));
+    if (!withinTolerance(base)) {
+      return { iso: base.toISOString(), reasoning: `用户要求 ${relativeHours} 小时后提醒` };
+    }
+    return null;
+  }
+
+  // 3. 组合日期+时刻：明天下午3点、后天上午、下周一晚上
+  const hybridISO = parseHybridTime(text);
+  if (hybridISO) {
+    const hybridTime = parseAsShanghai(hybridISO);
+    if (!withinTolerance(hybridTime)) {
+      return { iso: hybridISO, reasoning: "用户指定了具体日期和时刻" };
+    }
+    return null;
+  }
+
+  // 4. 今天内的时刻："下午3点提醒我"、"晚上8点"、"1点前提醒"
+  const timeStr = parseTimeOfDay(text);
+  if (timeStr) {
+    const now = getShanghaiNow();
+    const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+    let candidate = parseAsShanghai(`${todayStr}T${timeStr}:00+08:00`);
+
+    // "X点前" 且该时刻已过 → 顺延到明天
+    const before = parseBeforeTime(text);
+    if (before && candidate && candidate.getTime() <= now.getTime()) {
+      const tomorrowStr = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+        .toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+      candidate = parseAsShanghai(`${tomorrowStr}T${timeStr}:00+08:00`);
+    }
+
+    if (candidate && !withinTolerance(candidate)) {
+      return { iso: candidate.toISOString(), reasoning: before ? `用户要求 ${before.timeStr} 前提醒` : `用户指定了今天的时刻 ${timeStr}` };
+    }
+    return null;
+  }
+
+  return null;
+}
 
 /**
  * 多轮对话式任务输入
@@ -188,18 +263,12 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
         nextTask.title = text.split(/[。，,；;!！?？\n]/)[0].trim().slice(0, 120) || text.slice(0, 120);
       }
 
-      // 客户端兜底：如果用户明确说了"X分钟后"，但 AI 没按相对时间解析，直接修正
-      const relativeMinutes = parseRelativeMinutes(text);
-      if (relativeMinutes != null && relativeMinutes > 0) {
-        const base = new Date();
-        base.setMinutes(base.getMinutes() + relativeMinutes);
-        const fallbackISO = base.toISOString();
-        // 仅在 AI 返回的时间与预期相差超过 5 分钟时才覆盖
-        const aiTime = nextTask.reminder_time ? parseAsShanghai(nextTask.reminder_time) : null;
-        const expectedTime = parseAsShanghai(fallbackISO);
-        if (!aiTime || Math.abs(aiTime.getTime() - expectedTime.getTime()) > 5 * 60 * 1000) {
-          nextTask.reminder_time = fallbackISO;
-          nextTask.time_reasoning = `用户要求 ${relativeMinutes} 分钟后提醒`;
+      // 客户端兜底：覆盖 AI 没按相对时间解析的常见表达
+      const fallbackTime = resolveNaturalLanguageTime(text, nextTask.reminder_time);
+      if (fallbackTime) {
+        nextTask.reminder_time = fallbackTime.iso;
+        if (fallbackTime.reasoning) {
+          nextTask.time_reasoning = fallbackTime.reasoning;
         }
       }
 
@@ -244,11 +313,11 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 
     const finalTitle = draft?.title || userText.split(/[。，,；;!！?？\n]/)[0].trim().slice(0, 120);
     // 把 time_reasoning 作为 ai_context_summary 透传，让灵魂哨兵卡片能展示
-    const enriched = {
+    const enriched = normalizeTaskTime({
       ...draft,
       title: finalTitle,
       ai_context_summary: draft?.time_reasoning || draft?.ai_context_summary,
-    };
+    });
     await onConfirm(enriched);
     setMessages([]);
     setDraft(null);

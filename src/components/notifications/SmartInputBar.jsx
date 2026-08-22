@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import UnifiedTaskInput from "@/components/tasks/UnifiedTaskInput";
 import { generateExecutionPlan, executeStep } from "./ExecutionPlanGenerator";
+import { getShanghaiNow } from "@/lib/timeCore";
 
 export default function SmartInputBar() {
   const [inputValue, setInputValue] = useState("");
@@ -61,7 +62,7 @@ export default function SmartInputBar() {
         description: plan.task_data?.description || taskData.description || "",
         category: plan.task_data?.category || taskData.category || "personal",
         priority: plan.task_data?.priority || taskData.priority || "medium",
-        reminder_time: plan.task_data?.reminder_time || taskData.reminder_time || now,
+        reminder_time: plan.task_data?.reminder_time || taskData.reminder_time || getShanghaiNow().toISOString(),
         end_time: plan.task_data?.end_time || null,
         is_all_day: plan.task_data?.is_all_day || false,
         tags: plan.task_data?.tags || taskData.tags || [],

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { format, isToday, isTomorrow, formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
-import { formatShanghai, formatShanghaiTime, isSameShanghaiDay, parseAsShanghai } from "@/lib/timeCore";
+
+import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
 import { 
   Check, Clock, MapPin, Repeat, MoreHorizontal, 
   ShoppingBag, Zap, Navigation, 
@@ -100,10 +99,10 @@ export default function LifeTaskCard({
       });
     }
 
-    // Time/Habit Badges
+    // Time/Habit Badges（按北京时间判断）
     if (task.repeat_rule && task.repeat_rule !== 'none') {
-        const time = task.reminder_time ? new Date(task.reminder_time) : new Date();
-        const hour = time.getHours();
+        const time = task.reminder_time ? parseAsShanghai(task.reminder_time) : getShanghaiNow();
+        const hour = time ? parseInt(toShanghaiTimeStr(time).split(':')[0], 10) : 9;
         let label = '日常习惯';
         let icon = <Repeat className="w-3 h-3" />;
         let className = "bg-blue-100 text-blue-700 border-blue-200";
@@ -121,11 +120,11 @@ export default function LifeTaskCard({
         badges.push({ label, icon, className });
     }
 
-    // Urgency/Deadline Badge
+    // Urgency/Deadline Badge（按北京时间判断）
     if (task.end_time) {
-        const end = new Date(task.end_time);
-        const now = new Date();
-        const diffHours = (end - now) / (1000 * 60 * 60);
+        const end = parseAsShanghai(task.end_time);
+        const now = getShanghaiNow();
+        const diffHours = end && now ? (end.getTime() - now.getTime()) / (1000 * 60 * 60) : 0;
         
         if (diffHours > 0 && diffHours < 24) {
             badges.push({
@@ -218,7 +217,7 @@ export default function LifeTaskCard({
     return { icon, bgGradient, iconColor, emoji };
   };
 
-  // 3. Get Time/Status Text
+  // 3. Get Time/Status Text（按北京时间判断）
   const getTimeStatus = () => {
     if (completed) return { text: '已完成', color: 'text-stone-400 font-medium' };
 
@@ -230,17 +229,21 @@ export default function LifeTaskCard({
       : (task.end_time || task.reminder_time);
     if (!targetDateStr) return { text: '', color: 'text-stone-300' };
 
-    const targetDate = new Date(targetDateStr);
-    const now = new Date();
+    const targetDate = parseAsShanghai(targetDateStr);
+    const now = getShanghaiNow();
+    if (!targetDate || !now) return { text: '', color: 'text-stone-300' };
+
     const diffMs = targetDate.getTime() - now.getTime();
     const absMs = Math.abs(diffMs);
     const diffMinutes = Math.round(absMs / (1000 * 60));
     const diffHours = Math.round(absMs / (1000 * 60 * 60));
 
     // 按"日历日"差异（忽略时分秒），用于"剩X天 / 过期X天"
-    const targetDay = new Date(targetDate); targetDay.setHours(0, 0, 0, 0);
-    const currentDay = new Date(now); currentDay.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((targetDay - currentDay) / (1000 * 60 * 60 * 24));
+    const targetDayStr = toShanghaiDateStr(targetDate);
+    const currentDayStr = toShanghaiDateStr(now);
+    const targetDay = new Date(`${targetDayStr}T00:00:00+08:00`);
+    const currentDay = new Date(`${currentDayStr}T00:00:00+08:00`);
+    const diffDays = Math.round((targetDay.getTime() - currentDay.getTime()) / (1000 * 60 * 60 * 24));
 
     // 推迟后仍在未来 → 显示「已推迟·剩X」，动态反映距离新时间还差多久
     if (isSnoozed && diffMs > 0) {
@@ -261,15 +264,15 @@ export default function LifeTaskCard({
     }
 
     // 未来时间：今天 / 明天 / 剩X天
-    if (isToday(targetDate)) {
+    if (isSameShanghaiDay(targetDateStr, now.toISOString())) {
       if (diffMinutes < 60) return { text: `${diffMinutes}分钟后`, color: 'text-green-600 font-bold' };
       if (diffHours < 24) return { text: `${diffHours}小时后`, color: 'text-green-600 font-bold' };
       return { text: '今天', color: 'text-green-600 font-bold' };
     }
-    if (isTomorrow(targetDate)) return { text: '明天', color: 'text-stone-500 font-medium' };
+    if (diffDays === 1) return { text: '明天', color: 'text-stone-500 font-medium' };
     if (diffDays <= 3) return { text: `剩${diffDays}天`, color: 'text-amber-500 font-bold' };
 
-    return { text: format(targetDate, 'MM-dd'), color: 'text-stone-400' };
+    return { text: formatShanghai(targetDateStr, 'MM-dd'), color: 'text-stone-400' };
   };
 
   const badges = getContextBadges();

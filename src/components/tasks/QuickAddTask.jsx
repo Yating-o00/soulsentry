@@ -33,7 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
-import { composeShanghaiISO, formatShanghai, formatShanghaiTime, normalizeTimeRange, parseAsShanghai, toShanghaiTimeStr } from "@/lib/timeCore";
+import { composeShanghaiISO, formatShanghai, formatShanghaiDateTime, formatShanghaiTime, normalizeTimeRange, parseAsShanghai, toShanghaiTimeStr } from "@/lib/timeCore";
 import AIText from "@/components/AIText";
 
 const CATEGORIES = [
@@ -214,13 +214,13 @@ ${task.description ? `描述: "${task.description}"` : ''}
         ...prev,
         title: initialData.title || prev.title,
         description: initialData.description || prev.description,
-        reminder_time: initialData.reminder_time ? new Date(initialData.reminder_time) : prev.reminder_time,
-        time: initialData.reminder_time ? format(new Date(initialData.reminder_time), "HH:mm") : prev.time,
+        reminder_time: initialData.reminder_time ? parseAsShanghai(initialData.reminder_time) : prev.reminder_time,
+        time: initialData.reminder_time ? formatShanghaiTime(initialData.reminder_time) : prev.time,
         priority: initialData.priority || prev.priority,
         category: initialData.category || prev.category,
         subtasks: initialData.subtasks || prev.subtasks || [],
-        end_time: initialData.end_time ? new Date(initialData.end_time) : prev.end_time,
-        end_time_str: initialData.end_time ? format(new Date(initialData.end_time), "HH:mm") : prev.end_time_str,
+        end_time: initialData.end_time ? parseAsShanghai(initialData.end_time) : prev.end_time,
+        end_time_str: initialData.end_time ? formatShanghaiTime(initialData.end_time) : prev.end_time_str,
         has_end_time: !!initialData.end_time || prev.has_end_time,
       }));
       setIsExpanded(true);
@@ -364,8 +364,8 @@ ${task.description ? `描述: "${task.description}"` : ''}
           setTask({
             title: firstTask.title,
             description: firstTask.description || "",
-            reminder_time: new Date(firstTask.reminder_time),
-            time: format(new Date(firstTask.reminder_time), "HH:mm"),
+            reminder_time: parseAsShanghai(firstTask.reminder_time),
+            time: formatShanghaiTime(firstTask.reminder_time),
             priority: firstTask.priority || "medium",
             category: firstTask.category || "personal",
             repeat_rule: "none",
@@ -716,13 +716,13 @@ ${task.description ? `描述: "${task.description}"` : ''}
                       tags: aiSuggestions.tags || [],
                       // Update reminder time if AI suggests a better one and user didn't manually lock it (conceptually)
                       // Here we just apply it as it's an "Enhancer" action
-                      reminder_time: aiSuggestions.reminder_time ? new Date(aiSuggestions.reminder_time) : task.reminder_time,
-                      time: aiSuggestions.reminder_time ? format(new Date(aiSuggestions.reminder_time), "HH:mm") : task.time,
-                      
+                      reminder_time: aiSuggestions.reminder_time ? parseAsShanghai(aiSuggestions.reminder_time) : task.reminder_time,
+                      time: aiSuggestions.reminder_time ? formatShanghaiTime(aiSuggestions.reminder_time) : task.time,
+
                       // Also set end time if suggested
-                      end_time: aiSuggestions.end_time ? new Date(aiSuggestions.end_time) : task.end_time,
+                      end_time: aiSuggestions.end_time ? parseAsShanghai(aiSuggestions.end_time) : task.end_time,
                       has_end_time: !!aiSuggestions.end_time || task.has_end_time,
-                      end_time_str: aiSuggestions.end_time ? format(new Date(aiSuggestions.end_time), "HH:mm") : task.end_time_str,
+                      end_time_str: aiSuggestions.end_time ? formatShanghaiTime(aiSuggestions.end_time) : task.end_time_str,
 
                       subtasks: aiSuggestions.subtasks ? aiSuggestions.subtasks.map(st => ({
                           title: typeof st === 'object' ? (st.title || st.text || st.content || JSON.stringify(st)) : st,
@@ -822,12 +822,12 @@ ${task.description ? `描述: "${task.description}"` : ''}
                                                 title="调整时间"
                                             >
                                                 <Clock className="w-3 h-3" />
-                                                {st.reminder_time ? format(new Date(st.reminder_time), "HH:mm") : "时间"}
+                                                {st.reminder_time ? formatShanghaiTime(st.reminder_time) : "时间"}
                                             </button>
                                         </PopoverTrigger>
                                         <PopoverContent className="p-0 w-auto" align="end">
                                             <CustomTimePicker 
-                                                value={st.reminder_time ? format(new Date(st.reminder_time), "HH:mm") : (task.time || "09:00")}
+                                                value={st.reminder_time ? formatShanghaiTime(st.reminder_time) : (task.time || "09:00")}
                                                 onChange={(newTime) => {
                                                     if (newTime && typeof newTime === 'string' && newTime.includes(':')) {
                                                         const parts = newTime.split(':');
@@ -854,12 +854,12 @@ ${task.description ? `描述: "${task.description}"` : ''}
                                                 title="调整时间"
                                             >
                                                 <Clock className="w-3 h-3" />
-                                                {st.reminder_time ? format(new Date(st.reminder_time), "HH:mm") : "时间"}
+                                                {st.reminder_time ? formatShanghaiTime(st.reminder_time) : "时间"}
                                             </button>
                                         </PopoverTrigger>
                                         <PopoverContent className="p-0 w-auto" align="end">
                                             <CustomTimePicker 
-                                                value={st.reminder_time ? format(new Date(st.reminder_time), "HH:mm") : (task.time || "09:00")}
+                                                value={st.reminder_time ? formatShanghaiTime(st.reminder_time) : (task.time || "09:00")}
                                                 onChange={(newTime) => {
                                                     const newSubtasks = [...task.subtasks];
                                                     if (newTime && typeof newTime === 'string' && newTime.includes(':')) {
@@ -914,10 +914,10 @@ ${task.description ? `描述: "${task.description}"` : ''}
                                 <div className="text-sm font-bold text-slate-700 truncate">
                                      {task.reminder_time ? (
                                           <span>
-                                            {format(task.reminder_time, "M月d日", { locale: zhCN })}
+                                            {formatShanghai(task.reminder_time, "M月d日")}
                                             {task.end_time && task.end_time.getTime() !== task.reminder_time.getTime() && (
                                               <span className="text-slate-400 font-normal ml-1">
-                                                - {format(task.end_time, "M月d日", { locale: zhCN })}
+                                                - {formatShanghai(task.end_time, "M月d日")}
                                               </span>
                                             )}
                                           </span>

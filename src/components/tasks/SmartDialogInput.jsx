@@ -193,7 +193,7 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
       if (relativeMinutes != null && relativeMinutes > 0) {
         const base = new Date();
         base.setMinutes(base.getMinutes() + relativeMinutes);
-        const fallbackISO = base.toLocaleString("en-CA", { timeZone: "Asia/Shanghai", hour12: false }).replace(", ", "T") + ":00+08:00";
+        const fallbackISO = base.toISOString();
         // 仅在 AI 返回的时间与预期相差超过 5 分钟时才覆盖
         const aiTime = nextTask.reminder_time ? parseAsShanghai(nextTask.reminder_time) : null;
         const expectedTime = parseAsShanghai(fallbackISO);

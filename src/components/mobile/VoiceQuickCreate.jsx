@@ -162,7 +162,7 @@ ${timeCtx.promptSnippet}
       if (relativeMinutes != null && relativeMinutes > 0) {
         const base = parseAsShanghai(timeCtx.now_iso) || new Date();
         base.setMinutes(base.getMinutes() + relativeMinutes);
-        const fallbackISO = base.toLocaleString("en-CA", { timeZone: "Asia/Shanghai", hour12: false }).replace(", ", "T") + ":00+08:00";
+        const fallbackISO = base.toISOString();
         const aiTime = result.reminder_time ? parseAsShanghai(result.reminder_time) : null;
         const expectedTime = parseAsShanghai(fallbackISO);
         if (!aiTime || !expectedTime || Math.abs(aiTime.getTime() - expectedTime.getTime()) > 5 * 60 * 1000) {

@@ -374,6 +374,31 @@ export function getTimeContextForAI() {
 }
 
 /**
+ * 解析中文相对时间表达，返回需要加的分钟数。
+ * 支持：X分钟后、几分钟后、半小时后、一刻钟后、马上/立刻/现在就。
+ * 返回 null 表示未识别到相对时间。
+ */
+export function parseRelativeMinutes(text) {
+  if (!text) return null;
+  const t = text.trim();
+  if (/马上|立刻|立即|现在就/.test(t)) return 1;
+  if (/半小时后/.test(t)) return 30;
+  if (/一刻钟后/.test(t)) return 15;
+  const match = t.match(/(\d+)\s*分钟后?/);
+  if (match) return parseInt(match[1], 10);
+  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*分钟后?/);
+  if (cnMatch) {
+    const map = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+    const s = cnMatch[1];
+    if (s === "十") return 10;
+    if (s.startsWith("十")) return 10 + (map[s[1]] || 0);
+    if (s.endsWith("十")) return (map[s[0]] || 1) * 10;
+    return map[s] || null;
+  }
+  return null;
+}
+
+/**
  * 便捷函数：将一个 AI 返回的任务对象规范化到可直接存储为 Task 实体的形式。
  */
 export function normalizeTaskTime(taskData, fallbackDate = null) {

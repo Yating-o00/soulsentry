@@ -5,7 +5,7 @@ import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { toast } from "sonner";
-import { getTimeContextForAI, normalizeTaskTime } from "@/lib/timeCore";
+import { getTimeContextForAI, normalizeTaskTime, parseRelativeMinutes, parseAsShanghai } from "@/lib/timeCore";
 
 /**
  * 移动端「+ → 新建约定」语音一键生成弹窗。
@@ -125,7 +125,17 @@ ${timeCtx.promptSnippet}
 
 语音内容: "${text}"
 
-请推断标题、描述、时间、优先级、类别。返回 JSON。`,
+请推断标题、描述、时间、优先级、类别。
+
+⏰ 相对时间处理（最高优先级）：
+- "X分钟后" / "几分钟后" / "马上" / "立刻" / "现在就" → 必须基于"当前时间"精确加 X 分钟
+  - 例：当前 ${timeCtx.now_local}，用户说"十分钟后提醒我" → reminder_time 为当前时间加 10 分钟后的 ISO 时间
+- "X小时后" → 当前时间加 X 小时
+- "半小时后" → 加 30 分钟
+- "一刻钟后" → 加 15 分钟
+
+所有时间必须输出为 ISO 8601 格式并带 +08:00 时区。
+返回 JSON。`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -145,6 +155,19 @@ ${timeCtx.promptSnippet}
         toast.error("未能识别出约定内容，请重试");
         setIsProcessing(false);
         return;
+      }
+
+      // 客户端兜底：如果用户明确说了"X分钟后"等相对时间，但 AI 没按相对时间解析，直接修正
+      const relativeMinutes = parseRelativeMinutes(text);
+      if (relativeMinutes != null && relativeMinutes > 0) {
+        const base = parseAsShanghai(timeCtx.now_iso) || new Date();
+        base.setMinutes(base.getMinutes() + relativeMinutes);
+        const fallbackISO = base.toLocaleString("en-CA", { timeZone: "Asia/Shanghai", hour12: false }).replace(", ", "T") + ":00+08:00";
+        const aiTime = result.reminder_time ? parseAsShanghai(result.reminder_time) : null;
+        const expectedTime = parseAsShanghai(fallbackISO);
+        if (!aiTime || !expectedTime || Math.abs(aiTime.getTime() - expectedTime.getTime()) > 5 * 60 * 1000) {
+          result.reminder_time = fallbackISO;
+        }
       }
 
       const normalized = normalizeTaskTime({

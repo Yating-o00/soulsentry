@@ -375,27 +375,43 @@ export function getTimeContextForAI() {
 
 /**
  * 解析中文相对时间表达，返回需要加的分钟数。
- * 支持：X分钟后、几分钟后、半小时后、一刻钟后、马上/立刻/现在就。
+ * 支持：X分钟后/之后/以后、过X分钟、等X分钟、半小时后、一刻钟后、马上/立刻/现在就。
  * 返回 null 表示未识别到相对时间。
  */
 export function parseRelativeMinutes(text) {
   if (!text) return null;
   const t = text.trim();
   if (/马上|立刻|立即|现在就/.test(t)) return 1;
-  if (/半小时后/.test(t)) return 30;
-  if (/一刻钟后/.test(t)) return 15;
-  const match = t.match(/(\d+)\s*分钟后?/);
+  if (/半小时(?:之?后|以后)|过半小时|等半小时/.test(t)) return 30;
+  if (/一刻钟(?:之?后|以后)|过一刻钟|等一刻钟/.test(t)) return 15;
+  // "过5分钟" / "等5分钟" / "再等5分钟"
+  const passMatch = t.match(/(?:过|等|再等)\s*(\d+)\s*分钟/);
+  if (passMatch) return parseInt(passMatch[1], 10);
+  // "5分钟后" / "5分钟之后" / "5分钟以后" / "5分钟"
+  const match = t.match(/(\d+)\s*分钟(?:之?后|以后)?/);
   if (match) return parseInt(match[1], 10);
-  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*分钟后?/);
-  if (cnMatch) {
-    const map = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
-    const s = cnMatch[1];
-    if (s === "十") return 10;
-    if (s.startsWith("十")) return 10 + (map[s[1]] || 0);
-    if (s.endsWith("十")) return (map[s[0]] || 1) * 10;
-    return map[s] || null;
-  }
+  // "几分钟后" / "几分钟之后"
+  if (/几\s*分钟(?:之?后|以后)?/.test(t)) return 5;
+  // 中文数字
+  const cnPassMatch = t.match(/(?:过|等|再等)\s*([一二两三四五六七八九十百千万]+)\s*分钟/);
+  if (cnPassMatch) return parseCnNumber(cnPassMatch[1]);
+  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*分钟(?:之?后|以后)?/);
+  if (cnMatch) return parseCnNumber(cnMatch[1]);
   return null;
+}
+
+function parseCnNumber(s) {
+  const map = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10, 百: 100, 千: 1000, 万: 10000 };
+  if (s === "十") return 10;
+  if (s.startsWith("十")) return 10 + (map[s[1]] || 0);
+  if (s.endsWith("十")) return (map[s[0]] || 1) * 10;
+  if (/^[一二两三四五六七八九十]+$/.test(s)) {
+    // 简单组合：十进制内
+    let n = 0;
+    for (const ch of s) n = n * 10 + (map[ch] || 0);
+    return n || null;
+  }
+  return map[s] || null;
 }
 
 /**

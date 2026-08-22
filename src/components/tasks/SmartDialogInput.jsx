@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles, Send, Loader2, Check, RotateCcw, Bot, User, CalendarIcon, Clock, Tag, Flag, ListTodo, MapPin, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { formatShanghai, formatShanghaiDateTime, formatShanghaiTime, getTimeContextForAI, parseAsShanghai, toShanghaiTimeStr } from "@/lib/timeCore";
+import { formatShanghai, formatShanghaiDateTime, formatShanghaiTime, getTimeContextForAI, parseAsShanghai, parseRelativeMinutes, toShanghaiTimeStr } from "@/lib/timeCore";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { getCurrentLocationContext } from "@/lib/locationContext";
@@ -19,30 +19,6 @@ const CATEGORY_LABELS = {
 const PRIORITY_LABELS = {
   low: "低", medium: "中", high: "高", urgent: "紧急"
 };
-
-/**
- * 解析用户输入中的相对时间，返回需要加的分钟数。
- * 支持：X分钟后、几分钟后、半小时后、一刻钟后、马上/立刻
- */
-function parseRelativeMinutes(text) {
-  if (!text) return null;
-  const t = text.trim();
-  if (/马上|立刻|立即|现在就/.test(t)) return 1;
-  if (/半小时后/.test(t)) return 30;
-  if (/一刻钟后/.test(t)) return 15;
-  const match = t.match(/(\d+)\s*分钟后?/);
-  if (match) return parseInt(match[1], 10);
-  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*分钟后?/);
-  if (cnMatch) {
-    const map = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
-    const s = cnMatch[1];
-    if (s === "十") return 10;
-    if (s.startsWith("十")) return 10 + (map[s[1]] || 0);
-    if (s.endsWith("十")) return (map[s[0]] || 1) * 10;
-    return map[s] || null;
-  }
-  return null;
-}
 
 /**
  * 多轮对话式任务输入

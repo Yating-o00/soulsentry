@@ -14,7 +14,7 @@ import {
 /**
  * 综合解析用户自然语言中的时间意图，返回兜底 ISO。
  * 覆盖：X分钟后/小时后、X点前、明天下午3点、今晚等 AI 容易漏算或算错的表达。
- * 若 AI 返回的时间与兜底时间相差在 5 分钟内，优先保留 AI 结果。
+ * 对明确的相对时间（X分钟后/小时后）直接覆盖，不再容忍 AI 的默认值。
  */
 function resolveNaturalLanguageTime(text, aiReminderTime) {
   if (!text) return null;
@@ -25,26 +25,24 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
     return Math.abs(aiTime.getTime() - expected.getTime()) <= 5 * 60 * 1000;
   };
 
-  // 1. 相对分钟
+  // 1. 相对分钟：语义明确，直接以当前时间 + X 分钟为准
   const relativeMinutes = parseRelativeMinutes(text);
   if (relativeMinutes != null && relativeMinutes > 0) {
     const base = getShanghaiNow();
     base.setMinutes(base.getMinutes() + relativeMinutes);
-    if (!withinTolerance(base)) {
-      return { iso: base.toISOString(), reasoning: `用户要求 ${relativeMinutes} 分钟后提醒` };
-    }
-    return null;
+    const iso = base.toISOString();
+    console.log(`[VoiceTime] 识别相对分钟: ${relativeMinutes}, fallback=${iso}, ai=${aiReminderTime}`);
+    return { iso, reasoning: `用户要求 ${relativeMinutes} 分钟后提醒` };
   }
 
-  // 2. 相对小时
+  // 2. 相对小时：语义明确，直接以当前时间 + X 小时为准
   const relativeHours = parseRelativeHours(text);
   if (relativeHours != null && relativeHours > 0) {
     const base = getShanghaiNow();
     base.setMinutes(base.getMinutes() + Math.round(relativeHours * 60));
-    if (!withinTolerance(base)) {
-      return { iso: base.toISOString(), reasoning: `用户要求 ${relativeHours} 小时后提醒` };
-    }
-    return null;
+    const iso = base.toISOString();
+    console.log(`[VoiceTime] 识别相对小时: ${relativeHours}, fallback=${iso}, ai=${aiReminderTime}`);
+    return { iso, reasoning: `用户要求 ${relativeHours} 小时后提醒` };
   }
 
   // 3. 组合日期+时刻：明天下午3点、后天上午、下周一晚上
@@ -52,6 +50,7 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
   if (hybridISO) {
     const hybridTime = parseAsShanghai(hybridISO);
     if (!withinTolerance(hybridTime)) {
+      console.log(`[VoiceTime] 识别组合时间: fallback=${hybridISO}, ai=${aiReminderTime}`);
       return { iso: hybridISO, reasoning: "用户指定了具体日期和时刻" };
     }
     return null;
@@ -73,11 +72,13 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
     }
 
     if (candidate && !withinTolerance(candidate)) {
+      console.log(`[VoiceTime] 识别今天时刻: fallback=${candidate.toISOString()}, ai=${aiReminderTime}`);
       return { iso: candidate.toISOString(), reasoning: before ? `用户要求 ${before.timeStr} 前提醒` : `用户指定了今天的时刻 ${timeStr}` };
     }
     return null;
   }
 
+  console.log(`[VoiceTime] 未识别时间表达: text="${text}", ai=${aiReminderTime}`);
   return null;
 }
 
@@ -236,6 +237,8 @@ ${timeCtx.promptSnippet}
       if (fallbackTime) {
         result.reminder_time = fallbackTime.iso;
       }
+
+      console.log(`[VoiceTime] 最终 reminder_time: ${result.reminder_time}`);
 
       const normalized = normalizeTaskTime({
         title: result.title,

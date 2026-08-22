@@ -395,18 +395,18 @@ export function parseRelativeMinutes(text) {
   if (/马上|立刻|立即|现在就/.test(t)) return 1;
   if (/半小时(?:之?后|以后)|过半小时|等半小时/.test(t)) return 30;
   if (/一刻钟(?:之?后|以后)|过一刻钟|等一刻钟/.test(t)) return 15;
-  // "过5分钟" / "等5分钟" / "再等5分钟"
-  const passMatch = t.match(/(?:过|等|再等)\s*(\d+)\s*分钟/);
+  // "过5分钟" / "等5分钟" / "再等5分钟" / "过5分"
+  const passMatch = t.match(/(?:过|等|再等)\s*(\d+)\s*分(?:钟)?/);
   if (passMatch) return parseInt(passMatch[1], 10);
-  // "5分钟后" / "5分钟之后" / "5分钟以后" / "5分钟"
-  const match = t.match(/(\d+)\s*分钟(?:之?后|以后)?/);
+  // "5分钟后" / "5分钟之后" / "5分钟以后" / "5分钟" / "5分后"
+  const match = t.match(/(\d+)\s*分(?:钟)?(?:之?后|以后)?/);
   if (match) return parseInt(match[1], 10);
   // "几分钟后" / "几分钟之后"
-  if (/几\s*分钟(?:之?后|以后)?/.test(t)) return 5;
-  // 中文数字："五分钟后"、"十五分钟后"、"一个半钟头"中的分钟部分
-  const cnPassMatch = t.match(/(?:过|等|再等)\s*([一二两三四五六七八九十百千万]+)\s*分钟/);
+  if (/几\s*分(?:钟)?(?:之?后|以后)?/.test(t)) return 5;
+  // 中文数字："五分钟后"、"十五分钟后"、"五分后"
+  const cnPassMatch = t.match(/(?:过|等|再等)\s*([一二两三四五六七八九十百千万]+)\s*分(?:钟)?/);
   if (cnPassMatch) return parseCnNumber(cnPassMatch[1]);
-  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*分钟(?:之?后|以后)?/);
+  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*分(?:钟)?(?:之?后|以后)?/);
   if (cnMatch) return parseCnNumber(cnMatch[1]);
   return null;
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Loader2, X, Sparkles, Check } from "lucide-react";
+import { Mic, MicOff, Loader2, X, Sparkles, Check, Clock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { invokeAI } from "@/components/utils/aiHelper";
@@ -8,8 +8,11 @@ import { toast } from "sonner";
 import {
   getTimeContextForAI, normalizeTaskTime, parseAsShanghai,
   parseRelativeMinutes, parseRelativeHours, parseTimeOfDay,
-  parseBeforeTime, parseHybridTime, getShanghaiNow
+  parseBeforeTime, parseHybridTime, getShanghaiNow, formatShanghaiDateTime
 } from "@/lib/timeCore";
+
+// 部署版本戳，用于在 UI 上判断是否加载了新包
+const BUILD_STAMP = "20260822-v3";
 
 /**
  * 综合解析用户自然语言中的时间意图，返回兜底 ISO。
@@ -18,6 +21,7 @@ import {
  */
 function resolveNaturalLanguageTime(text, aiReminderTime) {
   if (!text) return null;
+  const t = text.trim();
 
   const aiTime = aiReminderTime ? parseAsShanghai(aiReminderTime) : null;
   const withinTolerance = (expected) => {
@@ -26,7 +30,7 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
   };
 
   // 1. 相对分钟：语义明确，直接以当前时间 + X 分钟为准
-  const relativeMinutes = parseRelativeMinutes(text);
+  const relativeMinutes = parseRelativeMinutes(t);
   if (relativeMinutes != null && relativeMinutes > 0) {
     const base = getShanghaiNow();
     base.setMinutes(base.getMinutes() + relativeMinutes);
@@ -37,7 +41,7 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
   }
 
   // 2. 相对小时：语义明确，直接以当前时间 + X 小时为准
-  const relativeHours = parseRelativeHours(text);
+  const relativeHours = parseRelativeHours(t);
   if (relativeHours != null && relativeHours > 0) {
     const base = getShanghaiNow();
     base.setMinutes(base.getMinutes() + Math.round(relativeHours * 60));
@@ -48,7 +52,7 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
   }
 
   // 3. 组合日期+时刻：明天下午3点、后天上午、下周一晚上
-  const hybridISO = parseHybridTime(text);
+  const hybridISO = parseHybridTime(t);
   if (hybridISO) {
     const hybridTime = parseAsShanghai(hybridISO);
     if (!withinTolerance(hybridTime)) {
@@ -59,14 +63,14 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
   }
 
   // 4. 今天内的时刻："下午3点提醒我"、"晚上8点"、"1点前提醒"
-  const timeStr = parseTimeOfDay(text);
+  const timeStr = parseTimeOfDay(t);
   if (timeStr) {
     const now = getShanghaiNow();
     const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
     let candidate = parseAsShanghai(`${todayStr}T${timeStr}:00+08:00`);
 
     // "X点前" 且该时刻已过 → 顺延到明天
-    const before = parseBeforeTime(text);
+    const before = parseBeforeTime(t);
     if (before && candidate && candidate.getTime() <= now.getTime()) {
       const tomorrowStr = new Date(now.getTime() + 24 * 60 * 60 * 1000)
         .toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
@@ -80,7 +84,28 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
     return null;
   }
 
-  console.log(`[VoiceTime] 未识别时间表达: text="${text}", ai=${aiReminderTime}`);
+  console.log(`[VoiceTime] 未识别时间表达: text="${t}", ai=${aiReminderTime}`);
+  return null;
+}
+
+/**
+ * 仅用于 UI 预览：解析相对时间并返回可读的格式化结果。
+ */
+function previewRelativeTime(text) {
+  if (!text) return null;
+  const t = text.trim();
+  const minutes = parseRelativeMinutes(t);
+  if (minutes != null && minutes > 0) {
+    const base = getShanghaiNow();
+    base.setMinutes(base.getMinutes() + minutes);
+    return { label: `${minutes} 分钟后`, iso: base.toISOString() };
+  }
+  const hours = parseRelativeHours(t);
+  if (hours != null && hours > 0) {
+    const base = getShanghaiNow();
+    base.setMinutes(base.getMinutes() + Math.round(hours * 60));
+    return { label: `${hours} 小时后`, iso: base.toISOString() };
+  }
   return null;
 }
 
@@ -99,7 +124,14 @@ export default function VoiceQuickCreate({ open, onClose }) {
   const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
   const [supported, setSupported] = useState(true);
+  const [previewTime, setPreviewTime] = useState(null);
   const recognitionRef = useRef(null);
+
+  // 识别文本变化时，实时显示解析到的时间（用于诊断+给用户确认）
+  useEffect(() => {
+    const text = (transcript + interim).trim();
+    setPreviewTime(previewRelativeTime(text));
+  }, [transcript, interim]);
 
   // 只检测设备是否支持语音识别，不预先创建实例
   useEffect(() => {
@@ -289,6 +321,7 @@ ${timeCtx.promptSnippet}
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-[#384877]" />
                 <h3 className="font-bold text-slate-800 text-base">语音一键生成约定</h3>
+                <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded">{BUILD_STAMP}</span>
               </div>
               <button
                 onClick={() => { stopRecognition(); onClose(); }}
@@ -332,6 +365,13 @@ ${timeCtx.promptSnippet}
                     isRecording ? "正在聆听，请说出你的约定…" : "点击麦克风开始说话"
                   )}
                 </div>
+
+                {previewTime && (
+                  <div className="w-full -mt-3 mb-1 px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center gap-2 text-sm text-blue-700">
+                    <Clock className="w-4 h-4" />
+                    <span>识别到：<strong>{previewTime.label}</strong>（{formatShanghaiDateTime(previewTime.iso)}）</span>
+                  </div>
+                )}
 
                 <button
                   onClick={handleGenerate}

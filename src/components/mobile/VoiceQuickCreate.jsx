@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Loader2, X, Sparkles, Check, Clock } from "lucide-react";
+import { Mic, MicOff, Loader2, X, Sparkles, Check } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { invokeAI } from "@/components/utils/aiHelper";
@@ -8,11 +8,8 @@ import { toast } from "sonner";
 import {
   getTimeContextForAI, normalizeTaskTime, parseAsShanghai,
   parseRelativeMinutes, parseRelativeHours, parseTimeOfDay,
-  parseBeforeTime, parseHybridTime, getShanghaiNow, formatShanghaiDateTime
+  parseBeforeTime, parseHybridTime, getShanghaiNow
 } from "@/lib/timeCore";
-
-// 部署版本戳，用于在 UI 上判断是否加载了新包
-const BUILD_STAMP = "20260822-v3";
 
 /**
  * 综合解析用户自然语言中的时间意图，返回兜底 ISO。
@@ -89,27 +86,6 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
 }
 
 /**
- * 仅用于 UI 预览：解析相对时间并返回可读的格式化结果。
- */
-function previewRelativeTime(text) {
-  if (!text) return null;
-  const t = text.trim();
-  const minutes = parseRelativeMinutes(t);
-  if (minutes != null && minutes > 0) {
-    const base = getShanghaiNow();
-    base.setMinutes(base.getMinutes() + minutes);
-    return { label: `${minutes} 分钟后`, iso: base.toISOString() };
-  }
-  const hours = parseRelativeHours(t);
-  if (hours != null && hours > 0) {
-    const base = getShanghaiNow();
-    base.setMinutes(base.getMinutes() + Math.round(hours * 60));
-    return { label: `${hours} 小时后`, iso: base.toISOString() };
-  }
-  return null;
-}
-
-/**
  * 移动端「+ → 新建约定」语音一键生成弹窗。
  * 录音 → AI 解析 → 直接创建约定，无需跳转或手动填表。
  *
@@ -124,14 +100,7 @@ export default function VoiceQuickCreate({ open, onClose }) {
   const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
   const [supported, setSupported] = useState(true);
-  const [previewTime, setPreviewTime] = useState(null);
   const recognitionRef = useRef(null);
-
-  // 识别文本变化时，实时显示解析到的时间（用于诊断+给用户确认）
-  useEffect(() => {
-    const text = (transcript + interim).trim();
-    setPreviewTime(previewRelativeTime(text));
-  }, [transcript, interim]);
 
   // 只检测设备是否支持语音识别，不预先创建实例
   useEffect(() => {
@@ -321,7 +290,6 @@ ${timeCtx.promptSnippet}
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-[#384877]" />
                 <h3 className="font-bold text-slate-800 text-base">语音一键生成约定</h3>
-                <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded">{BUILD_STAMP}</span>
               </div>
               <button
                 onClick={() => { stopRecognition(); onClose(); }}
@@ -365,13 +333,6 @@ ${timeCtx.promptSnippet}
                     isRecording ? "正在聆听，请说出你的约定…" : "点击麦克风开始说话"
                   )}
                 </div>
-
-                {previewTime && (
-                  <div className="w-full -mt-3 mb-1 px-4 py-2 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center gap-2 text-sm text-blue-700">
-                    <Clock className="w-4 h-4" />
-                    <span>识别到：<strong>{previewTime.label}</strong>（{formatShanghaiDateTime(previewTime.iso)}）</span>
-                  </div>
-                )}
 
                 <button
                   onClick={handleGenerate}

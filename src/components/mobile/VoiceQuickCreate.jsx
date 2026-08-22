@@ -32,6 +32,7 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
     base.setMinutes(base.getMinutes() + relativeMinutes);
     const iso = base.toISOString();
     console.log(`[VoiceTime] 识别相对分钟: ${relativeMinutes}, fallback=${iso}, ai=${aiReminderTime}`);
+    toast.info(`识别到 ${relativeMinutes} 分钟后`);
     return { iso, reasoning: `用户要求 ${relativeMinutes} 分钟后提醒` };
   }
 
@@ -42,6 +43,7 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
     base.setMinutes(base.getMinutes() + Math.round(relativeHours * 60));
     const iso = base.toISOString();
     console.log(`[VoiceTime] 识别相对小时: ${relativeHours}, fallback=${iso}, ai=${aiReminderTime}`);
+    toast.info(`识别到 ${relativeHours} 小时后`);
     return { iso, reasoning: `用户要求 ${relativeHours} 小时后提醒` };
   }
 

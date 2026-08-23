@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import Taro from "@tarojs/taro";
 import { get, patch } from "@/utils/api";
+import { getToken } from "@/utils/auth";
 
 const POLL_INTERVAL_MS = 10000;
 const NOTIFIED_KEY = "ss_notification_dedup";
@@ -146,6 +147,7 @@ export default function NotificationManager() {
 
   const checkTasks = async () => {
     if (!runningRef.current || modalOpenRef.current) return;
+    if (!getToken()) return;
 
     try {
       const data = await get("/tasks", { parent_task_id: "", sort: "-reminder_time", limit: 200 });

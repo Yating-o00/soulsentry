@@ -32,10 +32,16 @@ export function request(options = {}) {
 
       if (statusCode === 401) {
         clearToken();
-        showError("登录已过期，请重新登录");
-        setTimeout(() => {
-          Taro.redirectTo({ url: "/pages/login/index" });
-        }, 1500);
+        const pages = Taro.getCurrentPages();
+        const currentPath = pages.length > 0 ? pages[pages.length - 1].route : "";
+        const isLoginPage = currentPath === "pages/login/index" || currentPath === "pages/index/index";
+
+        if (!isLoginPage) {
+          showError("登录已过期，请重新登录");
+          setTimeout(() => {
+            Taro.redirectTo({ url: "/pages/login/index" });
+          }, 1500);
+        }
         return Promise.reject(new Error("UNAUTHORIZED"));
       }
 

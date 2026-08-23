@@ -53,6 +53,7 @@ export default function Tasks() {
   const [loading, setLoading] = useState(false);
   const [offsets, setOffsets] = useState({});
   const [expandedTaskId, setExpandedTaskId] = useState(null);
+  const [showCompleted, setShowCompleted] = useState(false);
   const moveXRef = useRef({});
 
   const ACTION_WIDTH = useMemo(() => getActionWidthPx(), []);
@@ -198,6 +199,230 @@ export default function Tasks() {
     resetOffset(taskId, -ACTION_WIDTH);
   };
 
+  const isTaskDone = (task) => task.status === "completed" || task.status === "done" || task.status === "archived";
+  const pendingTasks = tasks.filter((t) => !isTaskDone(t));
+  const completedTasks = tasks.filter((t) => isTaskDone(t));
+
+  const renderTaskItem = (task) => {
+    const status = statusMap[task.status] || statusMap.pending;
+    const done = isTaskDone(task);
+    const offset = offsets[task.id] ?? -ACTION_WIDTH;
+    const taskSubs = getSubtasks(task.id);
+    const isExpanded = expandedTaskId === task.id;
+
+    return (
+      <View key={task.id} style={{ marginBottom: "20rpx" }}>
+        <MovableArea
+          style={{
+            width: `${SCREEN_WIDTH}px`,
+            height: "200rpx",
+            overflow: "hidden",
+            borderRadius: "16rpx"
+          }}
+        >
+          <MovableView
+            style={{
+              width: `${SCREEN_WIDTH + ACTION_WIDTH * 2}px`,
+              height: "100%",
+              display: "flex",
+              flexDirection: "row"
+            }}
+            direction="horizontal"
+            damping={50}
+            friction={4}
+            x={offset}
+            outOfBounds={false}
+            onChange={(e) => onChange(task.id, e)}
+            onTouchEnd={() => onTouchEnd(task.id)}
+          >
+            {/* 左侧：右滑直接完成 */}
+            <View
+              style={{
+                width: `${ACTION_WIDTH}px`,
+                height: "100%",
+                background: done ? "#9e9e9e" : "#4caf50",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                position: "relative"
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: "28rpx", fontWeight: 600 }}>
+                {done ? "取消完成" : "完成"}
+              </Text>
+              <View
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "20%",
+                  bottom: "20%",
+                  width: "2rpx",
+                  background: "rgba(255,255,255,0.6)"
+                }}
+              />
+            </View>
+
+            {/* 中间：卡片内容 */}
+            <View
+              style={{
+                width: `${SCREEN_WIDTH}px`,
+                height: "100%",
+                background: "#fff",
+                padding: "24rpx",
+                boxSizing: "border-box",
+                boxShadow: "0 2rpx 12rpx rgba(0, 0, 0, 0.04)",
+                borderRadius: "16rpx"
+              }}
+              onClick={() => goEdit(task.id)}
+            >
+              <View className="ss-row">
+                <Text style={{ fontSize: "32rpx", fontWeight: 600, color: "#333", flex: 1, textDecoration: done ? "line-through" : "none" }}>
+                  {task.title}
+                </Text>
+                <View style={{ display: "flex", alignItems: "center" }}>
+                  <Text className={`ss-tag ${status.className}`} style={{ marginRight: "12rpx" }}>
+                    {status.text}
+                  </Text>
+                  <View
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpand(task.id);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: "48rpx",
+                      height: "36rpx",
+                      padding: "0 12rpx",
+                      background: "rgba(56,72,119,0.08)",
+                      borderRadius: "18rpx"
+                    }}
+                  >
+                    <Text style={{ color: "#384877", fontSize: "22rpx" }}>
+                      {isExpanded ? "−" : taskSubs.length > 0 ? `+${taskSubs.length}` : "+"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <View style={{ marginTop: "12rpx" }}>
+                {task.priority && (
+                  <Text className="ss-tag ss-tag-primary">优先级：{priorityMap[task.priority] || task.priority}</Text>
+                )}
+                {task.category && (
+                  <Text className="ss-tag ss-tag-primary">{categoryMap[task.category] || task.category}</Text>
+                )}
+                {task.end_time && (
+                  <Text className="ss-tag ss-tag-warning">截止 {formatDate(task.end_time)}</Text>
+                )}
+              </View>
+              {task.description ? (
+                <View style={{ marginTop: "12rpx" }}>
+                  <Text className="ss-muted">{task.description.slice(0, 60)}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* 右侧：左滑出现的操作按钮 */}
+            <View
+              style={{
+                width: `${ACTION_WIDTH}px`,
+                height: "100%",
+                display: "flex",
+                flexDirection: "row"
+              }}
+            >
+              <View
+                style={{
+                  flex: 1,
+                  background: "#4a5d8f",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                  fontSize: "28rpx"
+                }}
+                onClick={() => handleShare(task)}
+              >
+                分享
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                  background: "#e53935",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                  fontSize: "28rpx"
+                }}
+                onClick={() => handleDelete(task.id)}
+              >
+                删除
+              </View>
+            </View>
+          </MovableView>
+        </MovableArea>
+
+        {isExpanded && (
+          <View
+            style={{
+              marginTop: "8rpx",
+              marginLeft: "36rpx",
+              marginRight: "36rpx"
+            }}
+          >
+            {taskSubs.length === 0 ? (
+              <Text className="ss-muted" style={{ fontSize: "24rpx", padding: "8rpx 0" }}>暂无子约定</Text>
+            ) : (
+              taskSubs.map((sub) => {
+                const subDone = sub.status === "completed" || sub.status === "done";
+                return (
+                  <View
+                    key={sub.id}
+                    onClick={() => handleSubtaskToggle(sub)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "8rpx 0"
+                    }}
+                  >
+                    <Text
+                      style={{
+                        width: "28rpx",
+                        height: "28rpx",
+                        borderRadius: "50%",
+                        border: `2rpx solid ${subDone ? "#999" : "#384877"}`,
+                        background: subDone ? "#999" : "transparent",
+                        color: "#fff",
+                        textAlign: "center",
+                        lineHeight: "26rpx",
+                        marginRight: "10rpx",
+                        fontSize: "18rpx"
+                      }}
+                    >
+                      {subDone ? "✓" : ""}
+                    </Text>
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontSize: "26rpx",
+                        color: subDone ? "#999" : "#666",
+                        textDecoration: subDone ? "line-through" : "none"
+                      }}
+                    >
+                      {sub.title}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View className="ss-page">
       <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
@@ -209,226 +434,41 @@ export default function Tasks() {
           <View className="ss-empty">暂无约定，点击右下角添加</View>
         )}
 
-        {tasks.map((task) => {
-          const status = statusMap[task.status] || statusMap.pending;
-          const done = task.status === "completed" || task.status === "done";
-          const offset = offsets[task.id] ?? -ACTION_WIDTH;
+        {pendingTasks.map((task) => renderTaskItem(task))}
 
-          const taskSubs = getSubtasks(task.id);
-          const isExpanded = expandedTaskId === task.id;
-
-          return (
-            <View key={task.id} style={{ marginBottom: "20rpx" }}>
-              <MovableArea
-                style={{
-                  width: `${SCREEN_WIDTH}px`,
-                  height: "200rpx",
-                  overflow: "hidden",
-                  borderRadius: "16rpx"
-                }}
-              >
-                <MovableView
-                  style={{
-                    width: `${SCREEN_WIDTH + ACTION_WIDTH * 2}px`,
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "row"
-                  }}
-                  direction="horizontal"
-                  damping={50}
-                  friction={4}
-                  x={offset}
-                  outOfBounds={false}
-                  onChange={(e) => onChange(task.id, e)}
-                  onTouchEnd={() => onTouchEnd(task.id)}
-                >
-                  {/* 左侧：右滑直接完成 */}
-                  <View
-                    style={{
-                      width: `${ACTION_WIDTH}px`,
-                      height: "100%",
-                      background: done ? "#9e9e9e" : "#4caf50",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      position: "relative"
-                    }}
-                  >
-                    <Text style={{ color: "#fff", fontSize: "28rpx", fontWeight: 600 }}>
-                      {done ? "取消完成" : "完成"}
-                    </Text>
-                    <View
-                      style={{
-                        position: "absolute",
-                        right: 0,
-                        top: "20%",
-                        bottom: "20%",
-                        width: "2rpx",
-                        background: "rgba(255,255,255,0.6)"
-                      }}
-                    />
-                  </View>
-
-                  {/* 中间：卡片内容 */}
-                  <View
-                    style={{
-                      width: `${SCREEN_WIDTH}px`,
-                      height: "100%",
-                      background: "#fff",
-                      padding: "24rpx",
-                      boxSizing: "border-box",
-                      boxShadow: "0 2rpx 12rpx rgba(0, 0, 0, 0.04)",
-                      borderRadius: "16rpx"
-                    }}
-                    onClick={() => goEdit(task.id)}
-                  >
-                    <View className="ss-row">
-                      <Text style={{ fontSize: "32rpx", fontWeight: 600, color: "#333", flex: 1, textDecoration: done ? "line-through" : "none" }}>
-                        {task.title}
-                      </Text>
-                      <View style={{ display: "flex", alignItems: "center" }}>
-                        <Text className={`ss-tag ${status.className}`} style={{ marginRight: "12rpx" }}>
-                          {status.text}
-                        </Text>
-                        <View
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleExpand(task.id);
-                          }}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            minWidth: "48rpx",
-                            height: "36rpx",
-                            padding: "0 12rpx",
-                            background: "rgba(56,72,119,0.08)",
-                            borderRadius: "18rpx"
-                          }}
-                        >
-                          <Text style={{ color: "#384877", fontSize: "22rpx" }}>
-                            {isExpanded ? "−" : taskSubs.length > 0 ? `+${taskSubs.length}` : "+"}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    <View style={{ marginTop: "12rpx" }}>
-                      {task.priority && (
-                        <Text className="ss-tag ss-tag-primary">优先级：{priorityMap[task.priority] || task.priority}</Text>
-                      )}
-                      {task.category && (
-                        <Text className="ss-tag ss-tag-primary">{categoryMap[task.category] || task.category}</Text>
-                      )}
-                      {task.end_time && (
-                        <Text className="ss-tag ss-tag-warning">截止 {formatDate(task.end_time)}</Text>
-                      )}
-                    </View>
-                    {task.description ? (
-                      <View style={{ marginTop: "12rpx" }}>
-                        <Text className="ss-muted">{task.description.slice(0, 60)}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {/* 右侧：左滑出现的操作按钮 */}
-                  <View
-                    style={{
-                      width: `${ACTION_WIDTH}px`,
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "row"
-                    }}
-                  >
-                    <View
-                      style={{
-                        flex: 1,
-                        background: "#4a5d8f",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#fff",
-                        fontSize: "28rpx"
-                      }}
-                      onClick={() => handleShare(task)}
-                    >
-                      分享
-                    </View>
-                    <View
-                      style={{
-                        flex: 1,
-                        background: "#e53935",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#fff",
-                        fontSize: "28rpx"
-                      }}
-                      onClick={() => handleDelete(task.id)}
-                    >
-                      删除
-                    </View>
-                  </View>
-                </MovableView>
-              </MovableArea>
-
-              {isExpanded && (
-                <View
-                  style={{
-                    marginTop: "8rpx",
-                    marginLeft: "36rpx",
-                    marginRight: "36rpx"
-                  }}
-                >
-                  {taskSubs.length === 0 ? (
-                    <Text className="ss-muted" style={{ fontSize: "24rpx", padding: "8rpx 0" }}>暂无子约定</Text>
-                  ) : (
-                    taskSubs.map((sub, idx) => {
-                      const subDone = sub.status === "completed" || sub.status === "done";
-                      return (
-                        <View
-                          key={sub.id}
-                          onClick={() => handleSubtaskToggle(sub)}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            padding: "8rpx 0"
-                          }}
-                        >
-                          <Text
-                            style={{
-                              width: "28rpx",
-                              height: "28rpx",
-                              borderRadius: "50%",
-                              border: `2rpx solid ${subDone ? "#999" : "#384877"}`,
-                              background: subDone ? "#999" : "transparent",
-                              color: "#fff",
-                              textAlign: "center",
-                              lineHeight: "26rpx",
-                              marginRight: "10rpx",
-                              fontSize: "18rpx"
-                            }}
-                          >
-                            {subDone ? "✓" : ""}
-                          </Text>
-                          <Text
-                            style={{
-                              flex: 1,
-                              fontSize: "26rpx",
-                              color: subDone ? "#999" : "#666",
-                              textDecoration: subDone ? "line-through" : "none"
-                            }}
-                          >
-                            {sub.title}
-                          </Text>
-                        </View>
-                      );
-                    })
-                  )}
-                </View>
-              )}
+        {completedTasks.length > 0 && (
+          <View style={{ marginTop: "32rpx", marginBottom: "20rpx" }}>
+            <View
+              onClick={() => setShowCompleted((prev) => !prev)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "20rpx 24rpx",
+                background: "#f5f6fa",
+                borderRadius: "16rpx"
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", fontWeight: 600, color: "#666" }}>
+                已完成约定
+              </Text>
+              <View style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "24rpx", color: "#999", marginRight: "8rpx" }}>
+                  {completedTasks.length} 个
+                </Text>
+                <Text style={{ fontSize: "28rpx", color: "#384877" }}>
+                  {showCompleted ? "−" : "+"}
+                </Text>
+              </View>
             </View>
-          );
-        })}
+
+            {showCompleted && (
+              <View style={{ marginTop: "16rpx" }}>
+                {completedTasks.map((task) => renderTaskItem(task))}
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={{ height: "160rpx" }} />
       </ScrollView>

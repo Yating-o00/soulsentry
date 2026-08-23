@@ -137,6 +137,7 @@ function serializeTask(task) {
     share_expires_at: task.shareExpiresAt,
     reminder_sent: !!task.reminderSentAt,
     reminder_sent_at: task.reminderSentAt,
+    end_reminder_sent: !!(extraFields.end_reminder_sent_at && task.endTime && new Date(extraFields.end_reminder_sent_at).getTime() >= new Date(task.endTime).getTime()),
     ...extraFields,
     metadata: task.metadata,
     created_date: task.createdAt,

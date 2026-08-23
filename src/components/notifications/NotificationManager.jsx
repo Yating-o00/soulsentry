@@ -518,6 +518,23 @@ export default function NotificationManager() {
         });
       }
 
+      // 约定 end_time 跟进：像助手一样询问是否完成/需要延长，而不是死板闹钟
+      if (task.end_time && !task.end_reminder_sent) {
+        const endTime = parseISO(task.end_time);
+        const minutesSinceEnd = differenceInMinutes(now, endTime);
+        const isFreshlyEnd = minutesSinceEnd >= 0 && minutesSinceEnd <= 10;
+        const followUpKey = `${task.id}-followup-${format(endTime, 'yyyy-MM-dd-HH-mm')}`;
+        if (isFreshlyEnd && !checkedTasks.current.has(followUpKey) && !isNotified(followUpKey)) {
+          sendNotification(task, {
+            custom_message: "约定的预计时间到了，完成了吗？需要延长或调整吗？",
+            message_type: "encouraging",
+            title: `🤝 约定跟进：${task.title}`
+          });
+          checkedTasks.current.add(followUpKey);
+          markNotified(followUpKey);
+        }
+      }
+
       // Proactive: 检查是否为遗漏的重要约定 (High/Urgent, Overdue > 24h, Not Completed)
       // 且未被Snooze, 且未交互过
       if (['high', 'urgent'].includes(task.priority) && 

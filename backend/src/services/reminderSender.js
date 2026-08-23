@@ -17,6 +17,20 @@ function shouldSendPush(preferences) {
   return true;
 }
 
+function getTaskExtraFields(task) {
+  if (task?.metadata && typeof task.metadata === "object") {
+    return task.metadata._extraFields || {};
+  }
+  return {};
+}
+
+function buildTaskMetadataWithExtra(task, patch) {
+  const base = task?.metadata && typeof task.metadata === "object" ? { ...task.metadata } : {};
+  const prev = base._extraFields && typeof base._extraFields === "object" ? { ...base._extraFields } : {};
+  base._extraFields = { ...prev, ...patch };
+  return base;
+}
+
 async function createInAppNotification(userId, title, body, payload = {}) {
   try {
     await prisma.notification.create({
@@ -37,6 +51,52 @@ async function createInAppNotification(userId, title, body, payload = {}) {
   }
 }
 
+async function trySendPush({ userId, preferences, payload, logPrefix }) {
+  const subscription = getPushSubscription(preferences);
+  const pushEnabled = shouldSendPush(preferences);
+
+  if (!subscription || !pushEnabled) {
+    const reason = !subscription ? "no_push_subscription" : "push_disabled_by_user";
+    console.log(`[reminderSender] ${logPrefix} user=${userId} skipped push: ${reason}`);
+    await createInAppNotification(
+      userId,
+      payload.title,
+      payload.body,
+      { ...payload.data, url: payload.url, fallback_reason: reason }
+    );
+    return { ok: false, reason, inAppFallback: true };
+  }
+
+  try {
+    await sendPushNotification(subscription, payload);
+    console.log(`[reminderSender] ${logPrefix} user=${userId} push sent to ${subscription.endpoint?.slice(0, 60)}...`);
+    return { ok: true };
+  } catch (err) {
+    console.warn(`[reminderSender] ${logPrefix} user=${userId} push failed:`, err?.message || err);
+    if (err?.statusCode === 410 || err?.statusCode === 404) {
+      await prisma.userPreference.update({
+        where: { userId },
+        data: {
+          metadata: {
+            ...(preferences?.metadata || {}),
+            _extraFields: {
+              ...getUserExtraFields(preferences),
+              push_subscription: null,
+            },
+          },
+        },
+      }).catch(() => {});
+    }
+    await createInAppNotification(
+      userId,
+      payload.title,
+      payload.body,
+      { ...payload.data, url: payload.url, fallback_reason: "push_failed", error: err?.message }
+    );
+    return { ok: false, reason: "push_failed", error: err, inAppFallback: true };
+  }
+}
+
 export async function sendDueReminders() {
   const now = new Date();
   if (!isWebPushConfigured()) {
@@ -44,7 +104,6 @@ export async function sendDueReminders() {
   }
 
   // 找提醒时间已到、且未发送过提醒或提醒时间比上次发送时间更新的约定
-  // 注意：SQLite 不支持 Prisma 字段比较，所以先拉候选集，再在内存里做二次过滤。
   const candidates = await prisma.task.findMany({
     where: {
       deletedAt: null,
@@ -62,12 +121,8 @@ export async function sendDueReminders() {
   let sent = 0;
   let skipped = 0;
   let inAppFallback = 0;
-  const errors = [];
 
   for (const task of dueTasks) {
-    const subscription = getPushSubscription(task.user.preferences);
-    const pushEnabled = shouldSendPush(task.user.preferences);
-
     const payload = {
       title: `约定提醒：${task.title}`,
       body: task.description ? task.description.slice(0, 120) : "您有一个约定到时间了",
@@ -78,59 +133,16 @@ export async function sendDueReminders() {
       data: { taskId: task.id, type: "reminder" },
     };
 
-    let pushOk = false;
+    const result = await trySendPush({
+      userId: task.userId,
+      preferences: task.user.preferences,
+      payload,
+      logPrefix: `start-reminder task=${task.id}`,
+    });
 
-    if (!subscription || !pushEnabled) {
-      const reason = !subscription ? "no_push_subscription" : "push_disabled_by_user";
-      console.log(`[reminderSender] task=${task.id} skipped push: ${reason}`);
-      skipped += 1;
-      // 兜底：写入应用内通知，让用户打开 App 后能看到
-      await createInAppNotification(
-        task.userId,
-        payload.title,
-        payload.body,
-        { taskId: task.id, url: payload.url, fallback_reason: reason }
-      );
-      inAppFallback += 1;
-    } else {
-      try {
-        await sendPushNotification(subscription, payload);
-        sent += 1;
-        pushOk = true;
-        console.log(`[reminderSender] task=${task.id} push sent to ${subscription.endpoint?.slice(0, 60)}...`);
-      } catch (err) {
-        errors.push({ taskId: task.id, error: err?.message || String(err), statusCode: err?.statusCode });
-        console.warn(`[reminderSender] task=${task.id} push failed:`, err?.message || err);
-        // 订阅失效时清理，避免反复报错
-        if (err?.statusCode === 410 || err?.statusCode === 404) {
-          try {
-            await prisma.userPreference.update({
-              where: { userId: task.userId },
-              data: {
-                metadata: {
-                  ...(task.user.preferences?.metadata || {}),
-                  _extraFields: {
-                    ...getUserExtraFields(task.user.preferences),
-                    push_subscription: null,
-                  },
-                },
-              },
-            });
-            console.log(`[reminderSender] task=${task.id} cleared expired push subscription`);
-          } catch (cleanupErr) {
-            console.warn("[reminderSender] failed to clear expired subscription:", cleanupErr);
-          }
-        }
-        // 推送失败也创建应用内通知兜底
-        await createInAppNotification(
-          task.userId,
-          payload.title,
-          payload.body,
-          { taskId: task.id, url: payload.url, fallback_reason: "push_failed", error: err?.message }
-        );
-        inAppFallback += 1;
-      }
-    }
+    if (result.ok) sent += 1;
+    if (result.reason && result.reason !== "push_failed") skipped += 1;
+    if (result.inAppFallback) inAppFallback += 1;
 
     // 无论发送成功与否，都更新 reminderSentAt，避免同一分钟重复尝试
     try {
@@ -143,13 +155,80 @@ export async function sendDueReminders() {
     }
   }
 
-  if (errors.length > 0) {
-    console.warn("[reminderSender] push errors:", errors);
-  }
-
   const result = { sent, skipped, inAppFallback, total: dueTasks.length };
   if (dueTasks.length > 0) {
-    console.log("[reminderSender] reminders:", result);
+    console.log("[reminderSender] start reminders:", result);
+  }
+  return result;
+}
+
+/**
+ * 在约定 end_time 到达时发送一次「温和跟进」：
+ * 不把它当作闹钟，而是像助手一样问用户是否完成、是否需要延长。
+ */
+export async function sendEndTimeFollowUps() {
+  const now = new Date();
+  if (!isWebPushConfigured()) {
+    console.log("[reminderSender] web push not configured, skipping follow-up push (will still create in-app notifications)");
+  }
+
+  const candidates = await prisma.task.findMany({
+    where: {
+      deletedAt: null,
+      status: { notIn: ["DONE", "ARCHIVED"] },
+      endTime: { not: null, lte: now },
+    },
+    include: { user: { include: { preferences: true } } },
+  });
+
+  let sent = 0;
+  let skipped = 0;
+  let inAppFallback = 0;
+
+  for (const task of candidates) {
+    const extra = getTaskExtraFields(task);
+    const lastSentAt = extra.end_reminder_sent_at ? new Date(extra.end_reminder_sent_at) : null;
+    // 只对“当前 end_time 比上次跟进时间更新”的任务触发，避免重复
+    if (lastSentAt && task.endTime <= lastSentAt) {
+      continue;
+    }
+
+    const payload = {
+      title: `约定跟进：${task.title}`,
+      body: "约定的预计时间到了，完成了吗？需要延长或调整吗？",
+      url: `/tasks?id=${task.id}`,
+      tag: `followup-${task.id}`,
+      requireInteraction: false,
+      vibrate: [150, 80, 150],
+      data: { taskId: task.id, type: "follow_up" },
+    };
+
+    const result = await trySendPush({
+      userId: task.userId,
+      preferences: task.user.preferences,
+      payload,
+      logPrefix: `end-followup task=${task.id}`,
+    });
+
+    if (result.ok) sent += 1;
+    if (result.reason && result.reason !== "push_failed") skipped += 1;
+    if (result.inAppFallback) inAppFallback += 1;
+
+    try {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          metadata: buildTaskMetadataWithExtra(task, { end_reminder_sent_at: now.toISOString() }),
+        },
+      });
+    } catch (updateErr) {
+      console.warn(`[reminderSender] task=${task.id} failed to update end_reminder_sent_at:`, updateErr);
+    }
+  }
+
+  const result = { sent, skipped, inAppFallback, total: candidates.length };
+  if (candidates.length > 0) {
+    console.log("[reminderSender] end-time follow-ups:", result);
   }
   return result;
 }

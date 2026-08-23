@@ -135,6 +135,8 @@ function serializeTask(task) {
     share_token: task.shareToken,
     share_enabled: task.shareEnabled,
     share_expires_at: task.shareExpiresAt,
+    reminder_sent: !!task.reminderSentAt,
+    reminder_sent_at: task.reminderSentAt,
     ...extraFields,
     metadata: task.metadata,
     created_date: task.createdAt,

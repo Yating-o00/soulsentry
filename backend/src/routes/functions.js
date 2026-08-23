@@ -5,6 +5,7 @@ import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { executeAutomation } from "../services/executeAutomation.js";
+import { sendTestPush } from "../services/reminderSender.js";
 import { getCreditPack } from "../config/creditPacks.js";
 import { createWechatNativeOrder, generateOutTradeNo, getWechatMerchantConfig, queryWechatOrder as wechatQueryOrder } from "../lib/wechatPay.js";
 import { markWechatOrderPaid } from "../services/wechatOrders.js";
@@ -697,6 +698,14 @@ functionsRouter.post("/:name", async (req, res) => {
       return res.json({
         publicKey: env.VAPID_PUBLIC_KEY || null
       });
+    }
+
+    if (name === "sendTestPush") {
+      const result = await sendTestPush(req.user.id);
+      if (!result.ok) {
+        return res.status(400).json({ error: result.error, message: result.error });
+      }
+      return res.json({ ok: true });
     }
 
     if (name === "generateDailyBriefing") {

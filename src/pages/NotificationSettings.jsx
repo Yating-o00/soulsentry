@@ -191,7 +191,27 @@ export default function NotificationSettingsPage() {
               <Button onClick={requestPermission}>开启权限</Button>
             )}
             {permission === 'granted' && (
-               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">已开启</Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const r = await base44.functions.invoke('sendTestPush', {});
+                      if (r?.ok) {
+                        toast.success('测试通知已发送，请留意系统通知栏');
+                      } else {
+                        toast.error('测试通知发送失败：' + (r?.message || '未知错误'));
+                      }
+                    } catch (e) {
+                      toast.error('测试通知发送失败：' + (e?.message || '未知错误'));
+                    }
+                  }}
+                >
+                  发送测试通知
+                </Button>
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">已开启</Badge>
+              </div>
             )}
           </div>
         </CardHeader>

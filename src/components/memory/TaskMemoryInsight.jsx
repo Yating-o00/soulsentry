@@ -305,16 +305,16 @@ export default function TaskMemoryInsight({ task, compact = false, onClick, enab
           animate={{ opacity: 1, y: 0 }}
           className="mt-1"
         >
-          <div 
-            className="flex items-start gap-2 px-3 py-2 bg-gradient-to-r from-[#384877]/5 to-[#3b5aa2]/5 rounded-lg border border-[#384877]/15 cursor-pointer group"
+          <div
+            className="flex items-start gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-[#384877]/5 to-[#3b5aa2]/5 rounded-xl border border-[#384877]/15 cursor-pointer group"
             onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
           >
-            <Brain className="w-3.5 h-3.5 text-[#384877] mt-0.5 flex-shrink-0" />
-            <p className={`text-[11px] text-[#384877]/90 leading-relaxed ${expanded ? "" : "line-clamp-1"}`}>
+            <Brain className="w-4 h-4 text-[#384877] mt-0.5 flex-shrink-0" />
+            <p className={`text-xs sm:text-sm text-[#384877]/90 leading-relaxed ${expanded ? "" : "line-clamp-1"}`}>
               {insight.insight}
             </p>
             {!expanded && (
-              <ChevronDown className="w-3 h-3 text-[#384877]/40 mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ChevronDown className="w-4 h-4 text-[#384877]/40 mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
             )}
           </div>
         </motion.div>

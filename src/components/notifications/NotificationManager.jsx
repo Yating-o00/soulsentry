@@ -207,6 +207,16 @@ export default function NotificationManager() {
         if (messageType === 'summary') title = `📊 状态摘要：${task.title}`;
     }
 
+    // 触发设备震动（优先使用 Navigator.vibrate，再在 Notification 选项中声明）
+    const vibrationPattern = [200, 100, 200];
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      try {
+        navigator.vibrate(vibrationPattern);
+      } catch (e) {
+        console.log("Vibration failed:", e);
+      }
+    }
+
     var notification;
     try {
       notification = new Notification(title, {
@@ -215,6 +225,7 @@ export default function NotificationManager() {
         tag: task.id,
         requireInteraction: task.persistent_reminder,
         silent: soundToPlay === "none",
+        vibrate: vibrationPattern,
       });
 
       playSound(soundToPlay);

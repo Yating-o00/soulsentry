@@ -26,7 +26,7 @@ export default function AssociationRuleCard({ sequential, location }) {
       className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-50">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 px-5 pt-4 pb-3 border-b border-slate-50">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
             <Link2 className="w-4 h-4 text-indigo-500" />
@@ -36,7 +36,7 @@ export default function AssociationRuleCard({ sequential, location }) {
             <p className="text-xs text-slate-400">从你的历史中学到的隐藏逻辑</p>
           </div>
         </div>
-        <span className="text-[10px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+        <span className="self-start text-[10px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
           决策前置
         </span>
       </div>
@@ -45,15 +45,15 @@ export default function AssociationRuleCard({ sequential, location }) {
         {/* 序贯规则 */}
         {sequential && (
           <section>
-            <div className="flex items-center gap-2 mb-3 text-xs text-slate-500">
-              <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="flex items-start gap-2 mb-3 text-xs text-slate-500">
+              <TrendingUp className="w-3.5 h-3.5 text-indigo-400 mt-0.5" />
               <span>完成 <CheckCircle2 className="inline w-3 h-3 text-emerald-500 mx-0.5" /> 「{sequential.trigger_task.title}」后，你通常会接着处理…</span>
             </div>
 
             <div className="space-y-2.5">
               {sequential.suggestions.map((s, idx) => (
                 <div key={idx} className="bg-slate-50/60 rounded-xl p-3 border border-slate-100">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 mb-2">
                     <div className="flex items-center gap-1.5 text-xs text-slate-500">
                       <span className="font-medium text-slate-700">{s.from_label}</span>
                       <ArrowRight className="w-3 h-3 text-slate-400" />
@@ -70,10 +70,10 @@ export default function AssociationRuleCard({ sequential, location }) {
                       <Link
                         key={t.id}
                         to={createPageUrl(`Tasks?taskId=${t.id}`)}
-                        className="flex items-center justify-between gap-2 px-3 py-2 bg-white rounded-lg border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all group"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 py-2 bg-white rounded-lg border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all group items-start sm:items-center"
                       >
-                        <span className="text-sm text-slate-700 truncate group-hover:text-indigo-600">{t.title}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 ${PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.medium}`}>
+                        <span className="text-sm text-slate-700 truncate group-hover:text-indigo-600 w-full sm:w-auto">{t.title}</span>
+                        <span className={`self-start sm:self-auto text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 ${PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.medium}`}>
                           {t.priority || 'medium'}
                         </span>
                       </Link>
@@ -88,8 +88,8 @@ export default function AssociationRuleCard({ sequential, location }) {
         {/* 地点情境推荐 */}
         {location && (
           <section>
-            <div className="flex items-center gap-2 mb-3 text-xs text-slate-500">
-              <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+            <div className="flex items-start gap-2 mb-3 text-xs text-slate-500">
+              <MapPin className="w-3.5 h-3.5 text-emerald-500 mt-0.5" />
               <span>
                 你在 <span className="font-medium text-slate-700">{location.icon} {location.location_name}</span>（约 {location.distance}m）
                 附近通常会做：
@@ -120,15 +120,15 @@ export default function AssociationRuleCard({ sequential, location }) {
                   <Link
                     key={t.id}
                     to={createPageUrl(`Tasks?taskId=${t.id}`)}
-                    className="flex items-center justify-between gap-2 px-3 py-2 bg-white rounded-lg border border-emerald-100 hover:border-emerald-300 hover:shadow-sm transition-all group"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 py-2 bg-white rounded-lg border border-emerald-100 hover:border-emerald-300 hover:shadow-sm transition-all group items-start sm:items-center"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
                       <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 flex-shrink-0">
                         {t.category_label}
                       </span>
                       <span className="text-sm text-slate-700 truncate group-hover:text-emerald-700">{t.title}</span>
                     </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 ${PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.medium}`}>
+                    <span className={`self-start sm:self-auto text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 ${PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.medium}`}>
                       {t.priority || 'medium'}
                     </span>
                   </Link>

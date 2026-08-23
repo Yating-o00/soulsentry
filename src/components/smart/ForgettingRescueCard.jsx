@@ -20,17 +20,17 @@ export default function ForgettingRescueCard({ data, onSnooze }) {
       className="rounded-2xl border-2 border-purple-200 bg-white overflow-hidden shadow-sm"
     >
       {/* Header */}
-      <div className="flex items-start justify-between p-4 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 p-4 pb-3">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-purple-100 flex items-center justify-center flex-shrink-0">
             <AlertCircle className="w-5 h-5 text-purple-600" />
           </div>
           <div>
-            <h3 className="font-bold text-slate-900 text-base">遗忘拯救</h3>
+            <h3 className="font-bold text-slate-900 text-sm sm:text-base">遗忘拯救</h3>
             <p className="text-xs text-slate-500 mt-0.5">基于遗忘曲线预警</p>
           </div>
         </div>
-        <span className="px-2.5 py-1 bg-purple-50 text-purple-600 text-xs rounded-full font-medium whitespace-nowrap">
+        <span className="self-start px-2.5 py-1 bg-purple-50 text-purple-600 text-xs rounded-full font-medium whitespace-nowrap">
           智能干预
         </span>
       </div>
@@ -84,7 +84,7 @@ export default function ForgettingRescueCard({ data, onSnooze }) {
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2 px-4 pb-4">
+      <div className="flex flex-col sm:flex-row gap-2 px-4 pb-4">
         <Button
           onClick={() => navigate(`/Tasks?taskId=${primary.id}`)}
           className="flex-1 bg-purple-600 hover:bg-purple-700 text-white rounded-xl h-10"
@@ -94,7 +94,7 @@ export default function ForgettingRescueCard({ data, onSnooze }) {
         <Button
           onClick={onSnooze}
           variant="outline"
-          className="px-5 border-slate-200 rounded-xl h-10"
+          className="w-full sm:w-auto px-5 border-slate-200 rounded-xl h-10"
         >
           延后
         </Button>

@@ -8,17 +8,17 @@ export default function DecisionPreloadCard({ card }) {
 
   return (
     <div className="rounded-2xl border border-green-100 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center text-green-600">
             <ClipboardList className="w-5 h-5" />
           </div>
           <div>
-            <div className="font-semibold text-slate-900">{card.title}</div>
+            <div className="font-semibold text-slate-900 text-sm sm:text-base">{card.title}</div>
             <div className="text-xs text-slate-500 mt-0.5">{card.subtitle}</div>
           </div>
         </div>
-        <span className="text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
+        <span className="self-start text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
           智能辅助
         </span>
       </div>

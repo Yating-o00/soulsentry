@@ -29,14 +29,14 @@ export default function OnTheWayCard({ card, onDismiss, onSnooze }) {
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <Button
           className="flex-1 bg-slate-900 hover:bg-slate-800"
           onClick={() => navigate(card.cta_link || '/Tasks')}
         >
           记住了
         </Button>
-        <Button variant="outline" onClick={onSnooze}>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={onSnooze}>
           <Clock className="w-4 h-4 mr-1" /> 稍后
         </Button>
       </div>

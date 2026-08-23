@@ -15,17 +15,17 @@ export default function GeoContextCard({ card, onSnooze }) {
 
   return (
     <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
             <MapPin className="w-5 h-5" />
           </div>
           <div>
-            <div className="font-semibold text-slate-900">{card.title}</div>
+            <div className="font-semibold text-slate-900 text-sm sm:text-base">{card.title}</div>
             <div className="text-xs text-slate-500 mt-0.5">{card.subtitle}</div>
           </div>
         </div>
-        <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">
+        <span className="self-start text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">
           {card.priority === 'high' ? '高优先级' : '情境感知'}
         </span>
       </div>
@@ -56,14 +56,14 @@ export default function GeoContextCard({ card, onSnooze }) {
         )}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <Button
           className="flex-1 bg-blue-600 hover:bg-blue-700"
           onClick={() => navigate(card.cta_link || '/Tasks')}
         >
           查看详情
         </Button>
-        <Button variant="outline" onClick={onSnooze}>稍后</Button>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={onSnooze}>稍后</Button>
       </div>
     </div>
   );

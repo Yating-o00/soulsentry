@@ -83,7 +83,7 @@ export default function SoulSentryFeed({ showHeader = true, compact = false }) {
       />
 
       {showHeader && (
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
               <Sparkles className="w-4 h-4 text-white" />

@@ -55,12 +55,6 @@ export default function Notes() {
     Taro.navigateTo({ url: `/pages/note-detail/index?id=${id}` });
   };
 
-  const goEdit = (id, e) => {
-    e?.stopPropagation?.();
-    setOpenId(null);
-    Taro.navigateTo({ url: `/pages/note-create/index?id=${id}&mode=edit` });
-  };
-
   const handleShare = async (note, e) => {
     e?.stopPropagation?.();
     setOpenId(null);
@@ -133,7 +127,7 @@ export default function Notes() {
                 borderRadius: "16rpx"
               }}
             >
-              {/* 背景操作按钮 */}
+              {/* 背景操作按钮：左滑出现分享/删除 */}
               <View
                 style={{
                   position: "absolute",
@@ -147,7 +141,7 @@ export default function Notes() {
               >
                 <View
                   style={{
-                    width: "120rpx",
+                    width: "180rpx",
                     background: "#4a5d8f",
                     display: "flex",
                     alignItems: "center",
@@ -161,21 +155,7 @@ export default function Notes() {
                 </View>
                 <View
                   style={{
-                    width: "120rpx",
-                    background: "#384877",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                    fontSize: "28rpx"
-                  }}
-                  onClick={(e) => goEdit(note.id, e)}
-                >
-                  编辑
-                </View>
-                <View
-                  style={{
-                    width: "120rpx",
+                    width: "180rpx",
                     background: "#e53935",
                     display: "flex",
                     alignItems: "center",

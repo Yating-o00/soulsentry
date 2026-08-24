@@ -32,10 +32,28 @@ function wrapText(ctx, text, maxWidth) {
 export default function SharePoster({ visible, onClose, type, title, description, extra, shareToken, canvasId }) {
   const [posterUrl, setPosterUrl] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [canvasStyle, setCanvasStyle] = useState({ width: "600rpx", height: "840rpx" });
 
   const link = shareToken ? `https://www.xinzhan-soulsentry.cn/share/${shareToken}` : "";
   const displayTitle = String(title || "未命名").slice(0, 14);
   const displayDesc = String(description || "与你一起守护这份心意").slice(0, 60);
+
+  useEffect(() => {
+    try {
+      const sys = Taro.getSystemInfoSync();
+      const winWidth = sys.windowWidth || 375;
+      const paddingPx = 32; // 左右各留 32rpx 边距
+      const rpxRatio = 750 / winWidth;
+      const displayWidthPx = winWidth - paddingPx * 2;
+      const displayHeightPx = displayWidthPx * (CANVAS_HEIGHT / CANVAS_WIDTH);
+      setCanvasStyle({
+        width: `${Math.round(displayWidthPx * rpxRatio)}rpx`,
+        height: `${Math.round(displayHeightPx * rpxRatio)}rpx`
+      });
+    } catch {
+      // 使用默认尺寸
+    }
+  }, []);
 
   useEffect(() => {
     if (visible && shareToken && !posterUrl) {
@@ -174,16 +192,15 @@ export default function SharePoster({ visible, onClose, type, title, description
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
-        padding: "40rpx"
+        padding: "32rpx"
       }}
       onClick={onClose}
     >
-      <View style={{ width: "100%", maxWidth: "600rpx" }} onClick={(e) => e.stopPropagation()}>
+      <View style={{ width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <Canvas
           canvasId={canvasId}
           style={{
-            width: "600rpx",
-            height: "840rpx",
+            ...canvasStyle,
             margin: "0 auto",
             borderRadius: "16rpx",
             boxShadow: "0 8rpx 40rpx rgba(0,0,0,0.3)",

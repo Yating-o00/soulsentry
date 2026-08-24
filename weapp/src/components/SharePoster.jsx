@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text, Button, Canvas, Image } from "@tarojs/components";
 import createQRCode from "@/lib/qrcode";
@@ -6,7 +6,6 @@ import createQRCode from "@/lib/qrcode";
 const BASE_WIDTH = 640;
 const THEME = "#384877";
 const THEME_LIGHT = "#3b5aa2";
-const CANVAS_BUFFER_HEIGHT = 2000; // 足够大的绘制缓冲区，避免内容被截断
 
 // 所有尺寸基于 640px 基准画布，实际绘制时按 s = W / BASE_WIDTH 缩放。
 // 统一使用 textBaseline = 'top'，y 坐标表示当前文字/元素的顶部位置，
@@ -15,24 +14,24 @@ const LAYOUT = {
   pad: 48,
   topBarH: 8,
   headerFont: 24,
-  headerGap: 28, // header 文字底部到 title 顶部的间距
+  headerGap: 36, // header 底部到 title 顶部的间距
   titleFont: 36,
   titleFontLong: 30,
-  titleLineH: 56, // 36 + 20
-  titleLineHLong: 46, // 30 + 16
+  titleLineH: 64, // 36 + 28
+  titleLineHLong: 54, // 30 + 24
   titleMaxLines: 4,
   descFont: 26,
-  descLineH: 46, // 26 + 20
+  descLineH: 54, // 26 + 28
   descMaxLines: 6,
   extraFont: 22,
-  extraLineH: 40, // 22 + 18
+  extraLineH: 46, // 22 + 24
   subtaskFont: 24,
-  subtaskLineH: 44, // 24 + 20
+  subtaskLineH: 52, // 24 + 28
   subtaskBulletOffset: 32,
-  subtaskGap: 16,
+  subtaskGap: 20,
   subtaskMaxLines: 2,
   subtaskMaxCount: 8,
-  sectionGap: 28, // 两个 section 之间的间距
+  sectionGap: 32, // 两个 section 之间的间距
   separatorGap: 36,
   footerBrandFont: 26,
   footerTipFont: 18,
@@ -150,7 +149,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
     visibleSubtasks.forEach((sub) => {
       ctx.setFontSize(subtaskFont);
       const lines = wrapText(ctx, sub.title, BASE_WIDTH - pad * 2 - subtaskBulletOffset).slice(0, subtaskMaxLines);
-      const itemH = Math.max(lines.length * subtaskLineH + subtaskGap, 52);
+      const itemH = Math.max(lines.length * subtaskLineH + subtaskGap, 56);
       subtaskMeta.push({ ...sub, lines, itemH });
       y += itemH;
     });
@@ -175,23 +174,30 @@ export default function SharePoster({ visible, onClose, type, title, description
   const [generating, setGenerating] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: BASE_WIDTH, height: 960 });
 
+  const generatedRef = useRef(false);
+  const generatingRef = useRef(false);
+
   const link = shareToken ? `https://www.xinzhan-soulsentry.cn/share/${shareToken}` : "";
   const isNote = type === "note";
 
   useEffect(() => {
     if (!visible) {
       setPosterUrl("");
+      generatedRef.current = false;
       return;
     }
-    if (shareToken) {
-      // 使用 nextTick 确保 canvas 元素已渲染
-      Taro.nextTick(() => {
-        generatePoster();
-      });
-    }
+    if (!shareToken || generatedRef.current) return;
+    generatedRef.current = true;
+
+    // 使用 nextTick 确保 canvas 元素已渲染
+    Taro.nextTick(() => {
+      generatePoster();
+    });
   }, [visible, shareToken]);
 
   const generatePoster = () => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
     setGenerating(true);
     setPosterUrl("");
 
@@ -206,19 +212,21 @@ export default function SharePoster({ visible, onClose, type, title, description
 
       setCanvasSize({ width: widthPx, height: heightPx });
 
-      // 等待 state 更新、Canvas 元素尺寸稳定后再绘制
-      Taro.nextTick(() => {
+      // 等待 React 更新 Canvas 元素尺寸后再绘制
+      setTimeout(() => {
         try {
           const ctx2 = Taro.createCanvasContext(canvasId);
           drawPoster(ctx2, widthPx, heightPx, layout);
         } catch (err) {
           console.error("draw poster failed", err);
           setGenerating(false);
+          generatingRef.current = false;
         }
-      });
+      }, 120);
     } catch (err) {
       console.error("generate poster failed", err);
       setGenerating(false);
+      generatingRef.current = false;
     }
   };
 
@@ -230,7 +238,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.setTextBaseline("top");
 
     // 清空画布
-    ctx.clearRect(0, 0, W, CANVAS_BUFFER_HEIGHT);
+    ctx.clearRect(0, 0, W, H);
 
     // 白底圆角卡片
     ctx.setFillStyle("#ffffff");
@@ -354,19 +362,17 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.draw(false, () => {
       Taro.canvasToTempFilePath({
         canvasId,
-        x: 0,
-        y: 0,
-        width: W,
-        height: H,
         destWidth: W,
         destHeight: H,
         success: (res) => {
           setPosterUrl(res.tempFilePath);
           setGenerating(false);
+          generatingRef.current = false;
         },
         fail: (err) => {
           console.error("canvasToTempFilePath failed", err);
           setGenerating(false);
+          generatingRef.current = false;
           Taro.showToast({ title: "卡片生成失败", icon: "none" });
         }
       });
@@ -430,7 +436,7 @@ export default function SharePoster({ visible, onClose, type, title, description
         onClick={(e) => e.stopPropagation()}
       >
         {/* 显示区域：生成完成后展示图片，高度自然随内容变化 */}
-        <View style={{ width: "100%", display: "flex", justifyContent: "center" }}>
+        <View style={{ width: "100%", display: "flex", justifyContent: "center", position: "relative" }}>
           {posterUrl ? (
             <Image
               src={posterUrl}
@@ -439,7 +445,9 @@ export default function SharePoster({ visible, onClose, type, title, description
                 width: `${canvasSize.width}px`,
                 borderRadius: "20rpx",
                 boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)",
-                background: "#ffffff"
+                background: "#ffffff",
+                position: "relative",
+                zIndex: 2
               }}
             />
           ) : (
@@ -452,12 +460,28 @@ export default function SharePoster({ visible, onClose, type, title, description
                 justifyContent: "center",
                 background: "#ffffff",
                 borderRadius: "20rpx",
-                boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)"
+                boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)",
+                position: "relative",
+                zIndex: 2
               }}
             >
               <Text style={{ color: "#666", fontSize: "28rpx" }}>生成中...</Text>
             </View>
           )}
+
+          {/* 透明 Canvas 用于绘制，放在图片/loading 下方 */}
+          <Canvas
+            canvasId={canvasId}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: `${canvasSize.width}px`,
+              height: `${canvasSize.height}px`,
+              opacity: 0,
+              zIndex: 1
+            }}
+          />
         </View>
 
         {generating && !posterUrl && (
@@ -477,17 +501,6 @@ export default function SharePoster({ visible, onClose, type, title, description
             关闭
           </Button>
         </View>
-      </View>
-
-      {/* 离屏 Canvas：固定大缓冲区，只用于绘制，不展示给用户 */}
-      <View style={{ width: 0, height: 0, overflow: "hidden" }}>
-        <Canvas
-          canvasId={canvasId}
-          style={{
-            width: `${canvasSize.width}px`,
-            height: `${CANVAS_BUFFER_HEIGHT}px`
-          }}
-        />
       </View>
     </View>
   );

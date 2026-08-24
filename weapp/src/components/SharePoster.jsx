@@ -222,7 +222,7 @@ export default function SharePoster({ visible, onClose, type, title, description
           setGenerating(false);
           generatingRef.current = false;
         }
-      }, 120);
+      }, 200);
     } catch (err) {
       console.error("generate poster failed", err);
       setGenerating(false);
@@ -362,6 +362,10 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.draw(false, () => {
       Taro.canvasToTempFilePath({
         canvasId,
+        x: 0,
+        y: 0,
+        width: W,
+        height: H,
         destWidth: W,
         destHeight: H,
         success: (res) => {
@@ -436,7 +440,7 @@ export default function SharePoster({ visible, onClose, type, title, description
         onClick={(e) => e.stopPropagation()}
       >
         {/* 显示区域：生成完成后展示图片，高度自然随内容变化 */}
-        <View style={{ width: "100%", display: "flex", justifyContent: "center", position: "relative" }}>
+        <View style={{ width: "100%", display: "flex", justifyContent: "center" }}>
           {posterUrl ? (
             <Image
               src={posterUrl}
@@ -445,9 +449,7 @@ export default function SharePoster({ visible, onClose, type, title, description
                 width: `${canvasSize.width}px`,
                 borderRadius: "20rpx",
                 boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)",
-                background: "#ffffff",
-                position: "relative",
-                zIndex: 2
+                background: "#ffffff"
               }}
             />
           ) : (
@@ -460,29 +462,25 @@ export default function SharePoster({ visible, onClose, type, title, description
                 justifyContent: "center",
                 background: "#ffffff",
                 borderRadius: "20rpx",
-                boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)",
-                position: "relative",
-                zIndex: 2
+                boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)"
               }}
             >
               <Text style={{ color: "#666", fontSize: "28rpx" }}>生成中...</Text>
             </View>
           )}
-
-          {/* 透明 Canvas 用于绘制，放在图片/loading 下方 */}
-          <Canvas
-            canvasId={canvasId}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: `${canvasSize.width}px`,
-              height: `${canvasSize.height}px`,
-              opacity: 0,
-              zIndex: 1
-            }}
-          />
         </View>
+
+        {/* 屏幕外 Canvas，仅作为绘制缓冲区 */}
+        <Canvas
+          canvasId={canvasId}
+          style={{
+            position: "fixed",
+            top: "-9999px",
+            left: "-9999px",
+            width: `${canvasSize.width}px`,
+            height: `${canvasSize.height}px`
+          }}
+        />
 
         {generating && !posterUrl && (
           <View style={{ textAlign: "center", marginTop: "24rpx" }}>

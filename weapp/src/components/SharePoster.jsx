@@ -7,6 +7,35 @@ const BASE_WIDTH = 640;
 const THEME = "#384877";
 const THEME_LIGHT = "#3b5aa2";
 
+const LAYOUT = {
+  pad: 48,
+  topBarH: 8,
+  headerH: 50,
+  titleFont: 36,
+  titleFontLong: 30,
+  titleLineHeight: 52, // 36 * 1.45
+  titleLineHeightLong: 44, // 30 * 1.45
+  titleMaxLines: 4,
+  titleBottomGap: 16,
+  descFont: 26,
+  descLineHeight: 38,
+  descMaxLines: 6,
+  descBottomGap: 24,
+  extraFont: 22,
+  extraH: 40,
+  subtaskFont: 24,
+  subtaskLineHeight: 34,
+  subtaskMinH: 36,
+  subtaskBulletOffset: 32,
+  subtaskTopGap: 12,
+  subtaskBottomGap: 20,
+  subtaskMaxLines: 2,
+  subtaskMaxCount: 8,
+  separatorGap: 36,
+  qrAreaH: 180,
+  bottomPad: 60
+};
+
 function formatDateTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -51,6 +80,99 @@ function drawQRCode(ctx, text, x, y, size) {
   }
 }
 
+function measureLayout(ctx, title, description, extra, subtasks, isNote) {
+  const {
+    pad,
+    topBarH,
+    headerH,
+    titleFont,
+    titleFontLong,
+    titleLineHeight,
+    titleLineHeightLong,
+    titleMaxLines,
+    titleBottomGap,
+    descFont,
+    descLineHeight,
+    descMaxLines,
+    descBottomGap,
+    extraH,
+    subtaskFont,
+    subtaskLineHeight,
+    subtaskMinH,
+    subtaskBulletOffset,
+    subtaskTopGap,
+    subtaskBottomGap,
+    subtaskMaxLines,
+    subtaskMaxCount,
+    separatorGap,
+    qrAreaH,
+    bottomPad
+  } = LAYOUT;
+
+  let y = pad + topBarH;
+
+  // header
+  y += headerH;
+
+  // title
+  const titleText = String(title || "未命名").trim();
+  const useLongTitle = titleText.length > 40;
+  const titleFontSize = useLongTitle ? titleFontLong : titleFont;
+  const titleLineH = useLongTitle ? titleLineHeightLong : titleLineHeight;
+  ctx.setFontSize(titleFontSize);
+  const titleLines = wrapText(ctx, titleText, BASE_WIDTH - pad * 2).slice(0, titleMaxLines);
+  const titleBoxH = titleLines.length * titleLineH + titleBottomGap;
+  const titleMeta = { text: titleText, lines: titleLines, fontSize: titleFontSize, lineHeight: titleLineH };
+  y += titleBoxH;
+
+  // description
+  let descMeta = null;
+  let descBoxH = 0;
+  if (description) {
+    ctx.setFontSize(descFont);
+    const descLines = wrapText(ctx, String(description).trim(), BASE_WIDTH - pad * 2).slice(0, descMaxLines);
+    descBoxH = descLines.length * descLineHeight + descBottomGap;
+    descMeta = { lines: descLines, lineHeight: descLineHeight };
+    y += descBoxH;
+  }
+
+  // extra
+  let extraBoxH = 0;
+  if (extra) {
+    extraBoxH = extraH;
+    y += extraBoxH;
+  }
+
+  // subtasks
+  let subtaskMeta = [];
+  let subtaskBoxH = 0;
+  if (!isNote && subtasks && subtasks.length > 0) {
+    subtaskBoxH += subtaskTopGap;
+    const visibleSubtasks = subtasks.slice(0, subtaskMaxCount);
+    ctx.setFontSize(subtaskFont);
+    visibleSubtasks.forEach((sub) => {
+      const lines = wrapText(ctx, sub.title, BASE_WIDTH - pad * 2 - subtaskBulletOffset).slice(0, subtaskMaxLines);
+      const itemH = Math.max(lines.length * subtaskLineHeight, subtaskMinH);
+      subtaskMeta.push({ ...sub, lines, itemH });
+      subtaskBoxH += itemH;
+    });
+    subtaskBoxH += subtaskBottomGap;
+    y += subtaskBoxH;
+  }
+
+  // separator + qr area
+  y += separatorGap + qrAreaH + bottomPad;
+
+  return {
+    totalHeight: y,
+    title: titleMeta,
+    description: descMeta,
+    extra: extraBoxH,
+    subtasks: subtaskMeta,
+    subtaskBoxH
+  };
+}
+
 export default function SharePoster({ visible, onClose, type, title, description, extra, subtasks = [], shareToken, canvasId }) {
   const [posterUrl, setPosterUrl] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -59,55 +181,19 @@ export default function SharePoster({ visible, onClose, type, title, description
   const link = shareToken ? `https://www.xinzhan-soulsentry.cn/share/${shareToken}` : "";
   const isNote = type === "note";
 
-  // 计算内容所需高度
-  const computeBaseHeight = () => {
-    const pad = 48;
-    const headerH = 60;
-    const titleH = 72;
-    const descLineH = 38;
-    const subtaskH = 42;
-    const statusH = 60;
-    const qrAreaH = 180;
-    const bottomPad = 60;
-
-    const ctx = Taro.createCanvasContext(canvasId);
-    const titleFontSize = 36;
-    ctx.setFontSize(titleFontSize);
-    const titleLines = wrapText(ctx, String(title || "未命名"), BASE_WIDTH - pad * 2);
-
-    let descLines = [];
-    if (description) {
-      ctx.setFontSize(26);
-      descLines = wrapText(ctx, String(description), BASE_WIDTH - pad * 2);
-    }
-
-    const visibleSubtasks = (subtasks || []).slice(0, 8);
-    const subtaskCount = visibleSubtasks.length;
-
-    return (
-      pad +
-      headerH +
-      titleLines.length * titleH +
-      (descLines.length ? descLines.length * descLineH + 24 : 0) +
-      (subtaskCount ? subtaskCount * subtaskH + 36 : 0) +
-      statusH +
-      qrAreaH +
-      bottomPad
-    );
-  };
-
   useEffect(() => {
     try {
       const sys = Taro.getSystemInfoSync();
       const winWidth = sys.windowWidth || 375;
       const widthPx = Math.round(winWidth * 0.9);
-      const baseHeight = computeBaseHeight();
-      const heightPx = Math.round(widthPx * (baseHeight / BASE_WIDTH));
+      const ctx = Taro.createCanvasContext(canvasId);
+      const layout = measureLayout(ctx, title, description, extra, subtasks, isNote);
+      const heightPx = Math.round(widthPx * (layout.totalHeight / BASE_WIDTH));
       setCanvasSize({ width: widthPx, height: heightPx });
-    } catch {
-      // 使用默认尺寸
+    } catch (err) {
+      console.error("measure layout failed", err);
     }
-  }, [title, description, subtasks.length]);
+  }, [title, description, subtasks.length, extra, type]);
 
   useEffect(() => {
     if (visible && shareToken && !posterUrl && canvasSize.height > 0) {
@@ -126,7 +212,10 @@ export default function SharePoster({ visible, onClose, type, title, description
     const ctx = Taro.createCanvasContext(canvasId);
     const { width: W, height: H } = canvasSize;
     const s = W / BASE_WIDTH;
-    const pad = 48 * s;
+    const pad = LAYOUT.pad * s;
+
+    // 重新计算布局，确保与 canvasSize 严格一致
+    const layout = measureLayout(ctx, title, description, extra, subtasks, isNote);
 
     // 白底圆角卡片
     ctx.setFillStyle("#ffffff");
@@ -138,23 +227,22 @@ export default function SharePoster({ visible, onClose, type, title, description
     grd.addColorStop(0, THEME);
     grd.addColorStop(1, THEME_LIGHT);
     ctx.setFillStyle(grd);
-    roundRectTop(ctx, 0, 0, W, 8 * s, 20 * s);
+    roundRectTop(ctx, 0, 0, W, LAYOUT.topBarH * s, 20 * s);
     ctx.fill();
 
-    let y = pad + 8 * s;
+    let y = pad + LAYOUT.topBarH * s;
 
-    // 头部：类型 + 日期
+    // 头部：类型 + 日期 + 完成度
     ctx.setFillStyle(THEME);
     ctx.setFontSize(Math.round(24 * s));
-    ctx.fillText(isNote ? "心签" : "约定", pad, y);
+    ctx.fillText(isNote ? "心签" : "约定", pad, y + 24 * s);
 
     const dateStr = formatDateTime(new Date().toISOString());
     ctx.setFillStyle("#9ca3af");
     ctx.setFontSize(Math.round(20 * s));
     const dateWidth = ctx.measureText(dateStr).width;
-    ctx.fillText(dateStr, W - pad - dateWidth, y);
+    ctx.fillText(dateStr, W - pad - dateWidth, y + 24 * s);
 
-    // 完成度（仅约定）
     if (!isNote) {
       const doneCount = (subtasks || []).filter((t) => t.status === "completed" || t.status === "done").length;
       const total = (subtasks || []).length;
@@ -162,62 +250,56 @@ export default function SharePoster({ visible, onClose, type, title, description
       ctx.setFillStyle(doneCount === total && total > 0 ? "#10b981" : THEME);
       ctx.setFontSize(Math.round(20 * s));
       const statusWidth = ctx.measureText(statusText).width;
-      ctx.fillText(statusText, W - pad - dateWidth - statusWidth - 20 * s, y);
+      ctx.fillText(statusText, W - pad - dateWidth - statusWidth - 20 * s, y + 24 * s);
     }
 
-    y += 50 * s;
+    y += LAYOUT.headerH * s;
 
     // 标题
-    const titleText = String(title || "未命名").trim();
-    const titleFontSize = titleText.length > 40 ? Math.round(30 * s) : Math.round(36 * s);
+    const { title: titleMeta } = layout;
     ctx.setFillStyle("#111827");
-    ctx.setFontSize(titleFontSize);
-    const titleLines = wrapText(ctx, titleText, BASE_WIDTH - 96);
-    const titleLineHeight = titleFontSize * 1.45;
-    titleLines.slice(0, 4).forEach((line, idx) => {
-      ctx.fillText(line, pad, y + idx * titleLineHeight);
+    ctx.setFontSize(Math.round(titleMeta.fontSize * s));
+    titleMeta.lines.forEach((line, idx) => {
+      ctx.fillText(line, pad, y + idx * titleMeta.lineHeight * s);
     });
-    y += titleLines.length * titleLineHeight + 16 * s;
+    y += titleMeta.lines.length * titleMeta.lineHeight * s + LAYOUT.titleBottomGap * s;
 
     // 描述
-    if (description) {
+    if (layout.description) {
       ctx.setFillStyle("#4b5563");
-      ctx.setFontSize(Math.round(26 * s));
-      const descLines = wrapText(ctx, String(description).trim(), BASE_WIDTH - 96);
-      descLines.slice(0, 6).forEach((line, idx) => {
-        ctx.fillText(line, pad, y + idx * 38 * s);
+      ctx.setFontSize(Math.round(LAYOUT.descFont * s));
+      layout.description.lines.forEach((line, idx) => {
+        ctx.fillText(line, pad, y + idx * LAYOUT.descLineHeight * s);
       });
-      y += Math.min(descLines.length, 6) * 38 * s + 24 * s;
+      y += layout.description.lines.length * LAYOUT.descLineHeight * s + LAYOUT.descBottomGap * s;
     }
 
     // 截止时间（约定）
     if (extra) {
       ctx.setFillStyle(THEME);
-      ctx.setFontSize(Math.round(22 * s));
-      ctx.fillText(extra, pad, y);
-      y += 40 * s;
+      ctx.setFontSize(Math.round(LAYOUT.extraFont * s));
+      ctx.fillText(extra, pad, y + LAYOUT.extraFont * s);
+      y += LAYOUT.extraH * s;
     }
 
     // 子约定（约定）
-    if (!isNote && subtasks && subtasks.length > 0) {
-      y += 12 * s;
-      const visibleSubtasks = subtasks.slice(0, 8);
-      visibleSubtasks.forEach((sub) => {
+    if (!isNote && layout.subtasks.length > 0) {
+      y += LAYOUT.subtaskTopGap * s;
+      layout.subtasks.forEach((sub) => {
         const done = sub.status === "completed" || sub.status === "done";
         ctx.setFillStyle(done ? "#10b981" : "#d1d5db");
         ctx.beginPath();
-        ctx.arc(pad + 10 * s, y - 8 * s, 10 * s, 0, Math.PI * 2);
+        ctx.arc(pad + 10 * s, y + 12 * s, 10 * s, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.setFillStyle(done ? "#6b7280" : "#374151");
-        ctx.setFontSize(Math.round(24 * s));
-        const subLines = wrapText(ctx, sub.title, BASE_WIDTH - 96 - 32 * s);
-        subLines.slice(0, 2).forEach((line, idx) => {
-          ctx.fillText(line, pad + 32 * s, y + idx * 34 * s);
+        ctx.setFontSize(Math.round(LAYOUT.subtaskFont * s));
+        sub.lines.forEach((line, idx) => {
+          ctx.fillText(line, pad + LAYOUT.subtaskBulletOffset * s, y + idx * LAYOUT.subtaskLineHeight * s);
         });
-        y += Math.max(34 * Math.min(subLines.length, 2), 36 * s);
+        y += sub.itemH * s;
       });
-      y += 20 * s;
+      y += LAYOUT.subtaskBottomGap * s;
     }
 
     // 分隔线
@@ -228,7 +310,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.lineTo(W - pad, y);
     ctx.stroke();
 
-    y += 36 * s;
+    y += LAYOUT.separatorGap * s;
 
     // 底部：品牌 + 扫码提示 + QR
     ctx.setFillStyle("#111827");
@@ -239,12 +321,10 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.setFontSize(Math.round(18 * s));
     ctx.fillText("扫码查看 · 评论 · 参与", pad, y + 58 * s);
 
-    // QR 码
     const qrSize = 120 * s;
     const qrX = W - pad - qrSize;
     const qrY = y - 10 * s;
 
-    // QR 白色背景
     ctx.setFillStyle("#ffffff");
     ctx.fillRect(qrX - 8 * s, qrY - 8 * s, qrSize + 16 * s, qrSize + 16 * s);
 
@@ -377,7 +457,7 @@ function roundRectTop(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
   ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.lineTo(x + w, y + h);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
   ctx.lineTo(x, y + h);
   ctx.arcTo(x, y, x + w, y, radius);
   ctx.closePath();

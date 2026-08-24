@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import Taro from "@tarojs/taro";
-import { View, Text, Button, Canvas } from "@tarojs/components";
+import { View, Text, Button, Canvas, Image } from "@tarojs/components";
 import createQRCode from "@/lib/qrcode";
 
 const BASE_WIDTH = 640;
 const THEME = "#384877";
 const THEME_LIGHT = "#3b5aa2";
+const CANVAS_BUFFER_HEIGHT = 2000; // 足够大的绘制缓冲区，避免内容被截断
 
 // 所有尺寸基于 640px 基准画布，实际绘制时按 s = W / BASE_WIDTH 缩放。
 // 统一使用 textBaseline = 'top'，y 坐标表示当前文字/元素的顶部位置，
@@ -177,46 +178,59 @@ export default function SharePoster({ visible, onClose, type, title, description
   const link = shareToken ? `https://www.xinzhan-soulsentry.cn/share/${shareToken}` : "";
   const isNote = type === "note";
 
-  // 只有在分享卡片可见时才计算 canvas 尺寸，否则 canvas 元素尚未渲染，
-  // createCanvasContext 会失败，导致高度始终是默认值 960，造成文字重叠。
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setPosterUrl("");
+      return;
+    }
+    if (shareToken) {
+      // 使用 nextTick 确保 canvas 元素已渲染
+      Taro.nextTick(() => {
+        generatePoster();
+      });
+    }
+  }, [visible, shareToken]);
+
+  const generatePoster = () => {
+    setGenerating(true);
+    setPosterUrl("");
+
     try {
       const sys = Taro.getSystemInfoSync();
       const winWidth = sys.windowWidth || 375;
       const widthPx = Math.round(winWidth * 0.9);
+
       const ctx = Taro.createCanvasContext(canvasId);
       const layout = measureLayout(ctx, title, description, extra, subtasks, isNote);
       const heightPx = Math.round(widthPx * (layout.totalHeight / BASE_WIDTH));
+
       setCanvasSize({ width: widthPx, height: heightPx });
+
+      // 等待 state 更新、Canvas 元素尺寸稳定后再绘制
+      Taro.nextTick(() => {
+        try {
+          const ctx2 = Taro.createCanvasContext(canvasId);
+          drawPoster(ctx2, widthPx, heightPx, layout);
+        } catch (err) {
+          console.error("draw poster failed", err);
+          setGenerating(false);
+        }
+      });
     } catch (err) {
-      console.error("measure layout failed", err);
+      console.error("generate poster failed", err);
+      setGenerating(false);
     }
-  }, [visible, title, description, subtasks.length, extra, type]);
+  };
 
-  useEffect(() => {
-    if (visible && shareToken && !posterUrl && canvasSize.height > 0) {
-      generatePoster();
-    }
-  }, [visible, shareToken, posterUrl, canvasSize]);
-
-  useEffect(() => {
-    if (!visible) {
-      setPosterUrl("");
-    }
-  }, [visible]);
-
-  const generatePoster = () => {
-    setGenerating(true);
-    const ctx = Taro.createCanvasContext(canvasId);
-    const { width: W, height: H } = canvasSize;
+  const drawPoster = (ctx, W, H, layout) => {
     const s = W / BASE_WIDTH;
     const pad = LAYOUT.pad * s;
 
-    const layout = measureLayout(ctx, title, description, extra, subtasks, isNote);
-
     // 统一使用 top baseline，y 即元素顶部
     ctx.setTextBaseline("top");
+
+    // 清空画布
+    ctx.clearRect(0, 0, W, CANVAS_BUFFER_HEIGHT);
 
     // 白底圆角卡片
     ctx.setFillStyle("#ffffff");
@@ -340,6 +354,8 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.draw(false, () => {
       Taro.canvasToTempFilePath({
         canvasId,
+        x: 0,
+        y: 0,
         width: W,
         height: H,
         destWidth: W,
@@ -348,7 +364,8 @@ export default function SharePoster({ visible, onClose, type, title, description
           setPosterUrl(res.tempFilePath);
           setGenerating(false);
         },
-        fail: () => {
+        fail: (err) => {
+          console.error("canvasToTempFilePath failed", err);
           setGenerating(false);
           Taro.showToast({ title: "卡片生成失败", icon: "none" });
         }
@@ -412,35 +429,65 @@ export default function SharePoster({ visible, onClose, type, title, description
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <Canvas
-          canvasId={canvasId}
-          style={{
-            width: `${canvasSize.width}px`,
-            height: `${canvasSize.height}px`,
-            margin: "0 auto",
-            borderRadius: "20rpx",
-            boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)",
-            background: "#ffffff"
-          }}
-        />
+        {/* 显示区域：生成完成后展示图片，高度自然随内容变化 */}
+        <View style={{ width: "100%", display: "flex", justifyContent: "center" }}>
+          {posterUrl ? (
+            <Image
+              src={posterUrl}
+              mode="widthFix"
+              style={{
+                width: `${canvasSize.width}px`,
+                borderRadius: "20rpx",
+                boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)",
+                background: "#ffffff"
+              }}
+            />
+          ) : (
+            <View
+              style={{
+                width: `${canvasSize.width}px`,
+                height: "400rpx",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#ffffff",
+                borderRadius: "20rpx",
+                boxShadow: "0 16rpx 60rpx rgba(0,0,0,0.25)"
+              }}
+            >
+              <Text style={{ color: "#666", fontSize: "28rpx" }}>生成中...</Text>
+            </View>
+          )}
+        </View>
 
-        {generating && (
+        {generating && !posterUrl && (
           <View style={{ textAlign: "center", marginTop: "24rpx" }}>
-            <Text style={{ color: "#fff", fontSize: "28rpx" }}>生成中...</Text>
+            <Text style={{ color: "#fff", fontSize: "28rpx" }}>卡片生成中...</Text>
           </View>
         )}
 
         <View style={{ marginTop: "32rpx" }}>
-          <Button className="ss-btn" onClick={savePoster} disabled={generating}>
+          <Button className="ss-btn" onClick={savePoster} disabled={generating && !posterUrl}>
             保存到相册
           </Button>
-          <Button className="ss-btn ss-btn-plain" onClick={copyLink} disabled={generating}>
+          <Button className="ss-btn ss-btn-plain" onClick={copyLink} disabled={generating && !posterUrl}>
             复制链接
           </Button>
           <Button className="ss-btn ss-btn-plain" onClick={onClose}>
             关闭
           </Button>
         </View>
+      </View>
+
+      {/* 离屏 Canvas：固定大缓冲区，只用于绘制，不展示给用户 */}
+      <View style={{ width: 0, height: 0, overflow: "hidden" }}>
+        <Canvas
+          canvasId={canvasId}
+          style={{
+            width: `${canvasSize.width}px`,
+            height: `${CANVAS_BUFFER_HEIGHT}px`
+          }}
+        />
       </View>
     </View>
   );

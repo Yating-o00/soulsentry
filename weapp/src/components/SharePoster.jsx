@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text, Button, Canvas } from "@tarojs/components";
 
-const CANVAS_WIDTH = 600;
-const CANVAS_HEIGHT = 840;
+const BASE_WIDTH = 600;
+const BASE_HEIGHT = 840;
 
 function formatDateTime(iso) {
   if (!iso) return "";
@@ -32,24 +32,18 @@ function wrapText(ctx, text, maxWidth) {
 export default function SharePoster({ visible, onClose, type, title, description, extra, shareToken, canvasId }) {
   const [posterUrl, setPosterUrl] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [canvasStyle, setCanvasStyle] = useState({ width: "600rpx", height: "840rpx" });
+  const [canvasSize, setCanvasSize] = useState({ width: BASE_WIDTH, height: BASE_HEIGHT });
 
   const link = shareToken ? `https://www.xinzhan-soulsentry.cn/share/${shareToken}` : "";
-  const displayTitle = String(title || "未命名").slice(0, 14);
-  const displayDesc = String(description || "与你一起守护这份心意").slice(0, 60);
 
   useEffect(() => {
     try {
       const sys = Taro.getSystemInfoSync();
       const winWidth = sys.windowWidth || 375;
-      const paddingPx = 32; // 左右各留 32rpx 边距
-      const rpxRatio = 750 / winWidth;
-      const displayWidthPx = winWidth - paddingPx * 2;
-      const displayHeightPx = displayWidthPx * (CANVAS_HEIGHT / CANVAS_WIDTH);
-      setCanvasStyle({
-        width: `${Math.round(displayWidthPx * rpxRatio)}rpx`,
-        height: `${Math.round(displayHeightPx * rpxRatio)}rpx`
-      });
+      // 卡片宽度占屏幕 90%，留出边距，高度按比例
+      const widthPx = Math.round(winWidth * 0.9);
+      const heightPx = Math.round(widthPx * (BASE_HEIGHT / BASE_WIDTH));
+      setCanvasSize({ width: widthPx, height: heightPx });
     } catch {
       // 使用默认尺寸
     }
@@ -59,7 +53,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     if (visible && shareToken && !posterUrl) {
       generatePoster();
     }
-  }, [visible, shareToken, posterUrl]);
+  }, [visible, shareToken, posterUrl, canvasSize.width, canvasSize.height]);
 
   useEffect(() => {
     if (!visible) {
@@ -70,72 +64,76 @@ export default function SharePoster({ visible, onClose, type, title, description
   const generatePoster = () => {
     setGenerating(true);
     const ctx = Taro.createCanvasContext(canvasId);
+    const { width: W, height: H } = canvasSize;
+    const scale = W / BASE_WIDTH;
 
     // 背景
-    const grd = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    const grd = ctx.createLinearGradient(0, 0, 0, H);
     grd.addColorStop(0, "#384877");
     grd.addColorStop(1, "#4a5d8f");
     ctx.setFillStyle(grd);
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fillRect(0, 0, W, H);
 
     // 顶部品牌
     ctx.setFillStyle("#ffffff");
-    ctx.setFontSize(28);
-    ctx.fillText("SoulSentry", 40, 60);
+    ctx.setFontSize(Math.round(28 * scale));
+    ctx.fillText("SoulSentry", 40 * scale, 60 * scale);
 
     // 类型标签
     ctx.setFillStyle("rgba(255,255,255,0.9)");
-    ctx.setFontSize(22);
-    ctx.fillText(type === "note" ? "心签分享" : "约定分享", 40, 110);
+    ctx.setFontSize(Math.round(22 * scale));
+    ctx.fillText(type === "note" ? "心签分享" : "约定分享", 40 * scale, 110 * scale);
 
     // 标题
-    ctx.setFontSize(40);
-    ctx.fillText(displayTitle, 40, 170);
+    const displayTitle = String(title || "未命名").slice(0, 16);
+    ctx.setFontSize(Math.round(40 * scale));
+    ctx.fillText(displayTitle, 40 * scale, 170 * scale);
 
     // 描述
-    ctx.setFontSize(26);
-    const descLines = wrapText(ctx, displayDesc, 520);
+    const displayDesc = String(description || "与你一起守护这份心意").slice(0, 80);
+    ctx.setFontSize(Math.round(26 * scale));
+    const descLines = wrapText(ctx, displayDesc, 520 * scale);
     descLines.slice(0, 4).forEach((line, idx) => {
-      ctx.fillText(line, 40, 230 + idx * 40);
+      ctx.fillText(line, 40 * scale, 230 * scale + idx * 40 * scale);
     });
 
-    // 额外信息（截止时间等）
+    // 额外信息
     if (extra) {
-      ctx.setFontSize(24);
-      ctx.fillText(extra, 40, 270 + Math.min(descLines.length, 4) * 40);
+      ctx.setFontSize(Math.round(24 * scale));
+      ctx.fillText(extra, 40 * scale, 270 * scale + Math.min(descLines.length, 4) * 40 * scale);
     }
 
     // 白色内容区
     ctx.setFillStyle("#ffffff");
-    ctx.fillRect(40, 360, 520, 360);
+    ctx.fillRect(40 * scale, 360 * scale, 520 * scale, 360 * scale);
 
     // 内容区文字
     ctx.setFillStyle("#384877");
-    ctx.setFontSize(28);
-    ctx.fillText(type === "note" ? "扫码查看心签" : "扫码参与约定", 70, 420);
+    ctx.setFontSize(Math.round(28 * scale));
+    ctx.fillText(type === "note" ? "扫码查看心签" : "扫码参与约定", 70 * scale, 420 * scale);
 
     ctx.setFillStyle("#666666");
-    ctx.setFontSize(22);
-    ctx.fillText("对方可匿名查看、留言或勾选", 70, 460);
+    ctx.setFontSize(Math.round(22 * scale));
+    ctx.fillText("对方可匿名查看、留言或勾选", 70 * scale, 460 * scale);
 
     // 链接
     ctx.setFillStyle("#384877");
-    ctx.setFontSize(20);
+    ctx.setFontSize(Math.round(20 * scale));
     const shortLink = link.length > 48 ? link.slice(0, 48) + "…" : link;
-    ctx.fillText(shortLink, 70, 640);
+    ctx.fillText(shortLink, 70 * scale, 640 * scale);
 
     // 底部提示
     ctx.setFillStyle("rgba(255,255,255,0.8)");
-    ctx.setFontSize(22);
-    ctx.fillText("长按识别 · 共同守护", 40, 800);
+    ctx.setFontSize(Math.round(22 * scale));
+    ctx.fillText("长按识别 · 共同守护", 40 * scale, 800 * scale);
 
     ctx.draw(false, () => {
       Taro.canvasToTempFilePath({
         canvasId,
-        width: CANVAS_WIDTH,
-        height: CANVAS_HEIGHT,
-        destWidth: CANVAS_WIDTH,
-        destHeight: CANVAS_HEIGHT,
+        width: W,
+        height: H,
+        destWidth: W,
+        destHeight: H,
         success: (res) => {
           setPosterUrl(res.tempFilePath);
           setGenerating(false);
@@ -192,7 +190,7 @@ export default function SharePoster({ visible, onClose, type, title, description
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
-        padding: "32rpx"
+        padding: "5%"
       }}
       onClick={onClose}
     >
@@ -200,7 +198,8 @@ export default function SharePoster({ visible, onClose, type, title, description
         <Canvas
           canvasId={canvasId}
           style={{
-            ...canvasStyle,
+            width: `${canvasSize.width}px`,
+            height: `${canvasSize.height}px`,
             margin: "0 auto",
             borderRadius: "16rpx",
             boxShadow: "0 8rpx 40rpx rgba(0,0,0,0.3)",

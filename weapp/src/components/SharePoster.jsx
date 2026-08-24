@@ -10,22 +10,22 @@ const THEME_LIGHT = "#3b5aa2";
 const LAYOUT = {
   pad: 48,
   topBarH: 8,
-  headerH: 50,
+  headerH: 68,
   titleFont: 36,
   titleFontLong: 30,
   titleLineHeight: 52, // 36 * 1.45
   titleLineHeightLong: 44, // 30 * 1.45
   titleMaxLines: 4,
-  titleBottomGap: 16,
+  titleBottomGap: 20,
   descFont: 26,
   descLineHeight: 38,
   descMaxLines: 6,
   descBottomGap: 24,
   extraFont: 22,
-  extraH: 40,
+  extraH: 52,
   subtaskFont: 24,
   subtaskLineHeight: 34,
-  subtaskMinH: 36,
+  subtaskMinH: 44,
   subtaskBulletOffset: 32,
   subtaskTopGap: 12,
   subtaskBottomGap: 20,
@@ -152,7 +152,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
     ctx.setFontSize(subtaskFont);
     visibleSubtasks.forEach((sub) => {
       const lines = wrapText(ctx, sub.title, BASE_WIDTH - pad * 2 - subtaskBulletOffset).slice(0, subtaskMaxLines);
-      const itemH = Math.max(lines.length * subtaskLineHeight, subtaskMinH);
+      const itemH = Math.max(lines.length * subtaskLineHeight + 8, subtaskMinH);
       subtaskMeta.push({ ...sub, lines, itemH });
       subtaskBoxH += itemH;
     });
@@ -289,7 +289,7 @@ export default function SharePoster({ visible, onClose, type, title, description
         const done = sub.status === "completed" || sub.status === "done";
         ctx.setFillStyle(done ? "#10b981" : "#d1d5db");
         ctx.beginPath();
-        ctx.arc(pad + 10 * s, y + 12 * s, 10 * s, 0, Math.PI * 2);
+        ctx.arc(pad + 10 * s, y + 2 * s, 10 * s, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.setFillStyle(done ? "#6b7280" : "#374151");

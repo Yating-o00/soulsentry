@@ -52,9 +52,20 @@ function wrapText(ctx, text, maxWidth) {
   const chars = String(text || "").split("");
   const lines = [];
   let line = "";
+
+  // 部分环境下 Canvas 2D 字体未就绪时 measureText 会返回 0，
+  // 此时按当前字体大小估算中文字符宽度作为 fallback。
+  const probeWidth = ctx.measureText("中").width;
+  const fontSize = parseInt(ctx.font) || 26;
+  const fallbackCharWidth = probeWidth > 0 ? 0 : fontSize;
+
   for (const char of chars) {
     const test = line + char;
-    if (ctx.measureText(test).width > maxWidth && line) {
+    let width = ctx.measureText(test).width;
+    if (fallbackCharWidth && width === 0) {
+      width = test.length * fallbackCharWidth;
+    }
+    if (width > maxWidth && line) {
       lines.push(line);
       line = char;
     } else {
@@ -121,7 +132,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
   const useLongTitle = titleText.length > 40;
   const titleFontSize = useLongTitle ? titleFontLong : titleFont;
   const titleLineHeight = useLongTitle ? titleLineHLong : titleLineH;
-  ctx.font = `${titleFontSize}px sans-serif`;
+  ctx.font = `${titleFontSize}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
   const titleLines = wrapText(ctx, titleText, BASE_WIDTH - pad * 2).slice(0, titleMaxLines);
   y += titleLines.length * titleLineHeight;
   const titleMeta = { text: titleText, lines: titleLines, fontSize: titleFontSize, lineHeight: titleLineHeight };
@@ -129,7 +140,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
   let descLines = [];
   if (description) {
     y += sectionGap;
-    ctx.font = `${descFont}px sans-serif`;
+    ctx.font = `${descFont}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
     const maxLines = isNote ? noteDescMaxLines : descMaxLines;
     descLines = wrapText(ctx, String(description).trim(), BASE_WIDTH - pad * 2).slice(0, maxLines);
     y += descLines.length * descLineH;
@@ -145,7 +156,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
     y += sectionGap;
     const visibleSubtasks = subtasks.slice(0, subtaskMaxCount);
     visibleSubtasks.forEach((sub) => {
-      ctx.font = `${subtaskFont}px sans-serif`;
+      ctx.font = `${subtaskFont}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
       const lines = wrapText(ctx, sub.title, BASE_WIDTH - pad * 2 - subtaskBulletOffset).slice(0, subtaskMaxLines);
       const itemH = Math.max(lines.length * subtaskLineH + subtaskGap, 56);
       subtaskMeta.push({ ...sub, lines, itemH });
@@ -289,12 +300,12 @@ export default function SharePoster({ visible, onClose, type, title, description
 
     // header
     ctx.fillStyle = THEME;
-    ctx.font = `${Math.round(LAYOUT.headerFont * s)}px sans-serif`;
+    ctx.font = `${Math.round(LAYOUT.headerFont * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
     ctx.fillText(isNote ? "心签" : "约定", pad, y);
 
     const dateStr = formatDateTime(new Date().toISOString());
     ctx.fillStyle = "#9ca3af";
-    ctx.font = `${Math.round(20 * s)}px sans-serif`;
+    ctx.font = `${Math.round(20 * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
     const dateWidth = ctx.measureText(dateStr).width;
     ctx.fillText(dateStr, W - pad - dateWidth, y + (LAYOUT.headerFont - 20) * s * 0.5);
 
@@ -303,7 +314,7 @@ export default function SharePoster({ visible, onClose, type, title, description
       const total = (subtasks || []).length;
       const statusText = total > 0 ? `完成 ${doneCount}/${total}` : "进行中";
       ctx.fillStyle = doneCount === total && total > 0 ? "#10b981" : THEME;
-      ctx.font = `${Math.round(20 * s)}px sans-serif`;
+      ctx.font = `${Math.round(20 * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
       const statusWidth = ctx.measureText(statusText).width;
       ctx.fillText(statusText, W - pad - dateWidth - statusWidth - 20 * s, y + (LAYOUT.headerFont - 20) * s * 0.5);
     }
@@ -313,7 +324,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     // title
     const { title: titleMeta } = layout;
     ctx.fillStyle = "#111827";
-    ctx.font = `${Math.round(titleMeta.fontSize * s)}px sans-serif`;
+    ctx.font = `${Math.round(titleMeta.fontSize * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
     titleMeta.lines.forEach((line, idx) => {
       ctx.fillText(line, pad, y + idx * titleMeta.lineHeight * s);
     });
@@ -323,7 +334,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     if (layout.description.length > 0) {
       y += LAYOUT.sectionGap * s;
       ctx.fillStyle = "#4b5563";
-      ctx.font = `${Math.round(LAYOUT.descFont * s)}px sans-serif`;
+      ctx.font = `${Math.round(LAYOUT.descFont * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
       layout.description.forEach((line, idx) => {
         ctx.fillText(line, pad, y + idx * LAYOUT.descLineH * s);
       });
@@ -334,7 +345,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     if (extra) {
       y += LAYOUT.sectionGap * s;
       ctx.fillStyle = THEME;
-      ctx.font = `${Math.round(LAYOUT.extraFont * s)}px sans-serif`;
+      ctx.font = `${Math.round(LAYOUT.extraFont * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
       ctx.fillText(extra, pad, y);
       y += LAYOUT.extraLineH * s;
     }
@@ -351,7 +362,7 @@ export default function SharePoster({ visible, onClose, type, title, description
         ctx.fill();
 
         ctx.fillStyle = done ? "#6b7280" : "#374151";
-        ctx.font = `${Math.round(LAYOUT.subtaskFont * s)}px sans-serif`;
+        ctx.font = `${Math.round(LAYOUT.subtaskFont * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
         sub.lines.forEach((line, idx) => {
           ctx.fillText(line, pad + LAYOUT.subtaskBulletOffset * s, y + idx * LAYOUT.subtaskLineH * s);
         });
@@ -372,11 +383,11 @@ export default function SharePoster({ visible, onClose, type, title, description
     y += LAYOUT.separatorGap * s;
 
     ctx.fillStyle = "#111827";
-    ctx.font = `${Math.round(LAYOUT.footerBrandFont * s)}px sans-serif`;
+    ctx.font = `${Math.round(LAYOUT.footerBrandFont * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
     ctx.fillText("心栈 SoulSentry", pad, y);
 
     ctx.fillStyle = "#9ca3af";
-    ctx.font = `${Math.round(LAYOUT.footerTipFont * s)}px sans-serif`;
+    ctx.font = `${Math.round(LAYOUT.footerTipFont * s)}px "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
     ctx.fillText("扫码查看 · 评论 · 参与", pad, y + (LAYOUT.footerBrandFont + LAYOUT.footerTipGap) * s);
 
     const qrSize = LAYOUT.qrSize * s;

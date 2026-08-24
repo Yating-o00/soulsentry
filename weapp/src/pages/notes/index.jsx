@@ -58,13 +58,13 @@ export default function Notes() {
     Taro.navigateTo({ url: "/pages/note-create/index" });
   };
 
-  const goDetail = (id) => {
+  const goEdit = (id) => {
     if (openId) {
       setOpenId(null);
       resetOffset(openId, 0);
       return;
     }
-    Taro.navigateTo({ url: `/pages/note-detail/index?id=${id}` });
+    Taro.navigateTo({ url: `/pages/note-create/index?mode=edit&id=${id}` });
   };
 
   const handleShare = async (note, e) => {
@@ -178,7 +178,7 @@ export default function Notes() {
                     boxShadow: "0 2rpx 12rpx rgba(0, 0, 0, 0.04)",
                     borderRadius: "16rpx"
                   }}
-                  onClick={() => goDetail(note.id)}
+                  onClick={() => goEdit(note.id)}
                 >
                   <View className="ss-row">
                     <Text style={{ fontSize: "32rpx", fontWeight: 600, color: "#333", flex: 1 }}>

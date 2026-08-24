@@ -1,11 +1,25 @@
 import { useState, useEffect } from "react";
 import Taro from "@tarojs/taro";
-import { View, Input, Textarea, Button, ScrollView } from "@tarojs/components";
+import { View, Input, Textarea, Button, ScrollView, Text } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
+
+function normalizeTags(value) {
+  if (Array.isArray(value)) return value.filter((t) => typeof t === "string" && t.trim()).map((t) => t.trim());
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter((t) => typeof t === "string" && t.trim()).map((t) => t.trim());
+    } catch {}
+    return value.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
+  }
+  return [];
+}
 
 export default function NoteCreate() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState("");
   const [feedback, setFeedback] = useState("");
   const [createdNote, setCreatedNote] = useState(null);
   const [step, setStep] = useState("form");
@@ -30,6 +44,7 @@ export default function NoteCreate() {
       const note = await get(`/notes/${id}`);
       setTitle(note.title || "");
       setContent(note.content || "");
+      setTags(normalizeTags(note.tags));
     } catch (err) {
       // handled globally
     } finally {
@@ -45,20 +60,20 @@ export default function NoteCreate() {
 
     setLoading(true);
     try {
+      const payload = {
+        title: title.trim() || undefined,
+        content: content.trim(),
+        tags: tags.length > 0 ? tags : undefined
+      };
+
       if (isEdit && editId) {
-        await patch(`/notes/${editId}`, {
-          title: title.trim() || undefined,
-          content: content.trim()
-        });
+        await patch(`/notes/${editId}`, payload);
         Taro.showToast({ title: "更新成功", icon: "success" });
         setTimeout(() => Taro.navigateBack(), 500);
         return;
       }
 
-      const note = await post("/notes", {
-        title: title.trim() || undefined,
-        content: content.trim()
-      });
+      const note = await post("/notes", payload);
       setCreatedNote(note);
 
       // 获取 AI 正反馈
@@ -100,6 +115,36 @@ export default function NoteCreate() {
     Taro.navigateBack();
   };
 
+  const addTag = (raw) => {
+    const text = String(raw || tagInput).trim().replace(/[,，]/g, "");
+    if (!text) return;
+    if (tags.includes(text)) {
+      setTagInput("");
+      return;
+    }
+    setTags([...tags, text]);
+    setTagInput("");
+  };
+
+  const removeTag = (idx) => {
+    setTags(tags.filter((_, i) => i !== idx));
+  };
+
+  const onTagInput = (e) => {
+    const value = e.detail.value || "";
+    if (value.includes(",") || value.includes("，")) {
+      const parts = value.split(/[,，]/);
+      parts.slice(0, -1).forEach((p) => addTag(p));
+      setTagInput(parts[parts.length - 1]);
+      return;
+    }
+    setTagInput(value);
+  };
+
+  const onTagConfirm = () => {
+    addTag();
+  };
+
   const renderForm = () => (
     <View className="ss-card">
       <View className="ss-title">{isEdit ? "编辑心签" : "新建心签"}</View>
@@ -123,6 +168,59 @@ export default function NoteCreate() {
           value={content}
           onInput={(e) => setContent(e.detail.value)}
         />
+      </View>
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">标签</View>
+        <View
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "12rpx",
+            padding: "16rpx",
+            background: "#f8f9fb",
+            borderRadius: "12rpx",
+            border: "1rpx solid #e5e6eb"
+          }}
+        >
+          {tags.map((tag, idx) => (
+            <View
+              key={`${tag}-${idx}`}
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "center",
+                background: "linear-gradient(135deg, #eef1f7 0%, #e8ecf5 100%)",
+                borderRadius: "24rpx",
+                padding: "8rpx 20rpx",
+                border: "1rpx solid #d1d5db"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", color: "#384877" }}>{tag}</Text>
+              <Text
+                style={{ fontSize: "24rpx", color: "#9ca3af", marginLeft: "12rpx", padding: "0 4rpx" }}
+                onClick={() => removeTag(idx)}
+              >
+                ×
+              </Text>
+            </View>
+          ))}
+          <Input
+            style={{
+              minWidth: "140rpx",
+              flex: 1,
+              fontSize: "28rpx",
+              color: "#333",
+              padding: "8rpx 12rpx"
+            }}
+            placeholder={tags.length ? "" : "输入标签，回车或逗号添加"}
+            value={tagInput}
+            onInput={onTagInput}
+            onConfirm={onTagConfirm}
+          />
+        </View>
       </View>
 
       <Button className="ss-btn" loading={loading} disabled={loading || !content.trim()} onClick={submit}>

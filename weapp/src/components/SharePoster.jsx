@@ -8,12 +8,13 @@ const THEME = "#384877";
 const THEME_LIGHT = "#3b5aa2";
 
 // 所有尺寸基于 640px 基准画布，实际绘制时按 s = W / BASE_WIDTH 缩放。
-// y 坐标均表示当前行文字的基线位置，lineH 已包含字体高度和行间距。
+// 统一使用 textBaseline = 'top'，y 坐标表示当前文字/元素的顶部位置，
+// lineH 表示一行文字顶部到下一行文字顶部的距离，已包含字体高度和安全间距。
 const LAYOUT = {
   pad: 48,
   topBarH: 8,
   headerFont: 24,
-  headerLineH: 64, // 24 + 40 间距，确保与 title 不重叠
+  headerGap: 28, // header 文字底部到 title 顶部的间距
   titleFont: 36,
   titleFontLong: 30,
   titleLineH: 56, // 36 + 20
@@ -23,14 +24,14 @@ const LAYOUT = {
   descLineH: 46, // 26 + 20
   descMaxLines: 6,
   extraFont: 22,
-  extraLineH: 42, // 22 + 20
+  extraLineH: 40, // 22 + 18
   subtaskFont: 24,
-  subtaskLineH: 42, // 24 + 18
+  subtaskLineH: 44, // 24 + 20
   subtaskBulletOffset: 32,
   subtaskGap: 16,
   subtaskMaxLines: 2,
   subtaskMaxCount: 8,
-  sectionGap: 24,
+  sectionGap: 28, // 两个 section 之间的间距
   separatorGap: 36,
   footerBrandFont: 26,
   footerTipFont: 18,
@@ -87,7 +88,8 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
   const {
     pad,
     topBarH,
-    headerLineH,
+    headerFont,
+    headerGap,
     titleFont,
     titleFontLong,
     titleLineH,
@@ -112,7 +114,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
   let y = pad + topBarH;
 
   // header
-  y += headerLineH;
+  y += headerFont + headerGap;
 
   // title
   const titleText = String(title || "未命名").trim();
@@ -147,7 +149,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
     visibleSubtasks.forEach((sub) => {
       ctx.setFontSize(subtaskFont);
       const lines = wrapText(ctx, sub.title, BASE_WIDTH - pad * 2 - subtaskBulletOffset).slice(0, subtaskMaxLines);
-      const itemH = Math.max(lines.length * subtaskLineH + subtaskGap, 48);
+      const itemH = Math.max(lines.length * subtaskLineH + subtaskGap, 52);
       subtaskMeta.push({ ...sub, lines, itemH });
       y += itemH;
     });
@@ -210,6 +212,9 @@ export default function SharePoster({ visible, onClose, type, title, description
 
     const layout = measureLayout(ctx, title, description, extra, subtasks, isNote);
 
+    // 统一使用 top baseline，y 即元素顶部
+    ctx.setTextBaseline("top");
+
     // 白底圆角卡片
     ctx.setFillStyle("#ffffff");
     roundRect(ctx, 0, 0, W, H, 20 * s);
@@ -234,7 +239,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.setFillStyle("#9ca3af");
     ctx.setFontSize(Math.round(20 * s));
     const dateWidth = ctx.measureText(dateStr).width;
-    ctx.fillText(dateStr, W - pad - dateWidth, y);
+    ctx.fillText(dateStr, W - pad - dateWidth, y + (LAYOUT.headerFont - 20) * s * 0.5);
 
     if (!isNote) {
       const doneCount = (subtasks || []).filter((t) => t.status === "completed" || t.status === "done").length;
@@ -243,10 +248,10 @@ export default function SharePoster({ visible, onClose, type, title, description
       ctx.setFillStyle(doneCount === total && total > 0 ? "#10b981" : THEME);
       ctx.setFontSize(Math.round(20 * s));
       const statusWidth = ctx.measureText(statusText).width;
-      ctx.fillText(statusText, W - pad - dateWidth - statusWidth - 20 * s, y);
+      ctx.fillText(statusText, W - pad - dateWidth - statusWidth - 20 * s, y + (LAYOUT.headerFont - 20) * s * 0.5);
     }
 
-    y += LAYOUT.headerLineH * s;
+    y += (LAYOUT.headerFont + LAYOUT.headerGap) * s;
 
     // title
     const { title: titleMeta } = layout;
@@ -282,9 +287,11 @@ export default function SharePoster({ visible, onClose, type, title, description
       y += LAYOUT.sectionGap * s;
       layout.subtasks.forEach((sub) => {
         const done = sub.status === "completed" || sub.status === "done";
+
+        // 圆点与第一行文字垂直居中
         ctx.setFillStyle(done ? "#10b981" : "#d1d5db");
         ctx.beginPath();
-        ctx.arc(pad + 10 * s, y, 10 * s, 0, Math.PI * 2);
+        ctx.arc(pad + 10 * s, y + (LAYOUT.subtaskFont - 20) * s * 0.5 + 10 * s, 10 * s, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.setFillStyle(done ? "#6b7280" : "#374151");
@@ -310,11 +317,11 @@ export default function SharePoster({ visible, onClose, type, title, description
 
     ctx.setFillStyle("#111827");
     ctx.setFontSize(Math.round(LAYOUT.footerBrandFont * s));
-    ctx.fillText("心栈 SoulSentry", pad, y + LAYOUT.footerBrandFont * s);
+    ctx.fillText("心栈 SoulSentry", pad, y);
 
     ctx.setFillStyle("#9ca3af");
     ctx.setFontSize(Math.round(LAYOUT.footerTipFont * s));
-    ctx.fillText("扫码查看 · 评论 · 参与", pad, y + (LAYOUT.footerBrandFont + LAYOUT.footerTipGap + LAYOUT.footerTipFont) * s);
+    ctx.fillText("扫码查看 · 评论 · 参与", pad, y + (LAYOUT.footerBrandFont + LAYOUT.footerTipGap) * s);
 
     const qrSize = LAYOUT.qrSize * s;
     const qrX = W - pad - qrSize;

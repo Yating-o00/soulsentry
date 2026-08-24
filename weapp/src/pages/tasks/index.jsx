@@ -491,6 +491,7 @@ export default function Tasks() {
         title={posterTask?.title}
         description={posterTask?.description}
         extra={posterTask?.end_time ? `截止时间：${formatDateTime(posterTask.end_time)}` : ""}
+        subtasks={subtaskMap[posterTask?.id] || []}
         shareToken={posterToken}
         canvasId="taskShareCanvas"
       />

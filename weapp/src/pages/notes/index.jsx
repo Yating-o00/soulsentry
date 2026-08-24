@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView, Button, MovableArea, MovableView } from "@tarojs/components";
 import { get, post, del } from "@/utils/api";
+import SharePoster from "@/components/SharePoster";
 
 const statusMap = {
   active: { text: "正常", className: "ss-tag-primary" },
@@ -31,6 +32,8 @@ export default function Notes() {
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState(null);
   const [offsets, setOffsets] = useState({});
+  const [posterNote, setPosterNote] = useState(null);
+  const [posterToken, setPosterToken] = useState("");
 
   const ACTION_WIDTH = useMemo(() => getActionWidthPx(), []);
   const SCREEN_WIDTH = useMemo(() => getScreenWidthPx(), []);
@@ -70,14 +73,16 @@ export default function Notes() {
     resetOffset(note.id, 0);
     try {
       const share = await post(`/public/share/generate/note/${note.id}`);
-      const link = `https://www.xinzhan-soulsentry.cn/share/${share.token}`;
-      Taro.setClipboardData({
-        data: link,
-        success: () => Taro.showToast({ title: "分享链接已复制", icon: "success" })
-      });
+      setPosterNote(note);
+      setPosterToken(share.token || "");
     } catch (err) {
       Taro.showToast({ title: "分享生成失败", icon: "none" });
     }
+  };
+
+  const closePoster = () => {
+    setPosterNote(null);
+    setPosterToken("");
   };
 
   const handleDelete = async (id, e) => {
@@ -233,6 +238,16 @@ export default function Notes() {
       </ScrollView>
 
       <Button className="ss-fab" onClick={goCreate}>+</Button>
+
+      <SharePoster
+        visible={Boolean(posterNote)}
+        onClose={closePoster}
+        type="note"
+        title={posterNote?.title || "心签"}
+        description={posterNote?.plain_text || posterNote?.content}
+        shareToken={posterToken}
+        canvasId="noteShareCanvas"
+      />
     </View>
   );
 }

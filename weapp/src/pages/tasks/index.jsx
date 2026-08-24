@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView, Button, MovableArea, MovableView } from "@tarojs/components";
 import { get, post, del, patch } from "@/utils/api";
+import SharePoster from "@/components/SharePoster";
 
 const statusMap = {
   pending: { text: "待办", className: "ss-tag-warning" },
@@ -54,6 +55,8 @@ export default function Tasks() {
   const [offsets, setOffsets] = useState({});
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [posterTask, setPosterTask] = useState(null);
+  const [posterToken, setPosterToken] = useState("");
   const moveXRef = useRef({});
 
   const ACTION_WIDTH = useMemo(() => getActionWidthPx(), []);
@@ -111,10 +114,16 @@ export default function Tasks() {
   const handleShare = async (task) => {
     try {
       const share = await post(`/public/share/generate/task/${task.id}`);
-      Taro.navigateTo({ url: `/pages/share/index?token=${share.token}` });
+      setPosterTask(task);
+      setPosterToken(share.token || "");
     } catch (err) {
       Taro.showToast({ title: "分享生成失败", icon: "none" });
     }
+  };
+
+  const closePoster = () => {
+    setPosterTask(null);
+    setPosterToken("");
   };
 
   const handleDelete = async (id) => {
@@ -474,8 +483,26 @@ export default function Tasks() {
       </ScrollView>
 
       <Button className="ss-fab" onClick={goCreate}>+</Button>
+
+      <SharePoster
+        visible={Boolean(posterTask)}
+        onClose={closePoster}
+        type="task"
+        title={posterTask?.title}
+        description={posterTask?.description}
+        extra={posterTask?.end_time ? `截止时间：${formatDateTime(posterTask.end_time)}` : ""}
+        shareToken={posterToken}
+        canvasId="taskShareCanvas"
+      />
     </View>
   );
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatDate(iso) {

@@ -7,33 +7,36 @@ const BASE_WIDTH = 640;
 const THEME = "#384877";
 const THEME_LIGHT = "#3b5aa2";
 
+// 所有尺寸基于 640px 基准画布，实际绘制时按 s = W / BASE_WIDTH 缩放。
+// y 坐标均表示当前行文字的基线位置，lineH 已包含字体高度和行间距。
 const LAYOUT = {
   pad: 48,
   topBarH: 8,
-  headerH: 68,
+  headerFont: 24,
+  headerLineH: 64, // 24 + 40 间距，确保与 title 不重叠
   titleFont: 36,
   titleFontLong: 30,
-  titleLineHeight: 52, // 36 * 1.45
-  titleLineHeightLong: 44, // 30 * 1.45
+  titleLineH: 56, // 36 + 20
+  titleLineHLong: 46, // 30 + 16
   titleMaxLines: 4,
-  titleBottomGap: 20,
   descFont: 26,
-  descLineHeight: 38,
+  descLineH: 46, // 26 + 20
   descMaxLines: 6,
-  descBottomGap: 24,
   extraFont: 22,
-  extraH: 52,
+  extraLineH: 42, // 22 + 20
   subtaskFont: 24,
-  subtaskLineHeight: 34,
-  subtaskMinH: 44,
+  subtaskLineH: 42, // 24 + 18
   subtaskBulletOffset: 32,
-  subtaskTopGap: 12,
-  subtaskBottomGap: 20,
+  subtaskGap: 16,
   subtaskMaxLines: 2,
   subtaskMaxCount: 8,
+  sectionGap: 24,
   separatorGap: 36,
-  qrAreaH: 180,
-  bottomPad: 60
+  footerBrandFont: 26,
+  footerTipFont: 18,
+  footerTipGap: 8,
+  qrSize: 120,
+  bottomPad: 48
 };
 
 function formatDateTime(iso) {
@@ -84,92 +87,83 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
   const {
     pad,
     topBarH,
-    headerH,
+    headerLineH,
     titleFont,
     titleFontLong,
-    titleLineHeight,
-    titleLineHeightLong,
+    titleLineH,
+    titleLineHLong,
     titleMaxLines,
-    titleBottomGap,
     descFont,
-    descLineHeight,
+    descLineH,
     descMaxLines,
-    descBottomGap,
-    extraH,
+    extraLineH,
     subtaskFont,
-    subtaskLineHeight,
-    subtaskMinH,
+    subtaskLineH,
     subtaskBulletOffset,
-    subtaskTopGap,
-    subtaskBottomGap,
+    subtaskGap,
     subtaskMaxLines,
     subtaskMaxCount,
+    sectionGap,
     separatorGap,
-    qrAreaH,
+    qrSize,
     bottomPad
   } = LAYOUT;
 
   let y = pad + topBarH;
 
   // header
-  y += headerH;
+  y += headerLineH;
 
   // title
   const titleText = String(title || "未命名").trim();
   const useLongTitle = titleText.length > 40;
   const titleFontSize = useLongTitle ? titleFontLong : titleFont;
-  const titleLineH = useLongTitle ? titleLineHeightLong : titleLineHeight;
+  const titleLineHeight = useLongTitle ? titleLineHLong : titleLineH;
   ctx.setFontSize(titleFontSize);
   const titleLines = wrapText(ctx, titleText, BASE_WIDTH - pad * 2).slice(0, titleMaxLines);
-  const titleBoxH = titleLines.length * titleLineH + titleBottomGap;
-  const titleMeta = { text: titleText, lines: titleLines, fontSize: titleFontSize, lineHeight: titleLineH };
-  y += titleBoxH;
+  y += titleLines.length * titleLineHeight;
+  const titleMeta = { text: titleText, lines: titleLines, fontSize: titleFontSize, lineHeight: titleLineHeight };
 
   // description
-  let descMeta = null;
-  let descBoxH = 0;
+  let descLines = [];
   if (description) {
+    y += sectionGap;
     ctx.setFontSize(descFont);
-    const descLines = wrapText(ctx, String(description).trim(), BASE_WIDTH - pad * 2).slice(0, descMaxLines);
-    descBoxH = descLines.length * descLineHeight + descBottomGap;
-    descMeta = { lines: descLines, lineHeight: descLineHeight };
-    y += descBoxH;
+    descLines = wrapText(ctx, String(description).trim(), BASE_WIDTH - pad * 2).slice(0, descMaxLines);
+    y += descLines.length * descLineH;
   }
 
   // extra
-  let extraBoxH = 0;
   if (extra) {
-    extraBoxH = extraH;
-    y += extraBoxH;
+    y += sectionGap;
+    y += extraLineH;
   }
 
   // subtasks
   let subtaskMeta = [];
-  let subtaskBoxH = 0;
   if (!isNote && subtasks && subtasks.length > 0) {
-    subtaskBoxH += subtaskTopGap;
+    y += sectionGap;
     const visibleSubtasks = subtasks.slice(0, subtaskMaxCount);
-    ctx.setFontSize(subtaskFont);
     visibleSubtasks.forEach((sub) => {
+      ctx.setFontSize(subtaskFont);
       const lines = wrapText(ctx, sub.title, BASE_WIDTH - pad * 2 - subtaskBulletOffset).slice(0, subtaskMaxLines);
-      const itemH = Math.max(lines.length * subtaskLineHeight + 8, subtaskMinH);
+      const itemH = Math.max(lines.length * subtaskLineH + subtaskGap, 48);
       subtaskMeta.push({ ...sub, lines, itemH });
-      subtaskBoxH += itemH;
+      y += itemH;
     });
-    subtaskBoxH += subtaskBottomGap;
-    y += subtaskBoxH;
   }
 
-  // separator + qr area
-  y += separatorGap + qrAreaH + bottomPad;
+  // separator + footer
+  y += sectionGap;
+  y += separatorGap;
+  y += qrSize;
+  y += bottomPad;
 
   return {
     totalHeight: y,
     title: titleMeta,
-    description: descMeta,
-    extra: extraBoxH,
-    subtasks: subtaskMeta,
-    subtaskBoxH
+    description: descLines,
+    subtasks: subtaskMeta
   };
 }
 
@@ -214,7 +208,6 @@ export default function SharePoster({ visible, onClose, type, title, description
     const s = W / BASE_WIDTH;
     const pad = LAYOUT.pad * s;
 
-    // 重新计算布局，确保与 canvasSize 严格一致
     const layout = measureLayout(ctx, title, description, extra, subtasks, isNote);
 
     // 白底圆角卡片
@@ -232,16 +225,16 @@ export default function SharePoster({ visible, onClose, type, title, description
 
     let y = pad + LAYOUT.topBarH * s;
 
-    // 头部：类型 + 日期 + 完成度
+    // header：类型 + 日期 + 完成度
     ctx.setFillStyle(THEME);
-    ctx.setFontSize(Math.round(24 * s));
-    ctx.fillText(isNote ? "心签" : "约定", pad, y + 24 * s);
+    ctx.setFontSize(Math.round(LAYOUT.headerFont * s));
+    ctx.fillText(isNote ? "心签" : "约定", pad, y);
 
     const dateStr = formatDateTime(new Date().toISOString());
     ctx.setFillStyle("#9ca3af");
     ctx.setFontSize(Math.round(20 * s));
     const dateWidth = ctx.measureText(dateStr).width;
-    ctx.fillText(dateStr, W - pad - dateWidth, y + 24 * s);
+    ctx.fillText(dateStr, W - pad - dateWidth, y);
 
     if (!isNote) {
       const doneCount = (subtasks || []).filter((t) => t.status === "completed" || t.status === "done").length;
@@ -250,59 +243,61 @@ export default function SharePoster({ visible, onClose, type, title, description
       ctx.setFillStyle(doneCount === total && total > 0 ? "#10b981" : THEME);
       ctx.setFontSize(Math.round(20 * s));
       const statusWidth = ctx.measureText(statusText).width;
-      ctx.fillText(statusText, W - pad - dateWidth - statusWidth - 20 * s, y + 24 * s);
+      ctx.fillText(statusText, W - pad - dateWidth - statusWidth - 20 * s, y);
     }
 
-    y += LAYOUT.headerH * s;
+    y += LAYOUT.headerLineH * s;
 
-    // 标题
+    // title
     const { title: titleMeta } = layout;
     ctx.setFillStyle("#111827");
     ctx.setFontSize(Math.round(titleMeta.fontSize * s));
     titleMeta.lines.forEach((line, idx) => {
       ctx.fillText(line, pad, y + idx * titleMeta.lineHeight * s);
     });
-    y += titleMeta.lines.length * titleMeta.lineHeight * s + LAYOUT.titleBottomGap * s;
+    y += titleMeta.lines.length * titleMeta.lineHeight * s;
 
-    // 描述
-    if (layout.description) {
+    // description
+    if (layout.description.length > 0) {
+      y += LAYOUT.sectionGap * s;
       ctx.setFillStyle("#4b5563");
       ctx.setFontSize(Math.round(LAYOUT.descFont * s));
-      layout.description.lines.forEach((line, idx) => {
-        ctx.fillText(line, pad, y + idx * LAYOUT.descLineHeight * s);
+      layout.description.forEach((line, idx) => {
+        ctx.fillText(line, pad, y + idx * LAYOUT.descLineH * s);
       });
-      y += layout.description.lines.length * LAYOUT.descLineHeight * s + LAYOUT.descBottomGap * s;
+      y += layout.description.length * LAYOUT.descLineH * s;
     }
 
-    // 截止时间（约定）
+    // extra
     if (extra) {
+      y += LAYOUT.sectionGap * s;
       ctx.setFillStyle(THEME);
       ctx.setFontSize(Math.round(LAYOUT.extraFont * s));
-      ctx.fillText(extra, pad, y + LAYOUT.extraFont * s);
-      y += LAYOUT.extraH * s;
+      ctx.fillText(extra, pad, y);
+      y += LAYOUT.extraLineH * s;
     }
 
-    // 子约定（约定）
+    // subtasks
     if (!isNote && layout.subtasks.length > 0) {
-      y += LAYOUT.subtaskTopGap * s;
+      y += LAYOUT.sectionGap * s;
       layout.subtasks.forEach((sub) => {
         const done = sub.status === "completed" || sub.status === "done";
         ctx.setFillStyle(done ? "#10b981" : "#d1d5db");
         ctx.beginPath();
-        ctx.arc(pad + 10 * s, y + 2 * s, 10 * s, 0, Math.PI * 2);
+        ctx.arc(pad + 10 * s, y, 10 * s, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.setFillStyle(done ? "#6b7280" : "#374151");
         ctx.setFontSize(Math.round(LAYOUT.subtaskFont * s));
         sub.lines.forEach((line, idx) => {
-          ctx.fillText(line, pad + LAYOUT.subtaskBulletOffset * s, y + idx * LAYOUT.subtaskLineHeight * s);
+          ctx.fillText(line, pad + LAYOUT.subtaskBulletOffset * s, y + idx * LAYOUT.subtaskLineH * s);
         });
         y += sub.itemH * s;
       });
-      y += LAYOUT.subtaskBottomGap * s;
     }
 
-    // 分隔线
+    // separator
+    y += LAYOUT.sectionGap * s;
     ctx.setStrokeStyle("rgba(0,0,0,0.06)");
     ctx.setLineWidth(1);
     ctx.beginPath();
@@ -310,20 +305,20 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.lineTo(W - pad, y);
     ctx.stroke();
 
+    // footer
     y += LAYOUT.separatorGap * s;
 
-    // 底部：品牌 + 扫码提示 + QR
     ctx.setFillStyle("#111827");
-    ctx.setFontSize(Math.round(26 * s));
-    ctx.fillText("心栈 SoulSentry", pad, y + 30 * s);
+    ctx.setFontSize(Math.round(LAYOUT.footerBrandFont * s));
+    ctx.fillText("心栈 SoulSentry", pad, y + LAYOUT.footerBrandFont * s);
 
     ctx.setFillStyle("#9ca3af");
-    ctx.setFontSize(Math.round(18 * s));
-    ctx.fillText("扫码查看 · 评论 · 参与", pad, y + 58 * s);
+    ctx.setFontSize(Math.round(LAYOUT.footerTipFont * s));
+    ctx.fillText("扫码查看 · 评论 · 参与", pad, y + (LAYOUT.footerBrandFont + LAYOUT.footerTipGap + LAYOUT.footerTipFont) * s);
 
-    const qrSize = 120 * s;
+    const qrSize = LAYOUT.qrSize * s;
     const qrX = W - pad - qrSize;
-    const qrY = y - 10 * s;
+    const qrY = y;
 
     ctx.setFillStyle("#ffffff");
     ctx.fillRect(qrX - 8 * s, qrY - 8 * s, qrSize + 16 * s, qrSize + 16 * s);

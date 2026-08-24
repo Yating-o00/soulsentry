@@ -177,7 +177,10 @@ export default function SharePoster({ visible, onClose, type, title, description
   const link = shareToken ? `https://www.xinzhan-soulsentry.cn/share/${shareToken}` : "";
   const isNote = type === "note";
 
+  // 只有在分享卡片可见时才计算 canvas 尺寸，否则 canvas 元素尚未渲染，
+  // createCanvasContext 会失败，导致高度始终是默认值 960，造成文字重叠。
   useEffect(() => {
+    if (!visible) return;
     try {
       const sys = Taro.getSystemInfoSync();
       const winWidth = sys.windowWidth || 375;
@@ -189,7 +192,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     } catch (err) {
       console.error("measure layout failed", err);
     }
-  }, [title, description, subtasks.length, extra, type]);
+  }, [visible, title, description, subtasks.length, extra, type]);
 
   useEffect(() => {
     if (visible && shareToken && !posterUrl && canvasSize.height > 0) {

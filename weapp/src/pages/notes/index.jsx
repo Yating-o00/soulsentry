@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView, Button, MovableArea, MovableView } from "@tarojs/components";
 import { get, post, del } from "@/utils/api";
@@ -18,14 +18,22 @@ function getActionWidthPx() {
   }
 }
 
+function getScreenWidthPx() {
+  try {
+    return Taro.getSystemInfoSync().windowWidth;
+  } catch (e) {
+    return 375;
+  }
+}
+
 export default function Notes() {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState(null);
-  const [dragId, setDragId] = useState(null);
-  const [dragX, setDragX] = useState({});
+  const [offsets, setOffsets] = useState({});
 
   const ACTION_WIDTH = useMemo(() => getActionWidthPx(), []);
+  const SCREEN_WIDTH = useMemo(() => getScreenWidthPx(), []);
 
   const fetchNotes = async () => {
     setLoading(true);
@@ -50,6 +58,7 @@ export default function Notes() {
   const goDetail = (id) => {
     if (openId) {
       setOpenId(null);
+      resetOffset(openId, 0);
       return;
     }
     Taro.navigateTo({ url: `/pages/note-detail/index?id=${id}` });
@@ -58,6 +67,7 @@ export default function Notes() {
   const handleShare = async (note, e) => {
     e?.stopPropagation?.();
     setOpenId(null);
+    resetOffset(note.id, 0);
     try {
       const share = await post(`/public/share/generate/note/${note.id}`);
       const link = `https://www.xinzhan-soulsentry.cn/share/${share.token}`;
@@ -73,6 +83,7 @@ export default function Notes() {
   const handleDelete = async (id, e) => {
     e?.stopPropagation?.();
     setOpenId(null);
+    resetOffset(id, 0);
     const res = await Taro.showModal({
       title: "确认删除",
       content: "删除后可在回收站找回，是否继续？"
@@ -88,20 +99,30 @@ export default function Notes() {
     }
   };
 
+  const moveXRef = useRef({});
+
   const onMovableChange = (noteId, e) => {
-    setDragX((prev) => ({ ...prev, [noteId]: e.detail.x }));
+    moveXRef.current[noteId] = e.detail.x;
   };
 
-  const onMovableEnd = (noteId, e) => {
-    const x = e.detail.x;
-    if (x < -ACTION_WIDTH / 2) {
+  const resetOffset = (noteId, value) => {
+    setOffsets((prev) => ({ ...prev, [noteId]: value + 0.001 }));
+    setTimeout(() => {
+      setOffsets((prev) => ({ ...prev, [noteId]: value }));
+    }, 0);
+  };
+
+  const onMovableEnd = (noteId) => {
+    const x = moveXRef.current[noteId] ?? 0;
+    const threshold = ACTION_WIDTH / 2;
+
+    if (x < -threshold) {
       setOpenId(noteId);
-      setDragX((prev) => ({ ...prev, [noteId]: -ACTION_WIDTH }));
+      resetOffset(noteId, -ACTION_WIDTH);
     } else {
       setOpenId(null);
-      setDragX((prev) => ({ ...prev, [noteId]: 0 }));
+      resetOffset(noteId, 0);
     }
-    setDragId(null);
   };
 
   return (
@@ -113,82 +134,45 @@ export default function Notes() {
         {notes.map((note) => {
           const status = statusMap[note.status] || statusMap.active;
           const text = note.plain_text || note.content || "";
-          const targetX = dragId === note.id ? dragX[note.id] : openId === note.id ? -ACTION_WIDTH : 0;
+          const offset = offsets[note.id] ?? 0;
 
           return (
             <MovableArea
               key={note.id}
               style={{
-                width: "100%",
+                width: `${SCREEN_WIDTH}px`,
                 height: "180rpx",
                 marginBottom: "20rpx",
-                position: "relative",
                 overflow: "hidden",
                 borderRadius: "16rpx"
               }}
             >
-              {/* 背景操作按钮：左滑出现分享/删除 */}
-              <View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  right: 0,
-                  bottom: 0,
-                  display: "flex",
-                  flexDirection: "row",
-                  zIndex: 1
-                }}
-              >
-                <View
-                  style={{
-                    width: "180rpx",
-                    background: "#4a5d8f",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                    fontSize: "28rpx"
-                  }}
-                  onClick={(e) => handleShare(note, e)}
-                >
-                  分享
-                </View>
-                <View
-                  style={{
-                    width: "180rpx",
-                    background: "#e53935",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                    fontSize: "28rpx"
-                  }}
-                  onClick={(e) => handleDelete(note.id, e)}
-                >
-                  删除
-                </View>
-              </View>
-
-              {/* 可滑动卡片 */}
               <MovableView
                 style={{
-                  width: "100%",
+                  width: `${SCREEN_WIDTH + ACTION_WIDTH}px`,
                   height: "100%",
-                  zIndex: 2,
-                  background: "#fff"
+                  display: "flex",
+                  flexDirection: "row"
                 }}
                 direction="horizontal"
-                damping={40}
+                damping={50}
                 friction={4}
-                x={targetX}
+                x={offset}
                 outOfBounds={false}
                 onChange={(e) => onMovableChange(note.id, e)}
-                onTouchEnd={(e) => onMovableEnd(note.id, e)}
-                onTouchStart={() => setDragId(note.id)}
+                onTouchEnd={() => onMovableEnd(note.id)}
               >
+                {/* 卡片内容 */}
                 <View
-                  className="ss-card"
-                  style={{ marginBottom: 0, height: "100%", boxSizing: "border-box" }}
+                  style={{
+                    width: `${SCREEN_WIDTH}px`,
+                    height: "100%",
+                    background: "#fff",
+                    padding: "24rpx",
+                    boxSizing: "border-box",
+                    boxShadow: "0 2rpx 12rpx rgba(0, 0, 0, 0.04)",
+                    borderRadius: "16rpx"
+                  }}
                   onClick={() => goDetail(note.id)}
                 >
                   <View className="ss-row">
@@ -199,6 +183,45 @@ export default function Notes() {
                   </View>
                   <View style={{ marginTop: "12rpx" }}>
                     <Text className="ss-muted">{text.slice(0, 120)}</Text>
+                  </View>
+                </View>
+
+                {/* 左滑出现的操作按钮 */}
+                <View
+                  style={{
+                    width: `${ACTION_WIDTH}px`,
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "row"
+                  }}
+                >
+                  <View
+                    style={{
+                      flex: 1,
+                      background: "#4a5d8f",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#fff",
+                      fontSize: "28rpx"
+                    }}
+                    onClick={(e) => handleShare(note, e)}
+                  >
+                    分享
+                  </View>
+                  <View
+                    style={{
+                      flex: 1,
+                      background: "#e53935",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#fff",
+                      fontSize: "28rpx"
+                    }}
+                    onClick={(e) => handleDelete(note.id, e)}
+                  >
+                    删除
                   </View>
                 </View>
               </MovableView>

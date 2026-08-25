@@ -62,12 +62,15 @@ async function trySendPush({ userId, preferences, payload, task, logPrefix }) {
   const pushEnabled = shouldSendPush(preferences);
   const openid = getOpenid(preferences);
 
-  // 1. 优先尝试 Web Push（浏览器 / PWA 场景）
+  let webPushOk = false;
+  let wechatOk = false;
+
+  // 1. 尝试 Web Push（浏览器 / PWA 场景）
   if (subscription && pushEnabled) {
     try {
       await sendPushNotification(subscription, payload);
       console.log(`[reminderSender] ${logPrefix} user=${userId} push sent to ${subscription.endpoint?.slice(0, 60)}...`);
-      return { ok: true, channel: "web_push" };
+      webPushOk = true;
     } catch (err) {
       console.warn(`[reminderSender] ${logPrefix} user=${userId} push failed:`, err?.message || err);
       if (err?.statusCode === 410 || err?.statusCode === 404) {
@@ -87,19 +90,28 @@ async function trySendPush({ userId, preferences, payload, task, logPrefix }) {
     }
   }
 
-  // 2. Web Push 不可用或失败时，尝试微信小程序订阅消息
+  // 2. 同时尝试微信小程序订阅消息（与 Web Push 独立，不互相阻塞）
   if (openid && task) {
     const type = payload.data?.type === "follow_up" ? "follow_up" : "reminder";
     const wechatResult = await sendWechatSubscribeMessage(openid, task, type);
     if (wechatResult.ok) {
       console.log(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe sent`);
-      return { ok: true, channel: "wechat_subscribe" };
-    }
-    if (wechatResult.reason === "user_rejected_or_no_quota") {
+      wechatOk = true;
+    } else if (wechatResult.reason === "user_rejected_or_no_quota") {
       console.log(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe rejected/no quota`);
     } else {
       console.warn(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe failed:`, wechatResult.reason);
     }
+  }
+
+  // 任一渠道成功即视为推送成功
+  if (webPushOk || wechatOk) {
+    return {
+      ok: true,
+      channel: wechatOk ? "wechat_subscribe" : "web_push",
+      webPushOk,
+      wechatOk,
+    };
   }
 
   // 3. 兜底：应用内通知

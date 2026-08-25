@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Taro, { useShareAppMessage } from "@tarojs/taro";
 import { View, Text, Input, Textarea, Picker, Button, ScrollView, Canvas } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
+import createQRCode from "@/lib/qrcode";
 
 const priorities = [
   { value: "urgent", label: "紧急" },
@@ -131,22 +132,11 @@ export default function TaskCreate() {
   const [newSubtaskText, setNewSubtaskText] = useState("");
   const [newChildText, setNewChildText] = useState({});
   const [expandedIds, setExpandedIds] = useState(new Set());
-  const [wechatTmplIds, setWechatTmplIds] = useState([]);
+
+  // 微信小程序订阅消息模板 ID（与后端 .env 保持一致）
+  const wechatTmplIds = ["o0Xzec1QIL9CF9C2E4wspUEmfWX04vpBVwXkThQRWHc", "Sq9pF3iv5eiiVL99-odo8oG62XixtDojRMDCWKwchhY"];
 
   const isFormValid = title.trim().length > 0;
-
-  useEffect(() => {
-    // 获取微信小程序订阅消息模板 ID
-    if (process.env.TARO_ENV !== "weapp") return;
-    get("/public/config/wechat")
-      .then((cfg) => {
-        const ids = [];
-        if (cfg.subscribe_reminder_tmpl_id) ids.push(cfg.subscribe_reminder_tmpl_id);
-        if (cfg.subscribe_followup_tmpl_id) ids.push(cfg.subscribe_followup_tmpl_id);
-        setWechatTmplIds(ids);
-      })
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router.params || {};
@@ -377,15 +367,25 @@ export default function TaskCreate() {
     }
   };
 
-  const requestReminderSubscribe = async () => {
-    if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) return;
-    try {
-      const res = await Taro.requestSubscribeMessage({ tmplIds: wechatTmplIds });
-      console.log("[task-create] subscribe result", res);
-    } catch (err) {
-      // 用户拒绝或环境不支持，不影响保存
-      console.log("[task-create] subscribe request failed/ignored", err);
+  const requestReminderSubscribe = () => {
+    if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) {
+      return Promise.resolve();
     }
+    return new Promise((resolve) => {
+      // 使用原生 wx API 更稳定；Taro 的 Promise 封装在某些版本下可能不兼容
+      wx.requestSubscribeMessage({
+        tmplIds: wechatTmplIds,
+        success: (res) => {
+          console.log("[task-create] subscribe result", res);
+          resolve(res);
+        },
+        fail: (err) => {
+          // 用户拒绝、未配置模板或环境不支持，不影响保存
+          console.log("[task-create] subscribe request failed/ignored", err);
+          resolve(null);
+        }
+      });
+    });
   };
 
   const saveTask = async () => {
@@ -442,6 +442,26 @@ export default function TaskCreate() {
     }
   };
 
+  const drawQRCode = (ctx, text, x, y, size) => {
+    try {
+      const qr = createQRCode(0, "M");
+      qr.addData(text);
+      qr.make();
+      const count = qr.getModuleCount();
+      const cell = size / count;
+      for (let row = 0; row < count; row++) {
+        for (let col = 0; col < count; col++) {
+          if (qr.isDark(row, col)) {
+            ctx.setFillStyle("#1f2937");
+            ctx.fillRect(x + col * cell, y + row * cell, cell, cell);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("QR draw failed", err);
+    }
+  };
+
   const generatePoster = () => {
     if (!shareToken) {
       Taro.showToast({ title: "分享链接未生成", icon: "none" });
@@ -493,18 +513,20 @@ export default function TaskCreate() {
       // 内容区文字
       ctx.setFillStyle("#384877");
       ctx.setFontSize(28);
-      ctx.fillText("扫码参与约定", 70, 380);
+      ctx.fillText("扫码参与约定", 70, 360);
 
       ctx.setFillStyle("#666666");
       ctx.setFontSize(22);
-      ctx.fillText("对方可匿名勾选进度、留言", 70, 420);
+      ctx.fillText("对方可匿名勾选进度、留言", 70, 650);
 
-      // 链接
+      // 二维码
       const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
-      ctx.setFillStyle("#384877");
-      ctx.setFontSize(20);
-      const shortLink = link.length > 48 ? link.slice(0, 48) + "…" : link;
-      ctx.fillText(shortLink, 70, 620);
+      const qrSize = 200;
+      const qrX = (600 - qrSize) / 2;
+      const qrY = 400;
+      ctx.setFillStyle("#ffffff");
+      ctx.fillRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16);
+      drawQRCode(ctx, link, qrX, qrY, qrSize);
 
       // 底部提示
       ctx.setFillStyle("rgba(255,255,255,0.8)");

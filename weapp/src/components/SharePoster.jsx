@@ -49,9 +49,11 @@ function formatDateTime(iso) {
 }
 
 function wrapText(ctx, text, maxWidth) {
-  const chars = String(text || "").split("");
+  // 先按原文的换行符拆分成段落，保留用户手动输入的换行。
+  // 对每一段再按宽度自动换行。
+  const raw = String(text || "");
+  const paragraphs = raw.split(/\r?\n/);
   const lines = [];
-  let line = "";
 
   // 部分环境下 Canvas 2D 字体未就绪时 measureText 会返回 0，
   // 此时按当前字体大小估算中文字符宽度作为 fallback。
@@ -59,20 +61,37 @@ function wrapText(ctx, text, maxWidth) {
   const fontSize = parseInt(ctx.font) || 26;
   const fallbackCharWidth = probeWidth > 0 ? 0 : fontSize;
 
-  for (const char of chars) {
-    const test = line + char;
-    let width = ctx.measureText(test).width;
-    if (fallbackCharWidth && width === 0) {
-      width = test.length * fallbackCharWidth;
+  const wrapLine = (paragraph) => {
+    const chars = paragraph.split("");
+    let line = "";
+    for (const char of chars) {
+      const test = line + char;
+      let width = ctx.measureText(test).width;
+      if (fallbackCharWidth && width === 0) {
+        width = test.length * fallbackCharWidth;
+      }
+      if (width > maxWidth && line) {
+        lines.push(line);
+        line = char;
+      } else {
+        line = test;
+      }
     }
-    if (width > maxWidth && line) {
-      lines.push(line);
-      line = char;
-    } else {
-      line = test;
+    if (line) lines.push(line);
+  };
+
+  paragraphs.forEach((paragraph, index) => {
+    // 连续换行会产生空段落，保留为一个空行。
+    if (paragraph === "") {
+      // 仅在段落确实由换行符分隔时才插入空行，避免末尾多余空行。
+      if (index < paragraphs.length - 1) {
+        lines.push("");
+      }
+      return;
     }
-  }
-  if (line) lines.push(line);
+    wrapLine(paragraph);
+  });
+
   return lines;
 }
 

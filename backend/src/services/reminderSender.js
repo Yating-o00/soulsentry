@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { sendPushNotification, isWebPushConfigured } from "../lib/webPush.js";
+import { sendWechatSubscribeMessage } from "../lib/wechatSubscribeMessage.js";
 
 function getUserExtraFields(preferences) {
   if (!preferences?.metadata || typeof preferences.metadata !== "object") return {};
@@ -51,50 +52,70 @@ async function createInAppNotification(userId, title, body, payload = {}) {
   }
 }
 
-async function trySendPush({ userId, preferences, payload, logPrefix }) {
+function getOpenid(preferences) {
+  const extra = getUserExtraFields(preferences);
+  return extra.openid || null;
+}
+
+async function trySendPush({ userId, preferences, payload, task, logPrefix }) {
   const subscription = getPushSubscription(preferences);
   const pushEnabled = shouldSendPush(preferences);
+  const openid = getOpenid(preferences);
 
-  if (!subscription || !pushEnabled) {
-    const reason = !subscription ? "no_push_subscription" : "push_disabled_by_user";
-    console.log(`[reminderSender] ${logPrefix} user=${userId} skipped push: ${reason}`);
-    await createInAppNotification(
-      userId,
-      payload.title,
-      payload.body,
-      { ...payload.data, url: payload.url, fallback_reason: reason }
-    );
-    return { ok: false, reason, inAppFallback: true };
-  }
-
-  try {
-    await sendPushNotification(subscription, payload);
-    console.log(`[reminderSender] ${logPrefix} user=${userId} push sent to ${subscription.endpoint?.slice(0, 60)}...`);
-    return { ok: true };
-  } catch (err) {
-    console.warn(`[reminderSender] ${logPrefix} user=${userId} push failed:`, err?.message || err);
-    if (err?.statusCode === 410 || err?.statusCode === 404) {
-      await prisma.userPreference.update({
-        where: { userId },
-        data: {
-          metadata: {
-            ...(preferences?.metadata || {}),
-            _extraFields: {
-              ...getUserExtraFields(preferences),
-              push_subscription: null,
+  // 1. 优先尝试 Web Push（浏览器 / PWA 场景）
+  if (subscription && pushEnabled) {
+    try {
+      await sendPushNotification(subscription, payload);
+      console.log(`[reminderSender] ${logPrefix} user=${userId} push sent to ${subscription.endpoint?.slice(0, 60)}...`);
+      return { ok: true, channel: "web_push" };
+    } catch (err) {
+      console.warn(`[reminderSender] ${logPrefix} user=${userId} push failed:`, err?.message || err);
+      if (err?.statusCode === 410 || err?.statusCode === 404) {
+        await prisma.userPreference.update({
+          where: { userId },
+          data: {
+            metadata: {
+              ...(preferences?.metadata || {}),
+              _extraFields: {
+                ...getUserExtraFields(preferences),
+                push_subscription: null,
+              },
             },
           },
-        },
-      }).catch(() => {});
+        }).catch(() => {});
+      }
     }
-    await createInAppNotification(
-      userId,
-      payload.title,
-      payload.body,
-      { ...payload.data, url: payload.url, fallback_reason: "push_failed", error: err?.message }
-    );
-    return { ok: false, reason: "push_failed", error: err, inAppFallback: true };
   }
+
+  // 2. Web Push 不可用或失败时，尝试微信小程序订阅消息
+  if (openid && task) {
+    const type = payload.data?.type === "follow_up" ? "follow_up" : "reminder";
+    const wechatResult = await sendWechatSubscribeMessage(openid, task, type);
+    if (wechatResult.ok) {
+      console.log(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe sent`);
+      return { ok: true, channel: "wechat_subscribe" };
+    }
+    if (wechatResult.reason === "user_rejected_or_no_quota") {
+      console.log(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe rejected/no quota`);
+    } else {
+      console.warn(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe failed:`, wechatResult.reason);
+    }
+  }
+
+  // 3. 兜底：应用内通知
+  const reason = !subscription && !openid
+    ? "no_push_subscription_or_openid"
+    : !pushEnabled
+      ? "push_disabled_by_user"
+      : "all_channels_failed";
+  console.log(`[reminderSender] ${logPrefix} user=${userId} fallback to in-app: ${reason}`);
+  await createInAppNotification(
+    userId,
+    payload.title,
+    payload.body,
+    { ...payload.data, url: payload.url, fallback_reason: reason }
+  );
+  return { ok: false, reason, inAppFallback: true };
 }
 
 export async function sendDueReminders() {
@@ -137,12 +158,13 @@ export async function sendDueReminders() {
       userId: task.userId,
       preferences: task.user.preferences,
       payload,
+      task,
       logPrefix: `start-reminder task=${task.id}`,
     });
 
     if (result.ok) sent += 1;
-    if (result.reason && result.reason !== "push_failed") skipped += 1;
-    if (result.inAppFallback) inAppFallback += 1;
+    else if (result.inAppFallback) inAppFallback += 1;
+    else skipped += 1;
 
     // 无论发送成功与否，都更新 reminderSentAt，避免同一分钟重复尝试
     try {
@@ -207,12 +229,13 @@ export async function sendEndTimeFollowUps() {
       userId: task.userId,
       preferences: task.user.preferences,
       payload,
+      task,
       logPrefix: `end-followup task=${task.id}`,
     });
 
     if (result.ok) sent += 1;
-    if (result.reason && result.reason !== "push_failed") skipped += 1;
-    if (result.inAppFallback) inAppFallback += 1;
+    else if (result.inAppFallback) inAppFallback += 1;
+    else skipped += 1;
 
     try {
       await prisma.task.update({

@@ -5,6 +5,7 @@ import { signAccessToken } from "../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { requireAuth } from "../middleware/auth.js";
 import { sendVerificationSms } from "../lib/sms.js";
+import { code2Session } from "../lib/wechatAccessToken.js";
 
 export const authRouter = Router();
 
@@ -323,6 +324,65 @@ authRouter.post("/register", async (req, res) => {
 
 authRouter.get("/me", requireAuth, async (req, res) => {
   return res.json({ user: serializeUser(req.user) });
+});
+
+authRouter.post("/wechat/bind-openid", requireAuth, async (req, res) => {
+  const schema = z.object({
+    code: z.string().min(1, "微信登录 code 不能为空")
+  });
+
+  const payload = schema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({
+      error: "INVALID_INPUT",
+      details: payload.error.flatten()
+    });
+  }
+
+  const { openid, unionid, error } = await code2Session(payload.data.code);
+  if (error || !openid) {
+    return res.status(400).json({
+      error: "WECHAT_CODE_FAILED",
+      message: error || "无法获取微信 openid"
+    });
+  }
+
+  const preferences = await prisma.userPreference.findUnique({
+    where: { userId: req.user.id }
+  });
+
+  const existingMetadata = preferences?.metadata && typeof preferences.metadata === "object"
+    ? { ...preferences.metadata }
+    : {};
+  const existingExtra = existingMetadata._extraFields && typeof existingMetadata._extraFields === "object"
+    ? { ...existingMetadata._extraFields }
+    : {};
+
+  await prisma.userPreference.upsert({
+    where: { userId: req.user.id },
+    create: {
+      userId: req.user.id,
+      metadata: {
+        _extraFields: {
+          ...existingExtra,
+          openid,
+          unionid: unionid || existingExtra.unionid || undefined
+        }
+      }
+    },
+    update: {
+      metadata: {
+        ...existingMetadata,
+        _extraFields: {
+          ...existingExtra,
+          openid,
+          unionid: unionid || existingExtra.unionid || undefined
+        }
+      }
+    }
+  });
+
+  return res.json({ success: true, openid, unionid });
 });
 
 authRouter.post("/bind-phone", requireAuth, async (req, res) => {

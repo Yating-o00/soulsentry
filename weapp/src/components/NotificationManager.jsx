@@ -2,11 +2,13 @@ import { useEffect, useRef } from "react";
 import Taro from "@tarojs/taro";
 import { get, patch } from "@/utils/api";
 import { getToken } from "@/utils/auth";
+import notifySound from "@/lib/notifySound";
 
-const POLL_INTERVAL_MS = 10000;
+const POLL_INTERVAL_MS = 8000;
 const NOTIFIED_KEY = "ss_notification_dedup";
-const MODAL_COOLDOWN_MS = 5 * 60 * 1000; // 5 分钟内同一约定不重复弹窗
+const MODAL_COOLDOWN_MS = 2 * 60 * 1000; // 同一约定 2 分钟内不重复弹窗
 const OVERDUE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 超过 2 小时的旧提醒不再弹窗
+const BADGE_KEY = "ss_notification_badge";
 
 function isDone(task) {
   return task.status === "completed" || task.status === "done" || task.status === "archived";
@@ -30,11 +32,53 @@ function addMinutes(minutes) {
   return d.toISOString();
 }
 
+function formatTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export default function NotificationManager() {
   const runningRef = useRef(false);
   const timerRef = useRef(null);
   const modalOpenRef = useRef(false);
   const queueRef = useRef([]);
+  const audioRef = useRef(null);
+  const lastBadgeRef = useRef(0);
+
+  const initAudio = () => {
+    if (audioRef.current) return;
+    try {
+      const ctx = Taro.createInnerAudioContext();
+      ctx.src = notifySound;
+      ctx.volume = 1;
+      ctx.obeyMuteSwitch = false; // 尽量播放，即使用户开了静音开关也尝试
+      audioRef.current = ctx;
+    } catch {
+      // 不支持则忽略
+    }
+  };
+
+  const playAlert = () => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.stop();
+        audioRef.current.play();
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      // 震动节奏：长-短-长
+      Taro.vibrateLong();
+      setTimeout(() => Taro.vibrateShort(), 350);
+      setTimeout(() => Taro.vibrateLong(), 550);
+    } catch {
+      // ignore
+    }
+  };
 
   const loadDedup = () => {
     try {
@@ -78,25 +122,47 @@ export default function NotificationManager() {
     }
   };
 
+  const updateBadge = (count) => {
+    if (count === lastBadgeRef.current) return;
+    lastBadgeRef.current = count;
+    try {
+      if (count > 0) {
+        Taro.setTabBarBadge({ index: 0, text: String(count) });
+      } else {
+        Taro.removeTabBarBadge({ index: 0 });
+      }
+    } catch {
+      // 部分环境下 tabBar 未就绪，忽略
+    }
+    try {
+      Taro.setStorageSync(BADGE_KEY, count);
+    } catch {}
+  };
+
   const processQueue = async () => {
     if (modalOpenRef.current || queueRef.current.length === 0) return;
 
     const item = queueRef.current.shift();
     modalOpenRef.current = true;
 
-    try {
-      await Taro.vibrateLong();
-    } catch {
-      // 部分设备不支持震动，忽略
-    }
+    playAlert();
 
     const { task, type } = item;
     markShown(task.id, type);
 
+    const timeStr = type === "reminder"
+      ? (task.reminder_time ? `提醒时间 ${formatTime(task.reminder_time)}` : "")
+      : (task.end_time ? `预计结束 ${formatTime(task.end_time)}` : "");
+
+    const contentLines = [
+      task.description ? task.description.slice(0, 80) : "",
+      timeStr
+    ].filter(Boolean);
+
     if (type === "reminder") {
       const { confirm } = await Taro.showModal({
         title: `⏰ 约定提醒：${task.title}`,
-        content: "到点啦，开始做这个约定了吗？",
+        content: contentLines.join("\n") || "到点啦，开始做这个约定了吗？",
         confirmText: "已完成",
         cancelText: "稍后 15 分钟"
       });
@@ -115,7 +181,7 @@ export default function NotificationManager() {
     } else {
       const { confirm } = await Taro.showModal({
         title: `🤝 约定跟进：${task.title}`,
-        content: "约定时间到了，完成了吗？需要再延长一点吗？",
+        content: contentLines.join("\n") || "约定时间到了，完成了吗？需要再延长一点吗？",
         confirmText: "已完成",
         cancelText: "延长 30 分钟"
       });
@@ -147,43 +213,54 @@ export default function NotificationManager() {
 
   const checkTasks = async () => {
     if (!runningRef.current || modalOpenRef.current) return;
-    if (!getToken()) return;
+    if (!getToken()) {
+      updateBadge(0);
+      return;
+    }
 
     try {
       const data = await get("/tasks", { parent_task_id: "", sort: "-reminder_time", limit: 200 });
       const tasks = Array.isArray(data) ? data : [];
 
+      let dueCount = 0;
+
       for (const task of tasks) {
         if (!task || isDone(task) || task.deleted_at) continue;
 
-        if (
+        const isReminderDue =
           task.reminder_time &&
           isPast(task.reminder_time) &&
           isRecentlyPast(task.reminder_time) &&
           !task.reminder_sent &&
-          shouldShow(task.id, "reminder")
-        ) {
-          enqueue(task, "reminder");
-          break;
-        }
+          shouldShow(task.id, "reminder");
 
-        if (
+        const isFollowUpDue =
           task.end_time &&
           isPast(task.end_time) &&
           isRecentlyPast(task.end_time) &&
           !task.end_reminder_sent &&
-          shouldShow(task.id, "end")
-        ) {
+          shouldShow(task.id, "end");
+
+        if (isReminderDue || isFollowUpDue) {
+          dueCount += 1;
+        }
+
+        if (isReminderDue) {
+          enqueue(task, "reminder");
+        } else if (isFollowUpDue) {
           enqueue(task, "end");
-          break;
         }
       }
+
+      updateBadge(dueCount);
     } catch (err) {
       console.error("[NotificationManager] checkTasks failed", err);
     }
   };
 
   useEffect(() => {
+    initAudio();
+
     const start = () => {
       if (runningRef.current) return;
       runningRef.current = true;
@@ -208,6 +285,10 @@ export default function NotificationManager() {
       stop();
       if (Taro.offAppShow) Taro.offAppShow(start);
       if (Taro.offAppHide) Taro.offAppHide(stop);
+      if (audioRef.current) {
+        audioRef.current.destroy();
+        audioRef.current = null;
+      }
     };
   }, []);
 

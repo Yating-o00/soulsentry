@@ -18,6 +18,11 @@ const envSchema = z.object({
   WECHAT_PRIVATE_KEY: z.string().optional(),
   WECHAT_PRIVATE_KEY_PATH: z.string().optional(),
   WECHAT_NOTIFY_URL: z.string().optional(),
+  WECHAT_APP_SECRET: z.string().optional(),
+
+  // 微信小程序订阅消息模板 ID（可选，未配置时走应用内提醒）
+  WECHAT_SUBSCRIBE_REMINDER_TMPL_ID: z.string().optional(),
+  WECHAT_SUBSCRIBE_FOLLOWUP_TMPL_ID: z.string().optional(),
 
   // Kimi / Moonshot AI（可选，未配置时 callAI 等接口会提示未配置）
   KIMI_API_KEY: z.string().optional(),

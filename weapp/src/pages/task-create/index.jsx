@@ -120,8 +120,22 @@ export default function TaskCreate() {
   const [newSubtaskText, setNewSubtaskText] = useState("");
   const [newChildText, setNewChildText] = useState({});
   const [expandedIds, setExpandedIds] = useState(new Set());
+  const [wechatTmplIds, setWechatTmplIds] = useState([]);
 
   const isFormValid = title.trim().length > 0;
+
+  useEffect(() => {
+    // 获取微信小程序订阅消息模板 ID
+    if (process.env.TARO_ENV !== "weapp") return;
+    get("/public/config/wechat")
+      .then((cfg) => {
+        const ids = [];
+        if (cfg.subscribe_reminder_tmpl_id) ids.push(cfg.subscribe_reminder_tmpl_id);
+        if (cfg.subscribe_followup_tmpl_id) ids.push(cfg.subscribe_followup_tmpl_id);
+        setWechatTmplIds(ids);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router.params || {};
@@ -352,6 +366,17 @@ export default function TaskCreate() {
     }
   };
 
+  const requestReminderSubscribe = async () => {
+    if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) return;
+    try {
+      const res = await Taro.requestSubscribeMessage({ tmplIds: wechatTmplIds });
+      console.log("[task-create] subscribe result", res);
+    } catch (err) {
+      // 用户拒绝或环境不支持，不影响保存
+      console.log("[task-create] subscribe request failed/ignored", err);
+    }
+  };
+
   const saveTask = async () => {
     if (!isFormValid) {
       Taro.showToast({ title: "请输入标题", icon: "none" });
@@ -370,6 +395,11 @@ export default function TaskCreate() {
 
     if (reminderISO) payload.reminder_time = reminderISO;
     if (endISO) payload.end_time = endISO;
+
+    // 如果设置了提醒时间，尝试请求微信订阅消息权限
+    if (reminderISO && wechatTmplIds.length > 0) {
+      await requestReminderSubscribe();
+    }
 
     setLoading(true);
     try {

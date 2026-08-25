@@ -24,6 +24,14 @@ const envSchema = z.object({
   WECHAT_SUBSCRIBE_REMINDER_TMPL_ID: z.string().optional(),
   WECHAT_SUBSCRIBE_FOLLOWUP_TMPL_ID: z.string().optional(),
 
+  // 微信小程序订阅消息字段映射（默认使用常见字段名，若模板不一致请修改）
+  WECHAT_SUBSCRIBE_REMINDER_TITLE_FIELD: z.string().optional(),
+  WECHAT_SUBSCRIBE_REMINDER_DESC_FIELD: z.string().optional(),
+  WECHAT_SUBSCRIBE_REMINDER_TIME_FIELD: z.string().optional(),
+  WECHAT_SUBSCRIBE_FOLLOWUP_TITLE_FIELD: z.string().optional(),
+  WECHAT_SUBSCRIBE_FOLLOWUP_TIME_FIELD: z.string().optional(),
+  WECHAT_SUBSCRIBE_FOLLOWUP_NOTE_FIELD: z.string().optional(),
+
   // Kimi / Moonshot AI（可选，未配置时 callAI 等接口会提示未配置）
   KIMI_API_KEY: z.string().optional(),
   MOONSHOT_API_KEY: z.string().optional(),

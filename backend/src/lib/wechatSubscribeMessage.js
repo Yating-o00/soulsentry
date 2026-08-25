@@ -9,8 +9,11 @@ function buildReminderData(task) {
   const tmplId = env.WECHAT_SUBSCRIBE_REMINDER_TMPL_ID;
   if (!tmplId) return null;
 
-  // 微信订阅消息字段需与模板 ID 在 MP 后台配置的字段一致。
-  // 这里采用常见字段名，若后台不同请在 .env 中另配模板后调整。
+  // 字段名可在 backend/.env 中覆盖，默认使用常见模板字段
+  const titleField = env.WECHAT_SUBSCRIBE_REMINDER_TITLE_FIELD || "thing1";
+  const descField = env.WECHAT_SUBSCRIBE_REMINDER_DESC_FIELD || "thing2";
+  const timeField = env.WECHAT_SUBSCRIBE_REMINDER_TIME_FIELD || "time3";
+
   const title = task.title ? String(task.title).slice(0, 20) : "约定提醒";
   const desc = task.description ? String(task.description).slice(0, 40) : "您有一个约定到时间了";
   const time = task.reminderTime
@@ -21,9 +24,9 @@ function buildReminderData(task) {
     template_id: tmplId,
     page: `pages/tasks/index?id=${task.id}`,
     data: {
-      thing1: { value: title },
-      thing2: { value: desc },
-      time3: { value: time.slice(0, 20) }
+      [titleField]: { value: title },
+      [descField]: { value: desc },
+      [timeField]: { value: time.slice(0, 20) }
     },
     miniprogram_state: env.NODE_ENV === "production" ? "formal" : "trial"
   };
@@ -32,6 +35,10 @@ function buildReminderData(task) {
 function buildFollowUpData(task) {
   const tmplId = env.WECHAT_SUBSCRIBE_FOLLOWUP_TMPL_ID;
   if (!tmplId) return null;
+
+  const titleField = env.WECHAT_SUBSCRIBE_FOLLOWUP_TITLE_FIELD || "thing1";
+  const timeField = env.WECHAT_SUBSCRIBE_FOLLOWUP_TIME_FIELD || "time2";
+  const noteField = env.WECHAT_SUBSCRIBE_FOLLOWUP_NOTE_FIELD || "thing3";
 
   const title = task.title ? String(task.title).slice(0, 20) : "约定跟进";
   const endTime = task.endTime
@@ -42,9 +49,9 @@ function buildFollowUpData(task) {
     template_id: tmplId,
     page: `pages/tasks/index?id=${task.id}`,
     data: {
-      thing1: { value: title },
-      time2: { value: endTime.slice(0, 20) },
-      thing3: { value: "约定的预计时间到了，完成了吗？" }
+      [titleField]: { value: title },
+      [timeField]: { value: endTime.slice(0, 20) },
+      [noteField]: { value: "约定的预计时间到了，完成了吗？" }
     },
     miniprogram_state: env.NODE_ENV === "production" ? "formal" : "trial"
   };

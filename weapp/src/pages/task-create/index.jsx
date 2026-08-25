@@ -367,24 +367,18 @@ export default function TaskCreate() {
     }
   };
 
-  const requestReminderSubscribe = () => {
-    if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) {
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      // 使用原生 wx API 更稳定；Taro 的 Promise 封装在某些版本下可能不兼容
-      wx.requestSubscribeMessage({
-        tmplIds: wechatTmplIds,
-        success: (res) => {
-          console.log("[task-create] subscribe result", res);
-          resolve(res);
-        },
-        fail: (err) => {
-          // 用户拒绝、未配置模板或环境不支持，不影响保存
-          console.log("[task-create] subscribe request failed/ignored", err);
-          resolve(null);
-        }
-      });
+  const requestReminderSubscribeSync = () => {
+    if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) return;
+    // 必须在用户点击按钮的同步调用栈内发起，否则微信会拒绝
+    wx.requestSubscribeMessage({
+      tmplIds: wechatTmplIds,
+      success: (res) => {
+        console.log("[task-create] subscribe result", res);
+      },
+      fail: (err) => {
+        // 用户拒绝、未配置模板或环境不支持，不影响保存
+        console.log("[task-create] subscribe request failed/ignored", err);
+      }
     });
   };
 
@@ -407,9 +401,9 @@ export default function TaskCreate() {
     if (reminderISO) payload.reminder_time = reminderISO;
     if (endISO) payload.end_time = endISO;
 
-    // 如果设置了提醒时间，尝试请求微信订阅消息权限
-    if (reminderISO && wechatTmplIds.length > 0) {
-      await requestReminderSubscribe();
+    // 如果设置了提醒时间，同步请求微信订阅消息权限
+    if (reminderISO) {
+      requestReminderSubscribeSync();
     }
 
     setLoading(true);

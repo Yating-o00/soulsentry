@@ -9,8 +9,8 @@ function buildReminderData(task) {
   const tmplId = env.WECHAT_SUBSCRIBE_REMINDER_TMPL_ID;
   if (!tmplId) return null;
 
-  // 字段名可在 backend/.env 中覆盖，默认使用常见模板字段
-  const titleField = env.WECHAT_SUBSCRIBE_REMINDER_TITLE_FIELD || "thing1";
+  // 字段名可在 backend/.env 中覆盖，默认值已按当前项目模板设置
+  const titleField = env.WECHAT_SUBSCRIBE_REMINDER_TITLE_FIELD || "thing5";
   const descField = env.WECHAT_SUBSCRIBE_REMINDER_DESC_FIELD || "thing2";
   const timeField = env.WECHAT_SUBSCRIBE_REMINDER_TIME_FIELD || "time3";
 
@@ -37,8 +37,8 @@ function buildFollowUpData(task) {
   if (!tmplId) return null;
 
   const titleField = env.WECHAT_SUBSCRIBE_FOLLOWUP_TITLE_FIELD || "thing1";
-  const timeField = env.WECHAT_SUBSCRIBE_FOLLOWUP_TIME_FIELD || "time2";
-  const noteField = env.WECHAT_SUBSCRIBE_FOLLOWUP_NOTE_FIELD || "thing3";
+  const timeField = env.WECHAT_SUBSCRIBE_FOLLOWUP_TIME_FIELD || "time7";
+  const noteField = env.WECHAT_SUBSCRIBE_FOLLOWUP_NOTE_FIELD || "thing10";
 
   const title = task.title ? String(task.title).slice(0, 20) : "约定跟进";
   const endTime = task.endTime

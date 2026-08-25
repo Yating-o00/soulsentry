@@ -113,6 +113,17 @@ export default function TaskCreate() {
   const [loading, setLoading] = useState(false);
   const [createdTask, setCreatedTask] = useState(null);
   const [posterUrl, setPosterUrl] = useState("");
+  const [posterSize, setPosterSize] = useState(() => {
+    try {
+      const sys = Taro.getSystemInfoSync();
+      const winWidth = sys.windowWidth || 375;
+      const width = Math.round(winWidth * 0.9);
+      const height = Math.round(width * 840 / 600);
+      return { width, height };
+    } catch {
+      return { width: 600, height: 840 };
+    }
+  });
   const [editId, setEditId] = useState("");
   const [isEdit, setIsEdit] = useState(false);
 
@@ -437,81 +448,92 @@ export default function TaskCreate() {
       return;
     }
 
-    const ctx = Taro.createCanvasContext("shareCanvas");
-    const width = 600;
-    const height = 840;
+    try {
+      const { width, height } = posterSize;
+      const ctx = Taro.createCanvasContext("shareCanvas");
+      const scale = width / 600;
 
-    // 背景
-    const grd = ctx.createLinearGradient(0, 0, 0, height);
-    grd.addColorStop(0, "#384877");
-    grd.addColorStop(1, "#4a5d8f");
-    ctx.setFillStyle(grd);
-    ctx.fillRect(0, 0, width, height);
+      // 整体缩放，使 600x840 的内容适配到当前屏幕宽度的 90%
+      ctx.scale(scale, scale);
 
-    // 顶部品牌
-    ctx.setFillStyle("#ffffff");
-    ctx.setFontSize(28);
-    ctx.fillText("SoulSentry", 40, 60);
+      // 背景
+      const grd = ctx.createLinearGradient(0, 0, 0, 840);
+      grd.addColorStop(0, "#384877");
+      grd.addColorStop(1, "#4a5d8f");
+      ctx.setFillStyle(grd);
+      ctx.fillRect(0, 0, 600, 840);
 
-    // 标题
-    ctx.setFontSize(40);
-    const displayTitle = title.length > 14 ? title.slice(0, 14) + "…" : title;
-    ctx.fillText(displayTitle, 40, 140);
+      // 顶部品牌
+      ctx.setFillStyle("#ffffff");
+      ctx.setFontSize(28);
+      ctx.fillText("SoulSentry", 40, 60);
 
-    // 描述
-    ctx.setFontSize(26);
-    const desc = description || "与你一起守护这个约定";
-    const displayDesc = desc.length > 60 ? desc.slice(0, 60) + "…" : desc;
-    ctx.fillText(displayDesc, 40, 200);
+      // 标题
+      ctx.setFontSize(40);
+      const displayTitle = title.length > 14 ? title.slice(0, 14) + "…" : title;
+      ctx.fillText(displayTitle, 40, 140);
 
-    // 时间
-    const endISO = toISODate(endDate, endTime);
-    if (endISO) {
-      ctx.setFontSize(24);
-      ctx.fillText(`截止时间：${formatDateTime(endISO)}`, 40, 270);
-    }
+      // 描述
+      ctx.setFontSize(26);
+      const desc = description || "与你一起守护这个约定";
+      const displayDesc = desc.length > 60 ? desc.slice(0, 60) + "…" : desc;
+      ctx.fillText(displayDesc, 40, 200);
 
-    // 白色内容区
-    ctx.setFillStyle("#ffffff");
-    ctx.fillRect(40, 320, 520, 360);
+      // 时间
+      const endISO = toISODate(endDate, endTime);
+      if (endISO) {
+        ctx.setFontSize(24);
+        ctx.fillText(`截止时间：${formatDateTime(endISO)}`, 40, 270);
+      }
 
-    // 内容区文字
-    ctx.setFillStyle("#384877");
-    ctx.setFontSize(28);
-    ctx.fillText("扫码参与约定", 70, 380);
+      // 白色内容区
+      ctx.setFillStyle("#ffffff");
+      ctx.fillRect(40, 320, 520, 360);
 
-    ctx.setFillStyle("#666666");
-    ctx.setFontSize(22);
-    ctx.fillText("对方可匿名勾选进度、留言", 70, 420);
+      // 内容区文字
+      ctx.setFillStyle("#384877");
+      ctx.setFontSize(28);
+      ctx.fillText("扫码参与约定", 70, 380);
 
-    // 链接
-    const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
-    ctx.setFillStyle("#384877");
-    ctx.setFontSize(20);
-    const shortLink = link.length > 48 ? link.slice(0, 48) + "…" : link;
-    ctx.fillText(shortLink, 70, 620);
+      ctx.setFillStyle("#666666");
+      ctx.setFontSize(22);
+      ctx.fillText("对方可匿名勾选进度、留言", 70, 420);
 
-    // 底部提示
-    ctx.setFillStyle("rgba(255,255,255,0.8)");
-    ctx.setFontSize(22);
-    ctx.fillText("长按识别 · 共同守护", 40, 780);
+      // 链接
+      const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
+      ctx.setFillStyle("#384877");
+      ctx.setFontSize(20);
+      const shortLink = link.length > 48 ? link.slice(0, 48) + "…" : link;
+      ctx.fillText(shortLink, 70, 620);
 
-    ctx.draw(false, () => {
-      Taro.canvasToTempFilePath({
-        canvasId: "shareCanvas",
-        width,
-        height,
-        destWidth: width,
-        destHeight: height,
-        success: (res) => {
-          setPosterUrl(res.tempFilePath);
-          Taro.showToast({ title: "卡片已生成", icon: "success" });
-        },
-        fail: () => {
-          Taro.showToast({ title: "卡片生成失败", icon: "none" });
-        }
+      // 底部提示
+      ctx.setFillStyle("rgba(255,255,255,0.8)");
+      ctx.setFontSize(22);
+      ctx.fillText("长按识别 · 共同守护", 40, 780);
+
+      ctx.draw(false, () => {
+        Taro.canvasToTempFilePath({
+          canvasId: "shareCanvas",
+          x: 0,
+          y: 0,
+          width,
+          height,
+          destWidth: width * 2,
+          destHeight: height * 2,
+          success: (res) => {
+            setPosterUrl(res.tempFilePath);
+            Taro.showToast({ title: "卡片已生成", icon: "success" });
+          },
+          fail: (err) => {
+            console.error("canvasToTempFilePath failed", err);
+            Taro.showToast({ title: "卡片生成失败", icon: "none" });
+          }
+        });
       });
-    });
+    } catch (err) {
+      console.error("generate poster failed", err);
+      Taro.showToast({ title: "卡片生成失败", icon: "none" });
+    }
   };
 
   const savePoster = () => {
@@ -876,8 +898,8 @@ export default function TaskCreate() {
             <Canvas
               canvasId="shareCanvas"
               style={{
-                width: "600rpx",
-                height: "840rpx",
+                width: `${posterSize.width}px`,
+                height: `${posterSize.height}px`,
                 margin: "24rpx auto",
                 borderRadius: "16rpx",
                 boxShadow: "0 4rpx 20rpx rgba(0,0,0,0.1)"

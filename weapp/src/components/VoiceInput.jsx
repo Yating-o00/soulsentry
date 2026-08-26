@@ -7,7 +7,6 @@ let recognitionManager = null;
 function getRecognitionManager() {
   if (recognitionManager) return recognitionManager;
   try {
-    // 微信小程序全局 requirePlugin，不通过 Taro.getApp
     const plugin = requirePlugin("WechatSI");
     if (plugin && plugin.getRecordRecognitionManager) {
       recognitionManager = plugin.getRecordRecognitionManager();
@@ -18,19 +17,61 @@ function getRecognitionManager() {
   return recognitionManager;
 }
 
-export default function VoiceInput({ onResult, onError, size = 96, style = {} }) {
+async function ensureRecordAuth() {
+  return new Promise((resolve) => {
+    Taro.getSetting({
+      success: (res) => {
+        const auth = res.authSetting["scope.record"];
+        if (auth === true) {
+          resolve(true);
+          return;
+        }
+        if (auth === false) {
+          // 曾经被拒绝，需要引导去设置页
+          Taro.showModal({
+            title: "需要录音权限",
+            content: "语音输入需要录音权限，请前往设置开启",
+            confirmText: "去设置",
+            success: (modalRes) => {
+              if (modalRes.confirm) {
+                Taro.openSetting();
+              }
+              resolve(false);
+            }
+          });
+          return;
+        }
+        // 未请求过，直接授权
+        Taro.authorize({
+          scope: "scope.record",
+          success: () => resolve(true),
+          fail: (err) => {
+            console.warn("[VoiceInput] authorize record failed", err);
+            resolve(false);
+          }
+        });
+      },
+      fail: () => resolve(false)
+    });
+  });
+}
+
+export default function VoiceInput({ onResult, onError, onTouchStart: onTouchStartProp, size = 96, style = {} }) {
   const [recording, setRecording] = useState(false);
   const [hint, setHint] = useState("");
   const interimRef = useRef("");
   const finalRef = useRef("");
   const timerRef = useRef(null);
+  const initedRef = useRef(false);
 
   useEffect(() => {
+    if (initedRef.current) return;
     const manager = getRecognitionManager();
     if (!manager) {
       setHint("语音插件未配置");
       return;
     }
+    initedRef.current = true;
 
     manager.onRecognize = (res) => {
       if (typeof res?.result === "string") {
@@ -53,9 +94,12 @@ export default function VoiceInput({ onResult, onError, size = 96, style = {} })
 
     manager.onError = (res) => {
       setRecording(false);
-      const msg = res?.msg || "语音识别失败";
-      setHint(msg);
-      onError?.(msg);
+      const code = res?.retcode || res?.code || "";
+      const msg = res?.msg || res?.message || "语音识别失败";
+      const display = code ? `${msg} (${code})` : msg;
+      setHint(display);
+      console.error("[VoiceInput] recognition error", res);
+      onError?.(display);
       interimRef.current = "";
       finalRef.current = "";
       clearTimeout(timerRef.current);
@@ -66,11 +110,18 @@ export default function VoiceInput({ onResult, onError, size = 96, style = {} })
     };
   }, [onResult, onError]);
 
-  const startRecord = () => {
+  const startRecord = async () => {
     const manager = getRecognitionManager();
     if (!manager) {
       Taro.showToast({ title: "语音插件未配置", icon: "none" });
       onError?.("语音插件未配置");
+      return;
+    }
+
+    const granted = await ensureRecordAuth();
+    if (!granted) {
+      setHint("需要录音权限");
+      onError?.("需要录音权限");
       return;
     }
 
@@ -85,13 +136,13 @@ export default function VoiceInput({ onResult, onError, size = 96, style = {} })
         lang: "zh_CN"
       });
 
-      // 最长 30 秒自动停止
       timerRef.current = setTimeout(() => {
         stopRecord();
       }, 30000);
     } catch (err) {
       setRecording(false);
       setHint("启动失败");
+      console.error("[VoiceInput] start failed", err);
       onError?.(err?.message || "启动失败");
     }
   };
@@ -104,12 +155,14 @@ export default function VoiceInput({ onResult, onError, size = 96, style = {} })
       manager.stop();
     } catch (err) {
       setRecording(false);
+      console.error("[VoiceInput] stop failed", err);
       onError?.(err?.message || "停止失败");
     }
   };
 
   const onTouchStart = (e) => {
     e.preventDefault();
+    onTouchStartProp?.();
     startRecord();
   };
 

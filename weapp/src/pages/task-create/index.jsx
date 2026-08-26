@@ -709,12 +709,81 @@ export default function TaskCreate() {
     );
   };
 
-  const handleVoiceResult = (text) => {
-    setTitle(text);
-    // 自动触发 AI 分析，获得时间线与执行策略
-    if (text.trim()) {
-      setTimeout(() => analyze(text), 200);
+  const createTaskFromVoice = async (parsed) => {
+    setLoading(true);
+    try {
+      const payload = {
+        title: parsed.title?.trim(),
+        description: parsed.description?.trim() || undefined,
+        priority: parsed.priority || "medium",
+        category: parsed.category || "other"
+      };
+      if (parsed.reminder_time) payload.reminder_time = parsed.reminder_time;
+      if (parsed.end_time) payload.end_time = parsed.end_time;
+
+      const task = await post("/tasks", payload);
+      setCreatedTask(task);
+
+      try {
+        const share = await post(`/public/share/generate/task/${task.id}`);
+        setShareToken(share.token || "");
+      } catch (shareErr) {
+        console.error("generate share failed", shareErr);
+      }
+
+      Taro.showToast({ title: "约定已创建", icon: "success" });
+      setStep("created");
+    } catch (err) {
+      // handled globally
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleVoiceResult = async (text) => {
+    if (!text.trim()) return;
+
+    setLoading(true);
+    try {
+      const parsed = await post("/functions/parseVoiceTask", { input: text.trim() });
+      if (!parsed?.title || !parsed?.reminder_time) {
+        Taro.showToast({ title: "未能识别约定信息", icon: "none" });
+        setLoading(false);
+        return;
+      }
+
+      // 回显到表单，方便用户确认
+      setTitle(parsed.title || "");
+      setDescription(parsed.description || "");
+      const priorityIdx = priorities.findIndex((p) => p.value === parsed.priority);
+      const categoryIdx = categories.findIndex((c) => c.value === parsed.category);
+      if (priorityIdx >= 0) setPriorityIndex(priorityIdx);
+      if (categoryIdx >= 0) setCategoryIndex(categoryIdx);
+
+      const setDateTimeFromISO = (iso, setDate, setTime) => {
+        if (!iso) return;
+        const d = new Date(iso);
+        if (!isNaN(d.getTime())) {
+          setDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+          setTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+        }
+      };
+      setDateTimeFromISO(parsed.reminder_time, setReminderDate, setReminderTime);
+      setDateTimeFromISO(parsed.end_time, setEndDate, setEndTime);
+
+      // 自动创建约定
+      await createTaskFromVoice(parsed);
+    } catch (err) {
+      console.error("parseVoiceTask failed", err);
+      Taro.showToast({ title: "语音解析失败", icon: "none" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVoiceTouchStart = () => {
+    // 在用户主动按下语音按钮的同步调用栈内请求订阅授权
+    requestReminderSubscribeSync();
   };
 
   const renderForm = () => (
@@ -724,7 +793,11 @@ export default function TaskCreate() {
 
       {!isEdit && (
         <View style={{ marginTop: "32rpx", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <VoiceInput onResult={handleVoiceResult} onError={(err) => Taro.showToast({ title: err, icon: "none" })} />
+          <VoiceInput
+            onResult={handleVoiceResult}
+            onTouchStart={handleVoiceTouchStart}
+            onError={(err) => Taro.showToast({ title: err, icon: "none" })}
+          />
         </View>
       )}
 

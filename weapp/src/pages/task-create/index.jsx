@@ -3,6 +3,7 @@ import Taro, { useShareAppMessage } from "@tarojs/taro";
 import { View, Text, Input, Textarea, Picker, Button, ScrollView, Canvas } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
 import createQRCode from "@/lib/qrcode";
+import VoiceInput from "@/components/VoiceInput";
 
 const priorities = [
   { value: "urgent", label: "紧急" },
@@ -325,8 +326,9 @@ export default function TaskCreate() {
     };
   };
 
-  const analyze = async () => {
-    if (!isFormValid) {
+  const analyze = async (voiceText) => {
+    const inputText = voiceText || [title, description].filter(Boolean).join("\n");
+    if (!inputText.trim()) {
       Taro.showToast({ title: "请先输入约定内容", icon: "none" });
       return;
     }
@@ -334,10 +336,8 @@ export default function TaskCreate() {
     setLoading(true);
     let timeoutId = null;
     try {
-      const input = [title, description].filter(Boolean).join("\n");
-
       const requestPromise = post("/functions/analyzeIntent", {
-        input,
+        input: inputText,
         date: endDate || new Date().toISOString().slice(0, 10)
       });
 
@@ -709,10 +709,24 @@ export default function TaskCreate() {
     );
   };
 
+  const handleVoiceResult = (text) => {
+    setTitle(text);
+    // 自动触发 AI 分析，获得时间线与执行策略
+    if (text.trim()) {
+      setTimeout(() => analyze(text), 200);
+    }
+  };
+
   const renderForm = () => (
     <View className="ss-card">
       <View className="ss-title">{isEdit ? "编辑约定" : "新建约定"}</View>
       <View className="ss-subtitle">{isEdit ? "修改约定信息" : "输入约定后，可先让 SoulSentry 帮你分析时间线与执行策略。"}</View>
+
+      {!isEdit && (
+        <View style={{ marginTop: "32rpx", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <VoiceInput onResult={handleVoiceResult} onError={(err) => Taro.showToast({ title: err, icon: "none" })} />
+        </View>
+      )}
 
       <View style={{ marginTop: "24rpx" }}>
         <View className="ss-label">标题 *</View>

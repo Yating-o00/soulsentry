@@ -11,6 +11,12 @@ export default {
     "pages/share/index",
     "pages/account/index"
   ],
+  plugins: {
+    WechatSI: {
+      version: "0.3.5",
+      provider: "wx069ba97219f66d99"
+    }
+  },
   window: {
     backgroundTextStyle: "light",
     navigationBarBackgroundColor: "#384877",

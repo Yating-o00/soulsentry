@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Taro from "@tarojs/taro";
 import { View, Input, Textarea, Button, ScrollView, Text } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
+import VoiceInput from "@/components/VoiceInput";
 
 function normalizeTags(value) {
   if (Array.isArray(value)) return value.filter((t) => typeof t === "string" && t.trim()).map((t) => t.trim());
@@ -159,6 +160,15 @@ export default function NoteCreate() {
           onInput={(e) => setTitle(e.detail.value)}
         />
       </View>
+
+      {!isEdit && (
+        <View style={{ marginTop: "32rpx", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <VoiceInput
+            onResult={(text) => setContent(text)}
+            onError={(err) => Taro.showToast({ title: err, icon: "none" })}
+          />
+        </View>
+      )}
 
       <View style={{ marginTop: "24rpx" }}>
         <View className="ss-label">内容 *</View>

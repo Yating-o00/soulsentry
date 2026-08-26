@@ -7,7 +7,8 @@ let recognitionManager = null;
 function getRecognitionManager() {
   if (recognitionManager) return recognitionManager;
   try {
-    const plugin = Taro.getApp()?.requirePlugin?.("WechatSI");
+    // 微信小程序全局 requirePlugin，不通过 Taro.getApp
+    const plugin = requirePlugin("WechatSI");
     if (plugin && plugin.getRecordRecognitionManager) {
       recognitionManager = plugin.getRecordRecognitionManager();
     }

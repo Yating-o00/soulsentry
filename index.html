@@ -10,6 +10,26 @@
     <meta name="apple-mobile-web-app-title" content="心栈" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>灵魂哨兵 · SoulSentry</title>
+    <script>
+      (function() {
+        var shown = false;
+        function show(msg, stack) {
+          if (shown) return;
+          shown = true;
+          var pre = document.createElement('pre');
+          pre.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;padding:24px;margin:0;background:#fff;color:#c00;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-all;overflow:auto;';
+          pre.textContent = msg + (stack ? '\n\n' + stack : '');
+          document.body ? document.body.appendChild(pre) : document.addEventListener('DOMContentLoaded', function() { document.body.appendChild(pre); });
+        }
+        window.addEventListener('error', function(e) {
+          show('Error: ' + (e.message || String(e.error)), e.error && e.error.stack);
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+          var r = e.reason;
+          show('Unhandled: ' + (r && r.message ? r.message : String(r)), r && r.stack);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

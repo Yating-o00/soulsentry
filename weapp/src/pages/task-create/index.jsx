@@ -401,11 +401,6 @@ export default function TaskCreate() {
     if (reminderISO) payload.reminder_time = reminderISO;
     if (endISO) payload.end_time = endISO;
 
-    // 如果设置了提醒时间，同步请求微信订阅消息权限
-    if (reminderISO) {
-      requestReminderSubscribeSync();
-    }
-
     setLoading(true);
     try {
       if (isEdit && editId) {
@@ -888,7 +883,15 @@ export default function TaskCreate() {
           🤖 AI 分析并预览
         </Button>
       )}
-      <Button className="ss-btn" loading={loading} disabled={loading || !isFormValid} onClick={saveTask}>
+      <Button
+        className="ss-btn"
+        loading={loading}
+        disabled={loading || !isFormValid}
+        onClick={() => {
+          if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
+          saveTask();
+        }}
+      >
         {isEdit ? "保存修改" : "直接创建"}
       </Button>
     </View>
@@ -974,7 +977,15 @@ export default function TaskCreate() {
       )}
 
       <View className="ss-card">
-        <Button className="ss-btn" loading={loading} disabled={loading} onClick={saveTask}>
+        <Button
+          className="ss-btn"
+          loading={loading}
+          disabled={loading}
+          onClick={() => {
+            if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
+            saveTask();
+          }}
+        >
           创建约定
         </Button>
         <Button className="ss-btn ss-btn-plain" onClick={() => setStep("form")}>

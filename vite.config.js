@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react'
+import legacy from '@vitejs/plugin-legacy'
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { defineConfig } from 'vite'
@@ -20,5 +21,11 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src")
     }
   },
-  plugins: [react()]
+  plugins: [
+    react(),
+    legacy({
+      targets: ["chrome >= 60", "ios >= 10", "android >= 5", "safari >= 10"],
+      additionalLegacyPolyfills: ["regenerator-runtime/runtime"]
+    })
+  ]
 });

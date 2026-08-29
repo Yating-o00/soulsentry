@@ -20,11 +20,12 @@ export default function FloatingAssistantButton() {
 
   const assistantName = user?.assistant_name ? `SoulSentry-${user.assistant_name}` : "SoulSentry-小雅";
 
-  const { data: tasks = [] } = useQuery({
+  const { data: rawTasks } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-reminder_time'),
     initialData: [],
   });
+  const tasks = Array.isArray(rawTasks) ? rawTasks : [];
 
   // 监听用户交互，更新活动时间
   useEffect(() => {

@@ -122,7 +122,7 @@ export function useTaskOperations() {
     // 乐观更新 - 立即更新UI，无需等待服务器响应
     const optimisticStatus = isRecurring && newStatus === 'completed' ? 'pending' : newStatus;
     queryClient.setQueryData(['tasks'], (oldData) => {
-      if (!oldData) return oldData;
+      if (!Array.isArray(oldData)) return oldData;
       return oldData.map(t => 
         t.id === task.id 
           ? { ...t, status: optimisticStatus, completed_at: completedAt }
@@ -159,7 +159,7 @@ export function useTaskOperations() {
       if (subtasks.length > 0) {
          // Optimistically update subtasks in UI
          queryClient.setQueryData(['tasks'], (oldData) => {
-            if (!oldData) return oldData;
+            if (!Array.isArray(oldData)) return oldData;
             const subtaskIds = new Set(subtasks.map(s => s.id));
             return oldData.map(t => {
               if (subtaskIds.has(t.id)) {
@@ -333,7 +333,7 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
     
     // 乐观更新子任务
     queryClient.setQueryData(['tasks'], (oldData) => {
-      if (!oldData) return oldData;
+      if (!Array.isArray(oldData)) return oldData;
       return oldData.map(t => 
         t.id === subtask.id 
           ? { ...t, status: newStatus, completed_at: completedAt }

@@ -53,17 +53,19 @@ export default function CalendarView() {
   
   const queryClient = useQueryClient();
 
-  const { data: allTasks = [] } = useQuery({
+  const { data: tasksRaw } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-reminder_time'),
     initialData: [],
   });
+  const allTasks = Array.isArray(tasksRaw) ? tasksRaw : [];
 
-  const { data: allNotes = [] } = useQuery({
+  const { data: notesRaw } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date'),
     initialData: [],
   });
+  const allNotes = Array.isArray(notesRaw) ? notesRaw : [];
 
   const tasks = useMemo(() => {
     return allTasks.filter(task => {

@@ -50,11 +50,6 @@ const AuthenticatedApp = () => {
     }
   }
 
-  // 独立部署下未登录时直接显示登录页，避免页面继续调 API 触发 Demo 自动登录
-  if (isStandaloneMode && !isAuthenticated) {
-    return <Login />;
-  }
-
   // Render the main app
   return (
     <LayoutWrapper currentPageName={mainPageKey}>

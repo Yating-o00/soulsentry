@@ -50,6 +50,7 @@ import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
+import { isDemoUser } from "@/hooks/useTrialGate";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -303,7 +304,7 @@ export default function Dashboard() {
     <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto min-h-screen">
       <NotificationManager />
 
-      {!isAuthenticated && (
+      {isDemoUser(user) && (
         <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">

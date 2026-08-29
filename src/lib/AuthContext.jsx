@@ -2,7 +2,6 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
 import { isStandaloneMode } from '@/api/platformConfig';
-import { isDemoUser } from '@/hooks/useTrialGate';
 
 const AuthContext = createContext();
 const isStandalonePricingPreview = () => {
@@ -168,15 +167,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoadingAuth(true);
       const currentUser = await base44.auth.me();
-      const user = currentUser.user || currentUser;
-
-      // 生产环境禁止把 Demo 用户当作已登录用户
-      if (!import.meta.env.DEV && isStandaloneMode && isDemoUser(user)) {
-        base44.auth.logout();
-        throw new Error("当前为演示账号，请重新登录");
-      }
-
-      setUser(user);
+      setUser(currentUser.user || currentUser);
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
     } catch (error) {

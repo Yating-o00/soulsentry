@@ -54,7 +54,9 @@ export const AuthProvider = ({ children }) => {
       setAuthError(null);
 
       try {
-        if (!base44.auth.isAuthenticated() && typeof base44.auth.bootstrapDevSession === "function") {
+        // 生产环境不要自动登录 Demo 用户，避免用户看到空数据/测试数据
+        const shouldBootstrapDemo = import.meta.env.DEV && typeof base44.auth.bootstrapDevSession === "function";
+        if (shouldBootstrapDemo && !base44.auth.isAuthenticated()) {
           try {
             const bootstrapUser = await base44.auth.bootstrapDevSession();
             setUser(bootstrapUser.user || bootstrapUser);

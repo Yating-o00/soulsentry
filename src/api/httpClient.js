@@ -2,12 +2,35 @@ import { standaloneApiBaseUrl } from "./platformConfig";
 
 const ACCESS_TOKEN_KEY = "soulsentry_access_token";
 
-export function getAccessToken() {
+function getCookieToken() {
   try {
-    return window.localStorage.getItem(ACCESS_TOKEN_KEY);
+    const match = document.cookie.match(new RegExp('(?:^|; )' + ACCESS_TOKEN_KEY + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
   } catch (_error) {
     return null;
   }
+}
+
+function setCookieToken(token) {
+  try {
+    if (token) {
+      document.cookie = `${ACCESS_TOKEN_KEY}=${encodeURIComponent(token)}; path=/; max-age=31536000; SameSite=Lax`;
+    } else {
+      document.cookie = `${ACCESS_TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax`;
+    }
+  } catch (_error) {
+    // Ignore cookie failures.
+  }
+}
+
+export function getAccessToken() {
+  try {
+    const ls = window.localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (ls) return ls;
+  } catch (_error) {
+    // Fall through to cookie fallback.
+  }
+  return getCookieToken();
 }
 
 export function setAccessToken(token) {
@@ -20,6 +43,7 @@ export function setAccessToken(token) {
   } catch (_error) {
     // Ignore storage failures in privacy mode.
   }
+  setCookieToken(token);
 }
 
 export function buildApiUrl(path) {

@@ -71,19 +71,21 @@ export default function NotificationManager() {
   const swallow = (fn) => async () => {
     try { return await fn(); } catch (e) { console.warn('[NotificationManager] query failed:', e?.message); return []; }
   };
-  const { data: tasks = [] } = useQuery({
+  const { data: rawTasks } = useQuery({
     queryKey: ['tasks'],
     queryFn: swallow(() => base44.entities.Task.list()),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
+  const tasks = Array.isArray(rawTasks) ? rawTasks : [];
 
-  const { data: recentBehaviors = [] } = useQuery({
+  const { data: rawRecentBehaviors } = useQuery({
     queryKey: ['recentBehaviors'],
     queryFn: swallow(() => base44.entities.UserBehavior.list('-created_date', 20)),
     staleTime: 10 * 60 * 1000,
     retry: 1,
   });
+  const recentBehaviors = Array.isArray(rawRecentBehaviors) ? rawRecentBehaviors : [];
 
   const { data: rules = [] } = useQuery({
     queryKey: ['notificationRules'],

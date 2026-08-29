@@ -4,6 +4,18 @@ function unsupported(target, method) {
   throw new Error(`独立后端尚未实现 ${target}.${method}，请先完成对应模块迁移`);
 }
 
+/**
+ * 兜底：后端 list/filter 接口在某些情况下可能返回对象（例如 { data: [...] }）或异常值，
+ * iOS 16 上若前端直接调用 .map/.filter 会白屏。统一包成数组。
+ */
+function ensureArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value && Array.isArray(value.data)) return value.data;
+  if (value && Array.isArray(value.results)) return value.results;
+  if (value && Array.isArray(value.items)) return value.items;
+  return [];
+}
+
 const DEMO_EMAIL = "demo@soulsentry.local";
 const DEMO_PASSWORD = "demo123456";
 
@@ -31,7 +43,7 @@ function createPlanEntity(basePath) {
   return {
     async list(sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
-      return httpRequest(`${basePath}?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+      return ensureArray(await httpRequest(`${basePath}?sort=${encodeURIComponent(sort)}&limit=${limit}`));
     },
     async filter(filters = {}, sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
@@ -44,7 +56,7 @@ function createPlanEntity(basePath) {
       });
       params.set("sort", sort);
       params.set("limit", String(limit));
-      return httpRequest(`${basePath}?${params.toString()}`);
+      return ensureArray(await httpRequest(`${basePath}?${params.toString()}`));
     },
     async get(id) {
       await ensureStandaloneSession();
@@ -80,7 +92,7 @@ function createTaskEntity() {
   return {
     async list(sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
-      return httpRequest(`/api/tasks?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+      return ensureArray(await httpRequest(`/api/tasks?sort=${encodeURIComponent(sort)}&limit=${limit}`));
     },
     async filter(filters = {}, sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
@@ -93,7 +105,7 @@ function createTaskEntity() {
       });
       params.set("sort", sort);
       params.set("limit", String(limit));
-      return httpRequest(`/api/tasks?${params.toString()}`);
+      return ensureArray(await httpRequest(`/api/tasks?${params.toString()}`));
     },
     async get(id) {
       await ensureStandaloneSession();
@@ -136,7 +148,7 @@ function createNoteEntity() {
   return {
     async list(sort = "-updated_date", limit = 100) {
       await ensureStandaloneSession();
-      return httpRequest(`/api/notes?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+      return ensureArray(await httpRequest(`/api/notes?sort=${encodeURIComponent(sort)}&limit=${limit}`));
     },
     async get(id) {
       await ensureStandaloneSession();
@@ -172,7 +184,7 @@ function createTaskExecutionEntity() {
   return {
     async list(sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
-      return httpRequest(`/api/task-executions?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+      return ensureArray(await httpRequest(`/api/task-executions?sort=${encodeURIComponent(sort)}&limit=${limit}`));
     },
     async filter(filters = {}, sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
@@ -185,7 +197,7 @@ function createTaskExecutionEntity() {
       });
       params.set("sort", sort);
       params.set("limit", String(limit));
-      return httpRequest(`/api/task-executions?${params.toString()}`);
+      return ensureArray(await httpRequest(`/api/task-executions?${params.toString()}`));
     },
     async get(id) {
       await ensureStandaloneSession();
@@ -221,7 +233,7 @@ function createSavedLocationEntity() {
   return {
     async list(sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
-      return httpRequest(`/api/saved-locations?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+      return ensureArray(await httpRequest(`/api/saved-locations?sort=${encodeURIComponent(sort)}&limit=${limit}`));
     },
     async filter(filters = {}, sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
@@ -234,7 +246,7 @@ function createSavedLocationEntity() {
       });
       params.set("sort", sort);
       params.set("limit", String(limit));
-      return httpRequest(`/api/saved-locations?${params.toString()}`);
+      return ensureArray(await httpRequest(`/api/saved-locations?${params.toString()}`));
     },
     async get(id) {
       await ensureStandaloneSession();
@@ -277,7 +289,7 @@ function createNotificationRuleEntity() {
   return {
     async list(sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
-      return httpRequest(`/api/notification-rules?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+      return ensureArray(await httpRequest(`/api/notification-rules?sort=${encodeURIComponent(sort)}&limit=${limit}`));
     },
     async filter(filters = {}, sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
@@ -290,7 +302,7 @@ function createNotificationRuleEntity() {
       });
       params.set("sort", sort);
       params.set("limit", String(limit));
-      return httpRequest(`/api/notification-rules?${params.toString()}`);
+      return ensureArray(await httpRequest(`/api/notification-rules?${params.toString()}`));
     },
     async create(data) {
       await ensureStandaloneSession();
@@ -323,7 +335,7 @@ function createStandardEntity(basePath, { includeGet = true, includeBulkCreate =
   const entity = {
     async list(sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
-      return httpRequest(`${basePath}?sort=${encodeURIComponent(sort)}&limit=${limit}`);
+      return ensureArray(await httpRequest(`${basePath}?sort=${encodeURIComponent(sort)}&limit=${limit}`));
     },
     async filter(filters = {}, sort = "-created_date", limit = 100) {
       await ensureStandaloneSession();
@@ -336,7 +348,7 @@ function createStandardEntity(basePath, { includeGet = true, includeBulkCreate =
       });
       params.set("sort", sort);
       params.set("limit", String(limit));
-      return httpRequest(`${basePath}?${params.toString()}`);
+      return ensureArray(await httpRequest(`${basePath}?${params.toString()}`));
     },
     async create(data) {
       await ensureStandaloneSession();
@@ -475,7 +487,7 @@ function createEntityProxy() {
           return {
             async list() {
               await ensureStandaloneSession();
-              return httpRequest("/api/credits/transactions");
+              return ensureArray(await httpRequest("/api/credits/transactions"));
             }
           };
         }

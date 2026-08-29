@@ -12,6 +12,33 @@
     <title>灵魂哨兵 · SoulSentry</title>
     <script>
       (function() {
+        // iOS Safari 隐私模式 / 跨域 WebView 下访问 localStorage/sessionStorage 会抛 SecurityError，
+        // 导致顶层模块加载失败白屏。先提供一个内存 shim，让后续代码能安全访问。
+        function shimStorage(name) {
+          try {
+            var s = window[name];
+            s.getItem('__ss_storage_test__');
+            return;
+          } catch (e) {}
+          var store = {};
+          try {
+            Object.defineProperty(window, name, {
+              value: {
+                getItem: function(k) { return store[k] === undefined ? null : store[k]; },
+                setItem: function(k, v) { store[k] = String(v); },
+                removeItem: function(k) { delete store[k]; },
+                clear: function() { store = {}; },
+                key: function(i) { return Object.keys(store)[i] || null; },
+                get length() { return Object.keys(store).length; }
+              },
+              writable: true,
+              configurable: true
+            });
+          } catch (e) {}
+        }
+        shimStorage('localStorage');
+        shimStorage('sessionStorage');
+
         var shown = false;
         function show(msg, stack, isWarn) {
           if (shown) return;

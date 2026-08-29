@@ -72,11 +72,12 @@ export default function Dashboard() {
   });
 
   // Get all tasks
-  const { data: allTasks = [], isLoading } = useQuery({
+  const { data: tasksRaw = [], isLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-reminder_time'),
     initialData: [],
   });
+  const allTasks = Array.isArray(tasksRaw) ? tasksRaw : [];
 
   const { 
     updateTask, 
@@ -246,11 +247,12 @@ export default function Dashboard() {
   };
 
   // Note fetching for dashboard stats
-  const { data: allNotes = [] } = useQuery({
+  const { data: notesRaw = [] } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date'),
     initialData: [],
   });
+  const allNotes = Array.isArray(notesRaw) ? notesRaw : [];
   
   // Calculate notesOnSelectedDate for dashboard stats
   // Using today as selectedDate for stats context if not explicitly tracking a selected date in state for stats (stats cards use todayTasks, etc.)

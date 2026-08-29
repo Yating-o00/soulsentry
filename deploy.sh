@@ -184,12 +184,24 @@ systemctl restart "$SERVICE_NAME"
 systemctl is-active --quiet "$SERVICE_NAME" || fail "service is not active: $SERVICE_NAME"
 
 log "Validation 1/3: local backend health"
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -fsS "http://127.0.0.1:${BACKEND_PORT}${HEALTH_PATH}" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
 curl -fsS "http://127.0.0.1:${BACKEND_PORT}${HEALTH_PATH}" >/dev/null
 
 log "Validation 2/3: local backend response contains ok"
 curl -fsS "http://127.0.0.1:${BACKEND_PORT}${HEALTH_PATH}" | grep -qi '"ok":true'
 
 log "Validation 3/3: public health"
+for i in 1 2 3 4 5; do
+  if curl -fsS "$PUBLIC_HEALTH_URL" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
 curl -fsS "$PUBLIC_HEALTH_URL" | grep -qi '"ok":true'
 
 log "Cleanup old releases"

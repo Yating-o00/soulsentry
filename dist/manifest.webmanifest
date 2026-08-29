@@ -1,0 +1,21 @@
+{
+  "name": "灵魂哨兵 · SoulSentry",
+  "short_name": "心栈",
+  "description": "在合适的时间、合适的地点、合适的方式，守护你想记住的每件事。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8f9fa",
+  "theme_color": "#384877",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "https://base44.com/logo_v2.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "lifestyle"]
+}

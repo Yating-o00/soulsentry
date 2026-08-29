@@ -93,7 +93,9 @@ if [[ "$SKIP_FRONTEND_BUILD" != "1" ]]; then
   npm --prefix "$RELEASE_PATH" run build
 else
   log "Skip frontend build because SKIP_FRONTEND_BUILD=1"
-  if [[ -d "$CURRENT_LINK/dist" ]]; then
+  if [[ -d "$RELEASE_PATH/dist" ]]; then
+    log "Use committed dist from $RELEASE_PATH/dist"
+  elif [[ -d "$CURRENT_LINK/dist" ]]; then
     log "Reuse current dist from $CURRENT_LINK/dist"
     mkdir -p "$RELEASE_PATH/dist"
     rsync -a --delete "$CURRENT_LINK/dist/" "$RELEASE_PATH/dist/"

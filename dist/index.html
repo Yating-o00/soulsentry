@@ -13,14 +13,28 @@
     <script>
       (function() {
         var shown = false;
-        function show(msg, stack) {
+        function show(msg, stack, isWarn) {
           if (shown) return;
           shown = true;
           var pre = document.createElement('pre');
-          pre.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;padding:24px;margin:0;background:#fff;color:#c00;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-all;overflow:auto;';
+          pre.id = '__ss_diag__';
+          pre.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;padding:24px;margin:0;background:#fff;color:' + (isWarn ? '#c60' : '#c00') + ';font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-all;overflow:auto;font-family:monospace;';
           pre.textContent = msg + (stack ? '\n\n' + stack : '');
-          document.body ? document.body.appendChild(pre) : document.addEventListener('DOMContentLoaded', function() { document.body.appendChild(pre); });
+          if (document.body) document.body.appendChild(pre);
+          else document.addEventListener('DOMContentLoaded', function() { document.body.appendChild(pre); });
         }
+        function append(msg) {
+          var el = document.getElementById('__ss_diag__');
+          if (el) { el.textContent += '\n' + msg; return; }
+          var pre = document.createElement('pre');
+          pre.id = '__ss_diag__';
+          pre.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;padding:24px;margin:0;background:#fff;color:#333;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-all;overflow:auto;font-family:monospace;';
+          pre.textContent = msg;
+          if (document.body) document.body.appendChild(pre);
+          else document.addEventListener('DOMContentLoaded', function() { document.body.appendChild(pre); });
+        }
+        window.__ssShowDiag = show;
+        window.__ssAppendDiag = append;
         window.addEventListener('error', function(e) {
           show('Error: ' + (e.message || String(e.error)), e.error && e.error.stack);
         });
@@ -28,6 +42,23 @@
           var r = e.reason;
           show('Unhandled: ' + (r && r.message ? r.message : String(r)), r && r.stack);
         });
+        setTimeout(function() {
+          var root = document.getElementById('root');
+          var hasContent = root && (root.innerHTML || '').replace(/\s/g, '').length > 0;
+          if (!hasContent) {
+            var ua = navigator.userAgent || 'unknown';
+            var modern = window.__vite_is_modern_browser;
+            var info = [
+              'Root still empty after 5s.',
+              'UA: ' + ua,
+              'Modern bundle: ' + (modern === true ? 'yes' : (modern === false ? 'no' : 'unknown')),
+              'Scripts: ' + Array.prototype.slice.call(document.querySelectorAll('script')).map(function(s) { return s.src || s.getAttribute('data-src') || '[inline]'; }).join(', '),
+              'ReadyState: ' + document.readyState,
+              'Root HTML: ' + (root ? root.outerHTML : 'missing')
+            ].join('\n');
+            show('Timeout: ' + info, '', true);
+          }
+        }, 5000);
       })();
     </script>
     <script type="module" crossorigin src="/assets/index-DwthJDty.js"></script>

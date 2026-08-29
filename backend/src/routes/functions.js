@@ -637,13 +637,36 @@ functionsRouter.post("/:name", async (req, res) => {
     }
 
     if (name === "analyzeIntent") {
-      const data = await analyzeIntentWithKimi({
-        input: payload.input,
-        date: payload.date,
-        existingPlan: payload.existingPlan
-      });
-
-      return res.json(data);
+      try {
+        const data = await analyzeIntentWithKimi({
+          input: payload.input,
+          date: payload.date,
+          existingPlan: payload.existingPlan
+        });
+        return res.json(data);
+      } catch (error) {
+        const message = error?.message || String(error);
+        if (message.includes("KIMI_API_KEY") || message.includes("MOONSHOT_API_KEY") || message.includes("未配置")) {
+          return res.json({
+            steps: [{ key: "fallback", text: "AI 服务未配置，已使用基础兜底分析", icon: "🛡️" }],
+            resolved_date: payload.date || toYmd(new Date()),
+            timeline: [
+              { time: "09:00", date: payload.date || toYmd(new Date()), title: "开始处理", description: String(payload.input || "").slice(0, 40) }
+            ],
+            devices: {
+              phone: { name: "手机", strategies: [] },
+              watch: { name: "手表", strategies: [] },
+              glasses: { name: "眼镜", strategies: [] },
+              car: { name: "汽车", strategies: [] },
+              home: { name: "家居", strategies: [] },
+              pc: { name: "工作站", strategies: [] }
+            },
+            automations: [],
+            parsed: { times: [], intents: [String(payload.input || "").slice(0, 60)], locations: [] }
+          });
+        }
+        throw error;
+      }
     }
 
     if (name === "parseVoiceTask") {

@@ -741,9 +741,16 @@ export default function TaskCreate() {
     setLoading(true);
     try {
       const parsed = await post("/functions/parseVoiceTask", { input: text.trim() });
-      if (!parsed?.title || !parsed?.reminder_time) {
-        Taro.showToast({ title: "未能识别约定信息", icon: "none" });
-        setLoading(false);
+
+      // 兜底：无论 AI 是否识别出时间，都用原文创建约定
+      if (!parsed?.title) {
+        await createTaskFromVoice({
+          title: text.trim().slice(0, 120),
+          description: text.trim(),
+          priority: "medium",
+          category: "other"
+        });
+        Taro.showToast({ title: "已用语音原文创建约定", icon: "success" });
         return;
       }
 
@@ -770,7 +777,18 @@ export default function TaskCreate() {
       await createTaskFromVoice(parsed);
     } catch (err) {
       console.error("parseVoiceTask failed", err);
-      Taro.showToast({ title: "语音解析失败", icon: "none" });
+      // 即使后端报错，也用原文兜底创建
+      try {
+        await createTaskFromVoice({
+          title: text.trim().slice(0, 120),
+          description: text.trim(),
+          priority: "medium",
+          category: "other"
+        });
+        Taro.showToast({ title: "已用语音原文创建约定", icon: "success" });
+      } catch (fallbackErr) {
+        Taro.showToast({ title: "语音创建失败", icon: "none" });
+      }
     } finally {
       setLoading(false);
     }

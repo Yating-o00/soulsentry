@@ -2,6 +2,7 @@ export default {
   pages: [
     "pages/index/index",
     "pages/login/index",
+    "pages/flow/index",
     "pages/tasks/index",
     "pages/task-detail/index",
     "pages/task-create/index",
@@ -9,7 +10,8 @@ export default {
     "pages/note-detail/index",
     "pages/note-create/index",
     "pages/share/index",
-    "pages/account/index"
+    "pages/account/index",
+    "pages/webview/index"
   ],
   plugins: {
     WechatSI: {
@@ -29,6 +31,10 @@ export default {
     backgroundColor: "#ffffff",
     borderStyle: "black",
     list: [
+      {
+        pagePath: "pages/flow/index",
+        text: "心流"
+      },
       {
         pagePath: "pages/tasks/index",
         text: "约定"

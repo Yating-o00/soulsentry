@@ -1,0 +1,295 @@
+From ea00a89e4d644e9bcd1b00149a0cc92a323ffe90 Mon Sep 17 00:00:00 2001
+From: Yating-o00 <dengyating0330@gmail.com>
+Date: Wed, 26 Aug 2026 14:32:23 +0800
+Subject: [PATCH] feat(weapp): add voice input for quick task/note creation via
+ WechatSI
+
+---
+ weapp/src/app.config.js               |   6 +
+ weapp/src/components/VoiceInput.jsx   | 165 ++++++++++++++++++++++++++
+ weapp/src/pages/note-create/index.jsx |  10 ++
+ weapp/src/pages/task-create/index.jsx |  24 +++-
+ 4 files changed, 200 insertions(+), 5 deletions(-)
+ create mode 100644 weapp/src/components/VoiceInput.jsx
+
+diff --git a/weapp/src/app.config.js b/weapp/src/app.config.js
+index 16dfc1f..e2b36bd 100644
+--- a/weapp/src/app.config.js
++++ b/weapp/src/app.config.js
+@@ -11,6 +11,12 @@ export default {
+     "pages/share/index",
+     "pages/account/index"
+   ],
++  plugins: {
++    WechatSI: {
++      version: "0.3.5",
++      provider: "wx069ba97219f66d99"
++    }
++  },
+   window: {
+     backgroundTextStyle: "light",
+     navigationBarBackgroundColor: "#384877",
+diff --git a/weapp/src/components/VoiceInput.jsx b/weapp/src/components/VoiceInput.jsx
+new file mode 100644
+index 0000000..87b2395
+--- /dev/null
++++ b/weapp/src/components/VoiceInput.jsx
+@@ -0,0 +1,165 @@
++import { useState, useRef, useEffect } from "react";
++import Taro from "@tarojs/taro";
++import { View, Text } from "@tarojs/components";
++
++let recognitionManager = null;
++
++function getRecognitionManager() {
++  if (recognitionManager) return recognitionManager;
++  try {
++    const plugin = Taro.getApp()?.requirePlugin?.("WechatSI");
++    if (plugin && plugin.getRecordRecognitionManager) {
++      recognitionManager = plugin.getRecordRecognitionManager();
++    }
++  } catch (err) {
++    console.warn("[VoiceInput] WechatSI plugin not available", err);
++  }
++  return recognitionManager;
++}
++
++export default function VoiceInput({ onResult, onError, size = 96, style = {} }) {
++  const [recording, setRecording] = useState(false);
++  const [hint, setHint] = useState("");
++  const interimRef = useRef("");
++  const finalRef = useRef("");
++  const timerRef = useRef(null);
++
++  useEffect(() => {
++    const manager = getRecognitionManager();
++    if (!manager) {
++      setHint("语音插件未配置");
++      return;
++    }
++
++    manager.onRecognize = (res) => {
++      if (typeof res?.result === "string") {
++        interimRef.current = res.result;
++        setHint(`识别中：${res.result}`);
++      }
++    };
++
++    manager.onStop = (res) => {
++      setRecording(false);
++      const text = (res?.result || finalRef.current || interimRef.current || "").trim();
++      setHint(text ? `识别完成` : "未识别到语音");
++      if (text) {
++        onResult?.(text);
++      }
++      interimRef.current = "";
++      finalRef.current = "";
++      clearTimeout(timerRef.current);
++    };
++
++    manager.onError = (res) => {
++      setRecording(false);
++      const msg = res?.msg || "语音识别失败";
++      setHint(msg);
++      onError?.(msg);
++      interimRef.current = "";
++      finalRef.current = "";
++      clearTimeout(timerRef.current);
++    };
++
++    return () => {
++      clearTimeout(timerRef.current);
++    };
++  }, [onResult, onError]);
++
++  const startRecord = () => {
++    const manager = getRecognitionManager();
++    if (!manager) {
++      Taro.showToast({ title: "语音插件未配置", icon: "none" });
++      onError?.("语音插件未配置");
++      return;
++    }
++
++    interimRef.current = "";
++    finalRef.current = "";
++    setRecording(true);
++    setHint("正在听…");
++
++    try {
++      manager.start({
++        duration: 30000,
++        lang: "zh_CN"
++      });
++
++      // 最长 30 秒自动停止
++      timerRef.current = setTimeout(() => {
++        stopRecord();
++      }, 30000);
++    } catch (err) {
++      setRecording(false);
++      setHint("启动失败");
++      onError?.(err?.message || "启动失败");
++    }
++  };
++
++  const stopRecord = () => {
++    const manager = getRecognitionManager();
++    if (!manager) return;
++    clearTimeout(timerRef.current);
++    try {
++      manager.stop();
++    } catch (err) {
++      setRecording(false);
++      onError?.(err?.message || "停止失败");
++    }
++  };
++
++  const onTouchStart = (e) => {
++    e.preventDefault();
++    startRecord();
++  };
++
++  const onTouchEnd = (e) => {
++    e.preventDefault();
++    stopRecord();
++  };
++
++  return (
++    <View style={{ display: "flex", flexDirection: "column", alignItems: "center", ...style }}>
++      <View
++        onTouchStart={onTouchStart}
++        onTouchEnd={onTouchEnd}
++        onTouchCancel={onTouchEnd}
++        style={{
++          width: `${size}rpx`,
++          height: `${size}rpx`,
++          borderRadius: "50%",
++          background: recording
++            ? "linear-gradient(135deg, #e53935 0%, #ff6b6b 100%)"
++            : "linear-gradient(135deg, #384877 0%, #4a5d8f 100%)",
++          display: "flex",
++          alignItems: "center",
++          justifyContent: "center",
++          boxShadow: recording
++            ? "0 0 0 12rpx rgba(229, 57, 53, 0.25)"
++            : "0 8rpx 24rpx rgba(56, 72, 119, 0.25)",
++          transition: "all 0.2s ease"
++        }}
++      >
++        <Text style={{ fontSize: `${Math.round(size * 0.45)}rpx`, color: "#ffffff" }}>
++          {recording ? "🎙️" : "🎤"}
++        </Text>
++      </View>
++      {hint ? (
++        <Text
++          style={{
++            marginTop: "16rpx",
++            fontSize: "26rpx",
++            color: recording ? "#e53935" : "#666666",
++            textAlign: "center",
++            maxWidth: "560rpx"
++          }}
++        >
++          {hint}
++        </Text>
++      ) : (
++        <Text style={{ marginTop: "16rpx", fontSize: "26rpx", color: "#999999" }}>
++          按住说话
++        </Text>
++      )}
++    </View>
++  );
++}
+diff --git a/weapp/src/pages/note-create/index.jsx b/weapp/src/pages/note-create/index.jsx
+index 923ffe5..ae14fb3 100644
+--- a/weapp/src/pages/note-create/index.jsx
++++ b/weapp/src/pages/note-create/index.jsx
+@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
+ import Taro from "@tarojs/taro";
+ import { View, Input, Textarea, Button, ScrollView, Text } from "@tarojs/components";
+ import { get, post, patch } from "@/utils/api";
++import VoiceInput from "@/components/VoiceInput";
+ 
+ function normalizeTags(value) {
+   if (Array.isArray(value)) return value.filter((t) => typeof t === "string" && t.trim()).map((t) => t.trim());
+@@ -160,6 +161,15 @@ export default function NoteCreate() {
+         />
+       </View>
+ 
++      {!isEdit && (
++        <View style={{ marginTop: "32rpx", display: "flex", flexDirection: "column", alignItems: "center" }}>
++          <VoiceInput
++            onResult={(text) => setContent(text)}
++            onError={(err) => Taro.showToast({ title: err, icon: "none" })}
++          />
++        </View>
++      )}
++
+       <View style={{ marginTop: "24rpx" }}>
+         <View className="ss-label">内容 *</View>
+         <Textarea
+diff --git a/weapp/src/pages/task-create/index.jsx b/weapp/src/pages/task-create/index.jsx
+index 1b73f82..a3b388c 100644
+--- a/weapp/src/pages/task-create/index.jsx
++++ b/weapp/src/pages/task-create/index.jsx
+@@ -3,6 +3,7 @@ import Taro, { useShareAppMessage } from "@tarojs/taro";
+ import { View, Text, Input, Textarea, Picker, Button, ScrollView, Canvas } from "@tarojs/components";
+ import { get, post, patch, del } from "@/utils/api";
+ import createQRCode from "@/lib/qrcode";
++import VoiceInput from "@/components/VoiceInput";
+ 
+ const priorities = [
+   { value: "urgent", label: "紧急" },
+@@ -325,8 +326,9 @@ export default function TaskCreate() {
+     };
+   };
+ 
+-  const analyze = async () => {
+-    if (!isFormValid) {
++  const analyze = async (voiceText) => {
++    const inputText = voiceText || [title, description].filter(Boolean).join("\n");
++    if (!inputText.trim()) {
+       Taro.showToast({ title: "请先输入约定内容", icon: "none" });
+       return;
+     }
+@@ -334,10 +336,8 @@ export default function TaskCreate() {
+     setLoading(true);
+     let timeoutId = null;
+     try {
+-      const input = [title, description].filter(Boolean).join("\n");
+-
+       const requestPromise = post("/functions/analyzeIntent", {
+-        input,
++        input: inputText,
+         date: endDate || new Date().toISOString().slice(0, 10)
+       });
+ 
+@@ -709,11 +709,25 @@ export default function TaskCreate() {
+     );
+   };
+ 
++  const handleVoiceResult = (text) => {
++    setTitle(text);
++    // 自动触发 AI 分析，获得时间线与执行策略
++    if (text.trim()) {
++      setTimeout(() => analyze(text), 200);
++    }
++  };
++
+   const renderForm = () => (
+     <View className="ss-card">
+       <View className="ss-title">{isEdit ? "编辑约定" : "新建约定"}</View>
+       <View className="ss-subtitle">{isEdit ? "修改约定信息" : "输入约定后，可先让 SoulSentry 帮你分析时间线与执行策略。"}</View>
+ 
++      {!isEdit && (
++        <View style={{ marginTop: "32rpx", display: "flex", flexDirection: "column", alignItems: "center" }}>
++          <VoiceInput onResult={handleVoiceResult} onError={(err) => Taro.showToast({ title: err, icon: "none" })} />
++        </View>
++      )}
++
+       <View style={{ marginTop: "24rpx" }}>
+         <View className="ss-label">标题 *</View>
+         <Input
+-- 
+2.39.5 (Apple Git-154)
+

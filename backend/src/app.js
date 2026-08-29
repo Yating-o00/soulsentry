@@ -1,6 +1,7 @@
 import path from "node:path";
 import cors from "cors";
 import express from "express";
+import "express-async-errors";
 import helmet from "helmet";
 import morgan from "morgan";
 import { env } from "./config/env.js";

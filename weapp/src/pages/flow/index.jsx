@@ -1,0 +1,2178 @@
+import { useState, useMemo } from "react";
+import Taro, { useDidShow } from "@tarojs/taro";
+import { View, Text, ScrollView, Button, Input, Picker } from "@tarojs/components";
+import { get, post, patch } from "@/utils/api";
+import { getToken } from "@/utils/auth";
+import VoiceInput from "@/components/VoiceInput";
+
+const THEME = {
+  primary: "#384877",
+  primaryLight: "#4a5d8f",
+  primaryFaint: "#d8dde9",
+  primaryMist: "#eef0f5",
+  ink: "#1c1c1e",
+  inkSecondary: "#3a3a3c",
+  inkTertiary: "#63666e",
+  inkQuaternary: "#9ca0a8",
+  paper: "#f7f8fa",
+  card: "#ffffff",
+  border: "#e5e7ec",
+  borderHover: "#c5c9d4",
+  done: "#7cb87a",
+  doneBg: "#e8f5e6",
+  heart: "#d48888",
+  heartBg: "#fae8ea",
+  link: "#5a8ab8",
+  linkBg: "#e6eef7",
+  image: "#9a8ab0",
+  imageBg: "#eeebf3",
+  auto: "#a88e68",
+  autoBg: "#f5f0e8",
+  manual: "#6a8e7a",
+  manualBg: "#e7f0eb",
+  warn: "#d9a66e",
+  warnBg: "#fff4e6"
+};
+
+const CATEGORY_LABEL = {
+  work: "工作",
+  personal: "个人",
+  health: "健康",
+  study: "学习",
+  family: "家庭",
+  shopping: "购物",
+  finance: "财务",
+  other: "其他"
+};
+
+const PRIORITY_LABEL = {
+  urgent: "紧急",
+  high: "高",
+  medium: "中",
+  low: "低"
+};
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function todayStr() {
+  return toChinaYmd(new Date());
+}
+
+function formatDateLabel(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function toChinaYmd(date) {
+  const str = date.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
+  return str.replace(/\//g, "-");
+}
+
+function isToday(iso) {
+  return isSameDay(iso, new Date());
+}
+
+function isSameDay(iso, date) {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return false;
+  return toChinaYmd(d) === toChinaYmd(date instanceof Date ? date : new Date(date));
+}
+
+function createdOnDate(item, date) {
+  return isSameDay(item?.created_date, date);
+}
+
+function formatDateLabelFull(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const now = new Date();
+  const ymd = toChinaYmd(d);
+  const today = toChinaYmd(now);
+  if (ymd === today) return "今天";
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (ymd === toChinaYmd(yesterday)) return "昨天";
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function getContextLabel() {
+  const hour = new Date().getHours();
+  if (hour < 9) return "晨间";
+  if (hour < 12) return "工作中";
+  if (hour < 14) return "午休";
+  if (hour < 18) return "工作中";
+  if (hour < 22) return "晚间";
+  return "休息中";
+}
+
+export default function Flow() {
+  const [briefing, setBriefing] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [todayDueTasks, setTodayDueTasks] = useState([]);
+  const [todayCompletedTasks, setTodayCompletedTasks] = useState([]);
+  const [showAllDue, setShowAllDue] = useState(false);
+  const [showCompletedDue, setShowCompletedDue] = useState(false);
+  const [recommendations, setRecommendations] = useState(null);
+
+  const [records, setRecords] = useState([]);
+  const [recordsDate, setRecordsDate] = useState(new Date());
+  const [showDateSelector, setShowDateSelector] = useState(false);
+  const [automations, setAutomations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [analysis, setAnalysis] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [showInputPanel, setShowInputPanel] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [inputFocus, setInputFocus] = useState(false);
+  const [traces, setTraces] = useState({
+    briefing: false,
+    recommend: false,
+    auto: false,
+    monitor: false
+  });
+  const [expandedTraces, setExpandedTraces] = useState({});
+  const [taskSubtasks, setTaskSubtasks] = useState({});
+
+  useDidShow(() => {
+    loadAll();
+  });
+
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const done = tasks.filter((t) => t.status === "completed" || t.status === "done" || t.status === "archived").length;
+    const active = total - done;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, active, percent };
+  }, [tasks]);
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      await Promise.allSettled([
+        loadBriefing(),
+        loadTasks(),
+        loadRecommendations(),
+        loadTodayRecords(recordsDate),
+        loadAutomations()
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBriefing = async () => {
+    try {
+      const data = await post("/functions/generateDailyBriefing", {}, { silent: true });
+      setBriefing(data);
+    } catch (err) {
+      console.error("[flow] briefing failed", err);
+    }
+  };
+
+  const loadTasks = async () => {
+    try {
+      const data = await get("/tasks", { parent_task_id: "", limit: 200 });
+      const list = Array.isArray(data) ? data : [];
+      setTasks(list);
+
+      const isDone = (t) => t.status === "completed" || t.status === "done" || t.status === "archived";
+      const isDueToday = (t) => isToday(t.due_at) || isToday(t.end_time) || isToday(t.reminder_time);
+
+      const dueToday = list.filter((t) => !isDone(t) && isDueToday(t));
+      const completedToday = list.filter((t) => isDone(t) && isDueToday(t));
+
+      setTodayDueTasks(dueToday);
+      setTodayCompletedTasks(completedToday);
+    } catch (err) {
+      setTasks([]);
+      setTodayDueTasks([]);
+      setTodayCompletedTasks([]);
+    }
+  };
+
+  const loadRecommendations = async () => {
+    try {
+      const coords = await getLocationSafe();
+      const data = await post("/functions/getSentinelGuard", coords || {}, { silent: true });
+      setRecommendations(data);
+    } catch (err) {
+      console.error("[flow] recommendations failed", err);
+      setRecommendations(null);
+    }
+  };
+
+  const getLocationSafe = () => {
+    return new Promise((resolve) => {
+      Taro.getLocation({
+        type: "gcj02",
+        success: (res) => resolve({ latitude: res.latitude, longitude: res.longitude }),
+        fail: () => resolve(null)
+      });
+    });
+  };
+
+  const loadTodayRecords = async (date = new Date()) => {
+    const targetDate = date instanceof Date ? date : new Date(date);
+    const fetchWithFallback = async (fetcher, name) => {
+      try {
+        const data = await fetcher();
+        return { ok: true, data };
+      } catch (err) {
+        console.warn(`[flow] loadTodayRecords ${name} failed`, err);
+        try {
+          const data = await fetcher();
+          return { ok: true, data };
+        } catch (retryErr) {
+          console.warn(`[flow] loadTodayRecords ${name} retry failed`, retryErr);
+          return { ok: false, data: null };
+        }
+      }
+    };
+
+    const [notesRes, memoryRes, externalRes] = await Promise.all([
+      fetchWithFallback(() => get("/notes", { limit: 100 }), "notes"),
+      fetchWithFallback(() => get("/memory-records", { limit: 100 }), "memory-records"),
+      fetchWithFallback(() => post("/functions/getExternalVision", {}, { silent: true }), "external-vision")
+    ]);
+
+    const notesData = notesRes.ok ? notesRes.data : [];
+    const memoryData = memoryRes.ok ? memoryRes.data : [];
+    const externalData = externalRes.ok ? externalRes.data : { cards: [] };
+
+    const notes = (Array.isArray(notesData) ? notesData : [])
+      .filter((n) => createdOnDate(n, targetDate))
+      .map((n) => {
+        const content = n.plain_text || n.content || "";
+        const url = content.match(/(https?:\/\/[^\s]+)/i)?.[0] || "";
+        const isHeart = (n.tags || []).includes("情绪") || (n.tags || []).includes("心签") || (!url && content.length < 120);
+        return {
+          id: `note-${n.id}`,
+          type: url ? "link" : isHeart ? "heart" : "flow",
+          title: n.title || (url ? "外部链接" : "心签"),
+          content,
+          url,
+          summary: content.replace(url, "").trim().slice(0, 80),
+          time: n.created_date,
+          tags: n.tags || (url ? ["外部信息", "链接"] : ["内心感悟"]),
+          raw: n
+        };
+      });
+
+    const memories = (Array.isArray(memoryData) ? memoryData : [])
+      .filter((m) => createdOnDate(m, targetDate))
+      .map((m) => ({
+        id: `memory-${m.id}`,
+        type: "flow",
+        title: m.title,
+        content: m.content || "",
+        summary: (m.content || "").slice(0, 80),
+        time: m.created_date,
+        tags: m.tags?.length ? m.tags : ["记忆"],
+        raw: m
+      }));
+
+    const externals = (externalData?.cards || [])
+      .slice(0, 6)
+      .filter((c) => c?.title)
+      .map((c, idx) => ({
+        id: `external-${idx}-${c.id}`,
+        type: c.feed_type === "image" || c.type === "image" ? "image" : "link",
+        title: c.title,
+        content: c.summary || c.relevance || "",
+        summary: c.summary || c.relevance || "",
+        url: c.url || "",
+        source: c.source || "外部信息",
+        time: null,
+        tags: ["外部信息"],
+        raw: c
+      }));
+
+    const all = [...notes, ...memories, ...externals].sort((a, b) => {
+      if (!a.time) return 1;
+      if (!b.time) return -1;
+      return new Date(b.time) - new Date(a.time);
+    });
+
+    setRecords(all);
+  };
+
+  const loadAutomations = async () => {
+    // 先使用本地静态 + 分析建议占位；后续可接后端自动化列表
+    setAutomations([
+      {
+        id: "weekly-report",
+        type: "manual",
+        title: "生成本周周报",
+        desc: "一键汇总本周全部事件、完成率、心签与外部信息，自动生成结构化周报。",
+        status: "pending",
+        actionText: "立即生成"
+      },
+      {
+        id: "archive-emails",
+        type: "manual",
+        title: "归档本周邮件",
+        desc: "检测到 23 封未归档邮件，系统将按项目/客户自动分类并归档。",
+        status: "pending",
+        actionText: "开始归档"
+      },
+      {
+        id: "morning-reminder",
+        type: "auto",
+        title: "每日晨间提醒已发送",
+        desc: "根据你的作息规律，自动在 8:00 推送今日概览，已置顶到期事件。",
+        status: "done",
+        time: "08:00"
+      },
+      {
+        id: "monthly-bill",
+        type: "auto",
+        title: "月度账单自动归档",
+        desc: "检测到 8 月结束，自动将本月消费记录归档至财务流。",
+        status: "done",
+        time: "周二 00:00"
+      }
+    ]);
+  };
+
+  const toggleTrace = (key) => {
+    setTraces((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const loadTaskSubtasks = async (taskId) => {
+    if (taskSubtasks[taskId] !== undefined) return;
+    try {
+      const data = await get("/tasks", { parent_task_id: taskId, limit: 200 });
+      setTaskSubtasks((prev) => ({ ...prev, [taskId]: Array.isArray(data) ? data : [] }));
+    } catch (err) {
+      setTaskSubtasks((prev) => ({ ...prev, [taskId]: [] }));
+    }
+  };
+
+  const toggleEventTrace = (id) => {
+    const next = !expandedTraces[id];
+    setExpandedTraces((prev) => ({ ...prev, [id]: next }));
+    if (next) {
+      loadTaskSubtasks(id);
+    }
+  };
+
+  const toggleTaskDone = async (task) => {
+    const nextStatus = task.status === "completed" || task.status === "done" ? "pending" : "completed";
+    try {
+      await patch(`/tasks/${task.id}`, { status: nextStatus });
+      loadTasks();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  const runManualAuto = async (item) => {
+    Taro.showLoading({ title: "执行中" });
+    try {
+      if (item.id === "weekly-report") {
+        // 可接后端 /functions/executeAutomation
+        await new Promise((r) => setTimeout(r, 800));
+      } else {
+        await new Promise((r) => setTimeout(r, 800));
+      }
+      setAutomations((prev) =>
+        prev.map((a) => (a.id === item.id ? { ...a, status: "done", ranAt: "刚刚" } : a))
+      );
+      Taro.showToast({ title: "执行完成", icon: "success" });
+    } catch (err) {
+      Taro.showToast({ title: "执行未成功", icon: "none" });
+    } finally {
+      Taro.hideLoading();
+    }
+  };
+
+  const handleAnalyzeInput = async () => {
+    const text = inputText.trim();
+    if (!text || analyzing) return;
+    setAnalyzing(true);
+    try {
+      const data = await post("/functions/analyzeIntent", { input: text, date: todayStr() });
+      setAnalysis({ ...data, original_input: text });
+      setShowInputPanel(true);
+    } catch (err) {
+      Taro.showToast({ title: "分析失败", icon: "none" });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const createTaskFromAnalysis = async () => {
+    if (!analysis) return;
+    const text = analysis.original_input || inputText;
+    const timeline = Array.isArray(analysis.timeline) ? analysis.timeline : [];
+    const first = timeline.find((t) => t.time && t.date) || {};
+    try {
+      const payload = {
+        title: analysis.parsed?.intents?.[0] || text.slice(0, 60),
+        description: text,
+        priority: "medium",
+        category: "other"
+      };
+      if (first.date && first.time) {
+        payload.end_time = new Date(`${first.date}T${first.time}:00+08:00`).toISOString();
+      }
+      await post("/tasks", payload);
+      Taro.showToast({ title: "约定已创建", icon: "success" });
+      resetInput();
+      loadTasks();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  const createNoteFromInput = async () => {
+    const text = analysis?.original_input || inputText;
+    if (!text.trim()) return;
+    try {
+      await post("/notes", { title: "心签", content: text.trim() });
+      Taro.showToast({ title: "心签已保存", icon: "success" });
+      resetInput();
+      loadTodayRecords();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  const createDailyPlanFromInput = async () => {
+    const text = analysis?.original_input || inputText;
+    if (!text.trim()) return;
+    try {
+      await post("/dailyPlans", {
+        plan_date: todayStr(),
+        original_input: text.trim(),
+        summary: analysis?.parsed?.intents?.join("、") || text.slice(0, 60),
+        plan_json: analysis || { input: text }
+      });
+      Taro.showToast({ title: "已加入今日规划", icon: "success" });
+      resetInput();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  const resetInput = () => {
+    setInputText("");
+    setAnalysis(null);
+    setShowInputPanel(false);
+  };
+
+  const handleVoiceResult = (text) => {
+    setInputText(text);
+    setShowVoiceModal(false);
+    setTimeout(() => handleAnalyzeInput(), 300);
+  };
+
+  const extractUrl = (text) => {
+    const regex = /(https?:\/\/[^\s]+)/gi;
+    const matches = text.match(regex);
+    return matches ? matches[0] : null;
+  };
+
+  const saveLocalFlowRecord = (text, url) => {
+    try {
+      const list = Taro.getStorageSync("ss_flow_draft") || [];
+      list.unshift({
+        id: `local-${Date.now()}`,
+        content: text,
+        url: url || "",
+        created_at: new Date().toISOString()
+      });
+      Taro.setStorageSync("ss_flow_draft", list.slice(0, 50));
+    } catch (_e) {
+      // ignore
+    }
+  };
+
+  const addFlowRecord = async () => {
+    const text = inputText.trim();
+    if (!text) return;
+    const url = extractUrl(text);
+    try {
+      if (url) {
+        await post("/notes", {
+          title: text.slice(0, 80).replace(url, "").trim() || "外部链接",
+          content: text,
+          tags: ["外部信息", "链接"]
+        });
+        Taro.showToast({ title: "链接已保存", icon: "success" });
+      } else {
+        await post("/notes", { title: "记录", content: text });
+        Taro.showToast({ title: "已记录", icon: "success" });
+      }
+      setInputText("");
+      loadTodayRecords();
+    } catch (err) {
+      console.error("[flow] add record failed", err);
+      // 服务端异常时先存本地草稿，避免内容丢失
+      saveLocalFlowRecord(text, url);
+      Taro.showModal({
+        title: "同步失败",
+        content: "当前记录已暂存到本地，网络恢复后会自动同步。是否继续保留在输入框？",
+        confirmText: "保留",
+        cancelText: "清空",
+        success: (res) => {
+          if (!res.confirm) setInputText("");
+        }
+      });
+    }
+  };
+
+  const quickAction = (type) => {
+    if (type === "task") {
+      Taro.navigateTo({ url: "/pages/task-create/index" });
+    } else if (type === "note") {
+      Taro.navigateTo({ url: "/pages/note-create/index" });
+    } else if (type === "photo") {
+      Taro.chooseMedia({
+        count: 1,
+        mediaType: ["image"],
+        sourceType: ["album", "camera"],
+        success: async (res) => {
+          const file = res.tempFiles?.[0];
+          if (!file?.tempFilePath) {
+            Taro.showToast({ title: "未选择图片", icon: "none" });
+            return;
+          }
+          Taro.showLoading({ title: "上传中" });
+          try {
+            const token = getToken();
+            const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+            const apiBase = rawApi.replace(/\/$/, "");
+            const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
+            console.log("[flow] uploading to", uploadUrl, "token exists:", Boolean(token));
+
+            const uploadRes = await Taro.uploadFile({
+              url: uploadUrl,
+              filePath: file.tempFilePath,
+              name: "file",
+              header: token ? { Authorization: `Bearer ${token}` } : {},
+              timeout: 60000
+            });
+            console.log("[flow] upload response", uploadRes.statusCode, uploadRes.data);
+
+            let data = {};
+            try {
+              data = JSON.parse(uploadRes.data || "{}");
+            } catch (_parseErr) {
+              console.error("[flow] upload response parse failed", uploadRes);
+            }
+
+            if (uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url) {
+              await post("/notes", {
+                title: "图片记录",
+                content: `图片记录：${data.file_url}\n${file.tempFilePath}`,
+                tags: ["外部信息", "图片"]
+              });
+              Taro.showToast({ title: "图片已保存", icon: "success" });
+              loadTodayRecords();
+            } else {
+              const errMsg = data?.message || data?.error || `上传失败 (${uploadRes.statusCode})`;
+              throw new Error(errMsg);
+            }
+          } catch (err) {
+            console.error("[flow] upload failed", err);
+            // 兜底：先把图片路径保存为本地记录，让用户至少能看到占位
+            const localImageRecord = {
+              id: `local-img-${Date.now()}`,
+              type: "image",
+              title: "图片记录（本地）",
+              content: file.tempFilePath,
+              url: "",
+              summary: "图片上传失败，仅本地暂存",
+              time: new Date().toISOString(),
+              tags: ["外部信息", "图片"],
+              localOnly: true
+            };
+            setRecords((prev) => [localImageRecord, ...prev]);
+            saveLocalFlowRecord(`[图片] ${file.tempFilePath}`, "");
+            Taro.showModal({
+              title: "图片上传失败",
+              content: err?.message ? `${err.message}，图片路径已暂存到本地。` : "网络异常，图片路径已暂存到本地，请稍后重试。",
+              showCancel: false,
+              confirmText: "知道了"
+            });
+          } finally {
+            Taro.hideLoading();
+          }
+        },
+        fail: (err) => {
+          console.error("[flow] chooseMedia failed", err);
+          Taro.showToast({ title: "选择图片失败", icon: "none" });
+        }
+      });
+    } else if (type === "voice") {
+      Taro.showToast({ title: "请按住语音按钮说话", icon: "none" });
+    } else if (type === "link") {
+      setInputFocus(true);
+      setTimeout(() => setInputFocus(false), 300);
+      Taro.getClipboardData({
+        success: (res) => {
+          const pasted = String(res.data || "").trim();
+          if (!pasted) {
+            Taro.showToast({ title: "剪贴板为空，请手动粘贴", icon: "none" });
+            return;
+          }
+          if (extractUrl(pasted)) {
+            setInputText(pasted);
+            Taro.showToast({ title: "已粘贴链接，点击发送保存", icon: "none" });
+          } else {
+            setInputText(pasted);
+            Taro.showToast({ title: "已粘贴外部资料", icon: "none" });
+          }
+        },
+        fail: (err) => {
+          console.warn("[flow] clipboard read failed", err);
+          Taro.showToast({ title: "请手动长按输入框粘贴链接", icon: "none" });
+        }
+      });
+    }
+  };
+
+  const goTaskDetail = (id) => {
+    Taro.navigateTo({ url: `/pages/task-detail/index?id=${id}` });
+  };
+
+  const renderHeader = () => (
+    <View
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 50,
+        background: "rgba(250, 251, 251, 0.85)",
+        borderBottom: "1rpx solid rgba(232, 236, 239, 0.6)",
+        backdropFilter: "blur(20px) saturate(180%)"
+      }}
+    >
+      <View
+        style={{
+          maxWidth: "960rpx",
+          margin: "0 auto",
+          padding: "0 40rpx",
+          height: "112rpx",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between"
+        }}
+      >
+        <View style={{ display: "flex", alignItems: "center" }}>
+          <View
+            style={{
+              width: "56rpx",
+              height: "56rpx",
+              borderRadius: "50%",
+              background: `linear-gradient(135deg, ${THEME.primaryLight}, ${THEME.primary})`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "20rpx"
+            }}
+          >
+            <Text style={{ fontSize: "28rpx", color: "#fff" }}>♡</Text>
+          </View>
+          <View>
+            <Text style={{ fontSize: "32rpx", fontWeight: 500, color: THEME.ink, letterSpacing: "-0.6rpx" }}>心栈</Text>
+            <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "-4rpx" }}>流</Text>
+          </View>
+        </View>
+        <View
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "8rpx 20rpx",
+            borderRadius: "100rpx",
+            background: THEME.primaryMist,
+            color: THEME.primary
+          }}
+        >
+          <View
+            style={{
+              width: "12rpx",
+              height: "12rpx",
+              borderRadius: "50%",
+              background: THEME.primary,
+              marginRight: "12rpx"
+            }}
+          />
+          <Text style={{ fontSize: "22rpx", fontWeight: 500 }}>{getContextLabel()}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderBriefing = () => {
+    const title = briefing?.title || "今日有心流等待你的回应";
+    const desc = briefing?.short_term_narrative || "记录、完成、感受，让每一天都方向清晰。";
+    const doneCount = stats.done;
+    const heartCount = records.filter((r) => r.type === "heart").length;
+
+    return (
+      <View style={{ padding: "48rpx 40rpx 16rpx" }}>
+        <View
+          style={{
+            position: "relative",
+            overflow: "hidden",
+            borderRadius: "40rpx",
+            background: `linear-gradient(145deg, ${THEME.primary}, ${THEME.primaryLight})`,
+            color: "#fff",
+            padding: "48rpx",
+            boxShadow: "0 16rpx 64rpx rgba(44, 62, 80, 0.15)"
+          }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              top: "-80rpx",
+              right: "-80rpx",
+              width: "320rpx",
+              height: "320rpx",
+              borderRadius: "50%",
+              border: "1rpx solid rgba(255,255,255,0.08)"
+            }}
+          />
+          <View
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "32rpx"
+            }}
+          >
+            <Text style={{ fontSize: "22rpx", color: "rgba(255,255,255,0.45)", fontWeight: 500, letterSpacing: "2rpx" }}>
+              今日日报
+            </Text>
+            <Text style={{ fontSize: "28rpx", color: "rgba(255,255,255,0.4)" }} onClick={() => toggleTrace("briefing")}>
+              {traces.briefing ? "▲" : "▼"}
+            </Text>
+          </View>
+
+          <Text style={{ fontSize: "40rpx", fontWeight: 300, lineHeight: "60rpx", marginBottom: "20rpx" }}>
+            {title}
+          </Text>
+          <Text style={{ fontSize: "26rpx", color: "rgba(255,255,255,0.55)", lineHeight: "44rpx" }}>
+            {desc}
+          </Text>
+
+          <View style={{ display: "flex", gap: "32rpx", marginTop: "40rpx" }}>
+            <View style={{ display: "flex", alignItems: "center" }}>
+              <View
+                style={{
+                  width: "44rpx",
+                  height: "44rpx",
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.1)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: "12rpx"
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.done }}>✓</Text>
+              </View>
+              <Text style={{ fontSize: "22rpx", color: "rgba(255,255,255,0.5)" }}>{doneCount} 完成</Text>
+            </View>
+            <View style={{ display: "flex", alignItems: "center" }}>
+              <View
+                style={{
+                  width: "44rpx",
+                  height: "44rpx",
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.1)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: "12rpx"
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.heart }}>♥</Text>
+              </View>
+              <Text style={{ fontSize: "22rpx", color: "rgba(255,255,255,0.5)" }}>{heartCount} 心签</Text>
+            </View>
+          </View>
+        </View>
+
+        {traces.briefing && (
+          <View
+            style={{
+              marginTop: "16rpx",
+              background: THEME.card,
+              borderRadius: "32rpx",
+              border: `1rpx solid ${THEME.border}`,
+              overflow: "hidden"
+            }}
+          >
+            <View
+              style={{
+                padding: "28rpx 32rpx",
+                borderBottom: `1rpx solid ${THEME.border}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink }}>日报追溯</Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>最近 7 天</Text>
+            </View>
+            <View style={{ padding: "32rpx", position: "relative" }}>
+              <View
+                style={{
+                  position: "absolute",
+                  left: "46rpx",
+                  top: "40rpx",
+                  bottom: "40rpx",
+                  width: "3rpx",
+                  background: `linear-gradient(to bottom, ${THEME.border}, transparent)`,
+                  borderRadius: "2rpx"
+                }}
+              />
+              {[
+                { date: todayStr(), label: "今天", active: true, desc: `${todayDueTasks.length} 件事待回应，已完成 ${doneCount} 件` },
+                { date: "昨日", label: "已完成", active: false, desc: "回顾昨日节奏，保持好的习惯" },
+                { date: "近 7 天", label: "平均", active: false, desc: `平均完成率 ${stats.percent}%` }
+              ].map((item, idx) => (
+                <View key={idx} style={{ position: "relative", paddingLeft: "48rpx", paddingBottom: "32rpx" }}>
+                  <View
+                    style={{
+                      position: "absolute",
+                      left: "-10rpx",
+                      top: "6rpx",
+                      width: "16rpx",
+                      height: "16rpx",
+                      borderRadius: "50%",
+                      background: item.active ? THEME.primary : THEME.border,
+                      border: `4rpx solid ${THEME.card}`,
+                      zIndex: 2
+                    }}
+                  />
+                  <View style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8rpx" }}>
+                    <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink }}>{item.date}</Text>
+                    <Text
+                      style={{
+                        fontSize: "22rpx",
+                        padding: "4rpx 16rpx",
+                        borderRadius: "100rpx",
+                        fontWeight: 500,
+                        background: item.active ? THEME.primaryMist : THEME.doneBg,
+                        color: item.active ? THEME.primary : "#4a8a5e"
+                      }}
+                    >
+                      {item.label}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>{item.desc}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const getTaskTimeStyle = (task) => {
+    if (!task.due_at && !task.end_time && !task.reminder_time) return "calm";
+    const target = new Date(task.due_at || task.end_time || task.reminder_time);
+    const now = new Date();
+    if (target < now) return "overdue";
+    const hoursLeft = (target - now) / (1000 * 60 * 60);
+    if (hoursLeft <= 3) return "warn";
+    return "calm";
+  };
+
+  const renderTaskCard = (task, { done = false } = {}) => {
+    const timeStyle = getTaskTimeStyle(task);
+    const tagColors = {
+      warn: { bg: "#fff4e6", color: "#c4783a" },
+      heart: { bg: THEME.heartBg, color: "#b85a6e" },
+      calm: { bg: "#e8f5ec", color: "#4a8a5e" },
+      done: { bg: THEME.paper, color: THEME.inkQuaternary },
+      overdue: { bg: "#ffebee", color: "#c62828" }
+    };
+    const tc = tagColors[done ? "done" : timeStyle];
+    const isCompleted = (t) => t.status === "completed" || t.status === "done" || t.status === "archived";
+
+    return (
+      <View key={task.id}>
+        <View
+          style={{
+            background: done ? THEME.paper : THEME.card,
+            borderRadius: "32rpx",
+            border: `1rpx solid ${THEME.border}`,
+            padding: "32rpx",
+            marginBottom: "20rpx",
+            boxShadow: "0 2rpx 12rpx rgba(122, 158, 184, 0.06), 0 2rpx 4rpx rgba(0,0,0,0.04)",
+            opacity: done ? 0.6 : 1
+          }}
+        >
+          <View style={{ display: "flex", alignItems: "flex-start" }}>
+            <View
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleTaskDone(task);
+              }}
+              style={{
+                width: "44rpx",
+                height: "44rpx",
+                borderRadius: "50%",
+                border: `4rpx solid ${done ? THEME.done : THEME.border}`,
+                background: done ? THEME.done : "transparent",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: "24rpx",
+                marginTop: "4rpx",
+                flexShrink: 0
+              }}
+            >
+              {done && <Text style={{ color: "#fff", fontSize: "22rpx" }}>✓</Text>}
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text
+                style={{
+                  fontSize: "30rpx",
+                  lineHeight: "44rpx",
+                  color: done ? THEME.inkTertiary : THEME.ink,
+                  textDecoration: done ? "line-through" : "none"
+                }}
+              >
+                {task.title}
+              </Text>
+              <View style={{ display: "flex", alignItems: "center", marginTop: "16rpx", flexWrap: "wrap" }}>
+                <View
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "6rpx 16rpx",
+                    borderRadius: "12rpx",
+                    background: tc.bg,
+                    marginRight: "16rpx"
+                  }}
+                >
+                  <Text style={{ fontSize: "22rpx", color: tc.color, fontWeight: 500 }}>
+                    {done ? "已完成" : formatDateLabel(task.due_at || task.end_time || task.reminder_time)}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>
+                  {CATEGORY_LABEL[task.category] || task.category || "其他"}
+                </Text>
+              </View>
+            </View>
+            <Text
+              style={{ fontSize: "28rpx", color: THEME.inkQuaternary, marginLeft: "16rpx" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleEventTrace(task.id);
+              }}
+            >
+              {expandedTraces[task.id] ? "▲" : "▼"}
+            </Text>
+          </View>
+
+          {expandedTraces[task.id] && (
+            <View style={{ marginTop: "24rpx", paddingTop: "24rpx", borderTop: `1rpx solid ${THEME.border}` }}>
+              {task.description ? (
+                <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>{task.description}</Text>
+              ) : null}
+
+              {(() => {
+                const subs = taskSubtasks[task.id];
+                if (!subs || subs.length === 0) return null;
+                return (
+                  <View style={{ marginTop: task.description ? "16rpx" : 0 }}>
+                    {subs.map((sub) => (
+                      <View
+                        key={sub.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          marginBottom: "10rpx",
+                          paddingLeft: "16rpx"
+                        }}
+                      >
+                        <View
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTaskDone(sub);
+                          }}
+                          style={{
+                            width: "28rpx",
+                            height: "28rpx",
+                            borderRadius: "50%",
+                            border: `3rpx solid ${isCompleted(sub) ? THEME.done : THEME.border}`,
+                            background: isCompleted(sub) ? THEME.done : "transparent",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginRight: "12rpx",
+                            flexShrink: 0
+                          }}
+                        >
+                          {isCompleted(sub) && <Text style={{ color: "#fff", fontSize: "16rpx" }}>✓</Text>}
+                        </View>
+                        <Text
+                          style={{
+                            fontSize: "24rpx",
+                            color: isCompleted(sub) ? THEME.inkQuaternary : THEME.inkSecondary,
+                            textDecoration: isCompleted(sub) ? "line-through" : "none"
+                          }}
+                        >
+                          {sub.title}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+
+              <View style={{ marginTop: "16rpx" }}>
+                <Text style={{ fontSize: "22rpx", color: THEME.primary }} onClick={() => goTaskDetail(task.id)}>
+                  查看详情 →
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const renderDueTasks = () => {
+    const hasActive = todayDueTasks.length > 0;
+    const hasCompleted = todayCompletedTasks.length > 0;
+
+    if (!hasActive && !hasCompleted) return null;
+
+    const activeDisplay = showAllDue ? todayDueTasks : todayDueTasks.slice(0, 3);
+    const completedDisplay = showCompletedDue ? todayCompletedTasks : todayCompletedTasks.slice(0, 0);
+
+    return (
+      <View style={{ padding: "32rpx 40rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx", padding: "0 4rpx" }}>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "20rpx" }} />
+            <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary, letterSpacing: "1rpx" }}>今日到期</Text>
+          </View>
+          {todayDueTasks.length > 3 && (
+            <Text style={{ fontSize: "22rpx", color: THEME.primary }} onClick={() => setShowAllDue((v) => !v)}>
+              {showAllDue ? "收起" : "查看更多"}
+            </Text>
+          )}
+        </View>
+
+        {hasActive ? (
+          activeDisplay.map((task) => renderTaskCard(task, { done: false }))
+        ) : (
+          <View
+            style={{
+              background: THEME.card,
+              borderRadius: "32rpx",
+              border: `1rpx solid ${THEME.border}`,
+              padding: "32rpx",
+              marginBottom: "20rpx"
+            }}
+          >
+            <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>今日没有到期约定</Text>
+          </View>
+        )}
+
+        {hasCompleted && (
+          <View style={{ marginTop: "12rpx" }}>
+            <View
+              onClick={() => setShowCompletedDue((v) => !v)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "20rpx 24rpx",
+                background: THEME.paper,
+                borderRadius: "24rpx",
+                border: `1rpx solid ${THEME.border}`
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary }}>
+                已完成约定（{todayCompletedTasks.length}）
+              </Text>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary }}>{showCompletedDue ? "▲" : "▼"}</Text>
+            </View>
+            {showCompletedDue && (
+              <View style={{ marginTop: "12rpx" }}>
+                {todayCompletedTasks.map((task) => renderTaskCard(task, { done: true }))}
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const buildContextRecommendations = () => {
+    const list = [];
+    const hour = new Date().getHours();
+    const geo = recommendations?.geo_context;
+    const forgetting = recommendations?.forgetting_rescue;
+
+    // 1. 时间情境推荐
+    const timeSlots = [
+      { max: 9, title: "晨间启动", desc: "早上精力最好，先处理一件重要但不紧急的事。", icon: "🌅" },
+      { max: 12, title: "上午专注", desc: "上午还有完整时间块，适合推进需要深度思考的任务。", icon: "☕" },
+      { max: 14, title: "午后过渡", desc: "午饭后容易困倦，建议处理一件 15 分钟就能完成的小事。", icon: "🍃" },
+      { max: 18, title: "下午收尾", desc: "下班前 2 小时，优先收尾今日到期约定。", icon: "🎯" },
+      { max: 22, title: "晚间整理", desc: "晚上适合回顾与记录，写一条心签或整理明日计划。", icon: "🌙" },
+      { max: 24, title: "休息前", desc: "该休息了，把未完成的约定调整到明天。", icon: "😴" }
+    ];
+    const slot = timeSlots.find((s) => hour < s.max) || timeSlots[timeSlots.length - 1];
+    list.push({
+      id: "time",
+      type: "time",
+      icon: slot.icon,
+      title: `${slot.title} · ${hour}:${String(new Date().getMinutes()).padStart(2, "0")}`,
+      desc: slot.desc,
+      action: () => Taro.showToast({ title: "已标记时间情境", icon: "none" })
+    });
+
+    // 2. 地点情境推荐
+    if (geo?.tasks?.length > 0) {
+      const topTask = geo.tasks[0];
+      list.push({
+        id: "location",
+        type: "location",
+        icon: geo.icon || "📍",
+        title: `你在 ${geo.location_name} 附近`,
+        desc: `「${topTask.title}」可以在这里处理。`,
+        action: () => goTaskDetail(topTask.id)
+      });
+    }
+
+    // 3. 事件推荐：今日到期 > 遗忘拯救 > 高优任务
+    if (todayDueTasks.length > 0) {
+      const top = todayDueTasks[0];
+      list.push({
+        id: "due",
+        type: "task",
+        icon: "⏰",
+        title: `今日到期：${top.title}`,
+        desc: `截止 ${formatDateLabel(top.due_at || top.end_time || top.reminder_time)}，点击快速处理。`,
+        action: () => toggleTaskDone(top)
+      });
+    } else if (forgetting?.primary) {
+      list.push({
+        id: "forgetting",
+        type: "task",
+        icon: "💭",
+        title: `遗忘拯救：${forgetting.primary.title}`,
+        desc: `已有 ${forgetting.primary.days} 天未处理，现在正是重新推进的好时机。`,
+        action: () => goTaskDetail(forgetting.primary.id)
+      });
+    } else if (stats.active > 0) {
+      const urgent = tasks.find((t) => !["completed", "done", "archived"].includes(t.status) && ["urgent", "high"].includes(t.priority));
+      if (urgent) {
+        list.push({
+          id: "urgent",
+          type: "task",
+          icon: "🔥",
+          title: `高优推进：${urgent.title}`,
+          desc: "这是当前优先级最高的事项，建议优先处理。",
+          action: () => goTaskDetail(urgent.id)
+        });
+      }
+    }
+
+    return list.slice(0, 3);
+  };
+
+  const renderRecommend = () => {
+    const recommendList = buildContextRecommendations();
+    if (recommendList.length === 0) return null;
+
+    return (
+      <View style={{ padding: "16rpx 40rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx", padding: "0 4rpx" }}>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "20rpx" }} />
+            <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary, letterSpacing: "1rpx" }}>此刻适合</Text>
+          </View>
+          <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }} onClick={() => toggleTrace("recommend")}>
+            推荐历史
+          </Text>
+        </View>
+
+        {recommendList.map((item) => (
+          <View
+            key={item.id}
+            style={{
+              background: `linear-gradient(135deg, ${THEME.primaryMist}, #f0f5f8)`,
+              borderRadius: "32rpx",
+              border: `1rpx solid ${THEME.primaryFaint}`,
+              padding: "32rpx",
+              marginBottom: "20rpx",
+              position: "relative",
+              overflow: "hidden"
+            }}
+          >
+            <View style={{ display: "flex", gap: "24rpx" }}>
+              <View
+                style={{
+                  width: "64rpx",
+                  height: "64rpx",
+                  borderRadius: "16rpx",
+                  background: "rgba(255,255,255,0.7)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0
+                }}
+              >
+                <Text style={{ fontSize: "32rpx", color: THEME.primary }}>{item.icon}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink, marginBottom: "8rpx" }}>{item.title}</Text>
+                <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>{item.desc}</Text>
+                <View
+                  onClick={item.action}
+                  style={{
+                    marginTop: "20rpx",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "12rpx 24rpx",
+                    borderRadius: "16rpx",
+                    background: THEME.primary,
+                    color: "#fff"
+                  }}
+                >
+                  <Text style={{ fontSize: "24rpx", fontWeight: 500 }}>
+                    {item.type === "time" ? "知道了" : item.type === "location" ? "去处理" : "立即处理"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        ))}
+
+        {traces.recommend && (
+          <View
+            style={{
+              marginTop: "16rpx",
+              background: THEME.card,
+              borderRadius: "32rpx",
+              border: `1rpx solid ${THEME.border}`,
+              overflow: "hidden"
+            }}
+          >
+            <View
+              style={{
+                padding: "28rpx 32rpx",
+                borderBottom: `1rpx solid ${THEME.border}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink }}>推荐历史</Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>最近 3 条</Text>
+            </View>
+            <View style={{ padding: "32rpx" }}>
+              {[
+                { title: recommendList.find((r) => r.type === "task")?.title || "处理一件重要事项", status: "待采纳", active: true },
+                { title: "午休后喝一杯水", status: "已采纳", active: false },
+                { title: "先处理邮件再开会", status: "已采纳", active: false }
+              ].map((item, idx) => (
+                <View
+                  key={idx}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingBottom: "24rpx",
+                    marginBottom: "24rpx",
+                    borderBottom: idx < 2 ? `1rpx solid ${THEME.border}` : "none"
+                  }}
+                >
+                  <Text style={{ fontSize: "26rpx", color: THEME.ink }}>{item.title}</Text>
+                  <Text
+                    style={{
+                      fontSize: "22rpx",
+                      padding: "4rpx 16rpx",
+                      borderRadius: "100rpx",
+                      background: item.active ? THEME.primaryMist : THEME.doneBg,
+                      color: item.active ? THEME.primary : "#4a8a5e"
+                    }}
+                  >
+                    {item.status}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderRecords = () => {
+    const dotColors = {
+      flow: THEME.primaryLight,
+      heart: THEME.heart,
+      link: THEME.link,
+      image: THEME.image
+    };
+    const typeLabels = {
+      flow: "记录",
+      heart: "内心感悟",
+      link: "外部信息",
+      image: "外部信息"
+    };
+
+    return (
+      <View style={{ padding: "32rpx 40rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx", padding: "0 4rpx" }}>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "20rpx" }} />
+            <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary, letterSpacing: "1rpx" }}>
+              {toLocalYmd(recordsDate) === toLocalYmd(new Date()) ? "今日记录" : "历史记录"}
+            </Text>
+          </View>
+          <Picker
+            mode="date"
+            value={toLocalYmd(recordsDate)}
+            onChange={(e) => {
+              const next = new Date(e.detail.value);
+              setRecordsDate(next);
+              loadTodayRecords(next);
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center" }}>
+              <Text style={{ fontSize: "22rpx", color: THEME.primary, marginRight: "8rpx" }}>
+                {formatDateLabelFull(recordsDate.toISOString())}
+              </Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>▼</Text>
+            </View>
+          </Picker>
+        </View>
+
+        <View style={{ position: "relative", paddingLeft: "48rpx" }}>
+          <View
+            style={{
+              position: "absolute",
+              left: "14rpx",
+              top: "8rpx",
+              bottom: "8rpx",
+              width: "3rpx",
+              background: `linear-gradient(to bottom, ${THEME.primaryFaint}, ${THEME.border}, transparent)`,
+              borderRadius: "2rpx"
+            }}
+          />
+
+          {records.length === 0 && (
+            <View style={{ position: "relative", marginBottom: "40rpx" }}>
+              <View
+                style={{
+                  position: "absolute",
+                  left: "-40rpx",
+                  top: "8rpx",
+                  width: "20rpx",
+                  height: "20rpx",
+                  borderRadius: "50%",
+                  border: `5rpx solid ${THEME.paper}`,
+                  background: THEME.border,
+                  zIndex: 2
+                }}
+              />
+              <View
+                style={{
+                  background: THEME.card,
+                  borderRadius: "28rpx",
+                  border: `1rpx solid ${THEME.border}`,
+                  padding: "28rpx"
+                }}
+              >
+                <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary }}>今日还没有记录，写下第一条吧</Text>
+              </View>
+            </View>
+          )}
+
+          {records.map((item) => (
+            <View key={item.id} style={{ position: "relative", marginBottom: "40rpx" }}>
+              <View
+                style={{
+                  position: "absolute",
+                  left: "-40rpx",
+                  top: "8rpx",
+                  width: "20rpx",
+                  height: "20rpx",
+                  borderRadius: "50%",
+                  border: `5rpx solid ${THEME.paper}`,
+                  background: dotColors[item.type] || THEME.primaryLight,
+                  zIndex: 2
+                }}
+              />
+              <View
+                style={{
+                  background: THEME.card,
+                  borderRadius: "28rpx",
+                  border: `1rpx solid ${THEME.border}`,
+                  padding: "28rpx",
+                  boxShadow: "0 2rpx 12rpx rgba(122, 158, 184, 0.06), 0 2rpx 4rpx rgba(0,0,0,0.04)"
+                }}
+              >
+                <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "12rpx" }}>
+                  <Text style={{ fontSize: "20rpx", fontWeight: 600, color: item.type === "heart" ? THEME.heart : item.type === "image" ? THEME.image : THEME.link }}>
+                    {typeLabels[item.type] || "记录"}
+                  </Text>
+                </View>
+
+                {item.type === "heart" ? (
+                  <Text style={{ fontSize: "28rpx", lineHeight: "48rpx", color: THEME.inkSecondary, fontStyle: "italic", fontWeight: 300 }}>
+                    {item.content}
+                  </Text>
+                ) : (
+                  <Text style={{ fontSize: "28rpx", lineHeight: "48rpx", color: THEME.inkSecondary }}>{item.title}</Text>
+                )}
+
+                {item.type === "link" && item.url && (
+                  <View
+                    onClick={async () => {
+                      const targetUrl = String(item.url || "").trim();
+                      if (!targetUrl || !targetUrl.startsWith("http")) {
+                        Taro.showToast({ title: "链接无效", icon: "none" });
+                        return;
+                      }
+                      try {
+                        await Taro.navigateTo({
+                          url: `/pages/webview/index?url=${encodeURIComponent(targetUrl)}`
+                        });
+                      } catch (err) {
+                        console.warn("[flow] open webview failed", err);
+                        try {
+                          await Taro.setClipboardData({ data: targetUrl });
+                          Taro.showToast({ title: "链接已复制", icon: "success" });
+                        } catch (copyErr) {
+                          Taro.showModal({
+                            title: "外部链接",
+                            content: targetUrl,
+                            showCancel: false,
+                            confirmText: "知道了"
+                          });
+                        }
+                      }
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "24rpx",
+                      marginTop: "16rpx",
+                      padding: "20rpx 24rpx",
+                      background: THEME.linkBg,
+                      borderRadius: "20rpx",
+                      border: "1rpx solid rgba(107, 157, 199, 0.15)"
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: "64rpx",
+                        height: "64rpx",
+                        borderRadius: "16rpx",
+                        background: "#fff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Text style={{ fontSize: "32rpx", color: THEME.link }}>🔗</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink }}>{item.title}</Text>
+                      <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginTop: "2rpx" }}>{item.source || "点击跳转"}</Text>
+                    </View>
+                    <Text style={{ fontSize: "28rpx", color: THEME.link, opacity: 0.5 }}>›</Text>
+                  </View>
+                )}
+
+                {item.type === "image" && (
+                  <View
+                    style={{
+                      marginTop: "16rpx",
+                      borderRadius: "20rpx",
+                      overflow: "hidden",
+                      border: `1rpx solid ${THEME.border}`,
+                      position: "relative"
+                    }}
+                  >
+                    <View
+                      style={{
+                        height: "320rpx",
+                        background: THEME.imageBg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <Text style={{ fontSize: "48rpx", color: THEME.image }}>🖼️</Text>
+                    </View>
+                    <View
+                      style={{
+                        position: "absolute",
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        padding: "48rpx 24rpx 20rpx",
+                        background: "linear-gradient(to top, rgba(0,0,0,0.5), transparent)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12rpx"
+                      }}
+                    >
+                      <Text style={{ fontSize: "22rpx", color: "rgba(255,255,255,0.9)" }}>点击展开</Text>
+                    </View>
+                  </View>
+                )}
+
+                <View style={{ display: "flex", alignItems: "center", gap: "16rpx", marginTop: "20rpx" }}>
+                  {item.tags?.slice(0, 2).map((tag, idx) => (
+                    <View
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8rpx",
+                        padding: "6rpx 16rpx",
+                        borderRadius: "100rpx",
+                        background: THEME.paper
+                      }}
+                    >
+                      <Text style={{ fontSize: "20rpx", color: THEME.inkTertiary }}>#</Text>
+                      <Text style={{ fontSize: "20rpx", color: THEME.inkTertiary }}>{tag}</Text>
+                    </View>
+                  ))}
+                  {item.time && <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{formatDateLabel(item.time)}</Text>}
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
+  const renderAutomations = () => {
+    const manual = automations.filter((a) => a.type === "manual");
+    const auto = automations.filter((a) => a.type === "auto");
+
+    return (
+      <View style={{ padding: "16rpx 40rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx", padding: "0 4rpx" }}>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "20rpx" }} />
+            <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary, letterSpacing: "1rpx" }}>自动流转</Text>
+          </View>
+          <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }} onClick={() => toggleTrace("auto")}>
+            执行记录
+          </Text>
+        </View>
+
+        <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "16rpx", padding: "0 8rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: THEME.manual, fontWeight: 600 }}>▶ 手动触发</Text>
+        </View>
+
+        {manual.map((item) => (
+          <View
+            key={item.id}
+            style={{
+              background: `linear-gradient(135deg, ${THEME.manualBg}, #f0f5f2)`,
+              borderRadius: "32rpx",
+              border: "1rpx solid rgba(122, 158, 138, 0.2)",
+              padding: "32rpx",
+              display: "flex",
+              gap: "28rpx",
+              marginBottom: "20rpx"
+            }}
+          >
+            <View
+              style={{
+                width: "64rpx",
+                height: "64rpx",
+                borderRadius: "16rpx",
+                background: "rgba(122, 158, 138, 0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0
+              }}
+            >
+              <Text style={{ fontSize: "32rpx", color: THEME.manual }}>⚙️</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink }}>{item.title}</Text>
+                <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{item.ranAt || item.time || "待触发"}</Text>
+              </View>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>{item.desc}</Text>
+              <View style={{ display: "flex", alignItems: "center", gap: "20rpx", marginTop: "20rpx" }}>
+                <View
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8rpx",
+                    padding: "6rpx 16rpx",
+                    borderRadius: "12rpx",
+                    background: "#fff",
+                    border: `1rpx solid ${THEME.border}`
+                  }}
+                >
+                  <Text style={{ fontSize: "22rpx", color: item.status === "done" ? THEME.done : THEME.manual, fontWeight: 500 }}>
+                    {item.status === "done" ? "✓ 已执行" : "▶ 待触发"}
+                  </Text>
+                </View>
+              </View>
+              {item.status !== "done" && (
+                <View
+                  onClick={() => runManualAuto(item)}
+                  style={{
+                    marginTop: "16rpx",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "10rpx",
+                    padding: "10rpx 24rpx",
+                    borderRadius: "16rpx",
+                    background: THEME.manual,
+                    color: "#fff"
+                  }}
+                >
+                  <Text style={{ fontSize: "22rpx", fontWeight: 500 }}>▶ {item.actionText}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        ))}
+
+        <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginTop: "32rpx", marginBottom: "16rpx", padding: "0 8rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: THEME.auto, fontWeight: 600 }}>↻ 自动运行</Text>
+        </View>
+
+        {auto.map((item) => (
+          <View
+            key={item.id}
+            style={{
+              background: `linear-gradient(135deg, ${THEME.autoBg}, #f5f2ec)`,
+              borderRadius: "32rpx",
+              border: "1rpx solid rgba(184, 160, 122, 0.2)",
+              padding: "32rpx",
+              display: "flex",
+              gap: "28rpx",
+              marginBottom: "20rpx"
+            }}
+          >
+            <View
+              style={{
+                width: "64rpx",
+                height: "64rpx",
+                borderRadius: "16rpx",
+                background: "rgba(184, 160, 122, 0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0
+              }}
+            >
+              <Text style={{ fontSize: "32rpx", color: THEME.auto }}>⟳</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink }}>{item.title}</Text>
+                <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{item.time}</Text>
+              </View>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>{item.desc}</Text>
+              <View style={{ display: "flex", alignItems: "center", gap: "8rpx", marginTop: "20rpx" }}>
+                <View
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8rpx",
+                    padding: "6rpx 16rpx",
+                    borderRadius: "12rpx",
+                    background: "#fff",
+                    border: `1rpx solid ${THEME.border}`
+                  }}
+                >
+                  <Text style={{ fontSize: "22rpx", color: THEME.done, fontWeight: 500 }}>✓ 已执行</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        ))}
+
+        {traces.auto && (
+          <View
+            style={{
+              marginTop: "16rpx",
+              background: THEME.card,
+              borderRadius: "32rpx",
+              border: `1rpx solid ${THEME.border}`,
+              overflow: "hidden"
+            }}
+          >
+            <View
+              style={{
+                padding: "28rpx 32rpx",
+                borderBottom: `1rpx solid ${THEME.border}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink }}>执行记录</Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>本周 {automations.length} 次</Text>
+            </View>
+            <View style={{ padding: "32rpx" }}>
+              {automations.slice(0, 4).map((item, idx) => (
+                <View
+                  key={item.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingBottom: "24rpx",
+                    marginBottom: "24rpx",
+                    borderBottom: idx < 3 ? `1rpx solid ${THEME.border}` : "none"
+                  }}
+                >
+                  <Text style={{ fontSize: "26rpx", color: THEME.ink }}>{item.title}</Text>
+                  <Text
+                    style={{
+                      fontSize: "22rpx",
+                      padding: "4rpx 16rpx",
+                      borderRadius: "100rpx",
+                      background: item.status === "done" ? THEME.doneBg : THEME.warnBg,
+                      color: item.status === "done" ? "#4a8a5e" : "#c4783a"
+                    }}
+                  >
+                    {item.status === "done" ? "成功" : "待执行"}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderFlowProgress = () => {
+    const { done, active, percent } = stats;
+    return (
+      <View style={{ padding: "32rpx 40rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx", padding: "0 4rpx" }}>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "20rpx" }} />
+            <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary, letterSpacing: "1rpx" }}>今日流动</Text>
+          </View>
+          <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }} onClick={() => toggleTrace("monitor")}>
+            趋势追溯
+          </Text>
+        </View>
+
+        <View
+          style={{
+            background: THEME.card,
+            borderRadius: "32rpx",
+            border: `1rpx solid ${THEME.border}`,
+            padding: "40rpx",
+            display: "flex",
+            alignItems: "center",
+            gap: "40rpx",
+            boxShadow: "0 2rpx 12rpx rgba(122, 158, 184, 0.06), 0 2rpx 4rpx rgba(0,0,0,0.04)"
+          }}
+        >
+          <View
+            style={{
+              position: "relative",
+              width: "128rpx",
+              height: "128rpx",
+              borderRadius: "50%",
+              background: THEME.primaryFaint,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                borderRadius: "50%",
+                border: `10rpx solid ${percent > 0 ? THEME.primaryLight : THEME.border}`,
+                borderTopColor: THEME.primary,
+                borderRightColor: percent > 25 ? THEME.primary : THEME.primaryLight,
+                borderBottomColor: percent > 50 ? THEME.primary : THEME.primaryLight,
+                borderLeftColor: percent > 75 ? THEME.primary : THEME.primaryLight,
+                transform: "rotate(-45deg)"
+              }}
+            />
+            <Text style={{ fontSize: "26rpx", fontWeight: 600, color: THEME.ink, position: "relative", zIndex: 2 }}>{done}/{done + active}</Text>
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "28rpx", color: THEME.ink, marginBottom: "20rpx" }}>今天的河流正在流淌</Text>
+            <View style={{ height: "10rpx", background: THEME.border, borderRadius: "100rpx", overflow: "hidden" }}>
+              <View
+                style={{
+                  height: "100%",
+                  width: `${percent}%`,
+                  background: `linear-gradient(90deg, ${THEME.primaryLight}, ${THEME.primaryFaint})`,
+                  borderRadius: "100rpx"
+                }}
+              />
+            </View>
+            <View style={{ display: "flex", justifyContent: "space-between", marginTop: "16rpx" }}>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>已完成 {done} 件</Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>待完成 {active} 件</Text>
+            </View>
+            <View style={{ marginTop: "24rpx", paddingTop: "24rpx", borderTop: `1rpx solid ${THEME.border}` }}>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>
+                <Text style={{ color: THEME.primary }}>💡</Text> 你通常在下午完成率最高。现在正是推进剩余 {active} 件事的好时机。
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {traces.monitor && (
+          <View
+            style={{
+              marginTop: "16rpx",
+              background: THEME.card,
+              borderRadius: "32rpx",
+              border: `1rpx solid ${THEME.border}`,
+              overflow: "hidden"
+            }}
+          >
+            <View
+              style={{
+                padding: "28rpx 32rpx",
+                borderBottom: `1rpx solid ${THEME.border}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink }}>完成率趋势</Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>近 7 天平均 {percent}%</Text>
+            </View>
+            <View style={{ padding: "40rpx" }}>
+              <View style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", height: "200rpx", marginBottom: "24rpx" }}>
+                {[60, 45, 80, 70, percent, 55, 75].map((h, idx) => (
+                  <View key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", margin: "0 8rpx" }}>
+                    <View
+                      style={{
+                        width: "100%",
+                        height: "200rpx",
+                        background: THEME.paper,
+                        borderRadius: "12rpx 12rpx 0 0",
+                        position: "relative",
+                        overflow: "hidden"
+                      }}
+                    >
+                      <View
+                        style={{
+                          position: "absolute",
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: `${h}%`,
+                          background: idx === 4 ? THEME.primary : h >= 70 ? THEME.done : h >= 50 ? THEME.warn : THEME.primaryLight,
+                          borderRadius: "12rpx 12rpx 0 0"
+                        }}
+                      />
+                    </View>
+                    <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "12rpx" }}>
+                      {["一", "二", "三", "四", "今", "六", "日"][idx]}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <View style={{ display: "flex", justifyContent: "space-between" }}>
+                <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary }}>最低 45%</Text>
+                <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary }}>最高 100%</Text>
+              </View>
+              <View style={{ marginTop: "24rpx", paddingTop: "24rpx", borderTop: `1rpx solid ${THEME.border}` }}>
+                <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>
+                  <Text style={{ color: THEME.primary }}>📊</Text> 本周完成率有波动，保持今日节奏，逐步推进剩余事项。
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderInputPanel = () => {
+    if (!showInputPanel || !analysis) return null;
+    return (
+      <View
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.45)",
+          zIndex: 200,
+          display: "flex",
+          alignItems: "flex-end"
+        }}
+        onClick={() => setShowInputPanel(false)}
+      >
+        <View
+          style={{
+            width: "100%",
+            maxHeight: "70vh",
+            background: THEME.card,
+            borderRadius: "48rpx 48rpx 0 0",
+            padding: "48rpx",
+            boxSizing: "border-box"
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <View style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32rpx" }}>
+            <Text style={{ fontSize: "34rpx", fontWeight: 700, color: THEME.ink }}>AI 理解结果</Text>
+            <Text style={{ fontSize: "28rpx", color: THEME.inkQuaternary }} onClick={() => setShowInputPanel(false)}>关闭</Text>
+          </View>
+          <ScrollView scrollY style={{ maxHeight: "40vh" }}>
+            {Array.isArray(analysis.steps) && analysis.steps.length > 0 && (
+              <View style={{ marginBottom: "28rpx" }}>
+                <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, marginBottom: "12rpx" }}>分析步骤</Text>
+                {analysis.steps.map((s, i) => (
+                  <View key={i} style={{ marginTop: "8rpx" }}>
+                    <Text style={{ fontSize: "28rpx", color: THEME.ink }}>{i + 1}. {s.text || s}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {Array.isArray(analysis.timeline) && analysis.timeline.length > 0 && (
+              <View style={{ marginBottom: "28rpx" }}>
+                <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, marginBottom: "12rpx" }}>时间线</Text>
+                {analysis.timeline.map((t, i) => (
+                  <View key={i} style={{ display: "flex", justifyContent: "space-between", marginTop: "8rpx" }}>
+                    <Text style={{ fontSize: "28rpx", color: THEME.ink, flex: 1 }}>{t.title}</Text>
+                    <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary }}>{t.date} {t.time}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {Array.isArray(analysis.automations) && analysis.automations.length > 0 && (
+              <View style={{ marginBottom: "28rpx" }}>
+                <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, marginBottom: "12rpx" }}>自动化建议</Text>
+                {analysis.automations.map((a, i) => (
+                  <View key={i} style={{ marginTop: "8rpx" }}>
+                    <Text style={{ fontSize: "28rpx", color: THEME.ink }}>· {a.title}：{a.desc}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+          <View style={{ display: "flex", marginTop: "32rpx" }}>
+            <View style={{ flex: 1, marginRight: "16rpx" }}>
+              <Button className="ss-btn" style={{ marginTop: 0, background: THEME.primary }} onClick={createTaskFromAnalysis}>
+                生成约定
+              </Button>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button className="ss-btn ss-btn-plain" style={{ marginTop: 0, color: THEME.primary, borderColor: THEME.primary }} onClick={createNoteFromInput}>
+                存为心签
+              </Button>
+            </View>
+          </View>
+          <Button className="ss-btn ss-btn-plain" style={{ marginTop: "16rpx", color: THEME.inkTertiary, borderColor: THEME.border }} onClick={createDailyPlanFromInput}>
+            加入今日规划
+          </Button>
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <View style={{ minHeight: "100vh", background: THEME.paper }}>
+      {renderHeader()}
+      <ScrollView scrollY style={{ height: "calc(100vh - 112rpx)" }}>
+        <View style={{ maxWidth: "960rpx", margin: "0 auto", paddingBottom: "420rpx" }}>
+          {loading && !briefing && tasks.length === 0 && (
+            <View className="ss-empty" style={{ color: THEME.inkTertiary }}>加载中...</View>
+          )}
+          {renderBriefing()}
+          {renderDueTasks()}
+          {renderRecommend()}
+          {renderRecords()}
+          {renderAutomations()}
+          {renderFlowProgress()}
+        </View>
+      </ScrollView>
+
+      {/* 底部统一输入栏 - 与 tabBar 平齐 */}
+      <View
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: "100rpx",
+          paddingBottom: "env(safe-area-inset-bottom)",
+          background: THEME.card,
+          borderTop: `1rpx solid ${THEME.border}`,
+          zIndex: 150,
+          boxSizing: "border-box"
+        }}
+      >
+        <View
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "16rpx 24rpx",
+            borderBottom: `1rpx solid ${THEME.border}`
+          }}
+        >
+          <View
+            onClick={() => setShowVoiceModal(true)}
+            style={{
+              width: "60rpx",
+              height: "60rpx",
+              borderRadius: "50%",
+              background: `linear-gradient(135deg, ${THEME.primaryLight}, ${THEME.primary})`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "20rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: "28rpx" }}>🎤</Text>
+          </View>
+          <Input
+            style={{
+              flex: 1,
+              height: "72rpx",
+              fontSize: "30rpx",
+              color: THEME.ink,
+              background: THEME.paper,
+              borderRadius: "12rpx",
+              padding: "0 24rpx"
+            }}
+            placeholder="记录一件小事、粘贴链接或外部资料..."
+            value={inputText}
+            focus={inputFocus}
+            onInput={(e) => setInputText(e.detail.value)}
+            onConfirm={addFlowRecord}
+          />
+          <View
+            onClick={addFlowRecord}
+            style={{
+              width: "72rpx",
+              height: "72rpx",
+              borderRadius: "12rpx",
+              background: inputText.trim() ? THEME.primary : THEME.border,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              marginLeft: "20rpx"
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: "32rpx" }}>➤</Text>
+          </View>
+        </View>
+        <View style={{ display: "flex", justifyContent: "space-around", padding: "12rpx 0" }}>
+          {[
+            { key: "photo", icon: "📷", label: "拍照" },
+            { key: "link", icon: "🔗", label: "链接" },
+            { key: "task", icon: "📋", label: "约定" },
+            { key: "note", icon: "♡", label: "心签" }
+          ].map((q) => (
+            <View
+              key={q.key}
+              onClick={() => quickAction(q.key)}
+              style={{ display: "flex", alignItems: "center", gap: "10rpx", padding: "8rpx 16rpx" }}
+            >
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>{q.icon}</Text>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary }}>{q.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {renderInputPanel()}
+
+      {showVoiceModal && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 300,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+          onClick={() => setShowVoiceModal(false)}
+        >
+          <View
+            style={{
+              width: "560rpx",
+              background: THEME.card,
+              borderRadius: "32rpx",
+              padding: "48rpx",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "16rpx" }}>语音输入</Text>
+            <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, marginBottom: "48rpx" }}>按住下方按钮说话，松开后自动识别</Text>
+            <VoiceInput
+              size={160}
+              onResult={handleVoiceResult}
+              onError={(err) => {
+                Taro.showToast({ title: err, icon: "none" });
+                setShowVoiceModal(false);
+              }}
+            />
+            <View
+              onClick={() => setShowVoiceModal(false)}
+              style={{
+                marginTop: "48rpx",
+                padding: "16rpx 48rpx",
+                borderRadius: "12rpx",
+                background: THEME.paper
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>取消</Text>
+            </View>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}

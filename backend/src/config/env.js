@@ -1,11 +1,22 @@
 import "dotenv/config";
 import { z } from "zod";
 
+const isDev = process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test";
+
+// Prisma Client 在 import 时就会读取 schema 中的 env()，
+// 因此必须在 zod 解析之前把默认值写回 process.env。
+if (isDev && !process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = "file:./prisma/dev.db";
+}
+if (isDev && !process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = "dev-jwt-secret-please-change-in-production";
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3001),
-  DATABASE_URL: z.string().min(1),
-  JWT_SECRET: z.string().min(16),
+  DATABASE_URL: isDev ? z.string().min(1).default("file:./prisma/dev.db") : z.string().min(1),
+  JWT_SECRET: isDev ? z.string().min(16).default("dev-jwt-secret-please-change-in-production") : z.string().min(16),
   JWT_EXPIRES_IN: z.string().default("7d"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   UPLOAD_DIR: z.string().default("uploads"),

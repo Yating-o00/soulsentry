@@ -6,7 +6,7 @@ import { isLoggedIn } from "@/utils/auth";
 export default function Index() {
   useEffect(() => {
     if (isLoggedIn()) {
-      Taro.switchTab({ url: "/pages/tasks/index" });
+      Taro.switchTab({ url: "/pages/flow/index" });
     }
   }, []);
 

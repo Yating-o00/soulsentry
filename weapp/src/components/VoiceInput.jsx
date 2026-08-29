@@ -63,6 +63,9 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
   const finalRef = useRef("");
   const timerRef = useRef(null);
   const initedRef = useRef(false);
+  const startingRef = useRef(false);
+  const stoppingRef = useRef(false);
+  const managerRef = useRef(null);
 
   useEffect(() => {
     if (initedRef.current) return;
@@ -71,6 +74,7 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
       setHint("语音插件未配置");
       return;
     }
+    managerRef.current = manager;
     initedRef.current = true;
 
     manager.onRecognize = (res) => {
@@ -82,8 +86,10 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
 
     manager.onStop = (res) => {
       setRecording(false);
+      stoppingRef.current = false;
+      startingRef.current = false;
       const text = (res?.result || finalRef.current || interimRef.current || "").trim();
-      setHint(text ? `识别完成` : "未识别到语音");
+      setHint(text ? "识别完成" : "未识别到语音");
       if (text) {
         onResult?.(text);
       }
@@ -94,6 +100,8 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
 
     manager.onError = (res) => {
       setRecording(false);
+      stoppingRef.current = false;
+      startingRef.current = false;
       const code = res?.retcode || res?.code || "";
       const msg = res?.msg || res?.message || "语音识别失败";
       const display = code ? `${msg} (${code})` : msg;
@@ -111,12 +119,15 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
   }, [onResult, onError]);
 
   const startRecord = async () => {
-    const manager = getRecognitionManager();
+    if (startingRef.current || stoppingRef.current || recording) return;
+
+    const manager = managerRef.current || getRecognitionManager();
     if (!manager) {
       Taro.showToast({ title: "语音插件未配置", icon: "none" });
       onError?.("语音插件未配置");
       return;
     }
+    managerRef.current = manager;
 
     const granted = await ensureRecordAuth();
     if (!granted) {
@@ -125,6 +136,7 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
       return;
     }
 
+    startingRef.current = true;
     interimRef.current = "";
     finalRef.current = "";
     setRecording(true);
@@ -135,11 +147,13 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
         duration: 30000,
         lang: "zh_CN"
       });
+      startingRef.current = false;
 
       timerRef.current = setTimeout(() => {
         stopRecord();
       }, 30000);
     } catch (err) {
+      startingRef.current = false;
       setRecording(false);
       setHint("启动失败");
       console.error("[VoiceInput] start failed", err);
@@ -148,26 +162,39 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
   };
 
   const stopRecord = () => {
-    const manager = getRecognitionManager();
+    if (stoppingRef.current || !recording) return;
+
+    const manager = managerRef.current || getRecognitionManager();
     if (!manager) return;
+
+    stoppingRef.current = true;
     clearTimeout(timerRef.current);
+    setHint("识别中…");
+
     try {
       manager.stop();
     } catch (err) {
+      stoppingRef.current = false;
       setRecording(false);
       console.error("[VoiceInput] stop failed", err);
-      onError?.(err?.message || "停止失败");
+      // -30011 "请等待识别完成" 属于正常中间状态，不弹错误
+      const msg = err?.message || "";
+      if (!msg.includes("30011") && !msg.includes("recognition")) {
+        onError?.(msg || "停止失败");
+      }
     }
   };
 
   const onTouchStart = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     onTouchStartProp?.();
     startRecord();
   };
 
   const onTouchEnd = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     stopRecord();
   };
 

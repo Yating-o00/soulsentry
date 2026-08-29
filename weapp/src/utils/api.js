@@ -8,20 +8,21 @@ function showError(message) {
 }
 
 export function request(options = {}) {
+  const { silent, ...rest } = options;
   const token = getToken();
   const headers = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(options.header || {})
+    ...(rest.header || {})
   };
 
-  const url = options.url.startsWith("http") ? options.url : `${BASE_API}${options.url}`;
+  const url = rest.url.startsWith("http") ? rest.url : `${BASE_API}${rest.url}`;
 
   return Taro.request({
-    ...options,
+    ...rest,
     url,
     header: headers,
-    timeout: options.timeout || 60000
+    timeout: rest.timeout || 60000
   })
     .then((res) => {
       const { statusCode, data } = res;
@@ -36,7 +37,7 @@ export function request(options = {}) {
         const currentPath = pages.length > 0 ? pages[pages.length - 1].route : "";
         const isLoginPage = currentPath === "pages/login/index" || currentPath === "pages/index/index";
 
-        if (!isLoginPage) {
+        if (!isLoginPage && !silent) {
           showError("登录已过期，请重新登录");
           setTimeout(() => {
             Taro.redirectTo({ url: "/pages/login/index" });
@@ -46,10 +47,11 @@ export function request(options = {}) {
       }
 
       const message = data?.message || data?.error || `请求失败 (${statusCode})`;
-      showError(message);
+      if (!silent) showError(message);
       return Promise.reject(new Error(message));
     })
     .catch((err) => {
+      if (silent) return Promise.reject(err);
       if (err?.errMsg && err.errMsg.includes("request:fail")) {
         showError("网络连接失败，请检查网络");
       } else if (err?.message === "UNAUTHORIZED") {

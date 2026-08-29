@@ -22,6 +22,14 @@ const DEMO_PASSWORD = "demo123456";
 async function ensureStandaloneSession() {
   if (getAccessToken()) return true;
 
+  // 生产环境不要自动登录 Demo 用户，应让未认证用户回到登录页
+  if (!import.meta.env.DEV) {
+    const error = new Error("未登录，请先登录");
+    error.status = 401;
+    error.code = "AUTH_REQUIRED";
+    throw error;
+  }
+
   const result = await httpRequest("/api/auth/login", {
     method: "POST",
     body: {

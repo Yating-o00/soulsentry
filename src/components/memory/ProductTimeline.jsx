@@ -172,7 +172,7 @@ function TimelineItem({ event, relationships, allTasks, teamUsers, comments }) {
 
   // Match related people from relationships
   const combinedText = ((event.title || "") + " " + (event.description || "")).toLowerCase();
-  const relatedPeople = (relationships || []).filter(r => {
+  const relatedPeople = (Array.isArray(relationships) ? relationships : []).filter(r => {
     const name = (r.name || "").toLowerCase();
     const nick = (r.nickname || "").toLowerCase();
     return (name && combinedText.includes(name)) || (nick && combinedText.includes(nick));

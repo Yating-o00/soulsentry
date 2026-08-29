@@ -9,8 +9,13 @@ import moment from "moment";
 function buildTaskContext(task, allTasks, relationships, behaviors, completions) {
   const ctx = {};
 
+  const safeAllTasks = Array.isArray(allTasks) ? allTasks : [];
+  const safeRelationships = Array.isArray(relationships) ? relationships : [];
+  const safeBehaviors = Array.isArray(behaviors) ? behaviors : [];
+  const safeCompletions = Array.isArray(completions) ? completions : [];
+
   // Lv1: 记录层 — 时间偏好 & 日程模式
-  const completedTasks = (allTasks || []).filter(t => t.status === "completed" && t.completed_at && !t.deleted_at);
+  const completedTasks = safeAllTasks.filter(t => t.status === "completed" && t.completed_at && !t.deleted_at);
   const hourCounts = {};
   const dayCounts = {};
   completedTasks.forEach(t => {
@@ -26,7 +31,7 @@ function buildTaskContext(task, allTasks, relationships, behaviors, completions)
   ctx.peakDay = peakDay ? dayNames[parseInt(peakDay[0])] : null;
 
   // Same-category task history
-  const sameCat = (allTasks || []).filter(t => t.category === task.category && !t.deleted_at);
+  const sameCat = safeAllTasks.filter(t => t.category === task.category && !t.deleted_at);
   const sameCatCompleted = sameCat.filter(t => t.status === "completed");
   ctx.categoryTotal = sameCat.length;
   ctx.categoryCompleted = sameCatCompleted.length;
@@ -38,7 +43,7 @@ function buildTaskContext(task, allTasks, relationships, behaviors, completions)
   ctx.avgDelayMinutes = delays.length > 2 ? Math.round(delays.reduce((a, b) => a + b, 0) / delays.length) : null;
 
   // Lv1: 固定日程模式 — recurring tasks
-  const recurringTasks = (allTasks || []).filter(t => t.repeat_rule && t.repeat_rule !== "none" && !t.deleted_at);
+  const recurringTasks = safeAllTasks.filter(t => t.repeat_rule && t.repeat_rule !== "none" && !t.deleted_at);
   ctx.recurringPatterns = recurringTasks.slice(0, 3).map(t => `${t.title}(${t.repeat_rule === "daily" ? "每天" : t.repeat_rule === "weekly" ? "每周" : "每月"})`);
 
   // Lv2: 关系层 — 关联人物
@@ -46,7 +51,7 @@ function buildTaskContext(task, allTasks, relationships, behaviors, completions)
   const titleLower = (task.title || "").toLowerCase();
   const descLower = (task.description || "").toLowerCase();
   const combinedText = titleLower + " " + descLower;
-  (relationships || []).forEach(r => {
+  safeRelationships.forEach(r => {
     const name = (r.name || "").toLowerCase();
     const nick = (r.nickname || "").toLowerCase();
     if (name && combinedText.includes(name) || nick && combinedText.includes(nick)) {
@@ -66,7 +71,7 @@ function buildTaskContext(task, allTasks, relationships, behaviors, completions)
   ctx.relatedPeople = relatedPeople;
 
   // Lv2: 承诺追踪 — overdue tasks
-  const overdueTasks = (allTasks || []).filter(t =>
+  const overdueTasks = safeAllTasks.filter(t =>
     t.status === "pending" && !t.deleted_at && t.reminder_time && new Date(t.reminder_time) < new Date()
   );
   ctx.overdueCount = overdueTasks.length;

@@ -112,18 +112,19 @@ function FavorHistory({ favors }) {
 
 export default function RelationshipNetwork({ relationships }) {
   const [selected, setSelected] = useState(null);
+  const rels = Array.isArray(relationships) ? relationships : [];
 
   return (
     <div className="space-y-4">
       {/* Summary stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white rounded-xl p-3 border border-slate-100 text-center">
-          <div className="text-2xl font-bold text-[#384877]">{relationships.length}</div>
+          <div className="text-2xl font-bold text-[#384877]">{rels.length}</div>
           <div className="text-xs text-slate-500">核心网络</div>
         </div>
         <div className="bg-white rounded-xl p-3 border border-slate-100 text-center">
           <div className="text-2xl font-bold text-pink-500">
-            {relationships.filter(r => {
+            {rels.filter(r => {
               const days = r.last_interaction_date ? moment().diff(moment(r.last_interaction_date), "days") : 999;
               return days > (r.contact_frequency_days || 30);
             }).length}
@@ -132,7 +133,7 @@ export default function RelationshipNetwork({ relationships }) {
         </div>
         <div className="bg-white rounded-xl p-3 border border-slate-100 text-center">
           <div className="text-2xl font-bold text-emerald-500">
-            {relationships.reduce((sum, r) => sum + (r.interaction_count || 0), 0)}
+            {rels.reduce((sum, r) => sum + (r.interaction_count || 0), 0)}
           </div>
           <div className="text-xs text-slate-500">总互动</div>
         </div>
@@ -140,7 +141,7 @@ export default function RelationshipNetwork({ relationships }) {
 
       {/* Relationship cards */}
       <div className="grid gap-3 md:grid-cols-2">
-        {relationships.map((rel) => (
+        {rels.map((rel) => (
           <RelationshipCard
             key={rel.id}
             rel={rel}

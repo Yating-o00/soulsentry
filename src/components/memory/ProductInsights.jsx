@@ -127,7 +127,7 @@ export default function ProductInsights({ tasks, notes, behaviors, executions, r
           />
         )}
         {(() => {
-          const rels = relationships || [];
+          const rels = Array.isArray(relationships) ? relationships : [];
           const overdue = rels.filter(r => {
             if (!r.last_interaction_date) return false;
             const days = moment().diff(moment(r.last_interaction_date), "days");
@@ -159,16 +159,20 @@ export default function ProductInsights({ tasks, notes, behaviors, executions, r
           {insights.peakDay && <p>• 高产日：<span className="font-semibold text-purple-600">{insights.peakDay}</span>，建议安排重要会议和深度工作</p>}
           {insights.avgDelay > 0 && <p>• 时间校准：每项约定建议预留额外 <span className="font-semibold text-amber-600">{insights.avgDelay}分钟</span></p>}
           <p>• 近期沉淀 <span className="font-semibold text-indigo-600">{insights.noteCount}篇心签</span>，覆盖 <span className="font-semibold text-indigo-600">{insights.tagCount}个知识领域</span></p>
-          {(relationships || []).length > 0 && (
-            <p>• 人际网络 <span className="font-semibold text-pink-600">{(relationships || []).length}位联系人</span>，
+          {(() => {
+            const rels = Array.isArray(relationships) ? relationships : [];
+            if (rels.length === 0) return null;
+            return (
+            <p>• 人际网络 <span className="font-semibold text-pink-600">{rels.length}位联系人</span>，
               {(() => {
-                const overdue = (relationships || []).filter(r => r.last_interaction_date && moment().diff(moment(r.last_interaction_date), "days") > (r.contact_frequency_days || 30));
+                const overdue = rels.filter(r => r.last_interaction_date && moment().diff(moment(r.last_interaction_date), "days") > (r.contact_frequency_days || 30));
                 return overdue.length > 0
                   ? <span className="text-amber-600 font-semibold">{overdue.length}位待联系</span>
                   : <span className="text-emerald-600">维护状态良好</span>;
               })()}
             </p>
-          )}
+          );
+        })()}
         </div>
       </div>
     </div>

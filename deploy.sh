@@ -79,7 +79,6 @@ mkdir -p "$RELEASE_PATH"
 rsync -a --delete \
   --exclude ".git" \
   --exclude "node_modules" \
-  --exclude "dist" \
   --exclude "backend/node_modules" \
   "$PROJECT_ROOT/" "$RELEASE_PATH/"
 

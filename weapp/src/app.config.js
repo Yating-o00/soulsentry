@@ -13,6 +13,7 @@ export default {
     "pages/account/index",
     "pages/webview/index"
   ],
+  lazyCodeLoading: "requiredComponents",
   plugins: {
     WechatSI: {
       version: "0.3.5",

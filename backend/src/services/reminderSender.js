@@ -147,8 +147,10 @@ export async function sendDueReminders() {
   });
 
   const dueTasks = candidates.filter((task) => {
-    if (!task.reminderSentAt) return true;
-    return task.reminderTime > task.reminderSentAt;
+    const extraFields = getTaskExtraFields(task);
+    const lastSentAt = extraFields.reminder_sent_at ? new Date(extraFields.reminder_sent_at) : null;
+    if (!lastSentAt || isNaN(lastSentAt.getTime())) return true;
+    return new Date(task.reminderTime).getTime() > lastSentAt.getTime();
   });
 
   let sent = 0;
@@ -178,14 +180,14 @@ export async function sendDueReminders() {
     else if (result.inAppFallback) inAppFallback += 1;
     else skipped += 1;
 
-    // 无论发送成功与否，都更新 reminderSentAt，避免同一分钟重复尝试
+    // 无论发送成功与否，都更新 metadata 里的 reminder_sent_at，避免同一分钟重复尝试
     try {
       await prisma.task.update({
         where: { id: task.id },
-        data: { reminderSentAt: now },
+        data: { metadata: buildTaskMetadataWithExtra(task, { reminder_sent_at: now.toISOString() }) },
       });
     } catch (updateErr) {
-      console.warn(`[reminderSender] task=${task.id} failed to update reminderSentAt:`, updateErr);
+      console.warn(`[reminderSender] task=${task.id} failed to update reminder_sent_at:`, updateErr);
     }
   }
 

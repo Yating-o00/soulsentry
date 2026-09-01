@@ -48,6 +48,14 @@ function shouldTryFallback(status, errorText = "") {
   return /invalid authentication|permission denied|resource_not_found|rate limit|overload|timeout/i.test(errorText);
 }
 
+function normalizeTemperature(model, temperature) {
+  // Kimi K2/K3 系列模型目前只接受 temperature = 1
+  if (String(model || "").startsWith("kimi-k")) {
+    return 1;
+  }
+  return temperature;
+}
+
 function normalizeJsonString(content) {
   const raw = String(content || "").trim();
   if (!raw) return raw;
@@ -95,7 +103,7 @@ export async function callKimiChat({
       const body = {
         model: candidateModel,
         messages,
-        temperature,
+        temperature: normalizeTemperature(candidateModel, temperature),
         max_tokens: maxTokens
       };
 

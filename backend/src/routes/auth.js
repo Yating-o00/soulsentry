@@ -131,8 +131,9 @@ authRouter.post("/sms/send", async (req, res) => {
     }
   });
 
+  let smsResult;
   try {
-    await sendVerificationSms(phone, code, purpose);
+    smsResult = await sendVerificationSms(phone, code, purpose);
   } catch (error) {
     console.error("SMS send failed:", error);
     return res.status(500).json({
@@ -141,12 +142,13 @@ authRouter.post("/sms/send", async (req, res) => {
     });
   }
 
+  const isMocked = Boolean(smsResult?.mocked);
   return res.json({
     success: true,
-    message: "验证码已发送",
+    message: isMocked ? "短信配置未开启，已生成测试验证码" : "验证码已发送",
     expiresIn: 600,
-    // 本地开发环境返回验证码，方便测试；生产环境不返回
-    ...(process.env.NODE_ENV !== "production" ? { code, mocked: true } : {})
+    // 当短信被 mock（配置不完整）时，无论是否生产环境都返回验证码，否则真实用户无法登录
+    ...(isMocked || process.env.NODE_ENV !== "production" ? { code, mocked: true } : {})
   });
 });
 

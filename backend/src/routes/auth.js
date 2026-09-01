@@ -144,7 +144,9 @@ authRouter.post("/sms/send", async (req, res) => {
   return res.json({
     success: true,
     message: "验证码已发送",
-    expiresIn: 600
+    expiresIn: 600,
+    // 本地开发环境返回验证码，方便测试；生产环境不返回
+    ...(process.env.NODE_ENV !== "production" ? { code, mocked: true } : {})
   });
 });
 

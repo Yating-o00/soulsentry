@@ -1655,6 +1655,103 @@ functionsRouter.post("/:name", async (req, res) => {
       return res.json({ file_url: fileUrl, file_name: fileName });
     }
 
+    if (name === "analyzeHeartSign") {
+      const noteId = payload.note_id;
+      const noteData = payload.note_data || {};
+      if (!noteId) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 note_id" });
+      }
+
+      let note = await prisma.note.findFirst({
+        where: { id: noteId, userId: req.user.id }
+      });
+      if (!note && (noteData.plain_text || noteData.content)) {
+        note = { id: noteId, ...noteData, userId: req.user.id };
+      }
+      if (!note) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "心签不存在" });
+      }
+
+      const existingAi = note.metadata?.ai_analysis;
+      if (note.aiStatus === "completed" && existingAi?.analyzed_at) {
+        return res.json({ ok: true, skipped: true, ai_analysis: existingAi });
+      }
+
+      await prisma.note.update({
+        where: { id: noteId },
+        data: { aiStatus: "processing" }
+      });
+
+      const materialText = String(note.plainText || note.content || "")
+        .replace(/<[^>]+>/g, " ")
+        .slice(0, 8000);
+
+      const schema = {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "1-2 句话精炼摘要" },
+          key_points: { type: "array", items: { type: "string" }, description: "3-5 个核心要点" },
+          tags: { type: "array", items: { type: "string" }, description: "3-6 个智能标签，不含 #" },
+          category: { type: "string", description: "一级分类：产品/技术/读书/灵感/工作/生活/财务/健康/情绪/其他" },
+          is_emotional: { type: "boolean", description: "是否为生活记录、情绪倾诉、心灵感悟等偏感性内容" },
+          response_persona: { type: "string", description: "回应身份：comforter/mentor/friend，非情感类留空" },
+          response_title: { type: "string", description: "情感回应的标题，如「一封来自安慰者的信」" },
+          emotional_response: { type: "string", description: "80-200 字温暖回应，像写给朋友的短信" }
+        },
+        required: ["summary", "tags", "category"]
+      };
+
+      try {
+        const parsed = await invokeKimiText({
+          prompt: `请分析以下心签内容：\n\n${materialText}`,
+          systemPrompt: `你是用户的私人知识库助理，也是一位懂得共情的伙伴。用户发来的每一条"心签"都需要你完成：自动摘要、关键词提取、内容分类。\n此外，请判断这条心签是否属于生活记录、情绪倾诉、心灵感悟或人生灵感等偏感性、值得被温柔回应的内容：若是，请把 is_emotional 设为 true，选择最贴切的回应身份(response_persona)，并以那个身份的口吻写一段真诚、温暖、有人文温度的回应(emotional_response)，让用户感到被理解、被陪伴、被指引；若只是资料/任务/信息类内容，则 is_emotional 为 false，相关字段留空。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`,
+          responseJsonSchema: schema,
+          temperature: 1
+        });
+
+        const ai_analysis = {
+          summary: parsed.summary || "",
+          key_points: parsed.key_points || [],
+          category: parsed.category || "其他",
+          is_emotional: !!parsed.is_emotional,
+          response_persona: parsed.is_emotional ? (parsed.response_persona || "friend") : "",
+          response_title: parsed.is_emotional ? (parsed.response_title || "") : "",
+          emotional_response: parsed.is_emotional ? (parsed.emotional_response || "") : "",
+          analyzed_at: new Date().toISOString()
+        };
+
+        const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
+        const title = parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签");
+
+        const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
+        const updatedNote = await prisma.note.update({
+          where: { id: noteId },
+          data: {
+            title,
+            tags: mergedTags,
+            aiStatus: "completed",
+            metadata: {
+              ...currentMetadata,
+              ai_analysis
+            }
+          }
+        });
+
+        return res.json({
+          ok: true,
+          ai_analysis,
+          tags: mergedTags,
+          title: updatedNote.title
+        });
+      } catch (error) {
+        await prisma.note.update({
+          where: { id: noteId },
+          data: { aiStatus: "failed" }
+        });
+        throw error;
+      }
+    }
+
     if (name === "createStripeCheckout") {
       return res.status(501).json({
         error: "FUNCTION_NOT_IMPLEMENTED",

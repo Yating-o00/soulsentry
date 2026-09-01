@@ -16,9 +16,7 @@ module.exports = {
   plugins: [],
   defineConstants: {
     "process.env.TARO_APP_API": JSON.stringify(
-      isDev
-        ? "https://www.xinzhan-soulsentry.cn/api"
-        : "https://www.xinzhan-soulsentry.cn/api"
+      process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api"
     )
   },
   alias: {

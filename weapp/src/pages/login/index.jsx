@@ -63,8 +63,13 @@ export default function Login() {
     if (countdown > 0) return;
 
     try {
-      await post("/auth/sms/send", { phone, purpose: "login" });
-      Taro.showToast({ title: "验证码已发送", icon: "success" });
+      const res = await post("/auth/sms/send", { phone, purpose: "login" });
+      if (res?.code) {
+        setCode(String(res.code));
+        Taro.showToast({ title: `开发模式验证码：${res.code}`, icon: "none", duration: 3000 });
+      } else {
+        Taro.showToast({ title: "验证码已发送", icon: "success" });
+      }
       setCountdown(60);
       timerRef.current = setInterval(() => {
         setCountdown((prev) => {

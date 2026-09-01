@@ -5,10 +5,10 @@ async function callKimi(apiKey, systemPrompt, userPrompt, useJsonFormat) {
   if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
   messages.push({ role: "user", content: userPrompt });
 
-  const models = ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-32k"];
+  const models = ["kimi-k2.6", "kimi-k3", "kimi-latest"];
   let lastErr = null;
   for (const model of models) {
-    const body = { model, messages, temperature: 0.2, max_tokens: 8000 };
+    const body = { model, messages, temperature: 1, max_tokens: 8000 };
     if (useJsonFormat) body.response_format = { type: "json_object" };
     const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {
       method: "POST",

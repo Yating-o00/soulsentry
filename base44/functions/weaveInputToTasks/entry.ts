@@ -29,11 +29,11 @@ Deno.serve(async (req) => {
     const nowShanghai = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace(' ', 'T');
     const callKimi = async (messages) => {
       let lastErr = null;
-      for (const model of ['kimi-k2-0905-preview', 'kimi-latest', 'moonshot-v1-auto']) {
+      for (const model of ['kimi-k2.6', 'kimi-k3', 'kimi-latest']) {
         const r = await fetch('https://api.moonshot.ai/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey.trim()}` },
-          body: JSON.stringify({ model, temperature: 0.3, response_format: { type: 'json_object' }, messages }),
+          body: JSON.stringify({ model, temperature: 1, response_format: { type: 'json_object' }, messages }),
         });
         if (r.ok) { const d = await r.json(); return d.choices?.[0]?.message?.content || '{}'; }
         lastErr = `Kimi API error: ${r.status}`;

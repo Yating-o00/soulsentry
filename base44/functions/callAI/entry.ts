@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
     messages.push({ role: "user", content: prompt });
 
     // 模型 fallback 列表：kimi-k2-0905-preview 已下线/无权限，改用 kimi-latest 为首选
-    const candidateModels = ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
+    const candidateModels = ["kimi-k2.6", "kimi-k3", "kimi-latest"];
 
     let response = null;
     let lastErr = '';
@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
       const kimiBody = {
         model: m,
         messages,
-        temperature: 0.7,
+        temperature: 1,
       };
       if (response_json_schema) {
         kimiBody.response_format = { type: "json_object" };

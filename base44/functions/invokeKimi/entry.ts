@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
       file_urls,
       system_prompt,
       model,
-      temperature = 0.7
+      temperature = 1
     } = await req.json();
 
     if (!prompt) {
@@ -161,9 +161,9 @@ Deno.serve(async (req) => {
     // 因此当同时需要 JSON 输出 + 图片时，仍使用 vision 模型但去掉 response_format，
     // 通过 system prompt 中的 schema 约束让模型输出 JSON，再在外层 parse 兜底。
     // 视觉用 vision 模型；纯文本用文本模型，并对 404/403 自动 fallback
-    const textModels = model ? [model] : ["kimi-latest", "moonshot-v1-auto", "moonshot-v1-8k"];
+    const textModels = model ? [model] : ["kimi-k2.6", "kimi-k3", "kimi-latest"];
     const candidateModels = hasImages
-      ? [model || "moonshot-v1-32k-vision-preview"]
+      ? [model || "kimi-k2.6"]
       : textModels;
 
     let response = null;
@@ -176,7 +176,8 @@ Deno.serve(async (req) => {
           { role: "system", content: systemContent },
           { role: "user", content: userContent }
         ],
-        temperature
+        // 当前 Kimi 模型仅接受 temperature=1
+        temperature: 1
       };
       if (wantsJson && !hasImages) {
         body.response_format = { type: "json_object" };
@@ -193,7 +194,7 @@ Deno.serve(async (req) => {
       lastErrText = await response.text();
       lastStatus = response.status;
       // 模型不可用/无权限/过载/临时故障都继续 fallback
-      if (![404, 403, 401, 429, 500, 502, 503].includes(response.status)) break;
+      if (![400, 404, 403, 401, 429, 500, 502, 503].includes(response.status)) break;
     }
 
     if (!response || !response.ok) {

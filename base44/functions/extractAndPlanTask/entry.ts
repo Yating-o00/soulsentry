@@ -12,7 +12,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 async function callKimi(apiKey, systemPrompt, userPrompt) {
-  const models = ["kimi-k2-0905-preview", "kimi-latest", "moonshot-v1-auto"];
+  const models = ["kimi-k2.6", "kimi-k3", "kimi-latest"];
   let lastErr = null;
   for (const model of models) {
     const body = {
@@ -21,7 +21,7 @@ async function callKimi(apiKey, systemPrompt, userPrompt) {
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      temperature: 0.2,
+      temperature: 1,
       response_format: { type: "json_object" }
     };
     const res = await fetch("https://api.moonshot.ai/v1/chat/completions", {

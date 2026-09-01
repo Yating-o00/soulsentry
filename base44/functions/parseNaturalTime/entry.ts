@@ -147,12 +147,12 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey.trim()}` },
       body: JSON.stringify({
-        model: "kimi-k2-turbo-preview",
+        model: "kimi-k2.6",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: input }
         ],
-        temperature: 0.1,
+        temperature: 1,
         response_format: { type: "json_object" }
       })
     });

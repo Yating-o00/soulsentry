@@ -1424,6 +1424,16 @@ export default function Flow() {
           if (data?.ai_analysis?.emotional_response) {
             setHeartInsights((prev) => ({ ...prev, [note.id]: data.ai_analysis.emotional_response }));
           }
+          // AI 生成标题后，立即更新本地笔记列表，避免显示统一的"心签"
+          if (data?.title) {
+            setNotes((prev) =>
+              prev.map((n) =>
+                n.id === note.id
+                  ? { ...n, title: data.title, tags: data.tags || n.tags, metadata: { ...n.metadata, ai_analysis: data.ai_analysis } }
+                  : n
+              )
+            );
+          }
           loadAll();
         })
         .catch((err) => {

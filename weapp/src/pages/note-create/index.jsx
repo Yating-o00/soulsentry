@@ -77,30 +77,32 @@ export default function NoteCreate() {
       const note = await post("/notes", payload);
       setCreatedNote(note);
 
-      // 获取 AI 正反馈
+      // 调用 analyzeHeartSign 自动生成标题、标签和温暖回应
       try {
-        const fb = await post("/functions/callAI", {
-          prompt: `用户刚刚写下了一段心签：\n\n${content.trim()}\n\n请给出一段温暖、真诚、积极的回应，让用户感到被看见和被鼓励。`,
-          system_prompt:
-            "你是一位温暖、真诚的正反馈助手。用户写下的是一段'心签'（心情、感悟或目标），请给出一段简短、走心、积极的回应。只返回 JSON 对象，不要输出 markdown、代码块或任何解释文字。格式：{\"feedback\": \"你的回应\"}",
-          response_json_schema: {
-            type: "object",
-            properties: {
-              feedback: { type: "string", description: "给用户的温暖正反馈，50-120字" }
-            },
-            required: ["feedback"]
-          },
-          temperature: 0.7
-        });
-        if (fb?.data?.feedback) {
-          setFeedback(fb.data.feedback);
-        } else if (typeof fb?.data === "string") {
-          setFeedback(fb.data);
+        const ai = await post("/functions/analyzeHeartSign", {
+          note_id: note.id,
+          note_data: {
+            plain_text: content.trim(),
+            content: content.trim(),
+            tags: tags.length > 0 ? tags : ["心签"]
+          }
+        }, { silent: true });
+
+        if (ai?.title && !title.trim()) {
+          setTitle(ai.title);
+          setCreatedNote((prev) => (prev ? { ...prev, title: ai.title } : prev));
+        }
+        if (ai?.tags && tags.length === 0) {
+          setTags(normalizeTags(ai.tags));
+          setCreatedNote((prev) => (prev ? { ...prev, tags: ai.tags } : prev));
+        }
+        if (ai?.ai_analysis?.emotional_response) {
+          setFeedback(ai.ai_analysis.emotional_response);
         } else {
           setFeedback("你的心签已被温柔接住。愿这一份记录，成为你前行的微光。");
         }
       } catch (fbErr) {
-        console.error("feedback failed", fbErr);
+        console.error("analyzeHeartSign failed", fbErr);
         setFeedback("你的心签已被温柔接住。愿这一份记录，成为你前行的微光。");
       }
 

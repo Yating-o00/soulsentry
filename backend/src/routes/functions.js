@@ -1681,8 +1681,16 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       // 原子性地把 aiStatus 从非 processing 改为 processing，防止并发重复分析
+      // 注意：SQLite 中 NULL 不满足 { not: "processing" }，需要显式包含 null
       const claimed = await prisma.note.updateMany({
-        where: { id: noteId, userId: req.user.id, aiStatus: { not: "processing" } },
+        where: {
+          id: noteId,
+          userId: req.user.id,
+          OR: [
+            { aiStatus: null },
+            { aiStatus: { not: "processing" } }
+          ]
+        },
         data: { aiStatus: "processing" }
       });
       if (claimed.count === 0) {

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart, ChevronLeft, Zap, Brain, PenLine } from "lucide-react";
+import GlobalCreateHost from "./components/create/GlobalCreateHost";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -54,6 +55,16 @@ const getNavigationItems = (t) => [
     title: t('notes'),
     url: createPageUrl("Notes"),
     icon: StickyNote,
+  },
+  {
+    title: "自动执行",
+    url: createPageUrl("AutoPilot"),
+    icon: Zap,
+  },
+  {
+    title: "记忆库",
+    url: createPageUrl("MemoryVault"),
+    icon: Brain,
   },
   {
     title: t('teams'),
@@ -112,6 +123,21 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
       </SidebarHeader>
 
       <SidebarContent className="p-3">
+        <div className="px-2 mb-3">
+          <button
+            onClick={() => {
+              window.dispatchEvent(new Event("open-global-create"));
+              handleMobileClick();
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white rounded-xl text-sm font-medium shadow-lg shadow-[#384877]/20 hover:shadow-xl transition-all active:scale-[0.98]"
+          >
+            <PenLine className="w-4 h-4" />
+            <span>记一件事</span>
+            <kbd className="ml-auto hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-white/30 bg-white/10 px-1.5 font-mono text-[10px] font-medium text-white/90">
+              <span className="text-xs">⌘</span>J
+            </kbd>
+          </button>
+        </div>
         <div className="px-2 mb-3">
           <button 
             onClick={() => {
@@ -358,6 +384,7 @@ function LayoutContent({ children }) {
         <NotificationManager />
         <DeferredCatchupHost />
         <OnboardingHost />
+        <GlobalCreateHost />
         <GlobalTextTranslator />
         <GlobalVoiceInput />
         <GeofenceTracker />

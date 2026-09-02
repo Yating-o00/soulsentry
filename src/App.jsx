@@ -18,6 +18,8 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
+import AutoPilot from '@/pages/AutoPilot';
+import MemoryVault from '@/pages/MemoryVault';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -58,6 +60,14 @@ const AuthenticatedApp = () => {
         <Route
           path="/"
           element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>}
+        />
+        <Route
+          path="/AutoPilot"
+          element={<LayoutWrapper currentPageName="AutoPilot"><AutoPilot /></LayoutWrapper>}
+        />
+        <Route
+          path="/MemoryVault"
+          element={<LayoutWrapper currentPageName="MemoryVault"><MemoryVault /></LayoutWrapper>}
         />
         {Object.entries(Pages).map(([path, Page]) => (
           <Route

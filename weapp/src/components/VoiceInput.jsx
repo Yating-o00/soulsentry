@@ -104,7 +104,17 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
       startingRef.current = false;
       const code = res?.retcode || res?.code || "";
       const msg = res?.msg || res?.message || "语音识别失败";
-      const display = code ? `${msg} (${code})` : msg;
+      let display = code ? `${msg} (${code})` : msg;
+      // 常见 WechatSI 错误码的友好提示
+      if (String(code) === "-30001") {
+        display = "录音启动失败，请检查：1) 真机调试；2) 小程序插件权限；3) 麦克风授权";
+      } else if (String(code) === "-30002") {
+        display = "语音识别失败，请稍后再试";
+      } else if (String(code) === "-30003") {
+        display = "说话时间太短，请长按多说一会儿";
+      } else if (String(code) === "-30008") {
+        display = "未识别到语音，请重试";
+      }
       setHint(display);
       console.error("[VoiceInput] recognition error", res);
       onError?.(display);

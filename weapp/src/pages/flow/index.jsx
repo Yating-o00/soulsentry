@@ -1424,6 +1424,7 @@ export default function Flow() {
 
     // 后台调用 analyzeHeartSign 生成标题、标签和温暖回应
     if (note?.id) {
+      analyzingHeartIdsRef.current.add(note.id);
       post(
         "/functions/analyzeHeartSign",
         {
@@ -1454,9 +1455,15 @@ export default function Flow() {
         })
         .catch((err) => {
           // AI 分析失败不影响已保存的心签
+          console.error("[saveHeart] analyzeHeartSign failed", err);
           if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
             Taro.showToast({ title: "AI 服务未配置，请联系管理员", icon: "none" });
+          } else if (err?.message) {
+            Taro.showToast({ title: `AI 分析失败：${err.message}`, icon: "none" });
           }
+        })
+        .finally(() => {
+          analyzingHeartIdsRef.current.delete(note.id);
         });
     }
   };
@@ -1579,7 +1586,10 @@ export default function Flow() {
     setTimeout(() => setInputPlaceholder("此刻想记下什么？"), 2500);
     if (extractUrl(text)) {
       await saveLink(text);
-    } else if (text.length <= 50 && /[情绪心累烦焦虑难过开心感谢慢放弃]/.test(text)) {
+    } else if (
+      text.length <= 120 &&
+      /[情绪心累烦焦虑难过开心感谢慢放弃迷茫无助沮丧失望生气愤怒温暖幸福满足被爱孤独压力希望害怕担心纠结]/.test(text)
+    ) {
       await saveHeart(text);
     } else {
       await analyzeRoute(text);

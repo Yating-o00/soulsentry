@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { AUTOMATION_TYPES } from "@/components/automation/automationConfig";
-import { TIERS } from "@/lib/trustLadder";
+import { TIERS, TRUST_TYPE_LABEL, TRUST_TYPE_EMOJI } from "@/lib/trustLadder";
 import { CheckCircle2, Play, Loader2, AlertCircle, ExternalLink, User } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,7 +38,10 @@ export default function AgreementDeliveryCard({ machineParts = [], humanParts = 
       {summary && <p className="text-sm text-slate-500 leading-relaxed">{summary}</p>}
 
       {parts.map((part, index) => {
-        const cfg = AUTOMATION_TYPES[part.automation_type] || { label: part.automation_type, emoji: "⚙️" };
+        const cfg = {
+          label: TRUST_TYPE_LABEL[part.automation_type] || part.automation_type,
+          emoji: TRUST_TYPE_EMOJI[part.automation_type] || "⚙️",
+        };
         const delivered = part.state === "delivered";
         const failed = part.state === "failed";
         const tierCfg = TIERS[part.tier] || TIERS.confirm_first;

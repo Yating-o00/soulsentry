@@ -37,10 +37,33 @@ export const DEFAULT_TIERS = {
   web_research: "auto_draft",
   office_doc: "auto_draft",
   ppt_doc: "auto_draft",
+  // 说明：产出型默认自动，改动既有数据默认需确认
   summary_note: "auto_draft",
   ledger_organize: "auto_draft",
   calendar_event: "auto_draft",
   file_organize: "confirm_first",
+};
+
+export const TRUST_TYPE_LABEL = {
+  email_draft: "邮件草稿",
+  web_research: "网页调研",
+  office_doc: "办公文档",
+  ppt_doc: "演示稿",
+  summary_note: "总结心签",
+  ledger_organize: "整理账本",
+  calendar_event: "日历约定",
+  file_organize: "文件整理",
+};
+
+export const TRUST_TYPE_EMOJI = {
+  email_draft: "📧",
+  web_research: "🌐",
+  office_doc: "📄",
+  ppt_doc: "📊",
+  summary_note: "📝",
+  ledger_organize: "💰",
+  calendar_event: "📅",
+  file_organize: "📁",
 };
 
 export const TRUST_TYPE_NOTE = {

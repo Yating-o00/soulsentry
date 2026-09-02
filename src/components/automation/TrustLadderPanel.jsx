@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { AUTOMATION_TYPES } from "@/components/automation/automationConfig";
-import { TIERS, TIER_ORDER, DEFAULT_TIERS, TRUST_TYPE_NOTE, tierOf } from "@/lib/trustLadder";
+import { TIERS, TIER_ORDER, DEFAULT_TIERS, TRUST_TYPE_NOTE, TRUST_TYPE_LABEL, TRUST_TYPE_EMOJI, tierOf } from "@/lib/trustLadder";
 import { ShieldCheck, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,7 +28,7 @@ export default function TrustLadderPanel() {
         const rest = prev.filter((p) => p.automation_type !== automation_type);
         return [saved, ...rest];
       });
-      toast.success(`「${AUTOMATION_TYPES[automation_type]?.label || automation_type}」已设为${TIERS[tier].label}`);
+      toast.success(`「${TRUST_TYPE_LABEL[automation_type] || automation_type}」已设为${TIERS[tier].label}`);
     } catch (e) {
       toast.error("保存失败，请重试");
     } finally {
@@ -67,7 +66,7 @@ export default function TrustLadderPanel() {
       ) : (
         <div className="space-y-3">
           {TYPE_KEYS.map((type) => {
-            const cfg = AUTOMATION_TYPES[type] || { label: type, emoji: "⚙️" };
+            const cfg = { label: TRUST_TYPE_LABEL[type] || type, emoji: TRUST_TYPE_EMOJI[type] || "⚙️" };
             const current = tierOf(policies, type);
             return (
               <div

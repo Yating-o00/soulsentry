@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Mic, MicOff, Loader2, CornerDownLeft } from "lucide-react";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import CreatedAgreementView from "./CreatedAgreementView";
@@ -101,10 +101,10 @@ export default function GlobalCreatePanel({ open, onOpenChange }) {
       <DialogContent className="sm:max-w-[560px] max-h-[88vh] overflow-y-auto rounded-3xl p-6 md:p-8">
         {!task ? (
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">记一件事</h2>
-            <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+            <DialogTitle className="text-lg font-semibold text-slate-900">记一件事</DialogTitle>
+            <DialogDescription className="text-sm text-slate-500 mt-1 leading-relaxed">
               说一句或打一句就好，其余的心栈来安排。
-            </p>
+            </DialogDescription>
 
             <div className="mt-5 rounded-2xl border border-slate-200 focus-within:border-[#384877]/50 focus-within:ring-4 focus-within:ring-[#384877]/10 transition-all p-4">
               <textarea
@@ -146,6 +146,8 @@ export default function GlobalCreatePanel({ open, onOpenChange }) {
             </div>
           </div>
         ) : (
+          <>
+          <DialogTitle className="sr-only">约定已记下</DialogTitle>
           <CreatedAgreementView
             task={task}
             context={context}
@@ -154,6 +156,7 @@ export default function GlobalCreatePanel({ open, onOpenChange }) {
             onUndo={undo}
             onDone={() => onOpenChange(false)}
           />
+          </>
         )}
       </DialogContent>
     </Dialog>

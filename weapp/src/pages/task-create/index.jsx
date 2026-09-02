@@ -112,6 +112,7 @@ export default function TaskCreate() {
   const [analysis, setAnalysis] = useState(null);
   const [shareToken, setShareToken] = useState("");
   const [step, setStep] = useState("form");
+  const [parsedHint, setParsedHint] = useState("");
   const [loading, setLoading] = useState(false);
   const [createdTask, setCreatedTask] = useState(null);
   const [posterUrl, setPosterUrl] = useState("");
@@ -735,43 +736,80 @@ export default function TaskCreate() {
     }
   };
 
-  const handleVoiceResult = async (text) => {
-    if (!text.trim()) return;
+
+
+  const setDateTimeFromISO = (iso, setDate, setTime) => {
+    if (!iso) return;
+    const d = new Date(iso);
+    if (!isNaN(d.getTime())) {
+      setDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+      setTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    }
+  };
+
+  const applyParsedFields = (parsed, opts = {}) => {
+    if (!parsed) return;
+
+    // 标题/描述：如果是语音失败兜底或用户没输入，才覆盖
+    if (opts.forceTitle || !title.trim()) {
+      setTitle(parsed.title || "");
+    }
+    if (opts.forceDescription || !description.trim()) {
+      setDescription(parsed.description || "");
+    }
+
+    // 优先级/分类：只在当前为默认值或为空时覆盖
+    const priorityIdx = priorities.findIndex((p) => p.value === parsed.priority);
+    const categoryIdx = categories.findIndex((c) => c.value === parsed.category);
+    if (priorityIdx >= 0 && (priorityIndex === 2 || opts.forcePriority)) {
+      setPriorityIndex(priorityIdx);
+    }
+    if (categoryIdx >= 0 && (categoryIndex === 7 || opts.forceCategory)) {
+      setCategoryIndex(categoryIdx);
+    }
+
+    // 时间：只在未设置时回填，避免覆盖用户手动选择
+    if (!reminderDate || opts.forceTime) {
+      setDateTimeFromISO(parsed.reminder_time, setReminderDate, setReminderTime);
+    }
+    if (!endDate || opts.forceTime) {
+      setDateTimeFromISO(parsed.end_time, setEndDate, setEndTime);
+    }
+
+    // 提示
+    const hints = [];
+    if (parsed.location) hints.push(`地点：${parsed.location}`);
+    if (parsed.event_type) hints.push(`类型：${parsed.event_type}`);
+    if (parsed.time_source === "common_sense") hints.push("已按生活常识填充时间");
+    else if (parsed.time_source === "now") hints.push("未识别到时间，已设为当前时间");
+    if (hints.length > 0) setParsedHint(hints.join(" · "));
+  };
+
+  const parseInput = async (text, opts = {}) => {
+    const inputText = String(text || title).trim();
+    if (!inputText) return;
 
     setLoading(true);
     try {
-      const parsed = await post("/functions/parseVoiceTask", { input: text.trim() });
-
-      // 优先把识别结果回填到表单，让用户确认后再创建
-      const finalTitle = parsed?.title || text.trim().slice(0, 120);
-      setTitle(finalTitle);
-      setDescription(parsed?.description || text.trim());
-      const priorityIdx = priorities.findIndex((p) => p.value === parsed?.priority);
-      const categoryIdx = categories.findIndex((c) => c.value === parsed?.category);
-      if (priorityIdx >= 0) setPriorityIndex(priorityIdx);
-      if (categoryIdx >= 0) setCategoryIndex(categoryIdx);
-
-      const setDateTimeFromISO = (iso, setDate, setTime) => {
-        if (!iso) return;
-        const d = new Date(iso);
-        if (!isNaN(d.getTime())) {
-          setDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
-          setTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
-        }
-      };
-      setDateTimeFromISO(parsed?.reminder_time, setReminderDate, setReminderTime);
-      setDateTimeFromISO(parsed?.end_time, setEndDate, setEndTime);
-
-      Taro.showToast({ title: "已填入语音内容，请确认后创建", icon: "none", duration: 2000 });
+      const parsed = await post("/functions/parseTaskInput", { input: inputText, date: todayStr() });
+      applyParsedFields(parsed, opts);
     } catch (err) {
-      console.error("parseVoiceTask failed", err);
-      // 后端失败时，把原文填入标题，让用户手动补充
-      setTitle(text.trim().slice(0, 120));
-      setDescription(text.trim());
-      Taro.showToast({ title: "已填入语音原文，请补充时间后创建", icon: "none", duration: 2500 });
+      console.error("parseTaskInput failed", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVoiceResult = async (text) => {
+    if (!text.trim()) return;
+    await parseInput(text, { forceTitle: true, forceDescription: true, forceTime: true, forcePriority: true, forceCategory: true });
+    Taro.showToast({ title: "已填入语音内容，请确认后创建", icon: "none", duration: 2000 });
+  };
+
+  const handleInputBlur = () => {
+    // 仅在新建模式、标题非空、提醒日期未手动设置时自动解析
+    if (isEdit || !title.trim() || reminderDate) return;
+    parseInput();
   };
 
   const handleVoiceTouchStart = () => {
@@ -794,13 +832,28 @@ export default function TaskCreate() {
         </View>
       )}
 
+      {parsedHint ? (
+        <View
+          style={{
+            marginTop: "24rpx",
+            padding: "14rpx 18rpx",
+            borderRadius: "12rpx",
+            background: "#f0f5fa",
+            border: "1rpx solid #d4e4f0"
+          }}
+        >
+          <Text style={{ fontSize: "24rpx", color: "#5b82a0" }}>🪄 {parsedHint}</Text>
+        </View>
+      ) : null}
+
       <View style={{ marginTop: "24rpx" }}>
         <View className="ss-label">标题 *</View>
         <Input
           className="ss-input"
-          placeholder="例如：周五前完成报告"
+          placeholder="例如：周五前完成报告 / 明天下午3点开会 / 记得吃早餐"
           value={title}
           onInput={(e) => setTitle(e.detail.value)}
+          onBlur={handleInputBlur}
         />
       </View>
 
@@ -808,11 +861,23 @@ export default function TaskCreate() {
         <View className="ss-label">描述</View>
         <Textarea
           className="ss-textarea"
-          placeholder="补充说明（可选）"
+          placeholder="补充说明（可选），也可在这里补充时间、地点"
           value={description}
           onInput={(e) => setDescription(e.detail.value)}
+          onBlur={handleInputBlur}
         />
       </View>
+
+      {!isEdit && (
+        <Button
+          className="ss-btn ss-btn-plain"
+          loading={loading}
+          disabled={loading || !title.trim()}
+          onClick={() => parseInput(undefined, { forceTime: true })}
+        >
+          🪄 智能识别时间地点
+        </Button>
+      )}
 
       {isEdit && renderSubtaskEditor()}
 

@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
+import { parseTaskInput } from "../services/parseTaskInput.js";
 import { executeAutomation } from "../services/executeAutomation.js";
 import { sendTestPush } from "../services/reminderSender.js";
 import { getCreditPack } from "../config/creditPacks.js";
@@ -669,44 +670,16 @@ functionsRouter.post("/:name", async (req, res) => {
       }
     }
 
-    if (name === "parseVoiceTask") {
+    if (name === "parseVoiceTask" || name === "parseTaskInput") {
       if (!payload.input || !String(payload.input).trim()) {
-        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少语音输入内容" });
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少输入内容" });
       }
 
-      const now = new Date();
-      const fallbackDate = toYmd(now);
-      const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-      const schema = {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "约定标题，简洁概括" },
-          description: { type: "string", description: "约定描述，可为空" },
-          reminder_time: { type: "string", description: "提醒时间 ISO 8601（含时区），如果用户没有明确说提醒时间则和 end_time 相同" },
-          end_time: { type: "string", description: "截止时间 ISO 8601（含时区），如果用户没有明确说则比 reminder_time 晚 5 分钟" },
-          priority: { type: "string", enum: ["urgent", "high", "medium", "low"], description: "优先级" },
-          category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"], description: "分类" }
-        },
-        required: ["title", "reminder_time", "end_time", "priority", "category"]
-      };
-
       try {
-        const data = await invokeKimiText({
-          prompt: `用户语音输入：${String(payload.input).trim()}
-当前日期：${fallbackDate}
-当前时间：${currentTime}
-
-请解析用户的意图，生成一个约定（task）。注意：
-1. 如果用户说"X分钟之后提醒"， reminder_time 应该是当前时间加 X 分钟。
-2. 如果用户只说了提醒时间但没说明截止时间，end_time 默认比 reminder_time 晚 5 分钟。
-3. 时间必须使用 ISO 8601 格式并包含 +08:00 时区，例如 "2026-08-26T14:35:00+08:00"。
-4. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
-          systemPrompt: "你是 SoulSentry 的语音约定解析器。把中文自然语言语音输入转成可创建的约定字段。严格返回 JSON。",
-          responseJsonSchema: schema,
-          temperature: 0.2
+        const data = await parseTaskInput({
+          input: String(payload.input).trim(),
+          date: payload.date || toYmd(new Date())
         });
-
         return res.json(data);
       } catch (error) {
         const message = error?.message || String(error);

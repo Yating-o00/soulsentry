@@ -1689,6 +1689,7 @@ functionsRouter.post("/:name", async (req, res) => {
       const schema = {
         type: "object",
         properties: {
+          title: { type: "string", description: "8-20 字的简短标语，提炼心情或核心状态，用作笔记标题。例如：「项目收官，累并满足」「允许自己慢下来」" },
           summary: { type: "string", description: "1-2 句话精炼摘要" },
           key_points: { type: "array", items: { type: "string" }, description: "3-5 个核心要点" },
           tags: { type: "array", items: { type: "string" }, description: "3-6 个智能标签，不含 #" },
@@ -1698,13 +1699,13 @@ functionsRouter.post("/:name", async (req, res) => {
           response_title: { type: "string", description: "情感回应的标题，如「一封来自安慰者的信」" },
           emotional_response: { type: "string", description: "80-200 字温暖回应，像写给朋友的短信" }
         },
-        required: ["summary", "tags", "category"]
+        required: ["title", "summary", "tags", "category"]
       };
 
       try {
         const parsed = await invokeKimiText({
           prompt: `请分析以下心签内容：\n\n${materialText}`,
-          systemPrompt: `你是用户的私人知识库助理，也是一位懂得共情的伙伴。用户发来的每一条"心签"都需要你完成：自动摘要、关键词提取、内容分类。\n此外，请判断这条心签是否属于生活记录、情绪倾诉、心灵感悟或人生灵感等偏感性、值得被温柔回应的内容：若是，请把 is_emotional 设为 true，选择最贴切的回应身份(response_persona)，并以那个身份的口吻写一段真诚、温暖、有人文温度的回应(emotional_response)，让用户感到被理解、被陪伴、被指引；若只是资料/任务/信息类内容，则 is_emotional 为 false，相关字段留空。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`,
+          systemPrompt: `你是用户的私人知识库助理，也是一位懂得共情的伙伴。用户发来的每一条"心签"都需要你完成：提炼一条简短标题、自动摘要、关键词提取、内容分类。\n标题(title)必须简短有力，8-20 字，像一句标语或心情签名，能代表这条心签的核心状态，例如「项目收官，累并满足」「允许自己慢下来」。\n此外，请判断这条心签是否属于生活记录、情绪倾诉、心灵感悟或人生灵感等偏感性、值得被温柔回应的内容：若是，请把 is_emotional 设为 true，选择最贴切的回应身份(response_persona)，并以那个身份的口吻写一段真诚、温暖、有人文温度的回应(emotional_response)，让用户感到被理解、被陪伴、被指引；若只是资料/任务/信息类内容，则 is_emotional 为 false，相关字段留空。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`,
           responseJsonSchema: schema,
           temperature: 1
         });
@@ -1721,7 +1722,7 @@ functionsRouter.post("/:name", async (req, res) => {
         };
 
         const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
-        const title = parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签");
+        const title = parsed.title ? parsed.title.slice(0, 60) : (parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签"));
 
         const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
         const updatedNote = await prisma.note.update({

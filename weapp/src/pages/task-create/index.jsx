@@ -742,23 +742,12 @@ export default function TaskCreate() {
     try {
       const parsed = await post("/functions/parseVoiceTask", { input: text.trim() });
 
-      // 兜底：无论 AI 是否识别出时间，都用原文创建约定
-      if (!parsed?.title) {
-        await createTaskFromVoice({
-          title: text.trim().slice(0, 120),
-          description: text.trim(),
-          priority: "medium",
-          category: "other"
-        });
-        Taro.showToast({ title: "已用语音原文创建约定", icon: "success" });
-        return;
-      }
-
-      // 回显到表单，方便用户确认
-      setTitle(parsed.title || "");
-      setDescription(parsed.description || "");
-      const priorityIdx = priorities.findIndex((p) => p.value === parsed.priority);
-      const categoryIdx = categories.findIndex((c) => c.value === parsed.category);
+      // 优先把识别结果回填到表单，让用户确认后再创建
+      const finalTitle = parsed?.title || text.trim().slice(0, 120);
+      setTitle(finalTitle);
+      setDescription(parsed?.description || text.trim());
+      const priorityIdx = priorities.findIndex((p) => p.value === parsed?.priority);
+      const categoryIdx = categories.findIndex((c) => c.value === parsed?.category);
       if (priorityIdx >= 0) setPriorityIndex(priorityIdx);
       if (categoryIdx >= 0) setCategoryIndex(categoryIdx);
 
@@ -770,25 +759,16 @@ export default function TaskCreate() {
           setTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
         }
       };
-      setDateTimeFromISO(parsed.reminder_time, setReminderDate, setReminderTime);
-      setDateTimeFromISO(parsed.end_time, setEndDate, setEndTime);
+      setDateTimeFromISO(parsed?.reminder_time, setReminderDate, setReminderTime);
+      setDateTimeFromISO(parsed?.end_time, setEndDate, setEndTime);
 
-      // 自动创建约定
-      await createTaskFromVoice(parsed);
+      Taro.showToast({ title: "已填入语音内容，请确认后创建", icon: "none", duration: 2000 });
     } catch (err) {
       console.error("parseVoiceTask failed", err);
-      // 即使后端报错，也用原文兜底创建
-      try {
-        await createTaskFromVoice({
-          title: text.trim().slice(0, 120),
-          description: text.trim(),
-          priority: "medium",
-          category: "other"
-        });
-        Taro.showToast({ title: "已用语音原文创建约定", icon: "success" });
-      } catch (fallbackErr) {
-        Taro.showToast({ title: "语音创建失败", icon: "none" });
-      }
+      // 后端失败时，把原文填入标题，让用户手动补充
+      setTitle(text.trim().slice(0, 120));
+      setDescription(text.trim());
+      Taro.showToast({ title: "已填入语音原文，请补充时间后创建", icon: "none", duration: 2500 });
     } finally {
       setLoading(false);
     }

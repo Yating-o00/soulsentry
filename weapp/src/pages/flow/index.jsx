@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Taro, { useDidShow, useDidHide } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Image, Canvas } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
 import { getToken } from "@/utils/auth";
+import VoiceInput from "@/components/VoiceInput";
 
 const THEME = {
   primary: "#384877",
@@ -1174,6 +1175,7 @@ export default function Flow() {
   const [focusSeconds, setFocusSeconds] = useState(0);
   const focusTimerRef = useRef(null);
   const analyzingHeartIdsRef = useRef(new Set());
+  const analyzedHeartIdsRef = useRef(new Set());
 
   useDidShow(() => {
     loadAll();
@@ -1190,69 +1192,88 @@ export default function Flow() {
     // 页面隐藏时不做特殊处理
   });
 
+  // 带超时的 analyzeHeartSign 调用，10s 未返回即降级本地兜底
+  const runHeartAnalysis = useCallback((noteId, noteData, options = {}) => {
+    const text = String(noteData?.plain_text || noteData?.content || "").slice(0, 400);
+    if (analyzingHeartIdsRef.current.has(noteId) || analyzedHeartIdsRef.current.has(noteId)) {
+      console.log("[runHeartAnalysis] skip duplicated", noteId);
+      return Promise.resolve();
+    }
+
+    analyzingHeartIdsRef.current.add(noteId);
+    setHeartLoadingIds((prev) => {
+      const next = new Set(prev);
+      next.add(noteId);
+      return next;
+    });
+
+    const requestPromise = post(
+      "/functions/analyzeHeartSign",
+      {
+        note_id: noteId,
+        note_data: {
+          plain_text: text,
+          content: noteData.content,
+          tags: noteData.tags
+        }
+      },
+      { silent: true }
+    );
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("AI 回应超时，已切换本地兜底")), 10000);
+    });
+
+    return Promise.race([requestPromise, timeoutPromise])
+      .then((data) => {
+        console.log("[runHeartAnalysis] success", noteId, data?.title);
+        if (data?.ai_analysis?.emotional_response) {
+          setHeartInsights((prev) => ({ ...prev, [noteId]: data.ai_analysis.emotional_response }));
+        }
+        // AI 生成标题后，立即更新本地笔记列表，避免显示统一的"心签"
+        if (data?.title) {
+          setNotes((prev) =>
+            prev.map((n2) =>
+              n2.id === noteId
+                ? { ...n2, title: data.title, tags: data.tags || n2.tags, metadata: { ...n2.metadata, ai_analysis: data.ai_analysis } }
+                : n2
+            )
+          );
+        }
+        if (!options.skipReload) {
+          loadAll();
+        }
+      })
+      .catch((err) => {
+        console.error("[runHeartAnalysis] failed", noteId, err);
+        // AI 失败时再用本地兜底，避免空白
+        setHeartInsights((prev) => ({ ...prev, [noteId]: generateLocalHeartReply(text) }));
+        if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
+          Taro.showToast({ title: "AI 服务未配置，心签回应为本地兜底", icon: "none" });
+        }
+      })
+      .finally(() => {
+        analyzingHeartIdsRef.current.delete(noteId);
+        analyzedHeartIdsRef.current.add(noteId);
+        setHeartLoadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(noteId);
+          return next;
+        });
+      });
+  }, []);
+
   useEffect(() => {
     // 为每条尚未生成 AI 回应的心签请求 analyzeHeartSign，每次最多 5 条，避免并发过多
-    // 同时用 ref 记录正在分析中的 note id，防止重复调用导致页面跳动
     const hearts = notes
       .filter(isHeartNote)
       .filter((n) => {
         const ai = n.metadata?.ai_analysis;
-        return !ai?.emotional_response && n.ai_status !== "processing" && !analyzingHeartIdsRef.current.has(n.id);
+        return !ai?.emotional_response && n.ai_status !== "processing" && !analyzingHeartIdsRef.current.has(n.id) && !analyzedHeartIdsRef.current.has(n.id);
       })
       .slice(0, 5);
     hearts.forEach((n) => {
-      const text = String(n.plain_text || n.content || "").slice(0, 400);
-      analyzingHeartIdsRef.current.add(n.id);
-      // 标记为 AI 回应加载中，避免先显示本地兜底再跳变
-      setHeartLoadingIds((prev) => {
-        const next = new Set(prev);
-        next.add(n.id);
-        return next;
-      });
-
-      post(
-        "/functions/analyzeHeartSign",
-        {
-          note_id: n.id,
-          note_data: {
-            plain_text: text,
-            content: n.content,
-            tags: n.tags
-          }
-        },
-        { silent: true }
-      )
-        .then((data) => {
-          if (data?.ai_analysis?.emotional_response) {
-            setHeartInsights((prev) => ({ ...prev, [n.id]: data.ai_analysis.emotional_response }));
-          }
-          // AI 生成标题后，立即更新本地笔记列表，避免显示统一的"心签"
-          if (data?.title) {
-            setNotes((prev) =>
-              prev.map((n2) =>
-                n2.id === n.id
-                  ? { ...n2, title: data.title, tags: data.tags || n2.tags, metadata: { ...n2.metadata, ai_analysis: data.ai_analysis } }
-                  : n2
-              )
-            );
-          }
-          loadAll();
-        })
-        .catch((err) => {
-          // AI 失败时再用本地兜底，避免空白
-          setHeartInsights((prev) => ({ ...prev, [n.id]: generateLocalHeartReply(text) }));
-          if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
-            Taro.showToast({ title: "AI 服务未配置，心签回应为本地兜底", icon: "none" });
-          }
-        })
-        .finally(() => {
-          analyzingHeartIdsRef.current.delete(n.id);
-          setHeartLoadingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(n.id);
-            return next;
-          });
-        });
+      runHeartAnalysis(n.id, { plain_text: n.plain_text, content: n.content, tags: n.tags });
     });
   }, [notes]);
 
@@ -1435,58 +1456,7 @@ export default function Flow() {
 
     // 后台调用 analyzeHeartSign 生成标题、标签和温暖回应
     if (note?.id) {
-      analyzingHeartIdsRef.current.add(note.id);
-      setHeartLoadingIds((prev) => {
-        const next = new Set(prev);
-        next.add(note.id);
-        return next;
-      });
-      post(
-        "/functions/analyzeHeartSign",
-        {
-          note_id: note.id,
-          note_data: {
-            plain_text: text,
-            content: text,
-            tags: ["情绪", "心签"]
-          }
-        },
-        { silent: true }
-      )
-        .then((data) => {
-          if (data?.ai_analysis?.emotional_response) {
-            setHeartInsights((prev) => ({ ...prev, [note.id]: data.ai_analysis.emotional_response }));
-          }
-          // AI 生成标题后，立即更新本地笔记列表，避免显示统一的"心签"
-          if (data?.title) {
-            setNotes((prev) =>
-              prev.map((n) =>
-                n.id === note.id
-                  ? { ...n, title: data.title, tags: data.tags || n.tags, metadata: { ...n.metadata, ai_analysis: data.ai_analysis } }
-                  : n
-              )
-            );
-          }
-          loadAll();
-        })
-        .catch((err) => {
-          // AI 分析失败不影响已保存的心签，用本地兜底
-          setHeartInsights((prev) => ({ ...prev, [note.id]: generateLocalHeartReply(text) }));
-          console.error("[saveHeart] analyzeHeartSign failed", err);
-          if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
-            Taro.showToast({ title: "AI 服务未配置，请联系管理员", icon: "none" });
-          } else if (err?.message) {
-            Taro.showToast({ title: `AI 分析失败：${err.message}`, icon: "none" });
-          }
-        })
-        .finally(() => {
-          analyzingHeartIdsRef.current.delete(note.id);
-          setHeartLoadingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(note.id);
-            return next;
-          });
-        });
+      runHeartAnalysis(note.id, { plain_text: text, content: text, tags: ["情绪", "心签"] });
     }
   };
 
@@ -1600,10 +1570,12 @@ export default function Flow() {
     }
   };
 
-  const handleSend = async () => {
-    const text = inputText.trim();
+  const handleSend = async (explicitText) => {
+    const text = String(explicitText || inputText).trim();
     if (!text || analyzing) return;
-    setInputText("");
+    if (!explicitText) {
+      setInputText("");
+    }
     setInputPlaceholder("已收下，晚些时候一起看看");
     setTimeout(() => setInputPlaceholder("此刻想记下什么？"), 2500);
     if (extractUrl(text)) {
@@ -1616,6 +1588,12 @@ export default function Flow() {
     } else {
       await analyzeRoute(text);
     }
+  };
+
+  const handleVoiceResult = (text) => {
+    setShowVoiceModal(false);
+    if (!text.trim()) return;
+    handleSend(text);
   };
 
   const quickAction = (type) => {
@@ -2880,7 +2858,7 @@ export default function Flow() {
             onBlur={() => setInputFocus(false)}
           />
           <View
-            onClick={handleSend}
+            onClick={() => handleSend()}
             style={{
               width: "64rpx",
               height: "64rpx",
@@ -2929,7 +2907,7 @@ export default function Flow() {
         >
           <View
             style={{
-              width: "560rpx",
+              width: "620rpx",
               background: THEME.card,
               borderRadius: "32rpx",
               padding: "48rpx",
@@ -2939,15 +2917,20 @@ export default function Flow() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "16rpx" }}>语音输入</Text>
-            <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, marginBottom: "48rpx", textAlign: "center" }}>
-              语音输入功能正在适配微信小程序插件，即将上线。
+            <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "12rpx" }}>语音输入</Text>
+            <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, marginBottom: "36rpx", textAlign: "center" }}>
+              按住下方按钮说话，说完后松开即可
             </Text>
+            <VoiceInput
+              onResult={handleVoiceResult}
+              onError={(err) => Taro.showToast({ title: err, icon: "none" })}
+              size={120}
+            />
             <View
               onClick={() => setShowVoiceModal(false)}
-              style={{ marginTop: "8rpx", padding: "16rpx 48rpx", borderRadius: "12rpx", background: THEME.paper }}
+              style={{ marginTop: "40rpx", padding: "16rpx 48rpx", borderRadius: "12rpx", background: THEME.paper }}
             >
-              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>知道了</Text>
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>取消</Text>
             </View>
           </View>
         </View>

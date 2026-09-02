@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text } from "@tarojs/components";
 
@@ -27,7 +27,6 @@ async function ensureRecordAuth() {
           return;
         }
         if (auth === false) {
-          // 曾经被拒绝，需要引导去设置页
           Taro.showModal({
             title: "需要录音权限",
             content: "语音输入需要录音权限，请前往设置开启",
@@ -41,7 +40,6 @@ async function ensureRecordAuth() {
           });
           return;
         }
-        // 未请求过，直接授权
         Taro.authorize({
           scope: "scope.record",
           success: () => resolve(true),
@@ -56,16 +54,49 @@ async function ensureRecordAuth() {
   });
 }
 
-export default function VoiceInput({ onResult, onError, onTouchStart: onTouchStartProp, size = 96, style = {} }) {
-  const [recording, setRecording] = useState(false);
+// 将 WechatSI 错误码转友好提示
+function friendlyErrorMessage(res) {
+  const code = String(res?.retcode || res?.code || "");
+  const msg = res?.msg || res?.message || "语音识别失败";
+  switch (code) {
+    case "-30001":
+      return "录音启动失败，请检查麦克风授权和插件配置";
+    case "-30002":
+      return "语音识别失败，请稍后再试";
+    case "-30003":
+      return "说话时间太短，请长按多说一会儿";
+    case "-30008":
+      return "未识别到语音，请重试";
+    case "-30011":
+      return "识别还在准备中，请稍候";
+    default:
+      return code ? `${msg} (${code})` : msg;
+  }
+}
+
+export default function VoiceInput({
+  onResult,
+  onError,
+  onTouchStart: onTouchStartProp,
+  size = 96,
+  style = {}
+}) {
+  // idle | starting | recording | stopping
+  const [phase, setPhase] = useState("idle");
   const [hint, setHint] = useState("");
   const interimRef = useRef("");
   const finalRef = useRef("");
   const timerRef = useRef(null);
   const initedRef = useRef(false);
-  const startingRef = useRef(false);
-  const stoppingRef = useRef(false);
   const managerRef = useRef(null);
+  const touchLockRef = useRef(false);
+
+  const reset = useCallback(() => {
+    setPhase("idle");
+    interimRef.current = "";
+    finalRef.current = "";
+    clearTimeout(timerRef.current);
+  }, []);
 
   useEffect(() => {
     if (initedRef.current) return;
@@ -77,6 +108,12 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
     managerRef.current = manager;
     initedRef.current = true;
 
+    manager.onStart = (res) => {
+      console.log("[VoiceInput] onStart", res);
+      setPhase("recording");
+      setHint("正在听…");
+    };
+
     manager.onRecognize = (res) => {
       if (typeof res?.result === "string") {
         interimRef.current = res.result;
@@ -85,51 +122,43 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
     };
 
     manager.onStop = (res) => {
-      setRecording(false);
-      stoppingRef.current = false;
-      startingRef.current = false;
+      console.log("[VoiceInput] onStop", res);
       const text = (res?.result || finalRef.current || interimRef.current || "").trim();
       setHint(text ? "识别完成" : "未识别到语音");
       if (text) {
         onResult?.(text);
       }
-      interimRef.current = "";
-      finalRef.current = "";
-      clearTimeout(timerRef.current);
+      reset();
     };
 
     manager.onError = (res) => {
-      setRecording(false);
-      stoppingRef.current = false;
-      startingRef.current = false;
-      const code = res?.retcode || res?.code || "";
-      const msg = res?.msg || res?.message || "语音识别失败";
-      let display = code ? `${msg} (${code})` : msg;
-      // 常见 WechatSI 错误码的友好提示
-      if (String(code) === "-30001") {
-        display = "录音启动失败，请检查：1) 真机调试；2) 小程序插件权限；3) 麦克风授权";
-      } else if (String(code) === "-30002") {
-        display = "语音识别失败，请稍后再试";
-      } else if (String(code) === "-30003") {
-        display = "说话时间太短，请长按多说一会儿";
-      } else if (String(code) === "-30008") {
-        display = "未识别到语音，请重试";
-      }
-      setHint(display);
       console.error("[VoiceInput] recognition error", res);
+      const code = String(res?.retcode || res?.code || "");
+      const display = friendlyErrorMessage(res);
+
+      // -30011 是中间状态，通常下一秒会自愈，不抛给业务层
+      if (code === "-30011") {
+        setHint("识别准备中，请稍候");
+        setPhase("recording");
+        return;
+      }
+
+      setHint(display);
       onError?.(display);
-      interimRef.current = "";
-      finalRef.current = "";
-      clearTimeout(timerRef.current);
+      reset();
     };
 
     return () => {
       clearTimeout(timerRef.current);
     };
-  }, [onResult, onError]);
+  }, [onResult, onError, reset]);
 
   const startRecord = async () => {
-    if (startingRef.current || stoppingRef.current || recording) return;
+    if (touchLockRef.current) return;
+    if (phase !== "idle") {
+      console.warn("[VoiceInput] startRecord ignored, phase:", phase);
+      return;
+    }
 
     const manager = managerRef.current || getRecognitionManager();
     if (!manager) {
@@ -146,54 +175,74 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
       return;
     }
 
-    startingRef.current = true;
+    touchLockRef.current = true;
     interimRef.current = "";
     finalRef.current = "";
-    setRecording(true);
-    setHint("正在听…");
+    setPhase("starting");
+    setHint("准备中…");
 
     try {
       manager.start({
         duration: 30000,
         lang: "zh_CN"
       });
-      startingRef.current = false;
 
+      // 兜底：若插件没有触发 onStart，最多 600ms 后强制进入 recording
+      timerRef.current = setTimeout(() => {
+        setPhase((prev) => (prev === "starting" ? "recording" : prev));
+      }, 600);
+
+      // 30s 自动停止
       timerRef.current = setTimeout(() => {
         stopRecord();
       }, 30000);
     } catch (err) {
-      startingRef.current = false;
-      setRecording(false);
-      setHint("启动失败");
       console.error("[VoiceInput] start failed", err);
+      setHint("启动失败");
       onError?.(err?.message || "启动失败");
+      reset();
+    } finally {
+      setTimeout(() => {
+        touchLockRef.current = false;
+      }, 120);
     }
   };
 
-  const stopRecord = () => {
-    if (stoppingRef.current || !recording) return;
+  const stopRecord = useCallback(() => {
+    if (phase === "idle" || phase === "stopping") return;
 
     const manager = managerRef.current || getRecognitionManager();
-    if (!manager) return;
+    if (!manager) {
+      reset();
+      return;
+    }
 
-    stoppingRef.current = true;
-    clearTimeout(timerRef.current);
+    // 如果还在 starting，等一小会儿再 stop，避免 -30011
+    if (phase === "starting") {
+      setHint("识别准备中，请稍候");
+      timerRef.current = setTimeout(() => stopRecord(), 220);
+      return;
+    }
+
+    setPhase("stopping");
     setHint("识别中…");
+    clearTimeout(timerRef.current);
 
     try {
       manager.stop();
     } catch (err) {
-      stoppingRef.current = false;
-      setRecording(false);
       console.error("[VoiceInput] stop failed", err);
-      // -30011 "请等待识别完成" 属于正常中间状态，不弹错误
       const msg = err?.message || "";
-      if (!msg.includes("30011") && !msg.includes("recognition")) {
-        onError?.(msg || "停止失败");
+      if (msg.includes("30011")) {
+        setHint("识别准备中，请稍候");
+        setPhase("recording");
+        return;
       }
+      setHint("停止失败");
+      onError?.(msg || "停止失败");
+      reset();
     }
-  };
+  }, [phase, onError, reset]);
 
   const onTouchStart = (e) => {
     e.preventDefault();
@@ -207,6 +256,8 @@ export default function VoiceInput({ onResult, onError, onTouchStart: onTouchSta
     e.stopPropagation();
     stopRecord();
   };
+
+  const recording = phase === "recording" || phase === "starting";
 
   return (
     <View style={{ display: "flex", flexDirection: "column", alignItems: "center", ...style }}>

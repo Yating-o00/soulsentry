@@ -134,6 +134,7 @@ model Note {
   aiStatus       String?
   deletedAt      DateTime?
   tags           Json?
+  metadata       Json?
   shareToken     String?       @unique
   shareEnabled   Boolean       @default(false)
   shareExpiresAt DateTime?

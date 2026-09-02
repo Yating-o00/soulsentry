@@ -21,6 +21,8 @@ import TaskShareCard from "../components/tasks/TaskShareCard";
 import GlobalSearch from "../components/search/GlobalSearch";
 import SmartGroupSection from "../components/tasks/SmartGroupSection";
 import CombineParentDialog from "../components/tasks/CombineParentDialog";
+import AgreementCapture from "../components/agreements/AgreementCapture";
+import EvolutionSidebar from "../components/agreements/EvolutionSidebar";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -503,18 +505,10 @@ export default function Tasks() {
           </div>
         </div>
 
-        {/* Task Creation Panel */}
-        <section id="mobile-task-create-anchor" className="mb-10 scroll-mt-20" data-tour="task-create">
-          <TaskCreationPanel
-            onAddTask={handleAddTask}
-            onOpenManual={() => setSelectedTask({ status: 'pending', priority: 'medium' })}
-            onVoiceTasks={async (tasks) => {
-              for (const task of tasks) {
-                await handleAddTask(task);
-              }
-            }} />
-
-        </section>
+        {/* 零摩擦捕获：唯一的输入口 */}
+        <div className="mb-10">
+          <AgreementCapture />
+        </div>
 
         {/* Toolbar: Search, View, Selection */}
         <div className="bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-slate-200/60 mb-8 flex flex-col md:flex-row items-center justify-between gap-3 sticky top-4 z-20">
@@ -611,7 +605,8 @@ export default function Tasks() {
         </div>
 
         {/* Content Area */}
-        <div className="space-y-8">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-8 items-start">
+        <div className="space-y-8 min-w-0">
 
           {/* Overview Mode: 4 Smart Groups */}
           {viewMode === 'overview' && (
@@ -659,7 +654,7 @@ export default function Tasks() {
               />
 
               <SmartGroupSection
-                title="智能建议"
+                title="哨兵建议"
                 description="哨兵 AI 已生成执行建议或上下文摘要"
                 icon={Lightbulb}
                 iconBg="bg-amber-50"
@@ -947,6 +942,11 @@ export default function Tasks() {
             })()}
           </div>
 
+        </div>
+
+        <div className="lg:sticky lg:top-24">
+          <EvolutionSidebar completedToday={stats.completedToday} pending={stats.pending} />
+        </div>
         </div>
       </main>
 

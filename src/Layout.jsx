@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart, ChevronLeft, Zap, Brain, PenLine } from "lucide-react";
-import GlobalCreateHost from "./components/create/GlobalCreateHost";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart, ChevronLeft, PenLine } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -57,16 +56,6 @@ const getNavigationItems = (t) => [
     icon: StickyNote,
   },
   {
-    title: "自动执行",
-    url: createPageUrl("AutoPilot"),
-    icon: Zap,
-  },
-  {
-    title: "记忆库",
-    url: createPageUrl("MemoryVault"),
-    icon: Brain,
-  },
-  {
     title: t('teams'),
     url: createPageUrl("Teams"),
     icon: Users,
@@ -85,6 +74,7 @@ const getNavigationItems = (t) => [
 
 function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { setOpenMobile } = useSidebar();
   const { t, language, toggleLanguage, isAIMode, toggleAIMode } = useTranslation();
   const navigationItems = getNavigationItems(t);
@@ -126,7 +116,8 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
         <div className="px-2 mb-3">
           <button
             onClick={() => {
-              window.dispatchEvent(new Event("open-global-create"));
+              navigate(createPageUrl("Tasks"));
+              setTimeout(() => window.dispatchEvent(new Event("mobile-create-task")), 250);
               handleMobileClick();
             }}
             className="w-full flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white rounded-xl text-sm font-medium shadow-lg shadow-[#384877]/20 hover:shadow-xl transition-all active:scale-[0.98]"
@@ -274,6 +265,7 @@ function MobileHeader() {
 
 function LayoutContent({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { t } = useTranslation();
@@ -310,6 +302,11 @@ function LayoutContent({ children }) {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setSearchOpen(function(open) { return !open; });
+      }
+      if (e.key === "j" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        navigate(createPageUrl("Tasks"));
+        setTimeout(function() { window.dispatchEvent(new Event("mobile-create-task")); }, 250);
       }
     };
     document.addEventListener("keydown", down);
@@ -384,7 +381,6 @@ function LayoutContent({ children }) {
         <NotificationManager />
         <DeferredCatchupHost />
         <OnboardingHost />
-        <GlobalCreateHost />
         <GlobalTextTranslator />
         <GlobalVoiceInput />
         <GeofenceTracker />

@@ -1,6 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import LifeTaskCard from "./LifeTaskCard";
+import AgreementCardShell from "@/components/agreements/AgreementCardShell";
 
 /**
  * 智能分组容器 - 显示一组通过AI规则归类的约定
@@ -62,22 +63,25 @@ export default function SmartGroupSection({
 
       <div className="flex flex-col gap-4">
         {tasks.map((task) => (
-          <LifeTaskCard
-            key={task.id}
-            task={task}
-            subtasks={getSubtasks(task.id)}
-            commentCount={commentCountMap[task.id] || 0}
-            isSelectionMode={isSelectionMode}
-            isSelected={selectedTaskIds.includes(task.id)}
-            selectedTaskIds={selectedTaskIds}
-            onToggleSelection={(id) => onToggleSelection(id ?? task.id)}
-            onToggleSubtask={onToggleSubtask}
-            onComplete={onComplete}
-            onEdit={() => onEdit(task)}
-            onShare={() => onShare(task)}
-            onViewTab={(tab) => onViewTab(task, tab)}
-            onUpdateTask={onUpdateTask}
-          />
+          <AgreementCardShell key={task.id} task={task} onComplete={onComplete}>
+            {({ handleComplete }) => (
+              <LifeTaskCard
+                task={task}
+                subtasks={getSubtasks(task.id)}
+                commentCount={commentCountMap[task.id] || 0}
+                isSelectionMode={isSelectionMode}
+                isSelected={selectedTaskIds.includes(task.id)}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelection={(id) => onToggleSelection(id ?? task.id)}
+                onToggleSubtask={onToggleSubtask}
+                onComplete={handleComplete}
+                onEdit={() => onEdit(task)}
+                onShare={() => onShare(task)}
+                onViewTab={(tab) => onViewTab(task, tab)}
+                onUpdateTask={onUpdateTask}
+              />
+            )}
+          </AgreementCardShell>
         ))}
       </div>
     </div>

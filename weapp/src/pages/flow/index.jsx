@@ -1158,6 +1158,7 @@ export default function Flow() {
   const [executions, setExecutions] = useState([]);
   const [sentinel, setSentinel] = useState(null);
   const [heartInsights, setHeartInsights] = useState({});
+  const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [inputText, setInputText] = useState("");
   const [inputPlaceholder, setInputPlaceholder] = useState("此刻想记下什么？");
@@ -1202,8 +1203,12 @@ export default function Flow() {
     hearts.forEach((n) => {
       const text = String(n.plain_text || n.content || "").slice(0, 400);
       analyzingHeartIdsRef.current.add(n.id);
-      // 先给一条本地个性化兜底，避免统一文案
-      setHeartInsights((prev) => ({ ...prev, [n.id]: generateLocalHeartReply(text) }));
+      // 标记为 AI 回应加载中，避免先显示本地兜底再跳变
+      setHeartLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.add(n.id);
+        return next;
+      });
 
       post(
         "/functions/analyzeHeartSign",
@@ -1234,13 +1239,19 @@ export default function Flow() {
           loadAll();
         })
         .catch((err) => {
-          // 失败时保持本地兜底
+          // AI 失败时再用本地兜底，避免空白
+          setHeartInsights((prev) => ({ ...prev, [n.id]: generateLocalHeartReply(text) }));
           if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
             Taro.showToast({ title: "AI 服务未配置，心签回应为本地兜底", icon: "none" });
           }
         })
         .finally(() => {
           analyzingHeartIdsRef.current.delete(n.id);
+          setHeartLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(n.id);
+            return next;
+          });
         });
     });
   }, [notes]);
@@ -1425,6 +1436,11 @@ export default function Flow() {
     // 后台调用 analyzeHeartSign 生成标题、标签和温暖回应
     if (note?.id) {
       analyzingHeartIdsRef.current.add(note.id);
+      setHeartLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.add(note.id);
+        return next;
+      });
       post(
         "/functions/analyzeHeartSign",
         {
@@ -1454,7 +1470,8 @@ export default function Flow() {
           loadAll();
         })
         .catch((err) => {
-          // AI 分析失败不影响已保存的心签
+          // AI 分析失败不影响已保存的心签，用本地兜底
+          setHeartInsights((prev) => ({ ...prev, [note.id]: generateLocalHeartReply(text) }));
           console.error("[saveHeart] analyzeHeartSign failed", err);
           if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
             Taro.showToast({ title: "AI 服务未配置，请联系管理员", icon: "none" });
@@ -1464,6 +1481,11 @@ export default function Flow() {
         })
         .finally(() => {
           analyzingHeartIdsRef.current.delete(note.id);
+          setHeartLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(note.id);
+            return next;
+          });
         });
     }
   };
@@ -2735,13 +2757,15 @@ export default function Flow() {
                 <Text
                   style={{
                     fontSize: "24rpx",
-                    color: "#9a5f6e",
+                    color: heartLoadingIds.has(item.id) ? "#c97b8a" : "#9a5f6e",
                     lineHeight: "40rpx",
                     flex: 1,
                     wordBreak: "break-all"
                   }}
                 >
-                  {item.metadata?.ai_analysis?.emotional_response || heartInsights[item.id] || generateLocalHeartReply(item.text)}
+                  {heartLoadingIds.has(item.id)
+                    ? "AI 正在回应…"
+                    : item.metadata?.ai_analysis?.emotional_response || heartInsights[item.id] || generateLocalHeartReply(item.text)}
                 </Text>
               </View>
             )}

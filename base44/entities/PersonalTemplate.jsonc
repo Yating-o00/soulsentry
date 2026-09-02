@@ -1,0 +1,83 @@
+{
+  "name": "PersonalTemplate",
+  "type": "object",
+  "description": "\u81ea\u751f\u957f\u4e2a\u4eba\u6a21\u677f\uff1aAI \u4ece\u7528\u6237\u5386\u53f2\u7ea6\u5b9a\u4e2d\u5f52\u7eb3\u51fa\u7684\u91cd\u590d\u5957\u8def\uff08\u5982\u300c\u4f60\u7684\u5dee\u65c5\u7ea6\u5b9a\u901a\u5e38\u5305\u542b\u8fd9 6 \u6b65\u300d\uff09\uff0c\u53ef\u4e00\u952e\u590d\u7528",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "\u6a21\u677f\u540d\u79f0\uff0c\u5982\u300c\u5dee\u65c5\u51fa\u884c\u300d"
+    },
+    "trigger_keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "\u547d\u4e2d\u6b64\u6a21\u677f\u7684\u5173\u952e\u8bcd\uff0c\u7528\u4e8e\u521b\u5efa\u65f6\u81ea\u52a8\u63a8\u8350"
+    },
+    "category": {
+      "type": "string",
+      "description": "\u6240\u5c5e\u5206\u7c7b\uff0c\u5982 work / personal / family"
+    },
+    "evidence": {
+      "type": "string",
+      "description": "\u5f52\u7eb3\u4f9d\u636e\u7684\u4e00\u53e5\u8bdd\u8bf4\u660e\uff0c\u5982\u300c\u57fa\u4e8e\u4f60\u8fc7\u53bb 4 \u6b21\u5dee\u65c5\u7ea6\u5b9a\u300d"
+    },
+    "sample_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u5f52\u7eb3\u65f6\u53c2\u8003\u7684\u5386\u53f2\u7ea6\u5b9a\u6761\u6570"
+    },
+    "steps": {
+      "type": "array",
+      "description": "\u6a21\u677f\u5305\u542b\u7684\u5b50\u7ea6\u5b9a\u6b65\u9aa4",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "offset_hint": {
+            "type": "string",
+            "description": "\u76f8\u5bf9\u4e3b\u7ea6\u5b9a\u7684\u65f6\u95f4\u63d0\u793a\uff0c\u5982\u300c\u63d0\u524d 1 \u5929\u300d"
+          }
+        }
+      },
+      "default": []
+    },
+    "use_count": {
+      "type": "number",
+      "default": 0,
+      "description": "\u88ab\u590d\u7528\u6b21\u6570"
+    },
+    "last_used_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

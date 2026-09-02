@@ -1,0 +1,137 @@
+{
+  "name": "IntakeItem",
+  "type": "object",
+  "description": "\u8f6c\u53d1\u6536\u4ef6\u7bb1\uff1a\u7528\u6237\u8f6c\u53d1\u8fdb\u5fc3\u6808\u7684\u539f\u59cb\u5185\u5bb9\uff08\u804a\u5929\u8bb0\u5f55/\u90ae\u4ef6/\u6587\u4ef6/\u5212\u8bcd\uff09\uff0c\u7ecf AI \u62c6\u89e3\u4e3a\u300c\u673a\u5668\u53ef\u505a\u300d\u4e0e\u300c\u9700\u4eba\u505a\u300d\u4e24\u90e8\u5206",
+  "properties": {
+    "source": {
+      "type": "string",
+      "enum": [
+        "paste",
+        "wechat",
+        "email",
+        "file",
+        "share",
+        "shortcut",
+        "browser",
+        "other"
+      ],
+      "default": "paste",
+      "description": "\u5185\u5bb9\u6765\u6e90\u6e20\u9053\uff08\u7cfb\u7edf\u7ea7\u5165\u53e3\u7edf\u4e00\u8d70\u8fd9\u91cc\uff09"
+    },
+    "raw_content": {
+      "type": "string",
+      "description": "\u8f6c\u53d1\u8fdb\u6765\u7684\u539f\u59cb\u5185\u5bb9"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_url": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "file_type": {
+            "type": "string"
+          },
+          "file_size": {
+            "type": "number"
+          }
+        }
+      },
+      "default": []
+    },
+    "summary": {
+      "type": "string",
+      "description": "AI \u5bf9\u8fd9\u6bb5\u5185\u5bb9\u7684\u4e00\u53e5\u8bdd\u7406\u89e3"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "received",
+        "triaging",
+        "triaged",
+        "adopted",
+        "dismissed",
+        "failed"
+      ],
+      "default": "received",
+      "description": "\u5904\u7406\u72b6\u6001"
+    },
+    "machine_parts": {
+      "type": "array",
+      "description": "\u673a\u5668\u53ef\u76f4\u63a5\u5151\u73b0\u7684\u90e8\u5206\uff08\u5df2\u6302\u5165\u81ea\u52a8\u6267\u884c\u961f\u5217\uff09",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "automation_type": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          },
+          "execution_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "default": []
+    },
+    "human_parts": {
+      "type": "array",
+      "description": "\u9700\u8981\u4eba\u6765\u505a\u7684\u90e8\u5206\uff08\u751f\u6210\u4e3a\u7ea6\u5b9a\u8349\u7a3f\uff09",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "time_hint": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "adopted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "default": []
+    },
+    "error_message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "raw_content"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

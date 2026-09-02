@@ -1172,6 +1172,7 @@ export default function Flow() {
   const [focusTask, setFocusTask] = useState(null);
   const [focusSeconds, setFocusSeconds] = useState(0);
   const focusTimerRef = useRef(null);
+  const analyzingHeartIdsRef = useRef(new Set());
 
   useDidShow(() => {
     loadAll();
@@ -1190,15 +1191,17 @@ export default function Flow() {
 
   useEffect(() => {
     // 为每条尚未生成 AI 回应的心签请求 analyzeHeartSign，每次最多 5 条，避免并发过多
+    // 同时用 ref 记录正在分析中的 note id，防止重复调用导致页面跳动
     const hearts = notes
       .filter(isHeartNote)
       .filter((n) => {
         const ai = n.metadata?.ai_analysis;
-        return !ai?.emotional_response && n.ai_status !== "processing";
+        return !ai?.emotional_response && n.ai_status !== "processing" && !analyzingHeartIdsRef.current.has(n.id);
       })
       .slice(0, 5);
     hearts.forEach((n) => {
       const text = String(n.plain_text || n.content || "").slice(0, 400);
+      analyzingHeartIdsRef.current.add(n.id);
       // 先给一条本地个性化兜底，避免统一文案
       setHeartInsights((prev) => ({ ...prev, [n.id]: generateLocalHeartReply(text) }));
 
@@ -1218,6 +1221,16 @@ export default function Flow() {
           if (data?.ai_analysis?.emotional_response) {
             setHeartInsights((prev) => ({ ...prev, [n.id]: data.ai_analysis.emotional_response }));
           }
+          // AI 生成标题后，立即更新本地笔记列表，避免显示统一的"心签"
+          if (data?.title) {
+            setNotes((prev) =>
+              prev.map((n2) =>
+                n2.id === n.id
+                  ? { ...n2, title: data.title, tags: data.tags || n2.tags, metadata: { ...n2.metadata, ai_analysis: data.ai_analysis } }
+                  : n2
+              )
+            );
+          }
           loadAll();
         })
         .catch((err) => {
@@ -1225,6 +1238,9 @@ export default function Flow() {
           if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
             Taro.showToast({ title: "AI 服务未配置，心签回应为本地兜底", icon: "none" });
           }
+        })
+        .finally(() => {
+          analyzingHeartIdsRef.current.delete(n.id);
         });
     });
   }, [notes]);

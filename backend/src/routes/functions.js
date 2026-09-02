@@ -1676,11 +1676,18 @@ functionsRouter.post("/:name", async (req, res) => {
       if (note.aiStatus === "completed" && existingAi?.analyzed_at) {
         return res.json({ ok: true, skipped: true, ai_analysis: existingAi });
       }
+      if (note.aiStatus === "processing") {
+        return res.json({ ok: true, skipped: true, message: "已有分析任务在进行中" });
+      }
 
-      await prisma.note.update({
-        where: { id: noteId },
+      // 原子性地把 aiStatus 从非 processing 改为 processing，防止并发重复分析
+      const claimed = await prisma.note.updateMany({
+        where: { id: noteId, userId: req.user.id, aiStatus: { not: "processing" } },
         data: { aiStatus: "processing" }
       });
+      if (claimed.count === 0) {
+        return res.json({ ok: true, skipped: true, message: "已有分析任务在进行中" });
+      }
 
       const materialText = String(note.plainText || note.content || "")
         .replace(/<[^>]+>/g, " ")

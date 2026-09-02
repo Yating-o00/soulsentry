@@ -803,59 +803,42 @@ function dueWeight(t) {
   return w;
 }
 
-function buildContextCards(sentinel, river, tasks) {
+function isTaskVisible(t) {
+  return t && !isDone(t) && t.status !== "cancelled" && !t.completed_at;
+}
+
+function buildContextCards(sentinel, assoc, tasks) {
   const cards = [];
-  const hour = new Date().getHours();
-  const slot = hour < 9 ? "晨间" : hour < 12 ? "上午" : hour < 14 ? "午后" : hour < 18 ? "下午" : "晚间";
 
-  let timeText = `${slot}好。`;
-  if (river?.deep) {
-    timeText += `你今天的深流在 ${river.deep.start}:00–${river.deep.end + 1}:00，把需要专注的事放进去，我会替你守着，不让非紧急的事打扰你。`;
-  } else if (river?.doneToday) {
-    timeText += `今天已经完成 ${river.doneToday} 件事了。不用急，再顺水推一件就好。`;
-  } else {
-    timeText += `今天的河流还在等第一条波纹。先完成最小的一步，剩下的会自己展开。`;
-  }
-  cards.push({ type: "time", icon: "🌅", title: "此刻", desc: timeText });
-
+  // 1. 地理情境感知
   if (sentinel?.geo_context) {
     const g = sentinel.geo_context;
-    const top = g.tasks?.[0];
-    const typeLabel = LOCATION_TYPE_LABEL[g.location_type] || "相关";
-    cards.push({
-      type: "location",
-      icon: g.icon || "📍",
-      title: `我注意到你在 ${g.location_name} 附近`,
-      desc: `这里通常适合你处理${typeLabel}事务${top ? `，「${top.title}」可以在这里顺手推进` : "，不妨留一段完整的时间给它"}。`,
-      task: top
-    });
+    const visible = (g.tasks || []).filter(isTaskVisible);
+    if (visible.length > 0) {
+      cards.push({ type: "geo", data: g, tasks: visible });
+    }
   }
 
+  // 2. 遗忘拯救
   if (sentinel?.forgetting_rescue?.primary) {
-    const f = sentinel.forgetting_rescue.primary;
-    cards.push({
-      type: "forget",
-      icon: "💭",
-      title: "记忆正在变淡",
-      desc: `「${f.title}」已经等你 ${f.days} 天了。现在捞回它，比重新启动要容易得多。`,
-      task: { id: f.id, title: f.title }
-    });
+    cards.push({ type: "forget", data: sentinel.forgetting_rescue });
   }
 
-  // 习惯性接续：上一完成与下一同类型
-  const lastDone = tasks
-    .filter((t) => isDone(t) && t.completed_at)
-    .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))[0];
-  if (lastDone?.category) {
-    const nextSame = tasks.find((t) => !isDone(t) && t.category === lastDone.category);
-    if (nextSame) {
-      cards.push({
-        type: "habit",
-        icon: "⟲",
-        title: "习惯在延续",
-        desc: `你刚完成了${CATEGORY_LABEL[lastDone.category] || lastDone.category}类的事，同类还有「${nextSame.title}」，状态还在，顺势做掉会很轻。`,
-        task: nextSame
-      });
+  // 3. 序贯推荐
+  if (assoc?.sequential_recommendation) {
+    const s = assoc.sequential_recommendation;
+    const suggestions = (s.suggestions || []).filter((su) => (su.tasks || []).some(isTaskVisible));
+    if (suggestions.length > 0) {
+      cards.push({ type: "sequential", data: s, suggestions });
+    }
+  }
+
+  // 4. 地点情境推荐
+  if (assoc?.location_pattern) {
+    const l = assoc.location_pattern;
+    const suggested = (l.suggested_tasks || []).filter(isTaskVisible);
+    if (suggested.length > 0 || (l.top_categories || []).length > 0) {
+      cards.push({ type: "location", data: l, suggested });
     }
   }
 
@@ -1158,6 +1141,7 @@ export default function Flow() {
   const [notes, setNotes] = useState([]);
   const [executions, setExecutions] = useState([]);
   const [sentinel, setSentinel] = useState(null);
+  const [assoc, setAssoc] = useState(null);
   const [heartInsights, setHeartInsights] = useState({});
   const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
@@ -1280,7 +1264,7 @@ export default function Flow() {
   const river = useMemo(() => buildFlowLine(tasks, notes), [tasks, notes]);
   const riverInsight = useMemo(() => buildRiverInsight(river, tasks, notes), [river, tasks, notes]);
   const rhythm = useMemo(() => buildRhythm(tasks), [tasks]);
-  const contextCards = useMemo(() => buildContextCards(sentinel, river, tasks), [sentinel, river, tasks]);
+  const contextCards = useMemo(() => buildContextCards(sentinel, assoc, tasks), [sentinel, assoc, tasks]);
   const guardianRecords = useMemo(() => {
     return (executions || [])
       .filter((e) => e.automation_type && e.automation_type !== "none")
@@ -1290,22 +1274,25 @@ export default function Flow() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [tasksRes, notesRes, execRes, sentinelRes, briefingRes] = await Promise.allSettled([
+      const [tasksRes, notesRes, execRes, sentinelRes, assocRes, briefingRes] = await Promise.allSettled([
         get("/tasks", { parent_task_id: "", limit: 200 }, { silent: true }),
         get("/notes", { limit: 100 }, { silent: true }),
         get("/task-executions", { limit: 20 }, { silent: true }),
         loadSentinel(),
+        loadAssoc(),
         post("/functions/generateDailyBriefing", {}, { silent: true })
       ]);
       const taskList = tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value) ? tasksRes.value : [];
       const noteList = notesRes.status === "fulfilled" && Array.isArray(notesRes.value) ? notesRes.value : [];
       const execList = execRes.status === "fulfilled" && Array.isArray(execRes.value) ? execRes.value : [];
       const sentinelData = sentinelRes.status === "fulfilled" ? sentinelRes.value : null;
+      const assocData = assocRes.status === "fulfilled" ? assocRes.value : null;
       const briefingData = briefingRes.status === "fulfilled" && briefingRes.value ? briefingRes.value : null;
       setTasks(taskList);
       setNotes(noteList);
       setExecutions(execList);
       setSentinel(sentinelData);
+      setAssoc(assocData);
       setBriefing(briefingData);
     } catch (_err) {
       // ignore
@@ -1324,6 +1311,15 @@ export default function Flow() {
     try {
       const coords = await getLocationSafe();
       return await post("/functions/getSentinelGuard", coords || {}, { silent: true });
+    } catch (_err) {
+      return null;
+    }
+  };
+
+  const loadAssoc = async () => {
+    try {
+      const coords = await getLocationSafe();
+      return await post("/functions/getAssociationRecommendations", coords || {}, { silent: true });
     } catch (_err) {
       return null;
     }
@@ -2479,157 +2475,382 @@ export default function Flow() {
   };
 
   const renderContext = () => {
-    if (contextCards.length === 0) return null;
+    const PRIORITY_TEXT = { urgent: "紧急", high: "高", medium: "中", low: "低", default: "中" };
+    const PRIORITY_COLOR = { urgent: "#e15d5d", high: "#e07b39", medium: "#384877", low: "#8e8e93", default: "#384877" };
+    const PRIORITY_BG = { urgent: "#fde8e8", high: "#fff4e6", medium: "#eef0f5", low: "#f2f2f2", default: "#eef0f5" };
+    const fmtTime = (iso) => {
+      if (!iso) return "";
+      const s = String(iso);
+      return s.includes("T") ? s.slice(11, 16) : s.slice(0, 5);
+    };
+
+    const renderEmpty = () => (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", marginBottom: "20rpx" }}>
+          <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
+          <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>时空感知守护</Text>
+        </View>
+        <View style={{ background: "#f8f9fb", borderRadius: "24rpx", border: `1rpx dashed ${THEME.border}`, padding: "40rpx 24rpx", alignItems: "center" }}>
+          <Text style={{ fontSize: "40rpx", marginBottom: "12rpx" }}>✦</Text>
+          <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink, marginBottom: "8rpx" }}>一切安好</Text>
+          <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, marginBottom: "20rpx" }}>没有检测到需要守护的情境事件</Text>
+          <View onClick={loadAll} style={{ padding: "10rpx 24rpx", borderRadius: "10rpx", background: THEME.card, border: `1rpx solid ${THEME.border}` }}>
+            <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary }}>重新分析</Text>
+          </View>
+        </View>
+      </View>
+    );
+
+    if (contextCards.length === 0) return renderEmpty();
+
+    const CardShell = ({ children, borderColor, headerBg, icon, title, subtitle, tag, tagColor, tagBg }) => (
+      <View style={{ background: THEME.card, borderRadius: "24rpx", border: `2rpx solid ${borderColor}`, overflow: "hidden", marginBottom: "16rpx", boxShadow: "0 2rpx 10rpx rgba(0,0,0,0.03)" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22rpx 24rpx 18rpx", background: headerBg }}>
+          <View style={{ display: "flex", alignItems: "center", flex: 1, marginRight: "12rpx" }}>
+            <Text style={{ fontSize: "32rpx", marginRight: "14rpx" }}>{icon}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: "28rpx", fontWeight: 600, color: THEME.ink }}>{title}</Text>
+              {subtitle && <Text style={{ fontSize: "20rpx", color: THEME.inkTertiary, marginTop: "4rpx" }}>{subtitle}</Text>}
+            </View>
+          </View>
+          {tag && (
+            <View style={{ padding: "4rpx 12rpx", borderRadius: "100rpx", background: tagBg, flexShrink: 0 }}>
+              <Text style={{ fontSize: "18rpx", color: tagColor, fontWeight: 500 }}>{tag}</Text>
+            </View>
+          )}
+        </View>
+        <View style={{ padding: "22rpx 24rpx" }}>{children}</View>
+      </View>
+    );
+
+    const ActionBtn = ({ label, primary, onClick, color, bg, border }) => (
+      <View
+        onClick={onClick}
+        style={{
+          padding: "10rpx 18rpx",
+          borderRadius: "10rpx",
+          background: primary ? (bg || THEME.primaryMist) : THEME.card,
+          border: `1rpx solid ${primary ? (bg || THEME.primaryMist) : (border || THEME.border)}`,
+          marginRight: "12rpx",
+          marginBottom: "10rpx"
+        }}
+      >
+        <Text style={{ fontSize: "22rpx", color: primary ? (color || THEME.primary) : THEME.inkTertiary, fontWeight: primary ? 500 : 400 }}>{label}</Text>
+      </View>
+    );
+
     return (
       <View style={{ padding: "18rpx 32rpx" }}>
         <View style={{ display: "flex", alignItems: "center", marginBottom: "20rpx" }}>
           <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
-          <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>此刻适合 · 守护洞察</Text>
+          <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>时空感知守护</Text>
         </View>
-        {contextCards.map((c, i) => (
-          <View
-            key={i}
-            style={{
-              background: THEME.card,
-              borderRadius: "24rpx",
-              border: `1rpx solid ${THEME.primaryFaint}`,
-              padding: "24rpx",
-              marginBottom: "16rpx",
-              boxShadow: "0 2rpx 10rpx rgba(0,0,0,0.03)"
-            }}
-          >
-            <View style={{ display: "flex", alignItems: "center", marginBottom: "10rpx" }}>
-              <Text style={{ fontSize: "30rpx", marginRight: "12rpx" }}>{c.icon}</Text>
-              <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink }}>{c.title}</Text>
-            </View>
-            <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "42rpx", wordBreak: "break-all" }}>{c.desc}</Text>
-            {c.type === "location" && c.task && (
-              <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
-                <View
-                  onClick={() => goTask(c.task.id)}
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.primaryMist,
-                    marginRight: "12rpx",
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.primary }}>在这里做</Text>
+        {contextCards.map((c, i) => {
+          if (c.type === "geo") {
+            const g = c.data;
+            const eventLabel = g.event === "enter" ? `进入${g.location_name}附近` : `离开${g.location_name}附近`;
+            const first = c.tasks[0];
+            return (
+              <CardShell
+                key={i}
+                icon="📍"
+                title="地理情境感知"
+                subtitle={`${eventLabel} · 刚刚`}
+                tag="高优先级"
+                borderColor="#bfdbfe"
+                headerBg="#eff6ff"
+                tagColor="#2563eb"
+                tagBg="#dbeafe"
+              >
+                <View style={{ background: "#eff6ff", borderRadius: "16rpx", padding: "18rpx" }}>
+                  <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink, lineHeight: "44rpx" }}>
+                    您已到达{g.location_name}附近（{g.distance}米）
+                  </Text>
+                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginTop: "8rpx" }}>今日待办：</Text>
+                  {c.tasks.map((t) => (
+                    <View key={t.id} style={{ display: "flex", alignItems: "flex-start", marginTop: "12rpx" }}>
+                      <View
+                        style={{
+                          width: "12rpx",
+                          height: "12rpx",
+                          borderRadius: "50%",
+                          background: PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.default,
+                          marginTop: "10rpx",
+                          marginRight: "12rpx",
+                          flexShrink: 0
+                        }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: "24rpx", color: THEME.inkSecondary, lineHeight: "40rpx" }}>
+                          {fmtTime(t.time) ? `${fmtTime(t.time)} ` : ""}{t.title}
+                        </Text>
+                        {t.overdue && <Text style={{ fontSize: "20rpx", color: "#e15d5d" }}>（已超时）</Text>}
+                      </View>
+                    </View>
+                  ))}
                 </View>
-                <View
-                  onClick={() => rescheduleTask(c.task, "21:00")}
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.paper,
-                    border: `1rpx solid ${THEME.border}`,
-                    marginRight: "12rpx",
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>换个时间</Text>
+                <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
+                  <ActionBtn primary label="查看详情" onClick={() => goTask(first.id)} bg="#dbeafe" color="#2563eb" />
+                  <ActionBtn label="稍后" onClick={() => Taro.showToast({ title: "已稍后提醒", icon: "none" })} />
                 </View>
-                <View
-                  onClick={() => letGoTask(c.task)}
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.paper,
-                    border: `1rpx solid ${THEME.border}`,
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>知道了</Text>
+              </CardShell>
+            );
+          }
+
+          if (c.type === "forget") {
+            const f = c.data.primary;
+            const others = c.data.others || [];
+            const silent = c.data.silent_notes || [];
+            return (
+              <CardShell
+                key={i}
+                icon="💭"
+                title="遗忘拯救"
+                subtitle="基于遗忘曲线预警"
+                tag="智能干预"
+                borderColor="#d8b4fe"
+                headerBg="#faf5ff"
+                tagColor="#9333ea"
+                tagBg="#f3e8ff"
+              >
+                <View style={{ background: "#faf5ff", borderRadius: "16rpx", padding: "18rpx" }}>
+                  <View style={{ display: "flex", alignItems: "flex-start" }}>
+                    <View
+                      style={{
+                        width: "34rpx",
+                        height: "34rpx",
+                        borderRadius: "50%",
+                        background: "#a855f7",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: "12rpx",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Text style={{ fontSize: "22rpx", fontWeight: 700, color: "#fff" }}>!</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink, lineHeight: "44rpx" }}>
+                        您{f.days}天前提到的"{f.title}"还未完成
+                      </Text>
+                      <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginTop: "6rpx" }}>
+                        超过{f.days}天未完成遗忘率高达{f.forget_rate}%
+                      </Text>
+                    </View>
+                  </View>
+                  {f.context && (
+                    <View style={{ marginTop: "16rpx", padding: "14rpx", background: THEME.card, borderRadius: "12rpx", border: "1rpx solid #f3e8ff" }}>
+                      <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginBottom: "4rpx" }}>上下文：</Text>
+                      <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary, lineHeight: "40rpx" }}>
+                        {f.context}
+                        {f.overdue_days > 0 && <Text style={{ color: "#e15d5d" }}>，已逾期{f.overdue_days}天。</Text>}
+                      </Text>
+                    </View>
+                  )}
+                  {(others.length > 0 || silent.length > 0) && (
+                    <View style={{ marginTop: "16rpx", paddingTop: "14rpx", borderTop: "1rpx solid #f3e8ff" }}>
+                      {others.map((t) => (
+                        <View key={t.id} style={{ display: "flex", alignItems: "center", marginBottom: "8rpx" }}>
+                          <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: "#c084fc", marginRight: "10rpx" }} />
+                          <Text style={{ flex: 1, fontSize: "22rpx", color: THEME.inkTertiary }} numberOfLines={1}>
+                            {t.title}
+                          </Text>
+                          <Text style={{ fontSize: "20rpx", color: "#a855f7" }}>{t.days}天</Text>
+                        </View>
+                      ))}
+                      {silent.map((n) => (
+                        <View key={n.id} style={{ display: "flex", alignItems: "center", marginBottom: "8rpx" }}>
+                          <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: "#818cf8", marginRight: "10rpx" }} />
+                          <Text style={{ flex: 1, fontSize: "22rpx", color: THEME.inkTertiary }} numberOfLines={1}>
+                            心签 · {n.title}
+                          </Text>
+                          <Text style={{ fontSize: "20rpx", color: "#6366f1" }}>{n.days}天</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
-              </View>
-            )}
-            {c.type === "forget" && c.task && (
-              <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
-                <View
-                  onClick={() => goTask(c.task.id)}
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.primaryMist,
-                    marginRight: "12rpx",
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.primary }}>现在做</Text>
+                <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
+                  <ActionBtn primary label="立即处理" onClick={() => goTask(f.id)} bg="#f3e8ff" color="#9333ea" />
+                  <ActionBtn label="延后" onClick={() => rescheduleTask({ id: f.id, title: f.title }, "09:00")} />
+                  <ActionBtn label="轻轻放下" onClick={() => letGoTask({ id: f.id, title: f.title })} />
                 </View>
-                <View
-                  onClick={() =>
-                    Taro.navigateTo({ url: `/pages/task-create/index?parent_task_id=${c.task.id}&title=${encodeURIComponent(c.task.title)}` })
-                  }
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.paper,
-                    border: `1rpx solid ${THEME.border}`,
-                    marginRight: "12rpx",
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>拆小一步</Text>
+              </CardShell>
+            );
+          }
+
+          if (c.type === "sequential") {
+            const s = c.data;
+            return (
+              <CardShell
+                key={i}
+                icon="🔗"
+                title="关联规则推荐"
+                subtitle="从你的历史中学到的隐藏逻辑"
+                tag="决策前置"
+                borderColor="#c7d2fe"
+                headerBg="#eef2ff"
+                tagColor="#4f46e5"
+                tagBg="#e0e7ff"
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginBottom: "16rpx" }}>
+                  完成「{s.trigger_task?.title || "上一件事"}」后，你通常会接着处理…
+                </Text>
+                {c.suggestions.map((su, idx) => (
+                  <View key={idx} style={{ background: "#f5f7ff", borderRadius: "16rpx", padding: "18rpx", marginBottom: "14rpx", border: "1rpx solid #e0e7ff" }}>
+                    <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12rpx" }}>
+                      <View style={{ display: "flex", alignItems: "center" }}>
+                        <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary, fontWeight: 500 }}>{su.from_label}</Text>
+                        <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginHorizontal: "8rpx" }}>→</Text>
+                        <Text style={{ fontSize: "22rpx", color: "#4f46e5", fontWeight: 500 }}>{su.to_label}</Text>
+                      </View>
+                      <Text style={{ fontSize: "18rpx", color: THEME.inkQuaternary }}>
+                        置信度 <Text style={{ color: "#4f46e5", fontWeight: 500 }}>{su.confidence}%</Text> · {su.support}次共现
+                      </Text>
+                    </View>
+                    {su.tasks.filter(isTaskVisible).map((t) => (
+                      <View
+                        key={t.id}
+                        onClick={() => goTask(t.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          background: THEME.card,
+                          borderRadius: "10rpx",
+                          padding: "14rpx",
+                          marginBottom: "10rpx",
+                          border: "1rpx solid #e0e7ff"
+                        }}
+                      >
+                        <Text style={{ flex: 1, fontSize: "24rpx", color: THEME.inkSecondary }} numberOfLines={1}>
+                          {t.title}
+                        </Text>
+                        <View
+                          style={{
+                            padding: "2rpx 10rpx",
+                            borderRadius: "8rpx",
+                            background: PRIORITY_BG[t.priority] || PRIORITY_BG.default,
+                            border: `1rpx solid ${PRIORITY_BG[t.priority] || PRIORITY_BG.default}`
+                          }}
+                        >
+                          <Text style={{ fontSize: "18rpx", color: PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.default }}>
+                            {PRIORITY_TEXT[t.priority] || PRIORITY_TEXT.default}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </CardShell>
+            );
+          }
+
+          if (c.type === "location") {
+            const l = c.data;
+            return (
+              <CardShell
+                key={i}
+                icon="🌿"
+                title="地点情境推荐"
+                subtitle={`你在 ${l.icon || ""} ${l.location_name}（约${l.distance}m）附近`}
+                tag="决策前置"
+                borderColor="#a7f3d0"
+                headerBg="#f0fdf4"
+                tagColor="#059669"
+                tagBg="#d1fae5"
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginBottom: "12rpx" }}>你在这里经常会做：</Text>
+                <View style={{ display: "flex", flexWrap: "wrap", marginBottom: "16rpx" }}>
+                  {(l.top_categories || []).map((cat) => (
+                    <View
+                      key={cat.category}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        padding: "6rpx 14rpx",
+                        borderRadius: "100rpx",
+                        background: "#d1fae5",
+                        border: "1rpx solid #a7f3d0",
+                        marginRight: "10rpx",
+                        marginBottom: "10rpx"
+                      }}
+                    >
+                      <Text style={{ fontSize: "18rpx", color: "#059669", marginRight: "4rpx" }}>✦</Text>
+                      <Text style={{ fontSize: "20rpx", color: "#047857" }}>
+                        {cat.label} ×{cat.count}
+                      </Text>
+                    </View>
+                  ))}
+                  {(l.top_titles || []).slice(0, 2).map((t, idx) => (
+                    <View
+                      key={idx}
+                      style={{
+                        padding: "6rpx 14rpx",
+                        borderRadius: "100rpx",
+                        background: "#f8fafc",
+                        border: "1rpx solid #e2e8f0",
+                        marginRight: "10rpx",
+                        marginBottom: "10rpx"
+                      }}
+                    >
+                      <Text style={{ fontSize: "20rpx", color: THEME.inkTertiary }} numberOfLines={1}>
+                        常做「{t.title.length > 12 ? t.title.slice(0, 12) + "…" : t.title}」
+                      </Text>
+                    </View>
+                  ))}
                 </View>
-                <View
-                  onClick={() => rescheduleTask(c.task, "09:00")}
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.paper,
-                    border: `1rpx solid ${THEME.border}`,
-                    marginRight: "12rpx",
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>明天提醒</Text>
-                </View>
-                <View
-                  onClick={() => letGoTask(c.task)}
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.paper,
-                    border: `1rpx solid ${THEME.border}`,
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>轻轻放下</Text>
-                </View>
-              </View>
-            )}
-            {c.type === "habit" && c.task && (
-              <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
-                <View
-                  onClick={() => goTask(c.task.id)}
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.primaryMist,
-                    marginRight: "12rpx",
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.primary }}>顺势做</Text>
-                </View>
-                <View
-                  onClick={() => rescheduleTask(c.task, "21:00")}
-                  style={{
-                    padding: "10rpx 18rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.paper,
-                    border: `1rpx solid ${THEME.border}`,
-                    marginBottom: "10rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>稍后再说</Text>
-                </View>
-              </View>
-            )}
-          </View>
-        ))}
+                {c.suggested.length > 0 ? (
+                  <>
+                    <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginBottom: "10rpx" }}>现在就能处理：</Text>
+                    {c.suggested.map((t) => (
+                      <View
+                        key={t.id}
+                        onClick={() => goTask(t.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          background: THEME.card,
+                          borderRadius: "10rpx",
+                          padding: "14rpx",
+                          marginBottom: "10rpx",
+                          border: "1rpx solid #a7f3d0"
+                        }}
+                      >
+                        <View style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                          <View style={{ padding: "2rpx 8rpx", borderRadius: "6rpx", background: "#d1fae5", marginRight: "10rpx" }}>
+                            <Text style={{ fontSize: "18rpx", color: "#059669" }}>{t.category_label || CATEGORY_LABEL[t.category] || "其他"}</Text>
+                          </View>
+                          <Text style={{ flex: 1, fontSize: "24rpx", color: THEME.inkSecondary }} numberOfLines={1}>
+                            {t.title}
+                          </Text>
+                        </View>
+                        <View
+                          style={{
+                            padding: "2rpx 10rpx",
+                            borderRadius: "8rpx",
+                            background: PRIORITY_BG[t.priority] || PRIORITY_BG.default,
+                            border: `1rpx solid ${PRIORITY_BG[t.priority] || PRIORITY_BG.default}`
+                          }}
+                        >
+                          <Text style={{ fontSize: "18rpx", color: PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.default }}>
+                            {PRIORITY_TEXT[t.priority] || PRIORITY_TEXT.default}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                ) : (
+                  <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>基于 {l.history_sample_size || 0} 条历史记录推断，目前暂无匹配的待办。</Text>
+                )}
+              </CardShell>
+            );
+          }
+
+          return null;
+        })}
       </View>
     );
   };

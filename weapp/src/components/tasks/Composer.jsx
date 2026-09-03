@@ -1,7 +1,9 @@
 import { useState } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text, Input, Button } from "@tarojs/components";
+import VoiceInput from "@/components/VoiceInput";
 import { IconMic, IconArrowUp } from "./icons";
+import theme from "./theme";
 
 const suggestions = [
   "明天下午3点和林总过方案",
@@ -12,7 +14,7 @@ const suggestions = [
 
 export default function Composer() {
   const [value, setValue] = useState("");
-  const [listening, setListening] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   const submit = () => {
     const text = value.trim();
@@ -22,22 +24,16 @@ export default function Composer() {
     });
   };
 
-  const fakeVoice = () => {
-    if (listening) {
-      setListening(false);
-      return;
-    }
-    setListening(true);
-    const demo = "今晚8点提醒我给妈妈打电话";
-    let i = 0;
-    const t = setInterval(() => {
-      i += 1;
-      setValue(demo.slice(0, i));
-      if (i >= demo.length) {
-        clearInterval(t);
-        setListening(false);
-      }
-    }, 90);
+  const openVoice = () => setVoiceOpen(true);
+  const closeVoice = () => setVoiceOpen(false);
+
+  const handleVoiceResult = (text) => {
+    if (text) setValue(text);
+    closeVoice();
+  };
+
+  const handleVoiceError = (err) => {
+    Taro.showToast({ title: err || "语音识别失败", icon: "none" });
   };
 
   const fillSuggestion = (s) => {
@@ -48,8 +44,8 @@ export default function Composer() {
     <View>
       <View
         style={{
-          border: "1rpx solid rgba(19,23,18,0.15)",
-          background: "#ffffff",
+          border: `1rpx solid ${theme.border}`,
+          background: theme.card,
           borderRadius: "12rpx",
           padding: "24rpx",
           display: "flex",
@@ -57,28 +53,29 @@ export default function Composer() {
           gap: "16rpx",
         }}
       >
-        <Text style={{ fontSize: "40rpx", color: "#7b8277", lineHeight: "44rpx" }}>＋</Text>
+        <Text style={{ fontSize: "40rpx", color: theme.inkQuaternary, lineHeight: "44rpx" }}>＋</Text>
         <Input
           value={value}
           onInput={(e) => setValue(e.detail.value)}
           placeholder="说出一个约定，剩下的交给心栈…"
-          placeholderStyle={{ color: "#7b8277" }}
+          placeholderStyle={{ color: theme.inkQuaternary }}
           style={{
             flex: 1,
             fontSize: "32rpx",
-            color: "#131712",
+            color: theme.ink,
             height: "48rpx",
             lineHeight: "48rpx",
           }}
         />
         <View
-          onClick={fakeVoice}
+          onClick={openVoice}
           style={{
             padding: "12rpx",
-            border: listening ? "1rpx solid #db3356" : "1rpx solid transparent",
+            border: `1rpx solid ${voiceOpen ? theme.primary : "transparent"}`,
+            borderRadius: "8rpx",
           }}
         >
-          <IconMic size={36} color={listening ? "#db3356" : "#7b8277"} />
+          <IconMic size={36} color={voiceOpen ? theme.primary : theme.inkQuaternary} />
         </View>
         <Button
           onClick={submit}
@@ -88,8 +85,8 @@ export default function Composer() {
             padding: "12rpx 28rpx",
             height: "auto",
             lineHeight: "40rpx",
-            background: "#131712",
-            color: "#fdfdf9",
+            background: theme.primary,
+            color: theme.paper,
             fontSize: "28rpx",
             letterSpacing: "4rpx",
             borderRadius: "8rpx",
@@ -97,30 +94,90 @@ export default function Composer() {
           }}
         >
           <View style={{ display: "flex", alignItems: "center", gap: "8rpx" }}>
-            <Text style={{ color: "#fdfdf9", fontSize: "28rpx" }}>约定</Text>
-            <IconArrowUp size={24} />
+            <Text style={{ color: theme.paper, fontSize: "28rpx" }}>约定</Text>
+            <IconArrowUp size={24} color={theme.paper} />
           </View>
         </Button>
       </View>
 
       <View style={{ marginTop: "20rpx", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16rpx 24rpx" }}>
-        <Text style={{ fontSize: "22rpx", color: "#7b8277", letterSpacing: "4rpx" }}>试一试</Text>
+        <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>试一试</Text>
         {suggestions.map((s) => (
           <Text
             key={s}
             onClick={() => fillSuggestion(s)}
             style={{
               fontSize: "24rpx",
-              color: "#3a3f36",
+              color: theme.inkSecondary,
               textDecoration: "underline",
               textDecorationStyle: "dotted",
-              textDecorationColor: "rgba(19,23,18,0.35)",
+              textDecorationColor: theme.inkQuaternary,
             }}
           >
             {s}
           </Text>
         ))}
       </View>
+
+      {voiceOpen && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(28, 28, 30, 0.45)",
+            zIndex: 100,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+          }}
+          onClick={closeVoice}
+        >
+          <View
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              background: theme.card,
+              borderTopLeftRadius: "24rpx",
+              borderTopRightRadius: "24rpx",
+              padding: "48rpx 32rpx 96rpx",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ fontSize: "32rpx", fontWeight: 700, color: theme.ink, marginBottom: "12rpx" }}>
+              按住说话
+            </Text>
+            <Text style={{ fontSize: "24rpx", color: theme.inkTertiary, marginBottom: "48rpx" }}>
+              说出约定，松开即可填入输入框
+            </Text>
+            <VoiceInput
+              size={128}
+              onResult={handleVoiceResult}
+              onError={handleVoiceError}
+            />
+            <Button
+              onClick={closeVoice}
+              style={{
+                marginTop: "56rpx",
+                width: "100%",
+                height: "84rpx",
+                lineHeight: "84rpx",
+                background: theme.paper,
+                color: theme.inkSecondary,
+                fontSize: "28rpx",
+                border: `1rpx solid ${theme.border}`,
+                borderRadius: "12rpx",
+              }}
+            >
+              取消
+            </Button>
+          </View>
+        </View>
+      )}
     </View>
   );
 }

@@ -7,6 +7,7 @@ import Composer from "@/components/tasks/Composer";
 import PromiseCard from "@/components/tasks/PromiseCard";
 import { SnoozeSheet, ExecPreview } from "@/components/tasks/Sheets";
 import EvolutionRail, { computeEvolution } from "@/components/tasks/EvolutionRail";
+import theme from "@/components/tasks/theme";
 
 const groups = [
   { key: "now", zh: "现在能做", en: "NOW", hint: "长期计划里当下可推进的" },
@@ -14,6 +15,17 @@ const groups = [
   { key: "suggested", zh: "哨兵建议", en: "SUGGESTED", hint: "AI 已选好最佳时机" },
   { key: "fixed", zh: "固定安排", en: "FIXED", hint: "周期与长期约定" },
 ];
+
+const categoryMap = {
+  work: "工作",
+  personal: "个人",
+  health: "健康",
+  study: "学习",
+  family: "家庭",
+  shopping: "购物",
+  finance: "财务",
+  other: "其他",
+};
 
 function greeting() {
   const h = new Date().getHours();
@@ -34,6 +46,47 @@ const dateLabel = new Date().toLocaleDateString("zh-CN", {
 
 function isTaskDone(task) {
   return task.status === "completed" || task.status === "done" || task.status === "archived";
+}
+
+function aiNoteFallback(task, analysis = {}) {
+  if (analysis.aiNote) return analysis.aiNote;
+
+  const priority = task.priority || analysis.priority;
+  const timeLabel = analysis.timeLabel || "";
+  const location = analysis.location;
+  const overdue = analysis.overdue;
+  const dueSoon = analysis.dueSoon;
+  const category = categoryMap[task.category] || task.category || "约定";
+
+  const isMorning = /上午|早上|晨|AM|am|9|10|11/.test(timeLabel);
+
+  if (overdue || dueSoon) {
+    return "距离截止还有不久，建议先完成最小一步";
+  }
+  if (location) {
+    return `到达 ${location} 附近时可以顺手处理`;
+  }
+  if (priority === "high" && isMorning) {
+    return "上午是你的高产窗口，这类约定推进得最快";
+  }
+  if (priority === "urgent") {
+    return "这件事优先级最高，先把它从清单里移除";
+  }
+  if (category === "健康") {
+    return "照顾好自己的约定，值得被优先放进日程";
+  }
+  if (category === "家庭") {
+    return "和重要的人有关的约定，顺水推一件就好";
+  }
+  return "把它放进今天的河流，顺水推一件就好";
+}
+
+function mergeAnalysis(task, raw) {
+  if (!raw) return {};
+  return {
+    ...raw,
+    aiNote: aiNoteFallback(task, raw),
+  };
 }
 
 export default function Tasks() {
@@ -179,7 +232,7 @@ export default function Tasks() {
   };
 
   return (
-    <View className="ss-page" style={{ background: "#f5f6fa", minHeight: "100vh", padding: "24rpx", boxSizing: "border-box" }}>
+    <View className="ss-page" style={{ background: theme.paper, minHeight: "100vh", padding: "24rpx", boxSizing: "border-box" }}>
       <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
         {/* header */}
         <View
@@ -189,29 +242,29 @@ export default function Tasks() {
             justifyContent: "space-between",
             gap: "16rpx",
             paddingBottom: "24rpx",
-            borderBottom: "1rpx solid rgba(19,23,18,0.15)",
+            borderBottom: `1rpx solid ${theme.border}`,
           }}
         >
           <View style={{ display: "flex", alignItems: "baseline", gap: "16rpx" }}>
-            <Text style={{ fontSize: "44rpx", fontWeight: 900, color: "#384877", letterSpacing: "4rpx" }}>心栈</Text>
-            <Text style={{ fontSize: "22rpx", color: "#7b8277", letterSpacing: "6rpx" }}>SOULSENTRY</Text>
+            <Text style={{ fontSize: "44rpx", fontWeight: 900, color: theme.primary, letterSpacing: "4rpx" }}>心栈</Text>
+            <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "6rpx" }}>SOULSENTRY</Text>
           </View>
           <View style={{ display: "flex", alignItems: "center", gap: "20rpx" }}>
             <View style={{ display: "flex", alignItems: "center", gap: "8rpx" }}>
-              <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: "#db3356" }} />
-              <Text style={{ fontSize: "20rpx", color: "#3a3f36" }}>哨兵守护中 · 一切安好</Text>
+              <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: theme.seal }} />
+              <Text style={{ fontSize: "20rpx", color: theme.inkSecondary }}>哨兵守护中 · 一切安好</Text>
             </View>
-            <Text style={{ fontSize: "20rpx", color: "#7b8277" }}>AI 点数 1,240</Text>
+            <Text style={{ fontSize: "20rpx", color: theme.inkTertiary }}>AI 点数 1,240</Text>
           </View>
         </View>
 
         {/* greeting + composer */}
         <View style={{ paddingTop: "40rpx" }}>
-          <Text style={{ fontSize: "20rpx", color: "#7b8277", letterSpacing: "6rpx" }}>{dateLabel}</Text>
-          <Text style={{ marginTop: "16rpx", fontSize: "52rpx", fontWeight: 700, color: "#131712", lineHeight: "72rpx" }}>
+          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "6rpx" }}>{dateLabel}</Text>
+          <Text style={{ marginTop: "16rpx", fontSize: "52rpx", fontWeight: 700, color: theme.primary, lineHeight: "72rpx" }}>
             {greeting()}。
           </Text>
-          <Text style={{ fontSize: "52rpx", fontWeight: 700, color: "#131712", lineHeight: "72rpx" }}>
+          <Text style={{ fontSize: "52rpx", fontWeight: 700, color: theme.ink, lineHeight: "72rpx" }}>
             你的点滴，都是最重要的事。
           </Text>
           <View style={{ marginTop: "32rpx" }}>
@@ -224,22 +277,23 @@ export default function Tasks() {
           {grouped.map((g) => (
             <View key={g.key} style={{ marginBottom: "48rpx" }}>
               <View style={{ display: "flex", alignItems: "baseline", gap: "16rpx", marginBottom: "24rpx" }}>
-                <Text style={{ fontSize: "20rpx", color: "#7b8277", letterSpacing: "8rpx" }}>{g.en}</Text>
-                <Text style={{ fontSize: "34rpx", fontWeight: 700, color: "#131712" }}>{g.zh}</Text>
-                <Text style={{ fontSize: "22rpx", color: "#7b8277" }}>
+                <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "8rpx" }}>{g.en}</Text>
+                <Text style={{ fontSize: "34rpx", fontWeight: 700, color: theme.primary }}>{g.zh}</Text>
+                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>
                   {g.items.length} 个约定 · {g.hint}
                 </Text>
-                <View style={{ flex: 1, height: "1rpx", background: "rgba(19,23,18,0.25)" }} />
+                <View style={{ flex: 1, height: "1rpx", background: theme.border }} />
               </View>
 
               {g.items.length === 0 ? (
                 <View
                   style={{
-                    border: "1rpx dashed rgba(19,23,18,0.25)",
+                    border: `1rpx dashed ${theme.border}`,
                     padding: "28rpx",
+                    borderRadius: "8rpx",
                   }}
                 >
-                  <Text style={{ fontSize: "26rpx", color: "#7b8277" }}>暂无 —— 有约定到达这个阶段时会出现在这里</Text>
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>暂无 —— 有约定到达这个阶段时会出现在这里</Text>
                 </View>
               ) : (
                 <View style={{ position: "relative", paddingLeft: "20rpx" }}>
@@ -250,14 +304,14 @@ export default function Tasks() {
                       top: "12rpx",
                       bottom: "12rpx",
                       width: 0,
-                      borderLeft: "1rpx dashed rgba(19,23,18,0.25)",
+                      borderLeft: `1rpx dashed ${theme.border}`,
                     }}
                   />
                   {g.items.map((task, i) => (
                     <PromiseCard
                       key={task.id}
                       task={task}
-                      analysis={analysisMap[task.id] || {}}
+                      analysis={mergeAnalysis(task, analysisMap[task.id])}
                       subtasks={subtaskMap[task.id] || []}
                       index={i}
                       onComplete={handleComplete}
@@ -279,7 +333,7 @@ export default function Tasks() {
                 style={{
                   textAlign: "center",
                   fontSize: "20rpx",
-                  color: "#7b8277",
+                  color: theme.inkQuaternary,
                   letterSpacing: "4rpx",
                 }}
               >
@@ -301,7 +355,7 @@ export default function Tasks() {
             style={{
               textAlign: "center",
               fontSize: "20rpx",
-              color: "#7b8277",
+              color: theme.inkQuaternary,
               letterSpacing: "6rpx",
             }}
           >
@@ -319,7 +373,7 @@ export default function Tasks() {
       {reviewTask && analysisMap[reviewTask.id]?.autoExec && (
         <ExecPreview
           task={reviewTask}
-          analysis={analysisMap[reviewTask.id]}
+          analysis={mergeAnalysis(reviewTask, analysisMap[reviewTask.id])}
           onClose={() => setReviewTask(null)}
           onApprove={handleApprove}
         />
@@ -334,12 +388,12 @@ export default function Tasks() {
             left: "50%",
             transform: "translateX(-50%)",
             zIndex: 200,
-            background: "#131712",
+            background: theme.ink,
             padding: "16rpx 32rpx",
             borderRadius: "8rpx",
           }}
         >
-          <Text style={{ fontSize: "26rpx", color: "#fdfdf9" }}>{toast}</Text>
+          <Text style={{ fontSize: "26rpx", color: theme.paper }}>{toast}</Text>
         </View>
       )}
 

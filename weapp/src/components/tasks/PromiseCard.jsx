@@ -8,6 +8,7 @@ import {
   IconBot,
   IconChevronRight,
 } from "./icons";
+import theme from "./theme";
 
 const categoryMap = {
   work: "工作",
@@ -21,10 +22,10 @@ const categoryMap = {
 };
 
 const priorityMark = {
-  urgent: { color: "#db3356", label: "紧急" },
-  high: { color: "#db3356", label: "高" },
-  medium: { color: "#8fa893", label: "中" },
-  low: { color: "#7b8277", label: "低" },
+  urgent: { color: theme.seal, label: "紧急" },
+  high: { color: theme.seal, label: "高" },
+  medium: { color: theme.sage, label: "中" },
+  low: { color: theme.inkQuaternary, label: "低" },
 };
 
 function Seal() {
@@ -42,7 +43,7 @@ function Seal() {
           width: "120rpx",
           height: "120rpx",
           borderRadius: "50%",
-          border: "3rpx solid #db3356",
+          border: `3rpx solid ${theme.seal}`,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -54,23 +55,56 @@ function Seal() {
             width: "96rpx",
             height: "96rpx",
             borderRadius: "50%",
-            border: "1rpx solid #db3356",
+            border: `1rpx solid ${theme.seal}`,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Text style={{ fontSize: "32rpx", color: "#db3356", fontWeight: 700, lineHeight: "40rpx" }}>
+          <Text style={{ fontSize: "32rpx", color: theme.seal, fontWeight: 700, lineHeight: "40rpx" }}>
             如
           </Text>
-          <Text style={{ fontSize: "32rpx", color: "#db3356", fontWeight: 700, lineHeight: "40rpx" }}>
+          <Text style={{ fontSize: "32rpx", color: theme.seal, fontWeight: 700, lineHeight: "40rpx" }}>
             约
           </Text>
         </View>
       </View>
     </View>
   );
+}
+
+function makeAiNote(task, analysis) {
+  if (analysis?.aiNote) return analysis.aiNote;
+
+  const priority = task.priority || analysis?.priority;
+  const timeLabel = analysis?.timeLabel || "";
+  const location = analysis?.location;
+  const overdue = analysis?.overdue;
+  const dueSoon = analysis?.dueSoon;
+  const category = categoryMap[task.category] || task.category || "约定";
+
+  const isMorning = /上午|早上|晨|AM|am|9|10|11/.test(timeLabel);
+
+  if (overdue || dueSoon) {
+    return "距离截止还有不久，建议先完成最小一步";
+  }
+  if (location) {
+    return `到达 ${location} 附近时可以顺手处理`;
+  }
+  if (priority === "high" && isMorning) {
+    return "上午是你的高产窗口，这类约定推进得最快";
+  }
+  if (priority === "urgent") {
+    return "这件事优先级最高，先把它从清单里移除";
+  }
+  if (category === "健康") {
+    return "照顾好自己的约定，值得被优先放进日程";
+  }
+  if (category === "家庭") {
+    return "和重要的人有关的约定，顺水推一件就好";
+  }
+  return "把它放进今天的河流，顺水推一件就好";
 }
 
 export default function PromiseCard({
@@ -87,6 +121,7 @@ export default function PromiseCard({
   const done = task.status === "completed" || task.status === "done" || task.status === "archived";
   const p = priorityMark[task.priority] || priorityMark.medium;
   const categoryLabel = categoryMap[task.category] || task.category || "其他";
+  const aiNote = makeAiNote(task, analysis);
 
   const goDetail = () => {
     Taro.navigateTo({ url: `/pages/task-detail/index?id=${task.id}` });
@@ -122,12 +157,17 @@ export default function PromiseCard({
     onShare(task);
   };
 
+  const handleFeedback = (e) => {
+    e.stopPropagation();
+    Taro.showToast({ title: "已反馈给心栈", icon: "none" });
+  };
+
   return (
     <View
       style={{
         position: "relative",
-        background: "#ffffff",
-        border: `1rpx solid ${analysis?.overdue && !done ? "#db3356" : "rgba(19,23,18,0.15)"}`,
+        background: theme.card,
+        border: `1rpx solid ${analysis?.overdue && !done ? theme.seal : theme.border}`,
         borderStyle: analysis?.overdue && !done ? "dashed" : "solid",
         borderRadius: "16rpx",
         marginBottom: "24rpx",
@@ -146,8 +186,8 @@ export default function PromiseCard({
             width: "40rpx",
             height: "40rpx",
             borderRadius: "50%",
-            border: `2rpx solid ${done ? "#db3356" : "#3a3f36"}`,
-            background: done ? "#db3356" : "transparent",
+            border: `2rpx solid ${done ? theme.seal : theme.inkSecondary}`,
+            background: done ? theme.seal : "transparent",
             marginTop: "6rpx",
             marginRight: "24rpx",
             display: "flex",
@@ -157,7 +197,7 @@ export default function PromiseCard({
           }}
         >
           {done && (
-            <Text style={{ color: "#fdfdf9", fontSize: "24rpx" }}>✓</Text>
+            <Text style={{ color: theme.paper, fontSize: "24rpx" }}>✓</Text>
           )}
         </View>
 
@@ -176,7 +216,7 @@ export default function PromiseCard({
               style={{
                 fontSize: "32rpx",
                 fontWeight: 600,
-                color: "#131712",
+                color: theme.ink,
                 lineHeight: "44rpx",
                 textDecoration: done ? "line-through" : "none",
               }}
@@ -187,26 +227,28 @@ export default function PromiseCard({
             {analysis?.overdue && !done && (
               <View
                 style={{
-                  border: "1rpx solid #db3356",
+                  border: `1rpx solid ${theme.seal}`,
                   padding: "2rpx 10rpx",
+                  borderRadius: "4rpx",
                 }}
               >
-                <Text style={{ fontSize: "20rpx", color: "#db3356", letterSpacing: "2rpx" }}>已逾期</Text>
+                <Text style={{ fontSize: "20rpx", color: theme.seal, letterSpacing: "2rpx" }}>已逾期</Text>
               </View>
             )}
 
             {analysis?.recurring && (
               <View
                 style={{
-                  border: "1rpx solid rgba(19,23,18,0.3)",
+                  border: `1rpx solid ${theme.border}`,
                   padding: "4rpx 12rpx",
                   display: "flex",
                   alignItems: "center",
                   gap: "6rpx",
+                  borderRadius: "4rpx",
                 }}
               >
-                <IconRepeat size={18} />
-                <Text style={{ fontSize: "20rpx", color: "#7b8277" }}>{analysis.recurring}</Text>
+                <IconRepeat size={18} color={theme.inkQuaternary} />
+                <Text style={{ fontSize: "20rpx", color: theme.inkTertiary }}>{analysis.recurring}</Text>
               </View>
             )}
           </View>
@@ -216,7 +258,7 @@ export default function PromiseCard({
               style={{
                 marginTop: "12rpx",
                 fontSize: "26rpx",
-                color: "#3a3f36",
+                color: theme.inkSecondary,
                 lineHeight: "38rpx",
               }}
             >
@@ -228,24 +270,24 @@ export default function PromiseCard({
           {/* meta */}
           <View style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "24rpx", marginTop: "16rpx" }}>
             <View style={{ display: "flex", alignItems: "center", gap: "8rpx" }}>
-              <IconClock size={22} />
-              <Text style={{ fontSize: "24rpx", color: "#7b8277" }}>{analysis?.timeLabel || "未安排时间"}</Text>
+              <IconClock size={22} color={theme.inkQuaternary} />
+              <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>{analysis?.timeLabel || "未安排时间"}</Text>
             </View>
-            <Text style={{ fontSize: "24rpx", color: "#7b8277", letterSpacing: "4rpx" }}>{categoryLabel}</Text>
+            <Text style={{ fontSize: "24rpx", color: theme.inkTertiary, letterSpacing: "4rpx" }}>{categoryLabel}</Text>
             {analysis?.location ? (
               <View style={{ display: "flex", alignItems: "center", gap: "8rpx" }}>
-                <IconMapPin size={22} />
-                <Text style={{ fontSize: "24rpx", color: "#6e8a73" }}>{analysis.location}</Text>
+                <IconMapPin size={22} color={theme.sage} />
+                <Text style={{ fontSize: "24rpx", color: theme.sage }}>{analysis.location}</Text>
               </View>
             ) : null}
           </View>
 
           {/* AI note */}
-          {analysis?.aiNote && !done && (
+          {!done && (
             <View
               style={{
                 marginTop: "20rpx",
-                borderLeft: "3rpx dashed #6e8a73",
+                borderLeft: `3rpx dashed ${theme.water}`,
                 paddingLeft: "20rpx",
                 display: "flex",
                 flexDirection: "row",
@@ -253,9 +295,9 @@ export default function PromiseCard({
                 gap: "12rpx",
               }}
             >
-              <IconSparkles size={22} />
-              <Text style={{ flex: 1, fontSize: "25rpx", color: "#3a3f36", lineHeight: "38rpx" }}>
-                {analysis.aiNote}
+              <IconSparkles size={22} color={theme.water} />
+              <Text style={{ flex: 1, fontSize: "25rpx", color: theme.inkSecondary, lineHeight: "38rpx" }}>
+                {aiNote}
               </Text>
             </View>
           )}
@@ -265,7 +307,7 @@ export default function PromiseCard({
             <View
               style={{
                 marginTop: "24rpx",
-                borderTop: "1rpx dashed rgba(19,23,18,0.2)",
+                borderTop: `1rpx dashed ${theme.border}`,
                 paddingTop: "20rpx",
               }}
             >
@@ -287,15 +329,15 @@ export default function PromiseCard({
                         width: "14rpx",
                         height: "14rpx",
                         borderRadius: "50%",
-                        background: subDone ? "#db3356" : "transparent",
-                        border: subDone ? "none" : "2rpx solid #7b8277",
+                        background: subDone ? theme.seal : "transparent",
+                        border: subDone ? "none" : `2rpx solid ${theme.inkQuaternary}`,
                         flexShrink: 0,
                       }}
                     />
                     <Text
                       style={{
                         fontSize: "26rpx",
-                        color: subDone ? "#7b8277" : "#3a3f36",
+                        color: subDone ? theme.inkQuaternary : theme.inkSecondary,
                         textDecoration: subDone ? "line-through" : "none",
                       }}
                     >
@@ -312,19 +354,19 @@ export default function PromiseCard({
             <View
               style={{
                 marginTop: "24rpx",
-                border: "1rpx dashed #6e8a73",
-                background: "rgba(176,198,179,0.14)",
+                border: `1rpx dashed ${theme.water}`,
+                background: "rgba(91, 130, 160, 0.08)",
                 padding: "20rpx",
                 borderRadius: "8rpx",
               }}
             >
               <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16rpx" }}>
                 <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
-                  <IconBot size={28} />
-                  <Text style={{ fontSize: "26rpx", color: "#131712", fontWeight: 500 }}>
+                  <IconBot size={28} color={theme.primary} />
+                  <Text style={{ fontSize: "26rpx", color: theme.ink, fontWeight: 500 }}>
                     自动执行 · {analysis.autoExec.label}
                   </Text>
-                  <Text style={{ fontSize: "22rpx", color: "#7b8277", letterSpacing: "2rpx" }}>
+                  <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, letterSpacing: "2rpx" }}>
                     {analysis.autoExec.state === "ready" && "已预执行，待验收"}
                     {analysis.autoExec.state === "running" && "执行中…"}
                     {analysis.autoExec.state === "done" && "已完成 ✓"}
@@ -333,24 +375,38 @@ export default function PromiseCard({
                 </View>
               </View>
 
-              <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "16rpx" }}>
-                <Text style={{ fontSize: "22rpx", color: "#7b8277" }}>
+              <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "16rpx", flexWrap: "wrap", gap: "16rpx" }}>
+                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>
                   信任度 {analysis.autoExec.trust}% · {analysis.autoExec.trustLevel}
                 </Text>
-                <View
-                  onClick={handleReview}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6rpx",
-                    border: "1rpx solid rgba(19,23,18,0.15)",
-                    background: "#ffffff",
-                    padding: "8rpx 16rpx",
-                    borderRadius: "6rpx",
-                  }}
-                >
-                  <Text style={{ fontSize: "24rpx", color: "#131712" }}>验收</Text>
-                  <IconChevronRight size={20} />
+                <View style={{ display: "flex", alignItems: "center", gap: "16rpx" }}>
+                  <Text
+                    onClick={handleFeedback}
+                    style={{ fontSize: "24rpx", color: theme.water, letterSpacing: "2rpx" }}
+                  >
+                    调整
+                  </Text>
+                  <Text
+                    onClick={handleFeedback}
+                    style={{ fontSize: "24rpx", color: theme.water, letterSpacing: "2rpx" }}
+                  >
+                    我来接管
+                  </Text>
+                  <View
+                    onClick={handleReview}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6rpx",
+                      border: `1rpx solid ${theme.border}`,
+                      background: theme.card,
+                      padding: "8rpx 16rpx",
+                      borderRadius: "6rpx",
+                    }}
+                  >
+                    <Text style={{ fontSize: "24rpx", color: theme.ink }}>验收</Text>
+                    <IconChevronRight size={20} color={theme.inkTertiary} />
+                  </View>
                 </View>
               </View>
             </View>
@@ -365,15 +421,15 @@ export default function PromiseCard({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            borderTop: "1rpx solid rgba(19,23,18,0.15)",
+            borderTop: `1rpx solid ${theme.border}`,
             padding: "16rpx 28rpx",
           }}
         >
-          <Text style={{ fontSize: "20rpx", color: "#7b8277", letterSpacing: "4rpx" }}>约定 · PROMISE</Text>
+          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>约定 · PROMISE</Text>
           <View style={{ display: "flex", alignItems: "center", gap: "28rpx" }}>
             <Text
               onClick={handleShare}
-              style={{ fontSize: "24rpx", color: "#7b8277" }}
+              style={{ fontSize: "24rpx", color: theme.inkTertiary }}
             >
               分享
             </Text>
@@ -382,7 +438,7 @@ export default function PromiseCard({
                 onClick={handleDemote}
                 style={{
                   fontSize: "24rpx",
-                  color: "#6e8a73",
+                  color: theme.sage,
                   textDecoration: "underline",
                   textDecorationStyle: "dotted",
                   textUnderlineOffset: "4rpx",
@@ -393,13 +449,13 @@ export default function PromiseCard({
             )}
             <Text
               onClick={handleSnooze}
-              style={{ fontSize: "24rpx", color: "#7b8277" }}
+              style={{ fontSize: "24rpx", color: theme.inkTertiary }}
             >
               顺延
             </Text>
             <Text
               onClick={handleComplete}
-              style={{ fontSize: "24rpx", color: "#db3356", letterSpacing: "2rpx" }}
+              style={{ fontSize: "24rpx", color: theme.primary, letterSpacing: "2rpx", fontWeight: 600 }}
             >
               完成约定 →
             </Text>

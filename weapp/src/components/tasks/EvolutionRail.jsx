@@ -1,5 +1,6 @@
 import { View, Text } from "@tarojs/components";
 import { IconBrain, IconClock3, IconTrendingUp, IconMoonStar, IconLock } from "./icons";
+import theme from "./theme";
 
 const weekLabels = ["一", "二", "三", "四", "五", "六", "日"];
 
@@ -17,7 +18,7 @@ function SectionLabel({ children }) {
   return (
     <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "12rpx" }}>
       {children}
-      <View style={{ flex: 1, height: "1rpx", background: "rgba(19,23,18,0.25)" }} />
+      <View style={{ flex: 1, height: "1rpx", background: theme.border }} />
     </View>
   );
 }
@@ -25,8 +26,8 @@ function SectionLabel({ children }) {
 function Bar({ value, max, color }) {
   const width = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <View style={{ flex: 1, height: "4rpx", background: "rgba(19,23,18,0.15)", marginHorizontal: "12rpx" }}>
-      <View style={{ width: `${width}%`, height: "100%", background: color || "#131712" }} />
+    <View style={{ flex: 1, height: "4rpx", background: theme.border, marginHorizontal: "12rpx" }}>
+      <View style={{ width: `${width}%`, height: "100%", background: color || theme.primary }} />
     </View>
   );
 }
@@ -159,8 +160,8 @@ export default function EvolutionRail({ evo, onReview }) {
   return (
     <View
       style={{
-        border: "1rpx solid rgba(19,23,18,0.15)",
-        background: "#b0c6b3",
+        border: `1rpx solid ${theme.border}`,
+        background: "rgba(91, 130, 160, 0.10)",
         borderRadius: "16rpx",
         overflow: "hidden",
         marginTop: "40rpx",
@@ -168,15 +169,15 @@ export default function EvolutionRail({ evo, onReview }) {
     >
       <View
         style={{
-          borderBottom: "1rpx solid rgba(19,23,18,0.35)",
+          borderBottom: `1rpx solid ${theme.border}`,
           padding: "28rpx",
         }}
       >
         <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
-          <IconBrain size={32} />
-          <Text style={{ fontSize: "34rpx", fontWeight: 700, color: "#131712" }}>心栈越来越懂你</Text>
+          <IconBrain size={32} color={theme.primary} />
+          <Text style={{ fontSize: "34rpx", fontWeight: 700, color: theme.primary }}>心栈越来越懂你</Text>
         </View>
-        <Text style={{ marginTop: "10rpx", fontSize: "22rpx", color: "rgba(19,23,18,0.6)", letterSpacing: "2rpx" }}>
+        <Text style={{ marginTop: "10rpx", fontSize: "22rpx", color: theme.inkTertiary, letterSpacing: "2rpx" }}>
           基于 {evo.streak * 7 + 38} 条约定的记忆 · 每日进化
         </Text>
       </View>
@@ -185,12 +186,12 @@ export default function EvolutionRail({ evo, onReview }) {
         {/* streak */}
         <View style={{ marginBottom: "36rpx" }}>
           <SectionLabel>
-            <Text style={{ fontSize: "20rpx", color: "rgba(19,23,18,0.55)", letterSpacing: "4rpx" }}>连续如约</Text>
+            <Text style={{ fontSize: "20rpx", color: theme.inkTertiary, letterSpacing: "4rpx" }}>连续如约</Text>
           </SectionLabel>
           <View style={{ display: "flex", alignItems: "baseline", gap: "12rpx" }}>
-            <Text style={{ fontSize: "72rpx", fontWeight: 600, color: "#131712", lineHeight: "80rpx" }}>{evo.streak}</Text>
-            <Text style={{ fontSize: "28rpx", color: "#131712" }}>天</Text>
-            <Text style={{ marginLeft: "auto", fontSize: "22rpx", color: "rgba(19,23,18,0.6)" }}>
+            <Text style={{ fontSize: "72rpx", fontWeight: 600, color: theme.primary, lineHeight: "80rpx" }}>{evo.streak}</Text>
+            <Text style={{ fontSize: "28rpx", color: theme.inkSecondary }}>天</Text>
+            <Text style={{ marginLeft: "auto", fontSize: "22rpx", color: theme.inkTertiary }}>
               今日 {evo.doneToday}/{evo.totalToday} 已兑现
             </Text>
           </View>
@@ -199,27 +200,27 @@ export default function EvolutionRail({ evo, onReview }) {
         {/* time calibration */}
         <View style={{ marginBottom: "36rpx" }}>
           <SectionLabel>
-            <IconClock3 size={22} />
-            <Text style={{ fontSize: "20rpx", color: "rgba(19,23,18,0.55)", letterSpacing: "4rpx" }}>时间校准</Text>
+            <IconClock3 size={22} color={theme.water} />
+            <Text style={{ fontSize: "20rpx", color: theme.inkTertiary, letterSpacing: "4rpx" }}>时间校准</Text>
           </SectionLabel>
-          <Text style={{ fontSize: "26rpx", color: "#131712", lineHeight: "42rpx" }}>
-            你的约定平均晚 <Text style={{ fontWeight: 700 }}>{evo.avgDelay} 分钟</Text> 完成，
-            心栈已自动为每个约定预留 <Text style={{ fontWeight: 700, color: "#b01f3e" }}>+{evo.buffer} 分钟</Text> 缓冲。
+          <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, lineHeight: "42rpx" }}>
+            你的约定平均晚 <Text style={{ fontWeight: 700, color: theme.primary }}>{evo.avgDelay} 分钟</Text> 完成，
+            心栈已自动为每个约定预留 <Text style={{ fontWeight: 700, color: theme.seal }}>+{evo.buffer} 分钟</Text> 缓冲。
           </Text>
-          <View style={{ marginTop: "16rpx", height: "4rpx", width: "100%", background: "rgba(19,23,18,0.18)" }}>
-            <View style={{ width: `${Math.min(100, evo.buffer * 4)}%`, height: "100%", background: "#131712" }} />
+          <View style={{ marginTop: "16rpx", height: "4rpx", width: "100%", background: theme.border }}>
+            <View style={{ width: `${Math.min(100, evo.buffer * 4)}%`, height: "100%", background: theme.water }} />
           </View>
-          <Text style={{ marginTop: "8rpx", fontSize: "20rpx", color: "rgba(19,23,18,0.6)" }}>缓冲准确率随数据量持续提升</Text>
+          <Text style={{ marginTop: "8rpx", fontSize: "20rpx", color: theme.inkTertiary }}>缓冲准确率随数据量持续提升</Text>
         </View>
 
         {/* peak rhythm */}
         <View style={{ marginBottom: "36rpx" }}>
           <SectionLabel>
-            <IconTrendingUp size={22} />
-            <Text style={{ fontSize: "20rpx", color: "rgba(19,23,18,0.55)", letterSpacing: "4rpx" }}>能量节律</Text>
+            <IconTrendingUp size={22} color={theme.water} />
+            <Text style={{ fontSize: "20rpx", color: theme.inkTertiary, letterSpacing: "4rpx" }}>能量节律</Text>
           </SectionLabel>
-          <Text style={{ fontSize: "26rpx", color: "#131712" }}>
-            <Text style={{ fontWeight: 700 }}>{evo.peakDays}</Text> {evo.peakHours} 是你的高产窗口
+          <Text style={{ fontSize: "26rpx", color: theme.inkSecondary }}>
+            <Text style={{ fontWeight: 700, color: theme.primary }}>{evo.peakDays}</Text> {evo.peakHours} 是你的高产窗口
           </Text>
           <View style={{ marginTop: "16rpx", display: "flex", alignItems: "flex-end", gap: "12rpx", height: "120rpx" }}>
             {(evo.weekBars || [0, 0, 0, 0, 0, 0, 0]).map((v, i) => (
@@ -228,32 +229,33 @@ export default function EvolutionRail({ evo, onReview }) {
                   style={{
                     width: "100%",
                     height: `${(v / maxBar) * 100 + 6}rpx`,
-                    background: v === maxBar && maxBar > 0 ? "#db3356" : "rgba(19,23,18,0.55)",
+                    background: v === maxBar && maxBar > 0 ? theme.primary : theme.waterLight,
                     minHeight: "6rpx",
+                    borderRadius: "2rpx",
                   }}
                 />
-                <Text style={{ fontSize: "18rpx", color: "rgba(19,23,18,0.55)" }}>{weekLabels[i]}</Text>
+                <Text style={{ fontSize: "18rpx", color: theme.inkTertiary }}>{weekLabels[i]}</Text>
               </View>
             ))}
           </View>
-          <Text style={{ marginTop: "8rpx", fontSize: "20rpx", color: "rgba(19,23,18,0.6)" }}>重要约定将优先排进高产窗口</Text>
+          <Text style={{ marginTop: "8rpx", fontSize: "20rpx", color: theme.inkTertiary }}>重要约定将优先排进高产窗口</Text>
         </View>
 
         {/* snooze reasons */}
         {evo.snoozeReasons && evo.snoozeReasons.length > 0 && (
           <View style={{ marginBottom: "36rpx" }}>
             <SectionLabel>
-              <IconMoonStar size={22} />
-              <Text style={{ fontSize: "20rpx", color: "rgba(19,23,18,0.55)", letterSpacing: "4rpx" }}>顺延原因</Text>
+              <IconMoonStar size={22} color={theme.water} />
+              <Text style={{ fontSize: "20rpx", color: theme.inkTertiary, letterSpacing: "4rpx" }}>顺延原因</Text>
             </SectionLabel>
             {(evo.snoozeReasons || []).map((r) => (
               <View key={r.label} style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "12rpx" }}>
-                <Text style={{ width: "120rpx", fontSize: "24rpx", color: "#131712", flexShrink: 0 }}>{r.label}</Text>
+                <Text style={{ width: "120rpx", fontSize: "24rpx", color: theme.inkSecondary, flexShrink: 0 }}>{r.label}</Text>
                 <Bar value={r.count} max={maxSnooze} />
-                <Text style={{ width: "48rpx", textAlign: "right", fontSize: "22rpx", color: "rgba(19,23,18,0.6)" }}>{r.count}次</Text>
+                <Text style={{ width: "48rpx", textAlign: "right", fontSize: "22rpx", color: theme.inkTertiary }}>{r.count}次</Text>
               </View>
             ))}
-            <Text style={{ marginTop: "10rpx", fontSize: "20rpx", color: "rgba(19,23,18,0.6)", lineHeight: "32rpx" }}>
+            <Text style={{ marginTop: "10rpx", fontSize: "20rpx", color: theme.inkTertiary, lineHeight: "32rpx" }}>
               「{evo.snoozeReasons[0]?.label}」最多 —— 心栈已把晚间约定改排到清晨。
             </Text>
           </View>
@@ -262,25 +264,25 @@ export default function EvolutionRail({ evo, onReview }) {
         {/* automation trust */}
         <View style={{ marginBottom: "28rpx" }}>
           <SectionLabel>
-            <IconBrain size={22} />
-            <Text style={{ fontSize: "20rpx", color: "rgba(19,23,18,0.55)", letterSpacing: "4rpx" }}>自动化信任度</Text>
+            <IconBrain size={22} color={theme.water} />
+            <Text style={{ fontSize: "20rpx", color: theme.inkTertiary, letterSpacing: "4rpx" }}>自动化信任度</Text>
           </SectionLabel>
           {evo.trust && evo.trust.length > 0 ? (
             evo.trust.map((t) => (
               <View key={t.label} style={{ marginBottom: "18rpx" }}>
                 <View style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <Text style={{ fontSize: "25rpx", color: "#131712" }}>{t.label}</Text>
-                  <Text style={{ fontSize: "20rpx", color: "rgba(19,23,18,0.6)" }}>{t.mode} · {t.value}%</Text>
+                  <Text style={{ fontSize: "25rpx", color: theme.inkSecondary }}>{t.label}</Text>
+                  <Text style={{ fontSize: "20rpx", color: theme.inkTertiary }}>{t.mode} · {t.value}%</Text>
                 </View>
-                <View style={{ marginTop: "10rpx", height: "4rpx", width: "100%", background: "rgba(19,23,18,0.15)" }}>
-                  <View style={{ width: `${t.value}%`, height: "100%", background: t.value >= 90 ? "#db3356" : "#131712" }} />
+                <View style={{ marginTop: "10rpx", height: "4rpx", width: "100%", background: theme.border }}>
+                  <View style={{ width: `${t.value}%`, height: "100%", background: t.value >= 90 ? theme.seal : theme.water }} />
                 </View>
               </View>
             ))
           ) : (
-            <Text style={{ fontSize: "24rpx", color: "rgba(19,23,18,0.6)" }}>暂无自动化执行记录</Text>
+            <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>暂无自动化执行记录</Text>
           )}
-          <Text style={{ marginTop: "12rpx", fontSize: "20rpx", color: "rgba(19,23,18,0.6)", lineHeight: "32rpx" }}>
+          <Text style={{ marginTop: "12rpx", fontSize: "20rpx", color: theme.inkTertiary, lineHeight: "32rpx" }}>
             信任度 ≥90% 后自动执行，低于 50% 转人工接管 —— 由你的每次评价决定。
           </Text>
         </View>
@@ -289,27 +291,27 @@ export default function EvolutionRail({ evo, onReview }) {
         <View
           onClick={onReview}
           style={{
-            background: "#131712",
+            background: theme.primary,
             padding: "28rpx",
             borderRadius: "8rpx",
           }}
         >
-          <Text style={{ fontSize: "20rpx", color: "rgba(253,253,249,0.7)", letterSpacing: "4rpx" }}>晚间仪式 · 60 秒</Text>
-          <Text style={{ marginTop: "8rpx", fontSize: "32rpx", fontWeight: 700, color: "#fdfdf9" }}>开始今日复盘 →</Text>
+          <Text style={{ fontSize: "20rpx", color: "rgba(250,251,251,0.7)", letterSpacing: "4rpx" }}>晚间仪式 · 60 秒</Text>
+          <Text style={{ marginTop: "8rpx", fontSize: "32rpx", fontWeight: 700, color: theme.paper }}>开始今日复盘 →</Text>
         </View>
 
         <View
           style={{
             marginTop: "24rpx",
-            borderTop: "1rpx dashed rgba(19,23,18,0.35)",
+            borderTop: `1rpx dashed ${theme.border}`,
             paddingTop: "20rpx",
             display: "flex",
             alignItems: "flex-start",
             gap: "10rpx",
           }}
         >
-          <IconLock size={22} />
-          <Text style={{ flex: 1, fontSize: "20rpx", color: "rgba(19,23,18,0.6)", lineHeight: "32rpx" }}>
+          <IconLock size={22} color={theme.inkTertiary} />
+          <Text style={{ flex: 1, fontSize: "20rpx", color: theme.inkTertiary, lineHeight: "32rpx" }}>
             这些记忆只属于你：可查看、可导出、可删除。
           </Text>
         </View>

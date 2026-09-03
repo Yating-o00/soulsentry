@@ -2,6 +2,7 @@ import { useState } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text, Button } from "@tarojs/components";
 import { IconX, IconSend, IconPencil, IconUserCheck, IconCheck } from "./icons";
+import theme from "./theme";
 
 const snoozeReasons = ["精力不足", "时间被占用", "设备/条件未就绪", "外部阻塞", "忘记了", "范围变更"];
 const times = ["今晚", "明天上午", "明天下午", "下周一", "自定义…"];
@@ -49,7 +50,7 @@ function Overlay({ children, onClose }) {
         left: 0,
         right: 0,
         bottom: 0,
-        background: "rgba(19,23,18,0.45)",
+        background: "rgba(28, 28, 30, 0.45)",
         zIndex: 100,
         display: "flex",
         alignItems: "flex-end",
@@ -69,38 +70,39 @@ function SheetHeader({ title, sub, onClose }) {
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "space-between",
-        borderBottom: "1rpx solid rgba(19,23,18,0.15)",
+        borderBottom: `1rpx solid ${theme.border}`,
         padding: "28rpx",
       }}
     >
       <View style={{ flex: 1, paddingRight: "20rpx" }}>
-        <Text style={{ fontSize: "34rpx", fontWeight: 700, color: "#131712" }}>{title}</Text>
+        <Text style={{ fontSize: "34rpx", fontWeight: 700, color: theme.ink }}>{title}</Text>
         {sub && (
-          <Text style={{ marginTop: "8rpx", fontSize: "24rpx", color: "#7b8277" }} numberOfLines={1}>
+          <Text style={{ marginTop: "8rpx", fontSize: "24rpx", color: theme.inkTertiary }} numberOfLines={1}>
             {sub}
           </Text>
         )}
       </View>
       <View onClick={onClose} style={{ padding: "8rpx" }}>
-        <IconX size={36} />
+        <IconX size={36} color={theme.inkQuaternary} />
       </View>
     </View>
   );
 }
 
-function Pill({ label, active, onClick, activeColor = "#131712" }) {
+function Pill({ label, active, onClick, activeColor = theme.primary }) {
   return (
     <View
       onClick={onClick}
       style={{
-        border: `1rpx solid ${active ? activeColor : "rgba(19,23,18,0.3)"}`,
+        border: `1rpx solid ${active ? activeColor : theme.border}`,
         background: active ? activeColor : "transparent",
         padding: "12rpx 24rpx",
         marginRight: "16rpx",
         marginBottom: "16rpx",
+        borderRadius: "8rpx",
       }}
     >
-      <Text style={{ fontSize: "26rpx", color: active ? "#fdfdf9" : "#3a3f36" }}>{label}</Text>
+      <Text style={{ fontSize: "26rpx", color: active ? theme.paper : theme.inkSecondary }}>{label}</Text>
     </View>
   );
 }
@@ -122,7 +124,7 @@ export function SnoozeSheet({ task, onClose, onConfirm }) {
         style={{
           width: "100%",
           maxHeight: "85vh",
-          background: "#ffffff",
+          background: theme.card,
           borderTopLeftRadius: "24rpx",
           borderTopRightRadius: "24rpx",
           overflow: "hidden",
@@ -131,19 +133,19 @@ export function SnoozeSheet({ task, onClose, onConfirm }) {
         <SheetHeader title="顺延这个约定" sub={task.title} onClose={onClose} />
 
         <View style={{ padding: "28rpx" }}>
-          <Text style={{ fontSize: "22rpx", color: "#7b8277", letterSpacing: "4rpx" }}>顺延到</Text>
+          <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>顺延到</Text>
           <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
             {times.map((t) => (
               <Pill key={t} label={t} active={when === t} onClick={() => setWhen(t)} />
             ))}
           </View>
 
-          <Text style={{ marginTop: "12rpx", fontSize: "22rpx", color: "#7b8277", letterSpacing: "4rpx" }}>
+          <Text style={{ marginTop: "12rpx", fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>
             发生了什么？（会记入记忆，帮心栈下次排得更准）
           </Text>
           <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
             {snoozeReasons.map((r) => (
-              <Pill key={r} label={r} active={reason === r} onClick={() => setReason(r)} activeColor="#db3356" />
+              <Pill key={r} label={r} active={reason === r} onClick={() => setReason(r)} activeColor={theme.water} />
             ))}
           </View>
 
@@ -155,8 +157,8 @@ export function SnoozeSheet({ task, onClose, onConfirm }) {
               width: "100%",
               height: "88rpx",
               lineHeight: "88rpx",
-              background: reason ? "#131712" : "#131712",
-              color: "#fdfdf9",
+              background: theme.primary,
+              color: theme.paper,
               fontSize: "30rpx",
               letterSpacing: "6rpx",
               borderRadius: "8rpx",
@@ -171,7 +173,7 @@ export function SnoozeSheet({ task, onClose, onConfirm }) {
               style={{
                 textAlign: "center",
                 fontSize: "22rpx",
-                color: "#7b8277",
+                color: theme.inkTertiary,
               }}
             >
               顺延不是失败 —— 心栈会据此校准你的时间估算
@@ -203,7 +205,7 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
         style={{
           width: "100%",
           maxHeight: "85vh",
-          background: "#ffffff",
+          background: theme.card,
           borderTopLeftRadius: "24rpx",
           borderTopRightRadius: "24rpx",
           overflow: "hidden",
@@ -218,8 +220,8 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
         <View style={{ padding: "28rpx" }}>
           <View
             style={{
-              border: "1rpx dashed #6e8a73",
-              background: "rgba(176,198,179,0.12)",
+              border: `1rpx dashed ${theme.water}`,
+              background: "rgba(91, 130, 160, 0.08)",
               padding: "24rpx",
               borderRadius: "8rpx",
             }}
@@ -229,7 +231,7 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
                 key={i}
                 style={{
                   fontSize: line.startsWith("——") ? "22rpx" : "26rpx",
-                  color: line.startsWith("——") ? "#7b8277" : "#3a3f36",
+                  color: line.startsWith("——") ? theme.inkTertiary : theme.inkSecondary,
                   lineHeight: "40rpx",
                   marginTop: line.startsWith("——") ? "20rpx" : "0",
                 }}
@@ -247,12 +249,13 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "12rpx",
-                border: "1rpx solid #db3356",
+                border: `1rpx solid ${theme.seal}`,
                 padding: "24rpx",
+                borderRadius: "8rpx",
               }}
             >
-              <IconCheck size={24} color="#db3356" />
-              <Text style={{ fontSize: "28rpx", color: "#db3356" }}>已确认，交给心栈执行</Text>
+              <IconCheck size={24} color={theme.seal} />
+              <Text style={{ fontSize: "28rpx", color: theme.seal }}>已确认，交给心栈执行</Text>
             </View>
           ) : (
             <View style={{ marginTop: "28rpx", display: "flex", gap: "16rpx" }}>
@@ -262,16 +265,16 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
                   flex: 1,
                   height: "80rpx",
                   lineHeight: "80rpx",
-                  background: "#131712",
-                  color: "#fdfdf9",
+                  background: theme.primary,
+                  color: theme.paper,
                   fontSize: "26rpx",
                   borderRadius: "8rpx",
                   margin: 0,
                 }}
               >
                 <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
-                  <IconSend size={22} />
-                  <Text style={{ color: "#fdfdf9", fontSize: "26rpx" }}>验收并执行</Text>
+                  <IconSend size={22} color={theme.paper} />
+                  <Text style={{ color: theme.paper, fontSize: "26rpx" }}>验收并执行</Text>
                 </View>
               </Button>
               <Button
@@ -280,17 +283,17 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
                   flex: 1,
                   height: "80rpx",
                   lineHeight: "80rpx",
-                  background: "#ffffff",
-                  color: "#3a3f36",
+                  background: theme.paper,
+                  color: theme.inkSecondary,
                   fontSize: "26rpx",
-                  border: "1rpx solid rgba(19,23,18,0.3)",
+                  border: `1rpx solid ${theme.border}`,
                   borderRadius: "8rpx",
                   margin: 0,
                 }}
               >
                 <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
-                  <IconPencil size={22} />
-                  <Text style={{ color: "#3a3f36", fontSize: "26rpx" }}>修改</Text>
+                  <IconPencil size={22} color={theme.inkSecondary} />
+                  <Text style={{ color: theme.inkSecondary, fontSize: "26rpx" }}>修改</Text>
                 </View>
               </Button>
               <Button
@@ -299,17 +302,17 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
                   flex: 1,
                   height: "80rpx",
                   lineHeight: "80rpx",
-                  background: "#ffffff",
-                  color: "#3a3f36",
+                  background: theme.paper,
+                  color: theme.inkSecondary,
                   fontSize: "26rpx",
-                  border: "1rpx solid rgba(19,23,18,0.3)",
+                  border: `1rpx solid ${theme.border}`,
                   borderRadius: "8rpx",
                   margin: 0,
                 }}
               >
                 <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
-                  <IconUserCheck size={22} />
-                  <Text style={{ color: "#3a3f36", fontSize: "26rpx" }}>我来接管</Text>
+                  <IconUserCheck size={22} color={theme.inkSecondary} />
+                  <Text style={{ color: theme.inkSecondary, fontSize: "26rpx" }}>我来接管</Text>
                 </View>
               </Button>
             </View>
@@ -320,7 +323,7 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
               style={{
                 textAlign: "center",
                 fontSize: "22rpx",
-                color: "#7b8277",
+                color: theme.inkTertiary,
               }}
             >
               好评会提升这类自动化的信任度，差评会让它更谨慎

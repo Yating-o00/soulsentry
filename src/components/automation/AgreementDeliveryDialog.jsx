@@ -1,11 +1,11 @@
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import AutomationResultPreview from "./AutomationResultPreview";
 import { AUTOMATION_TYPES } from "./automationConfig";
 
 // 约定卡片「验收」弹窗：直接呈现心栈做出的实质交付物（PPT/邮件/文档/账本…）
-export default function AgreementDeliveryDialog({ open, onOpenChange, execution }) {
+export default function AgreementDeliveryDialog({ open, onOpenChange, execution, onAccept, accepting }) {
   const result = execution?.automation_result;
   const cfg = AUTOMATION_TYPES[execution?.automation_type];
   const desc = execution?.automation_plan?.description || execution?.task_title || "";
@@ -44,6 +44,21 @@ export default function AgreementDeliveryDialog({ open, onOpenChange, execution 
             </p>
           )}
         </div>
+
+        {onAccept && !execution?.user_feedback?.rated_at && (
+          <div className="px-6 py-4 border-t border-slate-100 bg-white flex items-center justify-end gap-2">
+            <span className="text-[11.5px] text-slate-400 mr-auto">看过没问题就可以确认收下</span>
+            <button
+              type="button"
+              onClick={onAccept}
+              disabled={accepting}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-600 text-white text-[12.5px] font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60"
+            >
+              {accepting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              没问题，验收完成
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

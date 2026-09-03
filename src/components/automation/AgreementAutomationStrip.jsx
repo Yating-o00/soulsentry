@@ -28,6 +28,23 @@ export default function AgreementAutomationStrip({ task }) {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["task-automations", task.id] });
 
+  const acceptDelivery = async () => {
+    if (!reviewing) return;
+    setBusy(true);
+    try {
+      await base44.entities.TaskExecution.update(reviewing.id, {
+        user_feedback: { rating: 5, comment: "验收通过", rated_at: new Date().toISOString() },
+      });
+      toast.success("已验收完成");
+      setReviewing(null);
+    } catch (e) {
+      toast.error("验收失败，请稍后重试");
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
+
   const runExecution = async (execId) => {
     setBusy(true);
     try {
@@ -110,6 +127,8 @@ export default function AgreementAutomationStrip({ task }) {
         open={!!reviewing}
         onOpenChange={(v) => !v && setReviewing(null)}
         execution={reviewing}
+        onAccept={acceptDelivery}
+        accepting={busy}
       />
     </div>
   );
@@ -130,6 +149,13 @@ function ExecutionRow({ ex, busy, onRun, onReview }) {
   }
 
   if (ex.execution_status === "completed") {
+    if (ex.user_feedback?.rated_at) {
+      return (
+        <Row cls="bg-emerald-50 text-emerald-800 border-emerald-200" Icon={CheckCircle2}
+          text={`${typeLabel} · 完成${deliverable ? `：${deliverable}` : ""}`}
+          action={{ label: "查看", onClick: onReview }} />
+      );
+    }
     return (
       <Row cls="bg-emerald-50 text-emerald-800 border-emerald-200" Icon={CheckCircle2}
         text={`${typeLabel} · 已完成，请验收${deliverable ? `：${deliverable}` : ""}`}

@@ -22,7 +22,6 @@ import GlobalSearch from "../components/search/GlobalSearch";
 import SmartGroupSection from "../components/tasks/SmartGroupSection";
 import CombineParentDialog from "../components/tasks/CombineParentDialog";
 import AgreementCapture from "../components/agreements/AgreementCapture";
-import EvolutionSidebar from "../components/agreements/EvolutionSidebar";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -605,7 +604,6 @@ export default function Tasks() {
         </div>
 
         {/* Content Area */}
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-8 items-start">
         <div className="space-y-8 min-w-0">
 
           {/* Overview Mode: 4 Smart Groups */}
@@ -942,11 +940,6 @@ export default function Tasks() {
             })()}
           </div>
 
-        </div>
-
-        <div className="lg:sticky lg:top-24">
-          <EvolutionSidebar completedToday={stats.completedToday} pending={stats.pending} />
-        </div>
         </div>
       </main>
 

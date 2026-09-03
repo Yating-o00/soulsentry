@@ -222,7 +222,27 @@ function buildRuleAiNote(task, subtasks, autoExec) {
     return "这个约定优先级较高，建议先安排一个完整的时间段。";
   }
 
-  // 按分类给出有区分度的兜底，避免所有卡片都是同一句话
+  // 基于标题关键词的个性化兜底（在 Kimi 不可用时仍保持差异感）
+  const t = String(task.title || "");
+  const lower = t.toLowerCase();
+  if (/看书|阅读|读书|翻书/.test(t)) return "把书放在手边，翻开读一页，惯性会带你继续。";
+  if (/加油|汽油|油箱|油站/.test(t)) return "顺路时油量最低，顺手加满，明天会轻松很多。";
+  if (/飞|航班|机场|登机|行李|收拾/.test(t)) return "提前 2 小时到机场，行李可以昨晚就开始收拾。";
+  if (/删|清理|整理|扔掉|丢掉/.test(t)) return "清理掉不再需要的，清单和心情都会轻一点。";
+  if (/药|吃药|服药|维生素|胶囊/.test(t)) return "把药和一杯水放在显眼处，吃完再忙别的。";
+  if (/锻炼|跑步|健身|运动|瑜伽/.test(t)) return "换上鞋出门就是最难的一步，接下来身体自己会动。";
+  if (/早餐|午饭|午餐|晚饭|晚餐|吃饭|吃点/.test(t)) return "按时吃饭不是奖励，是今天继续运转的燃料。";
+  if (/开会|会议|zoom|对齐|评审/.test(t)) return "提前 5 分钟到场，把要点在脑海里过一遍。";
+  if (/邮件|email|发信/.test(t)) return "先写主题和第一句，后面的内容会自然流出来。";
+  if (/报告|方案|文档|ppt|演示/.test(t)) return "先列 3 个要点，比一次性写完整版更容易启动。";
+  if (/电话|打电话|爸妈|父母|家人/.test(t)) return "电话接通后先说一声'想你了'，比说什么都重要。";
+  if (/写|写作|码字|文章/.test(t)) return "先写 50 字烂开头，改比写容易。";
+  if (/买|采购|超市|菜|水果/.test(t)) return "列一个小清单，一次买齐，少跑一趟。";
+  if (/还|还款|账单|交费|缴费/.test(t)) return "顺手还掉，避免月底一起算账的压力。";
+  if (/睡|睡觉|早睡|休息|放松/.test(t)) return "今晚把屏幕放远 20 厘米，睡眠会自己来。";
+  if (/提醒|记得|别忘了|别忘记/.test(t)) return "把它放在视觉中心，完成后再把它移开。";
+
+  // 按分类给出有区分度的兜底
   const category = task.category || "other";
   if (category === "health") return "照顾好自己，是今天最重要的小事之一。";
   if (category === "work") return "把它放进高产时段，推进会比想象中快。";
@@ -284,7 +304,7 @@ async function buildAiNote(task, subtasks, autoExec) {
         responseJsonSchema: schema,
         temperature: 0.6
       }),
-      8000
+      15000
     );
     const note = result?.aiNote?.trim();
     console.log(`[buildAiNote] task=${task.id} note="${note?.slice(0, 80) || "(empty)"}"`);
@@ -2029,7 +2049,7 @@ functionsRouter.post("/:name", async (req, res) => {
       const result = {};
 
       // 限制并发，避免大量任务同时调用 Kimi 导致超时/限流
-      const poolLimit = 3;
+      const poolLimit = 2;
       const executing = [];
       const promises = [];
 

@@ -264,7 +264,7 @@ export default function EvolutionRail({ evo, onReview }) {
         {/* automation trust */}
         <View style={{ marginBottom: "28rpx" }}>
           <SectionLabel>
-            <IconBrain size={22} color={theme.water} />
+            <IconSprout size={22} color={theme.water} />
             <Text style={{ fontSize: "20rpx", color: theme.inkTertiary, letterSpacing: "4rpx" }}>自动化信任度</Text>
           </SectionLabel>
           {evo.trust && evo.trust.length > 0 ? (

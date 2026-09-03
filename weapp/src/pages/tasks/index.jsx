@@ -1,114 +1,166 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useCallback } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, ScrollView, Button, MovableArea, MovableView } from "@tarojs/components";
-import { get, post, del, patch } from "@/utils/api";
+import { View, Text, ScrollView } from "@tarojs/components";
+import { get, post, patch } from "@/utils/api";
 import SharePoster from "@/components/SharePoster";
+import Composer from "@/components/tasks/Composer";
+import PromiseCard from "@/components/tasks/PromiseCard";
+import { SnoozeSheet, ExecPreview } from "@/components/tasks/Sheets";
+import EvolutionRail, { computeEvolution } from "@/components/tasks/EvolutionRail";
 
-const statusMap = {
-  pending: { text: "待办", className: "ss-tag-warning" },
-  todo: { text: "待办", className: "ss-tag-warning" },
-  in_progress: { text: "进行中", className: "ss-tag-primary" },
-  completed: { text: "已完成", className: "ss-tag-success" },
-  done: { text: "已完成", className: "ss-tag-success" },
-  archived: { text: "已归档", className: "ss-tag-danger" }
-};
+const groups = [
+  { key: "now", zh: "现在能做", en: "NOW", hint: "长期计划里当下可推进的" },
+  { key: "due", zh: "即将截止", en: "DUE", hint: "24 小时内到期或已逾期" },
+  { key: "suggested", zh: "哨兵建议", en: "SUGGESTED", hint: "AI 已选好最佳时机" },
+  { key: "fixed", zh: "固定安排", en: "FIXED", hint: "周期与长期约定" },
+];
 
-const priorityMap = {
-  urgent: "紧急",
-  high: "高",
-  medium: "中",
-  low: "低"
-};
-
-const categoryMap = {
-  work: "工作",
-  personal: "个人",
-  health: "健康",
-  study: "学习",
-  family: "家庭",
-  shopping: "购物",
-  finance: "财务",
-  other: "其他"
-};
-
-function getActionWidthPx() {
-  try {
-    const sys = Taro.getSystemInfoSync();
-    return Math.round((360 / 750) * sys.windowWidth);
-  } catch (e) {
-    return 180;
-  }
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return "凌晨好";
+  if (h < 9) return "早上好";
+  if (h < 12) return "上午好";
+  if (h < 14) return "中午好";
+  if (h < 18) return "下午好";
+  return "晚上好";
 }
 
-function getScreenWidthPx() {
-  try {
-    return Taro.getSystemInfoSync().windowWidth;
-  } catch (e) {
-    return 375;
-  }
+const dateLabel = new Date().toLocaleDateString("zh-CN", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  weekday: "long",
+});
+
+function isTaskDone(task) {
+  return task.status === "completed" || task.status === "done" || task.status === "archived";
 }
 
 export default function Tasks() {
   const [tasks, setTasks] = useState([]);
+  const [executions, setExecutions] = useState([]);
   const [subtaskMap, setSubtaskMap] = useState({});
+  const [analysisMap, setAnalysisMap] = useState({});
   const [loading, setLoading] = useState(false);
-  const [offsets, setOffsets] = useState({});
-  const [expandedTaskId, setExpandedTaskId] = useState(null);
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [snoozeTask, setSnoozeTask] = useState(null);
+  const [reviewTask, setReviewTask] = useState(null);
   const [posterTask, setPosterTask] = useState(null);
   const [posterToken, setPosterToken] = useState("");
-  const moveXRef = useRef({});
+  const [toast, setToast] = useState(null);
 
-  const ACTION_WIDTH = useMemo(() => getActionWidthPx(), []);
-  const SCREEN_WIDTH = useMemo(() => getScreenWidthPx(), []);
-
-  const fetchSubtasksForTasks = async (taskList) => {
-    if (!Array.isArray(taskList) || taskList.length === 0) return;
-    try {
-      const results = await Promise.all(
-        taskList.map((t) => get("/tasks", { parent_task_id: t.id, limit: 200 }).catch(() => []))
-      );
-      const map = {};
-      taskList.forEach((t, i) => {
-        map[t.id] = Array.isArray(results[i]) ? results[i] : [];
-      });
-      setSubtaskMap(map);
-    } catch (err) {
-      // ignore
-    }
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2600);
   };
 
-  const fetchTasks = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await get("/tasks", { parent_task_id: "", sort: "-created_date", limit: 200 });
-      const top = Array.isArray(data) ? data : [];
-      setTasks(top);
-      setExpandedTaskId(null);
-      // 异步加载每个约定的子约定，避免 parent_task_id=all 兼容性问题导致列表空白
-      fetchSubtasksForTasks(top);
+      const [taskData, execData] = await Promise.all([
+        get("/tasks", { parent_task_id: "", sort: "-created_date", limit: 200 }),
+        get("/task-executions", { limit: 100 }),
+      ]);
+      const topTasks = Array.isArray(taskData) ? taskData : [];
+      const execList = Array.isArray(execData) ? execData : [];
+
+      const subResults = await Promise.all(
+        topTasks.map((t) => get("/tasks", { parent_task_id: t.id, limit: 200 }).catch(() => []))
+      );
+      const subMap = {};
+      topTasks.forEach((t, i) => {
+        subMap[t.id] = Array.isArray(subResults[i]) ? subResults[i] : [];
+      });
+
+      const analysisPayload = {
+        tasks: topTasks,
+        executions: execList,
+        subtasks: subMap,
+      };
+      const analysisResult = await post("/functions/analyzeTasks", analysisPayload).catch(() => ({}));
+
+      setTasks(topTasks);
+      setExecutions(execList);
+      setSubtaskMap(subMap);
+      setAnalysisMap(isPlainObject(analysisResult) ? analysisResult : {});
     } catch (err) {
       setTasks([]);
+      setExecutions([]);
       setSubtaskMap({});
+      setAnalysisMap({});
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useDidShow(() => {
-    fetchTasks();
+    fetchData();
   });
 
-  const goCreate = () => {
-    Taro.navigateTo({ url: "/pages/task-create/index" });
+  const grouped = useMemo(() => {
+    return groups.map((g) => ({
+      ...g,
+      items: tasks.filter((t) => {
+        if (isTaskDone(t)) return false;
+        const analysis = analysisMap[t.id] || {};
+        return (analysis.group || "suggested") === g.key;
+      }),
+    }));
+  }, [tasks, analysisMap]);
+
+  const doneItems = useMemo(() => tasks.filter((t) => isTaskDone(t)), [tasks]);
+  const pendingItems = useMemo(() => tasks.filter((t) => !isTaskDone(t)), [tasks]);
+
+  const evo = useMemo(() => computeEvolution(tasks, executions), [tasks, executions]);
+
+  const handleComplete = async (task) => {
+    const nextStatus = isTaskDone(task) ? "pending" : "completed";
+    try {
+      await patch(`/tasks/${task.id}`, { status: nextStatus });
+      showToast(nextStatus === "completed" ? "已盖章 · 如约而至" : "已取消完成");
+      fetchData();
+    } catch (err) {
+      // handled globally
+    }
   };
 
-  const goDetail = (id) => {
-    Taro.navigateTo({ url: `/pages/task-detail/index?id=${id}` });
+  const handleSubtaskToggle = async (sub) => {
+    const nextStatus = isTaskDone(sub) ? "pending" : "completed";
+    try {
+      await patch(`/tasks/${sub.id}`, { status: nextStatus });
+      setSubtaskMap((prev) => {
+        const next = { ...prev };
+        const list = next[sub.parent_task_id] || [];
+        next[sub.parent_task_id] = list.map((s) => (s.id === sub.id ? { ...s, status: nextStatus } : s));
+        return next;
+      });
+    } catch (err) {
+      // handled globally
+    }
   };
 
-  const goEdit = (id) => {
-    Taro.navigateTo({ url: `/pages/task-create/index?id=${id}&mode=edit` });
+  const handleSnoozeConfirm = async (_task, payload) => {
+    try {
+      await patch(`/tasks/${_task.id}`, {
+        end_time: payload.end_time,
+        reminder_time: payload.reminder_time,
+      });
+      setSnoozeTask(null);
+      showToast(`已顺延到${payload.when} · 「${payload.reason}」记入记忆`);
+      fetchData();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  const handleApprove = async (task) => {
+    try {
+      await patch(`/tasks/${task.id}`, { status: "completed" });
+      setReviewTask(null);
+      showToast("已验收 · 交给心栈执行，结果会回流到约定");
+      fetchData();
+    } catch (err) {
+      // handled globally
+    }
   };
 
   const handleShare = async (task) => {
@@ -126,364 +178,172 @@ export default function Tasks() {
     setPosterToken("");
   };
 
-  const handleDelete = async (id) => {
-    const res = await Taro.showModal({
-      title: "确认删除",
-      content: "删除后可在回收站找回，是否继续？"
-    });
-    if (!res.confirm) return;
-
-    try {
-      await del(`/tasks/${id}`);
-      Taro.showToast({ title: "已删除", icon: "success" });
-      fetchTasks();
-    } catch (err) {
-      // handled globally
-    }
-  };
-
-  const handleQuickComplete = async (task) => {
-    const nextStatus = task.status === "completed" || task.status === "done" ? "pending" : "completed";
-    try {
-      await patch(`/tasks/${task.id}`, { status: nextStatus });
-      fetchTasks();
-    } catch (err) {
-      // handled globally
-    }
-  };
-
-  const toggleExpand = (taskId) => {
-    setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
-  };
-
-  const handleSubtaskToggle = async (sub) => {
-    const nextStatus = sub.status === "completed" || sub.status === "done" ? "pending" : "completed";
-    try {
-      await patch(`/tasks/${sub.id}`, { status: nextStatus });
-      setSubtaskMap((prev) => {
-        const next = { ...prev };
-        const list = next[sub.parent_task_id] || [];
-        next[sub.parent_task_id] = list.map((s) =>
-          s.id === sub.id ? { ...s, status: nextStatus } : s
-        );
-        return next;
-      });
-    } catch (err) {
-      // handled globally
-    }
-  };
-
-  const getSubtasks = (taskId) => subtaskMap[taskId] || [];
-
-  const onChange = (taskId, e) => {
-    moveXRef.current[taskId] = e.detail.x;
-  };
-
-  const resetOffset = (taskId, value) => {
-    setOffsets((prev) => ({ ...prev, [taskId]: value + 0.001 }));
-    setTimeout(() => {
-      setOffsets((prev) => ({ ...prev, [taskId]: value }));
-    }, 0);
-  };
-
-  const onTouchEnd = (taskId) => {
-    const x = moveXRef.current[taskId] ?? -ACTION_WIDTH;
-    const task = tasks.find((t) => t.id === taskId);
-    const threshold = ACTION_WIDTH / 2;
-
-    // 右滑超过一半 -> 直接完成
-    if (x > -ACTION_WIDTH + threshold) {
-      if (task) handleQuickComplete(task);
-      resetOffset(taskId, -ACTION_WIDTH);
-      return;
-    }
-
-    // 左滑超过一半 -> 展开操作按钮
-    if (x < -ACTION_WIDTH - threshold) {
-      resetOffset(taskId, -ACTION_WIDTH * 2);
-      return;
-    }
-
-    // 回弹到中间
-    resetOffset(taskId, -ACTION_WIDTH);
-  };
-
-  const isTaskDone = (task) => task.status === "completed" || task.status === "done" || task.status === "archived";
-  const pendingTasks = tasks.filter((t) => !isTaskDone(t));
-  const completedTasks = tasks.filter((t) => isTaskDone(t));
-
-  const renderTaskItem = (task) => {
-    const status = statusMap[task.status] || statusMap.pending;
-    const done = isTaskDone(task);
-    const offset = offsets[task.id] ?? -ACTION_WIDTH;
-    const taskSubs = getSubtasks(task.id);
-    const isExpanded = expandedTaskId === task.id;
-
-    return (
-      <View key={task.id} style={{ marginBottom: "20rpx" }}>
-        <MovableArea
+  return (
+    <View className="ss-page" style={{ background: "#f5f6fa", minHeight: "100vh", padding: "24rpx", boxSizing: "border-box" }}>
+      <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
+        {/* header */}
+        <View
           style={{
-            width: `${SCREEN_WIDTH}px`,
-            height: "200rpx",
-            overflow: "hidden",
-            borderRadius: "16rpx"
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: "16rpx",
+            paddingBottom: "24rpx",
+            borderBottom: "1rpx solid rgba(19,23,18,0.15)",
           }}
         >
-          <MovableView
-            style={{
-              width: `${SCREEN_WIDTH + ACTION_WIDTH * 2}px`,
-              height: "100%",
-              display: "flex",
-              flexDirection: "row"
-            }}
-            direction="horizontal"
-            damping={50}
-            friction={4}
-            x={offset}
-            outOfBounds={false}
-            onChange={(e) => onChange(task.id, e)}
-            onTouchEnd={() => onTouchEnd(task.id)}
-          >
-            {/* 左侧：右滑直接完成 */}
-            <View
-              style={{
-                width: `${ACTION_WIDTH}px`,
-                height: "100%",
-                background: done ? "#9e9e9e" : "#4caf50",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                position: "relative"
-              }}
-            >
-              <Text style={{ color: "#fff", fontSize: "28rpx", fontWeight: 600 }}>
-                {done ? "取消完成" : "完成"}
-              </Text>
-              <View
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "20%",
-                  bottom: "20%",
-                  width: "2rpx",
-                  background: "rgba(255,255,255,0.6)"
-                }}
-              />
+          <View style={{ display: "flex", alignItems: "baseline", gap: "16rpx" }}>
+            <Text style={{ fontSize: "44rpx", fontWeight: 900, color: "#384877", letterSpacing: "4rpx" }}>心栈</Text>
+            <Text style={{ fontSize: "22rpx", color: "#7b8277", letterSpacing: "6rpx" }}>SOULSENTRY</Text>
+          </View>
+          <View style={{ display: "flex", alignItems: "center", gap: "20rpx" }}>
+            <View style={{ display: "flex", alignItems: "center", gap: "8rpx" }}>
+              <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: "#db3356" }} />
+              <Text style={{ fontSize: "20rpx", color: "#3a3f36" }}>哨兵守护中 · 一切安好</Text>
             </View>
+            <Text style={{ fontSize: "20rpx", color: "#7b8277" }}>AI 点数 1,240</Text>
+          </View>
+        </View>
 
-            {/* 中间：卡片内容 */}
-            <View
-              style={{
-                width: `${SCREEN_WIDTH}px`,
-                height: "100%",
-                background: "#fff",
-                padding: "24rpx",
-                boxSizing: "border-box",
-                boxShadow: "0 2rpx 12rpx rgba(0, 0, 0, 0.04)",
-                borderRadius: "16rpx"
-              }}
-              onClick={() => goEdit(task.id)}
-            >
-              <View className="ss-row">
-                <Text style={{ fontSize: "32rpx", fontWeight: 600, color: "#333", flex: 1, textDecoration: done ? "line-through" : "none" }}>
-                  {task.title}
+        {/* greeting + composer */}
+        <View style={{ paddingTop: "40rpx" }}>
+          <Text style={{ fontSize: "20rpx", color: "#7b8277", letterSpacing: "6rpx" }}>{dateLabel}</Text>
+          <Text style={{ marginTop: "16rpx", fontSize: "52rpx", fontWeight: 700, color: "#131712", lineHeight: "72rpx" }}>
+            {greeting()}。
+          </Text>
+          <Text style={{ fontSize: "52rpx", fontWeight: 700, color: "#131712", lineHeight: "72rpx" }}>
+            你的点滴，都是最重要的事。
+          </Text>
+          <View style={{ marginTop: "32rpx" }}>
+            <Composer />
+          </View>
+        </View>
+
+        {/* groups */}
+        <View style={{ marginTop: "48rpx" }}>
+          {grouped.map((g) => (
+            <View key={g.key} style={{ marginBottom: "48rpx" }}>
+              <View style={{ display: "flex", alignItems: "baseline", gap: "16rpx", marginBottom: "24rpx" }}>
+                <Text style={{ fontSize: "20rpx", color: "#7b8277", letterSpacing: "8rpx" }}>{g.en}</Text>
+                <Text style={{ fontSize: "34rpx", fontWeight: 700, color: "#131712" }}>{g.zh}</Text>
+                <Text style={{ fontSize: "22rpx", color: "#7b8277" }}>
+                  {g.items.length} 个约定 · {g.hint}
                 </Text>
-                <View style={{ display: "flex", alignItems: "center" }}>
-                  <Text className={`ss-tag ${status.className}`} style={{ marginRight: "12rpx" }}>
-                    {status.text}
-                  </Text>
+                <View style={{ flex: 1, height: "1rpx", background: "rgba(19,23,18,0.25)" }} />
+              </View>
+
+              {g.items.length === 0 ? (
+                <View
+                  style={{
+                    border: "1rpx dashed rgba(19,23,18,0.25)",
+                    padding: "28rpx",
+                  }}
+                >
+                  <Text style={{ fontSize: "26rpx", color: "#7b8277" }}>暂无 —— 有约定到达这个阶段时会出现在这里</Text>
+                </View>
+              ) : (
+                <View style={{ position: "relative", paddingLeft: "20rpx" }}>
                   <View
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleExpand(task.id);
-                    }}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      minWidth: "48rpx",
-                      height: "36rpx",
-                      padding: "0 12rpx",
-                      background: "rgba(56,72,119,0.08)",
-                      borderRadius: "18rpx"
+                      position: "absolute",
+                      left: 0,
+                      top: "12rpx",
+                      bottom: "12rpx",
+                      width: 0,
+                      borderLeft: "1rpx dashed rgba(19,23,18,0.25)",
                     }}
-                  >
-                    <Text style={{ color: "#384877", fontSize: "22rpx" }}>
-                      {isExpanded ? "−" : taskSubs.length > 0 ? `+${taskSubs.length}` : "+"}
-                    </Text>
-                  </View>
+                  />
+                  {g.items.map((task, i) => (
+                    <PromiseCard
+                      key={task.id}
+                      task={task}
+                      analysis={analysisMap[task.id] || {}}
+                      subtasks={subtaskMap[task.id] || []}
+                      index={i}
+                      onComplete={handleComplete}
+                      onSnooze={setSnoozeTask}
+                      onReview={setReviewTask}
+                      onSubtaskToggle={handleSubtaskToggle}
+                      onShare={handleShare}
+                    />
+                  ))}
                 </View>
-              </View>
-              <View style={{ marginTop: "12rpx" }}>
-                {task.priority && (
-                  <Text className="ss-tag ss-tag-primary">优先级：{priorityMap[task.priority] || task.priority}</Text>
-                )}
-                {task.category && (
-                  <Text className="ss-tag ss-tag-primary">{categoryMap[task.category] || task.category}</Text>
-                )}
-                {task.end_time && (
-                  <Text className="ss-tag ss-tag-warning">截止 {formatDate(task.end_time)}</Text>
-                )}
-              </View>
-              {task.description ? (
-                <View style={{ marginTop: "12rpx" }}>
-                  <Text className="ss-muted">{task.description.slice(0, 60)}</Text>
-                </View>
-              ) : null}
+              )}
             </View>
+          ))}
 
-            {/* 右侧：左滑出现的操作按钮 */}
-            <View
-              style={{
-                width: `${ACTION_WIDTH}px`,
-                height: "100%",
-                display: "flex",
-                flexDirection: "row"
-              }}
-            >
-              <View
+          {/* archive line */}
+          {doneItems.length > 0 && (
+            <View style={{ marginBottom: "40rpx" }}>
+              <Text
                 style={{
-                  flex: 1,
-                  background: "#4a5d8f",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                  fontSize: "28rpx"
+                  textAlign: "center",
+                  fontSize: "20rpx",
+                  color: "#7b8277",
+                  letterSpacing: "4rpx",
                 }}
-                onClick={() => handleShare(task)}
               >
-                分享
-              </View>
-              <View
-                style={{
-                  flex: 1,
-                  background: "#e53935",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                  fontSize: "28rpx"
-                }}
-                onClick={() => handleDelete(task.id)}
-              >
-                删除
-              </View>
+                —— 已完成的约定会盖印归档，成为你的兑现记录 ——
+              </Text>
             </View>
-          </MovableView>
-        </MovableArea>
+          )}
+        </View>
 
-        {isExpanded && (
-          <View
+        {/* evolution rail */}
+        <EvolutionRail
+          evo={evo}
+          onReview={() => showToast("晚间复盘功能即将上线")}
+        />
+
+        {/* footer brand line */}
+        <View style={{ padding: "48rpx 0" }}>
+          <Text
             style={{
-              marginTop: "8rpx",
-              marginLeft: "36rpx",
-              marginRight: "36rpx"
+              textAlign: "center",
+              fontSize: "20rpx",
+              color: "#7b8277",
+              letterSpacing: "6rpx",
             }}
           >
-            {taskSubs.length === 0 ? (
-              <Text className="ss-muted" style={{ fontSize: "24rpx", padding: "8rpx 0" }}>暂无子约定</Text>
-            ) : (
-              taskSubs.map((sub) => {
-                const subDone = sub.status === "completed" || sub.status === "done";
-                return (
-                  <View
-                    key={sub.id}
-                    onClick={() => handleSubtaskToggle(sub)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      padding: "8rpx 0"
-                    }}
-                  >
-                    <Text
-                      style={{
-                        width: "28rpx",
-                        height: "28rpx",
-                        borderRadius: "50%",
-                        border: `2rpx solid ${subDone ? "#999" : "#384877"}`,
-                        background: subDone ? "#999" : "transparent",
-                        color: "#fff",
-                        textAlign: "center",
-                        lineHeight: "26rpx",
-                        marginRight: "10rpx",
-                        fontSize: "18rpx"
-                      }}
-                    >
-                      {subDone ? "✓" : ""}
-                    </Text>
-                    <Text
-                      style={{
-                        flex: 1,
-                        fontSize: "26rpx",
-                        color: subDone ? "#999" : "#666",
-                        textDecoration: subDone ? "line-through" : "none"
-                      }}
-                    >
-                      {sub.title}
-                    </Text>
-                  </View>
-                );
-              })
-            )}
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  return (
-    <View className="ss-page">
-      <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
-        {loading && tasks.length === 0 && (
-          <View className="ss-empty">加载中...</View>
-        )}
-
-        {!loading && tasks.length === 0 && (
-          <View className="ss-empty">暂无约定，点击右下角添加</View>
-        )}
-
-        {pendingTasks.map((task) => renderTaskItem(task))}
-
-        {completedTasks.length > 0 && (
-          <View style={{ marginTop: "32rpx", marginBottom: "20rpx" }}>
-            <View
-              onClick={() => setShowCompleted((prev) => !prev)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "20rpx 24rpx",
-                background: "#f5f6fa",
-                borderRadius: "16rpx"
-              }}
-            >
-              <Text style={{ fontSize: "28rpx", fontWeight: 600, color: "#666" }}>
-                已完成约定
-              </Text>
-              <View style={{ display: "flex", alignItems: "center" }}>
-                <Text style={{ fontSize: "24rpx", color: "#999", marginRight: "8rpx" }}>
-                  {completedTasks.length} 个
-                </Text>
-                <Text style={{ fontSize: "28rpx", color: "#384877" }}>
-                  {showCompleted ? "−" : "+"}
-                </Text>
-              </View>
-            </View>
-
-            {showCompleted && (
-              <View style={{ marginTop: "16rpx" }}>
-                {completedTasks.map((task) => renderTaskItem(task))}
-              </View>
-            )}
-          </View>
-        )}
+            坚定守护 · 适时轻唤 · 心栈 SOULSENTRY
+          </Text>
+        </View>
 
         <View style={{ height: "160rpx" }} />
       </ScrollView>
 
-      <Button className="ss-fab" onClick={goCreate}>+</Button>
+      {/* sheets */}
+      {snoozeTask && (
+        <SnoozeSheet task={snoozeTask} onClose={() => setSnoozeTask(null)} onConfirm={handleSnoozeConfirm} />
+      )}
+      {reviewTask && analysisMap[reviewTask.id]?.autoExec && (
+        <ExecPreview
+          task={reviewTask}
+          analysis={analysisMap[reviewTask.id]}
+          onClose={() => setReviewTask(null)}
+          onApprove={handleApprove}
+        />
+      )}
 
+      {/* toast */}
+      {toast && (
+        <View
+          style={{
+            position: "fixed",
+            bottom: "48rpx",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 200,
+            background: "#131712",
+            padding: "16rpx 32rpx",
+            borderRadius: "8rpx",
+          }}
+        >
+          <Text style={{ fontSize: "26rpx", color: "#fdfdf9" }}>{toast}</Text>
+        </View>
+      )}
+
+      {/* share poster */}
       <SharePoster
         visible={Boolean(posterTask)}
         onClose={closePoster}
@@ -499,16 +359,13 @@ export default function Tasks() {
   );
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function formatDateTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-function formatDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return `${d.getMonth() + 1}/${d.getDate()}`;
 }

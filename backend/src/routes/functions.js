@@ -56,6 +56,206 @@ function getTaskLocationReminder(task) {
   return isPlainObject(reminder) ? reminder : null;
 }
 
+// ===== 约定列表智能分析辅助函数 =====
+function sameLocalDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function addLocalDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function formatHm(date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function buildTaskTimeLabel(task, now = new Date()) {
+  const end = task.end_time || task.due_at || task.reminder_time;
+  if (!end) return "未安排时间";
+  const d = new Date(end);
+  if (isNaN(d.getTime())) return String(end);
+
+  const done = task.status === "completed" || task.status === "done" || task.status === "archived";
+  const diffMs = d.getTime() - now.getTime();
+  const diffH = diffMs / (1000 * 60 * 60);
+
+  if (!done && diffMs < 0) {
+    const days = Math.max(1, Math.ceil(-diffMs / (1000 * 60 * 60 * 24)));
+    return `已逾期 ${days} 天`;
+  }
+
+  if (sameLocalDay(d, now)) return `今天 ${formatHm(d)}`;
+  if (sameLocalDay(d, addLocalDays(now, 1))) return `明天 ${formatHm(d)}`;
+  if (sameLocalDay(d, addLocalDays(now, 2))) return `后天 ${formatHm(d)}`;
+  return `${d.getMonth() + 1}/${d.getDate()} ${formatHm(d)}`;
+}
+
+function getTaskRecurringLabel(task) {
+  const tags = Array.isArray(task.tags) ? task.tags : [];
+  const meta = isPlainObject(task.metadata) ? task.metadata : {};
+  const extra = isPlainObject(meta._extraFields) ? meta._extraFields : {};
+  if (extra.recurring || meta.recurring) return String(extra.recurring || meta.recurring);
+  const map = { "每天": "每天", "每周": "每周", "每月": "每月" };
+  for (const k of Object.keys(map)) {
+    if (tags.includes(k) || task.title?.includes(k)) return map[k];
+  }
+  if (/每天|每晚|每周|每月/.test(task.title || "")) {
+    const m = (task.title || "").match(/每[天周月晚]/);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+function getTaskLocation(task) {
+  const reminder = getTaskLocationReminder(task);
+  if (reminder?.location_name) return reminder.location_name;
+  const meta = isPlainObject(task.metadata) ? task.metadata : {};
+  const extra = isPlainObject(meta._extraFields) ? meta._extraFields : {};
+  if (extra.location_name || meta.location_name) return String(extra.location_name || meta.location_name);
+  if (task.location) return String(task.location);
+  return null;
+}
+
+function buildAutoExec(task, executions) {
+  const done = task.status === "completed" || task.status === "done" || task.status === "archived";
+  if (done) return undefined;
+  const list = (executions || []).filter(
+    (e) => e.task_id === task.id && e.automation_type && e.automation_type !== "none"
+  );
+  if (list.length === 0) return undefined;
+  list.sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
+  const exec = list[0];
+  const status = String(exec.execution_status || "").toLowerCase();
+  const kindLabelMap = {
+    email: "邮件草稿",
+    research: "联网调研",
+    slides: "演示稿",
+    ledger: "整理账本",
+    file: "文件整理",
+    calendar: "日程同步",
+    none: "自动执行"
+  };
+  const kind = exec.automation_type || "none";
+  const label = kindLabelMap[kind] || "自动执行";
+
+  let trust = exec.requires_approval ? 78 : 92;
+  let trustLevel = exec.requires_approval ? "确认后执行" : "自动执行";
+  let state = "ready";
+  if (status === "running" || status === "in_progress") {
+    state = "running";
+  } else if (status === "error" || status === "failed" || exec.error_message) {
+    trust = 45;
+    trustLevel = "人工接管";
+    state = "manual";
+  }
+
+  const plan = isPlainObject(exec.automation_plan) ? exec.automation_plan : {};
+  const result = isPlainObject(exec.automation_result) ? exec.automation_result : {};
+  const previewTitle = `${label} · ${state === "ready" ? "已备好，待你验收" : state === "running" ? "AI 生成中" : "信任度不足，已转人工"}`;
+  const previewBody = [];
+  if (Array.isArray(plan.previewBody) && plan.previewBody.length > 0) {
+    previewBody.push(...plan.previewBody);
+  } else if (Array.isArray(result.previewBody) && result.previewBody.length > 0) {
+    previewBody.push(...result.previewBody);
+  } else if (Array.isArray(plan.steps) && plan.steps.length > 0) {
+    previewBody.push(...plan.steps.map((s) => (typeof s === "string" ? s : s.text || "")).filter(Boolean));
+  } else if (result.summary) {
+    previewBody.push(String(result.summary));
+  } else {
+    previewBody.push("心栈已根据约定内容生成执行方案，验收后即可自动完成。");
+  }
+
+  return {
+    kind,
+    label,
+    state,
+    trust,
+    trustLevel,
+    previewTitle,
+    previewBody,
+    executionId: exec.id
+  };
+}
+
+function buildAiNote(task, subtasks, autoExec) {
+  const subs = Array.isArray(subtasks) ? subtasks : [];
+  const doneCount = subs.filter((s) => s.status === "completed" || s.status === "done").length;
+  const overdue = task.timeLabel?.includes("逾期");
+  const location = getTaskLocation(task);
+
+  if (autoExec && autoExec.state === "ready") {
+    return "机器可完成的部分已预执行，你只需验收。";
+  }
+  if (autoExec && autoExec.state === "running") {
+    return `${autoExec.label}正在生成中，完成后会提醒你验收。`;
+  }
+  if (autoExec && autoExec.state === "manual") {
+    return "这条自动执行之前出过问题，心栈建议你来接管。";
+  }
+  if (subs.length > 0) {
+    if (doneCount === subs.length) {
+      return "子约定都已完成，可以一键完成这个约定了。";
+    }
+    return `已完成 ${doneCount}/${subs.length} 步，下一步：${subs.find((s) => s.status !== "completed" && s.status !== "done")?.title || "继续推进"}。`;
+  }
+  if (overdue) {
+    const days = task.timeLabel?.match(/(\d+)/)?.[1] || "几";
+    return `已等你 ${days} 天了。现在捞回它，比重新启动要容易得多。`;
+  }
+  if (location) {
+    return `到达 ${location} 附近时可以顺手处理这个约定。`;
+  }
+  if (task.priority === "urgent" || task.priority === "high") {
+    const hour = new Date().getHours();
+    if (hour >= 9 && hour < 12) return "上午是你的高产时段，这种高优先级约定通常推进得最快。";
+    return "这个约定优先级较高，建议先安排一个完整的时间段。";
+  }
+  return undefined;
+}
+
+function analyzeTask(task, executions, subtasks) {
+  const now = new Date();
+  const timeLabel = buildTaskTimeLabel(task, now);
+  const recurring = getTaskRecurringLabel(task);
+  const location = getTaskLocation(task);
+  const autoExec = buildAutoExec(task, executions);
+  const aiNote = buildAiNote(task, subtasks, autoExec);
+  const subPromises = (subtasks || []).map((s) => ({
+    id: s.id,
+    title: s.title,
+    done: s.status === "completed" || s.status === "done"
+  }));
+
+  const end = task.end_time || task.due_at;
+  const overdue = end && new Date(end).getTime() < now.getTime() && !["completed", "done", "archived"].includes(task.status);
+  const within24h = end && !overdue && new Date(end).getTime() - now.getTime() <= 24 * 60 * 60 * 1000;
+
+  let group = "suggested";
+  if (recurring) {
+    group = "fixed";
+  } else if (overdue || within24h) {
+    group = "due";
+  } else if (autoExec || location || (task.priority === "urgent" || task.priority === "high")) {
+    group = "now";
+  }
+
+  const priorityLabelMap = { urgent: "紧急", high: "高", medium: "中", low: "低" };
+
+  return {
+    group,
+    timeLabel,
+    overdue,
+    recurring,
+    location,
+    aiNote,
+    autoExec,
+    subPromises,
+    priorityLabel: priorityLabelMap[task.priority] || task.priority || "中"
+  };
+}
+
 const FORGETTING_CURVE = [
   { days: 1, retention: 44 },
   { days: 2, retention: 28 },
@@ -1739,6 +1939,18 @@ functionsRouter.post("/:name", async (req, res) => {
         });
         throw error;
       }
+    }
+
+    if (name === "analyzeTasks") {
+      const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+      const executions = Array.isArray(payload.executions) ? payload.executions : [];
+      const subtaskMap = isPlainObject(payload.subtasks) ? payload.subtasks : {};
+      const result = {};
+      for (const task of tasks) {
+        if (!task?.id) continue;
+        result[task.id] = analyzeTask(task, executions, subtaskMap[task.id] || []);
+      }
+      return res.json(result);
     }
 
     if (name === "createStripeCheckout") {

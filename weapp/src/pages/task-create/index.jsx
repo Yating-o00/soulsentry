@@ -148,6 +148,8 @@ export default function TaskCreate() {
       setEditId(id);
       setIsEdit(true);
       loadTask(id);
+    } else if (params.title) {
+      setTitle(decodeURIComponent(params.title));
     }
   }, []);
 

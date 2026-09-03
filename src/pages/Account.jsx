@@ -16,6 +16,7 @@ import { SUBSCRIPTION_PLANS } from "@/components/credits/creditConfig";
 import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
 import { useQuery } from "@tanstack/react-query";
 import ProductInsights from "@/components/memory/ProductInsights";
+import EvolutionInsightBlocks from "@/components/insights/EvolutionInsightBlocks";
 import PersonalProfileCard from "@/components/insights/PersonalProfileCard";
 import AlertChannelSettings from "@/components/account/AlertChannelSettings";
 import PWAInstallGuide from "@/components/account/PWAInstallGuide";
@@ -489,6 +490,7 @@ export default function Account() {
           </CardHeader>
           <CardContent className="pt-6 space-y-5">
             <PersonalProfileCard />
+            <EvolutionInsightBlocks />
             <ProductInsights
               tasks={tasks}
               notes={notes}

@@ -276,6 +276,7 @@ async function buildAiNote(task, subtasks, autoExec) {
 6. 直接返回 JSON 对象 {"aiNote": "..."}，不要 markdown 或解释。`;
 
   try {
+    console.log(`[buildAiNote] task=${task.id} title="${task.title}" calling Kimi`);
     const result = await withTimeout(
       invokeKimiText({
         prompt,
@@ -286,9 +287,10 @@ async function buildAiNote(task, subtasks, autoExec) {
       8000
     );
     const note = result?.aiNote?.trim();
+    console.log(`[buildAiNote] task=${task.id} note="${note?.slice(0, 80) || "(empty)"}"`);
     return note || buildRuleAiNote(task, subtasks, autoExec);
   } catch (err) {
-    console.error("[buildAiNote] Kimi failed, fallback to rule", err?.message || err);
+    console.error(`[buildAiNote] task=${task.id} Kimi failed:`, err?.message || err);
     return buildRuleAiNote(task, subtasks, autoExec);
   }
 }
@@ -2023,6 +2025,7 @@ functionsRouter.post("/:name", async (req, res) => {
       const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
       const executions = Array.isArray(payload.executions) ? payload.executions : [];
       const subtaskMap = isPlainObject(payload.subtasks) ? payload.subtasks : {};
+      console.log(`[analyzeTasks] received tasks=${tasks.length} executions=${executions.length}`);
       const result = {};
 
       // 限制并发，避免大量任务同时调用 Kimi 导致超时/限流

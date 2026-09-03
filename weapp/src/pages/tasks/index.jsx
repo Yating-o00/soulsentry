@@ -229,16 +229,47 @@ export default function Tasks() {
           <Text style={{ marginTop: "16rpx", fontSize: "52rpx", fontWeight: 700, color: theme.primary, lineHeight: "72rpx" }}>
             {greeting()}。
           </Text>
-          <Text style={{ fontSize: "52rpx", fontWeight: 700, color: theme.ink, lineHeight: "72rpx" }}>
+          <Text
+            style={{
+              marginTop: "24rpx",
+              fontSize: "40rpx",
+              fontWeight: 500,
+              color: theme.inkSecondary,
+              lineHeight: "56rpx"
+            }}
+          >
             你的点滴，都是最重要的事。
           </Text>
-          <View style={{ marginTop: "32rpx" }}>
+
+          <View
+            style={{
+              marginTop: "40rpx",
+              padding: "28rpx",
+              borderRadius: "16rpx",
+              background: theme.card,
+              border: `1rpx solid ${theme.border}`
+            }}
+          >
             <Composer />
           </View>
         </View>
 
         {/* groups */}
         <View style={{ marginTop: "48rpx" }}>
+          <View
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12rpx",
+              marginBottom: "24rpx"
+            }}
+          >
+            <View style={{ width: "8rpx", height: "28rpx", background: theme.primary, borderRadius: "4rpx" }} />
+            <Text style={{ fontSize: "32rpx", fontWeight: 700, color: theme.primary }}>我的约定</Text>
+            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>{pendingItems.length} 个进行中</Text>
+            <View style={{ flex: 1, height: "1rpx", background: theme.border }} />
+          </View>
+
           {grouped.map((g) => (
             <View key={g.key} style={{ marginBottom: "48rpx" }}>
               <View style={{ display: "flex", alignItems: "baseline", gap: "16rpx", marginBottom: "24rpx" }}>

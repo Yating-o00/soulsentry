@@ -17,10 +17,10 @@ async function callKimi(base44, prompt, response_json_schema, system_prompt, fil
     const wantsJson = !!response_json_schema;
     let sys = system_prompt || "你是一位专业、贴心的 AI 助手。";
     if (wantsJson) sys += `\n\n⚠️ 你必须返回一个【符合下方 Schema 的 JSON 实例对象】，而不是返回 Schema 本身。\n- 正确：直接输出 schema 中 properties 描述的真实字段及其真实取值，例如 schema 中要求 {subject,body} 就输出 {"subject":"...","body":"..."}。\n- 禁止：① 不要输出 {"type":"object","properties":{...}} 这种 schema 元描述；② 不要画蛇添足把所有字段塞到额外的 wrapper 对象里（如 {"plan":{...}}、{"data":{...}}），除非 schema 明确要求这种嵌套。\n\nSchema 参考：\n${JSON.stringify(response_json_schema)}`;
-    const models = ["kimi-latest", "kimi-k2-0905-preview", "moonshot-v1-auto"];
+    const models = ["kimi-k2.6", "kimi-k3", "kimi-latest"];
     let resp = null, lastErr = '', lastStatus = 0;
     for (const m of models) {
-      const body = { model: m, messages: [{ role: "system", content: sys }, { role: "user", content: prompt }], temperature: 0.4 };
+      const body = { model: m, messages: [{ role: "system", content: sys }, { role: "user", content: prompt }], temperature: 1 };
       if (wantsJson) body.response_format = { type: "json_object" };
       try {
         resp = await fetch("https://api.moonshot.ai/v1/chat/completions", {

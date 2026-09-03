@@ -17,7 +17,7 @@ async function callKimi(base44, prompt, response_json_schema, system_prompt, fil
     const wantsJson = !!response_json_schema;
     let sys = system_prompt || "你是一位专业、贴心的 AI 助手。";
     if (wantsJson) sys += `\n\n⚠️ 你必须返回一个【符合下方 Schema 的 JSON 实例对象】，而不是返回 Schema 本身。\n- 正确：直接输出 schema 中 properties 描述的真实字段及其真实取值，例如 schema 中要求 {subject,body} 就输出 {"subject":"...","body":"..."}。\n- 禁止：① 不要输出 {"type":"object","properties":{...}} 这种 schema 元描述；② 不要画蛇添足把所有字段塞到额外的 wrapper 对象里（如 {"plan":{...}}、{"data":{...}}），除非 schema 明确要求这种嵌套。\n\nSchema 参考：\n${JSON.stringify(response_json_schema)}`;
-    const models = ["kimi-k2.6", "kimi-k3", "kimi-latest"];
+    const models = ["kimi-k2.6", "kimi-k3"];
     let resp = null, lastErr = '', lastStatus = 0;
     for (const m of models) {
       const body = { model: m, messages: [{ role: "system", content: sys }, { role: "user", content: prompt }], temperature: 1 };
@@ -298,19 +298,46 @@ const PLAN_SCHEMA = {
       },
       required: ["title", "description", "steps"]
     },
-    requires_approval: { type: "boolean", description: "高风险操作（发邮件/删文件）应为 true" }
+    deliverable: { type: "string", description: "一句话说明这次将交付给用户【什么产物】，如「一封待你确认的催款邮件草稿」「一份三章节的市场调研报告」；automation_type=none 时写这条约定为什么必须人来做" },
+    human_parts: { type: "array", items: { type: "string" }, description: "这条约定里机器做不了、仍需用户亲自完成的部分（0~3 条，简短）" },
+    needs_from_user: { type: "array", items: { type: "string" }, description: "执行前必须由用户提供或授权的信息/权限，如「收件人邮箱」「发信授权」。没有则空数组" },
+    requires_approval: { type: "boolean", description: "只要 needs_from_user 非空，或涉及对外发送/删除等不可逆操作，必须为 true" }
   },
   required: ["automation_type", "plan", "requires_approval"]
 };
 
+// 读取这条约定的真实上下文（描述、子约定、时间），确保产物与约定内容强相关
+async function buildAgreementContext(base44, exec) {
+  if (!exec?.task_id) return { text: '', bound: false };
+  try {
+    const task = await base44.entities.Task.get(exec.task_id);
+    if (!task) return { text: '', bound: false };
+    let subs = [];
+    try {
+      subs = await base44.entities.Task.filter({ parent_task_id: task.id }, '-created_date', 20);
+    } catch (_) { /* ignore */ }
+    const lines = [
+      `标题：${task.title}`,
+      task.description ? `说明：${task.description}` : '',
+      task.category ? `分类：${task.category}` : '',
+      task.reminder_time ? `时间：${new Date(task.reminder_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}` : '',
+      subs.length ? `已拆出的子约定：\n${subs.map((s) => `- ${s.title}${s.status === 'completed' ? '（已完成）' : ''}`).join('\n')}` : '',
+    ].filter(Boolean);
+    return { text: `\n\n=== 这条约定的完整上下文（产物必须紧扣这些内容，禁止另起话题）===\n${lines.join('\n')}\n=== 上下文结束 ===\n`, bound: true };
+  } catch (_) {
+    return { text: '', bound: false };
+  }
+}
+
 async function generatePlan(base44, exec, attachmentCtx) {
   const userInput = exec.original_input || exec.task_title;
+  const agreementCtx = await buildAgreementContext(base44, exec);
   const fileHint = attachmentCtx?.hasFiles
     ? `\n\n用户随指令上传了参考文件，方案设计时务必考虑如何利用这些文件内容。${attachmentCtx.text}`
     : '';
   const planRes = await callKimi(
     base44,
-    `用户希望心栈自动帮他完成的事项：${userInput}${fileHint}\n\n请分析这是哪种自动执行类型，并给出清晰的执行方案。\n\n【automation_type 选择铁律】\n- summary_note：基于附件内容生成会议纪要/笔记/总结/复盘/读书笔记/访谈记录等"内容产出型"任务（有附件 + 要产出文档默认走这里）。\n- office_doc：生成提案、方案、合同、报告、说明书等结构化办公文档。\n- ppt_doc：生成演示稿/幻灯片/PPT。\n- web_research：联网调研/搜集资料/对比分析。\n- email_draft：写邮件/发邮件（requires_approval=true）。\n- file_organize：**只**用于"对现有文件批量重命名/归档分类"——例如"把我所有发票按月份归档"。⚠️ 当用户带着附件要求"整理成XX/写成XX/转换成XX"时，这是【内容生产】不是【文件整理】，必须选 summary_note 或 office_doc，禁止选 file_organize。\n- ledger_organize：把混乱的记账文本（语音转写、聊天碎片、银行流水、随手记账）整理成结构化账本。任何同时包含【金额数字（如 12 / 9.9 / ¥58 / 块/元）】和【消费/收入描述（如 早饭/咖啡/工资/转给）】的指令，都应该选这个，而不是 summary_note。\n- calendar_event：创建日历事件/约定。\n\n注意：发送邮件/删除文件等不可逆操作 requires_approval 必须为 true。`,
+    `用户希望心栈自动帮他完成的事项：${userInput}${agreementCtx.text}${fileHint}\n\n请先判断：这条约定里【机器现在就能兑现的部分】是什么？产出物必须紧扣上面的约定内容与说明，禁止跑题、禁止只做一个泛泛的通用模板。${agreementCtx.bound ? '\n\n⚠️ 这条约定已经存在于用户的约定列表里，所以【禁止选 calendar_event】（那只会重复创建一条一样的约定）。如果这条约定只能靠人亲自去做（如出差、见面、体检、取快递、锻炼），automation_type 必须为 none，并在 deliverable 里说明原因。' : ''}\n\n再判断这是哪种自动执行类型，并给出清晰的执行方案。\n\n【automation_type 选择铁律】\n- summary_note：基于附件内容生成会议纪要/笔记/总结/复盘/读书笔记/访谈记录等"内容产出型"任务（有附件 + 要产出文档默认走这里）。\n- office_doc：生成提案、方案、合同、报告、说明书等结构化办公文档。\n- ppt_doc：生成演示稿/幻灯片/PPT。\n- web_research：联网调研/搜集资料/对比分析。\n- email_draft：写邮件/发邮件（requires_approval=true）。\n- file_organize：**只**用于"对现有文件批量重命名/归档分类"——例如"把我所有发票按月份归档"。⚠️ 当用户带着附件要求"整理成XX/写成XX/转换成XX"时，这是【内容生产】不是【文件整理】，必须选 summary_note 或 office_doc，禁止选 file_organize。\n- ledger_organize：把混乱的记账文本（语音转写、聊天碎片、银行流水、随手记账）整理成结构化账本。任何同时包含【金额数字（如 12 / 9.9 / ¥58 / 块/元）】和【消费/收入描述（如 早饭/咖啡/工资/转给）】的指令，都应该选这个，而不是 summary_note。\n- calendar_event：创建日历事件/约定。\n\n注意：发送邮件/删除文件等不可逆操作 requires_approval 必须为 true。`,
     PLAN_SCHEMA,
     "你是心栈 SoulSentry 的自动执行规划官，负责把用户的自然语言指令转换成结构化执行方案。要简洁、具体、可执行。严格遵守 automation_type 选择铁律：带附件要求生成纪要/总结/笔记的，一律选 summary_note，不要选 file_organize。"
   );
@@ -1893,13 +1920,24 @@ Deno.serve(async (req) => {
         detail: s.detail,
       }));
 
-      const nextStatus = planRes.requires_approval ? "waiting_confirm" : "pending";
+      const needs = Array.isArray(planRes.needs_from_user) ? planRes.needs_from_user.filter(Boolean) : [];
+      const humanParts = Array.isArray(planRes.human_parts) ? planRes.human_parts.filter(Boolean) : [];
+      const nextStatus = (planRes.requires_approval || needs.length > 0) ? "waiting_confirm" : "pending";
       const updated = await withRetry429(() => base44.entities.TaskExecution.update(execution_id, {
         automation_type: planRes.automation_type,
-        automation_plan: planRes.plan,
-        requires_approval: planRes.requires_approval,
+        automation_plan: {
+          ...planRes.plan,
+          description: planRes.deliverable || planRes.plan?.description || '',
+          risk_warning: [
+            needs.length ? `需要你提供/授权：${needs.join('、')}` : '',
+            humanParts.length ? `仍需你亲自完成：${humanParts.join('、')}` : '',
+            planRes.plan?.risk_warning || '',
+          ].filter(Boolean).join('\n'),
+        },
+        requires_approval: planRes.requires_approval || needs.length > 0,
         execution_steps: steps,
-        execution_status: nextStatus,
+        execution_status: planRes.automation_type === 'none' ? 'cancelled' : nextStatus,
+        error_message: planRes.automation_type === 'none' ? (planRes.deliverable || '这条约定需要你亲自完成，心栈只负责守候提醒') : '',
       }), 'TaskExecution.update[plan]');
 
       // 成功后扣 plan 点数

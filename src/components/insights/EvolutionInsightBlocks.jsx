@@ -8,9 +8,9 @@ import { Flame, Timer, Activity, RefreshCcw, ShieldCheck, Settings2, Sprout } fr
 
 function Block({ icon: Icon, title, children }) {
   return (
-    <div className="rounded-2xl bg-white/80 border border-[#6B8E23]/15 p-4">
+    <div className="rounded-2xl bg-white/80 border border-[#384877]/15 p-4">
       <div className="flex items-center gap-2 mb-2.5">
-        <Icon className="w-3.5 h-3.5 text-[#6B8E23]" />
+        <Icon className="w-3.5 h-3.5 text-[#384877]" />
         <p className="text-xs font-semibold text-slate-700">{title}</p>
       </div>
       {children}
@@ -27,11 +27,11 @@ export default function EvolutionInsightBlocks() {
   const buffer = suggestedBufferMinutes(offset);
 
   return (
-    <div className="rounded-3xl bg-[#f4f7ec] border border-[#6B8E23]/20 p-4 space-y-3">
+    <div className="rounded-3xl bg-[#f2f5fb] border border-[#384877]/20 p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <Sprout className="w-4 h-4 text-[#6B8E23]" />
+        <Sprout className="w-4 h-4 text-[#384877]" />
         <div>
-          <p className="text-sm font-semibold text-[#4d6619]">心栈越来越懂你</p>
+          <p className="text-sm font-semibold text-[#384877]">心栈越来越懂你</p>
           <p className="text-[11px] text-slate-500 mt-0.5">每一次如约与顺延都会改写这里</p>
         </div>
       </div>
@@ -41,7 +41,7 @@ export default function EvolutionInsightBlocks() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           <Block icon={Flame} title="连续如约">
-            <p className="text-2xl font-bold text-[#4d6619] leading-none">
+            <p className="text-2xl font-bold text-[#384877] leading-none">
               {data.streak}
               <span className="text-xs font-normal text-slate-500 ml-1">天</span>
             </p>
@@ -53,7 +53,7 @@ export default function EvolutionInsightBlocks() {
               <p className="text-[11px] text-slate-500">再完成几件约定，就能算出你的时间习惯。</p>
             ) : offset > 0 ? (
               <p className="text-[11px] text-slate-600 leading-relaxed">
-                你平均晚 <span className="font-semibold text-[#4d6619]">{formatOffset(offset)}</span> 完成
+                你平均晚 <span className="font-semibold text-[#384877]">{formatOffset(offset)}</span> 完成
                 → 新约定自动 +{formatOffset(buffer)} 缓冲
               </p>
             ) : (
@@ -75,9 +75,9 @@ export default function EvolutionInsightBlocks() {
                 {data.reasons.slice(0, 4).map((r) => (
                   <div key={r.key} className="flex items-center gap-2">
                     <span className="text-[11px] text-slate-600 w-16 shrink-0">{r.label}</span>
-                    <div className="flex-1 h-1.5 rounded-full bg-[#6B8E23]/10 overflow-hidden">
+                    <div className="flex-1 h-1.5 rounded-full bg-[#384877]/10 overflow-hidden">
                       <div
-                        className="h-full bg-[#6B8E23]/60"
+                        className="h-full bg-[#384877]/60"
                         style={{ width: `${(r.count / data.deferralTotal) * 100}%` }}
                       />
                     </div>
@@ -96,7 +96,7 @@ export default function EvolutionInsightBlocks() {
             <button
               type="button"
               onClick={() => setTrustOpen(true)}
-              className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#4d6619] hover:underline"
+              className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#384877] hover:underline"
             >
               <Settings2 className="w-3 h-3" /> 调整信任阶梯
             </button>

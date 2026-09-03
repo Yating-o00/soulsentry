@@ -1,5 +1,5 @@
 import { View, Text } from "@tarojs/components";
-import { IconBrain, IconClock3, IconTrendingUp, IconMoonStar, IconLock } from "./icons";
+import { IconSprout, IconClock3, IconTrendingUp, IconMoonStar, IconLock } from "./icons";
 import theme from "./theme";
 
 const weekLabels = ["一", "二", "三", "四", "五", "六", "日"];
@@ -174,7 +174,7 @@ export default function EvolutionRail({ evo, onReview }) {
         }}
       >
         <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
-          <IconBrain size={32} color={theme.primary} />
+          <IconSprout size={34} color={theme.primary} />
           <Text style={{ fontSize: "34rpx", fontWeight: 700, color: theme.primary }}>心栈越来越懂你</Text>
         </View>
         <Text style={{ marginTop: "10rpx", fontSize: "22rpx", color: theme.inkTertiary, letterSpacing: "2rpx" }}>

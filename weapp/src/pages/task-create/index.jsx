@@ -753,11 +753,14 @@ export default function TaskCreate() {
   const applyParsedFields = (parsed, opts = {}) => {
     if (!parsed) return;
 
-    // 标题/描述：如果是语音失败兜底或用户没输入，才覆盖
+    // 标题：用户把长内容输在 title 框，AI 提取后覆盖为简洁标题
     if (opts.forceTitle || !title.trim()) {
       setTitle(parsed.title || "");
     }
-    if (opts.forceDescription || !description.trim()) {
+    // 描述：强制模式时，仅当 AI 返回了有效描述才覆盖；否则保留用户已输入内容
+    if (opts.forceDescription) {
+      if (parsed.description?.trim()) setDescription(parsed.description);
+    } else if (!description.trim()) {
       setDescription(parsed.description || "");
     }
 
@@ -853,13 +856,35 @@ export default function TaskCreate() {
     requestReminderSubscribeSync();
   };
 
+  const SectionCard = ({ children, title, hint }) => (
+    <View
+      style={{
+        marginTop: "28rpx",
+        padding: "24rpx",
+        borderRadius: "16rpx",
+        background: "#ffffff",
+        border: "1rpx solid #e8ecef"
+      }}
+    >
+      {title && (
+        <View style={{ marginBottom: "16rpx" }}>
+          <Text style={{ fontSize: "26rpx", fontWeight: 600, color: "#384877" }}>{title}</Text>
+          {hint && <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginTop: "4rpx" }}>{hint}</Text>}
+        </View>
+      )}
+      {children}
+    </View>
+  );
+
   const renderForm = () => (
-    <View className="ss-card">
-      <View className="ss-title">{isEdit ? "编辑约定" : "新建约定"}</View>
-      <View className="ss-subtitle">{isEdit ? "修改约定信息" : "输入约定后，可先让 SoulSentry 帮你分析时间线与执行策略。"}</View>
+    <View>
+      <View className="ss-card" style={{ paddingBottom: "16rpx" }}>
+        <View className="ss-title">{isEdit ? "编辑约定" : "新建约定"}</View>
+        <Text className="ss-subtitle">{isEdit ? "修改约定信息" : "输入或说出约定，SoulSentry 会帮你解析并填表"}</Text>
+      </View>
 
       {!isEdit && (
-        <View style={{ marginTop: "32rpx", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <View style={{ marginTop: "24rpx", display: "flex", flexDirection: "column", alignItems: "center" }}>
           <VoiceInput
             onResult={handleVoiceResult}
             onTouchStart={handleVoiceTouchStart}
@@ -872,251 +897,281 @@ export default function TaskCreate() {
         <View
           style={{
             marginTop: "24rpx",
+            marginLeft: "24rpx",
+            marginRight: "24rpx",
             padding: "14rpx 18rpx",
             borderRadius: "12rpx",
             background: "#f0f5fa",
             border: "1rpx solid #d4e4f0"
           }}
         >
-          <Text style={{ fontSize: "24rpx", color: "#5b82a0" }}>🪄 {parsedHint}</Text>
+          <Text style={{ fontSize: "24rpx", color: "#5b82a0", lineHeight: "38rpx" }}>🪄 {parsedHint}</Text>
         </View>
       ) : null}
 
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">标题 *</View>
-        <Input
-          className="ss-input"
-          placeholder="例如：周五前完成报告 / 明天下午3点开会 / 记得吃早餐"
-          value={title}
-          onInput={(e) => setTitle(e.detail.value)}
-          onBlur={handleInputBlur}
-        />
-      </View>
-
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">描述</View>
-        <Textarea
-          className="ss-textarea"
-          placeholder="补充说明（可选），也可在这里补充时间、地点"
-          value={description}
-          onInput={(e) => setDescription(e.detail.value)}
-          onBlur={handleInputBlur}
-        />
-      </View>
+      <SectionCard title={isEdit ? "基本信息" : "你的输入"} hint={isEdit ? "" : "可以输入完整句子，AI 会提取关键信息"}>
+        {!isEdit && (
+          <View style={{ marginBottom: "20rpx" }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>完整内容</Text>
+            <Textarea
+              className="ss-textarea"
+              style={{ minHeight: "140rpx" }}
+              placeholder="例如：周五前完成报告 / 明天下午3点开会 / 记得吃早餐"
+              value={title}
+              autoHeight
+              maxlength={500}
+              onInput={(e) => setTitle(e.detail.value)}
+            />
+          </View>
+        )}
+        {isEdit && (
+          <View style={{ marginBottom: "20rpx" }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>约定标题</Text>
+            <Input
+              className="ss-input"
+              placeholder="约定标题"
+              value={title}
+              onInput={(e) => setTitle(e.detail.value)}
+            />
+          </View>
+        )}
+        <View>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>补充说明</Text>
+          <Textarea
+            className="ss-textarea"
+            style={{ minHeight: "120rpx" }}
+            placeholder="补充说明（可选），也可在这里补充时间、地点"
+            value={description}
+            autoHeight
+            maxlength={500}
+            onInput={(e) => setDescription(e.detail.value)}
+          />
+        </View>
+      </SectionCard>
 
       {isEdit && renderSubtaskEditor()}
 
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">优先级</View>
-        <Picker
-          mode="selector"
-          range={priorities.map((p) => p.label)}
-          value={priorityIndex}
-          onChange={(e) => setPriorityIndex(Number(e.detail.value))}
-        >
-          <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
-            <Text>{priorities[priorityIndex].label}</Text>
+      <SectionCard title="属性">
+        <View style={{ display: "flex", gap: "16rpx" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>优先级</Text>
+            <Picker
+              mode="selector"
+              range={priorities.map((p) => p.label)}
+              value={priorityIndex}
+              onChange={(e) => setPriorityIndex(Number(e.detail.value))}
+            >
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{priorities[priorityIndex].label}</Text>
+              </View>
+            </Picker>
           </View>
-        </Picker>
-      </View>
-
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">分类</View>
-        <Picker
-          mode="selector"
-          range={categories.map((c) => c.label)}
-          value={categoryIndex}
-          onChange={(e) => setCategoryIndex(Number(e.detail.value))}
-        >
-          <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
-            <Text>{categories[categoryIndex].label}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>分类</Text>
+            <Picker
+              mode="selector"
+              range={categories.map((c) => c.label)}
+              value={categoryIndex}
+              onChange={(e) => setCategoryIndex(Number(e.detail.value))}
+            >
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{categories[categoryIndex].label}</Text>
+              </View>
+            </Picker>
           </View>
-        </Picker>
-      </View>
-
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">截止时间</View>
-        <View style={{ display: "flex" }}>
-          <Picker mode="date" value={endDate || todayStr()} onChange={(e) => setEndDate(e.detail.value)}>
-            <View className="ss-input" style={{ display: "flex", alignItems: "center", marginRight: "16rpx" }}>
-              <Text>{endDate || "选择日期"}</Text>
-            </View>
-          </Picker>
-          <Picker mode="time" value={endTime} onChange={(e) => setEndTime(e.detail.value)}>
-            <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
-              <Text>{endTime}</Text>
-            </View>
-          </Picker>
         </View>
-      </View>
+      </SectionCard>
 
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">提醒时间</View>
-        <View style={{ display: "flex" }}>
-          <Picker mode="date" value={reminderDate || todayStr()} onChange={(e) => setReminderDate(e.detail.value)}>
-            <View className="ss-input" style={{ display: "flex", alignItems: "center", marginRight: "16rpx" }}>
-              <Text>{reminderDate || "选择日期"}</Text>
-            </View>
-          </Picker>
-          <Picker mode="time" value={reminderTime} onChange={(e) => setReminderTime(e.detail.value)}>
-            <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
-              <Text>{reminderTime}</Text>
-            </View>
-          </Picker>
+      <SectionCard title="时间">
+        <View style={{ marginBottom: "20rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>截止时间</Text>
+          <View style={{ display: "flex", gap: "16rpx" }}>
+            <Picker mode="date" value={endDate || todayStr()} onChange={(e) => setEndDate(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{endDate || "选择日期"}</Text>
+              </View>
+            </Picker>
+            <Picker mode="time" value={endTime} onChange={(e) => setEndTime(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{endTime}</Text>
+              </View>
+            </Picker>
+          </View>
         </View>
-      </View>
+        <View>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>提醒时间</Text>
+          <View style={{ display: "flex", gap: "16rpx" }}>
+            <Picker mode="date" value={reminderDate || todayStr()} onChange={(e) => setReminderDate(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{reminderDate || "选择日期"}</Text>
+              </View>
+            </Picker>
+            <Picker mode="time" value={reminderTime} onChange={(e) => setReminderTime(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{reminderTime}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+      </SectionCard>
 
-      {!isEdit && (
-        <Button className="ss-btn ss-btn-plain" loading={loading} disabled={loading || !isFormValid} onClick={analyze}>
-          🤖 AI 分析并预览
+      <View className="ss-card" style={{ marginTop: "32rpx" }}>
+        {!isEdit && (
+          <Button className="ss-btn ss-btn-plain" loading={loading} disabled={loading || !isFormValid} onClick={analyze}>
+            🤖 AI 分析并预览
+          </Button>
+        )}
+        <Button
+          className="ss-btn"
+          loading={loading}
+          disabled={loading || !isFormValid}
+          onClick={() => {
+            if (isEdit) {
+              if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
+              saveTask();
+            } else {
+              parseInputAndConfirm();
+            }
+          }}
+        >
+          {isEdit ? "保存修改" : "约定"}
         </Button>
-      )}
-      <Button
-        className="ss-btn"
-        loading={loading}
-        disabled={loading || !isFormValid}
-        onClick={() => {
-          if (isEdit) {
-            if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
-            saveTask();
-          } else {
-            parseInputAndConfirm();
-          }
-        }}
-      >
-        {isEdit ? "保存修改" : "约定"}
-      </Button>
+      </View>
     </View>
   );
 
   const renderConfirm = () => (
-    <View className="ss-card">
-      <View className="ss-title">确认约定信息</View>
-      <Text className="ss-subtitle">SoulSentry 已理解你的输入，你可以再调整细节</Text>
+    <View>
+      <View className="ss-card" style={{ paddingBottom: "16rpx" }}>
+        <View className="ss-title">确认约定信息</View>
+        <Text className="ss-subtitle">SoulSentry 已理解你的输入，你可以再调整细节</Text>
+      </View>
 
       {rawInput ? (
-        <View
-          style={{
-            marginTop: "24rpx",
-            padding: "18rpx",
-            borderRadius: "12rpx",
-            background: "#f8f9fb",
-            border: "1rpx solid #e8ecef"
-          }}
-        >
-          <Text style={{ fontSize: "24rpx", color: "#8e8e93", marginBottom: "8rpx" }}>你的原话</Text>
-          <Text style={{ fontSize: "28rpx", color: "#1c1c1e", lineHeight: "44rpx" }}>{rawInput}</Text>
-        </View>
+        <SectionCard title="你的原话" hint="AI 基于以下内容理解">
+          <Text style={{ fontSize: "30rpx", color: "#1c1c1e", lineHeight: "48rpx" }}>{rawInput}</Text>
+        </SectionCard>
       ) : null}
 
       {parsedHint ? (
         <View
           style={{
             marginTop: "24rpx",
+            marginLeft: "24rpx",
+            marginRight: "24rpx",
             padding: "14rpx 18rpx",
             borderRadius: "12rpx",
             background: "#f0f5fa",
             border: "1rpx solid #d4e4f0"
           }}
         >
-          <Text style={{ fontSize: "24rpx", color: "#5b82a0" }}>🪄 {parsedHint}</Text>
+          <Text style={{ fontSize: "24rpx", color: "#5b82a0", lineHeight: "38rpx" }}>🪄 {parsedHint}</Text>
         </View>
       ) : null}
 
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">标题 *</View>
-        <Input
-          className="ss-input"
-          placeholder="约定标题"
-          value={title}
-          onInput={(e) => setTitle(e.detail.value)}
-        />
-      </View>
-
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">描述</View>
-        <Textarea
-          className="ss-textarea"
-          placeholder="补充说明（可选）"
-          value={description}
-          onInput={(e) => setDescription(e.detail.value)}
-        />
-      </View>
-
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">优先级</View>
-        <Picker
-          mode="selector"
-          range={priorities.map((p) => p.label)}
-          value={priorityIndex}
-          onChange={(e) => setPriorityIndex(Number(e.detail.value))}
-        >
-          <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
-            <Text>{priorities[priorityIndex].label}</Text>
-          </View>
-        </Picker>
-      </View>
-
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">分类</View>
-        <Picker
-          mode="selector"
-          range={categories.map((c) => c.label)}
-          value={categoryIndex}
-          onChange={(e) => setCategoryIndex(Number(e.detail.value))}
-        >
-          <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
-            <Text>{categories[categoryIndex].label}</Text>
-          </View>
-        </Picker>
-      </View>
-
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">截止时间</View>
-        <View style={{ display: "flex" }}>
-          <Picker mode="date" value={endDate || todayStr()} onChange={(e) => setEndDate(e.detail.value)}>
-            <View className="ss-input" style={{ display: "flex", alignItems: "center", marginRight: "16rpx" }}>
-              <Text>{endDate || "选择日期"}</Text>
-            </View>
-          </Picker>
-          <Picker mode="time" value={endTime} onChange={(e) => setEndTime(e.detail.value)}>
-            <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
-              <Text>{endTime}</Text>
-            </View>
-          </Picker>
+      <SectionCard title="基本信息">
+        <View style={{ marginBottom: "20rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>约定标题</Text>
+          <Input
+            className="ss-input"
+            placeholder="约定标题"
+            value={title}
+            onInput={(e) => setTitle(e.detail.value)}
+          />
         </View>
-      </View>
-
-      <View style={{ marginTop: "24rpx" }}>
-        <View className="ss-label">提醒时间</View>
-        <View style={{ display: "flex" }}>
-          <Picker mode="date" value={reminderDate || todayStr()} onChange={(e) => setReminderDate(e.detail.value)}>
-            <View className="ss-input" style={{ display: "flex", alignItems: "center", marginRight: "16rpx" }}>
-              <Text>{reminderDate || "选择日期"}</Text>
-            </View>
-          </Picker>
-          <Picker mode="time" value={reminderTime} onChange={(e) => setReminderTime(e.detail.value)}>
-            <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
-              <Text>{reminderTime}</Text>
-            </View>
-          </Picker>
+        <View>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>补充说明</Text>
+          <Textarea
+            className="ss-textarea"
+            style={{ minHeight: "120rpx" }}
+            placeholder="补充说明（可选）"
+            value={description}
+            autoHeight
+            onInput={(e) => setDescription(e.detail.value)}
+          />
         </View>
-      </View>
+      </SectionCard>
 
-      <Button
-        className="ss-btn"
-        loading={loading}
-        disabled={loading || !isFormValid}
-        onClick={() => {
-          if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
-          saveTask();
-        }}
-      >
-        确认创建
-      </Button>
-      <Button className="ss-btn ss-btn-plain" onClick={() => setStep("form")}>
-        返回修改
-      </Button>
+      <SectionCard title="属性">
+        <View style={{ display: "flex", gap: "16rpx" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>优先级</Text>
+            <Picker
+              mode="selector"
+              range={priorities.map((p) => p.label)}
+              value={priorityIndex}
+              onChange={(e) => setPriorityIndex(Number(e.detail.value))}
+            >
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{priorities[priorityIndex].label}</Text>
+              </View>
+            </Picker>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>分类</Text>
+            <Picker
+              mode="selector"
+              range={categories.map((c) => c.label)}
+              value={categoryIndex}
+              onChange={(e) => setCategoryIndex(Number(e.detail.value))}
+            >
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{categories[categoryIndex].label}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+      </SectionCard>
+
+      <SectionCard title="时间">
+        <View style={{ marginBottom: "20rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>截止时间</Text>
+          <View style={{ display: "flex", gap: "16rpx" }}>
+            <Picker mode="date" value={endDate || todayStr()} onChange={(e) => setEndDate(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{endDate || "选择日期"}</Text>
+              </View>
+            </Picker>
+            <Picker mode="time" value={endTime} onChange={(e) => setEndTime(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{endTime}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+        <View>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>提醒时间</Text>
+          <View style={{ display: "flex", gap: "16rpx" }}>
+            <Picker mode="date" value={reminderDate || todayStr()} onChange={(e) => setReminderDate(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{reminderDate || "选择日期"}</Text>
+              </View>
+            </Picker>
+            <Picker mode="time" value={reminderTime} onChange={(e) => setReminderTime(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{reminderTime}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+      </SectionCard>
+
+      <View className="ss-card" style={{ marginTop: "32rpx" }}>
+        <Button
+          className="ss-btn"
+          loading={loading}
+          disabled={loading || !isFormValid}
+          onClick={() => {
+            if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
+            saveTask();
+          }}
+        >
+          确认创建
+        </Button>
+        <Button className="ss-btn ss-btn-plain" onClick={() => setStep("form")}>
+          返回修改
+        </Button>
+      </View>
     </View>
   );
 

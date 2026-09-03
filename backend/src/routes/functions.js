@@ -221,7 +221,16 @@ function buildRuleAiNote(task, subtasks, autoExec) {
     if (hour >= 9 && hour < 12) return "上午是你的高产时段，这种高优先级约定通常推进得最快。";
     return "这个约定优先级较高，建议先安排一个完整的时间段。";
   }
-  return undefined;
+
+  // 按分类给出有区分度的兜底，避免所有卡片都是同一句话
+  const category = task.category || "other";
+  if (category === "health") return "照顾好自己，是今天最重要的小事之一。";
+  if (category === "work") return "把它放进高产时段，推进会比想象中快。";
+  if (category === "study") return "每天一小步，也是在给长期目标蓄力。";
+  if (category === "family") return "和重要的人有关的约定，顺水推一件就好。";
+  if (category === "finance") return "顺手处理，清单和心情都会轻一点。";
+  if (category === "shopping") return "顺手处理，清单和心情都会轻一点。";
+  return "把它放进今天的河流，顺水推一件就好。";
 }
 
 async function buildAiNote(task, subtasks, autoExec) {

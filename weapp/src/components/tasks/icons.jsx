@@ -145,3 +145,11 @@ export function IconLock({ size = 22, color = "rgba(19,23,18,0.55)" }) {
     </View>
   );
 }
+
+export function IconSprout({ size = 28, color = "#131712" }) {
+  return (
+    <View style={{ ...base, width: size, height: size }}>
+      <Text style={{ fontSize: size * 0.8, color, lineHeight: `${size}px` }}>🌱</Text>
+    </View>
+  );
+}

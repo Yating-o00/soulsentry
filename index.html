@@ -40,8 +40,9 @@
         shimStorage('sessionStorage');
 
         var shown = false;
+        var dismissed = false;
         function show(msg, stack, isWarn) {
-          if (shown) return;
+          if (shown || dismissed) return;
           shown = true;
           var pre = document.createElement('pre');
           pre.id = '__ss_diag__';
@@ -50,6 +51,18 @@
           if (document.body) document.body.appendChild(pre);
           else document.addEventListener('DOMContentLoaded', function() { document.body.appendChild(pre); });
         }
+        // 应用渲染出内容后自动移除诊断层，否则慢加载先触发超时提示、页面渲染后提示层仍永久遮罩，形成假白屏
+        function hideDiag() {
+          var el = document.getElementById('__ss_diag__');
+          if (el && el.parentNode) el.parentNode.removeChild(el);
+          shown = false;
+          dismissed = true;
+        }
+        var mo = new MutationObserver(function() {
+          var r = document.getElementById('root');
+          if (r && (r.innerHTML || '').replace(/\s/g, '').length > 0) hideDiag();
+        });
+        mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
         function append(msg) {
           var el = document.getElementById('__ss_diag__');
           if (el) { el.textContent += '\n' + msg; return; }
@@ -85,7 +98,7 @@
             ].join('\n');
             show('Timeout: ' + info, '', true);
           }
-        }, 5000);
+        }, 10000);
       })();
     </script>
   </head>

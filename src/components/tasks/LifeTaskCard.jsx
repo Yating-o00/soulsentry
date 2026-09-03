@@ -29,6 +29,7 @@ import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
 import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
 import PriorityQuickMenu from "@/components/tasks/PriorityQuickMenu";
 import SubtaskChildren from "@/components/tasks/SubtaskChildren";
+import AgreementAutomationStrip from "@/components/automation/AgreementAutomationStrip";
 
 export default function LifeTaskCard({ 
   task, 
@@ -834,6 +835,10 @@ export default function LifeTaskCard({
                 </button>
               </div>
             )}
+        </div>
+
+        <div onClick={(e) => e.stopPropagation()}>
+          <AgreementAutomationStrip task={task} />
         </div>
 
         {/* 被分享者参与动态回流 */}

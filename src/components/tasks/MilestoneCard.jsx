@@ -41,6 +41,7 @@ import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
 import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
 import SubtaskChildren from "@/components/tasks/SubtaskChildren";
+import AgreementAutomationStrip from "@/components/automation/AgreementAutomationStrip";
 
 export default function MilestoneCard({
   task,
@@ -411,6 +412,10 @@ export default function MilestoneCard({
 
             {/* AI Memory Insight */}
             <TaskMemoryInsight task={task} />
+
+            <div onClick={(e) => e.stopPropagation()}>
+              <AgreementAutomationStrip task={task} />
+            </div>
           </div>
 
           {/* Right Action */}

@@ -1,16 +1,16 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma.js";
 
-const TEST_EMAIL = "demo@gmail.com";
+const TEST_EMAIL = "demo@soulsentry.local";
 const TEST_PASSWORD = "123456";
-const LEGACY_DEMO_EMAIL = "demo@soulsentry.local";
+const LEGACY_DEMO_EMAIL = "demo@gmail.com";
 const TEST_CREDITS = 10000;
 
 export async function ensureDemoUser() {
   try {
     const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
 
-    // 1. 已存在 demo@gmail.com：同步密码与点数，确保可直接登录
+    // 1. 已存在 demo@soulsentry.local：同步密码与点数，确保可直接登录
     const existing = await prisma.user.findUnique({ where: { email: TEST_EMAIL } });
     if (existing) {
       const updated = await prisma.user.update({
@@ -25,7 +25,7 @@ export async function ensureDemoUser() {
       return updated;
     }
 
-    // 2. 旧演示账号存在：迁移邮箱为 demo@gmail.com
+    // 2. 如果之前迁移到了 demo@gmail.com，把它迁回 demo@soulsentry.local
     const legacy = await prisma.user.findUnique({ where: { email: LEGACY_DEMO_EMAIL } });
     if (legacy) {
       const migrated = await prisma.user.update({

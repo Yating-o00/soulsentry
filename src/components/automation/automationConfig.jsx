@@ -58,12 +58,20 @@ export const AUTOMATION_TYPES = {
     description: "把混乱的记账内容整理成结构化账本",
   },
   none: {
+    label: "自动执行",
+    emoji: "🤖",
+    icon: Zap,
+    color: "bg-slate-50 text-slate-600 border-slate-200",
+    iconBg: "bg-slate-100 text-slate-600",
+    description: "",
+  },
+  ppt_doc: {
     label: "PPT报告",
     emoji: "📊",
     icon: FileText,
     color: "bg-purple-50 text-purple-600 border-purple-200",
     iconBg: "bg-purple-100 text-purple-600",
-    description: "",
+    description: "生成可下载的 PPT 报告",
   },
 };
 

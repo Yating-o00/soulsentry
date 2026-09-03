@@ -12,10 +12,18 @@ export default function AgreementAutomationStrip({ task }) {
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(null);
 
-  const { data: executions = [] } = useQuery({
+  const { data: allExecutions = [] } = useQuery({
     queryKey: ["task-automations", task.id],
     queryFn: () => base44.entities.TaskExecution.filter({ task_id: task.id }, "-created_date", 5),
     staleTime: 60 * 1000,
+  });
+
+  // 过滤掉「无可自动执行内容」的空记录（automation_type=none 且没有任何交付物）
+  const executions = allExecutions.filter((ex) => {
+    if (!ex.automation_type || ex.automation_type === "none") return false;
+    // 已完成但没有任何交付物 → 点开也是空的，不展示
+    if (ex.execution_status === "completed" && !ex.automation_result) return false;
+    return true;
   });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["task-automations", task.id] });
@@ -86,7 +94,7 @@ export default function AgreementAutomationStrip({ task }) {
   return (
     <div className="mt-3 pt-3 border-t border-stone-100 space-y-1.5">
       <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-0.5">
-        机器可兑现的部分
+        智能执行
       </div>
       {executions.map((ex) => (
         <ExecutionRow

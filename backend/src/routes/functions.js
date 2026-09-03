@@ -179,7 +179,16 @@ function buildAutoExec(task, executions) {
   };
 }
 
-function buildAiNote(task, subtasks, autoExec) {
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("TIMEOUT")), ms);
+    })
+  ]);
+}
+
+function buildRuleAiNote(task, subtasks, autoExec) {
   const subs = Array.isArray(subtasks) ? subtasks : [];
   const doneCount = subs.filter((s) => s.status === "completed" || s.status === "done").length;
   const overdue = task.timeLabel?.includes("逾期");
@@ -215,13 +224,73 @@ function buildAiNote(task, subtasks, autoExec) {
   return undefined;
 }
 
-function analyzeTask(task, executions, subtasks) {
+async function buildAiNote(task, subtasks, autoExec) {
+  const done = task.status === "completed" || task.status === "done" || task.status === "archived";
+
+  // 已完成的约定不需要 AI 分析；自动执行/子约定进度仍用规则文案更稳定
+  if (done) return undefined;
+  if (autoExec && autoExec.state) return buildRuleAiNote(task, subtasks, autoExec);
+  const subs = Array.isArray(subtasks) ? subtasks : [];
+  if (subs.length > 0) return buildRuleAiNote(task, subtasks, autoExec);
+  if (!task.title) return undefined;
+
+  const schema = {
+    type: "object",
+    properties: {
+      aiNote: { type: "string", description: "1-2句个性化建议，自然亲切、具体有针对性" }
+    },
+    required: ["aiNote"]
+  };
+
+  const categoryLabel = {
+    work: "工作", personal: "个人", health: "健康", study: "学习",
+    family: "家庭", shopping: "购物", finance: "财务", other: "其他"
+  }[task.category] || task.category || "其他";
+
+  const priorityLabel = { urgent: "紧急", high: "高", medium: "中", low: "低" }[task.priority] || task.priority || "中";
+
+  const prompt = `用户有这样一个约定：
+标题：${task.title}
+描述：${task.description || "无"}
+分类：${categoryLabel}
+优先级：${priorityLabel}
+时间：${task.timeLabel || "未安排"}
+地点：${getTaskLocation(task) || "未指定"}
+状态：${task.timeLabel?.includes("逾期") ? "已逾期" : task.timeLabel?.includes("今天") || task.timeLabel?.includes("即将") ? "今天/即将到期" : "进行中"}
+
+请基于以上信息，生成一句 1-2 行的个性化建议。要求：
+1. 内容具体、有温度，不要泛泛而谈。
+2. 如果是健康/用药/锻炼类，给出温暖的执行提示。
+3. 如果是工作/学习类，给出推进建议或最佳时段提示。
+4. 如果有地点，结合地点给出建议。
+5. 如果已逾期或即将到期，给出轻量安抚和最小下一步。
+6. 直接返回 JSON 对象 {"aiNote": "..."}，不要 markdown 或解释。`;
+
+  try {
+    const result = await withTimeout(
+      invokeKimiText({
+        prompt,
+        systemPrompt: "你是 SoulSentry 的心栈伙伴，擅长把任务信息转化成一句温暖、具体、可执行的建议。必须直接返回 JSON 对象。",
+        responseJsonSchema: schema,
+        temperature: 0.6
+      }),
+      8000
+    );
+    const note = result?.aiNote?.trim();
+    return note || buildRuleAiNote(task, subtasks, autoExec);
+  } catch (err) {
+    console.error("[buildAiNote] Kimi failed, fallback to rule", err?.message || err);
+    return buildRuleAiNote(task, subtasks, autoExec);
+  }
+}
+
+async function analyzeTask(task, executions, subtasks) {
   const now = new Date();
   const timeLabel = buildTaskTimeLabel(task, now);
   const recurring = getTaskRecurringLabel(task);
   const location = getTaskLocation(task);
   const autoExec = buildAutoExec(task, executions);
-  const aiNote = buildAiNote(task, subtasks, autoExec);
+  const aiNote = await buildAiNote(task, subtasks, autoExec);
   const subPromises = (subtasks || []).map((s) => ({
     id: s.id,
     title: s.title,
@@ -1946,10 +2015,12 @@ functionsRouter.post("/:name", async (req, res) => {
       const executions = Array.isArray(payload.executions) ? payload.executions : [];
       const subtaskMap = isPlainObject(payload.subtasks) ? payload.subtasks : {};
       const result = {};
-      for (const task of tasks) {
-        if (!task?.id) continue;
-        result[task.id] = analyzeTask(task, executions, subtaskMap[task.id] || []);
-      }
+      await Promise.all(
+        tasks.map(async (task) => {
+          if (!task?.id) return;
+          result[task.id] = await analyzeTask(task, executions, subtaskMap[task.id] || []);
+        })
+      );
       return res.json(result);
     }
 

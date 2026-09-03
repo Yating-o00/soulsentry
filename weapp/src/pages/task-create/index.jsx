@@ -113,6 +113,7 @@ export default function TaskCreate() {
   const [shareToken, setShareToken] = useState("");
   const [step, setStep] = useState("form");
   const [parsedHint, setParsedHint] = useState("");
+  const [rawInput, setRawInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [createdTask, setCreatedTask] = useState(null);
   const [posterUrl, setPosterUrl] = useState("");
@@ -802,16 +803,49 @@ export default function TaskCreate() {
     }
   };
 
+  const parseInputAndConfirm = async (text) => {
+    const inputText = String(text || [title, description].filter(Boolean).join("\n")).trim();
+    if (!inputText) {
+      Taro.showToast({ title: "请先输入约定内容", icon: "none" });
+      return;
+    }
+    setRawInput(inputText);
+
+    setLoading(true);
+    let timeoutId = null;
+    try {
+      const requestPromise = post("/functions/parseTaskInput", { input: inputText, date: todayStr() });
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("AI 解析超时")), 15000);
+      });
+      const parsed = await Promise.race([requestPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
+
+      applyParsedFields(parsed, {
+        forceTitle: true,
+        forceDescription: true,
+        forceTime: true,
+        forcePriority: true,
+        forceCategory: true
+      });
+      setStep("confirm");
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.error("parseInputAndConfirm failed", err);
+      Taro.showToast({ title: "AI 解析失败，请手动填写", icon: "none", duration: 2500 });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleVoiceResult = async (text) => {
     if (!text.trim()) return;
-    await parseInput(text, { forceTitle: true, forceDescription: true, forceTime: true, forcePriority: true, forceCategory: true });
-    Taro.showToast({ title: "已填入语音内容，请确认后创建", icon: "none", duration: 2000 });
+    setRawInput(text);
+    await parseInputAndConfirm(text);
   };
 
   const handleInputBlur = () => {
-    // 仅在新建模式、标题非空、提醒日期未手动设置时自动解析
-    if (isEdit || !title.trim() || reminderDate) return;
-    parseInput();
+    // 新流程：失焦时不再自动解析，统一由用户点击「约定」触发
   };
 
   const handleVoiceTouchStart = () => {
@@ -869,17 +903,6 @@ export default function TaskCreate() {
           onBlur={handleInputBlur}
         />
       </View>
-
-      {!isEdit && (
-        <Button
-          className="ss-btn ss-btn-plain"
-          loading={loading}
-          disabled={loading || !title.trim()}
-          onClick={() => parseInput(undefined, { forceTime: true })}
-        >
-          🪄 智能识别时间地点
-        </Button>
-      )}
 
       {isEdit && renderSubtaskEditor()}
 
@@ -953,11 +976,146 @@ export default function TaskCreate() {
         loading={loading}
         disabled={loading || !isFormValid}
         onClick={() => {
+          if (isEdit) {
+            if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
+            saveTask();
+          } else {
+            parseInputAndConfirm();
+          }
+        }}
+      >
+        {isEdit ? "保存修改" : "约定"}
+      </Button>
+    </View>
+  );
+
+  const renderConfirm = () => (
+    <View className="ss-card">
+      <View className="ss-title">确认约定信息</View>
+      <Text className="ss-subtitle">SoulSentry 已理解你的输入，你可以再调整细节</Text>
+
+      {rawInput ? (
+        <View
+          style={{
+            marginTop: "24rpx",
+            padding: "18rpx",
+            borderRadius: "12rpx",
+            background: "#f8f9fb",
+            border: "1rpx solid #e8ecef"
+          }}
+        >
+          <Text style={{ fontSize: "24rpx", color: "#8e8e93", marginBottom: "8rpx" }}>你的原话</Text>
+          <Text style={{ fontSize: "28rpx", color: "#1c1c1e", lineHeight: "44rpx" }}>{rawInput}</Text>
+        </View>
+      ) : null}
+
+      {parsedHint ? (
+        <View
+          style={{
+            marginTop: "24rpx",
+            padding: "14rpx 18rpx",
+            borderRadius: "12rpx",
+            background: "#f0f5fa",
+            border: "1rpx solid #d4e4f0"
+          }}
+        >
+          <Text style={{ fontSize: "24rpx", color: "#5b82a0" }}>🪄 {parsedHint}</Text>
+        </View>
+      ) : null}
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">标题 *</View>
+        <Input
+          className="ss-input"
+          placeholder="约定标题"
+          value={title}
+          onInput={(e) => setTitle(e.detail.value)}
+        />
+      </View>
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">描述</View>
+        <Textarea
+          className="ss-textarea"
+          placeholder="补充说明（可选）"
+          value={description}
+          onInput={(e) => setDescription(e.detail.value)}
+        />
+      </View>
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">优先级</View>
+        <Picker
+          mode="selector"
+          range={priorities.map((p) => p.label)}
+          value={priorityIndex}
+          onChange={(e) => setPriorityIndex(Number(e.detail.value))}
+        >
+          <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+            <Text>{priorities[priorityIndex].label}</Text>
+          </View>
+        </Picker>
+      </View>
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">分类</View>
+        <Picker
+          mode="selector"
+          range={categories.map((c) => c.label)}
+          value={categoryIndex}
+          onChange={(e) => setCategoryIndex(Number(e.detail.value))}
+        >
+          <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+            <Text>{categories[categoryIndex].label}</Text>
+          </View>
+        </Picker>
+      </View>
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">截止时间</View>
+        <View style={{ display: "flex" }}>
+          <Picker mode="date" value={endDate || todayStr()} onChange={(e) => setEndDate(e.detail.value)}>
+            <View className="ss-input" style={{ display: "flex", alignItems: "center", marginRight: "16rpx" }}>
+              <Text>{endDate || "选择日期"}</Text>
+            </View>
+          </Picker>
+          <Picker mode="time" value={endTime} onChange={(e) => setEndTime(e.detail.value)}>
+            <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+              <Text>{endTime}</Text>
+            </View>
+          </Picker>
+        </View>
+      </View>
+
+      <View style={{ marginTop: "24rpx" }}>
+        <View className="ss-label">提醒时间</View>
+        <View style={{ display: "flex" }}>
+          <Picker mode="date" value={reminderDate || todayStr()} onChange={(e) => setReminderDate(e.detail.value)}>
+            <View className="ss-input" style={{ display: "flex", alignItems: "center", marginRight: "16rpx" }}>
+              <Text>{reminderDate || "选择日期"}</Text>
+            </View>
+          </Picker>
+          <Picker mode="time" value={reminderTime} onChange={(e) => setReminderTime(e.detail.value)}>
+            <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+              <Text>{reminderTime}</Text>
+            </View>
+          </Picker>
+        </View>
+      </View>
+
+      <Button
+        className="ss-btn"
+        loading={loading}
+        disabled={loading || !isFormValid}
+        onClick={() => {
           if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
           saveTask();
         }}
       >
-        {isEdit ? "保存修改" : "直接创建"}
+        确认创建
+      </Button>
+      <Button className="ss-btn ss-btn-plain" onClick={() => setStep("form")}>
+        返回修改
       </Button>
     </View>
   );
@@ -1101,6 +1259,7 @@ export default function TaskCreate() {
     <View className="ss-page">
       <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
         {step === "form" && renderForm()}
+        {step === "confirm" && renderConfirm()}
         {step === "analysis" && renderAnalysis()}
         {step === "created" && renderCreated()}
         <View style={{ height: "40rpx" }} />

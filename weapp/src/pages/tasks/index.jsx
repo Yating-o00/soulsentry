@@ -48,45 +48,10 @@ function isTaskDone(task) {
   return task.status === "completed" || task.status === "done" || task.status === "archived";
 }
 
-function aiNoteFallback(task, analysis = {}) {
-  if (analysis.aiNote) return analysis.aiNote;
-
-  const priority = task.priority || analysis.priority;
-  const timeLabel = analysis.timeLabel || "";
-  const location = analysis.location;
-  const overdue = analysis.overdue;
-  const dueSoon = analysis.dueSoon;
-  const category = categoryMap[task.category] || task.category || "约定";
-
-  const isMorning = /上午|早上|晨|AM|am|9|10|11/.test(timeLabel);
-
-  if (overdue || dueSoon) {
-    return "距离截止还有不久，建议先完成最小一步";
-  }
-  if (location) {
-    return `到达 ${location} 附近时可以顺手处理`;
-  }
-  if (priority === "high" && isMorning) {
-    return "上午是你的高产窗口，这类约定推进得最快";
-  }
-  if (priority === "urgent") {
-    return "这件事优先级最高，先把它从清单里移除";
-  }
-  if (category === "健康") {
-    return "照顾好自己的约定，值得被优先放进日程";
-  }
-  if (category === "家庭") {
-    return "和重要的人有关的约定，顺水推一件就好";
-  }
-  return "把它放进今天的河流，顺水推一件就好";
-}
-
-function mergeAnalysis(task, raw) {
+function mergeAnalysis(_task, raw) {
   if (!raw) return {};
-  return {
-    ...raw,
-    aiNote: aiNoteFallback(task, raw),
-  };
+  // 完全信任后端的 aiNote；后端未返回时留空，不显示通用兜底
+  return { ...raw };
 }
 
 export default function Tasks() {

@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Bot, Loader2, CheckCircle2, AlertCircle, KeyRound, Hand } from "lucide-react";
 import { toast } from "sonner";
 import { AUTOMATION_TYPES } from "./automationConfig";
-import ExecutionResultDialog from "./ExecutionResultDialog";
+import AgreementDeliveryDialog from "./AgreementDeliveryDialog";
 
 // 约定卡片内嵌的「机器可兑现部分」：AI 直接预执行，用户看到的是「已完成，请验收」
 export default function AgreementAutomationStrip({ task }) {
@@ -98,13 +98,10 @@ export default function AgreementAutomationStrip({ task }) {
         />
       ))}
 
-      <ExecutionResultDialog
+      <AgreementDeliveryDialog
         open={!!reviewing}
         onOpenChange={(v) => !v && setReviewing(null)}
-        mode="success"
-        title={reviewing?.automation_plan?.description || reviewing?.task_title || task.title}
-        automationType={reviewing?.automation_type}
-        resultPreview={reviewing?.automation_result?.preview || ""}
+        execution={reviewing}
       />
     </div>
   );

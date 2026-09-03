@@ -2024,12 +2024,34 @@ functionsRouter.post("/:name", async (req, res) => {
       const executions = Array.isArray(payload.executions) ? payload.executions : [];
       const subtaskMap = isPlainObject(payload.subtasks) ? payload.subtasks : {};
       const result = {};
-      await Promise.all(
-        tasks.map(async (task) => {
-          if (!task?.id) return;
-          result[task.id] = await analyzeTask(task, executions, subtaskMap[task.id] || []);
-        })
-      );
+
+      // 限制并发，避免大量任务同时调用 Kimi 导致超时/限流
+      const poolLimit = 3;
+      const executing = [];
+      const promises = [];
+
+      for (const task of tasks) {
+        if (!task?.id) continue;
+        const promise = analyzeTask(task, executions, subtaskMap[task.id] || []).then(
+          (analysis) => { result[task.id] = analysis; },
+          (err) => {
+            console.error(`[analyzeTasks] analyzeTask failed for task ${task.id}:`, err?.message || err);
+            result[task.id] = {};
+          }
+        );
+        promises.push(promise);
+        if (tasks.length > poolLimit) {
+          const wrapped = promise.then(() => {
+            const idx = executing.indexOf(wrapped);
+            if (idx !== -1) executing.splice(idx, 1);
+          });
+          executing.push(wrapped);
+          if (executing.length >= poolLimit) {
+            await Promise.race(executing);
+          }
+        }
+      }
+      await Promise.all(promises);
       return res.json(result);
     }
 

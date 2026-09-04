@@ -44,6 +44,48 @@ async function sendWebPushTo(base44, targetEmail, task, opts) {
   }
 }
 
+// 计算循环约定的下一次提醒时间（同一时段，滚动到下一个符合规则的日期）
+function nextOccurrence(task) {
+  const rule = task.repeat_rule;
+  if (!rule || rule === 'none') return null;
+  const rec = task.custom_recurrence || {};
+  const freq = rule === 'custom' ? (rec.frequency || 'daily') : rule;
+  const start = new Date(task.reminder_time);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const interval = Math.max(1, rec.interval || 1);
+  const dayMs = 24 * 3600 * 1000;
+  let next = new Date(start.getTime());
+  const now = Date.now();
+  let guard = 0;
+
+  while (next.getTime() <= now && guard++ < 800) {
+    if (freq === 'daily') {
+      next = new Date(next.getTime() + interval * dayMs);
+    } else if (freq === 'weekly') {
+      const days = Array.isArray(rec.days_of_week) && rec.days_of_week.length
+        ? rec.days_of_week
+        : [start.getUTCDay()];
+      // 逐天前进，直到落在允许的星期上
+      do {
+        next = new Date(next.getTime() + dayMs);
+      } while (!days.includes(next.getUTCDay()) && guard++ < 800);
+    } else if (freq === 'monthly') {
+      next = new Date(next.getTime());
+      next.setUTCMonth(next.getUTCMonth() + interval);
+    } else {
+      return null;
+    }
+  }
+  if (next.getTime() <= now) return null;
+
+  if (rec.end_date) {
+    const end = new Date(rec.end_date);
+    if (!Number.isNaN(end.getTime()) && next.getTime() > end.getTime() + dayMs) return null;
+  }
+  return next.toISOString();
+}
+
 function buildWeworkMarkdown(task, hoursLeft) {
   const priorityMap = { urgent: '🔴 紧急', high: '🟠 高', medium: '🟡 中', low: '🟢 低' };
   const dueStr = new Date(task.reminder_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
@@ -143,6 +185,7 @@ Deno.serve(async (req) => {
     let processedAdvance = 0;
     let suppressedQuiet = 0;
     let suppressedLocation = 0;
+    let rolledRecurring = 0;
     const errors = [];
 
     for (const task of tasks) {
@@ -262,7 +305,18 @@ Deno.serve(async (req) => {
       // 关键修复：截止预警与到点提醒分开打标——预警不再消耗 reminder_sent，
       // 否则提前 N 小时的预警发出后，真正到点的提醒会被跳过（漏提醒）
       if (sentDue) {
-        await base44.asServiceRole.entities.Task.update(task.id, { reminder_sent: true });
+        // 循环约定：提醒发出后自动滚动到下一次时段，而不是一次性结束
+        const next = nextOccurrence(task);
+        if (next) {
+          await base44.asServiceRole.entities.Task.update(task.id, {
+            reminder_time: next,
+            reminder_sent: false,
+            advance_alert_sent: false,
+          });
+          rolledRecurring++;
+        } else {
+          await base44.asServiceRole.entities.Task.update(task.id, { reminder_sent: true });
+        }
       } else if (sentAdvance) {
         await base44.asServiceRole.entities.Task.update(task.id, { advance_alert_sent: true });
       }
@@ -275,6 +329,7 @@ Deno.serve(async (req) => {
       advance_sent: processedAdvance,
       suppressed_quiet_hours: suppressedQuiet,
       suppressed_wrong_location: suppressedLocation,
+      recurring_rolled: rolledRecurring,
       errors,
     });
   } catch (error) {

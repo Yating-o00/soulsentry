@@ -39,10 +39,16 @@ const CHUNK_TYPES = ["office_doc", "summary_note"];
 const MAX_CHUNK_STEPS = 12;
 
 async function runChunked(execId, silent) {
+  let pendingFile = null;
   for (let step = 0; step < MAX_CHUNK_STEPS; step++) {
-    const res = await base44.functions.invoke("generateDocChunk", { execution_id: execId });
+    const res = await base44.functions.invoke("generateDocChunk", { execution_id: execId, ...(pendingFile || {}) });
     const d = res?.data || {};
     if (d.done) return true;
+    if (d.stage === "uploaded" && d.file_url) {
+      // 文档已生成好文件，下一步单独把结果写回记录
+      pendingFile = { save_file_url: d.file_url, save_file_name: d.file_name };
+      continue;
+    }
     if (!silent && d.stage === "section" && d.total) {
       toast.info(`正在逐节生成（${d.filled}/${d.total}）`);
     }

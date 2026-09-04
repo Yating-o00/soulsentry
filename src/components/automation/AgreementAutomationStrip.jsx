@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useAutoRetryExecution } from "./useAutoRetryExecution";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Bot, Loader2, CheckCircle2, AlertCircle, KeyRound, Hand } from "lucide-react";
@@ -9,8 +10,12 @@ import AgreementDeliveryDialog from "./AgreementDeliveryDialog";
 // 约定卡片内嵌的「机器可兑现部分」：AI 直接预执行，用户看到的是「已完成，请验收」
 export default function AgreementAutomationStrip({ task }) {
   const queryClient = useQueryClient();
-  const [busy, setBusy] = useState(false);
+  const [localBusy, setLocalBusy] = useState(false);
   const [reviewing, setReviewing] = useState(null);
+  const refreshQ = () => queryClient.invalidateQueries({ queryKey: ["task-automations", task.id] });
+  const { busy: runBusy, run: runExecution, autoRecover } = useAutoRetryExecution(refreshQ);
+  const busy = localBusy || runBusy;
+  const setBusy = setLocalBusy;
 
   const { data: allExecutions = [] } = useQuery({
     queryKey: ["task-automations", task.id],
@@ -39,19 +44,6 @@ export default function AgreementAutomationStrip({ task }) {
       setReviewing(null);
     } catch (e) {
       toast.error("验收失败，请稍后重试");
-    } finally {
-      setBusy(false);
-      refresh();
-    }
-  };
-
-  const runExecution = async (execId) => {
-    setBusy(true);
-    try {
-      await base44.functions.invoke("executeAutomation", { execution_id: execId, phase: "execute" });
-      toast.success("心栈已经做好了，请验收");
-    } catch (e) {
-      toast.error(e?.response?.data?.error || "执行失败，请稍后重试");
     } finally {
       setBusy(false);
       refresh();
@@ -119,6 +111,7 @@ export default function AgreementAutomationStrip({ task }) {
           ex={ex}
           busy={busy}
           onRun={() => runExecution(ex.id)}
+          onAutoRecover={() => autoRecover(ex.id)}
           onReview={() => setReviewing(ex)}
         />
       ))}
@@ -134,7 +127,7 @@ export default function AgreementAutomationStrip({ task }) {
   );
 }
 
-function ExecutionRow({ ex, busy, onRun, onReview }) {
+function ExecutionRow({ ex, busy, onRun, onReview, onAutoRecover }) {
   const cfg = AUTOMATION_TYPES[ex.automation_type];
   const typeLabel = cfg ? `${cfg.emoji} ${cfg.label}` : "自动执行";
   const inFlight = ex.execution_status === "executing" || ex.execution_status === "parsing";
@@ -144,6 +137,11 @@ function ExecutionRow({ ex, busy, onRun, onReview }) {
   const running = (busy || inFlight) && !stalled;
   const deliverable = ex.automation_plan?.description || "";
   const need = ex.automation_plan?.risk_warning || "";
+
+  // 执行被中断（卡在进行中）→ 自动补跑，内部最多重试 3 次
+  useEffect(() => {
+    if (stalled && !busy) onAutoRecover?.();
+  }, [stalled]);
 
   if (running) {
     return (
@@ -155,8 +153,8 @@ function ExecutionRow({ ex, busy, onRun, onReview }) {
   if (stalled) {
     return (
       <Row cls="bg-amber-50 text-amber-800 border-amber-200" Icon={AlertCircle}
-        text={`${typeLabel} · 上次执行中断了，还没交付${deliverable ? `：${deliverable}` : ""}`}
-        action={{ label: "重新执行", onClick: onRun }} />
+        text={`${typeLabel} · 上次执行中断了，心栈正在自动重试（最多 3 次）`}
+        action={{ label: "立即重试", onClick: onRun }} />
     );
   }
 
@@ -193,7 +191,7 @@ function ExecutionRow({ ex, busy, onRun, onReview }) {
   if (ex.execution_status === "failed") {
     return (
       <Row cls="bg-red-50 text-red-700 border-red-200" Icon={AlertCircle}
-        text={`${typeLabel} · 执行失败${ex.error_message ? `：${ex.error_message.slice(0, 40)}` : ""}`}
+        text={`${typeLabel} · 执行失败${ex.error_message ? `：${ex.error_message.slice(0, 90)}` : ""}`}
         action={{ label: "重试", onClick: onRun }} />
     );
   }

@@ -68,15 +68,17 @@ export default function NoteCreate() {
 
     setLoading(true);
     try {
+      const density = Taro.getStorageSync("heart_response_density") || "light";
       const note = await post("/notes", {
         content: text,
         plain_text: text,
-        source_type: "emotion"
+        source_type: "emotion",
+        metadata: { response_density: density }
       });
 
       post("/functions/analyzeHeartSign", {
         note_id: note.id,
-        note_data: { plain_text: text, content: text }
+        note_data: { plain_text: text, content: text, metadata: { response_density: density } }
       }, { silent: true }).catch((err) => {
         console.error("analyzeHeartSign silent failed", err);
       });

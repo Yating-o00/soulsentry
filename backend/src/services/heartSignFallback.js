@@ -156,8 +156,16 @@ function extractKeywords(text) {
     .map(([k]) => k);
 }
 
+function getResponseTag(type) {
+  if (["emotion", "inspiration", "share"].includes(type)) return "感性回应";
+  if (type === "material") return "理性补充";
+  return "收录";
+}
+
 function buildTitle(text, type) {
   const t = String(text || "").trim();
+  // 0-50 字短内容不拟标题，前端会直接显示原话
+  if (t.length <= 50) return "";
   const firstLine = t.split(/[。！？\n]/)[0].trim();
   if (firstLine.length >= 4 && firstLine.length <= 20) {
     return firstLine.replace(/^#+\s*/, "");
@@ -225,6 +233,7 @@ export function buildHeartSignFallback({ content, plainText, density = "light" }
       response_title: "来自另一个你的拥抱",
       emotional_response:
         "谢谢你愿意说出来。你现在可能很难受，这不是你一个人要扛的事。可以的话，给信任的人打个电话，或者拨打心理援助热线 24 小时 400-161-9995。我一直都在。",
+      response_tag: "感性回应",
       analyzed_at: new Date().toISOString(),
       source: "crisis_fallback",
       is_crisis: true
@@ -244,6 +253,7 @@ export function buildHeartSignFallback({ content, plainText, density = "light" }
       response_persona: "",
       response_title: "",
       emotional_response: "",
+      response_tag: "收录",
       analyzed_at: new Date().toISOString(),
       source: "vault_fallback",
       is_vault: true,
@@ -277,6 +287,7 @@ export function buildHeartSignFallback({ content, plainText, density = "light" }
       type === "emotion" ? "comforter" : type === "material" ? "mentor" : type === "memo" ? "clerk" : "friend",
     response_title: type === "emotion" ? "来自另一个你的拥抱" : "另一个你说",
     emotional_response: response,
+    response_tag: getResponseTag(type),
     analyzed_at: new Date().toISOString(),
     source: "local_fallback",
     note_type: type

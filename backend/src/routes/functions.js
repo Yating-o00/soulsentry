@@ -2009,7 +2009,7 @@ functionsRouter.post("/:name", async (req, res) => {
       const schema = {
         type: "object",
         properties: {
-          title: { type: "string", description: "8-20 字的简短标语，提炼心情或核心状态，用作笔记标题。例如「项目收官，累并满足」「允许自己慢下来」" },
+          title: { type: "string", description: "8-20 字的简短标语，提炼心情或核心状态，用作笔记标题；若输入≤50字可返回空字符串" },
           summary: { type: "string", description: "1-2 句话精炼摘要" },
           key_points: { type: "array", items: { type: "string" }, description: "3-5 个核心要点" },
           tags: { type: "array", items: { type: "string" }, description: "3-6 个智能标签，不含 #" },
@@ -2017,7 +2017,8 @@ functionsRouter.post("/:name", async (req, res) => {
           is_emotional: { type: "boolean", description: "是否值得温柔回应" },
           response_persona: { type: "string", description: "回应身份：comforter/mentor/clerk/friend/poet" },
           response_title: { type: "string", description: "回应标题" },
-          emotional_response: { type: "string", description: "简短回应，情绪签80字内、资料签60字内、备忘签20字内、灵感签50字内、分享签40字内" }
+          emotional_response: { type: "string", description: "简短回应，情绪签80字内、资料签60字内、备忘签20字内、灵感签50字内、分享签40字内" },
+          response_tag: { type: "string", description: "回应标签：感性回应/理性补充/收录" }
         },
         required: ["title", "summary", "tags", "category"]
       };
@@ -2029,6 +2030,8 @@ functionsRouter.post("/:name", async (req, res) => {
 2. 简短。情绪≤80字，资料≤60字，备忘≤20字，灵感≤50字，分享≤40字。
 3. 浓度：当前为"${density}"，mute 时只输出"已收好。"，light 时一句，full 时最多两句。
 4. 危机词：若用户表达自杀/自伤意图，只返回固定话"谢谢你愿意说出来。你现在可能很难受，可以拨打心理援助热线 400-161-9995。我一直都在。"
+5. 必须返回 response_tag：情绪/灵感/分享返回"感性回应"，资料返回"理性补充"，备忘返回"收录"。
+6. 若用户输入≤50字，title 返回空字符串。
 严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
 
       try {
@@ -2061,13 +2064,17 @@ functionsRouter.post("/:name", async (req, res) => {
           response_persona: parsed.is_emotional ? (parsed.response_persona || "friend") : "",
           response_title: parsed.is_emotional ? (parsed.response_title || "") : "",
           emotional_response: parsed.is_emotional ? (parsed.emotional_response || "") : "",
+          response_tag: parsed.response_tag || (parsed.is_emotional ? "感性回应" : "收录"),
           analyzed_at: new Date().toISOString(),
           source: usedFallback ? "local_fallback" : "kimi",
           note_type: parsed.note_type || null
         };
 
         const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
-        const title = parsed.title ? parsed.title.slice(0, 60) : (parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签"));
+        const plainTextLen = String(note.plainText || note.content || "").trim().length;
+        const title = plainTextLen <= 50
+          ? ""
+          : (parsed.title ? parsed.title.slice(0, 60) : (parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签")));
         const sourceType = parsed.category && ["情绪", "灵感", "资料", "备忘", "分享"].includes(parsed.category)
           ? { 情绪: "emotion", 灵感: "inspiration", 资料: "material", 备忘: "memo", 分享: "share" }[parsed.category]
           : (parsed.note_type || note.sourceType);
@@ -2103,6 +2110,113 @@ functionsRouter.post("/:name", async (req, res) => {
         });
         throw error;
       }
+    }
+
+    if (name === "followupHeartSign") {
+      const { note_id: followNoteId, text, round = 1, density = "light" } = payload;
+      if (!followNoteId || !text) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 note_id 或 text" });
+      }
+
+      const followNote = await prisma.note.findFirst({
+        where: { id: followNoteId, userId: req.user.id }
+      });
+      if (!followNote) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "心签不存在" });
+      }
+
+      // 保存用户继续消息
+      await prisma.noteComment.create({
+        data: {
+          noteId: followNoteId,
+          userId: req.user.id,
+          content: String(text).slice(0, 4000)
+        }
+      });
+
+      const noteType = followNote.sourceType || "emotion";
+      const categoryMap = {
+        emotion: "情绪",
+        inspiration: "灵感",
+        material: "资料",
+        memo: "备忘",
+        share: "分享"
+      };
+      const category = categoryMap[noteType] || "情绪";
+
+      let replyText = "";
+      let closing = false;
+      let tag = "感性回应";
+
+      if (category === "情绪") {
+        if (Number(round) >= 3) {
+          replyText = "今天的对话先说到这里，好吗？谢谢你愿意说这么多。我会一直在这儿，明天如果想继续，随时回来。";
+          closing = true;
+          tag = "感性回应";
+        } else if (density === "mute") {
+          replyText = "已收好。";
+          tag = "收录";
+        } else {
+          const emotionalFollowups = {
+            full: [
+              "嗯，我在听。继续说，我跟着你。",
+              "这些感受都值得被认真放着。那时候，你最希望发生什么？",
+              "如果给现在的感受起一个名字，它叫什么？"
+            ],
+            light: [
+              "嗯，我在听。你慢慢说。",
+              "这些感受都值得被认真放着。",
+              "如果愿意，可以再具体说说那个瞬间。"
+            ]
+          };
+          const pool = emotionalFollowups[density] || emotionalFollowups.light;
+          replyText = pool[Math.floor(Math.random() * pool.length)];
+          tag = "感性回应";
+        }
+      } else if (category === "资料") {
+        if (density === "mute") {
+          replyText = "已收好。";
+          tag = "收录";
+        } else {
+          replyText = density === "full"
+            ? "往深想一步：这条内容和你正在做的事，连接点在哪里？要沉淀进知识库或转成约定，随时告诉我。"
+            : "往深想一步：这条内容和你正在做的事，连接点在哪里？";
+          tag = "理性补充";
+        }
+      } else if (category === "灵感") {
+        if (density === "mute") {
+          replyText = "已收好。";
+          tag = "收录";
+        } else {
+          replyText = density === "full"
+            ? "这个念头我收好了。它最想解决的是哪一个瞬间？想落地的话，我可以帮你转成约定。"
+            : "这个念头我收好了。想落地的话，我可以帮你转成约定。";
+          tag = "感性回应";
+        }
+      } else if (category === "备忘") {
+        replyText = "嗯，这条也一并记在这张签里了。";
+        tag = "收录";
+      } else if (category === "分享") {
+        replyText = density === "mute" ? "已收好。" : "好，分享的内容我都放进签卡里了。";
+        tag = density === "mute" ? "收录" : "感性回应";
+      } else {
+        replyText = "我记下了。";
+        tag = "感性回应";
+      }
+
+      const now = new Date().toISOString();
+      const currentMeta = isPlainObject(followNote.metadata) ? followNote.metadata : {};
+      const conversation = Array.isArray(currentMeta.conversation) ? currentMeta.conversation : [];
+      const nextConversation = [...conversation, { role: "user", text, ts: now }, { role: "other", text: replyText, tag, ts: now }];
+
+      await prisma.note.update({
+        where: { id: followNoteId },
+        data: {
+          metadata: { ...currentMeta, conversation: nextConversation }
+        }
+      });
+
+      return res.json({ ok: true, text: replyText, tag, closing, conversation: nextConversation });
     }
 
     if (name === "analyzeTasks") {

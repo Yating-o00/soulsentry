@@ -4,7 +4,15 @@ import { View, Text, ScrollView, Input, Button } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
 import SharePoster from "@/components/SharePoster";
 import VaultSheet from "@/components/VaultSheet";
+import ReviewDrawer from "@/components/ReviewDrawer";
 import theme from "@/components/tasks/theme";
+
+const DENSITY_KEY = "heart_response_density";
+const DENSITY_OPTIONS = [
+  { key: "full", label: "多陪我说说" },
+  { key: "light", label: "轻轻回应" },
+  { key: "mute", label: "只收不答" }
+];
 
 const FILTERS = [
   { key: "all", label: "全部" },
@@ -72,7 +80,13 @@ function getAiResponse(note) {
   return note.metadata?.ai_analysis?.emotional_response || "";
 }
 
+function getResponseTag(note) {
+  return note.metadata?.ai_analysis?.response_tag || "";
+}
+
 function getTitle(note) {
+  const text = note.plain_text || note.content || "";
+  if (!note.title && text.length <= 50) return text;
   return note.title || "心签";
 }
 
@@ -86,7 +100,14 @@ export default function Notes() {
   const [submittingId, setSubmittingId] = useState(null);
   const [vaultVisible, setVaultVisible] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
+  const [reviewVisible, setReviewVisible] = useState(false);
+  const [density, setDensity] = useState(() => Taro.getStorageSync(DENSITY_KEY) || "light");
   const scrollRef = useRef(null);
+
+  const setDensityAndSave = (val) => {
+    setDensity(val);
+    Taro.setStorageSync(DENSITY_KEY, val);
+  };
 
   const fetchNotes = useCallback(async () => {
     setLoading(true);
@@ -257,21 +278,18 @@ export default function Notes() {
     if (!text) return;
     setSubmittingId(note.id);
     try {
-      await post("/note-comments", { note_id: note.id, content: text });
-      const type = getNoteType(note);
-      const followups = {
-        emotion: "嗯，我在听。你慢慢说，我都在。",
-        inspiration: "往深想一步：这个念头最想解决的，是哪一个瞬间？",
-        material: "这条如果沉淀进知识库，我会把它和之前的内容关联起来。",
-        memo: "嗯，这条也一并记在这张签里了。",
-        share: "好，分享的内容我都放进签卡里了。"
-      };
-      const reply = followups[type] || "我记下了。";
       const conversation = note.metadata?.conversation || [];
-      const now = new Date().toISOString();
-      await updateNoteMeta(note, {
-        conversation: [...conversation, { role: "user", text, ts: now }, { role: "other", text: reply, ts: now }]
+      const userRounds = conversation.filter((m) => m.role === "user").length;
+      const round = userRounds + 1;
+      const res = await post("/functions/followupHeartSign", {
+        note_id: note.id,
+        text,
+        round,
+        density
       });
+      const metaPatch = { conversation: res.conversation || [] };
+      if (res.closing) metaPatch.conversation_closed = true;
+      await updateNoteMeta(note, metaPatch);
       setContinueMap((prev) => ({ ...prev, [note.id]: "" }));
     } catch {
       Taro.showToast({ title: "发送失败", icon: "none" });
@@ -286,18 +304,33 @@ export default function Notes() {
         <View>
           <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "3rpx" }}>{dateLine()}</Text>
         </View>
-        <View
-          onClick={() => setVaultVisible(true)}
-          style={{
-            padding: "8rpx 16rpx",
-            borderRadius: "999rpx",
-            background: theme.primaryMist,
-            display: "flex",
-            alignItems: "center",
-            gap: "6rpx"
-          }}
-        >
-          <Text style={{ fontSize: "22rpx", color: theme.primary }}>🔒 保险柜</Text>
+        <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
+          <View
+            onClick={() => setReviewVisible(true)}
+            style={{
+              padding: "8rpx 16rpx",
+              borderRadius: "999rpx",
+              background: theme.primaryMist,
+              display: "flex",
+              alignItems: "center",
+              gap: "6rpx"
+            }}
+          >
+            <Text style={{ fontSize: "22rpx", color: theme.primary }}>回顾</Text>
+          </View>
+          <View
+            onClick={() => setVaultVisible(true)}
+            style={{
+              padding: "8rpx 16rpx",
+              borderRadius: "999rpx",
+              background: theme.primaryMist,
+              display: "flex",
+              alignItems: "center",
+              gap: "6rpx"
+            }}
+          >
+            <Text style={{ fontSize: "22rpx", color: theme.primary }}>🔒 保险柜</Text>
+          </View>
         </View>
       </View>
       <View style={{ marginTop: "16rpx" }}>
@@ -316,6 +349,25 @@ export default function Notes() {
         <Text style={{ fontSize: "26rpx", color: theme.inkTertiary, lineHeight: "42rpx" }}>
           此刻的心情、刷到的好文章、怕忘的号码……丢进来就好。
         </Text>
+      </View>
+      <View style={{ marginTop: "20rpx", display: "flex", gap: "10rpx", flexWrap: "wrap" }}>
+        {DENSITY_OPTIONS.map((d) => {
+          const active = density === d.key;
+          return (
+            <View
+              key={d.key}
+              onClick={() => setDensityAndSave(d.key)}
+              style={{
+                padding: "8rpx 18rpx",
+                borderRadius: "999rpx",
+                border: `1rpx solid ${active ? theme.primary : theme.border}`,
+                background: active ? theme.primary : theme.card
+              }}
+            >
+              <Text style={{ fontSize: "22rpx", color: active ? "#fff" : theme.inkTertiary }}>{d.label}</Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -404,7 +456,6 @@ export default function Notes() {
 
     return (
       <View
-        key={note.id}
         style={{
           margin: "0 24rpx 28rpx",
           borderRadius: "18rpx",
@@ -454,57 +505,73 @@ export default function Notes() {
 
         {response ? (
           <View style={{ background: theme.primaryMist, borderRadius: "12rpx", padding: "20rpx", marginBottom: "20rpx" }}>
-            <Text style={{ fontSize: "22rpx", color: theme.primary, marginBottom: "8rpx" }}>另一个你 · 回应</Text>
+            <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "8rpx" }}>
+              <Text style={{ fontSize: "22rpx", color: theme.primary }}>另一个你 · 回应</Text>
+              {getResponseTag(note) ? (
+                <View style={{ padding: "2rpx 10rpx", borderRadius: "999rpx", background: "rgba(91,130,160,0.12)" }}>
+                  <Text style={{ fontSize: "18rpx", color: theme.water }}>{getResponseTag(note)}</Text>
+                </View>
+              ) : null}
+            </View>
             <Text style={{ fontSize: "28rpx", color: theme.inkSecondary, lineHeight: "48rpx" }}>{response}</Text>
           </View>
         ) : null}
 
         {conversation.map((m, idx) => (
           <View key={idx} style={{ marginBottom: "16rpx" }}>
-            <Text style={{ fontSize: "22rpx", color: m.role === "user" ? theme.inkQuaternary : theme.primary, marginBottom: "8rpx" }}>
-              {m.role === "user" ? "你" : "另一个你"}
-            </Text>
+            <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "8rpx" }}>
+              <Text style={{ fontSize: "22rpx", color: m.role === "user" ? theme.inkQuaternary : theme.primary }}>
+                {m.role === "user" ? "你" : "另一个你"}
+              </Text>
+              {m.role === "other" && m.tag ? (
+                <View style={{ padding: "2rpx 10rpx", borderRadius: "999rpx", background: "rgba(91,130,160,0.12)" }}>
+                  <Text style={{ fontSize: "18rpx", color: theme.water }}>{m.tag}</Text>
+                </View>
+              ) : null}
+            </View>
             <Text style={{ fontSize: "28rpx", color: theme.ink, lineHeight: "48rpx", whiteSpace: "pre-wrap" }}>{m.text}</Text>
           </View>
         ))}
 
-        <View
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12rpx",
-            borderTop: `1rpx dashed ${theme.border}`,
-            paddingTop: "20rpx",
-            marginTop: "8rpx"
-          }}
-        >
-          <Input
-            style={{ flex: 1, fontSize: "28rpx", color: theme.ink, padding: "10rpx 0" }}
-            placeholder="继续聊聊…"
-            value={continueMap[note.id] || ""}
-            onInput={(e) => setContinueText(note.id, e.detail.value)}
-            confirmType="send"
-            onConfirm={() => submitContinue(note)}
-          />
-          <Button
-            size="mini"
-            loading={submittingId === note.id}
-            disabled={!continueMap[note.id]?.trim()}
-            onClick={() => submitContinue(note)}
+        {note.metadata?.conversation_closed ? null : (
+          <View
             style={{
-              background: theme.primary,
-              color: "#fff",
-              borderRadius: "10rpx",
-              fontSize: "24rpx",
-              margin: 0,
-              padding: "0 20rpx",
-              lineHeight: "56rpx",
-              height: "56rpx"
+              display: "flex",
+              alignItems: "center",
+              gap: "12rpx",
+              borderTop: `1rpx dashed ${theme.border}`,
+              paddingTop: "20rpx",
+              marginTop: "8rpx"
             }}
           >
-            发送
-          </Button>
-        </View>
+            <Input
+              style={{ flex: 1, fontSize: "28rpx", color: theme.ink, padding: "10rpx 0" }}
+              placeholder="继续聊聊…"
+              value={continueMap[note.id] || ""}
+              onInput={(e) => setContinueText(note.id, e.detail.value)}
+              confirmType="send"
+              onConfirm={() => submitContinue(note)}
+            />
+            <Button
+              size="mini"
+              loading={submittingId === note.id}
+              disabled={!continueMap[note.id]?.trim()}
+              onClick={() => submitContinue(note)}
+              style={{
+                background: theme.primary,
+                color: "#fff",
+                borderRadius: "10rpx",
+                fontSize: "24rpx",
+                margin: 0,
+                padding: "0 20rpx",
+                lineHeight: "56rpx",
+                height: "56rpx"
+              }}
+            >
+              发送
+            </Button>
+          </View>
+        )}
 
         <View style={{ display: "flex", flexWrap: "wrap", gap: "8rpx", marginTop: "20rpx" }}>
           <ActionBtn onClick={(e) => togglePin(note, e)} active={pinned} text={pinned ? "已置顶" : "置顶"} loading={actionLoading[`pin-${note.id}`]} />
@@ -518,6 +585,17 @@ export default function Notes() {
     );
   };
 
+  const goToNote = (note) => {
+    setFilter("all");
+    setTimeout(() => {
+      const id = note.id;
+      const el = Taro.createSelectorQuery().select(`#note-${id}`);
+      el.boundingClientRect((rect) => {
+        if (rect) scrollRef.current?.scrollTo?.({ top: rect.top, animated: true });
+      }).exec();
+    }, 100);
+  };
+
   return (
     <View style={{ minHeight: "100vh", background: theme.paper, paddingBottom: "140rpx" }}>
       <ScrollView ref={scrollRef} scrollY style={{ height: "100vh" }}>
@@ -528,7 +606,7 @@ export default function Notes() {
             <Text style={{ fontSize: "28rpx", color: theme.inkTertiary }}>加载中…</Text>
           </View>
         ) : null}
-        {!loading && filteredNotes.length === 0 ? renderEmpty() : filteredNotes.map(renderCard)}
+        {!loading && filteredNotes.length === 0 ? renderEmpty() : filteredNotes.map((n) => <View key={n.id} id={`note-${n.id}`}>{renderCard(n)}</View>)}
         <View style={{ height: "120rpx" }} />
       </ScrollView>
 
@@ -553,6 +631,7 @@ export default function Notes() {
 
       {posterNote && <SharePoster note={posterNote} token={posterToken} onClose={closePoster} />}
       <VaultSheet visible={vaultVisible} onClose={() => setVaultVisible(false)} theme={theme} />
+      <ReviewDrawer visible={reviewVisible} onClose={() => setReviewVisible(false)} notes={notes} onGoToNote={goToNote} theme={theme} />
     </View>
   );
 }

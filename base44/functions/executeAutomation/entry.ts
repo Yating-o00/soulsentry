@@ -1842,6 +1842,15 @@ const EXECUTORS = {
   ledger_organize: executeLedger,
 };
 
+// 上游 AI 限流/额度类错误 → 转成用户能看懂的一句话
+function humanizeError(msg) {
+  const s = String(msg || '');
+  if (/\b429\b|rate limit|too many requests|exceeded/i.test(s)) {
+    return 'AI 服务当前排队繁忙（额度或频率受限），心栈稍后可以重试这条约定';
+  }
+  return s || '执行失败';
+}
+
 // 给 base44 entity/auth 调用包一层 429 指数退避重试（1s/2s/4s），避免偶发限流直接 500
 async function withRetry429(fn, label = 'op') {
   const MAX = 4;
@@ -1905,7 +1914,7 @@ Deno.serve(async (req) => {
       try {
         planRes = await generatePlan(base44, exec, attachmentCtx);
       } catch (e) {
-        const realMsg = e?.response?.data?.error || e?.message || '方案规划失败';
+        const realMsg = humanizeError(e?.response?.data?.error || e?.message || '方案规划失败');
         try {
           await withRetry429(() => base44.entities.TaskExecution.update(execution_id, {
             execution_status: "failed",
@@ -2012,9 +2021,9 @@ Deno.serve(async (req) => {
         // "Request failed with status code 400" 这种没营养的字符串
         const apiErr = e?.response?.data?.error || e?.response?.data?.message;
         const status = e?.response?.status;
-        const realMsg = apiErr
+        const realMsg = humanizeError(apiErr
           ? `${apiErr}${status ? `（HTTP ${status}）` : ''}`
-          : (e?.message || '执行失败');
+          : (e?.message || '执行失败'));
         await base44.entities.TaskExecution.update(execution_id, {
           execution_status: "failed",
           error_message: realMsg,

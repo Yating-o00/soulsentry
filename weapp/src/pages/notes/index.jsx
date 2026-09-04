@@ -80,14 +80,10 @@ function getAiResponse(note) {
   return note.metadata?.ai_analysis?.emotional_response || "";
 }
 
-function getResponseTag(note) {
-  return note.metadata?.ai_analysis?.response_tag || "";
-}
-
 function getTitle(note) {
   const text = note.plain_text || note.content || "";
-  if (!note.title && text.length <= 50) return text;
-  return note.title || "心签";
+  if (text.length <= 50) return null;
+  return note.title || null;
 }
 
 export default function Notes() {
@@ -492,44 +488,40 @@ export default function Notes() {
           <Text style={{ marginLeft: "auto", fontSize: "20rpx", color: theme.inkQuaternary }}>{fmtTime(note.created_date)}</Text>
         </View>
 
-        <Text style={{ fontSize: "32rpx", fontWeight: 700, color: theme.inkSecondary, marginBottom: "16rpx", lineHeight: "48rpx" }}>
-          {getTitle(note)}
-        </Text>
+        {getTitle(note) ? (
+          <Text style={{ fontSize: "32rpx", fontWeight: 700, color: theme.inkSecondary, marginBottom: "16rpx", lineHeight: "48rpx" }}>
+            {getTitle(note)}
+          </Text>
+        ) : null}
 
         <View style={{ marginBottom: "20rpx" }}>
-          <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginBottom: "8rpx" }}>你</Text>
-          <Text style={{ fontSize: "30rpx", color: theme.ink, lineHeight: "50rpx", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          <Text style={{ fontSize: "30rpx", color: theme.ink, lineHeight: "50rpx", whiteSpace: "pre-wrap", wordBreak: "break-word", fontWeight: 500 }}>
             {note.plain_text || note.content || ""}
           </Text>
         </View>
 
         {response ? (
-          <View style={{ background: theme.primaryMist, borderRadius: "12rpx", padding: "20rpx", marginBottom: "20rpx" }}>
-            <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "8rpx" }}>
-              <Text style={{ fontSize: "22rpx", color: theme.primary }}>另一个你 · 回应</Text>
-              {getResponseTag(note) ? (
-                <View style={{ padding: "2rpx 10rpx", borderRadius: "999rpx", background: "rgba(91,130,160,0.12)" }}>
-                  <Text style={{ fontSize: "18rpx", color: theme.water }}>{getResponseTag(note)}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={{ fontSize: "28rpx", color: theme.inkSecondary, lineHeight: "48rpx" }}>{response}</Text>
+          <View style={{ borderRadius: "12rpx", padding: "4rpx 0 16rpx", marginBottom: "12rpx" }}>
+            <Text style={{ fontSize: "28rpx", color: theme.water, lineHeight: "50rpx", fontStyle: "italic" }}>
+              {response}
+            </Text>
           </View>
         ) : null}
 
         {conversation.map((m, idx) => (
           <View key={idx} style={{ marginBottom: "16rpx" }}>
-            <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "8rpx" }}>
-              <Text style={{ fontSize: "22rpx", color: m.role === "user" ? theme.inkQuaternary : theme.primary }}>
-                {m.role === "user" ? "你" : "另一个你"}
-              </Text>
-              {m.role === "other" && m.tag ? (
-                <View style={{ padding: "2rpx 10rpx", borderRadius: "999rpx", background: "rgba(91,130,160,0.12)" }}>
-                  <Text style={{ fontSize: "18rpx", color: theme.water }}>{m.tag}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={{ fontSize: "28rpx", color: theme.ink, lineHeight: "48rpx", whiteSpace: "pre-wrap" }}>{m.text}</Text>
+            <Text
+              style={{
+                fontSize: "28rpx",
+                color: m.role === "user" ? theme.ink : theme.water,
+                lineHeight: "50rpx",
+                whiteSpace: "pre-wrap",
+                fontStyle: m.role === "user" ? "normal" : "italic",
+                fontWeight: m.role === "user" ? 500 : 400
+              }}
+            >
+              {m.text}
+            </Text>
           </View>
         ))}
 
@@ -629,7 +621,17 @@ export default function Notes() {
         <Text style={{ fontSize: "56rpx", color: "#fff" }}>+</Text>
       </View>
 
-      {posterNote && <SharePoster note={posterNote} token={posterToken} onClose={closePoster} />}
+      {posterNote && (
+        <SharePoster
+          visible
+          onClose={closePoster}
+          type="note"
+          title={getTitle(posterNote) || "心签"}
+          description={posterNote.plain_text || posterNote.content || ""}
+          extra={getAiResponse(posterNote) || undefined}
+          shareToken={posterToken}
+        />
+      )}
       <VaultSheet visible={vaultVisible} onClose={() => setVaultVisible(false)} theme={theme} />
       <ReviewDrawer visible={reviewVisible} onClose={() => setReviewVisible(false)} notes={notes} onGoToNote={goToNote} theme={theme} />
     </View>

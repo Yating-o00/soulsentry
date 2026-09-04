@@ -76,15 +76,17 @@ export default function NoteCreate() {
         metadata: { response_density: density }
       });
 
-      post("/functions/analyzeHeartSign", {
-        note_id: note.id,
-        note_data: { plain_text: text, content: text, metadata: { response_density: density } }
-      }, { silent: true }).catch((err) => {
-        console.error("analyzeHeartSign silent failed", err);
-      });
+      try {
+        await post("/functions/analyzeHeartSign", {
+          note_id: note.id,
+          note_data: { plain_text: text, content: text, metadata: { response_density: density } }
+        }, { silent: true, timeout: 8000 });
+      } catch (aiErr) {
+        console.error("analyzeHeartSign failed", aiErr);
+      }
 
       Taro.showToast({ title: "心签已保存", icon: "success" });
-      setTimeout(() => Taro.navigateBack(), 600);
+      setTimeout(() => Taro.navigateBack(), 400);
     } catch (err) {
       Taro.showToast({ title: "保存失败", icon: "none" });
     } finally {

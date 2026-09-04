@@ -133,7 +133,7 @@ function ExecutionRow({ ex, busy, onRun, onReview, onAutoRecover }) {
   const inFlight = ex.execution_status === "executing" || ex.execution_status === "parsing";
   // 后台执行被中断（超时/重启）时状态会永远停在「进行中」，超过 10 分钟即视为中断，给出重试出口
   const lastTouch = new Date(ex.updated_date || ex.created_date || 0).getTime();
-  const stalled = inFlight && Date.now() - lastTouch > 10 * 60 * 1000;
+  const stalled = inFlight && Date.now() - lastTouch > 15 * 60 * 1000;
   const running = (busy || inFlight) && !stalled;
   const deliverable = ex.automation_plan?.description || "";
   const need = ex.automation_plan?.risk_warning || "";
@@ -146,7 +146,7 @@ function ExecutionRow({ ex, busy, onRun, onReview, onAutoRecover }) {
   if (running) {
     return (
       <Row cls="bg-sky-50 text-sky-700 border-sky-200" Icon={Loader2} spin
-        text={`${typeLabel} · 心栈正在做${deliverable ? `：${deliverable}` : "…"}`} />
+        text={`${typeLabel} · 心栈正在做${deliverable ? `：${deliverable}` : "…"}（长文可能需要几分钟，完成后自动出现）`} />
     );
   }
 

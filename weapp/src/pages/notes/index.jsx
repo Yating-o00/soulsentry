@@ -199,20 +199,51 @@ export default function Notes() {
     setActionLoad(key, true);
     try {
       const text = note.plain_text || note.content || "";
-      const res = await post("/functions/parseTaskInput", { input: text, date: new Date().toISOString().slice(0, 10) });
-      await post("/tasks", {
-        title: res.title || getTitle(note),
+      const titleFallback = (getTitle(note) || text.slice(0, 30) || "心签转约定").slice(0, 60);
+
+      let parsed = null;
+      try {
+        parsed = await post("/functions/parseTaskInput", {
+          input: text,
+          date: new Date().toISOString().slice(0, 10)
+        }, { timeout: 10000 });
+      } catch (parseErr) {
+        console.error("parseTaskInput failed, use local fallback", parseErr);
+      }
+
+      // 兜底时间：当前中国时间 +1h / +1h5m
+      const now = new Date();
+      const pad2 = (n) => String(n).padStart(2, "0");
+      const toChinaISO = (d) => {
+        const y = d.getFullYear();
+        const mo = pad2(d.getMonth() + 1);
+        const day = pad2(d.getDate());
+        const h = pad2(d.getHours());
+        const m = pad2(d.getMinutes());
+        const s = pad2(d.getSeconds());
+        return `${y}-${mo}-${day}T${h}:${m}:${s}+08:00`;
+      };
+      const reminder = new Date(now.getTime() + 60 * 60 * 1000);
+      const end = new Date(reminder.getTime() + 5 * 60 * 1000);
+
+      const taskPayload = {
+        title: parsed?.title || titleFallback,
         description: text,
-        reminder_time: res.reminder_time,
-        end_time: res.end_time,
-        priority: res.priority || "medium",
-        category: res.category || "other",
+        reminder_time: parsed?.reminder_time || toChinaISO(reminder),
+        end_time: parsed?.end_time || toChinaISO(end),
+        priority: ["urgent", "high", "medium", "low"].includes(parsed?.priority) ? parsed.priority : "medium",
+        category: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"].includes(parsed?.category)
+          ? parsed.category
+          : "other",
         source_type: "note"
-      });
+      };
+
+      await post("/tasks", taskPayload);
       await updateNoteMeta(note, { converted_task: true });
       Taro.showToast({ title: "已转为约定", icon: "success" });
-    } catch {
-      Taro.showToast({ title: "转换失败", icon: "none" });
+    } catch (err) {
+      console.error("convertTask failed", err);
+      Taro.showToast({ title: `转换失败：${err?.message || ""}`, icon: "none" });
     } finally {
       setActionLoad(key, false);
     }
@@ -224,8 +255,7 @@ export default function Notes() {
     setActionLoad(key, true);
     try {
       await post("/knowledge-bases", {
-        title: getTitle(note),
-        content: note.plain_text || note.content || "",
+        title: getTitle(note) || (note.plain_text || note.content || "").slice(0, 60) || "心签沉淀",
         source_type: "note",
         source_id: note.id,
         tags: Array.isArray(note.tags) ? note.tags : [],

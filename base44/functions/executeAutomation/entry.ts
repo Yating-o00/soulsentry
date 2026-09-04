@@ -316,12 +316,29 @@ async function buildAgreementContext(base44, exec) {
     try {
       subs = await base44.entities.Task.filter({ parent_task_id: task.id }, '-created_date', 20);
     } catch (_) { /* ignore */ }
+    let comments = [];
+    try {
+      comments = await base44.entities.Comment.filter({ task_id: task.id }, '-created_date', 20);
+    } catch (_) { /* ignore */ }
+    const notes = Array.isArray(task.notes) ? task.notes.filter((n) => n?.content) : [];
+    const atts = Array.isArray(task.attachments) ? task.attachments.filter((a) => a?.file_url) : [];
     const lines = [
       `标题：${task.title}`,
       task.description ? `说明：${task.description}` : '',
       task.category ? `分类：${task.category}` : '',
+      task.priority ? `优先级：${task.priority}` : '',
+      task.status ? `当前状态：${task.status}` : '',
+      Array.isArray(task.tags) && task.tags.length ? `标签：${task.tags.join('、')}` : '',
       task.reminder_time ? `时间：${new Date(task.reminder_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}` : '',
-      subs.length ? `已拆出的子约定：\n${subs.map((s) => `- ${s.title}${s.status === 'completed' ? '（已完成）' : ''}`).join('\n')}` : '',
+      task.end_time ? `截止：${new Date(task.end_time).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}` : '',
+      subs.length
+        ? `已拆出的子约定：\n${subs.map((s) => `- ${s.title}${s.description ? `：${s.description}` : ''}${s.status === 'completed' ? '（已完成）' : ''}`).join('\n')}`
+        : '',
+      notes.length ? `约定备注：\n${notes.map((n) => `- ${String(n.content).slice(0, 500)}`).join('\n')}` : '',
+      comments.length ? `讨论/评论：\n${comments.map((c) => `- ${String(c.content).slice(0, 300)}`).join('\n')}` : '',
+      task.long_term_summary ? `长期计划摘要：${task.long_term_summary}` : '',
+      task.ai_analysis?.status_summary ? `AI 既有判断：${task.ai_analysis.status_summary}` : '',
+      atts.length ? `随约定的附件：\n${atts.map((a) => `- ${a.file_name || a.file_url}`).join('\n')}` : '',
     ].filter(Boolean);
     return { text: `\n\n=== 这条约定的完整上下文（产物必须紧扣这些内容，禁止另起话题）===\n${lines.join('\n')}\n=== 上下文结束 ===\n`, bound: true };
   } catch (_) {
@@ -1886,6 +1903,22 @@ Deno.serve(async (req) => {
       'TaskExecution.get'
     );
     if (!exec) return Response.json({ error: 'Execution not found' }, { status: 404 });
+
+    // 把约定卡片自身的附件也并入待解析文件列表（用户上传在约定详情里的资料）
+    if (exec.task_id) {
+      try {
+        const t = await base44.entities.Task.get(exec.task_id);
+        const taskFiles = (t?.attachments || []).filter((a) => a?.file_url);
+        if (taskFiles.length) {
+          const existing = exec.ai_parsed_result?.attached_files || [];
+          const seen = new Set(existing.map((f) => f.file_url));
+          exec.ai_parsed_result = {
+            ...(exec.ai_parsed_result || {}),
+            attached_files: [...existing, ...taskFiles.filter((f) => !seen.has(f.file_url))],
+          };
+        }
+      } catch (_) { /* ignore */ }
+    }
 
     // 读取用户上传的附件（plan / execute 都用得到）
     const attachmentCtx = await buildAttachmentContext(base44, exec);

@@ -819,7 +819,7 @@ export default function TaskCreate() {
     try {
       const requestPromise = post("/functions/parseTaskInput", { input: inputText, date: todayStr() });
       const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("AI 解析超时")), 15000);
+        timeoutId = setTimeout(() => reject(new Error("AI 解析超时")), 30000);
       });
       const parsed = await Promise.race([requestPromise, timeoutPromise]);
       clearTimeout(timeoutId);

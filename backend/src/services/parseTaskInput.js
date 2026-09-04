@@ -287,8 +287,10 @@ export async function parseTaskInput({ input, date }) {
 
   try {
     const currentTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    kimiResult = await invokeKimiText({
-      prompt: `用户输入：${text}
+    // Kimi 只给 5 秒，超时立即 fallback 到本地规则，避免前端等 25 秒
+    kimiResult = await Promise.race([
+      invokeKimiText({
+        prompt: `用户输入：${text}
 当前日期：${fallbackDate}
 当前时间：${currentTime}
 
@@ -298,13 +300,15 @@ export async function parseTaskInput({ input, date }) {
 3. 时间必须使用 ISO 8601 格式并包含 +08:00 时区，例如 "2026-08-26T14:35:00+08:00"。
 4. 从输入中提取地点（location）和事件类型（event_type）。
 5. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
-      systemPrompt: "你是 SoulSentry 的约定解析器。把中文自然语言输入转成可创建的约定字段。严格返回 JSON。",
-      responseJsonSchema: schema,
-      temperature: 0.2
-    });
+        systemPrompt: "你是 SoulSentry 的约定解析器。把中文自然语言输入转成可创建的约定字段。严格返回 JSON。",
+        responseJsonSchema: schema,
+        temperature: 0.2
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 5000))
+    ]);
     kimiSucceeded = true;
   } catch (err) {
-    console.error("[parseTaskInput] Kimi parse failed, fallback to local", err);
+    console.error("[parseTaskInput] Kimi parse failed, fallback to local", err?.message || err);
   }
 
   // 提取标题：优先 Kimi，否则取输入前 60 字

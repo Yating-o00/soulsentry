@@ -137,7 +137,11 @@ export default function AgreementAutomationStrip({ task }) {
 function ExecutionRow({ ex, busy, onRun, onReview }) {
   const cfg = AUTOMATION_TYPES[ex.automation_type];
   const typeLabel = cfg ? `${cfg.emoji} ${cfg.label}` : "自动执行";
-  const running = busy || ex.execution_status === "executing" || ex.execution_status === "parsing";
+  const inFlight = ex.execution_status === "executing" || ex.execution_status === "parsing";
+  // 后台执行被中断（超时/重启）时状态会永远停在「进行中」，超过 10 分钟即视为中断，给出重试出口
+  const lastTouch = new Date(ex.updated_date || ex.created_date || 0).getTime();
+  const stalled = inFlight && Date.now() - lastTouch > 10 * 60 * 1000;
+  const running = (busy || inFlight) && !stalled;
   const deliverable = ex.automation_plan?.description || "";
   const need = ex.automation_plan?.risk_warning || "";
 
@@ -145,6 +149,14 @@ function ExecutionRow({ ex, busy, onRun, onReview }) {
     return (
       <Row cls="bg-sky-50 text-sky-700 border-sky-200" Icon={Loader2} spin
         text={`${typeLabel} · 心栈正在做${deliverable ? `：${deliverable}` : "…"}`} />
+    );
+  }
+
+  if (stalled) {
+    return (
+      <Row cls="bg-amber-50 text-amber-800 border-amber-200" Icon={AlertCircle}
+        text={`${typeLabel} · 上次执行中断了，还没交付${deliverable ? `：${deliverable}` : ""}`}
+        action={{ label: "重新执行", onClick: onRun }} />
     );
   }
 

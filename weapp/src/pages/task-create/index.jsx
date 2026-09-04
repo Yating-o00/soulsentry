@@ -915,10 +915,9 @@ export default function TaskCreate() {
             <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>完整内容</Text>
             <Textarea
               className="ss-textarea"
-              style={{ minHeight: "240rpx", height: "auto" }}
+              style={{ height: "360rpx" }}
               placeholder="例如：周五前完成报告 / 明天下午3点开会 / 记得吃早餐"
               value={title}
-              autoHeight
               maxlength={500}
               disableDefaultPadding
               showConfirmBar={false}
@@ -941,10 +940,9 @@ export default function TaskCreate() {
           <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>补充说明</Text>
           <Textarea
             className="ss-textarea"
-            style={{ minHeight: "180rpx", height: "auto" }}
+            style={{ height: "240rpx" }}
             placeholder="补充说明（可选），也可在这里补充时间、地点"
             value={description}
-            autoHeight
             maxlength={500}
             disableDefaultPadding
             showConfirmBar={false}
@@ -1087,10 +1085,9 @@ export default function TaskCreate() {
           <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>补充说明</Text>
           <Textarea
             className="ss-textarea"
-            style={{ minHeight: "180rpx", height: "auto" }}
+            style={{ height: "240rpx" }}
             placeholder="补充说明（可选）"
             value={description}
-            autoHeight
             disableDefaultPadding
             showConfirmBar={false}
             onInput={(e) => setDescription(e.detail.value)}

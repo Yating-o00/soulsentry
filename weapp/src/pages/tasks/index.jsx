@@ -225,21 +225,26 @@ export default function Tasks() {
 
         {/* greeting + composer */}
         <View style={{ paddingTop: "40rpx" }}>
-          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "6rpx" }}>{dateLabel}</Text>
-          <Text style={{ marginTop: "16rpx", fontSize: "52rpx", fontWeight: 700, color: theme.primary, lineHeight: "72rpx" }}>
-            {greeting()}。
-          </Text>
-          <Text
-            style={{
-              marginTop: "24rpx",
-              fontSize: "40rpx",
-              fontWeight: 500,
-              color: theme.inkSecondary,
-              lineHeight: "56rpx"
-            }}
-          >
-            你的点滴，都是最重要的事。
-          </Text>
+          <View>
+            <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>{dateLabel}</Text>
+          </View>
+          <View style={{ marginTop: "16rpx" }}>
+            <Text style={{ fontSize: "52rpx", fontWeight: 700, color: theme.primary, lineHeight: "72rpx" }}>
+              {greeting()}。
+            </Text>
+          </View>
+          <View style={{ marginTop: "24rpx" }}>
+            <Text
+              style={{
+                fontSize: "40rpx",
+                fontWeight: 500,
+                color: theme.inkSecondary,
+                lineHeight: "56rpx"
+              }}
+            >
+              你的点滴，都是最重要的事。
+            </Text>
+          </View>
 
           <View
             style={{

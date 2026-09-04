@@ -10,8 +10,8 @@ const POLL_INTERVAL_MS = 6000;
 function reasonOf(e) {
   const msg = e?.response?.data?.error || e?.response?.data?.message || e?.message || "";
   const status = e?.response?.status;
-  if (status === 502 || status === 504 || status === 408 || status === 0 || !status ||
-      /timeout|timed out|502|504|network/i.test(msg)) {
+  if (status === 502 || status === 503 || status === 504 || status === 408 || status === 0 || !status ||
+      /timeout|timed out|DEPLOYMENT_TIMED_OUT|502|503|504|network/i.test(msg)) {
     return "__GATEWAY_TIMEOUT__";
   }
   if (status === 402 || /INSUFFICIENT_CREDITS|点数不足/i.test(msg)) return "AI 点数不足";
@@ -34,6 +34,22 @@ async function waitForResult(execId, refresh) {
   return "pending";
 }
 
+// 长文档类型走"分段接力"生成：每次请求只做一步，规避平台 120 秒硬超时
+const CHUNK_TYPES = ["office_doc", "summary_note"];
+const MAX_CHUNK_STEPS = 12;
+
+async function runChunked(execId, silent) {
+  for (let step = 0; step < MAX_CHUNK_STEPS; step++) {
+    const res = await base44.functions.invoke("generateDocChunk", { execution_id: execId });
+    const d = res?.data || {};
+    if (d.done) return true;
+    if (!silent && d.stage === "section" && d.total) {
+      toast.info(`正在逐节生成（${d.filled}/${d.total}）`);
+    }
+  }
+  throw new Error("章节过多，未在限定步骤内完成");
+}
+
 // 执行智能执行任务：耗时过长时继续等待后台出结果；真失败才自动重试，最多 3 次
 export function useAutoRetryExecution(refresh) {
   const [busy, setBusy] = useState(false);
@@ -43,9 +59,16 @@ export function useAutoRetryExecution(refresh) {
     setBusy(true);
     let lastReason = "";
     try {
+      let chunked = false;
+      try {
+        const rec = await base44.entities.TaskExecution.get(execId);
+        chunked = CHUNK_TYPES.includes(rec?.automation_type);
+      } catch (_) { /* ignore */ }
+
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          await base44.functions.invoke("executeAutomation", { execution_id: execId, phase: "execute" });
+          if (chunked) await runChunked(execId, silent);
+          else await base44.functions.invoke("executeAutomation", { execution_id: execId, phase: "execute" });
           if (!silent) toast.success("心栈已经做好了，请验收");
           return true;
         } catch (e) {

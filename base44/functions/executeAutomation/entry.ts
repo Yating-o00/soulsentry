@@ -9,9 +9,42 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // 原版调用 base44.functions.invoke('invokeKimi') —— 走 base44 平台 axios,
 // 会因 base44 平台 quota(Rate limit exceeded)整体卡住几分钟,导致 plan/执行 500。
 // 新版:无附件时直连 Moonshot,有附件才走 invokeKimi(因为它内置文件抽取)。
+// ⏱️ 平台硬限制：单次请求 120s 后被 Deno Deploy 掐断（DEPLOYMENT_TIMED_OUT）。
+// 因此内容生成必须走"快模型优先 + 剩余时间预算"策略：
+// ① 首选 gemini_3_flash（通常 15~40s 出长文）；② 时间还够才回退 Kimi。
+const HARD_BUDGET_MS = 105 * 1000;
+function budgetLeft(startedAt) { return HARD_BUDGET_MS - (Date.now() - startedAt); }
+
+async function callFastLLM(base44, prompt, response_json_schema, system_prompt) {
+  const res = await base44.integrations.Core.InvokeLLM({
+    prompt: `${system_prompt || ''}\n\n${prompt}`,
+    response_json_schema: response_json_schema || undefined,
+    model: 'gemini_3_flash',
+  });
+  if (response_json_schema) {
+    if (typeof res === 'string') {
+      try { return JSON.parse(res); } catch { return { _raw: res, _parse_error: true }; }
+    }
+    return res;
+  }
+  return { text: typeof res === 'string' ? res : (res?.text || '') };
+}
+
 async function callKimi(base44, prompt, response_json_schema, system_prompt, file_urls) {
   const hasFiles = Array.isArray(file_urls) && file_urls.length > 0;
   if (!hasFiles) {
+    const startedAt = Date.now();
+    // ① 快模型优先，避免 120s 硬超时
+    try {
+      const fast = await callFastLLM(base44, prompt, response_json_schema, system_prompt);
+      if (!fast?._parse_error && (!response_json_schema || Object.keys(fast || {}).length > 0)) return fast;
+    } catch (e) {
+      console.warn('[callKimi] fast model failed, fallback to Kimi:', e?.message || e);
+    }
+    // ② 时间不够就直接报错，不要拖到被平台掐断
+    if (budgetLeft(startedAt) < 25000) {
+      throw new Error('内容体量偏大，AI 生成超出单次执行时限，请把这条约定拆小后重试');
+    }
     const apiKey = (Deno.env.get("KIMI_API_KEY") || Deno.env.get("MOONSHOT_API_KEY") || "").trim();
     if (!apiKey) throw new Error('KIMI_API_KEY 未配置');
     const wantsJson = !!response_json_schema;
@@ -23,11 +56,15 @@ async function callKimi(base44, prompt, response_json_schema, system_prompt, fil
       const body = { model: m, messages: [{ role: "system", content: sys }, { role: "user", content: prompt }], temperature: 1 };
       if (wantsJson) body.response_format = { type: "json_object" };
       try {
+        // 剩余时间预算内中止，避免整个函数被平台 120s 掐断
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), Math.max(10000, budgetLeft(startedAt)));
         resp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
           body: JSON.stringify(body),
-        });
+          signal: ac.signal,
+        }).finally(() => clearTimeout(timer));
         if (resp.ok) break;
         lastErr = await resp.text(); lastStatus = resp.status;
         if (resp.status !== 404 && resp.status !== 403) break;

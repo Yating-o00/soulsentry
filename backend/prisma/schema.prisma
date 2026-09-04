@@ -46,6 +46,7 @@ model User {
   wechatOrders      WechatOrder[]
   weeklyPlans       WeeklyPlan[]
   memoryRecords     MemoryRecord[]
+  vaultItems        VaultItem[]
 }
 
 model UserPreference {

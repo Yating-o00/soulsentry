@@ -226,21 +226,23 @@ export default function Notes() {
       const reminder = new Date(now.getTime() + 60 * 60 * 1000);
       const end = new Date(reminder.getTime() + 5 * 60 * 1000);
 
-      const taskPayload = {
-        title: parsed?.title || titleFallback,
-        description: text,
-        reminder_time: parsed?.reminder_time || toChinaISO(reminder),
-        end_time: parsed?.end_time || toChinaISO(end),
+      const query = {
+        title: encodeURIComponent(parsed?.title || titleFallback),
+        description: encodeURIComponent(text),
+        raw_input: encodeURIComponent(text),
+        reminder_time: encodeURIComponent(parsed?.reminder_time || toChinaISO(reminder)),
+        end_time: encodeURIComponent(parsed?.end_time || toChinaISO(end)),
         priority: ["urgent", "high", "medium", "low"].includes(parsed?.priority) ? parsed.priority : "medium",
         category: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"].includes(parsed?.category)
           ? parsed.category
           : "other",
-        source_type: "note"
+        note_id: note.id
       };
 
-      await post("/tasks", taskPayload);
-      await updateNoteMeta(note, { converted_task: true });
-      Taro.showToast({ title: "已转为约定", icon: "success" });
+      const qs = Object.entries(query)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("&");
+      Taro.navigateTo({ url: `/pages/task-create/index?${qs}` });
     } catch (err) {
       console.error("convertTask failed", err);
       Taro.showToast({ title: `转换失败：${err?.message || ""}`, icon: "none" });

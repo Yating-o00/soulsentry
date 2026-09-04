@@ -149,8 +149,24 @@ export default function TaskCreate() {
       setEditId(id);
       setIsEdit(true);
       loadTask(id);
-    } else if (params.title) {
-      setTitle(decodeURIComponent(params.title));
+      return;
+    }
+
+    // 来自心签等外部来源的预填数据
+    if (params.title) setTitle(decodeURIComponent(params.title));
+    if (params.description) setDescription(decodeURIComponent(params.description));
+    if (params.raw_input) setRawInput(decodeURIComponent(params.raw_input));
+
+    if (params.reminder_time) setDateTimeFromISO(decodeURIComponent(params.reminder_time), setReminderDate, setReminderTime);
+    if (params.end_time) setDateTimeFromISO(decodeURIComponent(params.end_time), setEndDate, setEndTime);
+
+    if (params.priority) {
+      const idx = priorities.findIndex((p) => p.value === params.priority);
+      if (idx >= 0) setPriorityIndex(idx);
+    }
+    if (params.category) {
+      const idx = categories.findIndex((c) => c.value === params.category);
+      if (idx >= 0) setCategoryIndex(idx);
     }
   }, []);
 

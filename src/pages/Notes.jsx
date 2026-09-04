@@ -84,10 +84,10 @@ export default function Notes() {
     return () => window.removeEventListener('mobile-create-note', handler);
   }, [searchParams]);
 
-  const { data: notes = [], isLoading } = useQuery({
+  const { data: notes = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date'),
-    initialData: []
+    retry: 2
   });
 
   // Handle URL param for opening specific note
@@ -489,7 +489,25 @@ export default function Notes() {
           {/* 聊天信息流 */}
           <div className="flex flex-col bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}>
             <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4">
-              {filteredNotes.length === 0 ? (
+              {isLoading ? (
+                <div className="max-w-3xl mx-auto space-y-3">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="h-20 rounded-2xl bg-white/70 border border-slate-200 animate-pulse" />
+                  ))}
+                </div>
+              ) : isError ? (
+                <div className="text-center py-16 max-w-md mx-auto">
+                  <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <RotateCcw className="w-7 h-7 text-rose-500" />
+                  </div>
+                  <h3 className="text-slate-800 font-medium mb-2">心签没能加载出来</h3>
+                  <p className="text-slate-500 text-sm mb-4">网络似乎不太稳定，稍等一下再试试</p>
+                  <Button onClick={() => refetch()} variant="outline" size="sm" className="gap-1.5">
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    重新加载
+                  </Button>
+                </div>
+              ) : filteredNotes.length === 0 ? (
                 <div className="text-center py-16 max-w-md mx-auto">
                   <div className="w-16 h-16 bg-gradient-to-br from-violet-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Sparkles className="w-7 h-7 text-violet-500" />

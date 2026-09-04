@@ -1142,7 +1142,6 @@ export default function Flow() {
   const [executions, setExecutions] = useState([]);
   const [sentinel, setSentinel] = useState(null);
   const [assoc, setAssoc] = useState(null);
-  const [heartInsights, setHeartInsights] = useState({});
   const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [inputText, setInputText] = useState("");
@@ -1211,15 +1210,18 @@ export default function Flow() {
     return Promise.race([requestPromise, timeoutPromise])
       .then((data) => {
         console.log("[runHeartAnalysis] success", noteId, data?.title);
-        if (data?.ai_analysis?.emotional_response) {
-          setHeartInsights((prev) => ({ ...prev, [noteId]: data.ai_analysis.emotional_response }));
-        }
-        // AI 生成标题后，立即更新本地笔记列表，避免显示统一的"心签"
-        if (data?.title) {
+        // 只要后端返回了 ai_analysis，就统一写进 notes 状态，避免 heartInsights 与 metadata 双数据源导致跳动/重复
+        if (data?.ai_analysis) {
           setNotes((prev) =>
             prev.map((n2) =>
               n2.id === noteId
-                ? { ...n2, title: data.title, tags: data.tags || n2.tags, metadata: { ...n2.metadata, ai_analysis: data.ai_analysis } }
+                ? {
+                    ...n2,
+                    title: data.title || n2.title,
+                    tags: data.tags || n2.tags,
+                    source_type: data.source_type || n2.source_type,
+                    metadata: { ...n2.metadata, ai_analysis: data.ai_analysis }
+                  }
                 : n2
             )
           );
@@ -1230,8 +1232,26 @@ export default function Flow() {
       })
       .catch((err) => {
         console.error("[runHeartAnalysis] failed", noteId, err);
-        // AI 失败时再用本地兜底，避免空白
-        setHeartInsights((prev) => ({ ...prev, [noteId]: generateLocalHeartReply(text) }));
+        // AI 失败时给一条本地兜底回应，只写进 metadata，不再维护 heartInsights 双缓存
+        const fallbackReply = generateLocalHeartReply(text);
+        setNotes((prev) =>
+          prev.map((n2) =>
+            n2.id === noteId
+              ? {
+                  ...n2,
+                  metadata: {
+                    ...n2.metadata,
+                    ai_analysis: {
+                      ...(n2.metadata?.ai_analysis || {}),
+                      emotional_response: fallbackReply,
+                      source: "local_fallback",
+                      analyzed_at: new Date().toISOString()
+                    }
+                  }
+                }
+              : n2
+          )
+        );
         if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
           Taro.showToast({ title: "AI 服务未配置，心签回应为本地兜底", icon: "none" });
         }
@@ -2964,7 +2984,7 @@ export default function Flow() {
                 >
                   {heartLoadingIds.has(item.id)
                     ? "AI 正在回应…"
-                    : item.metadata?.ai_analysis?.emotional_response || heartInsights[item.id] || generateLocalHeartReply(item.text)}
+                    : item.metadata?.ai_analysis?.emotional_response || generateLocalHeartReply(item.text)}
                 </Text>
               </View>
             )}

@@ -60,7 +60,7 @@ function friendlyErrorMessage(res) {
   const msg = res?.msg || res?.message || "语音识别失败";
   switch (code) {
     case "-30001":
-      return "录音启动失败，请检查麦克风授权和插件配置";
+      return "语音插件启动失败，请检查微信公众平台是否已添加 WechatSI 插件";
     case "-30002":
       return "语音识别失败，请稍后再试";
     case "-30003":
@@ -69,6 +69,8 @@ function friendlyErrorMessage(res) {
       return "未识别到语音，请重试";
     case "-30011":
       return "识别还在准备中，请稍候";
+    case "-30012":
+      return "语音服务繁忙，请稍后再试";
     default:
       return code ? `${msg} (${code})` : msg;
   }

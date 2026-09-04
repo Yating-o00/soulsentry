@@ -14,7 +14,8 @@ const noteInputSchema = z.object({
   source_type: z.string().optional(),
   ai_status: z.string().optional(),
   deleted_at: z.string().datetime().optional().nullable(),
-  tags: z.any().optional()
+  tags: z.any().optional(),
+  metadata: z.any().optional()
 });
 
 notesRouter.use(requireAuth);
@@ -37,6 +38,7 @@ function serializeNote(note) {
     ai_status: note.aiStatus,
     deleted_at: note.deletedAt,
     tags: note.tags,
+    metadata: note.metadata,
     share_token: note.shareToken,
     share_enabled: note.shareEnabled,
     share_expires_at: note.shareExpiresAt,
@@ -117,7 +119,8 @@ notesRouter.post("/", async (req, res) => {
       sourceType: payload.data.source_type,
       aiStatus: payload.data.ai_status,
       deletedAt: payload.data.deleted_at ? new Date(payload.data.deleted_at) : null,
-      tags: payload.data.tags
+      tags: payload.data.tags,
+      metadata: payload.data.metadata
     }
   });
 
@@ -152,7 +155,8 @@ notesRouter.patch("/:id", async (req, res) => {
       sourceType: payload.data.source_type,
       aiStatus: payload.data.ai_status,
       deletedAt: payload.data.deleted_at === undefined ? undefined : (payload.data.deleted_at ? new Date(payload.data.deleted_at) : null),
-      tags: payload.data.tags
+      tags: payload.data.tags,
+      metadata: payload.data.metadata
     }
   });
 

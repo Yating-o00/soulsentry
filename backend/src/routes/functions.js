@@ -5,6 +5,7 @@ import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { parseTaskInput } from "../services/parseTaskInput.js";
+import { buildHeartSignFallback } from "../services/heartSignFallback.js";
 import { executeAutomation } from "../services/executeAutomation.js";
 import { sendTestPush } from "../services/reminderSender.js";
 import { getCreditPack } from "../config/creditPacks.js";
@@ -1991,12 +1992,26 @@ functionsRouter.post("/:name", async (req, res) => {
       };
 
       try {
-        const parsed = await invokeKimiText({
+        // Kimi 只给 5 秒；超时或失败立即走本地规则兜底，避免前端一直等
+        const kimiPromise = invokeKimiText({
           prompt: `请分析以下心签内容：\n\n${materialText}`,
           systemPrompt: `你是用户的私人知识库助理，也是一位懂得共情的伙伴。用户发来的每一条"心签"都需要你完成：提炼一条简短标题、自动摘要、关键词提取、内容分类。\n标题(title)必须简短有力，8-20 字，像一句标语或心情签名，能代表这条心签的核心状态，例如「项目收官，累并满足」「允许自己慢下来」。\n此外，请判断这条心签是否属于生活记录、情绪倾诉、心灵感悟或人生灵感等偏感性、值得被温柔回应的内容：若是，请把 is_emotional 设为 true，选择最贴切的回应身份(response_persona)，并以那个身份的口吻写一段真诚、温暖、有人文温度的回应(emotional_response)，让用户感到被理解、被陪伴、被指引；若只是资料/任务/信息类内容，则 is_emotional 为 false，相关字段留空。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`,
           responseJsonSchema: schema,
           temperature: 1
         });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("TIMEOUT")), 5000)
+        );
+
+        let parsed;
+        let usedFallback = false;
+        try {
+          parsed = await Promise.race([kimiPromise, timeoutPromise]);
+        } catch (kimiErr) {
+          console.error("[analyzeHeartSign] Kimi failed or timeout, use local fallback", kimiErr?.message || kimiErr);
+          parsed = buildHeartSignFallback({ content: note.content, plainText: note.plainText });
+          usedFallback = true;
+        }
 
         const ai_analysis = {
           summary: parsed.summary || "",
@@ -2006,11 +2021,15 @@ functionsRouter.post("/:name", async (req, res) => {
           response_persona: parsed.is_emotional ? (parsed.response_persona || "friend") : "",
           response_title: parsed.is_emotional ? (parsed.response_title || "") : "",
           emotional_response: parsed.is_emotional ? (parsed.emotional_response || "") : "",
-          analyzed_at: new Date().toISOString()
+          analyzed_at: new Date().toISOString(),
+          source: usedFallback ? "local_fallback" : "kimi"
         };
 
         const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
         const title = parsed.title ? parsed.title.slice(0, 60) : (parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签"));
+        const sourceType = parsed.category && ["情绪", "灵感", "资料", "备忘", "分享"].includes(parsed.category)
+          ? { 情绪: "emotion", 灵感: "inspiration", 资料: "material", 备忘: "memo", 分享: "share" }[parsed.category]
+          : note.sourceType;
 
         const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
         const updatedNote = await prisma.note.update({
@@ -2018,6 +2037,7 @@ functionsRouter.post("/:name", async (req, res) => {
           data: {
             title,
             tags: mergedTags,
+            sourceType,
             aiStatus: "completed",
             metadata: {
               ...currentMetadata,
@@ -2030,9 +2050,12 @@ functionsRouter.post("/:name", async (req, res) => {
           ok: true,
           ai_analysis,
           tags: mergedTags,
-          title: updatedNote.title
+          title: updatedNote.title,
+          source_type: updatedNote.sourceType,
+          used_fallback: usedFallback
         });
       } catch (error) {
+        console.error("[analyzeHeartSign] unexpected error", error);
         await prisma.note.update({
           where: { id: noteId },
           data: { aiStatus: "failed" }

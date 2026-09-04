@@ -5,7 +5,7 @@ import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { parseTaskInput } from "../services/parseTaskInput.js";
-import { buildHeartSignFallback } from "../services/heartSignFallback.js";
+import { buildHeartSignFallback, detectVault, detectCrisis } from "../services/heartSignFallback.js";
 import { executeAutomation } from "../services/executeAutomation.js";
 import { sendTestPush } from "../services/reminderSender.js";
 import { getCreditPack } from "../config/creditPacks.js";
@@ -1954,8 +1954,41 @@ functionsRouter.post("/:name", async (req, res) => {
         return res.json({ ok: true, skipped: true, message: "已有分析任务在进行中" });
       }
 
+      const materialText = String(note.plainText || note.content || "")
+        .replace(/<[^>]+>/g, " ")
+        .slice(0, 8000);
+
+      // 危机兜底：不进入 AI 管道，直接写死安全话术
+      if (detectCrisis(materialText)) {
+        const crisis = buildHeartSignFallback({ content: note.content, plainText: note.plainText });
+        const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
+        await prisma.note.update({
+          where: { id: noteId },
+          data: {
+            aiStatus: "completed",
+            sourceType: "emotion",
+            metadata: { ...currentMetadata, ai_analysis: crisis, is_crisis: true }
+          }
+        });
+        return res.json({ ok: true, ai_analysis: crisis, is_crisis: true });
+      }
+
+      // 保险柜兜底：敏感信息不进入 AI 管道，标记为 vault
+      if (detectVault(materialText)) {
+        const vaultFallback = buildHeartSignFallback({ content: note.content, plainText: note.plainText });
+        const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
+        await prisma.note.update({
+          where: { id: noteId },
+          data: {
+            aiStatus: "completed",
+            sourceType: "vault",
+            metadata: { ...currentMetadata, ai_analysis: vaultFallback, is_vault: true }
+          }
+        });
+        return res.json({ ok: true, ai_analysis: vaultFallback, is_vault: true, vault_label: vaultFallback.vault_label });
+      }
+
       // 原子性地把 aiStatus 从非 processing 改为 processing，防止并发重复分析
-      // 注意：SQLite 中 NULL 不满足 { not: "processing" }，需要显式包含 null
       const claimed = await prisma.note.updateMany({
         where: {
           id: noteId,
@@ -1971,33 +2004,40 @@ functionsRouter.post("/:name", async (req, res) => {
         return res.json({ ok: true, skipped: true, message: "已有分析任务在进行中" });
       }
 
-      const materialText = String(note.plainText || note.content || "")
-        .replace(/<[^>]+>/g, " ")
-        .slice(0, 8000);
+      const density = note.metadata?.response_density || "light";
 
       const schema = {
         type: "object",
         properties: {
-          title: { type: "string", description: "8-20 字的简短标语，提炼心情或核心状态，用作笔记标题。例如：「项目收官，累并满足」「允许自己慢下来」" },
+          title: { type: "string", description: "8-20 字的简短标语，提炼心情或核心状态，用作笔记标题。例如「项目收官，累并满足」「允许自己慢下来」" },
           summary: { type: "string", description: "1-2 句话精炼摘要" },
           key_points: { type: "array", items: { type: "string" }, description: "3-5 个核心要点" },
           tags: { type: "array", items: { type: "string" }, description: "3-6 个智能标签，不含 #" },
-          category: { type: "string", description: "一级分类：产品/技术/读书/灵感/工作/生活/财务/健康/情绪/其他" },
-          is_emotional: { type: "boolean", description: "是否为生活记录、情绪倾诉、心灵感悟等偏感性内容" },
-          response_persona: { type: "string", description: "回应身份：comforter/mentor/friend，非情感类留空" },
-          response_title: { type: "string", description: "情感回应的标题，如「一封来自安慰者的信」" },
-          emotional_response: { type: "string", description: "80-200 字温暖回应，像写给朋友的短信" }
+          category: { type: "string", description: "分类：情绪/灵感/资料/备忘/分享" },
+          is_emotional: { type: "boolean", description: "是否值得温柔回应" },
+          response_persona: { type: "string", description: "回应身份：comforter/mentor/clerk/friend/poet" },
+          response_title: { type: "string", description: "回应标题" },
+          emotional_response: { type: "string", description: "简短回应，情绪签80字内、资料签60字内、备忘签20字内、灵感签50字内、分享签40字内" }
         },
         required: ["title", "summary", "tags", "category"]
       };
 
+      const systemPrompt = `你是用户的"另一个自己"，更温柔、更克制、更懂用户。
+把每条心签分成五类之一：情绪/灵感/资料/备忘/分享。
+回应规则：
+1. 先接住再托举。情绪签先镜像感受，再给一句轻托举；资料签给摘要+下一步；备忘签只确认"已收好"；灵感签轻推落地；分享签鼓励传播。
+2. 简短。情绪≤80字，资料≤60字，备忘≤20字，灵感≤50字，分享≤40字。
+3. 浓度：当前为"${density}"，mute 时只输出"已收好。"，light 时一句，full 时最多两句。
+4. 危机词：若用户表达自杀/自伤意图，只返回固定话"谢谢你愿意说出来。你现在可能很难受，可以拨打心理援助热线 400-161-9995。我一直都在。"
+严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
+
       try {
-        // Kimi 只给 5 秒；超时或失败立即走本地规则兜底，避免前端一直等
+        // Kimi 只给 5 秒；超时或失败立即走本地规则兜底
         const kimiPromise = invokeKimiText({
-          prompt: `请分析以下心签内容：\n\n${materialText}`,
-          systemPrompt: `你是用户的私人知识库助理，也是一位懂得共情的伙伴。用户发来的每一条"心签"都需要你完成：提炼一条简短标题、自动摘要、关键词提取、内容分类。\n标题(title)必须简短有力，8-20 字，像一句标语或心情签名，能代表这条心签的核心状态，例如「项目收官，累并满足」「允许自己慢下来」。\n此外，请判断这条心签是否属于生活记录、情绪倾诉、心灵感悟或人生灵感等偏感性、值得被温柔回应的内容：若是，请把 is_emotional 设为 true，选择最贴切的回应身份(response_persona)，并以那个身份的口吻写一段真诚、温暖、有人文温度的回应(emotional_response)，让用户感到被理解、被陪伴、被指引；若只是资料/任务/信息类内容，则 is_emotional 为 false，相关字段留空。\n严格按 JSON schema 返回：\n${JSON.stringify(schema)}`,
+          prompt: `请分析以下心签内容（当前回应浓度：${density}）：\n\n${materialText}`,
+          systemPrompt,
           responseJsonSchema: schema,
-          temperature: 1
+          temperature: 0.9
         });
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("TIMEOUT")), 5000)
@@ -2009,7 +2049,7 @@ functionsRouter.post("/:name", async (req, res) => {
           parsed = await Promise.race([kimiPromise, timeoutPromise]);
         } catch (kimiErr) {
           console.error("[analyzeHeartSign] Kimi failed or timeout, use local fallback", kimiErr?.message || kimiErr);
-          parsed = buildHeartSignFallback({ content: note.content, plainText: note.plainText });
+          parsed = buildHeartSignFallback({ content: note.content, plainText: note.plainText, density });
           usedFallback = true;
         }
 
@@ -2022,14 +2062,15 @@ functionsRouter.post("/:name", async (req, res) => {
           response_title: parsed.is_emotional ? (parsed.response_title || "") : "",
           emotional_response: parsed.is_emotional ? (parsed.emotional_response || "") : "",
           analyzed_at: new Date().toISOString(),
-          source: usedFallback ? "local_fallback" : "kimi"
+          source: usedFallback ? "local_fallback" : "kimi",
+          note_type: parsed.note_type || null
         };
 
         const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
         const title = parsed.title ? parsed.title.slice(0, 60) : (parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签"));
         const sourceType = parsed.category && ["情绪", "灵感", "资料", "备忘", "分享"].includes(parsed.category)
           ? { 情绪: "emotion", 灵感: "inspiration", 资料: "material", 备忘: "memo", 分享: "share" }[parsed.category]
-          : note.sourceType;
+          : (parsed.note_type || note.sourceType);
 
         const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
         const updatedNote = await prisma.note.update({

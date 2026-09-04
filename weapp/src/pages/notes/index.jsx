@@ -1,20 +1,10 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, ScrollView, Input, Textarea, Button } from "@tarojs/components";
+import { View, Text, ScrollView, Input, Button } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
 import SharePoster from "@/components/SharePoster";
-
-const THEME = {
-  bg: "#ece4d9",
-  surface: "#f4f0ea",
-  card: "#fffbf5",
-  ink: "#4f483e",
-  inkStrong: "#3a352c",
-  muted: "#8a7d6b",
-  accent: "#f54001",
-  tint: "#ffc198",
-  line: "rgba(79,72,62,.14)"
-};
+import VaultSheet from "@/components/VaultSheet";
+import theme from "@/components/tasks/theme";
 
 const FILTERS = [
   { key: "all", label: "全部" },
@@ -27,11 +17,11 @@ const FILTERS = [
 ];
 
 const TYPE_META = {
-  emotion: { label: "情绪", color: "#e2607f", bg: "#fbe4ea" },
-  inspiration: { label: "灵感", color: "#d93800", bg: "#ffe4d6" },
-  material: { label: "资料", color: "#4a7ba6", bg: "#e0ecf5" },
-  memo: { label: "备忘", color: "#8a7d6b", bg: "#ece7dc" },
-  share: { label: "分享", color: "#557a49", bg: "#e5eede" }
+  emotion: { label: "情绪", color: "#c97b8a", bg: "#fce8ec" },
+  inspiration: { label: "灵感", color: "#d97706", bg: "#fef3c7" },
+  material: { label: "资料", color: "#5b82a0", bg: "#e8f0f5" },
+  memo: { label: "备忘", color: "#8a7d6b", bg: "#f4f0ea" },
+  share: { label: "分享", color: "#6e8a73", bg: "#e8f5e9" }
 };
 
 const TYPE_ORDER = ["emotion", "inspiration", "material", "memo", "share"];
@@ -94,6 +84,8 @@ export default function Notes() {
   const [posterToken, setPosterToken] = useState("");
   const [continueMap, setContinueMap] = useState({});
   const [submittingId, setSubmittingId] = useState(null);
+  const [vaultVisible, setVaultVisible] = useState(false);
+  const [actionLoading, setActionLoading] = useState({});
   const scrollRef = useRef(null);
 
   const fetchNotes = useCallback(async () => {
@@ -143,9 +135,19 @@ export default function Notes() {
     setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, metadata: next } : n)));
   };
 
+  const setActionLoad = (key, val) => {
+    setActionLoading((prev) => ({ ...prev, [key]: val }));
+  };
+
   const togglePin = async (note, e) => {
     e?.stopPropagation?.();
-    await updateNoteMeta(note, { pinned: !isPinned(note) });
+    const key = `pin-${note.id}`;
+    setActionLoad(key, true);
+    try {
+      await updateNoteMeta(note, { pinned: !isPinned(note) });
+    } finally {
+      setActionLoad(key, false);
+    }
   };
 
   const deleteNote = async (note, e) => {
@@ -163,12 +165,21 @@ export default function Notes() {
     const current = getNoteType(note);
     const idx = TYPE_ORDER.indexOf(current);
     const nextType = TYPE_ORDER[(idx + 1) % TYPE_ORDER.length];
-    await patch(`/notes/${note.id}`, { source_type: nextType });
-    setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, source_type: nextType } : n)));
+    const key = `correct-${note.id}`;
+    setActionLoad(key, true);
+    try {
+      await patch(`/notes/${note.id}`, { source_type: nextType });
+      setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, source_type: nextType } : n)));
+      Taro.showToast({ title: `已改为${TYPE_META[nextType].label}签`, icon: "none" });
+    } finally {
+      setActionLoad(key, false);
+    }
   };
 
   const convertTask = async (note, e) => {
     e?.stopPropagation?.();
+    const key = `task-${note.id}`;
+    setActionLoad(key, true);
     try {
       const text = note.plain_text || note.content || "";
       const res = await post("/functions/parseTaskInput", { input: text, date: new Date().toISOString().slice(0, 10) });
@@ -185,34 +196,46 @@ export default function Notes() {
       Taro.showToast({ title: "已转为约定", icon: "success" });
     } catch {
       Taro.showToast({ title: "转换失败", icon: "none" });
+    } finally {
+      setActionLoad(key, false);
     }
   };
 
   const addToKnowledge = async (note, e) => {
     e?.stopPropagation?.();
+    const key = `kb-${note.id}`;
+    setActionLoad(key, true);
     try {
-      await post("/knowledge-base", {
+      await post("/knowledge-bases", {
         title: getTitle(note),
         content: note.plain_text || note.content || "",
-        tags: note.tags || [],
         source_type: "note",
-        source_id: note.id
+        source_id: note.id,
+        tags: Array.isArray(note.tags) ? note.tags : [],
+        category: note.metadata?.ai_analysis?.category || "其他"
       });
       await updateNoteMeta(note, { in_knowledge_base: true });
       Taro.showToast({ title: "已沉淀到知识库", icon: "success" });
-    } catch {
+    } catch (err) {
+      console.error("addToKnowledge failed", err);
       Taro.showToast({ title: "沉淀失败", icon: "none" });
+    } finally {
+      setActionLoad(key, false);
     }
   };
 
   const shareNote = async (note, e) => {
     e?.stopPropagation?.();
+    const key = `share-${note.id}`;
+    setActionLoad(key, true);
     try {
       const share = await post(`/public/share/generate/note/${note.id}`);
       setPosterNote(note);
       setPosterToken(share.token || "");
     } catch {
       Taro.showToast({ title: "分享生成失败", icon: "none" });
+    } finally {
+      setActionLoad(key, false);
     }
   };
 
@@ -235,7 +258,6 @@ export default function Notes() {
     setSubmittingId(note.id);
     try {
       await post("/note-comments", { note_id: note.id, content: text });
-      // 本地生成一条跟进回应，避免等 Kimi
       const type = getNoteType(note);
       const followups = {
         emotion: "嗯，我在听。你慢慢说，我都在。",
@@ -260,22 +282,38 @@ export default function Notes() {
 
   const renderHeader = () => (
     <View style={{ padding: "40rpx 32rpx 24rpx" }}>
-      <View>
-        <Text style={{ fontSize: "22rpx", color: THEME.muted, letterSpacing: "3rpx" }}>{dateLine()}</Text>
+      <View style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <View>
+          <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "3rpx" }}>{dateLine()}</Text>
+        </View>
+        <View
+          onClick={() => setVaultVisible(true)}
+          style={{
+            padding: "8rpx 16rpx",
+            borderRadius: "999rpx",
+            background: theme.primaryMist,
+            display: "flex",
+            alignItems: "center",
+            gap: "6rpx"
+          }}
+        >
+          <Text style={{ fontSize: "22rpx", color: theme.primary }}>🔒 保险柜</Text>
+        </View>
       </View>
       <View style={{ marginTop: "16rpx" }}>
-        <Text style={{ fontSize: "52rpx", fontWeight: 700, color: THEME.inkStrong, lineHeight: "72rpx" }}>
+        <Text style={{ fontSize: "52rpx", fontWeight: 700, color: theme.primary, lineHeight: "72rpx" }}>
           {greeting()}。
         </Text>
       </View>
       <View style={{ marginTop: "16rpx" }}>
-        <Text style={{ fontSize: "34rpx", fontWeight: 500, color: THEME.ink, lineHeight: "52rpx" }}>
-          什么都可以放在这里，
-          <Text style={{ color: THEME.accent }}>说给另一个自己</Text>听。
+        <Text style={{ fontSize: "34rpx", fontWeight: 500, color: theme.inkSecondary, lineHeight: "52rpx" }}>
+          说给
+          <Text style={{ color: theme.primary }}>另一个自己</Text>
+          听。
         </Text>
       </View>
       <View style={{ marginTop: "12rpx" }}>
-        <Text style={{ fontSize: "26rpx", color: THEME.muted, lineHeight: "42rpx" }}>
+        <Text style={{ fontSize: "26rpx", color: theme.inkTertiary, lineHeight: "42rpx" }}>
           此刻的心情、刷到的好文章、怕忘的号码……丢进来就好。
         </Text>
       </View>
@@ -296,15 +334,13 @@ export default function Notes() {
                 alignItems: "center",
                 padding: "10rpx 22rpx",
                 borderRadius: "999rpx",
-                border: `1rpx solid ${THEME.line}`,
-                background: active ? THEME.inkStrong : "transparent"
+                border: `1rpx solid ${active ? theme.primary : theme.border}`,
+                background: active ? theme.primary : theme.card
               }}
             >
-              <Text style={{ fontSize: "26rpx", color: active ? THEME.card : THEME.muted }}>
-                {f.label}
-              </Text>
+              <Text style={{ fontSize: "26rpx", color: active ? "#fff" : theme.inkTertiary }}>{f.label}</Text>
               {counts[f.key] > 0 && (
-                <Text style={{ fontSize: "20rpx", color: active ? "rgba(255,251,245,0.7)" : THEME.muted, marginLeft: "8rpx" }}>
+                <Text style={{ fontSize: "20rpx", color: active ? "rgba(255,255,255,0.8)" : theme.inkQuaternary, marginLeft: "8rpx" }}>
                   {counts[f.key]}
                 </Text>
               )}
@@ -316,26 +352,25 @@ export default function Notes() {
   );
 
   const renderEmpty = () => (
-    <View style={{ textAlign: "center", padding: "80rpx 40rpx", color: THEME.muted }}>
+    <View style={{ textAlign: "center", padding: "80rpx 40rpx" }}>
       <View
         style={{
           width: "112rpx",
           height: "112rpx",
           margin: "0 auto 32rpx",
           borderRadius: "50%",
-          background: THEME.surface,
+          background: theme.primaryMist,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          border: `1rpx solid ${THEME.line}`
+          justifyContent: "center"
         }}
       >
-        <Text style={{ fontSize: "56rpx", color: THEME.accent }}>签</Text>
+        <Text style={{ fontSize: "56rpx", color: theme.primary }}>签</Text>
       </View>
-      <Text style={{ fontSize: "34rpx", color: THEME.inkStrong, fontWeight: 700, marginBottom: "16rpx" }}>
+      <Text style={{ fontSize: "34rpx", color: theme.inkSecondary, fontWeight: 700, marginBottom: "16rpx" }}>
         这里还空着
       </Text>
-      <Text style={{ fontSize: "28rpx", color: THEME.muted, lineHeight: "48rpx" }}>
+      <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx" }}>
         此刻的心情、刷到的好文章、怕忘的号码……都可以丢进来。
       </Text>
       <View style={{ display: "flex", gap: "16rpx", justifyContent: "center", marginTop: "32rpx", flexWrap: "wrap" }}>
@@ -346,11 +381,11 @@ export default function Notes() {
             style={{
               padding: "12rpx 24rpx",
               borderRadius: "999rpx",
-              border: `1rpx dashed ${THEME.line}`,
-              background: "transparent"
+              border: `1rpx dashed ${theme.border}`,
+              background: theme.card
             }}
           >
-            <Text style={{ fontSize: "24rpx", color: THEME.muted }}>{t}</Text>
+            <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>{t}</Text>
           </View>
         ))}
       </View>
@@ -365,6 +400,7 @@ export default function Notes() {
     const conversation = note.metadata?.conversation || [];
     const converted = note.metadata?.converted_task;
     const inKb = note.metadata?.in_knowledge_base;
+    const isCrisis = note.metadata?.is_crisis;
 
     return (
       <View
@@ -372,84 +408,78 @@ export default function Notes() {
         style={{
           margin: "0 24rpx 28rpx",
           borderRadius: "18rpx",
-          background: THEME.card,
+          background: theme.card,
           padding: "28rpx 28rpx 20rpx",
-          boxShadow: "0 2rpx 6rpx rgba(79,72,62,.05), 0 10rpx 30rpx rgba(79,72,62,.06)",
-          border: pinned ? `2rpx solid ${THEME.accent}` : "none"
+          boxShadow: "0 2rpx 12rpx rgba(0,0,0,0.04)",
+          border: pinned ? `2rpx solid ${theme.primary}` : "1rpx solid transparent"
         }}
       >
-        {/* type + time + pin */}
-        <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "20rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "20rpx", flexWrap: "wrap" }}>
           <View style={{ padding: "4rpx 16rpx", borderRadius: "999rpx", background: meta.bg }}>
             <Text style={{ fontSize: "22rpx", color: meta.color, fontWeight: 600 }}>{meta.label}签</Text>
           </View>
           {pinned && (
-            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: `1rpx solid ${THEME.accent}` }}>
-              <Text style={{ fontSize: "20rpx", color: THEME.accent }}>已置顶</Text>
+            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: `1rpx solid ${theme.primary}` }}>
+              <Text style={{ fontSize: "20rpx", color: theme.primary }}>已置顶</Text>
             </View>
           )}
           {converted && (
-            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: `1rpx solid #557a49` }}>
-              <Text style={{ fontSize: "20rpx", color: "#557a49" }}>已转约定</Text>
+            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: "1rpx solid #6e8a73" }}>
+              <Text style={{ fontSize: "20rpx", color: "#6e8a73" }}>已转约定</Text>
             </View>
           )}
           {inKb && (
-            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: `1rpx solid #4a7ba6` }}>
-              <Text style={{ fontSize: "20rpx", color: "#4a7ba6" }}>已沉淀</Text>
+            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: "1rpx solid #5b82a0" }}>
+              <Text style={{ fontSize: "20rpx", color: "#5b82a0" }}>已沉淀</Text>
             </View>
           )}
-          <Text style={{ marginLeft: "auto", fontSize: "20rpx", color: THEME.muted }}>{fmtTime(note.created_date)}</Text>
+          {isCrisis && (
+            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: "1rpx solid #db3356", background: "#fce8ec" }}>
+              <Text style={{ fontSize: "20rpx", color: "#db3356" }}>需要关注</Text>
+            </View>
+          )}
+          <Text style={{ marginLeft: "auto", fontSize: "20rpx", color: theme.inkQuaternary }}>{fmtTime(note.created_date)}</Text>
         </View>
 
-        {/* title */}
-        <Text style={{ fontSize: "32rpx", fontWeight: 700, color: THEME.inkStrong, marginBottom: "16rpx", lineHeight: "48rpx" }}>
+        <Text style={{ fontSize: "32rpx", fontWeight: 700, color: theme.inkSecondary, marginBottom: "16rpx", lineHeight: "48rpx" }}>
           {getTitle(note)}
         </Text>
 
-        {/* user message */}
         <View style={{ marginBottom: "20rpx" }}>
-          <Text style={{ fontSize: "22rpx", color: THEME.muted, marginBottom: "8rpx" }}>你</Text>
-          <Text style={{ fontSize: "30rpx", color: THEME.inkStrong, lineHeight: "50rpx", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginBottom: "8rpx" }}>你</Text>
+          <Text style={{ fontSize: "30rpx", color: theme.ink, lineHeight: "50rpx", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             {note.plain_text || note.content || ""}
           </Text>
         </View>
 
-        {/* AI response */}
         {response ? (
-          <View style={{ background: THEME.surface, borderRadius: "12rpx", padding: "20rpx", marginBottom: "20rpx" }}>
-            <Text style={{ fontSize: "22rpx", color: THEME.accent, marginBottom: "8rpx" }}>另一个你 · 回应</Text>
-            <Text style={{ fontSize: "28rpx", color: THEME.ink, lineHeight: "48rpx" }}>{response}</Text>
+          <View style={{ background: theme.primaryMist, borderRadius: "12rpx", padding: "20rpx", marginBottom: "20rpx" }}>
+            <Text style={{ fontSize: "22rpx", color: theme.primary, marginBottom: "8rpx" }}>另一个你 · 回应</Text>
+            <Text style={{ fontSize: "28rpx", color: theme.inkSecondary, lineHeight: "48rpx" }}>{response}</Text>
           </View>
         ) : null}
 
-        {/* conversation */}
         {conversation.map((m, idx) => (
           <View key={idx} style={{ marginBottom: "16rpx" }}>
-            <Text style={{ fontSize: "22rpx", color: m.role === "user" ? THEME.muted : THEME.accent, marginBottom: "8rpx" }}>
+            <Text style={{ fontSize: "22rpx", color: m.role === "user" ? theme.inkQuaternary : theme.primary, marginBottom: "8rpx" }}>
               {m.role === "user" ? "你" : "另一个你"}
             </Text>
-            <Text style={{ fontSize: "28rpx", color: THEME.inkStrong, lineHeight: "48rpx", whiteSpace: "pre-wrap" }}>{m.text}</Text>
+            <Text style={{ fontSize: "28rpx", color: theme.ink, lineHeight: "48rpx", whiteSpace: "pre-wrap" }}>{m.text}</Text>
           </View>
         ))}
 
-        {/* continue input */}
         <View
           style={{
             display: "flex",
             alignItems: "center",
             gap: "12rpx",
-            borderTop: `1rpx dashed ${THEME.line}`,
+            borderTop: `1rpx dashed ${theme.border}`,
             paddingTop: "20rpx",
             marginTop: "8rpx"
           }}
         >
           <Input
-            style={{
-              flex: 1,
-              fontSize: "28rpx",
-              color: THEME.inkStrong,
-              padding: "10rpx 0"
-            }}
+            style={{ flex: 1, fontSize: "28rpx", color: theme.ink, padding: "10rpx 0" }}
             placeholder="继续聊聊…"
             value={continueMap[note.id] || ""}
             onInput={(e) => setContinueText(note.id, e.detail.value)}
@@ -462,8 +492,8 @@ export default function Notes() {
             disabled={!continueMap[note.id]?.trim()}
             onClick={() => submitContinue(note)}
             style={{
-              background: THEME.accent,
-              color: "#fffbf5",
+              background: theme.primary,
+              color: "#fff",
               borderRadius: "10rpx",
               fontSize: "24rpx",
               margin: 0,
@@ -476,13 +506,12 @@ export default function Notes() {
           </Button>
         </View>
 
-        {/* actions */}
         <View style={{ display: "flex", flexWrap: "wrap", gap: "8rpx", marginTop: "20rpx" }}>
-          <ActionBtn onClick={(e) => togglePin(note, e)} active={pinned} text={pinned ? "已置顶" : "置顶"} />
-          <ActionBtn onClick={(e) => correctType(note, e)} text="分错了" />
-          {!converted && <ActionBtn onClick={(e) => convertTask(note, e)} text="转约定" />}
-          {!inKb && <ActionBtn onClick={(e) => addToKnowledge(note, e)} text="沉淀" />}
-          <ActionBtn onClick={(e) => shareNote(note, e)} text="签卡" />
+          <ActionBtn onClick={(e) => togglePin(note, e)} active={pinned} text={pinned ? "已置顶" : "置顶"} loading={actionLoading[`pin-${note.id}`]} />
+          <ActionBtn onClick={(e) => correctType(note, e)} text="分错了" loading={actionLoading[`correct-${note.id}`]} />
+          {!converted && <ActionBtn onClick={(e) => convertTask(note, e)} text="转约定" loading={actionLoading[`task-${note.id}`]} />}
+          {!inKb && <ActionBtn onClick={(e) => addToKnowledge(note, e)} text="沉淀" loading={actionLoading[`kb-${note.id}`]} />}
+          <ActionBtn onClick={(e) => shareNote(note, e)} text="签卡" loading={actionLoading[`share-${note.id}`]} />
           <ActionBtn onClick={(e) => deleteNote(note, e)} text="删除" danger />
         </View>
       </View>
@@ -490,18 +519,19 @@ export default function Notes() {
   };
 
   return (
-    <View style={{ minHeight: "100vh", background: THEME.bg, paddingBottom: "140rpx" }}>
+    <View style={{ minHeight: "100vh", background: theme.paper, paddingBottom: "140rpx" }}>
       <ScrollView ref={scrollRef} scrollY style={{ height: "100vh" }}>
         {renderHeader()}
         {renderFilters()}
         {loading && notes.length === 0 ? (
-          <View style={{ textAlign: "center", padding: "80rpx", color: THEME.muted, fontSize: "28rpx" }}>加载中…</View>
+          <View style={{ textAlign: "center", padding: "80rpx" }}>
+            <Text style={{ fontSize: "28rpx", color: theme.inkTertiary }}>加载中…</Text>
+          </View>
         ) : null}
         {!loading && filteredNotes.length === 0 ? renderEmpty() : filteredNotes.map(renderCard)}
         <View style={{ height: "120rpx" }} />
       </ScrollView>
 
-      {/* FAB */}
       <View
         onClick={goCreate}
         style={{
@@ -511,33 +541,37 @@ export default function Notes() {
           width: "100rpx",
           height: "100rpx",
           borderRadius: "50%",
-          background: THEME.accent,
+          background: theme.primary,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: "0 8rpx 24rpx rgba(245,64,1,.32)"
+          boxShadow: "0 8rpx 24rpx rgba(56,72,119,0.28)"
         }}
       >
-        <Text style={{ fontSize: "56rpx", color: "#fffbf5" }}>+</Text>
+        <Text style={{ fontSize: "56rpx", color: "#fff" }}>+</Text>
       </View>
 
       {posterNote && <SharePoster note={posterNote} token={posterToken} onClose={closePoster} />}
+      <VaultSheet visible={vaultVisible} onClose={() => setVaultVisible(false)} theme={theme} />
     </View>
   );
 }
 
-function ActionBtn({ onClick, text, active, danger }) {
+function ActionBtn({ onClick, text, active, danger, loading }) {
   return (
     <View
-      onClick={onClick}
+      onClick={loading ? undefined : onClick}
       style={{
         padding: "8rpx 16rpx",
         borderRadius: "10rpx",
-        background: active ? THEME.inkStrong : THEME.surface,
-        border: `1rpx solid ${THEME.line}`
+        background: active ? theme.primary : theme.paper,
+        border: `1rpx solid ${theme.border}`,
+        opacity: loading ? 0.6 : 1
       }}
     >
-      <Text style={{ fontSize: "22rpx", color: danger ? "#c2446c" : active ? THEME.card : THEME.muted }}>{text}</Text>
+      <Text style={{ fontSize: "22rpx", color: danger ? "#db3356" : active ? "#fff" : theme.inkTertiary }}>
+        {loading ? "…" : text}
+      </Text>
     </View>
   );
 }

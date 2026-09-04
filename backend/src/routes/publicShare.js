@@ -53,6 +53,7 @@ function serializeNote(note) {
     ai_status: note.aiStatus,
     deleted_at: note.deletedAt,
     tags: note.tags,
+    metadata: note.metadata,
     created_date: note.createdAt,
     updated_date: note.updatedAt
   };

@@ -406,6 +406,7 @@ export default function Account() {
   const localInsight = useMemo(() => generateInsight(localSeries, notes, tasks), [localSeries, notes, tasks]);
   const series = moodData?.series || localSeries;
   const insight = moodData?.insight || localInsight;
+  const errorHint = moodData?.errorHint || "";
   const rawSource = moodData?.source || "local";
   const moodSourceLabel = {
     ai: "AI 生成",
@@ -773,6 +774,11 @@ export default function Account() {
               }}
             >
               <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, lineHeight: "44rpx" }}>{insight}</Text>
+              {errorHint && rawSource !== "ai" && rawSource !== "local-empty" && (
+                <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "10rpx" }}>
+                  诊断：{errorHint}
+                </Text>
+              )}
             </View>
           </View>
 

@@ -1118,7 +1118,9 @@ async function generateMoodRiverWithAI(userId, period) {
     }
 
     const series = computeLocalMoodSeries(notes, tasks, executions, period);
-    return { series, insight: generateLocalInsight(series), source };
+    const insight = generateLocalInsight(series);
+    const errorHint = msg.slice(0, 120);
+    return { series, insight, source, errorHint };
   }
 }
 

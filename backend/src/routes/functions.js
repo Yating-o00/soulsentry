@@ -943,17 +943,17 @@ function summarizeMoodData(notes, tasks, executions, period) {
 
   return dates.map((d) => {
     const day = byDate[d];
-    const noteSummaries = day.notes.slice(0, 3).map((n) => {
-      const text = String(n.plainText || n.content || "").slice(0, 60);
+    const noteSummaries = day.notes.slice(0, 2).map((n) => {
+      const text = String(n.plainText || n.content || "").slice(0, 50);
       const type = n.sourceType || "心签";
       return `${type}: ${text || "..."}`;
     });
-    const taskSummaries = day.tasks.slice(0, 3).map((t) => {
+    const taskSummaries = day.tasks.slice(0, 2).map((t) => {
       const status = t.status === "DONE" ? "完成" : t.status === "TODO" ? "待办" : "进行中";
-      return `${status} ${t.title?.slice(0, 30) || ""}`;
+      return `${status} ${t.title?.slice(0, 25) || ""}`;
     });
-    const execSummaries = day.executions.slice(0, 2).map((e) => {
-      return `${e.executionStatus || "执行"} ${e.taskTitle?.slice(0, 30) || ""}`;
+    const execSummaries = day.executions.slice(0, 1).map((e) => {
+      return `${e.executionStatus || "执行"} ${e.taskTitle?.slice(0, 25) || ""}`;
     });
     return `${d} 心签${day.notes.length} 约定${day.tasks.length} 执行${day.executions.length}\n${[
       noteSummaries.join(" | "),
@@ -1033,7 +1033,7 @@ async function generateMoodRiverWithAI(userId, period) {
     prisma.note.findMany({
       where: { userId, deletedAt: null, createdAt: { gte: startDate } },
       orderBy: { createdAt: "desc" },
-      take: 100
+      take: 60
     }),
     prisma.task.findMany({
       where: {
@@ -1046,12 +1046,12 @@ async function generateMoodRiverWithAI(userId, period) {
         ]
       },
       orderBy: { createdAt: "desc" },
-      take: 100
+      take: 60
     }),
     prisma.taskExecution.findMany({
       where: { userId, createdAt: { gte: startDate } },
       orderBy: { createdAt: "desc" },
-      take: 50
+      take: 30
     })
   ]);
 
@@ -1084,15 +1084,19 @@ async function generateMoodRiverWithAI(userId, period) {
   const prompt = `基于用户最近 ${period} 天的心签、约定与执行数据，生成心境河流曲线与觉察提示。\n\n数据：\n${summary}\n\n要求：\n- series 为 ${period} 个 {date, score}，score 范围 1-10（保留1位小数），必须有可见起伏。\n- 积极事件/完成日子分数偏高，逾期/负面情绪日子分数偏低。\n- insight 1-2 句话，温暖具体。\n- 直接返回 JSON {"series": [...], "insight": "..."}。`;
 
   try {
+    console.log(`[moodRiver] calling AI: user=${userId}, period=${period}, notes=${notes.length}, tasks=${tasks.length}, execs=${executions.length}, promptLen=${prompt.length}`);
     const result = await withTimeout(
       invokeKimiText({
         prompt,
         systemPrompt: "你是 SoulSentry 心栈的 AI 伙伴，从用户数据中提炼情绪曲线，只用 JSON 返回。",
         responseJsonSchema: schema,
-        temperature: 0.7
+        model: "kimi-k2.6",
+        temperature: 0.7,
+        fetchTimeout: 35000
       }),
       35000
     );
+    console.log(`[moodRiver] AI raw result:`, JSON.stringify(result).slice(0, 400));
 
     const aiSeries = Array.isArray(result?.series) ? result.series : [];
     console.log(`[moodRiver] AI returned series=${aiSeries.length}, user=${userId}, period=${period}`);

@@ -85,7 +85,8 @@ export async function callKimiChat({
   model,
   temperature = 0.3,
   maxTokens = 4000,
-  tools
+  tools,
+  fetchTimeout = 25000
 }) {
   const endpoints = getEndpointConfigs();
   const candidateModels = model
@@ -119,7 +120,7 @@ export async function callKimiChat({
       let timeoutId;
       try {
         const controller = new AbortController();
-        timeoutId = setTimeout(() => controller.abort(), 25000);
+        timeoutId = setTimeout(() => controller.abort(), fetchTimeout);
         response = await fetch(`${endpoint.baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
@@ -176,7 +177,8 @@ export async function invokeKimiText({
   systemPrompt,
   responseJsonSchema,
   model,
-  temperature
+  temperature,
+  fetchTimeout
 }) {
   const messages = [];
   if (systemPrompt) {
@@ -188,7 +190,8 @@ export async function invokeKimiText({
     messages,
     responseJsonSchema,
     model,
-    temperature
+    temperature,
+    fetchTimeout
   });
 
   if (responseJsonSchema) {

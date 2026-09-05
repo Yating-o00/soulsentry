@@ -6,6 +6,7 @@ export async function requireAuth(req, res, next) {
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
   if (!token) {
+    console.log(`[requireAuth] 401 for ${req.method} ${req.originalUrl || req.path} (auth present=${Boolean(authHeader)})`);
     return res.status(401).json({ error: "UNAUTHORIZED", message: "缺少访问令牌" });
   }
 

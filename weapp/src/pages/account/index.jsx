@@ -317,17 +317,20 @@ export default function Account() {
   }, []);
 
   const loadMoodRiver = useCallback(async (p) => {
-    if (!getToken()) return;
+    const token = getToken();
+    console.log("[loadMoodRiver] token present=", Boolean(token), "period=", p);
+    if (!token) return;
     setMoodData(null);
     try {
       const res = await post("/functions/moodRiver", { period: p }, { silent: true });
+      console.log("[loadMoodRiver] response source=", res?.source, "errorHint=", res?.errorHint);
       if (res && Array.isArray(res.series) && res.series.length > 0) {
-        setMoodData({ series: res.series, insight: res.insight || "" });
+        setMoodData({ series: res.series, insight: res.insight || "", source: res.source, errorHint: res.errorHint });
       } else {
         setMoodData(null);
       }
     } catch (err) {
-      console.error("loadMoodRiver failed", err);
+      console.error("[loadMoodRiver] failed", err);
       setMoodData(null);
     }
   }, []);

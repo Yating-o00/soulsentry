@@ -1,21 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text, Button, ScrollView } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
 import { getToken, clearToken } from "@/utils/auth";
+import { get, patch } from "@/utils/api";
 import theme from "@/components/tasks/theme";
 
-const BADGES = [
-  { key: "morning", label: "晨型人", icon: "☀", locked: false },
-  { key: "selflove", label: "自爱心", icon: "♡", locked: false },
-  { key: "persistent", label: "坚持者", icon: "✓", locked: false },
-  { key: "night", label: "夜行者", icon: "☾", locked: true }
+const BADGE_TEMPLATES = [
+  { key: "morning", label: "晨型人", icon: "☀", color: "#d97706", condition: (data) => data.morningTasks >= 3 },
+  { key: "night", label: "夜行者", icon: "☾", color: "#5b82a0", condition: (data) => data.nightTasks >= 3 },
+  { key: "selflove", label: "自爱心", icon: "♡", color: "#c97b8a", condition: (data) => data.selfCareNotes >= 3 },
+  { key: "persistent", label: "坚持者", icon: "✓", color: "#6e8a73", condition: (data) => data.activeStreak >= 3 },
+  { key: "organizer", label: "整理师", icon: "☰", color: "#384877", condition: (data) => data.completedTasks >= 5 },
+  { key: "dreamcatcher", label: "灵感捕手", icon: "✦", color: "#d97706", condition: (data) => data.inspirationNotes >= 3 },
+  { key: "observer", label: "情绪观察家", icon: "◉", color: "#c97b8a", condition: (data) => data.emotionNotes >= 5 },
+  { key: "collector", label: "知识收藏家", icon: "◈", color: "#5b82a0", condition: (data) => data.materialNotes >= 3 },
+  { key: "sharer", label: "分享者", icon: "⇧", color: "#6e8a73", condition: (data) => data.shareNotes >= 2 },
+  { key: "doer", label: "行动派", icon: "➤", color: "#384877", condition: (data) => data.completionRate >= 0.6 && data.totalTasks >= 5 }
+];
+
+const BADGE_FALLBACKS = [
+  { key: "wanderer", label: "漫游者", icon: "◎", color: theme.inkQuaternary },
+  { key: "seed", label: "萌芽者", icon: "✦", color: theme.inkQuaternary },
+  { key: "listener", label: "倾听者", icon: "♫", color: theme.inkQuaternary },
+  { key: "recorder", label: "记录者", icon: "✎", color: theme.inkQuaternary },
+  { key: "curious", label: "好奇者", icon: "?", color: theme.inkQuaternary }
 ];
 
 const PLATFORMS = [
-  { key: "web_oversea", label: "海外版 Web", sub: "xinzhan-soulsentry.com", url: "https://www.xinzhan-soulsentry.com" },
-  { key: "web_cn", label: "国内版 Web", sub: "xinzhan-soulsentry.cn", url: "https://www.xinzhan-soulsentry.cn" },
-  { key: "miniprogram", label: "微信小程序", sub: "搜索「转眼科技" }
+  { key: "web_oversea", label: "海外版", sub: "https://www.xinzhan-soulsentry.com", url: "https://www.xinzhan-soulsentry.com" },
+  { key: "web_cn", label: "国内版", sub: "https://www.xinzhan-soulsentry.cn", url: "https://www.xinzhan-soulsentry.cn" },
+  { key: "miniprogram", label: "小程序", sub: "搜索「转眼科技」" }
 ];
 
 function pad(n) {
@@ -26,15 +41,162 @@ function formatDateLabel(d) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+function toYmd(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function lastNDays(n) {
   const list = [];
   const today = new Date();
   for (let i = n - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    list.push(formatDateLabel(d));
+    list.push({ date: d, label: formatDateLabel(d), ymd: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` });
   }
   return list;
+}
+
+function isSameDay(iso, ymd) {
+  return toYmd(iso) === ymd;
+}
+
+function computeMoodSeries(notes, tasks, executions, days) {
+  const daysMeta = lastNDays(days);
+  const positiveWords = /开心|高兴|满足|幸福|暖|安心|踏实|治愈|感动|希望|轻松|顺利|完成|达成|谢谢|感恩|喜欢|享受|平静|宁静/i;
+  const negativeWords = /难过|焦虑|烦|累|委屈|害怕|孤独|失落|压力|想哭|崩溃|怀疑|失眠|沮丧|愤怒|内耗|emo|挫败|不安|迷茫|无助/i;
+
+  return daysMeta.map(({ ymd, label }) => {
+    let score = 5;
+    const dayNotes = notes.filter((n) => isSameDay(n.created_date, ymd));
+    const dayTasksCreated = tasks.filter((t) => isSameDay(t.created_date, ymd));
+    const dayTasksCompleted = tasks.filter((t) => t.completed_at && isSameDay(t.completed_at, ymd));
+    const dayOverdue = tasks.filter((t) => {
+      if (!t.end_time || ["completed", "done", "archived"].includes(t.status)) return false;
+      return toYmd(t.end_time) < ymd;
+    });
+    const dayExec = (executions || []).filter((e) => isSameDay(e.created_date || e.executed_at, ymd));
+
+    score += dayNotes.length * 0.3;
+    score += dayTasksCreated.length * 0.2;
+    score += dayTasksCompleted.length * 0.6;
+    score += dayExec.length * 0.4;
+    score -= dayOverdue.length * 0.8;
+
+    dayNotes.forEach((n) => {
+      const text = `${n.plain_text || n.content || ""} ${JSON.stringify(n.metadata || {})}`;
+      if (positiveWords.test(text)) score += 0.7;
+      if (negativeWords.test(text)) score -= 0.7;
+    });
+
+    score = Math.max(1, Math.min(10, score));
+    return { ymd, label, score };
+  });
+}
+
+function generateInsight(series, notes, tasks) {
+  if (!series.length) return "开始记录吧，心栈会陪你看见自己的流动。";
+  const avg = series.reduce((s, d) => s + d.score, 0) / series.length;
+  const latest = series[series.length - 1]?.score || avg;
+  const trend = latest - series[0].score;
+  const emotionNotes = notes.filter((n) => n.source_type === "emotion" || n.metadata?.ai_analysis?.category === "情绪").length;
+  const completedTasks = tasks.filter((t) => ["completed", "done", "archived"].includes(t.status)).length;
+
+  let insight = "";
+  if (trend > 1.2) insight = "近期流动呈上升趋势，你的状态在回暖。";
+  else if (trend < -1.2) insight = "近期流动有些波动，给自己多一点耐心。";
+  else insight = "近期流动相对平稳，这是扎实前行的节奏。";
+
+  if (emotionNotes >= 3) insight += ` 你已经记录了 ${emotionNotes} 次情绪，觉察本身就是一种照顾。`;
+  if (completedTasks >= 3) insight += ` 还有 ${completedTasks} 个约定已被兑现，每一步都算数。`;
+
+  return insight;
+}
+
+function generateBadges(notes, tasks, executions) {
+  const emotionNotes = notes.filter((n) => n.source_type === "emotion" || n.metadata?.ai_analysis?.category === "情绪").length;
+  const inspirationNotes = notes.filter((n) => n.source_type === "inspiration" || n.metadata?.ai_analysis?.category === "灵感").length;
+  const materialNotes = notes.filter((n) => n.source_type === "material" || n.metadata?.ai_analysis?.category === "资料").length;
+  const shareNotes = notes.filter((n) => n.source_type === "share" || n.metadata?.ai_analysis?.category === "分享").length;
+  const completedTasks = tasks.filter((t) => ["completed", "done", "archived"].includes(t.status)).length;
+  const totalTasks = tasks.length;
+  const morningTasks = tasks.filter((t) => {
+    const h = new Date(t.reminder_time || t.end_time || t.created_date).getHours();
+    return h >= 5 && h < 10;
+  }).length;
+  const nightTasks = tasks.filter((t) => {
+    const h = new Date(t.reminder_time || t.end_time || t.created_date).getHours();
+    return h >= 21 || h < 2;
+  }).length;
+
+  const ymds = new Set();
+  [...notes, ...tasks, ...(executions || [])].forEach((item) => {
+    const iso = item.created_date || item.executed_at || item.completed_at;
+    if (iso) ymds.add(toYmd(iso));
+  });
+  const sorted = Array.from(ymds).sort();
+  let activeStreak = 0;
+  let currentStreak = 0;
+  const today = toYmd(new Date());
+  if (sorted.includes(today)) currentStreak = 1;
+
+  const selfCareNotes = notes.filter((n) => {
+    const text = n.plain_text || n.content || "";
+    return /睡觉|休息|冥想|运动|跑步|吃饭|喝水|散步|放松|照顾自己|对自己好/i.test(text);
+  }).length;
+
+  const data = {
+    emotionNotes,
+    inspirationNotes,
+    materialNotes,
+    shareNotes,
+    completedTasks,
+    totalTasks,
+    completionRate: totalTasks > 0 ? completedTasks / totalTasks : 0,
+    morningTasks,
+    nightTasks,
+    selfCareNotes,
+    activeStreak: Math.max(currentStreak, sorted.length > 0 ? 1 : 0)
+  };
+
+  const unlocked = BADGE_TEMPLATES.filter((b) => b.condition(data)).map((b) => ({ ...b, locked: false }));
+  const lockedCount = Math.max(0, 10 - unlocked.length);
+  const locked = BADGE_TEMPLATES.filter((b) => !b.condition(data)).slice(0, lockedCount).map((b) => ({ ...b, locked: true }));
+  const all = [...unlocked, ...locked];
+
+  if (all.length < 10) {
+    const need = 10 - all.length;
+    const extras = BADGE_FALLBACKS.slice(0, need).map((b) => ({ ...b, locked: true }));
+    all.push(...extras);
+  }
+
+  return all.slice(0, 10);
+}
+
+function buildSvgPath(series, width = 640, height = 180) {
+  if (!series.length) return "";
+  const maxScore = 10;
+  const minScore = 0;
+  const stepX = width / (series.length - 1 || 1);
+  const points = series.map((d, i) => {
+    const x = i * stepX;
+    const y = height - ((d.score - minScore) / (maxScore - minScore)) * (height - 20) - 10;
+    return [x, y];
+  });
+
+  if (points.length === 1) return `M0,${points[0][1]} L${width},${points[0][1]}`;
+
+  let d = `M${points[0][0]},${points[0][1]}`;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx1 = prev[0] + (curr[0] - prev[0]) / 2;
+    const cpy1 = prev[1];
+    const cpx2 = prev[0] + (curr[0] - prev[0]) / 2;
+    const cpy2 = curr[1];
+    d += ` C${cpx1},${cpy1} ${cpx2},${cpy2} ${curr[0]},${curr[1]}`;
+  }
+  return d;
 }
 
 function showDemoToast() {
@@ -53,6 +215,38 @@ export default function Account() {
   const { user, logout, loading } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [demoShown, setDemoShown] = useState(false);
+  const [period, setPeriod] = useState(14);
+  const [notes, setNotes] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [executions, setExecutions] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
+
+  const loadData = useCallback(async () => {
+    if (!getToken()) return;
+    setDataLoading(true);
+    try {
+      const [notesRes, tasksRes, execRes, notiRes] = await Promise.allSettled([
+        get("/notes", { sort: "-created_date", limit: 200 }, { silent: true }),
+        get("/tasks", { parent_task_id: "", sort: "-created_date", limit: 200 }, { silent: true }),
+        get("/task-executions", { limit: 200 }, { silent: true }),
+        get("/notifications", { limit: 50 }, { silent: true })
+      ]);
+      setNotes(notesRes.status === "fulfilled" && Array.isArray(notesRes.value) ? notesRes.value : []);
+      setTasks(tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value) ? tasksRes.value : []);
+      setExecutions(execRes.status === "fulfilled" && Array.isArray(execRes.value) ? execRes.value : []);
+      setNotifications(notiRes.status === "fulfilled" && Array.isArray(notiRes.value) ? notiRes.value : []);
+    } catch (err) {
+      console.error("account loadData failed", err);
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (!getToken() && !demoShown) {
@@ -60,6 +254,25 @@ export default function Account() {
       setTimeout(() => showDemoToast(), 400);
     }
   }, [demoShown]);
+
+  const series = useMemo(() => computeMoodSeries(notes, tasks, executions, period), [notes, tasks, executions, period]);
+  const insight = useMemo(() => generateInsight(series, notes, tasks), [series, notes, tasks]);
+  const badges = useMemo(() => generateBadges(notes, tasks, executions), [notes, tasks, executions]);
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
+
+  const markRead = async (id) => {
+    try {
+      await patch(`/notifications/${id}`, { is_read: true }, { silent: true });
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    } catch {}
+  };
+
+  const markAllRead = async () => {
+    try {
+      await Promise.all(notifications.filter((n) => !n.is_read).map((n) => patch(`/notifications/${n.id}`, { is_read: true }, { silent: true })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    } catch {}
+  };
 
   if (loading) {
     return (
@@ -112,11 +325,12 @@ export default function Account() {
 
   const displayName = user.display_name || user.full_name || "我";
   const initials = displayName.charAt(0);
-  const days = 128; // TODO: replace with real data
-  const completionRate = 86;
-  const focusHours = 42;
-  const moodScore = 7.2;
-  const labels = lastNDays(6);
+  const days = 128;
+  const completionRate = tasks.length ? Math.round((tasks.filter((t) => ["completed", "done", "archived"].includes(t.status)).length / tasks.length) * 100) : 0;
+  const focusHours = Math.round((executions || []).length * 0.5) || 42;
+  const moodScore = series.length ? (series.reduce((s, d) => s + d.score, 0) / series.length).toFixed(1) : "7.2";
+  const labels = lastNDays(period).filter((_, i) => i % Math.ceil(period / 5) === 0 || i === period - 1).map((d) => d.label);
+  const svgPath = buildSvgPath(series);
 
   const handleLogout = () => {
     clearToken();
@@ -156,17 +370,39 @@ export default function Account() {
               </View>
             </View>
             <View
+              onClick={() => setShowNotifications(true)}
               style={{
                 width: "64rpx",
                 height: "64rpx",
                 borderRadius: "16rpx",
-                background: theme.primary,
+                background: theme.paper,
+                border: `1rpx solid ${theme.border}`,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center"
+                justifyContent: "center",
+                position: "relative"
               }}
             >
-              <Text style={{ fontSize: "32rpx", color: "#fff" }}>{initials}</Text>
+              <Text style={{ fontSize: "32rpx", color: theme.inkSecondary }}>🔔</Text>
+              {unreadCount > 0 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: "6rpx",
+                    right: "6rpx",
+                    minWidth: "28rpx",
+                    height: "28rpx",
+                    borderRadius: "14rpx",
+                    background: theme.seal,
+                    padding: "0 8rpx",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "18rpx", color: "#fff" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+                </View>
+              )}
             </View>
           </View>
 
@@ -242,16 +478,24 @@ export default function Account() {
           <View style={{ marginBottom: "48rpx" }}>
             <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20rpx" }}>
               <View>
-                <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink }}>心境河流</Text>
-                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginTop: "4rpx" }}>过去14天的情绪波动</Text>
+                <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink }}>近期流动</Text>
+                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginTop: "4rpx" }}>由你的心签、约定与执行记录汇聚而成</Text>
               </View>
               <View style={{ display: "flex", gap: "8rpx" }}>
-                <View style={{ padding: "6rpx 14rpx", borderRadius: "8rpx", background: theme.primary }}>
-                  <Text style={{ fontSize: "20rpx", color: "#fff" }}>14天</Text>
-                </View>
-                <View style={{ padding: "6rpx 14rpx", borderRadius: "8rpx", background: theme.paper, border: `1rpx solid ${theme.border}` }}>
-                  <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary }}>30天</Text>
-                </View>
+                {[14, 30].map((p) => (
+                  <View
+                    key={p}
+                    onClick={() => setPeriod(p)}
+                    style={{
+                      padding: "6rpx 14rpx",
+                      borderRadius: "8rpx",
+                      background: period === p ? theme.primary : theme.paper,
+                      border: `1rpx solid ${period === p ? theme.primary : theme.border}`
+                    }}
+                  >
+                    <Text style={{ fontSize: "20rpx", color: period === p ? "#fff" : theme.inkQuaternary }}>{p}天</Text>
+                  </View>
+                ))}
               </View>
             </View>
             <View
@@ -263,25 +507,26 @@ export default function Account() {
                 padding: "20rpx"
               }}
             >
-              <svg viewBox="0 0 640 180" style={{ width: "100%", height: "100%" }} preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="moodGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={theme.primary} stopOpacity="0.12" />
-                    <stop offset="100%" stopColor={theme.primary} stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M0,140 Q32,122 64,130 T128,106 T192,114 T256,88 T320,96 T384,68 T448,76 T512,56 T576,64 T640,52"
-                  fill="none"
-                  stroke={theme.primary}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M0,140 Q32,122 64,130 T128,106 T192,114 T256,88 T320,96 T384,68 T448,76 T512,56 T576,64 T640,52 L640,180 L0,180 Z"
-                  fill="url(#moodGrad)"
-                />
-              </svg>
+              {dataLoading ? (
+                <View style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>河流汇聚中…</Text>
+                </View>
+              ) : (
+                <svg viewBox="0 0 640 180" style={{ width: "100%", height: "100%" }} preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="moodGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={theme.primary} stopOpacity="0.12" />
+                      <stop offset="100%" stopColor={theme.primary} stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {svgPath && (
+                    <>
+                      <path d={svgPath} fill="none" stroke={theme.primary} strokeWidth="2" strokeLinecap="round" />
+                      <path d={`${svgPath} L640,180 L0,180 Z`} fill="url(#moodGrad)" />
+                    </>
+                  )}
+                </svg>
+              )}
             </View>
             <View style={{ display: "flex", justifyContent: "space-between", marginTop: "10rpx", padding: "0 8rpx" }}>
               {labels.map((l) => (
@@ -299,16 +544,14 @@ export default function Account() {
                 border: `1rpx solid ${theme.border}`
               }}
             >
-              <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, lineHeight: "44rpx" }}>
-                觉察提示：你的情绪在周末呈现明显上升趋势，建议保持当前的晨间冥想习惯。连续3天的心境评分超过7分。
-              </Text>
+              <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, lineHeight: "44rpx" }}>{insight}</Text>
             </View>
           </View>
 
           {/* platforms */}
           <View style={{ marginBottom: "48rpx" }}>
-            <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "4rpx" }}>多平台入口</Text>
-            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginBottom: "20rpx" }}>随时随地，与心栈相连</Text>
+            <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "4rpx" }}>多方位沉淀</Text>
+            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginBottom: "20rpx" }}>数据可在多平台同步查看</Text>
             <View
               style={{
                 background: theme.card,
@@ -358,23 +601,25 @@ export default function Account() {
 
           {/* badges */}
           <View style={{ marginBottom: "48rpx" }}>
-            <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "20rpx" }}>心灵成就</Text>
-            <View style={{ display: "flex", gap: "32rpx" }}>
-              {BADGES.map((b) => (
-                <View key={b.key} style={{ textAlign: "center" }}>
+            <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "4rpx" }}>心灵成就</Text>
+            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginBottom: "20rpx" }}>AI 根据你的数据生成的正能量人格</Text>
+            <View style={{ display: "flex", flexWrap: "wrap", gap: "24rpx" }}>
+              {badges.map((b) => (
+                <View key={b.key} style={{ textAlign: "center", width: "104rpx" }}>
                   <View
                     style={{
                       width: "88rpx",
                       height: "88rpx",
                       margin: "0 auto 12rpx",
                       borderRadius: "20rpx",
-                      background: b.locked ? theme.paper : theme.primaryMist,
+                      background: b.locked ? theme.paper : `${b.color}18`,
+                      border: `1rpx solid ${b.locked ? theme.border : b.color}`,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center"
                     }}
                   >
-                    <Text style={{ fontSize: "40rpx", color: b.locked ? theme.inkQuaternary : theme.primary }}>{b.icon}</Text>
+                    <Text style={{ fontSize: "40rpx", color: b.locked ? theme.inkQuaternary : b.color }}>{b.icon}</Text>
                   </View>
                   <Text style={{ fontSize: "22rpx", color: b.locked ? theme.inkQuaternary : theme.inkTertiary }}>
                     {b.locked ? "未解锁" : b.label}
@@ -438,6 +683,76 @@ export default function Account() {
           </View>
         </View>
       </ScrollView>
+
+      {/* notification panel */}
+      {showNotifications && (
+        <View
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-end"
+          }}
+          onClick={() => setShowNotifications(false)}
+        >
+          <View
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxHeight: "70vh",
+              background: theme.card,
+              borderRadius: "28rpx 28rpx 0 0",
+              padding: "32rpx 28rpx 48rpx",
+              display: "flex",
+              flexDirection: "column"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx" }}>
+              <Text style={{ fontSize: "34rpx", fontWeight: 600, color: theme.ink }}>通知</Text>
+              <View style={{ display: "flex", alignItems: "center", gap: "20rpx" }}>
+                {unreadCount > 0 && (
+                  <Text onClick={markAllRead} style={{ fontSize: "24rpx", color: theme.primary }}>
+                    全部已读
+                  </Text>
+                )}
+                <Text onClick={() => setShowNotifications(false)} style={{ fontSize: "30rpx", color: theme.inkQuaternary, padding: "8rpx" }}>
+                  ✕
+                </Text>
+              </View>
+            </View>
+            <ScrollView scrollY style={{ maxHeight: "52vh" }}>
+              {notifications.length === 0 ? (
+                <View style={{ textAlign: "center", padding: "60rpx 20rpx" }}>
+                  <Text style={{ fontSize: "28rpx", color: theme.inkTertiary }}>暂无通知</Text>
+                </View>
+              ) : (
+                notifications.map((n) => (
+                  <View
+                    key={n.id}
+                    onClick={() => markRead(n.id)}
+                    style={{
+                      padding: "24rpx 20rpx",
+                      borderBottom: `1rpx solid ${theme.border}`,
+                      background: n.is_read ? theme.card : theme.primaryMist
+                    }}
+                  >
+                    <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "8rpx" }}>
+                      {!n.is_read && <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: theme.seal }} />}
+                      <Text style={{ fontSize: "28rpx", fontWeight: 500, color: theme.ink }}>{n.title}</Text>
+                    </View>
+                    <Text style={{ fontSize: "24rpx", color: theme.inkTertiary, lineHeight: "40rpx" }}>{n.content}</Text>
+                    <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "8rpx" }}>
+                      {new Date(n.created_date).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      )}
 
       {/* logout confirm modal */}
       {showLogoutConfirm && (

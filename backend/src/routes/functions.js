@@ -905,6 +905,198 @@ async function generateMonthPlan(payload) {
   }
 }
 
+function moodLastNDays(days) {
+  const list = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    list.push(toYmd(d));
+  }
+  return list;
+}
+
+function summarizeMoodData(notes, tasks, executions, period) {
+  const dates = moodLastNDays(period);
+  const startDate = new Date(dates[0]);
+  startDate.setHours(0, 0, 0, 0);
+
+  const byDate = {};
+  dates.forEach((d) => {
+    byDate[d] = { notes: [], tasks: [], executions: [] };
+  });
+
+  notes.forEach((n) => {
+    const d = toYmd(n.createdAt);
+    if (byDate[d]) byDate[d].notes.push(n);
+  });
+
+  tasks.forEach((t) => {
+    const d = toYmd(t.createdAt);
+    if (byDate[d]) byDate[d].tasks.push(t);
+  });
+
+  executions.forEach((e) => {
+    const d = toYmd(e.createdAt);
+    if (byDate[d]) byDate[d].executions.push(e);
+  });
+
+  return dates.map((d) => {
+    const day = byDate[d];
+    const noteSummaries = day.notes.slice(0, 3).map((n) => {
+      const text = String(n.plainText || n.content || "").slice(0, 60);
+      const type = n.sourceType || "心签";
+      return `${type}: ${text || "..."}`;
+    });
+    const taskSummaries = day.tasks.slice(0, 3).map((t) => {
+      const status = t.status === "DONE" ? "完成" : t.status === "TODO" ? "待办" : "进行中";
+      return `${status} ${t.title?.slice(0, 30) || ""}`;
+    });
+    const execSummaries = day.executions.slice(0, 2).map((e) => {
+      return `${e.executionStatus || "执行"} ${e.taskTitle?.slice(0, 30) || ""}`;
+    });
+    return `${d} 心签${day.notes.length} 约定${day.tasks.length} 执行${day.executions.length}\n${[
+      noteSummaries.join(" | "),
+      taskSummaries.join(" | "),
+      execSummaries.join(" | ")
+    ].filter(Boolean).join("\n")}`;
+  }).join("\n---\n");
+}
+
+function computeLocalMoodSeries(notes, tasks, executions, period) {
+  const positiveWords = /开心|高兴|满足|幸福|暖|安心|踏实|治愈|感动|希望|轻松|顺利|完成|达成|谢谢|感恩|喜欢|享受|平静|宁静/i;
+  const negativeWords = /难过|焦虑|烦|累|委屈|害怕|孤独|失落|压力|想哭|崩溃|怀疑|失眠|沮丧|愤怒|内耗|emo|挫败|不安|迷茫|无助/i;
+
+  const dates = moodLastNDays(period);
+  return dates.map((ymd) => {
+    let score = 5;
+    const dayNotes = notes.filter((n) => toYmd(n.createdAt) === ymd);
+    const dayTasksCreated = tasks.filter((t) => toYmd(t.createdAt) === ymd);
+    const dayTasksCompleted = tasks.filter((t) => t.completedAt && toYmd(t.completedAt) === ymd);
+    const dayOverdue = tasks.filter((t) => {
+      if (!t.endTime || t.status === "DONE" || t.status === "ARCHIVED") return false;
+      return toYmd(t.endTime) < ymd;
+    });
+    const dayExec = executions.filter((e) => toYmd(e.createdAt) === ymd);
+
+    score += dayNotes.length * 0.3;
+    score += dayTasksCreated.length * 0.2;
+    score += dayTasksCompleted.length * 0.6;
+    score += dayExec.length * 0.4;
+    score -= dayOverdue.length * 0.8;
+
+    dayNotes.forEach((n) => {
+      const text = `${n.plainText || n.content || ""} ${JSON.stringify(n.metadata || {})}`;
+      if (positiveWords.test(text)) score += 0.7;
+      if (negativeWords.test(text)) score -= 0.7;
+    });
+
+    score = Math.max(1, Math.min(10, score));
+    return { date: ymd, score: Number(score.toFixed(1)) };
+  });
+}
+
+function generateLocalInsight(series) {
+  if (!series.length) return "开始记录吧，心栈会陪你看见自己的流动。";
+  const avg = series.reduce((s, d) => s + d.score, 0) / series.length;
+  const latest = series[series.length - 1]?.score || avg;
+  const trend = latest - series[0].score;
+
+  let insight = "";
+  if (trend > 1.2) insight = "近期流动呈上升趋势，你的状态在回暖。";
+  else if (trend < -1.2) insight = "近期流动有些波动，给自己多一点耐心。";
+  else insight = "近期流动相对平稳，这是扎实前行的节奏。";
+
+  return insight;
+}
+
+async function generateMoodRiverWithAI(userId, period) {
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setDate(now.getDate() - period + 1);
+  startDate.setHours(0, 0, 0, 0);
+
+  const [notes, tasks, executions] = await Promise.all([
+    prisma.note.findMany({
+      where: { userId, deletedAt: null, createdAt: { gte: startDate } },
+      orderBy: { createdAt: "desc" },
+      take: 300
+    }),
+    prisma.task.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        OR: [
+          { createdAt: { gte: startDate } },
+          { completedAt: { gte: startDate } },
+          { endTime: { gte: startDate } }
+        ]
+      },
+      orderBy: { createdAt: "desc" },
+      take: 300
+    }),
+    prisma.taskExecution.findMany({
+      where: { userId, createdAt: { gte: startDate } },
+      orderBy: { createdAt: "desc" },
+      take: 300
+    })
+  ]);
+
+  if (notes.length === 0 && tasks.length === 0 && executions.length === 0) {
+    const series = computeLocalMoodSeries(notes, tasks, executions, period);
+    return { series, insight: "开始记录吧，心栈会陪你看见自己的流动。", source: "local-empty" };
+  }
+
+  const summary = summarizeMoodData(notes, tasks, executions, period);
+
+  const schema = {
+    type: "object",
+    properties: {
+      series: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            date: { type: "string" },
+            score: { type: "number" }
+          },
+          required: ["date", "score"]
+        }
+      },
+      insight: { type: "string" }
+    },
+    required: ["series", "insight"]
+  };
+
+  const prompt = `请根据用户最近 ${period} 天的真实数据，生成一条心境河流曲线和一段觉察提示。\n\n数据按日期聚合如下：\n${summary}\n\n要求：\n1. series 数组长度必须等于 ${period}，每条包含 date（YYYY-MM-DD）和 score（1-10，保留1位小数）。\n2. 曲线要真实反映数据：有情绪记录、完成任务、执行记录的日子分数偏高；有逾期任务或负面情绪的日子分数偏低。\n3. insight 用 1-2 句话，温暖、具体，引用真实数据中的亮点或需要关注的点。\n4. 直接返回 JSON 对象，不要 markdown 或解释。`;
+
+  try {
+    const result = await withTimeout(
+      invokeKimiText({
+        prompt,
+        systemPrompt: "你是 SoulSentry 心栈的 AI 伙伴，擅长从用户的心签、约定与执行记录中看见情绪流动，并用温暖简短的语言反馈。",
+        responseJsonSchema: schema,
+        temperature: 0.7
+      }),
+      15000
+    );
+
+    const aiSeries = Array.isArray(result?.series) ? result.series : [];
+    const normalizedSeries = moodLastNDays(period).map((ymd) => {
+      const found = aiSeries.find((s) => s?.date === ymd);
+      const score = found ? Math.max(1, Math.min(10, Number(found.score) || 5)) : 5;
+      return { date: ymd, score: Number(score.toFixed(1)) };
+    });
+
+    const insight = String(result?.insight || "").trim() || generateLocalInsight(normalizedSeries);
+    return { series: normalizedSeries, insight, source: "ai" };
+  } catch (err) {
+    console.error("[moodRiver] AI failed:", err?.message || err);
+    const series = computeLocalMoodSeries(notes, tasks, executions, period);
+    return { series, insight: generateLocalInsight(series), source: "local-fallback" };
+  }
+}
+
 functionsRouter.post("/:name", async (req, res) => {
   const { name } = req.params;
   const payload = req.body || {};
@@ -1055,6 +1247,12 @@ functionsRouter.post("/:name", async (req, res) => {
 
     if (name === "generateDailyBriefing") {
       return res.json(await generateDailyBriefingForUser(req.user));
+    }
+
+    if (name === "moodRiver") {
+      const period = Number(payload.period) === 30 ? 30 : 14;
+      const result = await generateMoodRiverWithAI(req.user.id, period);
+      return res.json(result);
     }
 
     if (name === "generateWeekPlan") {

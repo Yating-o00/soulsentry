@@ -222,6 +222,7 @@ export default function Account() {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
+  const [moodData, setMoodData] = useState(null);
 
   const loadData = useCallback(async () => {
     if (!getToken()) return;
@@ -244,9 +245,29 @@ export default function Account() {
     }
   }, []);
 
+  const loadMoodRiver = useCallback(async (p) => {
+    if (!getToken()) return;
+    setMoodData(null);
+    try {
+      const res = await post("/functions/moodRiver", { period: p }, { silent: true });
+      if (res && Array.isArray(res.series) && res.series.length > 0) {
+        setMoodData({ series: res.series, insight: res.insight || "" });
+      } else {
+        setMoodData(null);
+      }
+    } catch (err) {
+      console.error("loadMoodRiver failed", err);
+      setMoodData(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    loadMoodRiver(period);
+  }, [period, loadMoodRiver]);
 
   useEffect(() => {
     if (!getToken() && !demoShown) {
@@ -255,8 +276,10 @@ export default function Account() {
     }
   }, [demoShown]);
 
-  const series = useMemo(() => computeMoodSeries(notes, tasks, executions, period), [notes, tasks, executions, period]);
-  const insight = useMemo(() => generateInsight(series, notes, tasks), [series, notes, tasks]);
+  const localSeries = useMemo(() => computeMoodSeries(notes, tasks, executions, period), [notes, tasks, executions, period]);
+  const localInsight = useMemo(() => generateInsight(localSeries, notes, tasks), [localSeries, notes, tasks]);
+  const series = moodData?.series || localSeries;
+  const insight = moodData?.insight || localInsight;
   const badges = useMemo(() => generateBadges(notes, tasks, executions), [notes, tasks, executions]);
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
 

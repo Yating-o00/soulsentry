@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Button } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
+import { getToken } from "@/utils/auth";
 import SharePoster from "@/components/SharePoster";
 import VaultSheet from "@/components/VaultSheet";
 import ReviewDrawer from "@/components/ReviewDrawer";
@@ -98,6 +99,7 @@ export default function Notes() {
   const [actionLoading, setActionLoading] = useState({});
   const [reviewVisible, setReviewVisible] = useState(false);
   const [density, setDensity] = useState(() => Taro.getStorageSync(DENSITY_KEY) || "light");
+  const [isGuest, setIsGuest] = useState(false);
   const scrollRef = useRef(null);
 
   const setDensityAndSave = (val) => {
@@ -118,7 +120,9 @@ export default function Notes() {
   }, []);
 
   useDidShow(() => {
-    fetchNotes();
+    const guest = !getToken();
+    setIsGuest(guest);
+    if (!guest) fetchNotes();
   });
 
   const filteredNotes = useMemo(() => {
@@ -294,6 +298,10 @@ export default function Notes() {
   };
 
   const goCreate = () => {
+    if (isGuest) {
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
     Taro.navigateTo({ url: "/pages/note-create/index" });
   };
 
@@ -324,6 +332,28 @@ export default function Notes() {
     } finally {
       setSubmittingId(null);
     }
+  };
+
+  const renderGuestBanner = () => {
+    if (!isGuest) return null;
+    return (
+      <View
+        onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
+        style={{
+          margin: "0 24rpx 16rpx",
+          padding: "18rpx 24rpx",
+          borderRadius: "12rpx",
+          background: "#fff8e6",
+          border: "1rpx solid #f5d78e",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between"
+        }}
+      >
+        <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>游客模式 · 登录后记录你的心签</Text>
+        <Text style={{ fontSize: "24rpx", color: theme.primary, fontWeight: 500 }}>去登录 →</Text>
+      </View>
+    );
   };
 
   const renderHeader = () => (
@@ -448,27 +478,44 @@ export default function Notes() {
         <Text style={{ fontSize: "56rpx", color: theme.primary }}>签</Text>
       </View>
       <Text style={{ fontSize: "34rpx", color: theme.inkSecondary, fontWeight: 700, marginBottom: "16rpx" }}>
-        这里还空着
+        {isGuest ? "登录后开启心签" : "这里还空着"}
       </Text>
       <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx" }}>
-        此刻的心情、刷到的好文章、怕忘的号码……都可以丢进来。
+        {isGuest
+          ? "心签是说给另一个自己听的地方，登录后即可记录。"
+          : "此刻的心情、刷到的好文章、怕忘的号码……都可以丢进来。"}
       </Text>
-      <View style={{ display: "flex", gap: "16rpx", justifyContent: "center", marginTop: "32rpx", flexWrap: "wrap" }}>
-        {["今天的心情有点复杂", "这篇文章讲得真好，收藏一下", "突然想到一个点子"].map((t) => (
-          <View
-            key={t}
-            onClick={() => Taro.navigateTo({ url: `/pages/note-create/index?preset=${encodeURIComponent(t)}` })}
-            style={{
-              padding: "12rpx 24rpx",
-              borderRadius: "999rpx",
-              border: `1rpx dashed ${theme.border}`,
-              background: theme.card
-            }}
-          >
-            <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>{t}</Text>
-          </View>
-        ))}
-      </View>
+      {isGuest ? (
+        <View
+          onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
+          style={{
+            display: "inline-block",
+            marginTop: "32rpx",
+            padding: "14rpx 36rpx",
+            borderRadius: "999rpx",
+            background: theme.primary
+          }}
+        >
+          <Text style={{ fontSize: "28rpx", color: "#fff" }}>去登录</Text>
+        </View>
+      ) : (
+        <View style={{ display: "flex", gap: "16rpx", justifyContent: "center", marginTop: "32rpx", flexWrap: "wrap" }}>
+          {["今天的心情有点复杂", "这篇文章讲得真好，收藏一下", "突然想到一个点子"].map((t) => (
+            <View
+              key={t}
+              onClick={() => Taro.navigateTo({ url: `/pages/note-create/index?preset=${encodeURIComponent(t)}` })}
+              style={{
+                padding: "12rpx 24rpx",
+                borderRadius: "999rpx",
+                border: `1rpx dashed ${theme.border}`,
+                background: theme.card
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>{t}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 
@@ -624,6 +671,7 @@ export default function Notes() {
     <View style={{ minHeight: "100vh", background: theme.paper, paddingBottom: "140rpx" }}>
       <ScrollView ref={scrollRef} scrollY style={{ height: "100vh" }}>
         {renderHeader()}
+        {renderGuestBanner()}
         {renderFilters()}
         {loading && notes.length === 0 ? (
           <View style={{ textAlign: "center", padding: "80rpx" }}>

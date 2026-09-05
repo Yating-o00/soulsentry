@@ -10,6 +10,10 @@ export default function Index() {
     }
   }, []);
 
+  const goBrowse = () => {
+    Taro.switchTab({ url: "/pages/flow/index" });
+  };
+
   const goLogin = () => {
     Taro.navigateTo({ url: "/pages/login/index" });
   };
@@ -21,10 +25,16 @@ export default function Index() {
         <View style={{ marginTop: "24rpx" }}>
           <Text style={{ fontSize: "32rpx", color: "#666666" }}>守护每一个约定</Text>
         </View>
+        <View style={{ marginTop: "16rpx" }}>
+          <Text style={{ fontSize: "26rpx", color: "#999999" }}>先逛逛，再决定是否留下</Text>
+        </View>
       </View>
 
-      <Button className="ss-btn" style={{ width: "560rpx" }} onClick={goLogin}>
-        手机号登录
+      <Button className="ss-btn" style={{ width: "560rpx", marginBottom: "24rpx" }} onClick={goBrowse}>
+        立即体验
+      </Button>
+      <Button className="ss-btn ss-btn-plain" style={{ width: "560rpx" }} onClick={goLogin}>
+        登录 / 注册
       </Button>
     </View>
   );

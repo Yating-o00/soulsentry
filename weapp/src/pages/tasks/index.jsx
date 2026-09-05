@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
+import { getToken } from "@/utils/auth";
 import SharePoster from "@/components/SharePoster";
 import Composer from "@/components/tasks/Composer";
 import PromiseCard from "@/components/tasks/PromiseCard";
@@ -65,6 +66,7 @@ export default function Tasks() {
   const [posterTask, setPosterTask] = useState(null);
   const [posterToken, setPosterToken] = useState("");
   const [toast, setToast] = useState(null);
+  const [isGuest, setIsGuest] = useState(false);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -111,7 +113,9 @@ export default function Tasks() {
   }, []);
 
   useDidShow(() => {
-    fetchData();
+    const guest = !getToken();
+    setIsGuest(guest);
+    if (!guest) fetchData();
   });
 
   const grouped = useMemo(() => {
@@ -223,6 +227,26 @@ export default function Tasks() {
           </View>
         </View>
 
+        {/* guest banner */}
+        {isGuest && (
+          <View
+            onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
+            style={{
+              marginTop: "24rpx",
+              padding: "18rpx 24rpx",
+              borderRadius: "12rpx",
+              background: "#fff8e6",
+              border: "1rpx solid #f5d78e",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between"
+            }}
+          >
+            <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>游客模式 · 登录后管理你的约定</Text>
+            <Text style={{ fontSize: "24rpx", color: theme.primary, fontWeight: 500 }}>去登录 →</Text>
+          </View>
+        )}
+
         {/* greeting + composer */}
         <View style={{ paddingTop: "40rpx" }}>
           <View>
@@ -255,7 +279,7 @@ export default function Tasks() {
               border: `1rpx solid ${theme.border}`
             }}
           >
-            <Composer />
+            <Composer isGuest={isGuest} />
           </View>
         </View>
 

@@ -1144,6 +1144,7 @@ export default function Flow() {
   const [assoc, setAssoc] = useState(null);
   const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
   const [inputText, setInputText] = useState("");
   const [inputPlaceholder, setInputPlaceholder] = useState("此刻想记下什么？");
   const [inputFocus, setInputFocus] = useState(false);
@@ -1161,6 +1162,7 @@ export default function Flow() {
   const analyzedHeartIdsRef = useRef(new Set());
 
   useDidShow(() => {
+    setIsGuest(!getToken());
     loadAll();
   });
 
@@ -1586,7 +1588,12 @@ export default function Flow() {
     }
   };
 
+
   const handleSend = async (explicitText) => {
+    if (isGuest) {
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
     const text = String(explicitText || inputText).trim();
     if (!text || analyzing) return;
     if (!explicitText) {
@@ -1613,6 +1620,10 @@ export default function Flow() {
   };
 
   const quickAction = (type) => {
+    if (isGuest) {
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
     if (type === "heart") {
       Taro.navigateTo({ url: "/pages/note-create/index?tag=heart" });
     } else if (type === "task") {
@@ -1657,6 +1668,28 @@ export default function Flow() {
         fail: () => Taro.showToast({ title: "选择图片失败", icon: "none" })
       });
     }
+  };
+
+  const renderGuestBanner = () => {
+    if (!isGuest) return null;
+    return (
+      <View
+        onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
+        style={{
+          margin: "0 24rpx 16rpx",
+          padding: "18rpx 24rpx",
+          borderRadius: "12rpx",
+          background: "#fff8e6",
+          border: "1rpx solid #f5d78e",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between"
+        }}
+      >
+        <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>游客模式 · 登录后查看你的专属数据</Text>
+        <Text style={{ fontSize: "24rpx", color: "#384877", fontWeight: 500 }}>去登录 →</Text>
+      </View>
+    );
   };
 
   const renderHeader = () => (
@@ -3182,6 +3215,7 @@ export default function Flow() {
   return (
     <View style={{ minHeight: "100vh", background: THEME.paper, display: "flex", flexDirection: "column" }}>
       {renderHeader()}
+      {renderGuestBanner()}
       <ScrollView
         scrollY
         style={{ flex: 1 }}

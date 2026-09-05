@@ -12,19 +12,29 @@ const suggestions = [
   "周五前给张总发跟进邮件",
 ];
 
-export default function Composer() {
+export default function Composer({ isGuest = false }) {
   const [value, setValue] = useState("");
   const [voiceOpen, setVoiceOpen] = useState(false);
 
   const submit = () => {
     const text = value.trim();
     if (!text) return;
+    if (isGuest) {
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
     Taro.navigateTo({
       url: `/pages/task-create/index?title=${encodeURIComponent(text)}`,
     });
   };
 
-  const openVoice = () => setVoiceOpen(true);
+  const openVoice = () => {
+    if (isGuest) {
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
+    setVoiceOpen(true);
+  };
   const closeVoice = () => setVoiceOpen(false);
 
   const handleVoiceResult = (text) => {

@@ -1,3 +1,4 @@
+import Taro from "@tarojs/taro";
 import { View, Text, Button } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
 
@@ -14,8 +15,11 @@ export default function Account() {
 
   if (!user) {
     return (
-      <View className="ss-page">
-        <View className="ss-empty">未登录</View>
+      <View className="ss-page" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <Text style={{ fontSize: "32rpx", color: "#666", marginBottom: "40rpx" }}>登录后查看个人中心</Text>
+        <Button className="ss-btn" style={{ width: "560rpx" }} onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}>
+          登录 / 注册
+        </Button>
       </View>
     );
   }

@@ -42,6 +42,7 @@ import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
 import SoulSentryHub from "../components/dashboard/SoulSentryHub";
 import DailyBriefing from "../components/dashboard/DailyBriefing";
+import TodayDueList from "../components/dashboard/TodayDueList";
 import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
 import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
@@ -403,12 +404,21 @@ export default function Dashboard() {
 
       <DailyBriefing />
 
-      <div data-tour="daily-planner">
-        <SmartDailyPlanner />
-      </div>
+      <TodayDueList
+        tasks={allTasks}
+        notes={allNotes}
+        onTaskClick={(taskId) => {
+          const t = allTasks.find((x) => x.id === taskId);
+          if (t) setSelectedTask(t);
+        }}
+      />
 
       <div data-tour="auto-exec">
         <AutoExecutionPanel />
+      </div>
+
+      <div data-tour="daily-planner">
+        <SmartDailyPlanner />
       </div>
 
       <div data-tour="geo-guard">

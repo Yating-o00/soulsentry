@@ -41,7 +41,6 @@ import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
 import SoulSentryHub from "../components/dashboard/SoulSentryHub";
 import DailyBriefing from "../components/dashboard/DailyBriefing";
-import TodayDueList from "../components/dashboard/TodayDueList";
 import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
 import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
@@ -396,14 +395,6 @@ export default function Dashboard() {
 
       <SectionGroup label="今日" hint="此刻最该被看到的事">
         <DailyBriefing />
-        <TodayDueList
-          tasks={allTasks}
-          notes={allNotes}
-          onTaskClick={(taskId) => {
-            const t = allTasks.find((x) => x.id === taskId);
-            if (t) setSelectedTask(t);
-          }}
-        />
       </SectionGroup>
 
       <SectionGroup label="代我执行" hint="约定交给助手来做">

@@ -10,7 +10,6 @@ import {
   AlertCircle, 
   Calendar as CalendarIcon, 
   TrendingUp, 
-  Sun,
   ListTodo,
   Edit,
   StickyNote,
@@ -51,6 +50,7 @@ import SceneTaskPack from "../components/dashboard/SceneTaskPack";
 import UnifiedCaptureBar, { CAPTURE_EVENT } from "../components/dashboard/UnifiedCaptureBar";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
 import ModuleDrawer from "../components/dashboard/ModuleDrawer";
+import SectionGroup from "../components/dashboard/SectionGroup";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -275,17 +275,16 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-0.5 flex items-center gap-2">
-              {greeting}，{user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")} 
-              <Sun className="w-5 h-5 md:w-6 md:h-6 text-amber-500 fill-amber-500 animate-pulse" />
-            </h1>
-            <p className="text-slate-500 text-sm md:text-base">
-              今天是 {format(new Date(), "yyyy年MM月dd日 EEEE", { locale: zhCN })}
+            <p className="text-[11px] md:text-xs font-semibold tracking-[0.18em] uppercase text-slate-400 mb-1.5">
+              {format(new Date(), "M月d日 EEEE", { locale: zhCN })}
             </p>
+            <h1 className="text-[22px] md:text-[28px] font-semibold tracking-tight text-slate-900">
+              {greeting}，{user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")}
+            </h1>
           </motion.div>
 
           <div className="flex items-center gap-2 w-full md:w-auto">
-          <TabsList className="bg-white shadow-md rounded-[12px] p-1 h-auto flex-1 md:flex-none">
+          <TabsList className="bg-white border border-slate-200/70 shadow-sm rounded-xl p-1 h-auto flex-1 md:flex-none">
             <TabsTrigger value="overview" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white text-sm">
               <ListTodo className="w-4 h-4 mr-1.5" />
               概览
@@ -299,15 +298,15 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview" className="space-y-6 md:space-y-8">
           {/* Stats Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-3 gap-2 md:gap-4"
+        className="grid grid-cols-3 gap-2 md:gap-3"
         data-tour="dashboard-stats"
-      >
+        >
         <button
           type="button"
           onClick={() => setTaskListDialog({
@@ -315,26 +314,23 @@ export default function Dashboard() {
             title: "今日待办",
             tasks: todayTasks.filter(t => t.status === 'pending')
           })}
-          className="group relative overflow-hidden rounded-2xl md:rounded-3xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white text-left p-4 md:p-5 shadow-lg shadow-[#384877]/20 hover:shadow-xl hover:shadow-[#384877]/30 hover:-translate-y-0.5 active:scale-[0.98] transition-all"
+          className="group relative overflow-hidden rounded-2xl bg-[#384877] text-white text-left p-4 md:p-5 shadow-sm hover:shadow-md active:scale-[0.99] transition-all"
         >
-          <div className="absolute -top-4 -right-4 opacity-[0.08] group-hover:opacity-[0.14] transition-opacity">
-            <ListTodo className="w-20 h-20 md:w-24 md:h-24 rotate-12" />
-          </div>
-          <div className="relative z-10 flex flex-col h-full min-h-[104px] md:min-h-[120px]">
-            <div className="flex items-center gap-1.5 text-blue-100 text-xs md:text-sm font-medium">
-              <ListTodo className="w-3.5 h-3.5 md:w-4 md:h-4" />
+          <div className="relative z-10 flex flex-col h-full min-h-[100px] md:min-h-[112px]">
+            <div className="flex items-center gap-1.5 text-white/60 text-[11px] md:text-xs font-medium tracking-wide">
+              <ListTodo className="w-3.5 h-3.5" />
               今日待办
             </div>
-            <div className="text-3xl md:text-4xl font-bold mt-2 md:mt-3 tabular-nums">
+            <div className="text-[28px] md:text-[34px] font-semibold leading-none mt-2 md:mt-3 tabular-nums">
               {todayTasks.filter(t => t.status === 'pending').length}
             </div>
-            <div className="flex items-center gap-2 md:gap-3 text-blue-100 text-[11px] md:text-xs mt-auto pt-3">
+            <div className="flex items-center gap-2 md:gap-3 text-white/70 text-[11px] md:text-xs mt-auto pt-3">
               <Progress
                 value={completionRate}
-                className="h-1.5 bg-white/15 flex-1"
-                indicatorClassName="bg-white/90"
+                className="h-1 bg-white/15 flex-1"
+                indicatorClassName="bg-white/85"
               />
-              <span className="font-semibold tabular-nums">{completionRate}%</span>
+              <span className="font-medium tabular-nums">{completionRate}%</span>
             </div>
           </div>
         </button>
@@ -346,16 +342,14 @@ export default function Dashboard() {
             title: "逾期约定",
             tasks: overdueTasks
           })}
-          className="group rounded-2xl md:rounded-3xl bg-white border border-slate-200/80 text-left p-4 md:p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-rose-200 active:scale-[0.98] transition-all"
+          className="group rounded-2xl bg-white border border-slate-200/70 text-left p-4 md:p-5 shadow-sm hover:border-slate-300 active:scale-[0.99] transition-all"
         >
-          <div className="flex flex-col h-full min-h-[104px] md:min-h-[120px]">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-slate-500 text-xs md:text-sm font-medium truncate">逾期约定</span>
-              <div className="w-7 h-7 md:w-8 md:h-8 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-500" />
-              </div>
+          <div className="flex flex-col h-full min-h-[100px] md:min-h-[112px]">
+            <div className="flex items-center gap-1.5 text-slate-400 text-[11px] md:text-xs font-medium tracking-wide">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+              逾期约定
             </div>
-            <div className="text-3xl md:text-4xl font-bold text-slate-800 group-hover:text-rose-600 transition-colors mt-1.5 md:mt-2 tabular-nums">
+            <div className="text-[28px] md:text-[34px] font-semibold leading-none text-slate-900 mt-2 md:mt-3 tabular-nums">
               {overdueTasks.length}
             </div>
             <p className="text-[11px] md:text-xs text-slate-400 mt-auto pt-3">
@@ -371,16 +365,14 @@ export default function Dashboard() {
             title: "今日已完成",
             tasks: completedToday
           })}
-          className="group rounded-2xl md:rounded-3xl bg-white border border-slate-200/80 text-left p-4 md:p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-emerald-200 active:scale-[0.98] transition-all"
+          className="group rounded-2xl bg-white border border-slate-200/70 text-left p-4 md:p-5 shadow-sm hover:border-slate-300 active:scale-[0.99] transition-all"
         >
-          <div className="flex flex-col h-full min-h-[104px] md:min-h-[120px]">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-slate-500 text-xs md:text-sm font-medium truncate">今日已完成</span>
-              <div className="w-7 h-7 md:w-8 md:h-8 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-500" />
-              </div>
+          <div className="flex flex-col h-full min-h-[100px] md:min-h-[112px]">
+            <div className="flex items-center gap-1.5 text-slate-400 text-[11px] md:text-xs font-medium tracking-wide">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              今日已完成
             </div>
-            <div className="text-3xl md:text-4xl font-bold text-slate-800 group-hover:text-emerald-600 transition-colors mt-1.5 md:mt-2 tabular-nums">
+            <div className="text-[28px] md:text-[34px] font-semibold leading-none text-slate-900 mt-2 md:mt-3 tabular-nums">
               {completedToday.length}
             </div>
             <p className="text-[11px] md:text-xs text-slate-400 mt-auto pt-3">
@@ -402,33 +394,39 @@ export default function Dashboard() {
         if (t) setSelectedTask(t);
       }} />
 
-      <DailyBriefing />
+      <SectionGroup label="今日" hint="此刻最该被看到的事">
+        <DailyBriefing />
+        <TodayDueList
+          tasks={allTasks}
+          notes={allNotes}
+          onTaskClick={(taskId) => {
+            const t = allTasks.find((x) => x.id === taskId);
+            if (t) setSelectedTask(t);
+          }}
+        />
+      </SectionGroup>
 
-      <TodayDueList
-        tasks={allTasks}
-        notes={allNotes}
-        onTaskClick={(taskId) => {
-          const t = allTasks.find((x) => x.id === taskId);
-          if (t) setSelectedTask(t);
-        }}
-      />
+      <SectionGroup label="代我执行" hint="约定交给助手来做">
+        <div data-tour="auto-exec">
+          <AutoExecutionPanel />
+        </div>
+      </SectionGroup>
 
-      <div data-tour="auto-exec">
-        <AutoExecutionPanel />
-      </div>
+      <SectionGroup label="守护与协同" hint="时空感知 · 全设备接力">
+        <div data-tour="geo-guard">
+          <SpatioTemporalGuardModule />
+        </div>
+        <DeviceCollaborationModule />
+      </SectionGroup>
 
-      <div data-tour="daily-planner">
-        <SmartDailyPlanner />
-      </div>
-
-      <div data-tour="geo-guard">
-        <SpatioTemporalGuardModule />
-      </div>
-
-      <DeviceCollaborationModule />
+      <SectionGroup label="规划" hint="把一整天铺开来看">
+        <div data-tour="daily-planner">
+          <SmartDailyPlanner />
+        </div>
+      </SectionGroup>
 
       {/* 心栈中枢：折叠收纳，按需展开 */}
-      <div className="pt-2">
+      <div className="pt-1">
         <ModuleDrawer id="hub" title="心栈中枢" forceOpen={!!soulSentryData || hubForceOpen}>
           <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} pendingIntent={hubIntent} />
         </ModuleDrawer>

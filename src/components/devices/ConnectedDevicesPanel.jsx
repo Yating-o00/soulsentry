@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Smartphone, Monitor, Tablet, Watch, Speaker, RefreshCw, Pencil, Check, X, Wifi, WifiOff } from "lucide-react";
+import { Smartphone, Monitor, Tablet, Watch, Speaker, RefreshCw, Pencil, Check, X, Wifi, WifiOff, Trash2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { listMyDevices, registerCurrentDevice, renameDeviceByFingerprint } from "@/lib/deviceRegistry";
 import { resolveDeviceBrand } from "./DeviceBrandIcon";
@@ -29,7 +29,7 @@ const ROLE_META = {
   secondary: "辅助",
 };
 
-function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 }) {
+function DeviceCard({ device, onRename, onDelete, isSelected, onSelect, strategyCount = 0 }) {
   const brand = resolveDeviceBrand(device);
   // 用 brand.deviceType(由 UA 实时判定)取元信息,绕开数据库可能残留的旧 device_type
   const meta = TYPE_META[brand.deviceType] || TYPE_META[device.device_type] || TYPE_META.other;
@@ -130,6 +130,16 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
                   title="重命名"
                 >
                   <Pencil className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete?.(device);
+                  }}
+                  className="text-slate-300 hover:text-rose-500 transition-colors shrink-0"
+                  title="删除这条设备记录"
+                >
+                  <Trash2 className="w-3 h-3" />
                 </button>
                 {strategyCount > 0 && (
                   <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#384877] bg-[#384877]/8">
@@ -308,6 +318,20 @@ export default function ConnectedDevicesPanel({
     }
   };
 
+  const handleDelete = async (device) => {
+    const label = device.name || "这台设备";
+    const extra = device.is_current ? "（本机记录删除后，下次打开应用会重新登记）" : "";
+    if (!window.confirm(`确定删除「${label}」的设备记录吗？${extra}`)) return;
+    setDevices((prev) => prev.filter((d) => d.id !== device.id));
+    try {
+      await base44.entities.Device.delete(device.id);
+      toast.success("已删除设备记录");
+    } catch (e) {
+      toast.error("删除失败：" + (e?.message || "请稍后再试"));
+    }
+    refresh();
+  };
+
   const onlineCount = devices.filter((d) => d.is_online).length;
   const total = devices.length;
   const hasCurrent = devices.some((d) => d.is_current);
@@ -366,6 +390,7 @@ export default function ConnectedDevicesPanel({
               key={d.id}
               device={d}
               onRename={handleRename}
+              onDelete={handleDelete}
               isSelected={activeId === d.id}
               onSelect={handleSelect}
               strategyCount={strategiesByType?.[realType]?.length || 0}

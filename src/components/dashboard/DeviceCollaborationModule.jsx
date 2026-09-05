@@ -634,9 +634,7 @@ export default function DeviceCollaborationModule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveSelectedType, rawSelectedStrategies.map((s) => `${s.time}|${s.content}`).join("\n")]);
 
-  const hasAnyStrategy = devices.some((d) => d.strategies && d.strategies.length > 0);
-  const hasAnyRealDevice = (realDevices || []).length > 0;
-  if (!hasAnyStrategy && !hasAnyRealDevice) return null;
+  // 模块常驻：打开今日页面即呈现（没有设备/策略时也显示引导与空态）
 
   const selectedStrategies = rewriteMap[effectiveSelectedType] || rawSelectedStrategies;
 

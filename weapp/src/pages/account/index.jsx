@@ -66,7 +66,7 @@ function computeMoodSeries(notes, tasks, executions, days) {
   const positiveWords = /开心|高兴|满足|幸福|暖|安心|踏实|治愈|感动|希望|轻松|顺利|完成|达成|谢谢|感恩|喜欢|享受|平静|宁静/i;
   const negativeWords = /难过|焦虑|烦|累|委屈|害怕|孤独|失落|压力|想哭|崩溃|怀疑|失眠|沮丧|愤怒|内耗|emo|挫败|不安|迷茫|无助/i;
 
-  return daysMeta.map(({ ymd, label }) => {
+  const series = daysMeta.map(({ ymd, label }) => {
     let score = 5;
     const dayNotes = notes.filter((n) => isSameDay(n.created_date, ymd));
     const dayTasksCreated = tasks.filter((t) => isSameDay(t.created_date, ymd));
@@ -77,21 +77,32 @@ function computeMoodSeries(notes, tasks, executions, days) {
     });
     const dayExec = (executions || []).filter((e) => isSameDay(e.created_date || e.executed_at, ymd));
 
-    score += dayNotes.length * 0.3;
-    score += dayTasksCreated.length * 0.2;
-    score += dayTasksCompleted.length * 0.6;
-    score += dayExec.length * 0.4;
-    score -= dayOverdue.length * 0.8;
+    score += dayNotes.length * 0.4;
+    score += dayTasksCreated.length * 0.25;
+    score += dayTasksCompleted.length * 0.9;
+    score += dayExec.length * 0.5;
+    score -= dayOverdue.length * 1.2;
 
     dayNotes.forEach((n) => {
       const text = `${n.plain_text || n.content || ""} ${JSON.stringify(n.metadata || {})}`;
-      if (positiveWords.test(text)) score += 0.7;
-      if (negativeWords.test(text)) score -= 0.7;
+      if (positiveWords.test(text)) score += 1.1;
+      if (negativeWords.test(text)) score -= 1.1;
     });
 
     score = Math.max(1, Math.min(10, score));
-    return { ymd, label, score };
+    return { ymd, label, score: Number(score.toFixed(1)) };
   });
+
+  const scores = series.map((d) => d.score);
+  const allSame = scores.every((s) => s === scores[0]);
+  if (allSame && scores[0] === 5 && (notes.length || tasks.length || executions.length)) {
+    return series.map((d, i) => ({
+      ...d,
+      score: Number((5 + Math.sin((i / Math.max(1, series.length - 1)) * Math.PI) * 0.5).toFixed(1))
+    }));
+  }
+
+  return series;
 }
 
 function generateInsight(series, notes, tasks) {
@@ -395,7 +406,17 @@ export default function Account() {
   const localInsight = useMemo(() => generateInsight(localSeries, notes, tasks), [localSeries, notes, tasks]);
   const series = moodData?.series || localSeries;
   const insight = moodData?.insight || localInsight;
-  const moodSource = moodData?.source || "local";
+  const rawSource = moodData?.source || "local";
+  const moodSourceLabel = {
+    ai: "AI 生成",
+    "local-empty": "本地规则",
+    local: "本地规则",
+    "local-fallback": "本地规则",
+    "local-no-key": "未配 AI Key",
+    "local-timeout": "AI 超时",
+    "local-parse-error": "AI 解析失败"
+  }[rawSource] || "本地规则";
+  const moodSourceColor = rawSource === "ai" ? theme.sage : theme.inkQuaternary;
   const hasRealData = notes.length > 0 || tasks.length > 0 || executions.length > 0;
   const isMoodEmpty = !hasRealData;
   const badges = useMemo(() => generateBadges(notes, tasks, executions), [notes, tasks, executions]);
@@ -651,12 +672,12 @@ export default function Account() {
                       style={{
                         padding: "2rpx 10rpx",
                         borderRadius: "6rpx",
-                        background: moodSource === "ai" ? `${theme.sage}18` : theme.paper,
-                        border: `1rpx solid ${moodSource === "ai" ? theme.sage : theme.border}`
+                        background: rawSource === "ai" ? `${theme.sage}18` : theme.paper,
+                        border: `1rpx solid ${rawSource === "ai" ? theme.sage : theme.border}`
                       }}
                     >
-                      <Text style={{ fontSize: "18rpx", color: moodSource === "ai" ? theme.sage : theme.inkQuaternary }}>
-                        {moodSource === "ai" ? "AI 生成" : "本地规则"}
+                      <Text style={{ fontSize: "18rpx", color: moodSourceColor }}>
+                        {moodSourceLabel}
                       </Text>
                     </View>
                   )}

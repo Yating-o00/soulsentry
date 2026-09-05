@@ -968,7 +968,7 @@ function computeLocalMoodSeries(notes, tasks, executions, period) {
   const negativeWords = /难过|焦虑|烦|累|委屈|害怕|孤独|失落|压力|想哭|崩溃|怀疑|失眠|沮丧|愤怒|内耗|emo|挫败|不安|迷茫|无助/i;
 
   const dates = moodLastNDays(period);
-  return dates.map((ymd) => {
+  const series = dates.map((ymd) => {
     let score = 5;
     const dayNotes = notes.filter((n) => toYmd(n.createdAt) === ymd);
     const dayTasksCreated = tasks.filter((t) => toYmd(t.createdAt) === ymd);
@@ -979,21 +979,34 @@ function computeLocalMoodSeries(notes, tasks, executions, period) {
     });
     const dayExec = executions.filter((e) => toYmd(e.createdAt) === ymd);
 
-    score += dayNotes.length * 0.3;
-    score += dayTasksCreated.length * 0.2;
-    score += dayTasksCompleted.length * 0.6;
-    score += dayExec.length * 0.4;
-    score -= dayOverdue.length * 0.8;
+    score += dayNotes.length * 0.4;
+    score += dayTasksCreated.length * 0.25;
+    score += dayTasksCompleted.length * 0.9;
+    score += dayExec.length * 0.5;
+    score -= dayOverdue.length * 1.2;
 
     dayNotes.forEach((n) => {
       const text = `${n.plainText || n.content || ""} ${JSON.stringify(n.metadata || {})}`;
-      if (positiveWords.test(text)) score += 0.7;
-      if (negativeWords.test(text)) score -= 0.7;
+      if (positiveWords.test(text)) score += 1.1;
+      if (negativeWords.test(text)) score -= 1.1;
     });
 
     score = Math.max(1, Math.min(10, score));
     return { date: ymd, score: Number(score.toFixed(1)) };
   });
+
+  // 如果整条线完全水平（所有分数相同），人为拉开 0.3 的微小起伏，
+  // 避免用户看到一条完全无信息的直线。
+  const scores = series.map((d) => d.score);
+  const allSame = scores.every((s) => s === scores[0]);
+  if (allSame && scores[0] === 5 && (notes.length || tasks.length || executions.length)) {
+    return series.map((d, i) => ({
+      ...d,
+      score: Number((5 + Math.sin((i / Math.max(1, series.length - 1)) * Math.PI) * 0.5).toFixed(1))
+    }));
+  }
+
+  return series;
 }
 
 function generateLocalInsight(series) {
@@ -1082,6 +1095,7 @@ async function generateMoodRiverWithAI(userId, period) {
     );
 
     const aiSeries = Array.isArray(result?.series) ? result.series : [];
+    console.log(`[moodRiver] AI returned series=${aiSeries.length}, user=${userId}, period=${period}`);
     const normalizedSeries = moodLastNDays(period).map((ymd) => {
       const found = aiSeries.find((s) => s?.date === ymd);
       const score = found ? Math.max(1, Math.min(10, Number(found.score) || 5)) : 5;
@@ -1091,9 +1105,20 @@ async function generateMoodRiverWithAI(userId, period) {
     const insight = String(result?.insight || "").trim() || generateLocalInsight(normalizedSeries);
     return { series: normalizedSeries, insight, source: "ai" };
   } catch (err) {
-    console.error("[moodRiver] AI failed:", err?.message || err);
+    const msg = err?.message || String(err);
+    console.error(`[moodRiver] AI failed for user=${userId}:`, msg);
+
+    let source = "local-fallback";
+    if (msg.includes("KIMI_API_KEY") || msg.includes("MOONSHOT_API_KEY") || msg.includes("未配置")) {
+      source = "local-no-key";
+    } else if (msg.includes("TIMEOUT") || msg.includes("timeout")) {
+      source = "local-timeout";
+    } else if (msg.includes("JSON") || msg.includes("json")) {
+      source = "local-parse-error";
+    }
+
     const series = computeLocalMoodSeries(notes, tasks, executions, period);
-    return { series, insight: generateLocalInsight(series), source: "local-fallback" };
+    return { series, insight: generateLocalInsight(series), source };
   }
 }
 

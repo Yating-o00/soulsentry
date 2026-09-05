@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Smartphone, Monitor, Tablet, Watch, Speaker, RefreshCw, Pencil, Check, X, Wifi, WifiOff, Trash2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { listMyDevices, registerCurrentDevice, renameDeviceByFingerprint } from "@/lib/deviceRegistry";
+import { listMyDevices, registerCurrentDevice, renameDeviceByFingerprint, deleteDeviceByFingerprint } from "@/lib/deviceRegistry";
 import { resolveDeviceBrand } from "./DeviceBrandIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,7 @@ function DeviceCard({ device, onRename, onDelete, isSelected, onSelect, strategy
   const Icon = brand.Icon;
   const visual = { brandColor: brand.brandColor, label: brand.label };
   const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [draft, setDraft] = useState(device.name || brand.label || meta.label);
 
   const save = async (e) => {
@@ -131,16 +132,42 @@ function DeviceCard({ device, onRename, onDelete, isSelected, onSelect, strategy
                 >
                   <Pencil className="w-3 h-3" />
                 </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete?.(device);
-                  }}
-                  className="text-slate-300 hover:text-rose-500 transition-colors shrink-0"
-                  title="删除这条设备记录"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
+                {confirming ? (
+                  <span className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirming(false);
+                        onDelete?.(device);
+                      }}
+                      className="text-[10px] font-semibold text-rose-600 hover:text-rose-700"
+                      title="确认删除"
+                    >
+                      确认删除
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirming(false);
+                      }}
+                      className="text-slate-300 hover:text-slate-500"
+                      title="取消"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirming(true);
+                    }}
+                    className="text-slate-300 hover:text-rose-500 transition-colors shrink-0"
+                    title="删除这条设备记录"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
                 {strategyCount > 0 && (
                   <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#384877] bg-[#384877]/8">
                     {strategyCount}<span className="opacity-70">策略</span>
@@ -319,17 +346,19 @@ export default function ConnectedDevicesPanel({
   };
 
   const handleDelete = async (device) => {
-    const label = device.name || "这台设备";
-    const extra = device.is_current ? "（本机记录删除后，下次打开应用会重新登记）" : "";
-    if (!window.confirm(`确定删除「${label}」的设备记录吗？${extra}`)) return;
+    if (device.is_current) {
+      toast.info("这是本机，会持续自动登记；请在其它设备上删除它的记录。");
+      return;
+    }
     setDevices((prev) => prev.filter((d) => d.id !== device.id));
     try {
-      await base44.entities.Device.delete(device.id);
+      await deleteDeviceByFingerprint(device.device_id, device.id);
       toast.success("已删除设备记录");
     } catch (e) {
-      toast.error("删除失败：" + (e?.message || "请稍后再试"));
+      const status = e?.response?.status;
+      toast.error(status === 403 ? "无权限删除这台设备" : "删除失败：" + (e?.message || "请稍后再试"));
     }
-    refresh();
+    await refresh();
   };
 
   const onlineCount = devices.filter((d) => d.is_online).length;

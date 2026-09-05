@@ -195,6 +195,32 @@ export async function renameDeviceByFingerprint(deviceId, newName) {
   );
 }
 
+/** 按稳定指纹删除设备记录：把该指纹下所有（可能重复的）记录一并删除。
+ *  UI 里显示的 id 可能是已被去重清理掉的旧记录，所以不能只按 id 删。
+ */
+export async function deleteDeviceByFingerprint(deviceId, fallbackId) {
+  let ids = [];
+  if (deviceId) {
+    const existing = await base44.entities.Device.filter({ device_id: deviceId });
+    ids = (existing || []).map((d) => d.id);
+  }
+  if (ids.length === 0 && fallbackId) ids = [fallbackId];
+  if (ids.length === 0) return 0;
+  const results = await Promise.all(
+    ids.map((id) =>
+      base44.entities.Device.delete(id)
+        .then(() => true)
+        .catch((e) => {
+          // 记录已不存在也视为删除成功
+          const status = e?.response?.status;
+          if (status === 404 || /not found/i.test(e?.message || "")) return true;
+          throw e;
+        })
+    )
+  );
+  return results.filter(Boolean).length;
+}
+
 /** 标记本机离线（页面隐藏/关闭时调用） */
 export async function markOffline() {
   try {

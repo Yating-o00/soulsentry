@@ -46,6 +46,9 @@ import { persistExtraDaysFromTimeline } from "@/components/utils/persistMultiDay
 import { inferDatesForBlocks, detectSpanDaysFromInput } from "@/components/utils/inferBlockDate";
 import { detectMultiDayContext, fixDayPrefixForBlocks } from "@/components/utils/aggregateMultiDayPlans";
 import CleanupDirtyPlansButton from "./planner/CleanupDirtyPlansButton";
+import { CAPTURE_EVENT, CAPTURE_FOCUS_EVENT } from "./UnifiedCaptureBar";
+
+const focusCaptureBar = () => window.dispatchEvent(new Event(CAPTURE_FOCUS_EVENT));
 
 const DEFAULT_STEPS = [
   { key: 'time_extraction', text: '提取时间实体…' },
@@ -177,15 +180,8 @@ export default function SmartDailyPlanner() {
   // Sync UI state when plan data changes
   useEffect(() => {
     if (isLoading) return;
-    if (dayPlan) {
-      const draft = localStorage.getItem(draftKey);
-      setUserInput(draft ?? "");
-      setShowInput(false);
-    } else {
-      const draft = localStorage.getItem(draftKey);
-      setUserInput(draft || "");
-      setShowInput(true);
-    }
+    setUserInput("");
+    setShowInput(false);
     setAnalysis(null);
     setResolvedDateHint(null);
   }, [dayPlan?.id, isLoading, selectedDateStr]);
@@ -198,8 +194,8 @@ export default function SmartDailyPlanner() {
   }, [analysis]);
 
   // Use analyzeIntent (same as CalendarDayView)
-  const handleAnalyze = async () => {
-    const trimmed = userInput.trim();
+  const handleAnalyze = async (overrideText) => {
+    const trimmed = String(overrideText ?? userInput).trim();
     if (!trimmed || isProcessing) return;
 
     // 防止重复提交同一内容
@@ -442,6 +438,18 @@ export default function SmartDailyPlanner() {
       setIsProcessing(false);
     }
   };
+
+  // 统一输入口（今日页顶部细条）路由到日程规划
+  const analyzeRef = useRef(handleAnalyze);
+  analyzeRef.current = handleAnalyze;
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.kind !== "day_plan" || !e.detail?.text) return;
+      analyzeRef.current(e.detail.text);
+    };
+    window.addEventListener(CAPTURE_EVENT, handler);
+    return () => window.removeEventListener(CAPTURE_EVENT, handler);
+  }, []);
 
   // 在修改前保存当前 plan_json + analysis 快照
   const captureSnapshot = useCallback((label) => {
@@ -746,8 +754,8 @@ export default function SmartDailyPlanner() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 rounded-xl text-slate-400 hover:text-[#384877] hover:bg-[#384877]/5"
-                  onClick={() => setShowInput(true)}
-                  title="追加内容"
+                  onClick={focusCaptureBar}
+                  title="追加内容（去顶部输入）"
                 >
                   <Edit2 className="w-4 h-4" />
                 </Button>
@@ -766,7 +774,7 @@ export default function SmartDailyPlanner() {
               <Button
                 size="sm"
                 className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-3.5 text-xs shadow-sm shadow-[#384877]/20"
-                onClick={() => setShowInput(true)}
+                onClick={focusCaptureBar}
               >
                 <Plus className="w-3.5 h-3.5 mr-1" /> 新建规划
               </Button>
@@ -810,160 +818,25 @@ export default function SmartDailyPlanner() {
         </div>
       </div>
 
-      {/* Input Area */}
-      <AnimatePresence>
-        {showInput && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="px-5 md:px-6 py-5 space-y-3">
-              {/* Unified input card */}
-              <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/40 shadow-sm overflow-hidden">
-                {/* Mode tabs inside card top */}
-                <div className="flex items-center border-b border-slate-100 px-1 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setInputMode("text")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-all border-b-2 -mb-px",
-                      inputMode === "text"
-                        ? "border-[#384877] text-[#384877]"
-                        : "border-transparent text-slate-400 hover:text-slate-600"
-                    )}
-                  >
-                    <Type className="w-3.5 h-3.5" /> 文本
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInputMode("voice")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-all border-b-2 -mb-px",
-                      inputMode === "voice"
-                        ? "border-[#384877] text-[#384877]"
-                        : "border-transparent text-slate-400 hover:text-slate-600"
-                    )}
-                  >
-                    <Mic className="w-3.5 h-3.5" /> 语音
-                  </button>
-                  <div className="flex-1" />
-                  {dayPlan && (
-                    <button
-                      type="button"
-                      onClick={() => setShowInput(false)}
-                      className="text-[11px] text-slate-400 hover:text-slate-600 px-3 py-2 transition-colors"
-                    >
-                      取消
-                    </button>
-                  )}
-                </div>
-
-                {/* Text input body */}
-                {inputMode === "text" && (
-                  <div className="p-3">
-                    <Textarea
-                      value={userInput}
-                      onChange={(e) => { const v = e.target.value; setUserInput(v); localStorage.setItem(draftKey, v); }}
-                      placeholder={`输入安排，AI 会自动识别日期和意图…`}
-                      className="min-h-[76px] border-none shadow-none focus-visible:ring-0 resize-none bg-transparent text-sm placeholder:text-slate-350"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        const composing = e.nativeEvent && e.nativeEvent.isComposing;
-                        if (!composing && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnalyze(); }
-                      }}
-                    />
-                    {/* Bottom bar */}
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100/80 mt-1">
-                      <div className="flex gap-1.5 flex-wrap overflow-hidden">
-                        {['📞 打电话','📊 报告DDL','✈️ 航班'].map((s, i) => {
-                          const texts = ['今晚8点给妈妈打电话，聊聊最近身体情况','下周二前完成Q4报告，每天下午提醒我进度','明天早上7点飞深圳，提前一晚提醒收拾行李'];
-                          return (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => setUserInput(texts[i])}
-                              className="px-2.5 py-1 rounded-lg text-[11px] bg-slate-50 border border-slate-150 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors whitespace-nowrap"
-                            >
-                              {s}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <Button
-                        onClick={handleAnalyze}
-                        disabled={isProcessing || !userInput.trim()}
-                        className={cn(
-                          "rounded-xl h-8 px-5 text-xs font-medium shadow-sm transition-all shrink-0",
-                          userInput.trim()
-                            ? "bg-[#384877] hover:bg-[#2d3a5f] text-white shadow-[#384877]/20"
-                            : "bg-slate-100 text-slate-400 shadow-none"
-                        )}
-                      >
-                        {isProcessing ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />分析中</> : <><Send className="w-3 h-3 mr-1" />发送</>}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Voice input body */}
-                {inputMode === "voice" && (
-                  <div className="p-5">
-                    <VoiceInput
-                      disabled={isProcessing}
-                      onResult={(text) => {
-                        setUserInput((prev) => prev ? prev + "\n" + text : text);
-                        setInputMode("text");
-                      }}
-                    />
-                    {userInput && (
-                      <div className="mt-4 pt-3 border-t border-slate-100">
-                        <p className="text-[11px] text-slate-400 mb-1">已识别内容</p>
-                        <p className="text-sm text-slate-700 leading-relaxed">{userInput}</p>
-                        <Button
-                          onClick={handleAnalyze}
-                          disabled={isProcessing || !userInput.trim()}
-                          className="mt-3 bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-5 text-xs shadow-sm shadow-[#384877]/20"
-                        >
-                          {isProcessing ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />分析中</> : <><Sparkles className="w-3 h-3 mr-1" />发送分析</>}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Date navigation hint */}
-              {resolvedDateHint && resolvedDateHint !== selectedDateStr && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800"
-                >
-                  <CalendarIcon className="w-4 h-4 shrink-0" />
-                  <span className="text-sm flex-1">
-                    AI 识别到该安排属于 <strong>{resolvedDateHint}</strong>，已自动保存
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-amber-300 text-amber-700 hover:bg-amber-100 rounded-xl h-8 text-xs gap-1.5 shrink-0"
-                    onClick={() => {
-                      setSelectedDateStr(resolvedDateHint);
-                      setResolvedDateHint(null);
-                    }}
-                  >
-                    跳转查看 <ArrowRight className="w-3.5 h-3.5" />
-                  </Button>
-                </motion.div>
-              )}
-
-              {isProcessing && <AnalysisSteps steps={DEFAULT_STEPS} running={true} />}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* 日期识别提示（输入已统一到今日页顶部细条） */}
+      {resolvedDateHint && resolvedDateHint !== selectedDateStr && (
+        <div className="px-5 md:px-6 pt-4">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800">
+            <CalendarIcon className="w-4 h-4 shrink-0" />
+            <span className="text-sm flex-1">
+              AI 识别到该安排属于 <strong>{resolvedDateHint}</strong>，已自动保存
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-300 text-amber-700 hover:bg-amber-100 rounded-xl h-8 text-xs gap-1.5 shrink-0"
+              onClick={() => { setSelectedDateStr(resolvedDateHint); setResolvedDateHint(null); }}
+            >
+              跳转查看 <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Processing indicator when input is collapsed */}
       {isProcessing && !showInput && (
@@ -1204,7 +1077,7 @@ export default function SmartDailyPlanner() {
             <Button
               size="sm"
               className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl"
-              onClick={() => setShowInput(true)}
+              onClick={focusCaptureBar}
             >
               <Sparkles className="w-3.5 h-3.5 mr-2" /> 开始规划
             </Button>

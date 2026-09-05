@@ -47,7 +47,7 @@ import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
 import SceneTaskPack from "../components/dashboard/SceneTaskPack";
-import FlowCaptureBar from "../components/dashboard/FlowCaptureBar";
+import UnifiedCaptureBar, { CAPTURE_EVENT } from "../components/dashboard/UnifiedCaptureBar";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
 import ModuleDrawer from "../components/dashboard/ModuleDrawer";
 
@@ -63,6 +63,20 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const location = useLocation();
   const soulSentryData = location.state?.soulSentryData;
+  const [hubForceOpen, setHubForceOpen] = useState(false);
+  const [hubIntent, setHubIntent] = useState(null);
+
+  // 统一输入口路由到设备协同时，自动展开心栈中枢并把意图交给它
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.kind === "hub" && e.detail?.text) {
+        setHubForceOpen(true);
+        setHubIntent(e.detail.text);
+      }
+    };
+    window.addEventListener(CAPTURE_EVENT, handler);
+    return () => window.removeEventListener(CAPTURE_EVENT, handler);
+  }, []);
 
   // Get current user
   const { data: user } = useQuery({
@@ -375,15 +389,15 @@ export default function Dashboard() {
         </button>
       </motion.div>
 
-      {/* 场景任务包：到达关键地点后 AI 重组当前场景最顺手的行动 */}
-      <SceneTaskPack onTaskClick={(taskId) => {
-        const t = allTasks.find((x) => x.id === taskId);
+      {/* 统一输入口：一个入口，AI 自动路由到任务编织 / 日程规划 / 设备协同 */}
+      <UnifiedCaptureBar onTaskClick={(taskId) => {
+        const t = queryClient.getQueryData(['tasks'])?.find((x) => x.id === taskId) || allTasks.find((x) => x.id === taskId);
         if (t) setSelectedTask(t);
       }} />
 
-      {/* 流式行动输入：碎片想法实时编织进任务链 */}
-      <FlowCaptureBar onTaskClick={(taskId) => {
-        const t = queryClient.getQueryData(['tasks'])?.find((x) => x.id === taskId) || allTasks.find((x) => x.id === taskId);
+      {/* 场景任务包：到达关键地点后 AI 重组当前场景最顺手的行动 */}
+      <SceneTaskPack onTaskClick={(taskId) => {
+        const t = allTasks.find((x) => x.id === taskId);
         if (t) setSelectedTask(t);
       }} />
 
@@ -405,8 +419,8 @@ export default function Dashboard() {
 
       {/* 心栈中枢：折叠收纳，按需展开 */}
       <div className="pt-2">
-        <ModuleDrawer id="hub" title="心栈中枢" forceOpen={!!soulSentryData}>
-          <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
+        <ModuleDrawer id="hub" title="心栈中枢" forceOpen={!!soulSentryData || hubForceOpen}>
+          <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} pendingIntent={hubIntent} />
         </ModuleDrawer>
       </div>
       </TabsContent>

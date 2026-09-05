@@ -10,6 +10,10 @@ export default function ModuleDrawer({ id, title, defaultOpen = false, forceOpen
     return saved === null ? defaultOpen : saved === "1";
   });
 
+  React.useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
+
   const toggle = () => {
     setOpen((v) => {
       localStorage.setItem(storageKey, v ? "0" : "1");

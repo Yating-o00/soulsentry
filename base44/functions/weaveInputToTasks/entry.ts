@@ -48,7 +48,9 @@ Deno.serve(async (req) => {
 输出 JSON: {"mode": "link"|"create", "task_id": "...", "note": "...", "updated_summary": "...", "title": "...", "description": "...", "category": "...", "priority": "...", "reminder_time": null, "message": "给用户的一句话反馈（说明关联到了哪条约定并更新了什么，或创建了什么）"}` },
           { role: 'user', content: JSON.stringify({ input: text.trim(), existing_tasks: brief }) },
     ]);
-    const parsed = JSON.parse(content);
+    // 模型偶尔会带 ```json 代码围栏，先剥掉再解析
+    const cleaned = String(content).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    const parsed = JSON.parse(cleaned);
 
     // 3. 执行编织
     const target = parsed.mode === 'link' ? active.find((t) => t.id === parsed.task_id) : null;

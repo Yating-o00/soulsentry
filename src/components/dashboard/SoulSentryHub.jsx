@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import "./SoulSentryHub.css";
 import { getEventIcon } from "./iconMatcher";
 import SentinelGuardPanel from "./SentinelGuardPanel";
+import { CAPTURE_FOCUS_EVENT } from "./UnifiedCaptureBar";
 
 // Color mapping for inline styles or arbitrary tailwind classes - Updated to match Product Tone
 const colors = {
@@ -17,7 +18,7 @@ const colors = {
   twilight: '#f8fafc', // Slate 50 - Backgrounds
 };
 
-export default function SoulSentryHub({ initialData, initialShowResults = false }) {
+export default function SoulSentryHub({ initialData, initialShowResults = false, pendingIntent = null }) {
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResults, setShowResults] = useState(initialShowResults);
@@ -75,8 +76,10 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     setInput(text);
   };
 
-  const processIntent = async () => {
-    if (!input.trim()) return;
+  const processIntent = async (overrideText) => {
+    const intentText = String(overrideText ?? input).trim();
+    if (!intentText) return;
+    if (overrideText) setInput(intentText);
     
     setIsProcessing(true);
     setParsingSteps([]);
@@ -103,7 +106,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
     try {
         // Call the custom backend function using Kimi AI
         const { data: response } = await base44.functions.invoke('analyzeIntent', {
-            input: input
+            input: intentText
         });
 
         // Merge AI response with default icons/names
@@ -150,6 +153,16 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
         clearInterval(stepInterval);
     }
   };
+
+  // 统一输入口（今日页顶部细条）路由过来的意图：挂载/变化时自动分析
+  const processRef = useRef(processIntent);
+  processRef.current = processIntent;
+  const lastPendingRef = useRef(null);
+  useEffect(() => {
+    if (!pendingIntent || pendingIntent === lastPendingRef.current) return;
+    lastPendingRef.current = pendingIntent;
+    processRef.current(pendingIntent);
+  }, [pendingIntent]);
 
   const DEVICE_GRADIENTS = {
     phone: 'bg-gradient-to-br from-[#384877] to-[#3b5aa2]',
@@ -216,50 +229,14 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                     </p>
                 </div>
 
-                <div className="w-full relative group rounded-2xl md:rounded-3xl transition-all duration-500">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-[#384877]/10 to-[#3b5aa2]/10 rounded-2xl md:rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
-                    <div className="relative bg-white rounded-2xl md:rounded-3xl p-1.5 md:p-2 border border-slate-200 shadow-sm">
-                        <div className="bg-slate-50/50 rounded-xl md:rounded-2xl flex flex-col">
-                            <textarea
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onInput={autoResize}
-                                placeholder="明天下午三点和林总在望京SOHO见面..."
-                                className="w-full bg-transparent border-none outline-none text-base md:text-lg text-slate-800 placeholder-slate-400 resize-none px-4 py-4 md:px-6 md:py-5 leading-relaxed scrollbar-hide min-h-[80px] md:min-h-[100px]"
-                                disabled={isProcessing}
-                            />
-                            <div className="flex items-center justify-between px-3 pb-3 md:px-4 md:pb-4">
-                                <div className="flex gap-1 md:gap-2">
-                                    <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-[#384877] transition-colors touch-manipulation">
-                                        <Mic className="w-5 h-5" />
-                                    </button>
-                                    <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-[#384877] transition-colors touch-manipulation">
-                                        <ImageIcon className="w-5 h-5" />
-                                    </button>
-                                </div>
-                                <button 
-                                    onClick={processIntent}
-                                    disabled={isProcessing || !input.trim()}
-                                    className="px-4 md:px-6 py-2 rounded-full text-sm font-medium flex items-center gap-1.5 md:gap-2 shadow-md disabled:opacity-50 bg-[#384877] text-white hover:bg-[#3b5aa2] transition-colors active:scale-95 touch-manipulation"
-                                >
-                                    {isProcessing ? '分析中...' : '发送'}
-                                    {!isProcessing && <Send className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex flex-wrap justify-center gap-2 md:gap-3 mt-5 md:mt-8 px-2">
-                    {['今晚8点给妈妈打电话', '下周二完成Q4报告', '明早7点飞深圳'].map(text => (
-                        <button 
-                            key={text}
-                            onClick={() => handleQuickFill(text)}
-                            className="px-3 md:px-4 py-1.5 md:py-2 bg-white rounded-full text-xs md:text-sm text-slate-600 hover:text-[#384877] border border-slate-200 hover:border-[#384877]/30 transition-all shadow-sm active:scale-95 touch-manipulation"
-                        >
-                            {text}
-                        </button>
-                    ))}
+                <div className="flex flex-col items-center gap-3">
+                    <button
+                        onClick={() => window.dispatchEvent(new Event(CAPTURE_FOCUS_EVENT))}
+                        className="px-5 py-2.5 rounded-full bg-[#384877] text-white text-sm font-medium shadow-md hover:bg-[#3b5aa2] transition-colors active:scale-95"
+                    >
+                        去顶部输入口说一句
+                    </button>
+                    <p className="text-xs text-slate-400">输入已统一到今日页顶部，AI 会自动把跨设备意图分发到这里</p>
                 </div>
 
             </motion.div>

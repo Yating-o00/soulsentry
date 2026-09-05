@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Taro from "@tarojs/taro";
-import { View, Text, Button, ScrollView } from "@tarojs/components";
+import { View, Text, Button, ScrollView, Canvas } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
 import { getToken, clearToken } from "@/utils/auth";
 import { get, patch } from "@/utils/api";
@@ -173,30 +173,89 @@ function generateBadges(notes, tasks, executions) {
   return all.slice(0, 10);
 }
 
-function buildSvgPath(series, width = 640, height = 180) {
-  if (!series.length) return "";
+function computeMoodPoints(series, width, height) {
+  if (!series.length) return [];
   const maxScore = 10;
   const minScore = 0;
   const stepX = width / (series.length - 1 || 1);
-  const points = series.map((d, i) => {
+  return series.map((d, i) => {
     const x = i * stepX;
     const y = height - ((d.score - minScore) / (maxScore - minScore)) * (height - 20) - 10;
-    return [x, y];
+    return { x, y, score: d.score };
   });
+}
 
-  if (points.length === 1) return `M0,${points[0][1]} L${width},${points[0][1]}`;
+function drawMoodCurve(ctx, points, width, height, color) {
+  if (!points.length) return;
 
-  let d = `M${points[0][0]},${points[0][1]}`;
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const curr = points[i];
-    const cpx1 = prev[0] + (curr[0] - prev[0]) / 2;
-    const cpy1 = prev[1];
-    const cpx2 = prev[0] + (curr[0] - prev[0]) / 2;
-    const cpy2 = curr[1];
-    d += ` C${cpx1},${cpy1} ${cpx2},${cpy2} ${curr[0]},${curr[1]}`;
+  // Fill gradient
+  ctx.save();
+  ctx.beginPath();
+  if (points.length === 1) {
+    ctx.moveTo(0, points[0].y);
+    ctx.lineTo(width, points[0].y);
+  } else {
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const cpx1 = prev.x + (curr.x - prev.x) / 2;
+      const cpy1 = prev.y;
+      const cpx2 = prev.x + (curr.x - prev.x) / 2;
+      const cpy2 = curr.y;
+      ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, curr.x, curr.y);
+    }
   }
-  return d;
+  ctx.lineTo(width, height);
+  ctx.lineTo(0, height);
+  ctx.closePath();
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, `${color}1F`); // 12% alpha
+  gradient.addColorStop(1, `${color}00`); // 0% alpha
+  ctx.fillStyle = gradient;
+  ctx.fill();
+  ctx.restore();
+
+  // Line
+  ctx.save();
+  ctx.beginPath();
+  if (points.length === 1) {
+    ctx.moveTo(0, points[0].y);
+    ctx.lineTo(width, points[0].y);
+  } else {
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const cpx1 = prev.x + (curr.x - prev.x) / 2;
+      const cpy1 = prev.y;
+      const cpx2 = prev.x + (curr.x - prev.x) / 2;
+      const cpy2 = curr.y;
+      ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, curr.x, curr.y);
+    }
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.stroke();
+  ctx.restore();
+
+  // Dots
+  ctx.save();
+  points.forEach((p, idx) => {
+    const isLast = idx === points.length - 1;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, isLast ? 4 : 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = isLast ? color : "#fff";
+    ctx.fill();
+    if (!isLast) {
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
+  });
+  ctx.restore();
 }
 
 function showDemoToast() {
@@ -276,6 +335,27 @@ export default function Account() {
     }
   }, [demoShown]);
 
+  useEffect(() => {
+    if (!series.length) return;
+    const query = Taro.createSelectorQuery();
+    query
+      .select("#moodCanvas")
+      .fields({ node: true, size: true })
+      .exec((res) => {
+        if (!res || !res[0] || !res[0].node) return;
+        const canvas = res[0].node;
+        const { width, height } = res[0];
+        const dpr = Taro.getSystemInfoSync().pixelRatio || 1;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, width, height);
+        const points = computeMoodPoints(series, width, height);
+        drawMoodCurve(ctx, points, width, height, theme.primary);
+      });
+  }, [series]);
+
   const localSeries = useMemo(() => computeMoodSeries(notes, tasks, executions, period), [notes, tasks, executions, period]);
   const localInsight = useMemo(() => generateInsight(localSeries, notes, tasks), [localSeries, notes, tasks]);
   const series = moodData?.series || localSeries;
@@ -311,17 +391,18 @@ export default function Account() {
         <View style={{ textAlign: "center", marginBottom: "80rpx" }}>
           <View
             style={{
-              width: "120rpx",
-              height: "120rpx",
+              width: "128rpx",
+              height: "128rpx",
               margin: "0 auto 32rpx",
-              borderRadius: "24rpx",
-              background: theme.primary,
+              borderRadius: "64rpx",
+              background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.water} 100%)`,
               display: "flex",
               alignItems: "center",
-              justifyContent: "center"
+              justifyContent: "center",
+              boxShadow: `0 8rpx 24rpx ${theme.primary}33`
             }}
           >
-            <Text style={{ fontSize: "56rpx", color: "#fff" }}>♡</Text>
+            <Text style={{ fontSize: "52rpx", color: "#fff", fontWeight: 300, letterSpacing: "4rpx" }}>栈</Text>
           </View>
           <Text style={{ fontSize: "36rpx", fontWeight: 600, color: theme.ink, marginBottom: "16rpx" }}>游客模式</Text>
           <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx" }}>这是 Demo 账号体验版</Text>
@@ -353,7 +434,6 @@ export default function Account() {
   const focusHours = Math.round((executions || []).length * 0.5) || 42;
   const moodScore = series.length ? (series.reduce((s, d) => s + d.score, 0) / series.length).toFixed(1) : "7.2";
   const labels = lastNDays(period).filter((_, i) => i % Math.ceil(period / 5) === 0 || i === period - 1).map((d) => d.label);
-  const svgPath = buildSvgPath(series);
 
   const handleLogout = () => {
     clearToken();
@@ -435,14 +515,16 @@ export default function Account() {
               style={{
                 width: "112rpx",
                 height: "112rpx",
-                borderRadius: "24rpx",
-                background: theme.primary,
+                borderRadius: "56rpx",
+                background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.waterLight} 100%)`,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center"
+                justifyContent: "center",
+                boxShadow: `0 6rpx 20rpx ${theme.primary}33`,
+                border: `2rpx solid rgba(255,255,255,0.25)`
               }}
             >
-              <Text style={{ fontSize: "56rpx", color: "#fff" }}>{initials}</Text>
+              <Text style={{ fontSize: "48rpx", color: "#fff", fontWeight: 300 }}>{initials}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "6rpx" }}>
@@ -530,25 +612,14 @@ export default function Account() {
                 padding: "20rpx"
               }}
             >
-              {dataLoading ? (
+              {dataLoading || !series.length ? (
                 <View style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>河流汇聚中…</Text>
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>
+                    {!series.length ? "暂无数据" : "河流汇聚中…"}
+                  </Text>
                 </View>
               ) : (
-                <svg viewBox="0 0 640 180" style={{ width: "100%", height: "100%" }} preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="moodGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={theme.primary} stopOpacity="0.12" />
-                      <stop offset="100%" stopColor={theme.primary} stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  {svgPath && (
-                    <>
-                      <path d={svgPath} fill="none" stroke={theme.primary} strokeWidth="2" strokeLinecap="round" />
-                      <path d={`${svgPath} L640,180 L0,180 Z`} fill="url(#moodGrad)" />
-                    </>
-                  )}
-                </svg>
+                <Canvas type="2d" id="moodCanvas" style={{ width: "100%", height: "100%" }} />
               )}
             </View>
             <View style={{ display: "flex", justifyContent: "space-between", marginTop: "10rpx", padding: "0 8rpx" }}>
@@ -758,7 +829,7 @@ export default function Account() {
                     style={{
                       padding: "24rpx 20rpx",
                       borderBottom: `1rpx solid ${theme.border}`,
-                      background: n.is_read ? theme.card : theme.primaryMist
+                      background: n.is_read ? theme.card : theme.paper
                     }}
                   >
                     <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "8rpx" }}>

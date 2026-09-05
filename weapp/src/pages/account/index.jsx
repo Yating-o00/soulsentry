@@ -282,6 +282,7 @@ export default function Account() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [moodData, setMoodData] = useState(null);
+  const [canvasFailed, setCanvasFailed] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!getToken()) return;
@@ -337,23 +338,57 @@ export default function Account() {
 
   useEffect(() => {
     if (!series.length) return;
-    const query = Taro.createSelectorQuery();
-    query
-      .select("#moodCanvas")
-      .fields({ node: true, size: true })
-      .exec((res) => {
-        if (!res || !res[0] || !res[0].node) return;
-        const canvas = res[0].node;
-        const { width, height } = res[0];
-        const dpr = Taro.getSystemInfoSync().pixelRatio || 1;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        const ctx = canvas.getContext("2d");
-        ctx.scale(dpr, dpr);
-        ctx.clearRect(0, 0, width, height);
-        const points = computeMoodPoints(series, width, height);
-        drawMoodCurve(ctx, points, width, height, theme.primary);
-      });
+    setCanvasFailed(false);
+
+    let attempts = 0;
+    const maxAttempts = 10;
+    const tryDraw = () => {
+      attempts += 1;
+      const query = Taro.createSelectorQuery();
+      query
+        .select("#moodCanvas")
+        .fields({ node: true, size: true })
+        .exec((res) => {
+          if (!res || !res[0] || !res[0].node) {
+            if (attempts < maxAttempts) {
+              setTimeout(tryDraw, 100);
+            } else {
+              setCanvasFailed(true);
+            }
+            return;
+          }
+          const canvas = res[0].node;
+          const { width, height } = res[0];
+          if (!width || !height) {
+            if (attempts < maxAttempts) {
+              setTimeout(tryDraw, 100);
+            } else {
+              setCanvasFailed(true);
+            }
+            return;
+          }
+          const dpr = Taro.getSystemInfoSync().pixelRatio || 1;
+          canvas.width = Math.floor(width * dpr);
+          canvas.height = Math.floor(height * dpr);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            if (attempts < maxAttempts) {
+              setTimeout(tryDraw, 100);
+            } else {
+              setCanvasFailed(true);
+            }
+            return;
+          }
+          ctx.scale(dpr, dpr);
+          ctx.clearRect(0, 0, width, height);
+          const points = computeMoodPoints(series, width, height);
+          drawMoodCurve(ctx, points, width, height, theme.primary);
+        });
+    };
+
+    // 延迟一帧，确保 Canvas 已完成布局
+    const timer = setTimeout(tryDraw, 50);
+    return () => clearTimeout(timer);
   }, [series]);
 
   const localSeries = useMemo(() => computeMoodSeries(notes, tasks, executions, period), [notes, tasks, executions, period]);
@@ -486,26 +521,49 @@ export default function Account() {
                 position: "relative"
               }}
             >
-              <Text style={{ fontSize: "32rpx", color: theme.inkSecondary }}>🔔</Text>
-              {unreadCount > 0 && (
+              <View style={{ position: "relative", width: "28rpx", height: "28rpx", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <View
+                  style={{
+                    width: "22rpx",
+                    height: "20rpx",
+                    borderRadius: "12rpx 12rpx 4rpx 4rpx",
+                    border: `2rpx solid ${theme.inkSecondary}`,
+                    borderBottomWidth: 0,
+                    background: "transparent"
+                  }}
+                />
                 <View
                   style={{
                     position: "absolute",
-                    top: "6rpx",
-                    right: "6rpx",
-                    minWidth: "28rpx",
-                    height: "28rpx",
-                    borderRadius: "14rpx",
-                    background: theme.seal,
-                    padding: "0 8rpx",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center"
+                    bottom: "0rpx",
+                    left: "50%",
+                    width: "6rpx",
+                    height: "6rpx",
+                    marginLeft: "-3rpx",
+                    borderRadius: "50%",
+                    background: theme.inkSecondary
                   }}
-                >
-                  <Text style={{ fontSize: "18rpx", color: "#fff" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
-                </View>
-              )}
+                />
+                {unreadCount > 0 && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: "-6rpx",
+                      right: "-6rpx",
+                      minWidth: "18rpx",
+                      height: "18rpx",
+                      borderRadius: "9rpx",
+                      background: theme.seal,
+                      padding: "0 4rpx",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}
+                  >
+                    <Text style={{ fontSize: "16rpx", color: "#fff" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
 
@@ -619,7 +677,29 @@ export default function Account() {
                   </Text>
                 </View>
               ) : (
-                <Canvas type="2d" id="moodCanvas" style={{ width: "100%", height: "100%" }} />
+                <View style={{ width: "100%", height: "100%", position: "relative" }}>
+                  <Canvas type="2d" id="moodCanvas" style={{ width: "100%", height: "100%", opacity: canvasFailed ? 0 : 1 }} />
+                  {canvasFailed && (
+                    <View style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "space-between", paddingVertical: "10rpx" }}>
+                      {series.map((d, i) => {
+                        const h = Math.max(4, ((d.score || 5) / 10) * 100);
+                        return (
+                          <View
+                            key={d.date || i}
+                            style={{
+                              flex: 1,
+                              marginHorizontal: "2rpx",
+                              height: `${h}%`,
+                              borderRadius: "4rpx",
+                              background: i === series.length - 1 ? theme.primary : `${theme.primary}66`,
+                              minWidth: "4rpx"
+                            }}
+                          />
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
               )}
             </View>
             <View style={{ display: "flex", justifyContent: "space-between", marginTop: "10rpx", padding: "0 8rpx" }}>

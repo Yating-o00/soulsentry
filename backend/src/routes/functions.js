@@ -1060,54 +1060,35 @@ async function generateMoodRiverWithAI(userId, period) {
     return { series, insight: "开始记录吧，心栈会陪你看见自己的流动。", source: "local-empty" };
   }
 
+  // 曲线由本地算法基于真实数据计算，保证稳定且有起伏
+  const localSeries = computeLocalMoodSeries(notes, tasks, executions, period);
+
+  // AI 只负责生成觉察提示，prompt 更短、响应更快
   const summary = summarizeMoodData(notes, tasks, executions, period);
-
-  const schema = {
+  const insightSchema = {
     type: "object",
-    properties: {
-      series: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            date: { type: "string" },
-            score: { type: "number" }
-          },
-          required: ["date", "score"]
-        }
-      },
-      insight: { type: "string" }
-    },
-    required: ["series", "insight"]
+    properties: { insight: { type: "string" } },
+    required: ["insight"]
   };
-
-  const prompt = `基于用户最近 ${period} 天的心签、约定与执行数据，生成心境河流曲线与觉察提示。\n\n数据：\n${summary}\n\n要求：\n- series 为 ${period} 个 {date, score}，score 范围 1-10（保留1位小数），必须有可见起伏。\n- 积极事件/完成日子分数偏高，逾期/负面情绪日子分数偏低。\n- insight 1-2 句话，温暖具体。\n- 直接返回 JSON {"series": [...], "insight": "..."}。`;
+  const insightPrompt = `基于用户最近 ${period} 天的心签、约定与执行数据，写 1-2 句温暖、具体的觉察提示。\n\n数据：\n${summary}\n\n要求：\n- 1-2 句话，温暖具体，引用数据中的亮点或需要关注的点。\n- 直接返回 JSON {"insight": "..."}。`;
 
   try {
-    console.log(`[moodRiver] calling AI: user=${userId}, period=${period}, notes=${notes.length}, tasks=${tasks.length}, execs=${executions.length}, promptLen=${prompt.length}`);
-    const result = await withTimeout(
+    console.log(`[moodRiver] calling AI insight: user=${userId}, period=${period}, notes=${notes.length}, tasks=${tasks.length}, execs=${executions.length}, promptLen=${insightPrompt.length}`);
+    const insightResult = await withTimeout(
       invokeKimiText({
-        prompt,
-        systemPrompt: "你是 SoulSentry 心栈的 AI 伙伴，从用户数据中提炼情绪曲线，只用 JSON 返回。",
-        responseJsonSchema: schema,
-        model: "kimi-k2.6",
+        prompt: insightPrompt,
+        systemPrompt: "你是 SoulSentry 心栈的 AI 伙伴，从用户数据中提炼一句温暖的觉察。只用 JSON 返回。",
+        responseJsonSchema: insightSchema,
+        model: "moonshot-v1-8k",
         temperature: 0.7,
         fetchTimeout: 35000
       }),
       35000
     );
-    console.log(`[moodRiver] AI raw result:`, JSON.stringify(result).slice(0, 400));
+    console.log(`[moodRiver] AI insight result:`, JSON.stringify(insightResult).slice(0, 400));
 
-    const aiSeries = Array.isArray(result?.series) ? result.series : [];
-    console.log(`[moodRiver] AI returned series=${aiSeries.length}, user=${userId}, period=${period}`);
-    const normalizedSeries = moodLastNDays(period).map((ymd) => {
-      const found = aiSeries.find((s) => s?.date === ymd);
-      const score = found ? Math.max(1, Math.min(10, Number(found.score) || 5)) : 5;
-      return { date: ymd, score: Number(score.toFixed(1)) };
-    });
-
-    const insight = String(result?.insight || "").trim() || generateLocalInsight(normalizedSeries);
-    return { series: normalizedSeries, insight, source: "ai" };
+    const insight = String(insightResult?.insight || "").trim() || generateLocalInsight(localSeries);
+    return { series: localSeries, insight, source: "ai" };
   } catch (err) {
     const msg = err?.message || String(err);
     console.error(`[moodRiver] AI failed for user=${userId}:`, msg);
@@ -1121,10 +1102,9 @@ async function generateMoodRiverWithAI(userId, period) {
       source = "local-parse-error";
     }
 
-    const series = computeLocalMoodSeries(notes, tasks, executions, period);
-    const insight = generateLocalInsight(series);
+    const insight = generateLocalInsight(localSeries);
     const errorHint = msg.slice(0, 120);
-    return { series, insight, source, errorHint };
+    return { series: localSeries, insight, source, errorHint };
   }
 }
 

@@ -1068,7 +1068,7 @@ async function generateMoodRiverWithAI(userId, period) {
     required: ["series", "insight"]
   };
 
-  const prompt = `请根据用户最近 ${period} 天的真实数据，生成一条心境河流曲线和一段觉察提示。\n\n数据按日期聚合如下：\n${summary}\n\n要求：\n1. series 数组长度必须等于 ${period}，每条包含 date（YYYY-MM-DD）和 score（1-10，保留1位小数）。\n2. 曲线要真实反映数据：有情绪记录、完成任务、执行记录的日子分数偏高；有逾期任务或负面情绪的日子分数偏低。\n3. insight 用 1-2 句话，温暖、具体，引用真实数据中的亮点或需要关注的点。\n4. 直接返回 JSON 对象，不要 markdown 或解释。`;
+  const prompt = `请根据用户最近 ${period} 天的真实数据，生成一条心境河流曲线和一段觉察提示。\n\n数据按日期聚合如下：\n${summary}\n\n要求：\n1. series 数组长度必须等于 ${period}，每条包含 date（YYYY-MM-DD）和 score（1-10，保留1位小数）。\n2. 曲线要真实反映数据：有情绪记录、完成任务、执行记录的日子分数偏高；有逾期任务或负面情绪的日子分数偏低。\n3. 分数必须有可见起伏，不要所有日期相同；无事件的日子可略低于平均，有积极事件的日子可明显高于平均。\n4. insight 用 1-2 句话，温暖、具体，引用真实数据中的亮点或需要关注的点。\n5. 直接返回 JSON 对象，不要 markdown 或解释。`;
 
   try {
     const result = await withTimeout(

@@ -395,6 +395,9 @@ export default function Account() {
   const localInsight = useMemo(() => generateInsight(localSeries, notes, tasks), [localSeries, notes, tasks]);
   const series = moodData?.series || localSeries;
   const insight = moodData?.insight || localInsight;
+  const moodSource = moodData?.source || "local";
+  const hasRealData = notes.length > 0 || tasks.length > 0 || executions.length > 0;
+  const isMoodEmpty = !hasRealData;
   const badges = useMemo(() => generateBadges(notes, tasks, executions), [notes, tasks, executions]);
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
 
@@ -641,7 +644,23 @@ export default function Account() {
           <View style={{ marginBottom: "48rpx" }}>
             <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20rpx" }}>
               <View>
-                <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink }}>近期流动</Text>
+                <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
+                  <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink }}>近期流动</Text>
+                  {!isMoodEmpty && (
+                    <View
+                      style={{
+                        padding: "2rpx 10rpx",
+                        borderRadius: "6rpx",
+                        background: moodSource === "ai" ? `${theme.sage}18` : theme.paper,
+                        border: `1rpx solid ${moodSource === "ai" ? theme.sage : theme.border}`
+                      }}
+                    >
+                      <Text style={{ fontSize: "18rpx", color: moodSource === "ai" ? theme.sage : theme.inkQuaternary }}>
+                        {moodSource === "ai" ? "AI 生成" : "本地规则"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginTop: "4rpx" }}>由你的心签、约定与执行记录汇聚而成</Text>
               </View>
               <View style={{ display: "flex", gap: "8rpx" }}>
@@ -675,6 +694,20 @@ export default function Account() {
                   <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>
                     {!series.length ? "暂无数据" : "河流汇聚中…"}
                   </Text>
+                </View>
+              ) : isMoodEmpty ? (
+                <View style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                  <View
+                    style={{
+                      width: "96rpx",
+                      height: "4rpx",
+                      borderRadius: "2rpx",
+                      background: theme.border,
+                      marginBottom: "16rpx"
+                    }}
+                  />
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary, marginBottom: "8rpx" }}>还没有足够的数据</Text>
+                  <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary }}>记录心签或完成约定后，河流会在这里出现</Text>
                 </View>
               ) : (
                 <View style={{ width: "100%", height: "100%", position: "relative" }}>

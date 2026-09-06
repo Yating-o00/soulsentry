@@ -142,6 +142,23 @@ function extractUrl(text) {
   return m ? m[0] : null;
 }
 
+function AiBadge({ text = "AI 生成" }) {
+  return (
+    <View style={{ display: "flex", alignItems: "center" }}>
+      <View
+        style={{
+          padding: "2rpx 10rpx",
+          borderRadius: "8rpx",
+          background: "rgba(91,130,160,0.10)",
+          border: "1rpx solid rgba(91,130,160,0.20)"
+        }}
+      >
+        <Text style={{ fontSize: "18rpx", color: THEME.water, fontWeight: 500 }}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
 function isHeartNote(n) {
   const tags = Array.isArray(n.tags) ? n.tags : [];
   const text = String(n.plain_text || n.content || "");
@@ -2214,6 +2231,7 @@ export default function Flow() {
                 <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink }}>远见与思考</Text>
                 <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "-2rpx" }}>Long-Term</Text>
               </View>
+              <AiBadge text="AI 生成" />
             </View>
             <View
               onClick={loadAll}
@@ -3006,19 +3024,23 @@ export default function Flow() {
                 >
                   <Text style={{ fontSize: "18rpx", color: "#fff" }}>♡</Text>
                 </View>
-                <Text
-                  style={{
-                    fontSize: "24rpx",
-                    color: heartLoadingIds.has(item.id) ? "#c97b8a" : "#9a5f6e",
-                    lineHeight: "40rpx",
-                    flex: 1,
-                    wordBreak: "break-all"
-                  }}
-                >
-                  {heartLoadingIds.has(item.id)
-                    ? "AI 正在回应…"
-                    : item.metadata?.ai_analysis?.emotional_response || generateLocalHeartReply(item.text)}
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "6rpx" }}>
+                    <Text style={{ fontSize: "20rpx", color: "#c97b8a", fontWeight: 500 }}>AI 回应</Text>
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: "24rpx",
+                      color: heartLoadingIds.has(item.id) ? "#c97b8a" : "#9a5f6e",
+                      lineHeight: "40rpx",
+                      wordBreak: "break-all"
+                    }}
+                  >
+                    {heartLoadingIds.has(item.id)
+                      ? "AI 正在回应…"
+                      : item.metadata?.ai_analysis?.emotional_response || generateLocalHeartReply(item.text)}
+                  </Text>
+                </View>
               </View>
             )}
 
@@ -3096,6 +3118,40 @@ export default function Flow() {
       </View>
     );
   };
+
+  const renderAiDisclaimer = () => (
+    <View style={{ padding: "24rpx 32rpx 40rpx" }}>
+      <View
+        style={{
+          padding: "18rpx 22rpx",
+          borderRadius: "14rpx",
+          background: "rgba(91,130,160,0.06)",
+          border: "1rpx solid rgba(91,130,160,0.12)",
+          display: "flex",
+          alignItems: "center"
+        }}
+      >
+        <View
+          style={{
+            width: "28rpx",
+            height: "28rpx",
+            borderRadius: "50%",
+            background: THEME.water,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: "14rpx",
+            flexShrink: 0
+          }}
+        >
+          <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+        </View>
+        <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, lineHeight: "38rpx" }}>
+          部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
+        </Text>
+      </View>
+    </View>
+  );
 
   const renderBottomBar = () => (
     <View
@@ -3223,7 +3279,7 @@ export default function Flow() {
         refresherTriggered={refreshing}
         onRefresherRefresh={onRefresh}
       >
-        <View style={{ paddingBottom: "320rpx" }}>
+        <View style={{ paddingBottom: "420rpx" }}>
           {loading && tasks.length === 0 ? (
             <View style={{ padding: "60rpx", textAlign: "center" }}>
               <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>河流正在汇聚…</Text>
@@ -3237,6 +3293,7 @@ export default function Flow() {
               {renderGuardian()}
               {renderVision()}
               {renderRhythm()}
+              {renderAiDisclaimer()}
             </>
           )}
         </View>

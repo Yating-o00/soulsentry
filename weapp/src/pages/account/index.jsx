@@ -681,6 +681,16 @@ export default function Account() {
                       <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: theme.primary }} />
                     </View>
                     <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, fontWeight: 500 }}>今日觉察</Text>
+                    <View
+                      style={{
+                        padding: "2rpx 10rpx",
+                        borderRadius: "8rpx",
+                        background: "rgba(91,130,160,0.10)",
+                        border: "1rpx solid rgba(91,130,160,0.20)"
+                      }}
+                    >
+                      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>AI 生成</Text>
+                    </View>
                   </View>
                   <Text style={{ fontSize: "28rpx", color: theme.ink, lineHeight: "48rpx", fontWeight: 400 }}>{insight}</Text>
                   {errorHint && rawSource !== "ai" && rawSource !== "local-empty" && (
@@ -821,7 +831,38 @@ export default function Account() {
             </View>
           </View>
 
-          <View style={{ textAlign: "center", padding: "48rpx 0 20rpx" }}>
+          <View
+            style={{
+              margin: "0 0 24rpx",
+              padding: "18rpx 22rpx",
+              borderRadius: "14rpx",
+              background: "rgba(91,130,160,0.06)",
+              border: "1rpx solid rgba(91,130,160,0.12)",
+              display: "flex",
+              alignItems: "center"
+            }}
+          >
+            <View
+              style={{
+                width: "28rpx",
+                height: "28rpx",
+                borderRadius: "50%",
+                background: theme.water,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: "14rpx",
+                flexShrink: 0
+              }}
+            >
+              <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+            </View>
+            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
+              部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
+            </Text>
+          </View>
+
+          <View style={{ textAlign: "center", padding: "24rpx 0 20rpx" }}>
             <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "2rpx" }}>
               SoulSentry 心栈 · 观照自己，觉察当下
             </Text>

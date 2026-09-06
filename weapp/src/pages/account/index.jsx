@@ -651,28 +651,18 @@ export default function Account() {
                 padding: "20rpx"
               }}
             >
-              {dataLoading || !series.length ? (
+              {series.length > 0 ? (
+                <MoodLineChart series={series} color={theme.primary} />
+              ) : dataLoading ? (
                 <View style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>
-                    {!series.length ? "暂无数据" : "河流汇聚中…"}
-                  </Text>
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>河流汇聚中…</Text>
                 </View>
-              ) : isMoodEmpty ? (
+              ) : (
                 <View style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                  <View
-                    style={{
-                      width: "96rpx",
-                      height: "4rpx",
-                      borderRadius: "2rpx",
-                      background: theme.border,
-                      marginBottom: "16rpx"
-                    }}
-                  />
+                  <View style={{ width: "96rpx", height: "4rpx", borderRadius: "2rpx", background: theme.border, marginBottom: "16rpx" }} />
                   <Text style={{ fontSize: "26rpx", color: theme.inkTertiary, marginBottom: "8rpx" }}>还没有足够的数据</Text>
                   <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary }}>记录心签或完成约定后，河流会在这里出现</Text>
                 </View>
-              ) : (
-                <MoodLineChart series={series} color={theme.primary} />
               )}
             </View>
             <View style={{ display: "flex", justifyContent: "space-between", marginTop: "10rpx", padding: "0 8rpx" }}>

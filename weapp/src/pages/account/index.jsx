@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, Button, ScrollView, Canvas } from "@tarojs/components";
+import { View, Text, Button, ScrollView } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
 import { getToken, clearToken } from "@/utils/auth";
 import { get, post, patch } from "@/utils/api";
@@ -184,89 +184,76 @@ function generateBadges(notes, tasks, executions) {
   return all.slice(0, 10);
 }
 
-function computeMoodPoints(series, width, height) {
-  if (!series.length) return [];
-  const maxScore = 10;
-  const minScore = 0;
-  const stepX = width / (series.length - 1 || 1);
-  return series.map((d, i) => {
-    const x = i * stepX;
-    const y = height - ((d.score - minScore) / (maxScore - minScore)) * (height - 20) - 10;
-    return { x, y, score: d.score };
-  });
-}
+function MoodLineChart({ series, color }) {
+  if (!series || series.length < 2) return null;
+  const topPad = 8;
+  const bottomPad = 8;
+  const usable = 100 - topPad - bottomPad;
 
-function drawMoodCurve(ctx, points, width, height, color) {
-  if (!points.length) return;
+  const points = series.map((d, i) => ({
+    x: (i / (series.length - 1)) * 100,
+    y: topPad + (1 - (d.score || 5) / 10) * usable,
+    score: d.score
+  }));
 
-  // Fill gradient
-  ctx.save();
-  ctx.beginPath();
-  if (points.length === 1) {
-    ctx.moveTo(0, points[0].y);
-    ctx.lineTo(width, points[0].y);
-  } else {
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-      const prev = points[i - 1];
-      const curr = points[i];
-      const cpx1 = prev.x + (curr.x - prev.x) / 2;
-      const cpy1 = prev.y;
-      const cpx2 = prev.x + (curr.x - prev.x) / 2;
-      const cpy2 = curr.y;
-      ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, curr.x, curr.y);
-    }
-  }
-  ctx.lineTo(width, height);
-  ctx.lineTo(0, height);
-  ctx.closePath();
-  const gradient = ctx.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, `${color}1F`); // 12% alpha
-  gradient.addColorStop(1, `${color}00`); // 0% alpha
-  ctx.fillStyle = gradient;
-  ctx.fill();
-  ctx.restore();
-
-  // Line
-  ctx.save();
-  ctx.beginPath();
-  if (points.length === 1) {
-    ctx.moveTo(0, points[0].y);
-    ctx.lineTo(width, points[0].y);
-  } else {
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-      const prev = points[i - 1];
-      const curr = points[i];
-      const cpx1 = prev.x + (curr.x - prev.x) / 2;
-      const cpy1 = prev.y;
-      const cpx2 = prev.x + (curr.x - prev.x) / 2;
-      const cpy2 = curr.y;
-      ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, curr.x, curr.y);
-    }
-  }
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.stroke();
-  ctx.restore();
-
-  // Dots
-  ctx.save();
-  points.forEach((p, idx) => {
-    const isLast = idx === points.length - 1;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, isLast ? 4 : 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = isLast ? color : "#fff";
-    ctx.fill();
-    if (!isLast) {
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = color;
-      ctx.stroke();
-    }
-  });
-  ctx.restore();
+  return (
+    <View style={{ width: "100%", height: "100%", position: "relative" }}>
+      {[0.25, 0.5, 0.75].map((ratio) => (
+        <View
+          key={ratio}
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: `${topPad + (1 - ratio) * usable}%`,
+            height: "1rpx",
+            background: "rgba(122, 158, 184, 0.08)"
+          }}
+        />
+      ))}
+      {points.slice(0, -1).map((p, i) => {
+        const next = points[i + 1];
+        const dx = next.x - p.x;
+        const dy = next.y - p.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        return (
+          <View
+            key={`line-${i}`}
+            style={{
+              position: "absolute",
+              left: `${p.x}%`,
+              top: `${p.y}%`,
+              width: `${len}%`,
+              height: "2rpx",
+              background: color,
+              transformOrigin: "0 50%",
+              transform: `rotate(${angle}deg)`
+            }}
+          />
+        );
+      })}
+      {points.map((p, i) => {
+        const isLast = i === points.length - 1;
+        return (
+          <View
+            key={`dot-${i}`}
+            style={{
+              position: "absolute",
+              left: `${p.x}%`,
+              top: `${p.y}%`,
+              width: isLast ? "10rpx" : "8rpx",
+              height: isLast ? "10rpx" : "8rpx",
+              borderRadius: "50%",
+              background: isLast ? color : "#fff",
+              border: `2rpx solid ${color}`,
+              transform: "translate(-50%, -50%)"
+            }}
+          />
+        );
+      })}
+    </View>
+  );
 }
 
 function showDemoToast() {
@@ -293,7 +280,6 @@ export default function Account() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [moodData, setMoodData] = useState(null);
-  const [canvasFailed, setCanvasFailed] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!getToken()) return;
@@ -361,60 +347,7 @@ export default function Account() {
     }
   }, [demoShown]);
 
-  useEffect(() => {
-    if (!series.length) return;
-    setCanvasFailed(false);
 
-    let attempts = 0;
-    const maxAttempts = 10;
-    const tryDraw = () => {
-      attempts += 1;
-      const query = Taro.createSelectorQuery();
-      query
-        .select("#moodCanvas")
-        .fields({ node: true, size: true })
-        .exec((res) => {
-          if (!res || !res[0] || !res[0].node) {
-            if (attempts < maxAttempts) {
-              setTimeout(tryDraw, 100);
-            } else {
-              setCanvasFailed(true);
-            }
-            return;
-          }
-          const canvas = res[0].node;
-          const { width, height } = res[0];
-          if (!width || !height) {
-            if (attempts < maxAttempts) {
-              setTimeout(tryDraw, 100);
-            } else {
-              setCanvasFailed(true);
-            }
-            return;
-          }
-          const dpr = Taro.getSystemInfoSync().pixelRatio || 1;
-          canvas.width = Math.floor(width * dpr);
-          canvas.height = Math.floor(height * dpr);
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            if (attempts < maxAttempts) {
-              setTimeout(tryDraw, 100);
-            } else {
-              setCanvasFailed(true);
-            }
-            return;
-          }
-          ctx.scale(dpr, dpr);
-          ctx.clearRect(0, 0, width, height);
-          const points = computeMoodPoints(series, width, height);
-          drawMoodCurve(ctx, points, width, height, theme.primary);
-        });
-    };
-
-    // 延迟一帧，确保 Canvas 已完成布局
-    const timer = setTimeout(tryDraw, 50);
-    return () => clearTimeout(timer);
-  }, [series]);
 
   const localSeries = useMemo(() => computeMoodSeries(notes, tasks, executions, period), [notes, tasks, executions, period]);
   const localInsight = useMemo(() => generateInsight(localSeries, notes, tasks), [localSeries, notes, tasks]);
@@ -746,29 +679,7 @@ export default function Account() {
                   <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary }}>记录心签或完成约定后，河流会在这里出现</Text>
                 </View>
               ) : (
-                <View style={{ width: "100%", height: "100%", position: "relative" }}>
-                  <Canvas type="2d" id="moodCanvas" style={{ width: "100%", height: "100%", opacity: canvasFailed ? 0 : 1 }} />
-                  {canvasFailed && (
-                    <View style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "space-between", paddingVertical: "10rpx" }}>
-                      {series.map((d, i) => {
-                        const h = Math.max(4, ((d.score || 5) / 10) * 100);
-                        return (
-                          <View
-                            key={d.date || i}
-                            style={{
-                              flex: 1,
-                              marginHorizontal: "2rpx",
-                              height: `${h}%`,
-                              borderRadius: "4rpx",
-                              background: i === series.length - 1 ? theme.primary : `${theme.primary}66`,
-                              minWidth: "4rpx"
-                            }}
-                          />
-                        );
-                      })}
-                    </View>
-                  )}
-                </View>
+                <MoodLineChart series={series} color={theme.primary} />
               )}
             </View>
             <View style={{ display: "flex", justifyContent: "space-between", marginTop: "10rpx", padding: "0 8rpx" }}>
@@ -781,18 +692,39 @@ export default function Account() {
             <View
               style={{
                 marginTop: "20rpx",
-                padding: "20rpx",
-                borderRadius: "14rpx",
-                background: theme.paper,
-                border: `1rpx solid ${theme.border}`
+                borderRadius: "18rpx",
+                background: theme.card,
+                border: `1rpx solid ${theme.border}`,
+                overflow: "hidden"
               }}
             >
-              <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, lineHeight: "44rpx" }}>{insight}</Text>
-              {errorHint && rawSource !== "ai" && rawSource !== "local-empty" && (
-                <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "10rpx" }}>
-                  诊断：{errorHint}
-                </Text>
-              )}
+              <View style={{ display: "flex" }}>
+                <View style={{ width: "6rpx", background: theme.primary }} />
+                <View style={{ flex: 1, padding: "22rpx 24rpx" }}>
+                  <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "10rpx" }}>
+                    <View
+                      style={{
+                        width: "20rpx",
+                        height: "20rpx",
+                        borderRadius: "50%",
+                        background: `${theme.primary}18`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: theme.primary }} />
+                    </View>
+                    <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, fontWeight: 500 }}>今日觉察</Text>
+                  </View>
+                  <Text style={{ fontSize: "28rpx", color: theme.ink, lineHeight: "48rpx", fontWeight: 400 }}>{insight}</Text>
+                  {errorHint && rawSource !== "ai" && rawSource !== "local-empty" && (
+                    <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "12rpx" }}>
+                      诊断：{errorHint}
+                    </Text>
+                  )}
+                </View>
+              </View>
             </View>
           </View>
 

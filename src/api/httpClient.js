@@ -65,7 +65,17 @@ export async function httpRequest(path, { method = "GET", body, headers = {} } =
   });
 
   const raw = await response.text();
-  const data = raw ? JSON.parse(raw) : null;
+  let data = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch (_parseError) {
+    // 后端可能返回 HTML（网关错误页），给前端一个可读的报错
+    const snippet = raw ? raw.slice(0, 120).replace(/\s+/g, " ") : "";
+    const error = new Error(`服务端返回非 JSON 响应（${response.status}）：${snippet}`);
+    error.status = response.status;
+    error.data = { raw, html: /^\s*</.test(raw) };
+    throw error;
+  }
 
   if (!response.ok) {
     const error = new Error(data?.message || `请求失败: ${response.status}`);

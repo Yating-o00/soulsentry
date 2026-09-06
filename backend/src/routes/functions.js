@@ -17,6 +17,36 @@ export const functionsRouter = Router();
 
 functionsRouter.use(requireAuth);
 
+// 为所有 functions 路由设置 28 秒超时，避免 AI 调用挂起导致网关返回 HTML 错误页
+functionsRouter.use((req, res, next) => {
+  const FUNCTION_TIMEOUT_MS = 28000;
+  let timeoutId;
+
+  const originalJson = res.json.bind(res);
+  res.json = function jsonSafe(...args) {
+    if (!res.headersSent) return originalJson(...args);
+    return res;
+  };
+
+  const originalStatus = res.status.bind(res);
+  res.status = function statusSafe(code) {
+    if (!res.headersSent) return originalStatus(code);
+    return { json: () => res };
+  };
+
+  timeoutId = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({
+        error: "GATEWAY_TIMEOUT",
+        message: "AI 服务响应超时，请稍后重试"
+      });
+    }
+  }, FUNCTION_TIMEOUT_MS);
+
+  res.on("finish", () => clearTimeout(timeoutId));
+  next();
+});
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

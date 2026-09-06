@@ -19,7 +19,7 @@ functionsRouter.use(requireAuth);
 
 // 为所有 functions 路由设置 28 秒超时，避免 AI 调用挂起导致网关返回 HTML 错误页
 functionsRouter.use((req, res, next) => {
-  const FUNCTION_TIMEOUT_MS = 28000;
+  const FUNCTION_TIMEOUT_MS = 35000;
   let timeoutId;
 
   const originalJson = res.json.bind(res);

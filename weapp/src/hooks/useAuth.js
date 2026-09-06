@@ -16,12 +16,17 @@ export default function useAuth() {
     }
 
     setLoading(true);
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+    }, 8000);
+
     try {
-      const data = await get("/users/me");
+      const data = await get("/users/me", {}, { silent: true });
       setUser(data);
     } catch (err) {
       setUser(null);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }, []);

@@ -41,11 +41,15 @@ function getEndpointConfigs() {
 }
 
 function shouldTryFallback(status, errorText = "") {
-  if ([401, 403, 404, 408, 409, 429, 500, 502, 503, 504].includes(status)) {
+  // 401/403 是鉴权错误，重试无用，直接失败
+  if ([401, 403].includes(status)) {
+    return false;
+  }
+  if ([404, 408, 409, 429, 500, 502, 503, 504].includes(status)) {
     return true;
   }
 
-  return /invalid authentication|permission denied|resource_not_found|rate limit|overload|timeout/i.test(errorText);
+  return /resource_not_found|rate limit|overload|timeout|aborted/i.test(errorText);
 }
 
 function normalizeTemperature(model, temperature) {

@@ -1079,7 +1079,7 @@ async function generateMoodRiverWithAI(userId, period) {
         prompt: insightPrompt,
         systemPrompt: "你是 SoulSentry 心栈的 AI 伙伴，从用户数据中提炼一句温暖的觉察。只用 JSON 返回。",
         responseJsonSchema: insightSchema,
-        model: "moonshot-v1-8k",
+        model: "kimi-k2.6",
         temperature: 0.7,
         fetchTimeout: 35000
       }),

@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import Taro from "@tarojs/taro";
+import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Button, ScrollView, Canvas } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
 import { getToken, clearToken } from "@/utils/auth";
-import { get, patch } from "@/utils/api";
+import { get, post, patch } from "@/utils/api";
 import theme from "@/components/tasks/theme";
 
 const BADGE_TEMPLATES = [
@@ -319,14 +319,19 @@ export default function Account() {
   const loadMoodRiver = useCallback(async (p) => {
     const token = getToken();
     console.log("[loadMoodRiver] token present=", Boolean(token), "period=", p);
-    if (!token) return;
+    if (!token) {
+      console.log("[loadMoodRiver] no token, skip");
+      return;
+    }
     setMoodData(null);
     try {
+      console.log("[loadMoodRiver] requesting /functions/moodRiver");
       const res = await post("/functions/moodRiver", { period: p }, { silent: true });
-      console.log("[loadMoodRiver] response source=", res?.source, "errorHint=", res?.errorHint);
+      console.log("[loadMoodRiver] response", JSON.stringify({ source: res?.source, seriesLen: res?.series?.length, insight: res?.insight?.slice(0, 30) }));
       if (res && Array.isArray(res.series) && res.series.length > 0) {
         setMoodData({ series: res.series, insight: res.insight || "", source: res.source, errorHint: res.errorHint });
       } else {
+        console.log("[loadMoodRiver] empty response");
         setMoodData(null);
       }
     } catch (err) {
@@ -340,8 +345,14 @@ export default function Account() {
   }, [loadData]);
 
   useEffect(() => {
+    console.log("[account] mount, period=", period);
     loadMoodRiver(period);
   }, [period, loadMoodRiver]);
+
+  useDidShow(() => {
+    console.log("[account] did show, period=", period);
+    loadMoodRiver(period);
+  });
 
   useEffect(() => {
     if (!getToken() && !demoShown) {

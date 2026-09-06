@@ -97,6 +97,8 @@ export async function callKimiChat({
   let lastErrorText = "";
   let lastError = null;
 
+  console.log(`[callKimiChat] start: models=${candidateModels.join(",")}, endpoints=${endpoints.map((e) => e.label).join(",")}, timeout=${fetchTimeout}ms, msgCount=${messages?.length || 0}`);
+
   for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex += 1) {
     const endpoint = endpoints[endpointIndex];
 
@@ -118,7 +120,9 @@ export async function callKimiChat({
 
       let response;
       let timeoutId;
+      const startAt = Date.now();
       try {
+        console.log(`[callKimiChat] attempt: endpoint=${endpoint.label}(${endpoint.baseUrl}), model=${candidateModel}`);
         const controller = new AbortController();
         timeoutId = setTimeout(() => controller.abort(), fetchTimeout);
         response = await fetch(`${endpoint.baseUrl}/chat/completions`, {
@@ -131,8 +135,11 @@ export async function callKimiChat({
           signal: controller.signal
         });
 
+        const duration = Date.now() - startAt;
+
         if (response.ok) {
           const data = await response.json();
+          console.log(`[callKimiChat] success: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms`);
           return {
             endpoint: endpoint.label,
             baseUrl: endpoint.baseUrl,
@@ -146,6 +153,7 @@ export async function callKimiChat({
 
         lastStatus = response.status;
         lastErrorText = await response.text();
+        console.log(`[callKimiChat] http error: endpoint=${endpoint.label}, model=${candidateModel}, status=${lastStatus}, duration=${duration}ms, body=${lastErrorText.slice(0, 200)}`);
         lastError = null;
 
         if (!shouldTryFallback(response.status, lastErrorText)) {
@@ -154,14 +162,18 @@ export async function callKimiChat({
           throw error;
         }
       } catch (error) {
+        const duration = Date.now() - startAt;
         lastError = error;
         lastStatus = error?.status || 0;
         lastErrorText = error?.message || "Unknown request failure";
+        console.log(`[callKimiChat] exception: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, error=${lastErrorText.slice(0, 200)}`);
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
       }
     }
   }
+
+  console.log(`[callKimiChat] exhausted all attempts, lastStatus=${lastStatus}, lastError=${lastErrorText.slice(0, 200)}`);
 
   if (lastError?.status && !shouldTryFallback(lastError.status, lastError.message || "")) {
     throw lastError;

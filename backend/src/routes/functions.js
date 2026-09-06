@@ -2512,6 +2512,64 @@ functionsRouter.post("/:name", async (req, res) => {
       });
     }
 
+    if (name === "kimiStatus") {
+      const results = [];
+      const endpoints = [];
+      try {
+        const primaryApiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
+        const primaryBaseUrl = (process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1").replace(/\/+$/, "");
+        const fallbackApiKey = process.env.KIMI_FALLBACK_API_KEY || process.env.MOONSHOT_FALLBACK_API_KEY;
+        const fallbackBaseUrl = (process.env.KIMI_FALLBACK_BASE_URL || "https://api.moonshot.ai/v1").replace(/\/+$/, "");
+        if (primaryApiKey) endpoints.push({ label: "primary", apiKey: primaryApiKey.trim(), baseUrl: primaryBaseUrl });
+        if (fallbackApiKey) {
+          const normalizedFallbackKey = fallbackApiKey.trim();
+          const isDuplicate = endpoints.some((item) => item.apiKey === normalizedFallbackKey && item.baseUrl === fallbackBaseUrl);
+          if (!isDuplicate) endpoints.push({ label: "fallback", apiKey: normalizedFallbackKey, baseUrl: fallbackBaseUrl });
+        }
+      } catch (e) {
+        return res.status(500).json({ error: "CONFIG_ERROR", message: String(e) });
+      }
+
+      for (const endpoint of endpoints) {
+        const startAt = Date.now();
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const response = await fetch(`${endpoint.baseUrl}/models`, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${endpoint.apiKey}` },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          const duration = Date.now() - startAt;
+          const body = await response.text();
+          results.push({
+            label: endpoint.label,
+            baseUrl: endpoint.baseUrl,
+            status: response.status,
+            duration,
+            ok: response.ok,
+            bodyPreview: body.slice(0, 200)
+          });
+        } catch (err) {
+          results.push({
+            label: endpoint.label,
+            baseUrl: endpoint.baseUrl,
+            status: 0,
+            duration: Date.now() - startAt,
+            ok: false,
+            error: err?.message || String(err)
+          });
+        }
+      }
+
+      return res.json({
+        configured: results.length > 0,
+        results,
+        models: ["kimi-k2.6", "kimi-k2.7-code", "kimi-k3"]
+      });
+    }
+
     return res.status(404).json({
       error: "FUNCTION_NOT_FOUND",
       message: `未找到函数 ${name}`

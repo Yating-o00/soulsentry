@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, Button, ScrollView, Image } from "@tarojs/components";
+import { View, Text, Button, ScrollView } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
 import { getToken, clearToken } from "@/utils/auth";
 import { get, post, patch } from "@/utils/api";
@@ -187,65 +187,47 @@ function generateBadges(notes, tasks, executions) {
 function MoodLineChart({ series, color }) {
   if (!series || series.length < 2) return null;
 
-  const width = 640;
-  const height = 180;
-  const padding = { top: 16, bottom: 16 };
-  const usableHeight = height - padding.top - padding.bottom;
-
+  // 用短的线段拼接折线，避免 transform rotate 兼容性问题
+  const topPad = 10;
+  const bottomPad = 10;
+  const usable = 100 - topPad - bottomPad;
   const points = series.map((d, i) => ({
-    x: (i / (series.length - 1)) * width,
-    y: padding.top + (1 - Math.max(0, Math.min(10, d.score || 5)) / 10) * usableHeight,
-    score: d.score
+    x: (i / (series.length - 1)) * 100,
+    y: topPad + (1 - Math.max(0, Math.min(10, d.score || 5)) / 10) * usable
   }));
 
-  // 生成平滑三次贝塞尔曲线 path
-  let pathD = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = points[i - 1];
-    const curr = points[i];
-    const cp1x = prev.x + (curr.x - prev.x) / 3;
-    const cp1y = prev.y;
-    const cp2x = curr.x - (curr.x - prev.x) / 3;
-    const cp2y = curr.y;
-    pathD += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${curr.x} ${curr.y}`;
-  }
-
-  // 区域填充 path
-  const areaD = `${pathD} L ${width} ${height} L 0 ${height} Z`;
-
-  const circles = points.map((p, i) => {
-    const isLast = i === points.length - 1;
-    const r = isLast ? 5 : 3;
-    return `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${isLast ? color : "#fff"}" stroke="${color}" stroke-width="1.5" />`;
-  }).join("");
-
-  const gridLines = [0.25, 0.5, 0.75].map((ratio) => {
-    const y = padding.top + (1 - ratio) * usableHeight;
-    return `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="rgba(122,158,184,0.08)" stroke-width="1" />`;
-  }).join("");
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-    <defs>
-      <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${color}" stop-opacity="0.12"/>
-        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-      </linearGradient>
-    </defs>
-    ${gridLines}
-    <path d="${areaD}" fill="url(#areaGrad)" />
-    <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-    ${circles}
-  </svg>`;
-
-  const src = `data:image/svg+xml;base64,${typeof btoa === "function" ? btoa(svg) : Buffer.from(svg).toString("base64")}`;
-
+  // 简化为短垂直线 + 点，视觉上能看出起伏
   return (
-    <Image
-      src={src}
-      style={{ width: "100%", height: "100%" }}
-      mode="aspectFit"
-      lazyLoad={false}
-    />
+    <View style={{ width: "100%", height: "100%", position: "relative", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+      {points.map((p, i) => {
+        const isLast = i === points.length - 1;
+        const h = Math.max(6, (1 - p.y / 100) * 100);
+        return (
+          <View
+            key={i}
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              height: "100%",
+              marginHorizontal: "2rpx"
+            }}
+          >
+            <View
+              style={{
+                width: isLast ? "6rpx" : "4rpx",
+                height: `${h}%`,
+                borderRadius: "4rpx",
+                background: isLast ? color : `${color}80`,
+                minHeight: "6rpx"
+              }}
+            />
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -377,7 +359,7 @@ export default function Account() {
     } catch {}
   };
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <View style={{ minHeight: "100vh", background: theme.paper, padding: "120rpx 40rpx", textAlign: "center" }}>
         <Text style={{ fontSize: "28rpx", color: theme.inkTertiary }}>加载中...</Text>

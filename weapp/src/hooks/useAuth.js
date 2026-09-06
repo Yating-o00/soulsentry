@@ -18,7 +18,7 @@ export default function useAuth() {
     setLoading(true);
     const timeoutId = setTimeout(() => {
       setLoading(false);
-    }, 8000);
+    }, 3000);
 
     try {
       const data = await get("/users/me", {}, { silent: true });

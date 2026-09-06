@@ -3270,12 +3270,16 @@ export default function Flow() {
       {renderGuestBanner()}
       <ScrollView
         scrollY
-        style={{ flex: 1 }}
+        style={{ flex: 1, minHeight: 0 }}
         refresherEnabled
         refresherTriggered={refreshing}
         onRefresherRefresh={onRefresh}
+        enhanced
+        showScrollbar={false}
+        scrollWithAnimation
+        bounces={false}
       >
-        <View style={{ paddingBottom: "40rpx" }}>
+        <View style={{ paddingBottom: "200rpx" }}>
           {loading && tasks.length === 0 ? (
             <View style={{ padding: "60rpx", textAlign: "center" }}>
               <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>河流正在汇聚…</Text>

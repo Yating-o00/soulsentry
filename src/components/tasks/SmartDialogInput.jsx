@@ -100,6 +100,7 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
   const [messages, setMessages] = useState([]); // {role, content}
   const [draft, setDraft] = useState(null); // 当前 AI 解析的结构化任务
   const [isLoading, setIsLoading] = useState(false);
+  const [lastLocationCtx, setLastLocationCtx] = useState(null);
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
 
@@ -109,10 +110,40 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
     }
   }, [messages, draft, isLoading]);
 
+  function looksLikeSubtask(text) {
+    const t = String(text || "").trim();
+    if (!t) return false;
+    const prepKeywords = /提前|准备|提醒|通知|发邮件|发资料|发文件|发链接|叫上|邀请|预约|确认|顺便|先|记得/;
+    return prepKeywords.test(t);
+  }
+
+  function addOneDayBefore(iso) {
+    const d = parseAsShanghai(iso);
+    if (!d) return null;
+    d.setDate(d.getDate() - 1);
+    d.setHours(9, 0, 0, 0);
+    return d.toISOString();
+  }
+
   const callAI = async (userText, prevDraft, lastAiReply, locationCtx) => {
     const timeCtx = getTimeContextForAI();
     const nowISO = timeCtx.now_iso;
     const nowLocal = timeCtx.now_local;
+
+    // 多轮时只保留核心字段，避免 prompt 膨胀导致超时
+    const compactDraft = prevDraft
+      ? {
+          title: prevDraft.title,
+          description: prevDraft.description,
+          reminder_time: prevDraft.reminder_time,
+          end_time: prevDraft.end_time,
+          time_reasoning: prevDraft.time_reasoning,
+          priority: prevDraft.priority,
+          category: prevDraft.category,
+          tags: prevDraft.tags,
+          subtasks: (prevDraft.subtasks || []).map((s) => ({ title: s.title, priority: s.priority }))
+        }
+      : null;
 
     // 构建位置/作息上下文区块
     let ctxBlock = "";
@@ -144,7 +175,7 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
 ${timeCtx.promptSnippet}
 当前时间（ISO/UTC）: ${nowISO}
 当前时间（北京时间显示）: ${nowLocal}${ctxBlock}
-${prevDraft ? `已有解析：\n${JSON.stringify(prevDraft, null, 2)}` : "（首轮，无已有解析）"}
+${compactDraft ? `已有解析：\n${JSON.stringify(compactDraft, null, 2)}` : "（首轮，无已有解析）"}
 ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 
 本轮用户输入："${userText}"
@@ -166,6 +197,8 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 - 如果"上一轮 AI 提问"是一个**是/否问题**，用户的简短回答（"是/好/要/对/嗯/否/不/不用"）是对该问题的**回答**，绝不可当作任务标题或子任务！
   - 同意 → 执行上一轮 AI 提议，在 reply 里追问下一步具体细节
   - 拒绝 → 跳过该设置
+- **已有约定标题时，不要随意替换标题**。用户补充的"提前发邮件"、"准备资料"、"提醒大家"等动作，是对已有约定的**准备步骤/子约定**，必须作为 subtasks 追加，而不是把原约定标题改成这个动作。
+- 当用户说"提前X天/小时做某事"或"先/记得/顺便做某事"，且已有约定存在时 → 作为 subtask，并把 reminder_time 安排在父约定之前。
 - 用户输入是具体内容时，才作为新字段或新子任务处理
 - 不确定时宁可再问一次，也不乱填
 
@@ -182,6 +215,12 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 ★ 时间锚定型任务：晨跑 7:30 / 午饭 12:00 / 吃药 餐后30分钟 / 学习 20:00 / 睡前 22:00
 
 ★ 在 task.time_reasoning 字段（不是 description）用一句中文说明**为什么定在这个时间**（例如"你现在在办公室，下班 18:00 后回家路上会路过"）
+
+📍 地点与事件识别：
+- 从用户输入中提取地点关键词（公司/家/医院/学校/健身房/超市/餐厅/机场等），填入 task.location（地点名称）和 task.location_type（office/home/hospital/school/gym/shopping/restaurant/transit/other）。
+- 从用户输入中提取事件类型（开会/用餐/就医/出行/生活/工作/学习/运动/社交），填入 task.event_type。
+- 如果用户**没有明确说地点**，但提供了【当前位置】上下文，使用当前位置作为 task.location 和 task.location_type 的兜底，并在 time_reasoning 中说明"未指定地点，使用你当前所在位置"。
+- 如果既无明确地点也无当前位置上下文，task.location 留空，location_type 设为 "unknown"。
 
 ★ 如果【当前位置】= "unknown" 或【用户作息】缺失，且任务是顺路/位置型 → 在 reply 里**主动追问一句**："为了帮你算最佳提醒时机，告诉我一下：你现在大概在家还是办公室？平时几点出门、几点到家？"，并把 needs_user_context 设为 true。
 
@@ -209,15 +248,21 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
               reminder_time: { type: "string", description: "ISO 8601 时间，必须带 +08:00 时区" },
               end_time: { type: "string", description: "ISO 8601 时间，必须带 +08:00 时区" },
               time_reasoning: { type: "string", description: "为什么定在这个时间（中文一句话）" },
+              location: { type: "string", description: "地点名称，如公司/家/医院" },
+              location_type: { type: "string", enum: ["office", "home", "hospital", "school", "gym", "shopping", "restaurant", "transit", "unknown", "other"], description: "地点类型" },
+              event_type: { type: "string", enum: ["会议", "用餐", "就医", "出行", "生活", "工作", "学习", "运动", "社交", "其他"], description: "事件类型" },
               priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
               category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
               tags: { type: "array", items: { type: "string" } },
               subtasks: {
                 type: "array",
+                description: "父约定的准备步骤或子动作。每个子约定必须有 title，可独立设置 reminder_time（必须在父约定 reminder_time 之前）",
                 items: {
                   type: "object",
                   properties: {
                     title: { type: "string" },
+                    reminder_time: { type: "string", description: "子约定提醒时间 ISO 8601，必须带 +08:00 时区，且应在父约定之前" },
+                    time_reasoning: { type: "string", description: "为什么子约定定在这个时间" },
                     priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
                   },
                   required: ["title"]
@@ -246,6 +291,7 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
       let locationCtx = null;
       try {
         locationCtx = await getCurrentLocationContext();
+        setLastLocationCtx(locationCtx);
       } catch (e) {
         console.warn("Location context unavailable:", e);
       }
@@ -263,14 +309,62 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
         nextTask.title = text.split(/[。，,；;!！?？\n]/)[0].trim().slice(0, 120) || text.slice(0, 120);
       }
 
-      // 客户端兜底：覆盖 AI 没按相对时间解析的常见表达
+      // 客户端兜底：覆盖 AI 没按相对时间解析的常见表达（主约定）
+      let timeSource = nextTask.reminder_time ? "ai" : null;
       const fallbackTime = resolveNaturalLanguageTime(text, nextTask.reminder_time);
       if (fallbackTime) {
         nextTask.reminder_time = fallbackTime.iso;
+        timeSource = "explicit";
         if (fallbackTime.reasoning) {
           nextTask.time_reasoning = fallbackTime.reasoning;
         }
       }
+
+      // 多轮补充：如果用户输入看起来像准备步骤/子约定，不要替换父约定标题，而是追加子约定
+      if (draft?.title && draft.title !== nextTask.title && looksLikeSubtask(text)) {
+        const subtaskTime = nextTask.reminder_time
+          || addOneDayBefore(draft.reminder_time)
+          || fallbackTime?.iso;
+        const subtaskTimeReasoning = subtaskTime
+          ? (nextTask.reminder_time
+              ? nextTask.time_reasoning || "按你指定时间安排"
+              : "安排在父约定前一天上午，便于提前准备")
+          : undefined;
+        const newSubtask = {
+          title: nextTask.title,
+          priority: nextTask.priority || "medium",
+          ...(subtaskTime ? { reminder_time: subtaskTime } : {}),
+          ...(subtaskTimeReasoning ? { time_reasoning: subtaskTimeReasoning } : {})
+        };
+        nextTask = {
+          ...draft,
+          subtasks: [...(draft.subtasks || []), newSubtask]
+        };
+        timeSource = nextTask.reminder_time ? timeSource : (draft.reminder_time ? "ai" : "now");
+      }
+
+      // 客户端兜底：地点未识别时使用当前位置上下文
+      if (!nextTask.location || !nextTask.location.trim()) {
+        if (locationCtx?.current_place_name) {
+          nextTask.location = locationCtx.current_place_name;
+          nextTask.location_type = locationCtx.current_place_type || "unknown";
+          nextTask.time_reasoning = nextTask.time_reasoning
+            ? `${nextTask.time_reasoning}；未指定地点，使用你当前所在位置「${locationCtx.current_place_name}」`
+            : `未指定地点，使用你当前所在位置「${locationCtx.current_place_name}」`;
+        } else {
+          nextTask.location_type = nextTask.location_type || "unknown";
+        }
+      }
+
+      // 记录创建时的时空上下文，供后端情境感知使用
+      nextTask.spatiotemporal = {
+        created_at: new Date().toISOString(),
+        input: text.slice(0, 500),
+        current_place_type: locationCtx?.current_place_type || "unknown",
+        current_place_name: locationCtx?.current_place_name || null,
+        time_source: timeSource || "now",
+        ...(locationCtx?.coords ? { coords: locationCtx.coords } : {})
+      };
 
       setDraft(nextTask);
       setMessages(prev => [...prev, {
@@ -312,21 +406,44 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
     }
 
     const finalTitle = draft?.title || userText.split(/[。，,；;!！?？\n]/)[0].trim().slice(0, 120);
+
+    // 若用户直接确认而无 AI 解析，尝试用当前位置兜底
+    let spatiotemporal = draft?.spatiotemporal || {
+      created_at: new Date().toISOString(),
+      input: userText.slice(0, 500),
+      current_place_type: lastLocationCtx?.current_place_type || "unknown",
+      current_place_name: lastLocationCtx?.current_place_name || null,
+      time_source: "now",
+      ...(lastLocationCtx?.coords ? { coords: lastLocationCtx.coords } : {})
+    };
+
     // 把 time_reasoning 作为 ai_context_summary 透传，让灵魂哨兵卡片能展示
     const enriched = normalizeTaskTime({
       ...draft,
       title: finalTitle,
       ai_context_summary: draft?.time_reasoning || draft?.ai_context_summary,
+      location: draft?.location || lastLocationCtx?.current_place_name || "",
+      location_type: draft?.location_type || lastLocationCtx?.current_place_type || "unknown",
+      event_type: draft?.event_type || "其他",
+      metadata: {
+        ...(draft?.metadata || {}),
+        _extraFields: {
+          ...(draft?.metadata?._extraFields || {}),
+          spatiotemporal
+        }
+      }
     });
     await onConfirm(enriched);
     setMessages([]);
     setDraft(null);
+    setLastLocationCtx(null);
     onChange("");
   };
 
   const handleReset = () => {
     setMessages([]);
     setDraft(null);
+    setLastLocationCtx(null);
     onChange("");
   };
 
@@ -422,6 +539,12 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
                     至 {formatShanghaiTime(draft.end_time)}
                   </Badge>
                 )}
+                {draft.location && (
+                  <Badge variant="outline" className="bg-white gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {draft.location}
+                  </Badge>
+                )}
                 {draft.category && (
                   <Badge variant="outline" className="bg-white">{CATEGORY_LABELS[draft.category] || draft.category}</Badge>
                 )}
@@ -445,7 +568,13 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
                   <ul className="space-y-1">
                     {draft.subtasks.map((st, i) => (
                       <li key={i} className="text-sm text-slate-600 flex items-center gap-2">
-                        <span className="w-1 h-1 rounded-full bg-slate-400" /> {st.title}
+                        <span className="w-1 h-1 rounded-full bg-slate-400" />
+                        <span className="flex-1">{st.title}</span>
+                        {st.reminder_time && (
+                          <span className="text-xs text-slate-400">
+                            {formatShanghaiDateTime(st.reminder_time)}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>

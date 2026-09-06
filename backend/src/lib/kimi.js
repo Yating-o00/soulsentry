@@ -1,7 +1,7 @@
 const DEFAULT_BASE_URL = "https://api.moonshot.cn/v1";
 const DEFAULT_FALLBACK_BASE_URL = "https://api.moonshot.ai/v1";
-const DEFAULT_TEXT_MODELS = ["kimi-k2.6", "kimi-k2.7-code", "kimi-k3"];
-const DEFAULT_WEB_MODELS = ["kimi-k2.6", "kimi-k3"];
+const DEFAULT_TEXT_MODELS = ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed"];
+const DEFAULT_WEB_MODELS = ["kimi-k2.6", "kimi-k2.7-code"];
 
 function getEndpointConfigs() {
   const primaryApiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;

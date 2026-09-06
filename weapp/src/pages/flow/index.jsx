@@ -3156,14 +3156,10 @@ export default function Flow() {
   const renderBottomBar = () => (
     <View
       style={{
-        position: "fixed",
-        left: 0,
-        right: 0,
-        bottom: "100rpx",
         paddingBottom: "env(safe-area-inset-bottom)",
         background: "rgba(250,251,251,0.92)",
         borderTop: "1rpx solid rgba(232,236,239,0.6)",
-        zIndex: 50
+        flexShrink: 0
       }}
     >
       <View style={{ padding: "16rpx 28rpx 12rpx" }}>
@@ -3269,7 +3265,7 @@ export default function Flow() {
   );
 
   return (
-    <View style={{ minHeight: "100vh", background: THEME.paper, display: "flex", flexDirection: "column" }}>
+    <View style={{ height: "100vh", background: THEME.paper, display: "flex", flexDirection: "column" }}>
       {renderHeader()}
       {renderGuestBanner()}
       <ScrollView
@@ -3279,7 +3275,7 @@ export default function Flow() {
         refresherTriggered={refreshing}
         onRefresherRefresh={onRefresh}
       >
-        <View style={{ paddingBottom: "420rpx" }}>
+        <View style={{ paddingBottom: "40rpx" }}>
           {loading && tasks.length === 0 ? (
             <View style={{ padding: "60rpx", textAlign: "center" }}>
               <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>河流正在汇聚…</Text>

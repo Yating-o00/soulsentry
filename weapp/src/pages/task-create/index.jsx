@@ -4,6 +4,22 @@ import { View, Text, Input, Textarea, Picker, Button, ScrollView, Canvas } from 
 import { get, post, patch, del } from "@/utils/api";
 import createQRCode from "@/lib/qrcode";
 import VoiceInput from "@/components/VoiceInput";
+import theme from "@/components/tasks/theme";
+
+function AiBadge({ text = "AI 生成" }) {
+  return (
+    <View
+      style={{
+        padding: "2rpx 10rpx",
+        borderRadius: "8rpx",
+        background: "rgba(91,130,160,0.10)",
+        border: "1rpx solid rgba(91,130,160,0.20)"
+      }}
+    >
+      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>{text}</Text>
+    </View>
+  );
+}
 
 const priorities = [
   { value: "urgent", label: "紧急" },
@@ -1200,7 +1216,10 @@ export default function TaskCreate() {
   const renderAnalysis = () => (
     <View>
       <View className="ss-card">
-        <View className="ss-title">AI 分析结果</View>
+        <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "8rpx" }}>
+          <View className="ss-title">AI 分析结果</View>
+          <AiBadge />
+        </View>
         <Text className="ss-subtitle">基于你的约定，SoulSentry 给出的执行建议</Text>
 
         {analysis?.resolved_date && (
@@ -1339,6 +1358,38 @@ export default function TaskCreate() {
         {step === "confirm" && renderConfirm()}
         {step === "analysis" && renderAnalysis()}
         {step === "created" && renderCreated()}
+
+        <View
+          style={{
+            margin: "0 24rpx 24rpx",
+            padding: "18rpx 22rpx",
+            borderRadius: "14rpx",
+            background: "rgba(91,130,160,0.06)",
+            border: "1rpx solid rgba(91,130,160,0.12)",
+            display: "flex",
+            alignItems: "center"
+          }}
+        >
+          <View
+            style={{
+              width: "28rpx",
+              height: "28rpx",
+              borderRadius: "50%",
+              background: theme.water,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "14rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+          </View>
+          <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
+            部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
+          </Text>
+        </View>
+
         <View style={{ height: "40rpx" }} />
       </ScrollView>
     </View>

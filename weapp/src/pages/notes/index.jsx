@@ -8,6 +8,21 @@ import VaultSheet from "@/components/VaultSheet";
 import ReviewDrawer from "@/components/ReviewDrawer";
 import theme from "@/components/tasks/theme";
 
+function AiBadge({ text = "AI 生成" }) {
+  return (
+    <View
+      style={{
+        padding: "2rpx 10rpx",
+        borderRadius: "8rpx",
+        background: "rgba(91,130,160,0.10)",
+        border: "1rpx solid rgba(91,130,160,0.20)"
+      }}
+    >
+      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>{text}</Text>
+    </View>
+  );
+}
+
 const DENSITY_KEY = "heart_response_density";
 const DENSITY_OPTIONS = [
   { key: "full", label: "多陪我说说" },
@@ -581,6 +596,9 @@ export default function Notes() {
 
         {response ? (
           <View style={{ borderRadius: "12rpx", padding: "4rpx 0 16rpx", marginBottom: "12rpx" }}>
+            <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "10rpx" }}>
+              <AiBadge text="AI 回应" />
+            </View>
             <Text style={{ fontSize: "28rpx", color: theme.water, lineHeight: "50rpx", fontStyle: "italic" }}>
               {response}
             </Text>
@@ -679,6 +697,38 @@ export default function Notes() {
           </View>
         ) : null}
         {!loading && filteredNotes.length === 0 ? renderEmpty() : filteredNotes.map((n) => <View key={n.id} id={`note-${n.id}`}>{renderCard(n)}</View>)}
+
+        <View
+          style={{
+            margin: "0 24rpx 24rpx",
+            padding: "18rpx 22rpx",
+            borderRadius: "14rpx",
+            background: "rgba(91,130,160,0.06)",
+            border: "1rpx solid rgba(91,130,160,0.12)",
+            display: "flex",
+            alignItems: "center"
+          }}
+        >
+          <View
+            style={{
+              width: "28rpx",
+              height: "28rpx",
+              borderRadius: "50%",
+              background: theme.water,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "14rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+          </View>
+          <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
+            部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
+          </Text>
+        </View>
+
         <View style={{ height: "120rpx" }} />
       </ScrollView>
 

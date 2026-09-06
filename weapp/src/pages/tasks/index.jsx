@@ -10,6 +10,21 @@ import { SnoozeSheet, ExecPreview } from "@/components/tasks/Sheets";
 import EvolutionRail, { computeEvolution } from "@/components/tasks/EvolutionRail";
 import theme from "@/components/tasks/theme";
 
+function AiBadge({ text = "AI 生成" }) {
+  return (
+    <View
+      style={{
+        padding: "2rpx 10rpx",
+        borderRadius: "8rpx",
+        background: "rgba(91,130,160,0.10)",
+        border: "1rpx solid rgba(91,130,160,0.20)"
+      }}
+    >
+      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>{text}</Text>
+    </View>
+  );
+}
+
 const groups = [
   { key: "now", zh: "现在能做", en: "NOW", hint: "长期计划里当下可推进的" },
   { key: "due", zh: "即将截止", en: "DUE", hint: "24 小时内到期或已逾期" },
@@ -301,9 +316,10 @@ export default function Tasks() {
 
           {grouped.map((g) => (
             <View key={g.key} style={{ marginBottom: "48rpx" }}>
-              <View style={{ display: "flex", alignItems: "baseline", gap: "16rpx", marginBottom: "24rpx" }}>
+              <View style={{ display: "flex", alignItems: "baseline", gap: "16rpx", marginBottom: "24rpx", flexWrap: "wrap" }}>
                 <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "8rpx" }}>{g.en}</Text>
                 <Text style={{ fontSize: "34rpx", fontWeight: 700, color: theme.primary }}>{g.zh}</Text>
+                {g.key === "suggested" && <AiBadge />}
                 <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>
                   {g.items.length} 个约定 · {g.hint}
                 </Text>
@@ -385,6 +401,37 @@ export default function Tasks() {
             }}
           >
             坚定守护 · 适时轻唤 · 心栈 SOULSENTRY
+          </Text>
+        </View>
+
+        <View
+          style={{
+            margin: "0 0 24rpx",
+            padding: "18rpx 22rpx",
+            borderRadius: "14rpx",
+            background: "rgba(91,130,160,0.06)",
+            border: "1rpx solid rgba(91,130,160,0.12)",
+            display: "flex",
+            alignItems: "center"
+          }}
+        >
+          <View
+            style={{
+              width: "28rpx",
+              height: "28rpx",
+              borderRadius: "50%",
+              background: theme.water,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "14rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+          </View>
+          <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
+            部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
           </Text>
         </View>
 

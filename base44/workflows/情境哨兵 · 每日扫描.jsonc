@@ -1,0 +1,44 @@
+{
+  "name": "\u60c5\u5883\u54e8\u5175 \u00b7 \u6bcf\u65e5\u626b\u63cf",
+  "description": "\u6bcf\u5929\u51cc\u6668 02:00 \u626b\u63cf\u672a\u5b8c\u6210\u4efb\u52a1\uff0c\u5bf9\u8d85\u8fc7 7 \u5929\u672a\u5206\u6790\u6216\u8fbe\u5230\u6c89\u9ed8\u8ffd\u95ee\u65f6\u95f4\u7684\u4efb\u52a1\u91cd\u65b0\u8fdb\u884c\u54e8\u5175\u5206\u6790\uff0c\u5b9e\u73b0\u9057\u5fd8\u9884\u6d4b\u4e0e\u6c89\u9ed8\u8ffd\u8e2a\u3002",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 18 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sentinelDailyScan",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "sentinelDailyScan"
+  }
+}

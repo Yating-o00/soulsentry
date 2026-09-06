@@ -1,0 +1,44 @@
+{
+  "name": "\u5fc3\u7b7e \u00b7 \u5916\u90e8\u6570\u636e\u6e90\u5b9a\u65f6\u62c9\u53d6",
+  "description": "\u6bcf 2 \u5c0f\u65f6\u626b\u63cf\u6240\u6709\u542f\u7528\u7684\u5916\u90e8 RSS/Newsletter \u6e90\uff0c\u6309\u5404\u81ea\u9891\u7387\u62c9\u53d6\u5e76\u5f52\u6863\u5230\u5fc3\u7b7e",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 2,
+      "interval_unit": "hours",
+      "interval_anchor": "2026-05-26T07:12:58.615000",
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "fetchExternalFeeds",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "fetchExternalFeeds"
+  }
+}

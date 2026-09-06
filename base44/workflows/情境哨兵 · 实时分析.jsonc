@@ -1,0 +1,38 @@
+{
+  "name": "\u60c5\u5883\u54e8\u5175 \u00b7 \u5b9e\u65f6\u5206\u6790",
+  "description": "\u5f53 Task \u521b\u5efa\u6216\u53d1\u751f\u5b9e\u8d28\u53d8\u66f4\uff08\u6807\u9898/\u63cf\u8ff0/\u65f6\u95f4/\u4f18\u5148\u7ea7/\u7c7b\u522b\u7b49\uff09\u65f6\uff0c\u81ea\u52a8\u89e6\u53d1 sentinelBrain \u8c03\u7528 Kimi \u8fdb\u884c\u60c5\u5883\u5206\u6790\uff0c\u4ea7\u51fa\u6700\u4f73\u63d0\u9192\u65f6\u95f4\u3001\u6253\u65ad\u68af\u5ea6\u3001\u4e0a\u4e0b\u6587\u6458\u8981\u7b49\u3002",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create",
+        "update"
+      ],
+      "entity_name": "Task"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sentinelAutoTrigger",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "sentinelAutoTrigger"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "\u6708\u89c4\u5212 \u2192 \u4efb\u52a1\u540c\u6b65",
+  "description": "\u5f53\u6708\u89c4\u5212\u521b\u5efa\u6216\u66f4\u65b0\u65f6\uff0c\u81ea\u52a8\u63d0\u53d6\u5176\u4e2d\u7684\u91cc\u7a0b\u7891\u5e76\u521b\u5efa\u4e3a Task \u5b9e\u4f53\uff0c\u5f00\u542f Google Calendar \u540c\u6b65",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create",
+        "update"
+      ],
+      "entity_name": "MonthlyPlan"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "planToTasks",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "planToTasks"
+  }
+}

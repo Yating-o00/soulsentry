@@ -1,0 +1,44 @@
+{
+  "name": "\u4efb\u52a1\u622a\u6b62\u9884\u8b66\u81ea\u52a8\u626b\u63cf",
+  "description": "\u6bcf\u5c0f\u65f6\u626b\u63cf\u5373\u5c06\u622a\u6b62\u7684\u4efb\u52a1\uff0c\u81ea\u52a8\u5411\u7528\u6237\u914d\u7f6e\u7684\u6e20\u9053\uff08\u4f01\u4e1a\u5fae\u4fe1/\u90ae\u4ef6\uff09\u63a8\u9001\u9884\u8b66",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "interval",
+      "cron_expression": null,
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": 5,
+      "interval_unit": "minutes",
+      "interval_anchor": "2026-04-24T08:05:34.784000",
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "scanTaskAlerts",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "scanTaskAlerts"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "\u5fc3\u7b7e\u81ea\u52a8 AI \u5206\u6790",
+  "description": "\u65b0\u5fc3\u7b7e\u521b\u5efa\u65f6\u81ea\u52a8\u8c03\u7528 Kimi \u8fdb\u884c\u6458\u8981\u3001\u6807\u7b7e\u3001\u5206\u7c7b\u3001\u5916\u90e8\u80cc\u666f\u8865\u5145",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create"
+      ],
+      "entity_name": "Note"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "ai",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "analyzeHeartSign",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "analyzeHeartSign"
+  }
+}

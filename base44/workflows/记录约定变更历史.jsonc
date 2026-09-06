@@ -1,0 +1,39 @@
+{
+  "name": "\u8bb0\u5f55\u7ea6\u5b9a\u53d8\u66f4\u5386\u53f2",
+  "description": "\u5f53\u7ea6\u5b9a\u6216\u5b50\u7ea6\u5b9a\u53d1\u751f\u521b\u5efa\u3001\u66f4\u65b0\u3001\u5220\u9664\u65f6\uff0c\u81ea\u52a8\u8bb0\u5f55\u53d8\u66f4\u65e5\u5fd7",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create",
+        "update",
+        "delete"
+      ],
+      "entity_name": "Task"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "logTaskChange",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "logTaskChange"
+  }
+}

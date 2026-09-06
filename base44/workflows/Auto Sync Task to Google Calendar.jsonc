@@ -1,0 +1,38 @@
+{
+  "name": "Auto Sync Task to Google Calendar",
+  "description": "\u5f53\u542f\u7528\u4e86 Google Calendar \u540c\u6b65\u7684\u7ea6\u5b9a\u88ab\u521b\u5efa\u6216\u66f4\u65b0\u65f6\uff0c\u81ea\u52a8\u540c\u6b65\u5230 Google Calendar",
+  "trigger": {
+    "condition": "${ ((.trigger.data.gcal_sync_enabled == true) or (.trigger.data.google_calendar_event_id != null and .trigger.data.google_calendar_event_id != \"\" and .trigger.data.google_calendar_event_id != [] and .trigger.data.google_calendar_event_id != {})) }",
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create",
+        "update"
+      ],
+      "entity_name": "Task"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "auto_sync_task_to_google_calendar",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "autoSyncTaskToCalendar",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "autoSyncTaskToCalendar"
+  }
+}

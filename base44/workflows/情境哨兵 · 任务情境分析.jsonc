@@ -1,0 +1,38 @@
+{
+  "name": "\u60c5\u5883\u54e8\u5175 \u00b7 \u4efb\u52a1\u60c5\u5883\u5206\u6790",
+  "description": "\u5f53\u4efb\u52a1\u521b\u5efa\u6216\u5b9e\u8d28\u5b57\u6bb5\u66f4\u65b0\u65f6\uff0c\u81ea\u52a8\u8c03\u7528 Kimi \u8fdb\u884c\u60c5\u5883\u5206\u6790\uff0c\u751f\u6210\u6700\u4f73\u65f6\u673a/\u5730\u70b9/\u6253\u65ad\u68af\u5ea6",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create",
+        "update"
+      ],
+      "entity_name": "Task"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sentinelAutoTrigger",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "sentinelAutoTrigger"
+  }
+}

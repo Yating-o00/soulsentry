@@ -1,0 +1,38 @@
+{
+  "name": "Google Calendar Webhook Sync",
+  "description": "\u63a5\u6536 Google Calendar \u7684\u53d8\u66f4\u901a\u77e5\uff0c\u81ea\u52a8\u5c06\u65e5\u5386\u4e8b\u4ef6\u7684\u4fee\u6539\u540c\u6b65\u56de\u7ea6\u5b9a",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "connector",
+      "events": [
+        "events"
+      ],
+      "integration_type": "googlecalendar",
+      "resource_id": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "google_calendar_webhook_sync",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "handleCalendarWebhook",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "handleCalendarWebhook"
+  }
+}

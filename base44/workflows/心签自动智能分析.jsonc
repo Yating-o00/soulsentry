@@ -1,0 +1,37 @@
+{
+  "name": "\u5fc3\u7b7e\u81ea\u52a8\u667a\u80fd\u5206\u6790",
+  "description": "\u5f53\u7528\u6237\u521b\u5efa\u65b0\u5fc3\u7b7e (Note) \u65f6\uff0c\u81ea\u52a8\u89e6\u53d1 AI \u6458\u8981\u3001\u6807\u7b7e\u3001\u5206\u7c7b\u3001\u5916\u90e8\u4fe1\u606f\u8865\u5145\u4e0e\u753b\u50cf\u6c89\u6dc0",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create"
+      ],
+      "entity_name": "Note"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "migrated_workflow",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "analyzeHeartSign",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "analyzeHeartSign"
+  }
+}

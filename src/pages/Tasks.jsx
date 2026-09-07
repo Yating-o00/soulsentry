@@ -68,6 +68,43 @@ export default function Tasks() {
     initialData: []
   });
 
+  // 拉取执行单列表，配合 analyzeTasks 批量分析出每个约定可自动执行的部分
+  const { data: allExecutions = [] } = useQuery({
+    queryKey: ['task-executions'],
+    queryFn: () => base44.entities.TaskExecution.list('-created_date', 100).catch(() => []),
+    initialData: []
+  });
+
+  // {[taskId]: {autoExec?, ...}} —— analyzeTasks 批量分析结果（单次调用，失败不影响页面展示）
+  const [autoExecMap, setAutoExecMap] = useState({});
+  useEffect(() => {
+    const roots = allTasks.filter(t => !t.parent_task_id && !t.deleted_at);
+    if (roots.length === 0) {
+      setAutoExecMap({});
+      return;
+    }
+    const subMap = {};
+    roots.forEach(t => {
+      subMap[t.id] = allTasks.filter(s => s.parent_task_id === t.id && !s.deleted_at);
+    });
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await base44.functions.invoke('analyzeTasks', {
+          tasks: roots,
+          executions: allExecutions,
+          subtasks: subMap
+        });
+        const result = res?.data;
+        if (!cancelled) setAutoExecMap(result && typeof result === 'object' ? result : {});
+      } catch (e) {
+        console.warn('analyzeTasks 分析失败', e);
+        if (!cancelled) setAutoExecMap({});
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [allTasks, allExecutions]);
+
   // Auto-open task detail when navigated via ?taskId=xxx (e.g. from global search)
   const location = useLocation();
   useEffect(() => {
@@ -766,6 +803,7 @@ export default function Tasks() {
                     onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                     onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                     onReparent={handleReparent}
+                    autoExec={autoExecMap[task.id]?.autoExec}
                   />
                 )}
               </div>

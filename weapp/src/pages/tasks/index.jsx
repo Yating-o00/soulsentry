@@ -191,9 +191,16 @@ export default function Tasks() {
 
   const handleApprove = async (task) => {
     try {
-      await patch(`/tasks/${task.id}`, { status: "completed" });
+      const autoExec = analysisMap[task.id]?.autoExec;
+      if (autoExec?.executionId) {
+        // 验收执行单产物：只确认产物，不自动完成约定本身
+        await patch(`/task-executions/${autoExec.executionId}`, { execution_status: "completed" });
+        showToast("已验收 · 产物已确认");
+      } else {
+        await patch(`/tasks/${task.id}`, { status: "completed" });
+        showToast("已验收 · 交给心栈执行，结果会回流到约定");
+      }
       setReviewTask(null);
-      showToast("已验收 · 交给心栈执行，结果会回流到约定");
       fetchData();
     } catch (err) {
       // handled globally

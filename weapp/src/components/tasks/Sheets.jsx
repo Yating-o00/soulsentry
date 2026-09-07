@@ -255,7 +255,7 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
               }}
             >
               <IconCheck size={24} color={theme.seal} />
-              <Text style={{ fontSize: "28rpx", color: theme.seal }}>已确认，交给心栈执行</Text>
+              <Text style={{ fontSize: "28rpx", color: theme.seal }}>已验收完成</Text>
             </View>
           ) : (
             <View style={{ marginTop: "28rpx", display: "flex", gap: "16rpx" }}>
@@ -274,7 +274,7 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
               >
                 <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
                   <IconSend size={22} color={theme.paper} />
-                  <Text style={{ color: theme.paper, fontSize: "26rpx" }}>验收并执行</Text>
+                  <Text style={{ color: theme.paper, fontSize: "26rpx" }}>验收</Text>
                 </View>
               </Button>
               <Button

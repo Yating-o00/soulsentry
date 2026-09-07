@@ -9,8 +9,10 @@ import {
   Car, Store, Home, AlertCircle, Timer,
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
-  Link2, StickyNote, Paperclip, Bell, CornerDownRight
+  Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw
 } from "lucide-react";
+import { toast } from "sonner";
+import { base44 } from "@/api/base44Client";
 import AttachToParentDialog from "@/components/tasks/AttachToParentDialog";
 import {
   DropdownMenu,
@@ -42,12 +44,52 @@ export default function LifeTaskCard({
   selectedTaskIds = [],
   onToggleSelection,
   onViewTab,
-  onReparent
+  onReparent,
+  autoExec
 }) {
   const [completed, setCompleted] = useState(task.status === 'completed');
   const [expanded, setExpanded] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  // 自动执行区块：本地状态覆盖（验收后 done / 批准·重试后 running）与"我来接管"忽略标记
+  const [execStateOverride, setExecStateOverride] = useState(null);
+  const [execIgnored, setExecIgnored] = useState(false);
+  const [execBusy, setExecBusy] = useState(false);
+  const execState = execStateOverride || autoExec?.state;
+
+  // 验收：只确认产物，不完成约定本身
+  const handleExecAccept = async (e) => {
+    e?.stopPropagation();
+    if (!autoExec?.executionId || execBusy) return;
+    setExecBusy(true);
+    try {
+      await base44.entities.TaskExecution.update(autoExec.executionId, { execution_status: "completed" });
+      setExecStateOverride('done');
+    } catch (err) {
+      toast.error("验收失败：" + (err?.message || err));
+    } finally {
+      setExecBusy(false);
+    }
+  };
+
+  // 批准执行（confirm）/ 重试（manual）：复用 AutomationDetailDialog 的执行方式
+  const handleExecRun = async (e) => {
+    e?.stopPropagation();
+    if (!autoExec?.executionId || execBusy) return;
+    setExecBusy(true);
+    try {
+      const res = await base44.functions.invoke('executeAutomation', {
+        execution_id: autoExec.executionId,
+        phase: "execute"
+      });
+      if (res.data?.error) throw new Error(res.data.error);
+      setExecStateOverride('running');
+    } catch (err) {
+      toast.error("执行失败：" + (err?.message || err));
+    } finally {
+      setExecBusy(false);
+    }
+  };
   const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   const dragEnabled = !isSelectionMode && !!onReparent;
@@ -764,6 +806,104 @@ export default function LifeTaskCard({
                             推迟
                         </button>
                     </SnoozePopover>
+                </div>
+            )}
+
+            {/* 4. Auto Execution Block（已预执行待验收 / 待批准 / 执行中 / 转人工） */}
+            {autoExec && !completed && !execIgnored && execState && execState !== 'done' && (
+                <div
+                    className="mt-3 rounded-2xl px-3.5 py-2.5 border border-dashed border-[#c7d2fe] bg-[#eef2ff]/40"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Bot className="w-4 h-4 text-[#384877] flex-shrink-0" />
+                            <span className="text-xs font-semibold text-slate-800 truncate">
+                                自动执行 · {autoExec.label}
+                            </span>
+                            <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                                {execState === 'ready' && "已预执行，待验收"}
+                                {execState === 'confirm' && "待批准"}
+                                {execState === 'running' && "执行中…"}
+                                {execState === 'manual' && "已转人工"}
+                            </span>
+                        </div>
+                        {autoExec.trust != null && (
+                            <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                                信任度 {autoExec.trust}% · {autoExec.trustLevel}
+                            </span>
+                        )}
+                    </div>
+
+                    {autoExec.previewTitle && (
+                        <p className="mt-1.5 text-[11px] text-slate-500 truncate leading-relaxed">
+                            {autoExec.previewTitle}
+                            {Array.isArray(autoExec.previewBody) && autoExec.previewBody.length > 0 && (
+                                <span className="text-slate-400"> · {autoExec.previewBody[0]}</span>
+                            )}
+                        </p>
+                    )}
+
+                    <div className="mt-2 flex items-center justify-end gap-3">
+                        {execState === 'ready' && (
+                            <>
+                                <button
+                                    type="button"
+                                    className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
+                                    onClick={() => onEdit && onEdit()}
+                                >
+                                    调整
+                                </button>
+                                <button
+                                    type="button"
+                                    className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
+                                    onClick={() => setExecIgnored(true)}
+                                >
+                                    我来接管
+                                </button>
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-1 text-[11px] font-medium text-white bg-[#384877] hover:bg-[#2d3a60] px-3 py-1.5 rounded-lg transition-all disabled:opacity-60"
+                                    onClick={handleExecAccept}
+                                    disabled={execBusy}
+                                >
+                                    {execBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                    验收
+                                </button>
+                            </>
+                        )}
+                        {execState === 'confirm' && (
+                            <button
+                                type="button"
+                                className="flex items-center gap-1 text-[11px] font-medium text-white bg-[#384877] hover:bg-[#2d3a60] px-3 py-1.5 rounded-lg transition-all disabled:opacity-60"
+                                onClick={handleExecRun}
+                                disabled={execBusy}
+                            >
+                                {execBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                批准执行
+                            </button>
+                        )}
+                        {execState === 'manual' && (
+                            <>
+                                <button
+                                    type="button"
+                                    className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
+                                    onClick={() => setExecIgnored(true)}
+                                >
+                                    我来接管
+                                </button>
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-1 text-[11px] font-medium text-white bg-[#384877] hover:bg-[#2d3a60] px-3 py-1.5 rounded-lg transition-all disabled:opacity-60"
+                                    onClick={handleExecRun}
+                                    disabled={execBusy}
+                                >
+                                    {execBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                    重试
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
 

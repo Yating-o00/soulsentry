@@ -13,6 +13,7 @@ import AutomationResultPreview from "./AutomationResultPreview";
 export default function AutomationDetailDialog({ execution: executionProp, open, onOpenChange }) {
   const queryClient = useQueryClient();
   const [executing, setExecuting] = useState(false);
+  const [accepting, setAccepting] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [adjustText, setAdjustText] = useState("");
   const [adjustAttachments, setAdjustAttachments] = useState([]); // [{file_name,file_url}]
@@ -326,6 +327,21 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
     }
   };
 
+  // 待验收：用户只确认产物，不完成约定本身；服务端会自动写 completedAt
+  const handleAccept = async () => {
+    setAccepting(true);
+    try {
+      await base44.entities.TaskExecution.update(execution.id, { execution_status: "completed" });
+      await reloadExecution();
+      toast.success("已验收");
+      refresh();
+    } catch (e) {
+      toast.error("验收失败：" + e.message);
+    } finally {
+      setAccepting(false);
+    }
+  };
+
   const handleAdjust = async () => {
     if (!adjustText.trim()) return;
     setAdjusting(true);
@@ -544,6 +560,7 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
               <div className="flex items-center gap-1.5 mt-0.5">
                 <Badge variant="outline" className={`text-[10px] ${cfg.color}`}>{cfg.emoji} {cfg.label}</Badge>
                 {status === "waiting_confirm" && <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">待你确认</Badge>}
+                {status === "waiting_acceptance" && <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-600 border-emerald-200">待验收</Badge>}
                 {status === "executing" && <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-600 border-indigo-200">执行中</Badge>}
                 {status === "completed" && <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-600 border-emerald-200">已完成</Badge>}
                 {status === "parsing" && <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-600 border-indigo-200">规划中</Badge>}
@@ -726,6 +743,14 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                 </div>
               </details>
             </div>
+          )}
+
+          {/* 待验收：确认产物 */}
+          {status === "waiting_acceptance" && (
+            <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handleAccept} disabled={accepting}>
+              {accepting ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1.5" />}
+              验收成果
+            </Button>
           )}
 
           {/* 已完成：调整反馈 */}

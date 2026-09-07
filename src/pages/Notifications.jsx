@@ -118,6 +118,22 @@ export default function NotificationsPage() {
   };
 
   const handleConfirm = async (execution) => {
+    // waiting_confirm 且已有产物 → 直接标 completed（验收产物）；
+    // waiting_confirm 但没有产物（只有方案）→ 触发实际执行，而不是直接标完成
+    if (execution.execution_status === "waiting_confirm" && !execution.automation_result) {
+      try {
+        const res = await base44.functions.invoke('executeAutomation', {
+          execution_id: execution.id,
+          phase: "execute"
+        });
+        if (res.data?.error) throw new Error(res.data.error);
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+        toast.success("已开始执行");
+      } catch (e) {
+        toast.error("执行失败：" + e.message);
+      }
+      return;
+    }
     const now = new Date().toISOString();
     await base44.entities.TaskExecution.update(execution.id, {
       execution_status: "completed",

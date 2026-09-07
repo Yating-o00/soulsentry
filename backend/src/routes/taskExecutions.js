@@ -144,6 +144,15 @@ taskExecutionsRouter.patch("/:id", async (req, res) => {
     return res.status(404).json({ error: "NOT_FOUND", message: "执行记录不存在" });
   }
 
+  const nextStatus = payload.data.execution_status;
+  // 验收：待验收（waiting_acceptance）的执行单标记 completed 时自动写入完成时间
+  const isAcceptance =
+    nextStatus === "completed" && existing.executionStatus === "waiting_acceptance";
+  const completedAt =
+    payload.data.completed_at === undefined
+      ? (isAcceptance ? new Date() : undefined)
+      : (payload.data.completed_at ? new Date(payload.data.completed_at) : null);
+
   const execution = await prisma.taskExecution.update({
     where: { id: existing.id },
     data: {
@@ -152,14 +161,12 @@ taskExecutionsRouter.patch("/:id", async (req, res) => {
         : (payload.data.task_id && payload.data.task_id.trim() ? payload.data.task_id.trim() : null),
       taskTitle: payload.data.task_title,
       category: payload.data.category,
-      executionStatus: payload.data.execution_status,
+      executionStatus: nextStatus,
       originalInput: payload.data.original_input,
       aiParsedResult: payload.data.ai_parsed_result,
       executionSteps: payload.data.execution_steps,
       errorMessage: payload.data.error_message,
-      completedAt: payload.data.completed_at === undefined
-        ? undefined
-        : (payload.data.completed_at ? new Date(payload.data.completed_at) : null),
+      completedAt,
       automationType: payload.data.automation_type,
       automationPlan: payload.data.automation_plan,
       automationResult: payload.data.automation_result,

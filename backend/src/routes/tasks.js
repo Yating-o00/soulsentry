@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { maybeAutoExecute } from "../services/autoAutomation.js";
 
 export const tasksRouter = Router();
 
@@ -308,6 +309,9 @@ tasksRouter.post("/", async (req, res) => {
     payload.data
   );
 
+  // 主动检测可自动执行的部分，异步执行后待用户验收（不阻塞创建）
+  void maybeAutoExecute(task, req.user.id, prisma);
+
   return res.status(201).json(serializeTask(task));
 });
 
@@ -416,6 +420,11 @@ tasksRouter.patch("/:id", async (req, res) => {
       progress: existing.progress
     }
   );
+
+  // 标题/描述变更后重新检测可自动执行的部分（maybeAutoExecute 内部有去重）
+  if (payload.data.title !== undefined || payload.data.description !== undefined) {
+    void maybeAutoExecute(task, req.user.id, prisma);
+  }
 
   return res.json(serializeTask(task));
 });

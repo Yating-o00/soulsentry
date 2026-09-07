@@ -166,12 +166,14 @@ function buildAutoExec(task, executions) {
   const exec = list[0];
   const status = String(exec.execution_status || "").toLowerCase();
   const kindLabelMap = {
-    email: "邮件草稿",
-    research: "联网调研",
-    slides: "演示稿",
-    ledger: "整理账本",
-    file: "文件整理",
-    calendar: "日程同步",
+    email_draft: "邮件草稿",
+    web_research: "联网调研",
+    ppt_doc: "演示稿",
+    summary_note: "纪要总结",
+    office_doc: "文档",
+    ledger_organize: "整理账本",
+    file_organize: "整理文件",
+    calendar_event: "日程同步",
     none: "自动执行"
   };
   const kind = exec.automation_type || "none";
@@ -180,8 +182,10 @@ function buildAutoExec(task, executions) {
   let trust = exec.requires_approval ? 78 : 92;
   let trustLevel = exec.requires_approval ? "确认后执行" : "自动执行";
   let state = "ready";
-  if (status === "running" || status === "in_progress") {
+  if (status === "running" || status === "in_progress" || status === "executing" || status === "pending") {
     state = "running";
+  } else if (status === "waiting_confirm" || status === "waiting_approval") {
+    state = "confirm";
   } else if (status === "error" || status === "failed" || exec.error_message) {
     trust = 45;
     trustLevel = "人工接管";
@@ -190,14 +194,14 @@ function buildAutoExec(task, executions) {
 
   const plan = isPlainObject(exec.automation_plan) ? exec.automation_plan : {};
   const result = isPlainObject(exec.automation_result) ? exec.automation_result : {};
-  const previewTitle = `${label} · ${state === "ready" ? "已备好，待你验收" : state === "running" ? "AI 生成中" : "信任度不足，已转人工"}`;
+  const previewTitle = `${label} · ${state === "ready" ? "已备好，待你验收" : state === "confirm" ? "待你批准" : state === "running" ? "AI 生成中" : "信任度不足，已转人工"}`;
   const previewBody = [];
   if (Array.isArray(plan.previewBody) && plan.previewBody.length > 0) {
     previewBody.push(...plan.previewBody);
   } else if (Array.isArray(result.previewBody) && result.previewBody.length > 0) {
     previewBody.push(...result.previewBody);
   } else if (Array.isArray(plan.steps) && plan.steps.length > 0) {
-    previewBody.push(...plan.steps.map((s) => (typeof s === "string" ? s : s.text || "")).filter(Boolean));
+    previewBody.push(...plan.steps.map((s) => (typeof s === "string" ? s : s.detail || s.text || s.name || "")).filter(Boolean));
   } else if (result.summary) {
     previewBody.push(String(result.summary));
   } else {
@@ -206,6 +210,7 @@ function buildAutoExec(task, executions) {
 
   return {
     kind,
+    automation_type: kind,
     label,
     state,
     trust,

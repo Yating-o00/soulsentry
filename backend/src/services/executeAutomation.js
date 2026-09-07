@@ -7,7 +7,7 @@ import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 
-const AUTOMATION_EXECUTE_COSTS = {
+export const AUTOMATION_EXECUTE_COSTS = {
   plan: 5,
   email_draft: 15,
   summary_note: 20,
@@ -286,7 +286,7 @@ function looksLikeLedger(text) {
 }
 
 // 当用户没有指定有效类型（或 AI 默认 summary_note）时，从自然语言输入里兜底推断类型
-function detectAutomationTypeFromInput(text) {
+export function detectAutomationTypeFromInput(text) {
   if (typeof text !== "string" || !text.trim()) return null;
   const t = text.trim();
   const lower = t.toLowerCase();
@@ -1284,14 +1284,15 @@ export async function executeAutomation({ executionId, phase, userId, prisma }) 
 
     const handlerResult = await handler(execution, prisma);
     const requiresApproval = execution.automationType === "email_draft";
-    const nextStatus = requiresApproval ? "waiting_confirm" : "completed";
+    // 产物型自动执行生成后进入待验收，由用户确认产物；验收不自动完成约定本身
+    const nextStatus = requiresApproval ? "waiting_confirm" : "waiting_acceptance";
 
     await prisma.taskExecution.update({
       where: { id: execution.id },
       data: {
         automationResult: handlerResult,
         executionStatus: nextStatus,
-        completedAt: nextStatus === "completed" ? new Date() : null,
+        completedAt: null,
       },
     });
 
@@ -1304,6 +1305,34 @@ export async function executeAutomation({ executionId, phase, userId, prisma }) 
         errorMessage: error.message || "执行失败",
       },
     });
+
+    // 执行失败退回本次扣费
+    try {
+      const freshUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { aiCredits: true },
+      });
+      if (freshUser) {
+        await prisma.$transaction([
+          prisma.user.update({
+            where: { id: userId },
+            data: { aiCredits: { increment: cost } },
+          }),
+          prisma.aICreditTransaction.create({
+            data: {
+              userId,
+              type: "REFUND",
+              amount: cost,
+              balanceAfter: freshUser.aiCredits + cost,
+              feature: `automation_${execution.automationType || "execute"}_refund`,
+              description: `自动执行失败退款（${phase}）`,
+            },
+          }),
+        ]);
+      }
+    } catch (refundError) {
+      console.error("[automation] 执行失败退款出错:", refundError);
+    }
 
     const wrapped = new Error(error.message || "执行失败");
     wrapped.status = error.status || 500;

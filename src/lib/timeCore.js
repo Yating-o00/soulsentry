@@ -194,9 +194,9 @@ export function normalizeTimeRange(raw = {}, fallbackDate = null) {
     endOfDay: isAllDay,
   });
 
-  // 两者都缺 → 兜底
+  // 两者都缺 → 以创建时刻为基准（+5 分钟），不再默认当天 09:00
   if (!start && !end) {
-    start = normalizeToISO(today, { defaultTime: DEFAULT_TIME });
+    start = new Date(getShanghaiNow().getTime() + 5 * 60000).toISOString();
   }
 
   // 只有结束 → 反推开始

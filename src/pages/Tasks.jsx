@@ -672,6 +672,7 @@ export default function Tasks() {
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
               <SmartGroupSection
@@ -693,6 +694,7 @@ export default function Tasks() {
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
               <SmartGroupSection
@@ -714,6 +716,7 @@ export default function Tasks() {
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
               <SmartGroupSection
@@ -735,6 +738,7 @@ export default function Tasks() {
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
             </div>
           )}

@@ -24,6 +24,7 @@ export default function SmartGroupSection({
   onShare,
   onViewTab,
   onUpdateTask,
+  getAutoExec,
 }) {
   if (!tasks || tasks.length === 0) {
     if (!emptyHint) return null;
@@ -77,6 +78,7 @@ export default function SmartGroupSection({
             onShare={() => onShare(task)}
             onViewTab={(tab) => onViewTab(task, tab)}
             onUpdateTask={onUpdateTask}
+            autoExec={getAutoExec ? getAutoExec(task) : undefined}
           />
         ))}
       </div>

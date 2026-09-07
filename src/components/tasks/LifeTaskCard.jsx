@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
 import { 
@@ -55,18 +56,43 @@ export default function LifeTaskCard({
   const [execStateOverride, setExecStateOverride] = useState(null);
   const [execIgnored, setExecIgnored] = useState(false);
   const [execBusy, setExecBusy] = useState(false);
+  const queryClient = useQueryClient();
   const execState = execStateOverride || autoExec?.state;
 
-  // 验收：只确认产物，不完成约定本身
+  // 验收：确认产物，服务端会同步把关联约定标为完成
   const handleExecAccept = async (e) => {
     e?.stopPropagation();
     if (!autoExec?.executionId || execBusy) return;
     setExecBusy(true);
     try {
-      await base44.entities.TaskExecution.update(autoExec.executionId, { execution_status: "completed" });
+      await base44.entities.TaskExecution.update(autoExec.executionId, {
+        execution_status: "completed",
+        user_feedback: { rating: 5, comment: "验收通过", rated_at: new Date().toISOString() }
+      });
       setExecStateOverride('done');
+      toast.success("已验收，约定已完成");
+      // 约定状态已由服务端更新，刷新任务列表与执行单让卡片状态同步
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
     } catch (err) {
       toast.error("验收失败：" + (err?.message || err));
+    } finally {
+      setExecBusy(false);
+    }
+  };
+
+  // 有问题：只写反馈，不传 execution_status，约定保持待处理，执行单仍待验收
+  const handleExecFeedback = async (e) => {
+    e?.stopPropagation();
+    if (!autoExec?.executionId || execBusy) return;
+    setExecBusy(true);
+    try {
+      await base44.entities.TaskExecution.update(autoExec.executionId, {
+        user_feedback: { rating: 2, comment: "用户标记有问题", rated_at: new Date().toISOString() }
+      });
+      toast.success("已记录反馈，约定保留待处理");
+    } catch (err) {
+      toast.error("反馈失败：" + (err?.message || err));
     } finally {
       setExecBusy(false);
     }
@@ -819,7 +845,7 @@ export default function LifeTaskCard({
                         <div className="flex items-center gap-2 min-w-0">
                             <Bot className="w-4 h-4 text-[#384877] flex-shrink-0" />
                             <span className="text-xs font-semibold text-slate-800 truncate">
-                                自动执行 · {autoExec.label}
+                                智能执行 · {autoExec.label}
                             </span>
                             <span className="text-[11px] text-slate-400 whitespace-nowrap">
                                 {execState === 'ready' && "已预执行，待验收"}
@@ -863,12 +889,20 @@ export default function LifeTaskCard({
                                 </button>
                                 <button
                                     type="button"
+                                    className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
+                                    onClick={handleExecFeedback}
+                                    disabled={execBusy}
+                                >
+                                    有问题
+                                </button>
+                                <button
+                                    type="button"
                                     className="flex items-center gap-1 text-[11px] font-medium text-white bg-[#384877] hover:bg-[#2d3a60] px-3 py-1.5 rounded-lg transition-all disabled:opacity-60"
                                     onClick={handleExecAccept}
                                     disabled={execBusy}
                                 >
                                     {execBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                                    验收
+                                    验收，没问题
                                 </button>
                             </>
                         )}

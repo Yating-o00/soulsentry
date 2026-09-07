@@ -185,7 +185,7 @@ export function SnoozeSheet({ task, onClose, onConfirm }) {
   );
 }
 
-export function ExecPreview({ task, analysis, onClose, onApprove }) {
+export function ExecPreview({ task, analysis, onClose, onApprove, onFeedback }) {
   const ax = analysis?.autoExec;
   const [sent, setSent] = useState(false);
 
@@ -196,6 +196,10 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
     setTimeout(() => {
       onApprove(task);
     }, 400);
+  };
+
+  const handleFeedback = () => {
+    onFeedback(task);
   };
 
   return (
@@ -213,7 +217,7 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
       >
         <SheetHeader
           title={ax.previewTitle}
-          sub={`自动执行 · ${ax.label} · 信任度 ${ax.trust}%（${ax.trustLevel}）`}
+          sub={`智能执行 · ${ax.label} · 信任度 ${ax.trust}%（${ax.trustLevel}）`}
           onClose={onClose}
         />
 
@@ -255,7 +259,7 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
               }}
             >
               <IconCheck size={24} color={theme.seal} />
-              <Text style={{ fontSize: "28rpx", color: theme.seal }}>已验收完成</Text>
+              <Text style={{ fontSize: "28rpx", color: theme.seal }}>已验收，约定已完成</Text>
             </View>
           ) : (
             <View style={{ marginTop: "28rpx", display: "flex", gap: "16rpx" }}>
@@ -274,11 +278,11 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
               >
                 <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
                   <IconSend size={22} color={theme.paper} />
-                  <Text style={{ color: theme.paper, fontSize: "26rpx" }}>验收</Text>
+                  <Text style={{ color: theme.paper, fontSize: "26rpx" }}>验收，没问题</Text>
                 </View>
               </Button>
               <Button
-                onClick={onClose}
+                onClick={handleFeedback}
                 style={{
                   flex: 1,
                   height: "80rpx",
@@ -293,7 +297,7 @@ export function ExecPreview({ task, analysis, onClose, onApprove }) {
               >
                 <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
                   <IconPencil size={22} color={theme.inkSecondary} />
-                  <Text style={{ color: theme.inkSecondary, fontSize: "26rpx" }}>修改</Text>
+                  <Text style={{ color: theme.inkSecondary, fontSize: "26rpx" }}>有问题</Text>
                 </View>
               </Button>
               <Button

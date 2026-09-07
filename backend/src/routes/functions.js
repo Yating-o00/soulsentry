@@ -5,6 +5,7 @@ import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { parseTaskInput } from "../services/parseTaskInput.js";
+import { getUserHabitProfile } from "../services/habitProfile.js";
 import { buildHeartSignFallback, detectVault, detectCrisis } from "../services/heartSignFallback.js";
 import { executeAutomation } from "../services/executeAutomation.js";
 import { sendTestPush } from "../services/reminderSender.js";
@@ -155,7 +156,33 @@ function getTaskLocation(task) {
   return null;
 }
 
-function buildAutoExec(task, executions) {
+// 信任度动态评分：按用户按 automation_type 统计最近执行历史
+// 公式（移植海外版 getAutomationTrust）：成功率×60 + 平均评分/5×40（无评分按 3.5 计）
+// 样本 <3 条返回 null，调用方沿用默认值
+function computeTrustScores(executions) {
+  const byType = new Map();
+  for (const e of executions || []) {
+    const t = e?.automation_type || "none";
+    if (t === "none") continue;
+    if (!byType.has(t)) byType.set(t, []);
+    byType.get(t).push(e);
+  }
+  const scores = new Map();
+  for (const [type, list] of byType) {
+    const recent = list.slice(0, 50);
+    const finished = recent.filter((e) => ["completed", "failed"].includes(String(e.execution_status)));
+    if (finished.length < 3) continue;
+    const successRate = finished.filter((e) => e.execution_status === "completed").length / finished.length;
+    const ratings = recent
+      .map((e) => (e.user_feedback && typeof e.user_feedback === "object" ? e.user_feedback.rating : null))
+      .filter((r) => typeof r === "number" && r >= 1 && r <= 5);
+    const avgRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 3.5;
+    scores.set(type, Math.max(5, Math.min(99, Math.round(successRate * 60 + (avgRating / 5) * 40))));
+  }
+  return scores;
+}
+
+function buildAutoExec(task, executions, trustScores) {
   const done = task.status === "completed" || task.status === "done" || task.status === "archived";
   if (done) return undefined;
   const list = (executions || []).filter(
@@ -181,6 +208,12 @@ function buildAutoExec(task, executions) {
 
   let trust = exec.requires_approval ? 78 : 92;
   let trustLevel = exec.requires_approval ? "确认后执行" : "自动执行";
+  // 有历史样本时改用动态信任分（越用越准）
+  const dynamicTrust = trustScores instanceof Map ? trustScores.get(kind) : null;
+  if (typeof dynamicTrust === "number") {
+    trust = dynamicTrust;
+    trustLevel = trust < 60 ? "偏谨慎" : trust <= 80 ? "稳步" : "高信任";
+  }
   let state = "ready";
   if (status === "running" || status === "in_progress" || status === "executing" || status === "pending") {
     state = "running";
@@ -357,12 +390,12 @@ async function buildAiNote(task, subtasks, autoExec) {
   }
 }
 
-async function analyzeTask(task, executions, subtasks) {
+async function analyzeTask(task, executions, subtasks, trustScores) {
   const now = new Date();
   const timeLabel = buildTaskTimeLabel(task, now);
   const recurring = getTaskRecurringLabel(task);
   const location = getTaskLocation(task);
-  const autoExec = buildAutoExec(task, executions);
+  const autoExec = buildAutoExec(task, executions, trustScores);
   const aiNote = await buildAiNote(task, subtasks, autoExec);
   const subPromises = (subtasks || []).map((s) => ({
     id: s.id,
@@ -1227,11 +1260,13 @@ functionsRouter.post("/:name", async (req, res) => {
         const savedLocations = await prisma.savedLocation.findMany({
           where: { userId: req.user.id, isActive: true }
         });
+        const habitProfileText = await getUserHabitProfile(req.user.id, prisma);
         const data = await parseTaskInput({
           input: String(payload.input).trim(),
           date: payload.date || toYmd(new Date()),
           savedLocations,
-          currentCoords
+          currentCoords,
+          habitProfileText
         });
         return res.json(data);
       } catch (error) {
@@ -2505,6 +2540,7 @@ functionsRouter.post("/:name", async (req, res) => {
       const subtaskMap = isPlainObject(payload.subtasks) ? payload.subtasks : {};
       console.log(`[analyzeTasks] received tasks=${tasks.length} executions=${executions.length}`);
       const result = {};
+      const trustScores = computeTrustScores(executions);
 
       // 限制并发，避免大量任务同时调用 Kimi 导致超时/限流
       const poolLimit = 2;
@@ -2513,7 +2549,7 @@ functionsRouter.post("/:name", async (req, res) => {
 
       for (const task of tasks) {
         if (!task?.id) continue;
-        const promise = analyzeTask(task, executions, subtaskMap[task.id] || []).then(
+        const promise = analyzeTask(task, executions, subtaskMap[task.id] || [], trustScores).then(
           (analysis) => { result[task.id] = analysis; },
           (err) => {
             console.error(`[analyzeTasks] analyzeTask failed for task ${task.id}:`, err?.message || err);

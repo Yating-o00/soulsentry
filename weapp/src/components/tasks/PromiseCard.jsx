@@ -336,7 +336,7 @@ export default function PromiseCard({
                 <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
                   <IconBot size={28} color={theme.primary} />
                   <Text style={{ fontSize: "26rpx", color: theme.ink, fontWeight: 500 }}>
-                    自动执行 · {analysis.autoExec.label}
+                    智能执行 · {analysis.autoExec.label}
                   </Text>
                   <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, letterSpacing: "2rpx" }}>
                     {analysis.autoExec.state === "ready" && "已预执行，待验收"}

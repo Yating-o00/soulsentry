@@ -193,14 +193,36 @@ export default function Tasks() {
     try {
       const autoExec = analysisMap[task.id]?.autoExec;
       if (autoExec?.executionId) {
-        // 验收执行单产物：只确认产物，不自动完成约定本身
-        await patch(`/task-executions/${autoExec.executionId}`, { execution_status: "completed" });
-        showToast("已验收 · 产物已确认");
+        // 验收执行单产物：服务端会同步把关联约定标为完成
+        await patch(`/task-executions/${autoExec.executionId}`, {
+          execution_status: "completed",
+          user_feedback: { rating: 5, comment: "验收通过", rated_at: new Date().toISOString() },
+        });
+        showToast("已验收，约定已完成");
       } else {
         await patch(`/tasks/${task.id}`, { status: "completed" });
         showToast("已验收 · 交给心栈执行，结果会回流到约定");
       }
       setReviewTask(null);
+      fetchData();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  // 有问题：只写反馈，不传 execution_status，约定保持待处理，执行单仍待验收
+  const handleFeedback = async (task) => {
+    try {
+      const executionId = analysisMap[task.id]?.autoExec?.executionId;
+      if (!executionId) {
+        showToast("未找到执行单，无法记录反馈");
+        return;
+      }
+      await patch(`/task-executions/${executionId}`, {
+        user_feedback: { rating: 2, comment: "用户标记有问题", rated_at: new Date().toISOString() },
+      });
+      setReviewTask(null);
+      showToast("已记录反馈，约定保留待处理");
       fetchData();
     } catch (err) {
       // handled globally
@@ -455,6 +477,7 @@ export default function Tasks() {
           analysis={mergeAnalysis(reviewTask, analysisMap[reviewTask.id])}
           onClose={() => setReviewTask(null)}
           onApprove={handleApprove}
+          onFeedback={handleFeedback}
         />
       )}
 

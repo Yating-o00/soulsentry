@@ -175,6 +175,45 @@ taskExecutionsRouter.patch("/:id", async (req, res) => {
     }
   });
 
+  // 验收通过：约定同步算完成，评价/行为数据落库（数据分析基础）
+  if (isAcceptance) {
+    try {
+      const taskId = execution.taskId;
+      if (taskId) {
+        await prisma.task.updateMany({
+          where: { id: taskId, userId: req.user.id, status: { not: "DONE" } },
+          data: { status: "DONE", completedAt: new Date() }
+        });
+        await prisma.taskCompletion.create({
+          data: {
+            userId: req.user.id,
+            taskId,
+            status: "completed",
+            completedAt: new Date(),
+            note: "智能执行验收通过"
+          }
+        });
+      }
+      const feedback = execution.userFeedback && typeof execution.userFeedback === "object"
+        ? execution.userFeedback
+        : {};
+      await prisma.userBehavior.create({
+        data: {
+          userId: req.user.id,
+          taskId: taskId || undefined,
+          eventType: "automation_accepted",
+          metadata: {
+            executionId: execution.id,
+            automation_type: execution.automationType || "",
+            rating: feedback.rating ?? null
+          }
+        }
+      });
+    } catch (err) {
+      console.error("[taskExecutions] 验收后续处理失败:", err?.message || err);
+    }
+  }
+
   return res.json(serializeTaskExecution(execution));
 });
 

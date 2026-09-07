@@ -327,13 +327,16 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
     }
   };
 
-  // 待验收：用户只确认产物，不完成约定本身；服务端会自动写 completedAt
+  // 待验收：确认产物并附验收反馈；服务端会同步把关联约定标为完成（status=completed + completedAt）
   const handleAccept = async () => {
     setAccepting(true);
     try {
-      await base44.entities.TaskExecution.update(execution.id, { execution_status: "completed" });
+      await base44.entities.TaskExecution.update(execution.id, {
+        execution_status: "completed",
+        user_feedback: { rating: 5, comment: "验收通过", rated_at: new Date().toISOString() }
+      });
       await reloadExecution();
-      toast.success("已验收");
+      toast.success("已验收，约定已完成");
       refresh();
     } catch (e) {
       toast.error("验收失败：" + e.message);

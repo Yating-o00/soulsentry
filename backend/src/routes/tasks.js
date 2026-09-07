@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { maybeAutoExecute } from "../services/autoAutomation.js";
+import { maybeGenerateRealityChain } from "../services/realityChain.js";
 
 export const tasksRouter = Router();
 
@@ -311,6 +312,8 @@ tasksRouter.post("/", async (req, res) => {
 
   // 主动检测可自动执行的部分，异步执行后待用户验收（不阻塞创建）
   void maybeAutoExecute(task, req.user.id, prisma);
+  // 推导现实事项链路并挂载为子约定（fire-and-forget）
+  void maybeGenerateRealityChain(task, req.user.id, prisma);
 
   return res.status(201).json(serializeTask(task));
 });

@@ -346,7 +346,7 @@ function parseExplicitTimeLocal(text, baseDate = new Date()) {
   return null;
 }
 
-export async function parseTaskInput({ input, date, savedLocations = [], currentCoords = null }) {
+export async function parseTaskInput({ input, date, savedLocations = [], currentCoords = null, habitProfileText = "" }) {
   const now = new Date();
   const fallbackDate = date || toYmd(now);
   const text = String(input || "").trim();
@@ -386,6 +386,9 @@ export async function parseTaskInput({ input, date, savedLocations = [], current
   const candidateEventText = spatiotemporal.event_type
     ? `事件类型候选：${spatiotemporal.event_type}`
     : "事件类型候选：未识别";
+  const habitText = habitProfileText
+    ? `用户习惯参考（来自该用户历史完成数据，仅用于推断时段偏好，不得覆盖用户明确说出的时间）：\n${habitProfileText}\n`
+    : "";
 
   let kimiResult = null;
   let kimiSucceeded = false;
@@ -400,14 +403,16 @@ export async function parseTaskInput({ input, date, savedLocations = [], current
 当前时间：${currentTime}
 ${candidateLocationText}
 ${candidateEventText}
+${habitText}
 
 请解析约定信息。注意：
-1. 如果用户说"X分钟之后"、"明天下午3点"、"三天后"、"下周五晚上8点"等，请准确计算 reminder_time。
+1. 所有相对时间（"X分钟之后"、"明天下午3点"、"三天后"、"下周五晚上8点"）一律以上面给出的当前日期/时间为基准计算，不要自己假设其他基准。
 2. 如果用户只说了提醒时间但没说明截止时间，end_time 默认比 reminder_time 晚 5 分钟。
-3. 时间必须使用 ISO 8601 格式并包含 +08:00 时区，例如 "2026-08-26T14:35:00+08:00"。
-4. 从输入中提取地点（location）、地点类型（location_type）和事件类型（event_type）。
-5. 如果用户没有明确说地点，请使用上面给出的"地点候选"；如果候选也没有，返回空字符串。
-6. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
+3. 如果用户没有指明任何具体时间（例如"提醒我吃药"、"整理一下文件"），reminder_time 直接使用上面的当前时间作为创建时间，end_time = reminder_time + 5 分钟，禁止编造时间。
+4. 时间必须使用 ISO 8601 格式并包含 +08:00 时区，例如 "2026-08-26T14:35:00+08:00"。
+5. 从输入中提取地点（location）、地点类型（location_type）和事件类型（event_type）。
+6. 如果用户没有明确说地点，请使用上面给出的"地点候选"；如果候选也没有，返回空字符串。
+7. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
         systemPrompt: "你是 SoulSentry 的约定解析器。把中文自然语言输入转成可创建的约定字段。严格返回 JSON。",
         responseJsonSchema: schema,
         temperature: 0.2
@@ -436,14 +441,25 @@ ${candidateEventText}
     }
   }
 
-  // 本地显式时间兜底（Kimi 失败时）
-  const localExplicit = !explicitTime ? parseExplicitTimeLocal(text) : null;
+  // 本地显式时间解析（同时用于校验 Kimi 的相对时间计算）
+  const localExplicit = parseExplicitTimeLocal(text);
 
-  // 常识时间兜底
+  // Kimi 时间与本地显式解析偏差 >2 小时，判定 Kimi 相对时间算错（时区/基准问题），采用本地结果
+  if (explicitTime && localExplicit) {
+    const kimiT = new Date(`${explicitTime.date}T${explicitTime.time}:00`);
+    const localT = new Date(`${localExplicit.date}T${localExplicit.time}:00`);
+    const diffMs = Math.abs(kimiT.getTime() - localT.getTime());
+    if (diffMs > 2 * 60 * 60 * 1000) {
+      console.warn(`[parseTaskInput] Kimi 时间与本地解析偏差 ${Math.round(diffMs / 3600000)}h，采用本地结果 ${localExplicit.date} ${localExplicit.time}`);
+      explicitTime = localExplicit;
+    }
+  }
+
+  // 常识规则：仅用于事件类型/分类/优先级推断，不再作为时间兜底（无明确时间以创建时间为基准）
   const commonSense = applyCommonSenseTime(text);
 
-  // 最终选择时间：Kimi 显式 > 本地显式 > 常识 > 当前时间+5分钟
-  const chosen = explicitTime || localExplicit || commonSense || applyDefaultTime();
+  // 最终选择时间：显式（Kimi 校验后）> 本地显式 > 创建时间+5分钟
+  const chosen = explicitTime || localExplicit || applyDefaultTime();
 
   const reminderISO = toISODateTime(chosen.date, chosen.time);
 

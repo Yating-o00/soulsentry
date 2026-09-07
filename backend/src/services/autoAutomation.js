@@ -4,7 +4,7 @@ import {
   AUTOMATION_EXECUTE_COSTS,
 } from "./executeAutomation.js";
 
-const MIN_CONTENT_CHARS = 12;
+const MIN_CONTENT_CHARS = 6;
 
 function isDoneStatus(status) {
   return ["completed", "done", "archived", "deleted"].includes(String(status || "").toLowerCase());
@@ -29,11 +29,17 @@ export async function maybeAutoExecute(task, userId, prisma) {
       where: { id: userId },
       select: { aiCredits: true, email: true },
     });
-    if (!user || isDemoUser(user)) return;
+    if (!user || isDemoUser(user)) {
+      console.log(`[autoAutomation] task=${task.id} 跳过：用户不存在或为演示账户`);
+      return;
+    }
 
     // 内容不足以判定可自动执行的类型则跳过
     const automationType = detectAutomationTypeFromInput(content);
-    if (!automationType) return;
+    if (!automationType) {
+      console.log(`[autoAutomation] task=${task.id} 跳过：未识别到可自动执行类型`);
+      return;
+    }
 
     // 副作用型（会真实创建日程/子任务）不主动执行，交由用户手动发起
     if (automationType === "calendar_event") return;
@@ -52,7 +58,10 @@ export async function maybeAutoExecute(task, userId, prisma) {
     // 额度预检：plan + execute 两阶段费用
     const planCost = AUTOMATION_EXECUTE_COSTS.plan ?? 5;
     const executeCost = AUTOMATION_EXECUTE_COSTS[automationType] ?? AUTOMATION_EXECUTE_COSTS.default;
-    if (user.aiCredits < planCost + executeCost) return;
+    if (user.aiCredits < planCost + executeCost) {
+      console.log(`[autoAutomation] task=${task.id} type=${automationType} 跳过：点数不足（${user.aiCredits} < ${planCost + executeCost}）`);
+      return;
+    }
 
     const execution = await prisma.taskExecution.create({
       data: {

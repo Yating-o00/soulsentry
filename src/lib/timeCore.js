@@ -189,6 +189,10 @@ export function normalizeTimeRange(raw = {}, fallbackDate = null) {
   let start = normalizeToISO(raw.reminder_time, {
     defaultTime: DEFAULT_TIME,
   });
+  // AI 对"未指明时间"的输入常返回纯日期（当天），此时以创建时刻为基准，而非默认 09:00
+  if (start && isDateOnly(raw.reminder_time) && String(raw.reminder_time) === today) {
+    start = new Date(getShanghaiNow().getTime() + 5 * 60000).toISOString();
+  }
   let end = normalizeToISO(raw.end_time, {
     defaultTime: DEFAULT_TIME,
     endOfDay: isAllDay,

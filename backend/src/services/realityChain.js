@@ -1,7 +1,7 @@
 import { invokeKimiText } from "../lib/kimi.js";
 import { getUserHabitProfile } from "./habitProfile.js";
 
-const MIN_CONTENT_CHARS = 12;
+const MIN_CONTENT_CHARS = 6;
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -25,6 +25,8 @@ export async function maybeGenerateRealityChain(task, userId, prisma) {
     // 已有子约定则不重复生成
     const childCount = await prisma.task.count({ where: { parentTaskId: task.id } });
     if (childCount > 0) return;
+
+    console.log(`[realityChain] task=${task.id} 开始生成事项链路（${content.length} 字）`);
 
     const habitProfileText = await getUserHabitProfile(userId, prisma);
     const habitBlock = habitProfileText

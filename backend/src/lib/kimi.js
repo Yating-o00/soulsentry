@@ -90,7 +90,7 @@ export async function callKimiChat({
   temperature = 0.3,
   maxTokens = 4000,
   tools,
-  fetchTimeout = 12000
+  fetchTimeout = 30000
 }) {
   const endpoints = getEndpointConfigs();
   const candidateModels = model

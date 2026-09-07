@@ -297,6 +297,8 @@ export function detectAutomationTypeFromInput(text) {
   // 按优先级匹配：内容生产/整理意图优先于时间约定，避免"会议跟进邮件"
   // "会议要点整理"等被 calendar_event 的"会议"误触发。
   const patterns = [
+    // 0. 泛化兜底：任何"邮件"字样都优先按邮件草稿处理（本规则最先匹配）
+    { type: "email_draft", regex: /邮件|e-?mail/i },
     // 1. 邮件：必须优先，"给张总发一封会议跟进邮件"不应被 calendar 截胡
     { type: "email_draft", regex: /写邮件|发邮件|邮件草稿|回复邮件|跟进邮件|邮件主题|邮件正文|给.*(?:发|写).*邮|致.*的.*邮|写.*邮|发.*邮/ },
     // 2. PPT / 演示

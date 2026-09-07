@@ -24,6 +24,10 @@ import CombineParentDialog from "../components/tasks/CombineParentDialog";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
+// analyzeTasks 调用去抖（模块级，避免对近百条卡片反复调 Kimi 造成并发风暴）
+let lastAnalyzeSig = "";
+let lastAnalyzeAt = 0;
+
 export default function Tasks() {
   const { t } = useTranslation();
   const [viewMode, setViewMode] = useState("overview"); // 'overview', 'milestone', 'life'
@@ -87,6 +91,12 @@ export default function Tasks() {
     roots.forEach(t => {
       subMap[t.id] = allTasks.filter(s => s.parent_task_id === t.id && !s.deleted_at);
     });
+    // 去抖：数据指纹没变且 120s 内调用过则跳过，避免对近百条卡片反复调 Kimi 造成并发风暴
+    const signature = JSON.stringify([
+      roots.map(t => `${t.id}:${t.updated_date || ""}`),
+      allExecutions.map(e => `${e.id}:${e.execution_status}`)
+    ]);
+    if (signature === lastAnalyzeSig && Date.now() - lastAnalyzeAt < 120000) return;
     let cancelled = false;
     (async () => {
       try {
@@ -96,7 +106,11 @@ export default function Tasks() {
           subtasks: subMap
         });
         const result = res?.data;
-        if (!cancelled) setAutoExecMap(result && typeof result === 'object' ? result : {});
+        if (!cancelled) {
+          lastAnalyzeSig = signature;
+          lastAnalyzeAt = Date.now();
+          setAutoExecMap(result && typeof result === 'object' ? result : {});
+        }
       } catch (e) {
         console.warn('analyzeTasks 分析失败', e);
         if (!cancelled) setAutoExecMap({});

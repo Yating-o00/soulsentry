@@ -89,6 +89,7 @@ export default function PromiseCard({
   onReview,
   onSubtaskToggle,
   onShare,
+  onDelegate,
 }) {
   const done = task.status === "completed" || task.status === "done" || task.status === "archived";
   const p = priorityMark[task.priority] || priorityMark.medium;
@@ -132,6 +133,11 @@ export default function PromiseCard({
   const handleFeedback = (e) => {
     e.stopPropagation();
     Taro.showToast({ title: "已反馈给心栈", icon: "none" });
+  };
+
+  const handleDelegate = (e) => {
+    e.stopPropagation();
+    if (onDelegate) onDelegate(task);
   };
 
   return (
@@ -275,7 +281,10 @@ export default function PromiseCard({
           )}
 
           {/* sub promises */}
-          {subtasks && subtasks.length > 0 && (
+          {subtasks && subtasks.length > 0 && (() => {
+            const subDoneCount = subtasks.filter((s) => s.status === "completed" || s.status === "done").length;
+            const progress = Math.round((subDoneCount / subtasks.length) * 100);
+            return (
             <View
               style={{
                 marginTop: "24rpx",
@@ -283,6 +292,17 @@ export default function PromiseCard({
                 paddingTop: "20rpx",
               }}
             >
+              {/* 子约定进度摘要：一眼可见完成度 */}
+              <View style={{ display: "flex", alignItems: "center", gap: "16rpx", marginBottom: "16rpx" }}>
+                <IconChevronRight size={18} color={theme.primary} />
+                <Text style={{ fontSize: "24rpx", color: theme.inkSecondary, fontWeight: 500 }}>
+                  子约定 {subDoneCount}/{subtasks.length}
+                </Text>
+                <View style={{ flex: 1, height: "8rpx", borderRadius: "4rpx", background: theme.waterFaint || "rgba(91,130,160,0.15)", overflow: "hidden" }}>
+                  <View style={{ width: `${progress}%`, height: "100%", borderRadius: "4rpx", background: theme.primary }} />
+                </View>
+                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>{progress}%</Text>
+              </View>
               {subtasks.map((s) => {
                 const subDone = s.status === "completed" || s.status === "done";
                 return (
@@ -318,6 +338,41 @@ export default function PromiseCard({
                   </View>
                 );
               })}
+            </View>
+            );
+          })()}
+
+          {/* 智能执行入口：尚无执行单时可手动让心栈先执行 */}
+          {!analysis?.autoExec && !done && onDelegate && (
+            <View
+              style={{
+                marginTop: "24rpx",
+                border: `1rpx dashed ${theme.water}`,
+                background: "rgba(91, 130, 160, 0.08)",
+                padding: "20rpx",
+                borderRadius: "8rpx",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "16rpx",
+              }}
+            >
+              <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
+                <IconBot size={28} color={theme.primary} />
+                <Text style={{ fontSize: "26rpx", color: theme.ink, fontWeight: 500 }}>智能执行</Text>
+                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>让心栈把能做的先做了</Text>
+              </View>
+              <View
+                onClick={handleDelegate}
+                style={{
+                  border: `1rpx solid ${theme.primary}`,
+                  background: theme.card,
+                  padding: "8rpx 20rpx",
+                  borderRadius: "24rpx",
+                }}
+              >
+                <Text style={{ fontSize: "24rpx", color: theme.primary, fontWeight: 500 }}>让心栈先执行</Text>
+              </View>
             </View>
           )}
 

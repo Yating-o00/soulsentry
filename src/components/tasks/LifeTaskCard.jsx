@@ -116,6 +116,29 @@ export default function LifeTaskCard({
       setExecBusy(false);
     }
   };
+
+  // 让心栈先执行：尚无执行单时手动委托，创建执行单并异步执行
+  const handleExecDelegate = async (e) => {
+    e?.stopPropagation();
+    if (execBusy) return;
+    setExecBusy(true);
+    try {
+      const res = await base44.functions.invoke('delegateTaskAutomation', { task_id: task.id });
+      const data = res?.data;
+      if (data?.status === 'started' || data?.status === 'existing') {
+        toast.success("心栈开始执行，完成后可验收");
+        setExecStateOverride('running');
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      } else {
+        toast.error(data?.reason || "未识别到可自动执行的内容");
+      }
+    } catch (err) {
+      toast.error("委托失败：" + (err?.message || err));
+    } finally {
+      setExecBusy(false);
+    }
+  };
+
   const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   const dragEnabled = !isSelectionMode && !!onReparent;
@@ -832,6 +855,28 @@ export default function LifeTaskCard({
                             推迟
                         </button>
                     </SnoozePopover>
+                </div>
+            )}
+
+            {/* 3.5 智能执行入口：尚无执行单时，可手动让心栈先执行 */}
+            {!autoExec && !completed && !execIgnored && (
+                <div
+                    className="mt-3 rounded-2xl px-3.5 py-2.5 border border-dashed border-[#c7d2fe] bg-[#eef2ff]/40 flex items-center justify-between gap-3"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Bot className="w-4 h-4 text-[#384877] flex-shrink-0" />
+                        <span className="text-xs font-semibold text-slate-800">智能执行</span>
+                        <span className="text-[11px] text-slate-400 truncate">让心栈把能做的先做了</span>
+                    </div>
+                    <button
+                        type="button"
+                        className="text-[11px] font-medium text-[#384877] px-2.5 py-1 rounded-lg bg-white/80 hover:bg-white transition-all whitespace-nowrap flex-shrink-0"
+                        onClick={handleExecDelegate}
+                        disabled={execBusy}
+                    >
+                        让心栈先执行 →
+                    </button>
                 </div>
             )}
 

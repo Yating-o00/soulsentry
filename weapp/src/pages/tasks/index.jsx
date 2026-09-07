@@ -229,6 +229,22 @@ export default function Tasks() {
     }
   };
 
+  // 让心栈先执行：手动委托智能执行，返回跳过原因时提示用户
+  const handleDelegate = async (task) => {
+    try {
+      const res = await post("/functions/delegateTaskAutomation", { task_id: task.id });
+      const data = isPlainObject(res) ? res : {};
+      if (data.status === "started" || data.status === "existing") {
+        showToast("心栈开始执行，完成后可验收");
+        fetchData();
+      } else {
+        showToast(data.reason || "未识别到可自动执行的内容");
+      }
+    } catch (err) {
+      // handled globally
+    }
+  };
+
   const handleShare = async (task) => {
     try {
       const share = await post(`/public/share/generate/task/${task.id}`);
@@ -387,6 +403,7 @@ export default function Tasks() {
                       onComplete={handleComplete}
                       onSnooze={setSnoozeTask}
                       onReview={setReviewTask}
+                      onDelegate={handleDelegate}
                       onSubtaskToggle={handleSubtaskToggle}
                       onShare={handleShare}
                     />

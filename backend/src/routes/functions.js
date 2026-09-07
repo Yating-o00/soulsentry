@@ -6,6 +6,7 @@ import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { parseTaskInput } from "../services/parseTaskInput.js";
 import { getUserHabitProfile } from "../services/habitProfile.js";
+import { delegateAutoExecute } from "../services/autoAutomation.js";
 import { buildHeartSignFallback, detectVault, detectCrisis } from "../services/heartSignFallback.js";
 import { executeAutomation } from "../services/executeAutomation.js";
 import { sendTestPush } from "../services/reminderSender.js";
@@ -1276,6 +1277,21 @@ functionsRouter.post("/:name", async (req, res) => {
         }
         return res.status(502).json({ error: "AI_SERVICE_ERROR", message: `AI 解析失败：${message}` });
       }
+    }
+
+    if (name === "delegateTaskAutomation") {
+      const taskId = String(payload.task_id || "").trim();
+      if (!taskId) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 task_id" });
+      }
+      const task = await prisma.task.findFirst({
+        where: { id: taskId, userId: req.user.id }
+      });
+      if (!task) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "约定不存在" });
+      }
+      const result = await delegateAutoExecute(task, req.user.id, prisma);
+      return res.json(result);
     }
 
     if (name === "callAI") {

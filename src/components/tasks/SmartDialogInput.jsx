@@ -125,10 +125,36 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
     return d.toISOString();
   }
 
-  const callAI = async (userText, prevDraft, lastAiReply, locationCtx) => {
+  const buildLocationCtxBlock = (locationCtx) => {
+    if (!locationCtx) return "";
+    const placeMap = {
+      home: "家中", office: "办公室", gym: "健身房", school: "学校",
+      shopping: "购物场所", hospital: "医院", restaurant: "餐厅",
+      other: "外出", unknown: "位置未知",
+    };
+    const placeText = placeMap[locationCtx.current_place_type] || "位置未知";
+    const placeName = locationCtx.current_place_name ? `（${locationCtx.current_place_name}）` : "";
+    let block = `\n【当前位置】${placeText}${placeName}`;
+    block += `\n【当前时间】${locationCtx.current_time}（${locationCtx.is_workday ? "工作日" : "休息日"}）`;
+    if (locationCtx.daily_routine) {
+      const r = locationCtx.daily_routine;
+      const lines = [];
+      if (r.wake_up) lines.push(`起床 ${r.wake_up}`);
+      if (r.leave_home) lines.push(`出门 ${r.leave_home}`);
+      if (r.arrive_office) lines.push(`到办公室 ${r.arrive_office}`);
+      if (r.leave_office) lines.push(`下班 ${r.leave_office}`);
+      if (r.arrive_home) lines.push(`到家 ${r.arrive_home}`);
+      if (r.sleep) lines.push(`睡觉 ${r.sleep}`);
+      if (lines.length > 0) block += `\n【用户日常作息】${lines.join(" → ")}`;
+    }
+    return block;
+  };
+
+  const callAI = async (userText, prevDraft, lastAiReply, locationCtx, isFollowUp = false) => {
     const timeCtx = getTimeContextForAI();
     const nowISO = timeCtx.now_iso;
     const nowLocal = timeCtx.now_local;
+    const ctxBlock = buildLocationCtxBlock(locationCtx);
 
     // 多轮时只保留核心字段，避免 prompt 膨胀导致超时
     const compactDraft = prevDraft
@@ -140,97 +166,77 @@ export default function SmartDialogInput({ value, onChange, onConfirm }) {
           time_reasoning: prevDraft.time_reasoning,
           priority: prevDraft.priority,
           category: prevDraft.category,
+          location: prevDraft.location,
+          location_type: prevDraft.location_type,
           tags: prevDraft.tags,
-          subtasks: (prevDraft.subtasks || []).map((s) => ({ title: s.title, priority: s.priority }))
+          subtasks: (prevDraft.subtasks || []).map((s) => ({
+            title: s.title,
+            reminder_time: s.reminder_time,
+            priority: s.priority
+          }))
         }
       : null;
 
-    // 构建位置/作息上下文区块
-    let ctxBlock = "";
-    if (locationCtx) {
-      const placeMap = {
-        home: "家中", office: "办公室", gym: "健身房", school: "学校",
-        shopping: "购物场所", hospital: "医院", restaurant: "餐厅",
-        other: "外出（非常用地点）", unknown: "位置未知（用户拒绝定位或无匹配）",
-      };
-      const placeText = placeMap[locationCtx.current_place_type] || "位置未知";
-      const placeName = locationCtx.current_place_name ? `（${locationCtx.current_place_name}）` : "";
-      ctxBlock += `\n【当前位置】${placeText}${placeName}`;
-      ctxBlock += `\n【当前时间】${locationCtx.current_time}（${locationCtx.is_workday ? "工作日" : "休息日"}）`;
-      if (locationCtx.daily_routine) {
-        const r = locationCtx.daily_routine;
-        const lines = [];
-        if (r.wake_up) lines.push(`起床 ${r.wake_up}`);
-        if (r.leave_home) lines.push(`出门 ${r.leave_home}`);
-        if (r.arrive_office) lines.push(`到办公室 ${r.arrive_office}`);
-        if (r.leave_office) lines.push(`下班 ${r.leave_office}`);
-        if (r.arrive_home) lines.push(`到家 ${r.arrive_home}`);
-        if (r.sleep) lines.push(`睡觉 ${r.sleep}`);
-        if (lines.length > 0) ctxBlock += `\n【用户日常作息】${lines.join(" → ")}`;
-      }
-    }
+    let prompt;
+    if (isFollowUp) {
+      // 后续轮次：精简 prompt，只保留必要上下文和更新规则
+      prompt = `你是任务结构化助手。用户正在多轮补充一个已有约定，请基于"已有解析"和"本轮输入"更新，返回完整更新后的约定 JSON。
 
-    const prompt = `你是一个任务结构化助手。用户用自然语言描述任务，可能分多轮补充修正。请基于"已有解析"、"上一轮 AI 提问"和"本轮用户输入"，更新结构化任务。
+当前时间（ISO/UTC）: ${nowISO}
+当前时间（北京时间）: ${nowLocal}${ctxBlock}
+
+已有解析：
+${JSON.stringify(compactDraft, null, 2)}
+
+本轮用户输入："${userText}"
+
+关键规则：
+1. 用户的新输入是补充/修正，优先作为新字段或子约定处理，**不要替换已有标题**。
+2. "提前发邮件"、"准备资料"、"提醒大家"等表述 → 作为 subtasks 追加，并把时间设在父约定之前。
+3. 时间解析为 ISO 8601（带 +08:00），相对时间基于当前时间计算。
+4. 时间锚点参考：早上=09:00, 中午=12:00, 下午=15:00, 傍晚=18:00, 晚上=20:00, 深夜=22:00, 凌晨=00:00。
+5. 返回 JSON。`;
+    } else {
+      // 首轮：完整 prompt
+      prompt = `你是一个任务结构化助手。用户用自然语言描述任务。请解析为结构化约定。
 
 ${timeCtx.promptSnippet}
 当前时间（ISO/UTC）: ${nowISO}
 当前时间（北京时间显示）: ${nowLocal}${ctxBlock}
-${compactDraft ? `已有解析：\n${JSON.stringify(compactDraft, null, 2)}` : "（首轮，无已有解析）"}
-${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
 
 本轮用户输入："${userText}"
 
 ⏰ 相对时间处理（最高优先级）：
-- "X分钟后" / "几分钟后" / "马上" / "立刻" → 必须基于"当前时间"精确加 X 分钟
-  - 例：当前 14:30，用户说"两分钟后提醒我" → reminder_time = "2026-08-21T14:32:00+08:00"
+- "X分钟后" / "几分钟后" / "马上" / "立刻" → 当前时间加 X 分钟
 - "X小时后" → 当前时间加 X 小时
-- "半小时后" → 加 30 分钟
-- "一刻钟后" → 加 15 分钟
+- "半小时后" → 加 30 分钟；"一刻钟后" → 加 15 分钟
 
-🤝 拟人化提醒语义（不是死板闹钟）：
-- "提醒我X分钟后做某事" = 在 X 分钟时轻声提醒用户**开始**，并在默认 1 小时后温和**跟进**是否完成或需要延长。
-- 因此：reminder_time = 当前时间 + X；end_time = reminder_time + 1 小时（作为预计用时和跟进窗口）。
-- 如果用户没有明确说截止时间，不要把 end_time 当作硬截止，而是 AI 助手的 check-in 点。
-- 在 time_reasoning 中用一句话说明：先提醒开始，1 小时后再跟进完成情况或帮助延长。
+🤝 提醒语义：
+- "提醒我X分钟后做某事" = X 分钟后提醒开始，默认 1 小时后跟进。
+- reminder_time = 当前时间 + X；end_time = reminder_time + 1 小时。
 
-⚠️ 极其重要的对话规则：
-- 如果"上一轮 AI 提问"是一个**是/否问题**，用户的简短回答（"是/好/要/对/嗯/否/不/不用"）是对该问题的**回答**，绝不可当作任务标题或子任务！
-  - 同意 → 执行上一轮 AI 提议，在 reply 里追问下一步具体细节
-  - 拒绝 → 跳过该设置
-- **已有约定标题时，不要随意替换标题**。用户补充的"提前发邮件"、"准备资料"、"提醒大家"等动作，是对已有约定的**准备步骤/子约定**，必须作为 subtasks 追加，而不是把原约定标题改成这个动作。
-- 当用户说"提前X天/小时做某事"或"先/记得/顺便做某事"，且已有约定存在时 → 作为 subtask，并把 reminder_time 安排在父约定之前。
-- 用户输入是具体内容时，才作为新字段或新子任务处理
-- 不确定时宁可再问一次，也不乱填
+⚠️ 对话规则：
+- 已有约定标题时，不要随意替换标题。
+- "提前发邮件"、"准备资料"、"提醒大家"等是准备步骤/子约定，作为 subtasks 追加。
+- 用户输入是具体内容时，才作为新字段或新子任务处理。
 
 🧠 智能时间推断：
-当用户**没有明确说出时间**（如"路过加油站提醒我加油"、"出门买菜"），你必须结合【当前位置】+【当前时间】+【用户作息】综合推断 reminder_time，不要简单默认 09:00：
-
-★ 顺路型 / 位置触发型任务（含"路过"、"顺便"、"出门"、"下班路上"等）：
-  - 关键：找用户**下一次会经过该地点**的时间窗口
-  - 当前在【家中】→ 推断为下次出门通勤前 15 分钟（参考作息 leave_home，无则默认 08:45）
-  - 当前在【办公室】或【外出】→ 推断为下次回家路上（参考作息 leave_office/arrive_home，无则默认 18:30）
-  - 当前时间已接近通勤时段（差 ≤30 分钟）→ 直接安排在通勤开始时刻
-  - 周末/休息日 → 安排在白天外出常见时段（10:00 或 15:30）
-
-★ 时间锚定型任务：晨跑 7:30 / 午饭 12:00 / 吃药 餐后30分钟 / 学习 20:00 / 睡前 22:00
-
-★ 在 task.time_reasoning 字段（不是 description）用一句中文说明**为什么定在这个时间**（例如"你现在在办公室，下班 18:00 后回家路上会路过"）
+- 无明确时间时结合【当前位置】+【当前时间】+【用户作息】推断，不要简单默认 09:00。
+- 顺路/位置型任务：找下一次经过该地点的时间窗口。
+- 时间锚定型：晨跑 7:30 / 午饭 12:00 / 学习 20:00 / 睡前 22:00。
 
 📍 地点与事件识别：
-- 从用户输入中提取地点关键词（公司/家/医院/学校/健身房/超市/餐厅/机场等），填入 task.location（地点名称）和 task.location_type（office/home/hospital/school/gym/shopping/restaurant/transit/other）。
-- 从用户输入中提取事件类型（开会/用餐/就医/出行/生活/工作/学习/运动/社交），填入 task.event_type。
-- 如果用户**没有明确说地点**，但提供了【当前位置】上下文，使用当前位置作为 task.location 和 task.location_type 的兜底，并在 time_reasoning 中说明"未指定地点，使用你当前所在位置"。
-- 如果既无明确地点也无当前位置上下文，task.location 留空，location_type 设为 "unknown"。
-
-★ 如果【当前位置】= "unknown" 或【用户作息】缺失，且任务是顺路/位置型 → 在 reply 里**主动追问一句**："为了帮你算最佳提醒时机，告诉我一下：你现在大概在家还是办公室？平时几点出门、几点到家？"，并把 needs_user_context 设为 true。
+- 地点关键词：公司/家/医院/学校/健身房/超市/餐厅/机场 → task.location + task.location_type。
+- 事件类型：会议/用餐/就医/出行/生活/工作/学习/运动/社交 → task.event_type。
+- 无地点时用当前位置兜底，无当前位置则 location_type="unknown"。
 
 其他规则：
-1. 合并/修正字段（用户新的具体输入优先覆盖旧值）
-2. 时间表达解析为 ISO 8601 字符串，必须带 +08:00 时区，例如 "2026-08-21T15:00:00+08:00"
-3. 只有用户明确说**多个具体动作**才拆 subtasks
-4. confidence 表示当前解析完整度（0-100），>=80 表示信息已完整
+1. 时间输出 ISO 8601 带 +08:00，例如 "2026-08-21T15:00:00+08:00"。
+2. 只有用户明确说多个具体动作才拆 subtasks。
+3. confidence 0-100，>=80 表示信息完整。
 
 返回 JSON。`;
+    }
 
     return await invokeAI({
       prompt,
@@ -297,7 +303,7 @@ ${lastAiReply ? `上一轮 AI 提问/回复："${lastAiReply}"` : ""}
       }
 
       const lastAiMsg = [...messages].reverse().find(m => m.role === "ai");
-      const res = await callAI(text, draft, lastAiMsg?.content, locationCtx);
+      const res = await callAI(text, draft, lastAiMsg?.content, locationCtx, messages.length > 0);
 
       // 兼容 AI 可能未按 schema 返回 task 或遗漏 title 的情况
       let nextTask = res?.task;

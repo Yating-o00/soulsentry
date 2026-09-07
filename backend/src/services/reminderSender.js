@@ -158,9 +158,22 @@ export async function sendDueReminders() {
   let inAppFallback = 0;
 
   for (const task of dueTasks) {
+    const extraFields = getTaskExtraFields(task);
+    const st = extraFields.spatiotemporal;
+    let body = task.description ? task.description.slice(0, 120) : "您有一个约定到时间了";
+    if (st?.current_place_name) {
+      body = `${body} · 地点：${st.current_place_name}`;
+    } else if (st?.location_type && st.location_type !== "unknown") {
+      const typeLabel = { office: "公司", home: "家", hospital: "医院", school: "学校", gym: "健身房", shopping: "购物", restaurant: "餐厅", transit: "途中" }[st.location_type] || st.location_type;
+      body = `${body} · 地点：${typeLabel}`;
+    }
+    if (st?.input && st.time_source === "now") {
+      body = `你随手记下的约定：${body}`;
+    }
+
     const payload = {
       title: `约定提醒：${task.title}`,
-      body: task.description ? task.description.slice(0, 120) : "您有一个约定到时间了",
+      body,
       url: `/tasks?id=${task.id}`,
       tag: `reminder-${task.id}`,
       requireInteraction: false,

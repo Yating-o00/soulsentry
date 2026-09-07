@@ -64,6 +64,18 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+async function getWeappLocation() {
+  try {
+    const res = await Taro.getLocation({ type: "gcj02" });
+    if (res && typeof res.latitude === "number" && typeof res.longitude === "number") {
+      return { latitude: res.latitude, longitude: res.longitude };
+    }
+  } catch (e) {
+    console.warn("getWeappLocation failed:", e);
+  }
+  return null;
+}
+
 function toISODate(date, time) {
   if (!date) return "";
   const t = time || "00:00";
@@ -130,6 +142,7 @@ export default function TaskCreate() {
   const [step, setStep] = useState("form");
   const [parsedHint, setParsedHint] = useState("");
   const [rawInput, setRawInput] = useState("");
+  const [parsedMetadata, setParsedMetadata] = useState(null);
   const [loading, setLoading] = useState(false);
   const [createdTask, setCreatedTask] = useState(null);
   const [posterUrl, setPosterUrl] = useState("");
@@ -436,6 +449,7 @@ export default function TaskCreate() {
 
     if (reminderISO) payload.reminder_time = reminderISO;
     if (endISO) payload.end_time = endISO;
+    if (parsedMetadata) payload.metadata = parsedMetadata;
 
     setLoading(true);
     try {
@@ -751,6 +765,11 @@ export default function TaskCreate() {
       };
       if (parsed.reminder_time) payload.reminder_time = parsed.reminder_time;
       if (parsed.end_time) payload.end_time = parsed.end_time;
+      if (parsed.spatiotemporal) {
+        payload.metadata = {
+          _extraFields: { spatiotemporal: parsed.spatiotemporal }
+        };
+      }
 
       const task = await post("/tasks", payload);
       setCreatedTask(task);
@@ -814,12 +833,28 @@ export default function TaskCreate() {
       setDateTimeFromISO(parsed.end_time, setEndDate, setEndTime);
     }
 
+    // 保存解析出的时空元数据，创建时透传给后端
+    if (parsed.spatiotemporal || parsed.location || parsed.location_type || parsed.event_type) {
+      setParsedMetadata({
+        _extraFields: {
+          spatiotemporal: parsed.spatiotemporal || {
+            created_at: new Date().toISOString(),
+            input: (parsed.title || "").slice(0, 500),
+            location: parsed.location || null,
+            location_type: parsed.location_type || "unknown",
+            event_type: parsed.event_type || null,
+            time_source: parsed.time_source || "unknown"
+          }
+        }
+      });
+    }
+
     // 提示
     const hints = [];
     if (parsed.location) hints.push(`地点：${parsed.location}`);
     if (parsed.event_type) hints.push(`类型：${parsed.event_type}`);
     if (parsed.time_source === "common_sense") hints.push("已按生活常识填充时间");
-    else if (parsed.time_source === "now") hints.push("未识别到时间，已设为当前时间");
+    else if (parsed.time_source === "now") hints.push("未识别到时间，已设为当前时间附近");
     if (hints.length > 0) setParsedHint(hints.join(" · "));
   };
 
@@ -829,7 +864,12 @@ export default function TaskCreate() {
 
     setLoading(true);
     try {
-      const parsed = await post("/functions/parseTaskInput", { input: inputText, date: todayStr() });
+      const coords = await getWeappLocation();
+      const parsed = await post("/functions/parseTaskInput", {
+        input: inputText,
+        date: todayStr(),
+        ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {})
+      });
       applyParsedFields(parsed, opts);
     } catch (err) {
       console.error("parseTaskInput failed", err);
@@ -849,7 +889,12 @@ export default function TaskCreate() {
     setLoading(true);
     let timeoutId = null;
     try {
-      const requestPromise = post("/functions/parseTaskInput", { input: inputText, date: todayStr() });
+      const coords = await getWeappLocation();
+      const requestPromise = post("/functions/parseTaskInput", {
+        input: inputText,
+        date: todayStr(),
+        ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {})
+      });
       const timeoutPromise = new Promise((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error("AI 解析超时")), 30000);
       });

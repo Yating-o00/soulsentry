@@ -444,22 +444,64 @@ export function parseRelativeHours(text) {
 }
 
 /**
+ * 解析中文相对天数表达，返回需要加的天数。
+ * 支持：X天后/之后/以后、过X天、等X天、一天后、两天后、一周后、一星期后、一个星期后、七天後。
+ */
+export function parseRelativeDays(text) {
+  if (!text) return null;
+  const t = text.trim();
+
+  // 星期/周相关：一周/一星期/一个星期/礼拜/七天
+  if (/一(?:个)?(?:星期|礼拜)(?:之?后|以后)|一星期后|一个礼拜后|一周后|一周以后|七天后|七天之后/.test(t)) return 7;
+  if (/两(?:个)?(?:星期|礼拜)(?:之?后|以后)|两个星期后|两个礼拜后|两周后|两周以后|十四天后/.test(t)) return 14;
+  if (/三(?:个)?(?:星期|礼拜)(?:之?后|以后)|三个星期后|三个礼拜后|三周后/.test(t)) return 21;
+
+  // "X天后" / "X天之后" / "X天以后" / "过X天" / "等X天"
+  const passMatch = t.match(/(?:过|等|再等)\s*(\d+)\s*天/);
+  if (passMatch) return parseInt(passMatch[1], 10);
+  const match = t.match(/(\d+)\s*天(?:之?后|以后)?/);
+  if (match) return parseInt(match[1], 10);
+
+  // 中文数字
+  const cnPassMatch = t.match(/(?:过|等|再等)\s*([一二两三四五六七八九十百千万]+)\s*天/);
+  if (cnPassMatch) return parseCnNumber(cnPassMatch[1]);
+  const cnMatch = t.match(/([一二两三四五六七八九十百千万]+)\s*天(?:之?后|以后)?/);
+  if (cnMatch) return parseCnNumber(cnMatch[1]);
+
+  // "几天后" / "数天后"
+  if (/几\s*天(?:之?后|以后)?|数天(?:之?后|以后)?/.test(t)) return 3;
+
+  return null;
+}
+
+/**
  * 解析一天中的时段表达，返回 HH:mm 字符串（北京时间）。
  * 支持：早上/上午→09:00、中午→12:00、下午→15:00、傍晚→18:00、晚上/今晚→20:00、深夜/半夜→22:00、凌晨→00:00。
- * 若文本中包含具体时刻如"3点"、"15:00"，优先返回该时刻。
+ * 若文本中包含具体时刻如"3点"、"15:00"、"晚上8点"、"3点半"，优先返回该时刻。
  */
 export function parseTimeOfDay(text) {
   if (!text) return null;
   const t = text.trim();
 
-  // 优先识别具体时刻："3点"、"3:00"、"15:00"、"下午3点"
-  const hourMatch = t.match(/(\d{1,2})\s*[点:：]\s*(\d{1,2})?\s*(?:分)?/);
-  if (hourMatch) {
-    let hour = parseInt(hourMatch[1], 10);
-    const minute = parseInt(hourMatch[2] || "0", 10);
-    // 下午/晚上 3点 → 15:00；凌晨/早上 3点 → 03:00
-    if (/下午|傍晚|晚上|今晚|深夜|半夜/.test(t) && hour < 12) hour += 12;
+  // 优先识别具体时刻："3点"、"3:00"、"15:00"、"下午3点"、"晚上8点半"、"3点一刻"
+  // 支持 "半/30"、"一刻/15"、"三刻/45" 作为分钟替代
+  const timeMatch = t.match(/(\d{1,2})\s*[点:：]\s*(?:(\d{1,2})\s*(?:分)?|(半|一刻|三刻))?/);
+  if (timeMatch) {
+    let hour = parseInt(timeMatch[1], 10);
+    let minute = 0;
+    const minuteRaw = timeMatch[2] || timeMatch[3];
+    if (minuteRaw) {
+      if (minuteRaw === "半") minute = 30;
+      else if (minuteRaw === "一刻") minute = 15;
+      else if (minuteRaw === "三刻") minute = 45;
+      else minute = parseInt(minuteRaw, 10) || 0;
+    }
+    // 下午/晚上/傍晚/深夜/半夜 8点 → 20:00；凌晨/早上 8点 → 08:00
+    const isAfternoonEvening = /下午|傍晚|晚上|今晚|深夜|半夜/.test(t);
+    const isMorning = /早上|上午|凌晨/.test(t);
+    if (isAfternoonEvening && hour < 12) hour += 12;
     if (/凌晨/.test(t) && hour === 12) hour = 0;
+    // 无时段修饰的"8点"默认按 24 小时制字面量处理；若 caller 需要推断，由 parseHybridTime 结合上下文决定
     return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
   }
 
@@ -525,21 +567,101 @@ export function parseHybridTime(text) {
   else if (/明天|明/.test(t)) dateStr = addDaysToDateStr(today, 1);
   else if (/后天/.test(t)) dateStr = addDaysToDateStr(today, 2);
   else if (/大后天/.test(t)) dateStr = addDaysToDateStr(today, 3);
-  else if (/一周后|下周这?时候|七天后/.test(t)) dateStr = addDaysToDateStr(today, 7);
+  else if (/一周后|下周这?时候|七天后|一星期后|一个星期后|一个礼拜后|过一星期|等一星期/.test(t)) dateStr = addDaysToDateStr(today, 7);
   else {
-    // 本周/下周X
+    // 相对 X 天后
+    const relativeDays = parseRelativeDays(t);
+    if (relativeDays != null && relativeDays > 0) {
+      dateStr = addDaysToDateStr(today, relativeDays);
+    }
+  }
+
+  // 本周/下周/下星期/下礼拜 X，以及周末
+  if (!dateStr) {
     const weekdayMap = { 日: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 天: 0 };
-    const weekMatch = t.match(/(本|下)周([一二三四五六日天])/);
+    const weekMatch = t.match(/(本|下)(?:周|星期|礼拜)([一二三四五六日天])/);
     if (weekMatch) {
       const targetDow = weekdayMap[weekMatch[2]];
       const base = new Date(`${today}T00:00:00+08:00`);
       const curDow = base.getUTCDay();
       let diff = (targetDow - curDow + 7) % 7;
-      if (weekMatch[1] === "下" || (diff === 0 && /下周/.test(t))) {
+      if (weekMatch[1] === "下" || (diff === 0 && /下周|下星期|下礼拜/.test(t))) {
         diff = diff === 0 ? 7 : diff;
       }
       if (weekMatch[1] === "下") diff += 7;
       dateStr = addDaysToDateStr(today, diff);
+    }
+  }
+
+  // 周末：周六；下周末：下周六
+  if (!dateStr) {
+    if (/下周末/.test(t)) {
+      const base = new Date(`${today}T00:00:00+08:00`);
+      const curDow = base.getUTCDay();
+      const diff = ((6 - curDow + 7) % 7) + 7;
+      dateStr = addDaysToDateStr(today, diff || 7);
+    } else if (/这?周末/.test(t)) {
+      const base = new Date(`${today}T00:00:00+08:00`);
+      const curDow = base.getUTCDay();
+      const diff = (6 - curDow + 7) % 7;
+      dateStr = addDaysToDateStr(today, diff);
+    }
+  }
+
+  // 下个月/下月/下月X号/下个月底
+  if (!dateStr) {
+    if (/下个月|下月/.test(t)) {
+      const [y, m, d] = today.split("-").map(Number);
+      let year = y;
+      let month = m + 1;
+      let day = 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+      const dayMatch = t.match(/(\d{1,2})\s*[日号]/);
+      if (dayMatch) {
+        day = parseInt(dayMatch[1], 10);
+      } else if (/月底|月末/.test(t)) {
+        day = new Date(year, month, 0).getDate();
+      }
+      const base = new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00+08:00`);
+      dateStr = toShanghaiDateStr(base);
+    }
+  }
+
+  // 单独 "X号" / "X月X号"：先按本月，若已过则顺延到下月/明年
+  if (!dateStr) {
+    const mdMatch = t.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
+    if (mdMatch) {
+      const [y, m] = today.split("-").map(Number);
+      let year = y;
+      const month = parseInt(mdMatch[1], 10);
+      const day = parseInt(mdMatch[2], 10);
+      let base = new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00+08:00`);
+      // 若该月日已过（按北京时间），顺延到明年
+      if (base.getTime() < new Date(`${today}T00:00:00+08:00`).getTime()) {
+        year += 1;
+        base = new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00+08:00`);
+      }
+      dateStr = toShanghaiDateStr(base);
+    } else {
+      const dMatch = t.match(/(\d{1,2})\s*[日号]/);
+      if (dMatch) {
+        const [y, m] = today.split("-").map(Number);
+        const day = parseInt(dMatch[1], 10);
+        let month = m;
+        let base = new Date(`${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00+08:00`);
+        if (base.getTime() <= new Date(`${today}T00:00:00+08:00`).getTime()) {
+          month += 1;
+          if (month > 12) {
+            base = new Date(`${y + 1}-01-${String(day).padStart(2, "0")}T00:00:00+08:00`);
+          } else {
+            base = new Date(`${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00+08:00`);
+          }
+        }
+        dateStr = toShanghaiDateStr(base);
+      }
     }
   }
 

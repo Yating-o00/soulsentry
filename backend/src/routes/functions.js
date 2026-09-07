@@ -17,9 +17,9 @@ export const functionsRouter = Router();
 
 functionsRouter.use(requireAuth);
 
-// 为所有 functions 路由设置 28 秒超时，避免 AI 调用挂起导致网关返回 HTML 错误页
+// 为所有 functions 路由设置 40 秒超时，避免 AI 调用挂起导致网关返回 HTML 错误页
 functionsRouter.use((req, res, next) => {
-  const FUNCTION_TIMEOUT_MS = 35000;
+  const FUNCTION_TIMEOUT_MS = 40000;
   let timeoutId;
 
   const originalJson = res.json.bind(res);
@@ -85,6 +85,12 @@ function getTaskLocationReminder(task) {
   const extraFields = getTaskExtraFields(task);
   const reminder = extraFields.location_reminder;
   return isPlainObject(reminder) ? reminder : null;
+}
+
+function getTaskSpatiotemporal(task) {
+  const extraFields = getTaskExtraFields(task);
+  const st = extraFields.spatiotemporal;
+  return isPlainObject(st) ? st : null;
 }
 
 // ===== 约定列表智能分析辅助函数 =====
@@ -1210,9 +1216,17 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       try {
+        const currentCoords = (typeof payload.latitude === "number" && typeof payload.longitude === "number")
+          ? { latitude: payload.latitude, longitude: payload.longitude }
+          : null;
+        const savedLocations = await prisma.savedLocation.findMany({
+          where: { userId: req.user.id, isActive: true }
+        });
         const data = await parseTaskInput({
           input: String(payload.input).trim(),
-          date: payload.date || toYmd(new Date())
+          date: payload.date || toYmd(new Date()),
+          savedLocations,
+          currentCoords
         });
         return res.json(data);
       } catch (error) {
@@ -1231,7 +1245,8 @@ functionsRouter.post("/:name", async (req, res) => {
           systemPrompt: payload.system_prompt,
           responseJsonSchema: payload.response_json_schema,
           model: payload.model,
-          temperature: payload.temperature
+          temperature: payload.temperature,
+          maxTokens: 2500
         });
 
         return res.json({
@@ -1590,6 +1605,13 @@ functionsRouter.post("/:name", async (req, res) => {
               );
               if (d < (hitLocation.radius || 300) + 500) score += 35;
             }
+            // 读取创建时记录的 spatiotemporal 上下文进行地点匹配
+            const st = getTaskSpatiotemporal(t);
+            if (st?.current_place_type) {
+              if (st.current_place_type === hitLocation.locationType) score += 25;
+              if (st.location_type === hitLocation.locationType) score += 20;
+            }
+            if (st?.nearest_location?.location_type === hitLocation.locationType) score += 20;
             return { task: t, score };
           })
           .filter((x) => x.score > 0)
@@ -1604,6 +1626,10 @@ functionsRouter.post("/:name", async (req, res) => {
           }));
 
         if (relevantTasks.length > 0) {
+          const typeLabel = {
+            office: "工作", home: "生活", gym: "健康", school: "学习",
+            shopping: "购物", hospital: "健康", restaurant: "生活", other: "相关"
+          }[hitLocation.locationType] || "相关";
           geoContext = {
             location_id: hitLocation.id,
             location_name: hitLocation.name,
@@ -1611,7 +1637,8 @@ functionsRouter.post("/:name", async (req, res) => {
             icon: hitLocation.icon || "📍",
             event: hitEvent,
             distance: Math.round(hitDistance || hitLocation.radius || 200),
-            tasks: relevantTasks
+            tasks: relevantTasks,
+            contextual_reason: `你已到${hitLocation.name}附近，这里有 ${relevantTasks.length} 个${typeLabel}约定可以顺手处理`
           };
         }
       }

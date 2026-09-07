@@ -1,4 +1,5 @@
 import { invokeKimiText } from "../lib/kimi.js";
+import { resolveSpatiotemporalContext } from "./extractContext.js";
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -109,7 +110,7 @@ function applyCommonSenseTime(text, baseDate = new Date()) {
 }
 
 function applyDefaultTime() {
-  const d = nowPlusMinutes(60);
+  const d = nowPlusMinutes(5);
   return {
     date: toYmd(d),
     time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
@@ -217,25 +218,105 @@ function parseExplicitTimeLocal(text, baseDate = new Date()) {
     return { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "explicit" };
   }
 
-  // 明天/后天/大后天 + 上午/下午/晚上 + X 点
-  const dayOffsetMatch = t.match(/(明天|后天|大后天)(?:上午|下午|晚上)?\s*(\d+)(?:点|：|:)?(?:30|半)?/);
+  // X 天后 / 一周后 / 一星期后 / 七天后（可带时刻）
+  const dayOffsetMatch = t.match(/(明天|后天|大后天|一周后|一星期后|一个星期后|七天后|(\d+)\s*天后?)\s*(?:上午|下午|晚上|今晚)?\s*(?:(\d{1,2})\s*[点:：]\s*(?:(\d{1,2})|半|一刻|三刻)?)?/);
   if (dayOffsetMatch) {
-    const offset = { 明天: 1, 后天: 2, 大后天: 3 }[dayOffsetMatch[1]] || 1;
-    let hour = parseInt(dayOffsetMatch[2], 10);
-    const minute = /半/.test(t) ? 30 : 0;
-    if (t.includes("下午") && hour < 12) hour += 12;
-    if (t.includes("晚上") && hour < 12) hour += 12;
+    let offset = 0;
+    let minute = 0;
+    if (dayOffsetMatch[1] === "明天") offset = 1;
+    else if (dayOffsetMatch[1] === "后天") offset = 2;
+    else if (dayOffsetMatch[1] === "大后天") offset = 3;
+    else if (/一周后|一星期后|一个星期后|七天后/.test(dayOffsetMatch[1])) offset = 7;
+    else if (dayOffsetMatch[2]) offset = parseInt(dayOffsetMatch[2], 10);
+
+    let hour = dayOffsetMatch[3] ? parseInt(dayOffsetMatch[3], 10) : 9;
+    const minuteRaw = dayOffsetMatch[4];
+    if (minuteRaw) {
+      if (/半/.test(minuteRaw)) minute = 30;
+      else if (/一刻/.test(minuteRaw)) minute = 15;
+      else if (/三刻/.test(minuteRaw)) minute = 45;
+      else minute = parseInt(minuteRaw, 10) || 0;
+    }
+    if (/下午|晚上|今晚/.test(t) && hour < 12) hour += 12;
+    if (/凌晨/.test(t) && hour === 12) hour = 0;
+
     const d = new Date(baseDate);
     d.setDate(d.getDate() + offset);
+    d.setHours(hour, minute, 0, 0);
+    if (offset === 0 && d <= now) d.setDate(d.getDate() + 1);
+    return { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "explicit" };
+  }
+  // 本周/下周/下星期/下礼拜 X + 可选时刻
+  const weekMatch = t.match(/(本|下)(?:周|星期|礼拜)([一二三四五六日天])\s*(?:上午|下午|晚上|今晚)?\s*(?:(\d{1,2})\s*[点:：]\s*(?:(\d{1,2})|半|一刻|三刻)?)?/);
+  if (weekMatch) {
+    const weekdayMap = { 日: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 天: 0 };
+    const targetDow = weekdayMap[weekMatch[2]];
+    const d = new Date(baseDate);
+    const curDow = d.getDay();
+    let diff = (targetDow - curDow + 7) % 7;
+    if (weekMatch[1] === "下" || (diff === 0 && /下周|下星期|下礼拜/.test(t))) {
+      diff = diff === 0 ? 7 : diff;
+    }
+    if (weekMatch[1] === "下") diff += 7;
+
+    let hour = weekMatch[3] ? parseInt(weekMatch[3], 10) : 9;
+    let minute = 0;
+    const minuteRaw = weekMatch[4];
+    if (minuteRaw) {
+      if (/半/.test(minuteRaw)) minute = 30;
+      else if (/一刻/.test(minuteRaw)) minute = 15;
+      else if (/三刻/.test(minuteRaw)) minute = 45;
+      else minute = parseInt(minuteRaw, 10) || 0;
+    }
+    if (/下午|晚上|今晚/.test(t) && hour < 12) hour += 12;
+    if (/凌晨/.test(t) && hour === 12) hour = 0;
+
+    d.setDate(d.getDate() + diff);
     d.setHours(hour, minute, 0, 0);
     return { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "explicit" };
   }
 
+  // 周末：周六；下周末：下周六
+  if (/这?周末/.test(t) || /下周末/.test(t)) {
+    const d = new Date(baseDate);
+    const curDow = d.getDay();
+    let diff = (6 - curDow + 7) % 7;
+    if (/下周末/.test(t)) diff += 7;
+    d.setDate(d.getDate() + diff);
+    d.setHours(9, 0, 0, 0);
+    return { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "explicit" };
+  }
+
+  // 下个月/下月/X月X号/X号
+  const monthMatch = t.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
+  if (monthMatch) {
+    const d = new Date(baseDate);
+    d.setMonth(parseInt(monthMatch[1], 10) - 1, parseInt(monthMatch[2], 10));
+    d.setHours(9, 0, 0, 0);
+    if (d <= now) d.setFullYear(d.getFullYear() + 1);
+    return { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "explicit" };
+  }
+  const dayOnlyMatch = t.match(/(\d{1,2})\s*[日号]/);
+  if (dayOnlyMatch) {
+    const d = new Date(baseDate);
+    d.setDate(parseInt(dayOnlyMatch[1], 10));
+    d.setHours(9, 0, 0, 0);
+    if (d <= now) d.setMonth(d.getMonth() + 1);
+    return { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "explicit" };
+  }
+
   // 今天下午/晚上 X 点
-  const todayPmMatch = t.match(/(?:今天下午|今晚)(\d+)(?:点|：|:)?(?:30|半)?/);
+  const todayPmMatch = t.match(/(?:今天下午|今晚)(\d+)\s*[点:：]\s*(?:(\d{1,2})|半|一刻|三刻)?/);
   if (todayPmMatch) {
     const hour = parseInt(todayPmMatch[1], 10) + (parseInt(todayPmMatch[1], 10) < 12 ? 12 : 0);
-    const minute = /半/.test(t) ? 30 : 0;
+    let minute = 0;
+    const minuteRaw = todayPmMatch[2];
+    if (minuteRaw) {
+      if (/半/.test(minuteRaw)) minute = 30;
+      else if (/一刻/.test(minuteRaw)) minute = 15;
+      else if (/三刻/.test(minuteRaw)) minute = 45;
+      else minute = parseInt(minuteRaw, 10) || 0;
+    }
     const d = new Date(baseDate);
     d.setHours(hour, minute, 0, 0);
     if (d <= now) d.setDate(d.getDate() + 1);
@@ -243,10 +324,17 @@ function parseExplicitTimeLocal(text, baseDate = new Date()) {
   }
 
   // 上午/下午/晚上 X 点（无明天前缀）
-  const plainMatch = t.match(/(?:上午|下午|晚上)\s*(\d+)(?:点|：|:)?(?:30|半)?/);
+  const plainMatch = t.match(/(?:上午|下午|晚上)\s*(\d+)\s*[点:：]\s*(?:(\d{1,2})|半|一刻|三刻)?/);
   if (plainMatch) {
     let hour = parseInt(plainMatch[1], 10);
-    const minute = /半/.test(t) ? 30 : 0;
+    let minute = 0;
+    const minuteRaw = plainMatch[2];
+    if (minuteRaw) {
+      if (/半/.test(minuteRaw)) minute = 30;
+      else if (/一刻/.test(minuteRaw)) minute = 15;
+      else if (/三刻/.test(minuteRaw)) minute = 45;
+      else minute = parseInt(minuteRaw, 10) || 0;
+    }
     if (t.includes("下午") && hour < 12) hour += 12;
     if (t.includes("晚上") && hour < 12) hour += 12;
     const d = new Date(baseDate);
@@ -258,7 +346,7 @@ function parseExplicitTimeLocal(text, baseDate = new Date()) {
   return null;
 }
 
-export async function parseTaskInput({ input, date }) {
+export async function parseTaskInput({ input, date, savedLocations = [], currentCoords = null }) {
   const now = new Date();
   const fallbackDate = date || toYmd(now);
   const text = String(input || "").trim();
@@ -266,6 +354,14 @@ export async function parseTaskInput({ input, date }) {
   if (!text) {
     return null;
   }
+
+  // 1. 先做一次本地时空上下文提取，作为 Kimi 的候选，也作为兜底
+  const spatiotemporal = resolveSpatiotemporalContext({
+    text,
+    savedLocations,
+    currentCoords,
+    currentTime: now
+  });
 
   const schema = {
     type: "object",
@@ -275,12 +371,21 @@ export async function parseTaskInput({ input, date }) {
       reminder_time: { type: "string", description: "提醒时间 ISO 8601（含时区），如果用户没有明确说提醒时间则和 end_time 相同" },
       end_time: { type: "string", description: "截止时间 ISO 8601（含时区），如果用户没有明确说则比 reminder_time 晚 5 分钟" },
       location: { type: "string", description: "地点，如'公司'、'医院'、'家里'" },
+      location_type: { type: "string", description: "地点类型：office/home/hospital/school/gym/shopping/restaurant/transit/other" },
       event_type: { type: "string", description: "事件类型：会议/用餐/就医/出行/生活/工作/学习/运动/社交/其他" },
       priority: { type: "string", enum: ["urgent", "high", "medium", "low"], description: "优先级" },
       category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"], description: "分类" }
     },
     required: ["title", "reminder_time", "end_time", "priority", "category"]
   };
+
+  const candidateLocation = spatiotemporal.location;
+  const candidateLocationText = candidateLocation.name
+    ? `地点候选：${candidateLocation.name}（类型：${candidateLocation.location_type || "unknown"}）`
+    : "地点候选：未识别到地点";
+  const candidateEventText = spatiotemporal.event_type
+    ? `事件类型候选：${spatiotemporal.event_type}`
+    : "事件类型候选：未识别";
 
   let kimiResult = null;
   let kimiSucceeded = false;
@@ -293,13 +398,16 @@ export async function parseTaskInput({ input, date }) {
         prompt: `用户输入：${text}
 当前日期：${fallbackDate}
 当前时间：${currentTime}
+${candidateLocationText}
+${candidateEventText}
 
 请解析约定信息。注意：
-1. 如果用户说"X分钟之后"、"明天下午3点"等，请准确计算 reminder_time。
+1. 如果用户说"X分钟之后"、"明天下午3点"、"三天后"、"下周五晚上8点"等，请准确计算 reminder_time。
 2. 如果用户只说了提醒时间但没说明截止时间，end_time 默认比 reminder_time 晚 5 分钟。
 3. 时间必须使用 ISO 8601 格式并包含 +08:00 时区，例如 "2026-08-26T14:35:00+08:00"。
-4. 从输入中提取地点（location）和事件类型（event_type）。
-5. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
+4. 从输入中提取地点（location）、地点类型（location_type）和事件类型（event_type）。
+5. 如果用户没有明确说地点，请使用上面给出的"地点候选"；如果候选也没有，返回空字符串。
+6. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
         systemPrompt: "你是 SoulSentry 的约定解析器。把中文自然语言输入转成可创建的约定字段。严格返回 JSON。",
         responseJsonSchema: schema,
         temperature: 0.2
@@ -311,7 +419,7 @@ export async function parseTaskInput({ input, date }) {
     console.error("[parseTaskInput] Kimi parse failed, fallback to local", err?.message || err);
   }
 
-  // 提取标题：优先 Kimi，否则取输入前 60 字
+  // 提取标题：优先 Kimi，否则取输入前 120 字
   const title = (kimiResult?.title || text).slice(0, 120).trim();
   const description = (kimiResult?.description || "").trim();
 
@@ -334,11 +442,19 @@ export async function parseTaskInput({ input, date }) {
   // 常识时间兜底
   const commonSense = applyCommonSenseTime(text);
 
-  // 最终选择时间：Kimi 显式 > 本地显式 > 常识 > 当前时间+60分钟
+  // 最终选择时间：Kimi 显式 > 本地显式 > 常识 > 当前时间+5分钟
   const chosen = explicitTime || localExplicit || commonSense || applyDefaultTime();
 
   const reminderISO = toISODateTime(chosen.date, chosen.time);
-  const eventType = kimiResult?.event_type || commonSense?.eventType || "其他";
+
+  // 地点与事件：Kimi > 本地提取 > 常识/兜底
+  const location = kimiResult?.location || spatiotemporal.location.name || "";
+  const locationType = kimiResult?.location_type || spatiotemporal.location.location_type || "";
+  const eventType = kimiResult?.event_type
+    || spatiotemporal.event_type
+    || commonSense?.eventType
+    || "其他";
+
   const endISO = kimiResult?.end_time
     ? String(kimiResult.end_time)
     : computeEndDateTime(reminderISO, eventType);
@@ -351,10 +467,15 @@ export async function parseTaskInput({ input, date }) {
     description,
     reminder_time: reminderISO,
     end_time: endISO,
-    location: kimiResult?.location || "",
+    location,
+    location_type: locationType,
     event_type: eventType,
     priority,
     category,
-    time_source: chosen.source
+    time_source: chosen.source,
+    spatiotemporal: {
+      ...spatiotemporal.context_at_creation,
+      time_source: chosen.source
+    }
   };
 }

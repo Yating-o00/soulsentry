@@ -15,6 +15,11 @@
       ],
       "description": "\u884c\u4e3a\u7c7b\u578b"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "\u8865\u5145\u8bf4\u660e\uff08\u53ef\u9009\uff09"
+    },
     "task_id": {
       "type": "string",
       "description": "\u5173\u8054\u4efb\u52a1ID"

@@ -1,7 +1,7 @@
 {
   "name": "TrustPolicy",
   "type": "object",
-  "description": "\u4fe1\u4efb\u9636\u68af\uff1a\u7528\u6237\u4e3a\u6bcf\u4e00\u7c7b\u81ea\u52a8\u6267\u884c\u64cd\u4f5c\u8bbe\u5b9a\u7684\u6258\u7ba1\u6863\u4f4d\uff0c\u51b3\u5b9a\u8be5\u7c7b\u7ea6\u5b9a\u662f\u300c\u5148\u51fa\u8349\u7a3f\u7b49\u786e\u8ba4\u300d\u300c\u4f4e\u98ce\u9669\u81ea\u52a8\u5b8c\u6210\u300d\u8fd8\u662f\u300c\u5b8c\u5168\u6258\u7ba1\u300d",
+  "description": "\u4fe1\u4efb\u9636\u68af\uff1a\u7528\u6237\u4e3a\u6bcf\u4e00\u7c7b\u81ea\u52a8\u6267\u884c\u64cd\u4f5c\u8bbe\u5b9a\u7684\u6258\u7ba1\u6863\u4f4d",
   "properties": {
     "automation_type": {
       "type": "string",
@@ -16,6 +16,11 @@
         "ledger_organize"
       ],
       "description": "\u81ea\u52a8\u6267\u884c\u7c7b\u578b"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "\u8865\u5145\u8bf4\u660e\uff08\u53ef\u9009\uff09"
     },
     "tier": {
       "type": "string",

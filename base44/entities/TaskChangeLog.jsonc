@@ -6,6 +6,11 @@
       "type": "string",
       "description": "\u5173\u8054\u7684\u7ea6\u5b9aID\uff08\u4e3b\u7ea6\u5b9a\u6216\u5b50\u7ea6\u5b9a\uff09"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "\u8865\u5145\u8bf4\u660e\uff08\u53ef\u9009\uff09"
+    },
     "parent_task_id": {
       "type": "string",
       "description": "\u5982\u679c\u662f\u5b50\u7ea6\u5b9a\u53d8\u66f4\uff0c\u8bb0\u5f55\u5176\u7236\u7ea6\u5b9aID"

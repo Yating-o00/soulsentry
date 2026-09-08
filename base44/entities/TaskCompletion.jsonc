@@ -6,6 +6,11 @@
       "type": "string",
       "description": "The ID of the task"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Optional additional description"
+    },
     "status": {
       "type": "string",
       "enum": [

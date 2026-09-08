@@ -6,6 +6,11 @@
       "type": "string",
       "description": "Google Calendar incremental sync token"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Optional additional description"
+    },
     "last_synced_at": {
       "type": "string",
       "format": "date-time",

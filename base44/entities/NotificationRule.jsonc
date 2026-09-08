@@ -6,6 +6,11 @@
       "type": "string",
       "description": "\u89c4\u5219\u540d\u79f0"
     },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "\u8865\u5145\u8bf4\u660e\uff08\u53ef\u9009\uff09"
+    },
     "is_enabled": {
       "type": "boolean",
       "default": true,

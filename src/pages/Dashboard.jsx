@@ -10,8 +10,7 @@ import {
   Clock, 
   AlertCircle, 
   Calendar as CalendarIcon, 
-  TrendingUp, 
-  Sun,
+  TrendingUp,
   ListTodo,
   Edit,
   StickyNote,
@@ -51,9 +50,16 @@ import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
 import { isDemoUser } from "@/hooks/useTrialGate";
+import "./today-theme.css";
+import { useRevealRoot } from "../components/dashboard/useReveal";
+import { phaseOf } from "@/lib/todayPhase";
+import TodayHero from "../components/today/TodayHero";
+import TodaySection from "../components/today/TodaySection";
+import TodayTimeline from "../components/today/TodayTimeline";
+import MoodMirror from "../components/today/MoodMirror";
+import RetroBars from "../components/today/RetroBars";
 
 export default function Dashboard() {
-  const [greeting, setGreeting] = useState("你好");
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [taskListDialog, setTaskListDialog] = useState({ open: false, title: "", tasks: [] });
@@ -61,10 +67,17 @@ export default function Dashboard() {
   const [calendarViewMode, setCalendarViewMode] = useState("month");
   const [showCalendarQuickAdd, setShowCalendarQuickAdd] = useState(false);
   const [calendarQuickAddDate, setCalendarQuickAddDate] = useState(null);
+  const [phase, setPhase] = useState(() => phaseOf());
+  const todayRef = useRevealRoot();
   const queryClient = useQueryClient();
   const location = useLocation();
   const soulSentryData = location.state?.soulSentryData;
   const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    const t = setInterval(() => setPhase(phaseOf()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Get current user
   const { data: user } = useQuery({
@@ -80,6 +93,13 @@ export default function Dashboard() {
   });
   const allTasks = Array.isArray(tasksRaw) ? tasksRaw : [];
 
+  const { data: notesRaw = [] } = useQuery({
+    queryKey: ['notes'],
+    queryFn: () => base44.entities.Note.list('-created_date'),
+    initialData: [],
+  });
+  const allNotes = Array.isArray(notesRaw) ? notesRaw : [];
+
   const { 
     updateTask, 
     updateTaskAsync,
@@ -88,16 +108,6 @@ export default function Dashboard() {
     handleComplete, 
     handleSubtaskToggle 
   } = useTaskOperations();
-
-  useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour < 6) setGreeting("凌晨好");
-    else if (hour < 9) setGreeting("早上好");
-    else if (hour < 12) setGreeting("上午好");
-    else if (hour < 14) setGreeting("中午好");
-    else if (hour < 18) setGreeting("下午好");
-    else setGreeting("晚上好");
-  }, []);
 
   // Filter tasks (exclude subtasks from main view)
   const activeTasks = React.useMemo(() => allTasks.filter(t => !t.deleted_at), [allTasks]);
@@ -183,6 +193,42 @@ export default function Dashboard() {
     return total > 0 ? Math.round((doneToday / total) * 100) : 0;
   }, [todayTasks, completedToday]);
 
+  // —— 今日页 Hero / 时间线数据 ——
+  const notesList = React.useMemo(
+    () => (Array.isArray(allNotes) ? allNotes.filter(n => n && !n.deleted_at) : []),
+    [allNotes]
+  );
+
+  const memory = React.useMemo(() => {
+    const keptToday =
+      activeTasks.filter(t => t.created_date && isToday(parseISO(t.created_date))).length +
+      notesList.filter(n => n.created_date && isToday(parseISO(n.created_date))).length;
+    return {
+      kept: keptToday,
+      watching: todayTasks.filter(t => t.status === 'pending').length,
+      notes: notesList.length,
+    };
+  }, [activeTasks, notesList, todayTasks]);
+
+  const whisper = React.useMemo(() => {
+    const upcoming = todayTasks
+      .filter(t => t.status === 'pending' && t.reminder_time)
+      .sort((a, b) => new Date(a.reminder_time) - new Date(b.reminder_time));
+    if (upcoming.length > 0) {
+      return `今天记得：「${upcoming[0].title}」。除此之外，其余的都已被妥善记住，你只管从容去过。`;
+    }
+    if (completedToday.length > 0) {
+      return '今天的约定都已兑现。夜晚回望时，你会感谢现在这个从容的自己。';
+    }
+    return '今天还是一张白纸。把心事说给下面的门听，我替你记住，并陪你慢慢读懂它。';
+  }, [todayTasks, completedToday]);
+
+  const nowLabel = format(new Date(), 'HH:mm');
+  const timelineTasks = React.useMemo(
+    () => [...todayTasks, ...completedToday],
+    [todayTasks, completedToday]
+  );
+
 
 
   // Calendar navigation handlers
@@ -247,59 +293,6 @@ export default function Dashboard() {
     }
   };
 
-  // Note fetching for dashboard stats
-  const { data: notesRaw = [] } = useQuery({
-    queryKey: ['notes'],
-    queryFn: () => base44.entities.Note.list('-created_date'),
-    initialData: [],
-  });
-  const allNotes = Array.isArray(notesRaw) ? notesRaw : [];
-  
-  // Calculate notesOnSelectedDate for dashboard stats
-  // Using today as selectedDate for stats context if not explicitly tracking a selected date in state for stats (stats cards use todayTasks, etc.)
-  // Actually dashboard stats card uses 'todayTasks' etc.
-  // The '便签' card was showing notesOnSelectedDate. Dashboard has no 'selectedDate' state for the top cards, it implies Today.
-  // Wait, in CalendarView it has selectedDate. In Dashboard...
-  // In Dashboard.js read earlier:
-  // It uses `notesOnSelectedDate.length` in the card. But `notesOnSelectedDate` is NOT defined in Dashboard.js!
-  // Ah! `notesOnSelectedDate` was in `CalendarView.js`.
-  // In `Dashboard.js` the card with "便签" is NOT present in the code I read in step 3?
-  // Let me re-read step 3's Dashboard.js content.
-  
-  // Lines 267-318: Stats Cards
-  // Card 1: Today Tasks
-  // Card 2: Overdue
-  // Card 3: Completed Today
-  // There is NO "便签" card in the top stats of Dashboard.js!
-  
-  // Where did I see `notesOnSelectedDate`? 
-  // It was in `CalendarView.js`!
-  // Step 3 read file `CalendarView.js` lines 432-433: `<span className="text-sm opacity-90">便签</span>`
-  // But `CalendarView.js` find_replace SUCCEEDED in step 1.
-  
-  // So why did I think `Dashboard.js` had it?
-  // In step 1 I tried to replace in `Dashboard.js` and it failed.
-  // Maybe `Dashboard.js` DOES NOT HAVE "便签" at all?
-  // Let's check the code of `Dashboard.js` again.
-  // It has `StickyNote` icon imported.
-  // It does NOT seem to have the text "便签".
-  // Let me search for "便签" in the `Dashboard.js` content from step 3.
-  // I am scanning...
-  // I don't see it.
-  
-  // So `Dashboard.js` find_replace failed because the text wasn't there!
-  // And `CalendarView.js` succeeded.
-  
-  // So I am likely done.
-  
-  // Let me double check `layout.js` - success.
-  // `pages/Notes.js` - success.
-  // `CalendarView.js` - success.
-  
-  // So the failures were false positives (me trying to replace something that wasn't there).
-  
-  // I will just return success then.
-  
   return (
     <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto min-h-screen">
       <NotificationManager />
@@ -337,22 +330,9 @@ export default function Dashboard() {
       )}
 
       <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
-        {/* Header Section */}
+        {/* Header Section：问候移入 Hero 天幕带，这里只留页签与同步入口 */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-0.5 flex items-center gap-2">
-              {greeting}，{user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")} 
-              <Sun className="w-5 h-5 md:w-6 md:h-6 text-amber-500 fill-amber-500 animate-pulse" />
-            </h1>
-            <p className="text-slate-500 text-sm md:text-base">
-              今天是 {format(new Date(), "yyyy年MM月dd日 EEEE", { locale: zhCN })}
-            </p>
-          </motion.div>
-
-          <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-2 w-full md:w-auto md:ml-auto">
           <TabsList className="bg-white shadow-md rounded-[12px] p-1 h-auto flex-1 md:flex-none">
             <TabsTrigger value="overview" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white text-sm">
               <ListTodo className="w-4 h-4 mr-1.5" />
@@ -367,7 +347,25 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview">
+          <div ref={todayRef} className="today-page space-y-14" data-phase={phase}>
+            <TodayHero
+              phase={phase}
+              dateLabel={format(new Date(), "yyyy年MM月dd日 EEEE", { locale: zhCN })}
+              whisper={whisper}
+              memory={memory}
+              userName={user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")}
+            />
+
+            {/* 01 内容输入 */}
+            <TodaySection no="01" title="内容输入" sub="告诉我，任何事情" index={1}>
+              <div className="module-shell">
+                <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
+              </div>
+            </TodaySection>
+
+            {/* 02 今日印记（当日待完成） */}
+            <TodaySection no="02" title="今日印记" sub="经过的每一刻，都值得被记住" index={2} bodyClassName="space-y-6">
           {/* Stats Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -449,41 +447,61 @@ export default function Dashboard() {
         </Card>
       </motion.div>
 
-      <DailyBriefing />
+              <TodayTimeline
+                tasks={timelineTasks}
+                nowLabel={nowLabel}
+                onToggle={(t) => handleComplete(t, allTasks)}
+              />
 
-      {/* Smart Daily Planner */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
-      >
-        <SmartDailyPlanner />
-      </motion.div>
+              {/* 智能日程规划（完整功能保留） */}
+              <SmartDailyPlanner />
+            </TodaySection>
 
-      {/* 自动执行清单 - 输入场景 → AI 拆解候选 → 单条授权执行 */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.18 }}
-      >
-        <AutoExecutionPanel />
-      </motion.div>
+            {/* 03 心境（心签 + 约定的数据分析） */}
+            <TodaySection no="03" title="心境" sub="心栈眼中的你" index={3} bodyClassName="space-y-6">
+              <MoodMirror notes={notesList} tasks={activeTasks} />
+              <UserBehaviorInsights />
+            </TodaySection>
 
-      {/* 时空感知守护 - 独立模块 */}
-      <SpatioTemporalGuardModule />
+            {/* 04 守护动态（时空感知守护） */}
+            <TodaySection no="04" title="守护动态" sub="记忆会在对的时候，回来找你" index={4}>
+              <div className="module-shell">
+                <SpatioTemporalGuardModule />
+              </div>
+            </TodaySection>
 
-      {/* 全设备智能协同 - 独立模块 */}
-      <DeviceCollaborationModule />
+            {/* 05 心栈为你编织（自动执行） */}
+            <TodaySection no="05" title="心栈为你编织" sub="把零散的记录，织成理解" index={5}>
+              <div className="module-shell">
+                <AutoExecutionPanel />
+              </div>
+            </TodaySection>
 
-      {/* Main Content: SoulSentry Hub - 放在页面最下方 */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="mt-6"
-      >
-        <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
-      </motion.div>
+            {/* 06 全设备协同 */}
+            <TodaySection no="06" title="全设备协同" sub="你在哪里，记忆就在哪里" index={6}>
+              <div className="module-shell">
+                <DeviceCollaborationModule />
+              </div>
+            </TodaySection>
+
+            {/* 07 AI 简报 + 回望与远见 */}
+            <TodaySection no="07" title="回望与远见" sub="数据是你的年轮，简报是我的心意" index={7}>
+              <div className="grid gap-4 lg:grid-cols-5">
+                <div className="lg:col-span-2">
+                  <RetroBars tasks={activeTasks} notes={notesList} />
+                </div>
+                <div className="lg:col-span-3">
+                  <DailyBriefing />
+                </div>
+              </div>
+              <div className="mt-12 pb-4 text-center">
+                <p className="font-[var(--font-serif)] text-[17px] tracking-[0.1em] text-[var(--ink-2)]">
+                  观照自己，觉察当下
+                </p>
+                <p className="mt-1.5 text-[11px] tracking-[0.2em] text-[var(--ink-4)]">心栈 SOULSENTRY</p>
+              </div>
+            </TodaySection>
+          </div>
       </TabsContent>
 
       <TabsContent value="calendar" className="space-y-4 md:space-y-6">

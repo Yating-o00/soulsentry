@@ -89,7 +89,7 @@
             var ua = navigator.userAgent || 'unknown';
             var modern = window.__vite_is_modern_browser;
             var info = [
-              'Root still empty after 5s.',
+              'Root still empty after 10s (loading splash should prevent this).',
               'UA: ' + ua,
               'Modern bundle: ' + (modern === true ? 'yes' : (modern === false ? 'no' : 'unknown')),
               'Scripts: ' + Array.prototype.slice.call(document.querySelectorAll('script')).map(function(s) { return s.src || s.getAttribute('data-src') || '[inline]'; }).join(', '),
@@ -107,7 +107,13 @@
     <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fafbfb;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
+        <div style="width:36px;height:36px;border-radius:50%;border:3px solid #d4e4f0;border-top-color:#7a9eb8;animation:ss-spin 0.9s linear infinite;"></div>
+        <div style="margin-top:14px;font-size:14px;color:#8e8e93;letter-spacing:2px;">心栈</div>
+      </div>
+      <style>@keyframes ss-spin{to{transform:rotate(360deg);}}</style>
+    </div>
     <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
     <script nomodule crossorigin id="vite-legacy-polyfill" src="/assets/polyfills-legacy-CBNChj63.js"></script>
     <script nomodule crossorigin id="vite-legacy-entry" data-src="/assets/index-legacy-DwX7Y0eA.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>

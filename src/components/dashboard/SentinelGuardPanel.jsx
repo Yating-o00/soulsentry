@@ -261,48 +261,52 @@ export default function SentinelGuardPanel() {
           <div
             key={c.key}
             className="guard-card echo-born rounded-2xl p-4 sm:p-5"
-            style={{ '--aura': `color-mix(in srgb, ${meta.color} 7%, transparent)`, '--med-c': meta.color }}
+            style={{ '--gc': meta.color }}
           >
-            <div className="flex items-start gap-3.5">
-              <div className="guard-medallion" style={{ '--med-c': meta.color }}>
+            {/* 顶部一行:情境图标 + 标题 + 等级点标 */}
+            <div className="flex items-center gap-3">
+              <div className="guard-medallion" style={{ '--gc': meta.color }}>
                 <span>
                   <c.Icon className="w-[18px] h-[18px]" />
                 </span>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10.5px] font-medium"
-                    style={{ background: `color-mix(in srgb, ${meta.color} 12%, white)`, color: meta.color }}
-                  >
-                    {meta.label}
-                  </span>
-                  <h4 className="text-[14px] font-medium text-[var(--ink)]">{c.title}</h4>
-                </div>
-                {c.detail && <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink-2)]">{c.detail}</p>}
-                {c.extra && <p className="mt-1 text-[11.5px] text-[var(--ink-3)]">{c.extra}</p>}
-                {c.basis && (
-                  <p className="num mt-2 text-[10.5px] tracking-wide text-[var(--ink-4)]">情境依据 · {c.basis}</p>
+              <h4 className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-[var(--ink)]">{c.title}</h4>
+              <span className="guard-tag" style={{ '--gc': meta.color }}>
+                <i />
+                {meta.label}
+              </span>
+            </div>
+            <div className="mt-2.5">
+              {c.detail && <p className="text-[12.5px] leading-relaxed text-[var(--ink-2)]">{c.detail}</p>}
+              {c.extra && <p className="mt-1 text-[11.5px] text-[var(--ink-3)]">{c.extra}</p>}
+              {/* 底部一行:左侧情境依据,右侧操作按钮 */}
+              <div className="mt-3.5 flex items-center justify-between gap-3">
+                {c.basis ? (
+                  <p className="num min-w-0 truncate text-[10.5px] tracking-wide text-[var(--ink-4)]">情境依据 · {c.basis}</p>
+                ) : (
+                  <span />
                 )}
-                <div className="mt-3 flex items-center gap-2">
-                  {c.action && (
-                    <button
-                      onClick={c.action.onClick}
-                      className="rounded-full px-3.5 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-85"
-                      style={{ background: 'var(--sentinel)' }}
-                    >
-                      {c.action.label}
-                    </button>
-                  )}
-                  {c.snooze && (
-                    <button
-                      onClick={c.snooze}
-                      className="rounded-full border border-[var(--hairline)] px-3.5 py-1.5 text-[12px] text-[var(--ink-3)] transition-colors hover:border-[var(--hairline-strong)] hover:text-[var(--ink-2)]"
-                    >
-                      稍后
-                    </button>
-                  )}
-                </div>
+                {(c.action || c.snooze) && (
+                  <div className="ml-auto flex flex-shrink-0 items-center gap-2">
+                    {c.action && (
+                      <button
+                        onClick={c.action.onClick}
+                        className="rounded-full px-3.5 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-85"
+                        style={{ background: 'var(--sentinel)' }}
+                      >
+                        {c.action.label}
+                      </button>
+                    )}
+                    {c.snooze && (
+                      <button
+                        onClick={c.snooze}
+                        className="rounded-full border border-[var(--hairline)] px-3.5 py-1.5 text-[12px] text-[var(--ink-3)] transition-colors hover:border-[var(--hairline-strong)] hover:text-[var(--ink-2)]"
+                      >
+                        稍后
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

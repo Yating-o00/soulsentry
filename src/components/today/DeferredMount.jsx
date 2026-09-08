@@ -22,11 +22,18 @@ export default function DeferredMount({ children, minHeight = 420, className = '
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          setNear(true);
           io.disconnect();
+          // 等浏览器空闲再挂载,避免在滚动手势的同帧里
+          // 一次性初始化重组件 + 齐发查询,造成滚动中段卡顿。
+          if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(() => setNear(true), { timeout: 300 });
+          } else {
+            setTimeout(() => setNear(true), 60);
+          }
         }
       },
-      { rootMargin: '1000px 0px' }
+      // 预挂载距离缩小:500px 窗口让各板块错帧挂载,而不是 1000px 内集中触发
+      { rootMargin: '500px 0px' }
     );
     io.observe(node);
     return () => io.disconnect();

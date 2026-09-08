@@ -518,7 +518,7 @@ export default function SmartInputBar() {
   })();
 
   return (
-    <div className="mx-auto mt-8 w-full max-w-[680px]">
+    <div className="mt-7 w-full">
       {showChatRecognizer && inputValue.trim() && (
         <div className="px-1 mb-2">
           <ChatPasteRecognizer
@@ -529,7 +529,7 @@ export default function SmartInputBar() {
         </div>
       )}
 
-      <p className="mb-3 text-center font-[var(--font-serif)] text-[17px] text-[var(--sky-ink)]">
+      <p className="mb-3 font-[var(--font-serif)] text-[17px] text-[var(--sky-ink)]">
         告诉我，<span className="text-[var(--signal)]">任何事情</span>
       </p>
 
@@ -627,7 +627,7 @@ export default function SmartInputBar() {
           <button
             key={s}
             onClick={() => setInputValue(s)}
-            className="sky-chip rounded-full border border-[var(--hairline)] bg-white/60 px-3.5 py-1.5 text-[12.5px] text-[var(--ink-2)] transition-all duration-300 hover:border-[var(--sentinel)]/50 hover:text-[var(--sentinel)]"
+            className="sky-chip rounded-full border border-[var(--hairline)] bg-slate-50/80 px-3.5 py-1.5 text-[12.5px] text-[var(--ink-2)] transition-all duration-300 hover:border-[var(--sentinel)]/50 hover:text-[var(--sentinel)]"
           >
             {s}
           </button>

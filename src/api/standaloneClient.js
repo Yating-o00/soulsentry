@@ -19,24 +19,37 @@ function ensureArray(value) {
 const DEMO_EMAIL = "demo@soulsentry.local";
 const DEMO_PASSWORD = "demo123456";
 
+// demo 自动登录失败一次后不再重试：避免每个 API 调用都触发一次登录请求形成 401 风暴
+let demoLoginFailed = false;
+
 async function ensureStandaloneSession() {
   if (getAccessToken()) return true;
-
-  const result = await httpRequest("/api/auth/login", {
-    method: "POST",
-    body: {
-      type: "email",
-      email: DEMO_EMAIL,
-      password: DEMO_PASSWORD
-    }
-  });
-
-  if (result?.token) {
-    setAccessToken(result.token);
-    return true;
+  if (demoLoginFailed) {
+    const err = new Error("未登录或登录已过期");
+    err.status = 401;
+    throw err;
   }
 
-  return false;
+  try {
+    const result = await httpRequest("/api/auth/login", {
+      method: "POST",
+      body: {
+        type: "email",
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD
+      }
+    });
+
+    if (result?.token) {
+      setAccessToken(result.token);
+      return true;
+    }
+    demoLoginFailed = true;
+    return false;
+  } catch (error) {
+    demoLoginFailed = true;
+    throw error;
+  }
 }
 
 function createPlanEntity(basePath) {

@@ -50,6 +50,12 @@ const AuthenticatedApp = () => {
     }
   }
 
+  // 独立部署下鉴权检查已结束但未登录（token 丢失/过期且 demo 自动登录不可用）：
+  // 直接渲染登录页兜底，避免挂着空应用壳不停重试
+  if (!isAuthenticated && isStandaloneMode) {
+    return <Login />;
+  }
+
   // Render the main app
   return (
     <LayoutWrapper currentPageName={mainPageKey}>

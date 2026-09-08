@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -31,7 +30,6 @@ import CalendarWeekView from "../components/calendar/CalendarWeekView";
 import SoulWeekPlanner from "../components/calendar/SoulWeekPlanner";
 import CalendarDayView from "../components/calendar/CalendarDayView";
 import TaskCard from "../components/tasks/TaskCard";
-import UserBehaviorInsights from "../components/insights/UserBehaviorInsights";
 import NotificationManager from "../components/notifications/NotificationManager";
 import TeamOnboardingProgress from "../components/dashboard/TeamOnboardingProgress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,9 +40,8 @@ import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
-import SoulSentryHub from "../components/dashboard/SoulSentryHub";
 import DailyBriefing from "../components/dashboard/DailyBriefing";
-import SmartDailyPlanner from "../components/dashboard/SmartDailyPlanner";
+import SmartInputBar from "../components/notifications/SmartInputBar";
 import GoogleCalendarSync from "../components/calendar/GoogleCalendarSync";
 import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
@@ -70,8 +67,6 @@ export default function Dashboard() {
   const [phase, setPhase] = useState(() => phaseOf());
   const todayRef = useRevealRoot();
   const queryClient = useQueryClient();
-  const location = useLocation();
-  const soulSentryData = location.state?.soulSentryData;
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
@@ -360,7 +355,7 @@ export default function Dashboard() {
             {/* 01 内容输入 */}
             <TodaySection no="01" title="内容输入" sub="告诉我，任何事情" index={1}>
               <div className="module-shell">
-                <SoulSentryHub initialData={soulSentryData} initialShowResults={!!soulSentryData} />
+                <SmartInputBar />
               </div>
             </TodaySection>
 
@@ -452,15 +447,11 @@ export default function Dashboard() {
                 nowLabel={nowLabel}
                 onToggle={(t) => handleComplete(t, allTasks)}
               />
-
-              {/* 智能日程规划（完整功能保留） */}
-              <SmartDailyPlanner />
             </TodaySection>
 
             {/* 03 心境（心签 + 约定的数据分析） */}
-            <TodaySection no="03" title="心境" sub="心栈眼中的你" index={3} bodyClassName="space-y-6">
+            <TodaySection no="03" title="心境" sub="心栈眼中的你" index={3}>
               <MoodMirror notes={notesList} tasks={activeTasks} />
-              <UserBehaviorInsights />
             </TodaySection>
 
             {/* 04 守护动态（时空感知守护） */}

@@ -50,10 +50,10 @@
   --sky-card: rgba(255, 255, 255, 0.07);
 }
 
-/* 夜间:深色值守卡(静态微光,无动画层) */
+/* 夜间:深色值守卡(静态微光,无动画层) —— 微光用心流主题蓝（#5a7bd6），不再用紫色 */
 .today-page[data-phase='night'] .sky-band {
   background:
-    radial-gradient(120% 90% at 50% -10%, rgba(109, 95, 211, 0.14) 0%, transparent 55%),
+    radial-gradient(120% 90% at 50% -10%, rgba(90, 123, 214, 0.16) 0%, transparent 55%),
     #131c33;
   border-color: rgba(255, 255, 255, 0.08);
 }
@@ -298,14 +298,6 @@
   .today-page > section {
     padding-left: 24px;
     padding-right: 24px;
-  }
-}
-/* 3) 电脑端：信息流收敛为居中窄栏（720px），避免宽屏下卡片被拉满、行宽过长难阅读 */
-@media (min-width: 768px) {
-  .today-page > section {
-    max-width: 720px;
-    margin-left: auto;
-    margin-right: auto;
   }
 }
 

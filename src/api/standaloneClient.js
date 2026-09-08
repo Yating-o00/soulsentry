@@ -150,6 +150,19 @@ function createNoteEntity() {
       await ensureStandaloneSession();
       return ensureArray(await httpRequest(`/api/notes?sort=${encodeURIComponent(sort)}&limit=${limit}`));
     },
+    async filter(filters = {}, sort = "-updated_date", limit = 100) {
+      await ensureStandaloneSession();
+      const params = new URLSearchParams();
+      Object.entries(filters || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = String(value);
+        if (!text) return;
+        params.set(key, text);
+      });
+      params.set("sort", sort);
+      params.set("limit", String(limit));
+      return ensureArray(await httpRequest(`/api/notes?${params.toString()}`));
+    },
     async get(id) {
       await ensureStandaloneSession();
       return httpRequest(`/api/notes/${id}`);
@@ -175,7 +188,8 @@ function createNoteEntity() {
       });
     },
     subscribe() {
-      unsupported("entities.Note", "subscribe");
+      // 独立后端暂无实时推送，返回 no-op，避免调用方因抛错卡死
+      return () => {};
     }
   };
 }

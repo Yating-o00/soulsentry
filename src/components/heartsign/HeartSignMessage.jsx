@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, ListTodo, RefreshCw } from "lucide-react";
+import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, ListTodo, RefreshCw, BookOpen, Lock, Check, PenLine } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { base44 } from "@/api/base44Client";
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import KeywordExplorer from "@/components/heartsign/KeywordExplorer";
@@ -33,6 +34,111 @@ const COLOR_SCHEMES = {
 };
 const getScheme = (color) => COLOR_SCHEMES[color] || COLOR_SCHEMES.white;
 
+// 心签五类分类（与 analyzeHeartSign 写入的 source_type / metadata.ai_analysis.category 对应）
+export const HEARTSIGN_CATEGORIES = [
+  { type: 'emotion', label: '情绪' },
+  { type: 'inspiration', label: '灵感' },
+  { type: 'material', label: '资料' },
+  { type: 'memo', label: '备忘' },
+  { type: 'share', label: '分享' },
+];
+const categoryLabelOf = (type) => HEARTSIGN_CATEGORIES.find(c => c.type === type)?.label || '';
+
+// 理性内容的「知识补充」卡：白色卡面 + 品牌蓝细条，底部关键词可拓展外部链接
+function KnowledgeCard({ ai, plain }) {
+  if (!ai?.emotional_response) return null;
+  const keywords = [...(ai.key_points || []), ...(ai.related_topics || [])];
+  return (
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+      className="relative mt-2 rounded-2xl p-4 border border-slate-200/80 bg-white overflow-hidden">
+      {/* 左侧品牌蓝细条（对齐 AI 卡风格） */}
+      <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#384877]/40" aria-hidden />
+
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className="w-5 h-5 rounded-md bg-[#384877]/10 flex items-center justify-center">
+          <BookOpen className="w-3 h-3 text-[#384877]" />
+        </div>
+        <span className="text-[11.5px] font-medium text-[#384877]/80 tracking-wide">
+          {ai.response_title || '知识补充'}
+        </span>
+      </div>
+
+      <p className="text-[13.5px] text-slate-700 leading-[1.8] whitespace-pre-wrap break-words">{ai.emotional_response}</p>
+
+      {keywords.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          <div className="flex flex-wrap gap-x-2 gap-y-1.5">
+            {keywords.slice(0, 6).map((k, i) => (
+              <KeywordExplorer key={i} keyword={k} context={ai.summary || plain} inline />
+            ))}
+          </div>
+          <div className="mt-2 text-[10.5px] text-slate-400">点击关键词 · 拓展相关知识与链接</div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// 后端标记的敏感心签：原文不展示，引导在保险柜中查看
+function VaultLockedCard({ note, onDelete, onVaultRequest, isOptimistic }) {
+  const createdAt = note.created_date ? new Date(note.created_date) : null;
+  const time = createdAt && !isNaN(createdAt.getTime())
+    ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(createdAt)
+    : '';
+  return (
+    <div className="space-y-2">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex justify-end gap-2 group">
+        <div className="max-w-[88%] md:max-w-[78%] w-full">
+          <div className="relative bg-white border border-slate-200 rounded-2xl px-4 py-4 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)]">
+            {!isOptimistic && (
+              <div
+                className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity md:opacity-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-50 flex items-center justify-center text-slate-500"
+                      aria-label="更多操作"
+                    >
+                      <MoreHorizontal className="w-3.5 h-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); onVaultRequest?.(note); }}>
+                      <Lock className="w-3.5 h-3.5 mr-2" /> 移入保险柜
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={(e) => { e.preventDefault?.(); onDelete(); }}
+                      className="text-rose-600 focus:text-rose-700 focus:bg-rose-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" /> 删除
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
+            <div className="flex items-center gap-3">
+              <span className="w-9 h-9 rounded-full bg-[#384877]/8 border border-[#384877]/15 flex items-center justify-center flex-shrink-0">
+                <Lock className="w-4 h-4 text-[#384877]" />
+              </span>
+              <div>
+                <div className="text-[13.5px] font-medium text-slate-700">敏感内容已被保护</div>
+                <div className="text-[11.5px] text-slate-400 mt-0.5">原文已加密存证，不在信息流中展示</div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-1 text-right pr-1">
+            <span className="text-[10px] text-slate-400">{time}</span>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function SourceBadge({ note }) {
   const map = {
     manual: null,
@@ -52,7 +158,7 @@ function SourceBadge({ note }) {
   );
 }
 
-export default function HeartSignMessage({ note, onDeleted, onRestore }) {
+export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeChange, onVaultRequest }) {
   const [expanded, setExpanded] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -91,7 +197,7 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
       note_id: note.id,
       note_data: buildNoteData(),
     }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [note.id]);
   const createdAt = note.created_date ? new Date(note.created_date) : null;
   const isValidDate = createdAt && !isNaN(createdAt.getTime());
@@ -180,6 +286,43 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
       toast.error('转换失败');
     }
   };
+
+  // 「分错了」纠正：乐观更新本地分类，失败时回滚并提示
+  const handleTypeChange = async (cat) => {
+    if (isOptimistic || cat.type === note.source_type) return;
+    const prevType = note.source_type;
+    const prevLabel = ai.category || categoryLabelOf(prevType);
+    onTypeChange?.(note.id, cat.type, cat.label);
+    try {
+      await base44.entities.Note.update(note.id, {
+        source_type: cat.type,
+        metadata: {
+          ...note.metadata,
+          ai_analysis: { ...(note.metadata?.ai_analysis || ai), category: cat.label },
+        },
+      });
+      toast.success(`已归类为「${cat.label}」`);
+    } catch (e) {
+      toast.error('分类更新失败，已恢复原分类');
+      onTypeChange?.(note.id, prevType, prevLabel);
+    }
+  };
+
+  // 后端已标记的敏感心签：渲染锁定卡，不展示原文与 AI 卡
+  const isVault = note.source_type === 'vault' || note.metadata?.is_vault;
+  if (isVault) {
+    return (
+      <VaultLockedCard
+        note={note}
+        isOptimistic={isOptimistic}
+        onDelete={handleDelete}
+        onVaultRequest={onVaultRequest}
+      />
+    );
+  }
+
+  // 理性内容（资料/知识类）：用「知识补充」卡替代温暖回应卡
+  const isRational = ai.emotional_response && (ai.is_emotional === false || ai.response_tag === '理性补充');
 
   return (
    <div className="space-y-2">
@@ -293,9 +436,11 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
           </button>
         )}
 
-        {/* 感性内容 · AI 温暖回应 —— 置于智能处理之前 */}
+        {/* 感性温暖回应 / 理性知识补充 —— 置于智能处理之前 */}
         {note.ai_status === 'completed' && (
-          <WarmResponseCard ai={ai} />
+          isRational
+            ? <KnowledgeCard ai={ai} plain={plain} />
+            : <WarmResponseCard ai={ai} />
         )}
 
         {/* AI 知识卡片 - 主题色低调风格 */}
@@ -313,7 +458,31 @@ export default function HeartSignMessage({ note, onDeleted, onRestore }) {
                 {isReport ? '长文摘要' : note.source_type === 'external_feed' ? '外部信息已解析' : 'AI 智能处理'}
               </span>
               {ai.category && (
-                <span className="ml-auto text-[10.5px] px-2 py-0.5 bg-white text-[#384877]/70 rounded-md border border-[#384877]/15">{ai.category}</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      title="分类不对？点击纠正"
+                      className="ml-auto inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 bg-white text-[#384877]/70 rounded-md border border-[#384877]/15 hover:border-[#384877]/40 hover:text-[#384877] transition"
+                    >
+                      {ai.category}
+                      <PenLine className="w-2.5 h-2.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-36" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuLabel className="text-[10.5px] text-slate-400">分错了？重新归类</DropdownMenuLabel>
+                    {HEARTSIGN_CATEGORIES.map((c) => (
+                      <DropdownMenuItem
+                        key={c.type}
+                        onSelect={(e) => { e.preventDefault?.(); handleTypeChange(c); }}
+                        className="text-xs"
+                      >
+                        <Check className={`w-3.5 h-3.5 mr-2 ${(ai.category === c.label || note.source_type === c.type) ? 'opacity-100' : 'opacity-0'}`} />
+                        {c.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
 

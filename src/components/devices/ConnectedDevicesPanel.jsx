@@ -121,16 +121,18 @@ function DeviceCard({ device, onRename, isSelected, onSelect, strategyCount = 0 
                 >
                   {device.name || meta.label}
                 </h4>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditing(true);
-                  }}
-                  className="text-slate-300 hover:text-[#384877] transition-colors shrink-0"
-                  title="重命名"
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
+                {!device.isVirtual && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(true);
+                    }}
+                    className="text-slate-300 hover:text-[#384877] transition-colors shrink-0"
+                    title="重命名"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
                 {strategyCount > 0 && (
                   <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#384877] bg-[#384877]/8">
                     {strategyCount}<span className="opacity-70">策略</span>
@@ -222,6 +224,7 @@ export default function ConnectedDevicesPanel({
   selectedDeviceId,
   onSelectDevice,
   strategiesByType = {},
+  fallbackDevices = [],
 }) {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -308,8 +311,12 @@ export default function ConnectedDevicesPanel({
     }
   };
 
-  const onlineCount = devices.filter((d) => d.is_online).length;
-  const total = devices.length;
+  // standalone 下 Device 是 mock 实体恒为空,此时用父组件注入的虚拟设备矩阵兜底渲染,
+  // 让"全设备协同"板块始终有内容;真实设备一旦上线即自然替换
+  const displayDevices = devices.length > 0 ? devices : fallbackDevices;
+
+  const onlineCount = displayDevices.filter((d) => d.is_online).length;
+  const total = displayDevices.length;
   const hasCurrent = devices.some((d) => d.is_current);
 
   return (
@@ -342,7 +349,7 @@ export default function ConnectedDevicesPanel({
         </div>
       </div>
 
-      {!loading && !hasCurrent && (
+      {!loading && !hasCurrent && fallbackDevices.length === 0 && (
         <button
           onClick={handleConnectCurrent}
           className="w-full mb-3 text-sm py-2.5 rounded-xl border-2 border-dashed border-[#384877]/30 text-[#384877] hover:bg-[#384877]/5 transition-colors"
@@ -351,14 +358,14 @@ export default function ConnectedDevicesPanel({
         </button>
       )}
 
-      {!loading && devices.length === 0 && (
+      {!loading && devices.length === 0 && fallbackDevices.length === 0 && (
         <div className="text-center py-8 text-sm text-slate-400">
           还没有连接的设备，在每台你想用的设备上打开本应用即可自动加入。
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
-        {devices.map((d) => {
+        {displayDevices.map((d) => {
           // 用 UA 实时判定的形态取策略数,避免数据库 device_type 脏数据
           const realType = resolveDeviceBrand(d).deviceType || d.device_type;
           return (
@@ -374,7 +381,7 @@ export default function ConnectedDevicesPanel({
         })}
       </div>
 
-      {devices.length > 0 && (
+      {displayDevices.length > 0 && (
         <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
           提示：在任何一台手机、平板或电脑上打开 SoulSentry 并保持登录，会自动加入这里的设备列表。
           AI 之后会根据你当前在哪台设备上，把通知和任务精准推到这台机器。

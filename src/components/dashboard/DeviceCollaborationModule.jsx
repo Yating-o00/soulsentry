@@ -438,6 +438,23 @@ function mergeDevicesWithReminders(baseDevices, taskStrategies, noteStrategies, 
     });
   }
 
+  // 数据库无设备记录(standalone 下 Device 是 mock 实体恒为空)时,
+  // 注入虚拟设备矩阵,让 Task/Note 策略有挂载点,模块不再整块消失
+  if (map.size === 0) {
+    const virtualMatrix = ["phone", "pc", "watch", "speaker"];
+    for (const key of virtualMatrix) {
+      map.set(key, {
+        id: key,
+        device_type: key,
+        name: defaultNames[key] || "设备",
+        online: true,
+        is_online: true,
+        isVirtual: true,
+        strategies: [],
+      });
+    }
+  }
+
   // 按设备形态差异化分发策略 — 此处 key 已经归一化,可直接喂给 filterStrategiesForDevice
   for (const [key, dev] of map.entries()) {
     const extra = filterStrategiesForDevice(key, taskStrategies, noteStrategies, routine);
@@ -601,6 +618,7 @@ export default function DeviceCollaborationModule() {
   const effectiveSelected = selectedDevice
     || (realDevices || []).find((d) => d.is_current)
     || (realDevices || [])[0]
+    || devices[0]
     || null;
 
   // 关键:用 UA 实时判定出的形态作为真相,绕开数据库里可能错误的 device_type
@@ -628,9 +646,7 @@ export default function DeviceCollaborationModule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveSelectedType, rawSelectedStrategies.map((s) => `${s.time}|${s.content}`).join("\n")]);
 
-  const hasAnyStrategy = devices.some((d) => d.strategies && d.strategies.length > 0);
-  const hasAnyRealDevice = (realDevices || []).length > 0;
-  if (!hasAnyStrategy && !hasAnyRealDevice) return null;
+  if (devices.length === 0) return null;
 
   const selectedStrategies = rewriteMap[effectiveSelectedType] || rawSelectedStrategies;
 
@@ -657,6 +673,7 @@ export default function DeviceCollaborationModule() {
           selectedDeviceId={effectiveSelected?.id}
           onSelectDevice={setSelectedDevice}
           strategiesByType={strategiesByType}
+          fallbackDevices={devices.filter((d) => d.isVirtual)}
         />
         {effectiveSelected && (
           <DeviceStrategyPanel

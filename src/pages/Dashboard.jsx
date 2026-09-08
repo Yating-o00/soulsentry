@@ -219,10 +219,6 @@ export default function Dashboard() {
   }, [todayTasks, completedToday]);
 
   const nowLabel = format(new Date(), 'HH:mm');
-  const timelineTasks = React.useMemo(
-    () => [...todayTasks, ...completedToday],
-    [todayTasks, completedToday]
-  );
 
 
 
@@ -350,17 +346,14 @@ export default function Dashboard() {
               whisper={whisper}
               memory={memory}
               userName={user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")}
-            />
-
-            {/* 01 内容输入 */}
-            <TodaySection no="01" title="内容输入" sub="告诉我，任何事情" index={1}>
+            >
               <div className="module-shell">
                 <SmartInputBar />
               </div>
-            </TodaySection>
+            </TodayHero>
 
-            {/* 02 今日印记（当日待完成） */}
-            <TodaySection no="02" title="今日印记" sub="经过的每一刻，都值得被记住" index={2} bodyClassName="space-y-6">
+            {/* 01 今日印记（当日待完成） */}
+            <TodaySection no="01" title="今日印记" sub="经过的每一刻，都值得被记住" index={1} bodyClassName="space-y-6">
           {/* Stats Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -443,47 +436,44 @@ export default function Dashboard() {
       </motion.div>
 
               <TodayTimeline
-                tasks={timelineTasks}
+                tasks={rootTasks}
+                notes={notesList}
                 nowLabel={nowLabel}
                 onToggle={(t) => handleComplete(t, allTasks)}
               />
             </TodaySection>
 
-            {/* 03 心境（心签 + 约定的数据分析） */}
-            <TodaySection no="03" title="心境" sub="心栈眼中的你" index={3}>
+            {/* 02 心境（心签 + 约定的数据分析） */}
+            <TodaySection no="02" title="心境" sub="心栈眼中的你" index={2}>
               <MoodMirror notes={notesList} tasks={activeTasks} />
             </TodaySection>
 
-            {/* 04 守护动态（时空感知守护） */}
-            <TodaySection no="04" title="守护动态" sub="记忆会在对的时候，回来找你" index={4}>
+            {/* 03 守护动态（时空感知守护） */}
+            <TodaySection no="03" title="守护动态" sub="记忆会在对的时候，回来找你" index={3}>
               <div className="module-shell">
                 <SpatioTemporalGuardModule />
               </div>
             </TodaySection>
 
-            {/* 05 心栈为你编织（自动执行） */}
-            <TodaySection no="05" title="心栈为你编织" sub="把零散的记录，织成理解" index={5}>
+            {/* 04 心栈为你编织（自动执行） */}
+            <TodaySection no="04" title="心栈为你编织" sub="把零散的记录，织成理解" index={4}>
               <div className="module-shell">
                 <AutoExecutionPanel />
               </div>
             </TodaySection>
 
-            {/* 06 全设备协同 */}
-            <TodaySection no="06" title="全设备协同" sub="你在哪里，记忆就在哪里" index={6}>
+            {/* 05 全设备协同 */}
+            <TodaySection no="05" title="全设备协同" sub="你在哪里，记忆就在哪里" index={5}>
               <div className="module-shell">
                 <DeviceCollaborationModule />
               </div>
             </TodaySection>
 
-            {/* 07 AI 简报 + 回望与远见 */}
-            <TodaySection no="07" title="回望与远见" sub="数据是你的年轮，简报是我的心意" index={7}>
-              <div className="grid gap-4 lg:grid-cols-5">
-                <div className="lg:col-span-2">
-                  <RetroBars tasks={activeTasks} notes={notesList} />
-                </div>
-                <div className="lg:col-span-3">
-                  <DailyBriefing />
-                </div>
+            {/* 06 AI 简报 + 回望与远见 */}
+            <TodaySection no="06" title="回望与远见" sub="数据是你的年轮，简报是我的心意" index={6}>
+              <div className="space-y-4">
+                <DailyBriefing />
+                <RetroBars tasks={activeTasks} notes={notesList} />
               </div>
               <div className="mt-12 pb-4 text-center">
                 <p className="font-[var(--font-serif)] text-[17px] tracking-[0.1em] text-[var(--ink-2)]">

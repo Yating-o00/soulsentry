@@ -1,30 +1,31 @@
 /* ============ 心栈 · 今日 — 设计系统（作用域限定 .today-page） ============ */
 /* 移植自参考稿 index.css，全部选择器加 .today-page 前缀，避免污染全局 shadcn 主题 */
+/* 调色与全站主题色（#384877 品牌蓝 + amber 强调 + slate 文字阶）保持一致 */
 
 .today-page {
-  --paper: #faf9f5;
-  --paper-2: #f4f2ec;
-  --ink: #1c2340;
-  --ink-2: #3d4466;
-  --ink-3: #8a90ac;
-  --ink-4: #b7bbc9;
-  --hairline: rgba(28, 35, 64, 0.09);
-  --hairline-strong: rgba(28, 35, 64, 0.16);
+  --paper: #f8fafc;
+  --paper-2: #f1f5f9;
+  --ink: #0f172a;
+  --ink-2: #334155;
+  --ink-3: #64748b;
+  --ink-4: #94a3b8;
+  --hairline: rgba(15, 23, 42, 0.08);
+  --hairline-strong: rgba(15, 23, 42, 0.16);
 
-  --signal: #e8842c;
-  --signal-soft: rgba(232, 132, 44, 0.12);
-  --signal-glow: rgba(232, 132, 44, 0.22);
-  --sentinel: #223e86;
-  --sentinel-deep: #16204a;
-  --jade: #3e8e6d;
-  --alarm: #c94f42;
+  --signal: #f59e0b;
+  --signal-soft: rgba(245, 158, 11, 0.12);
+  --signal-glow: rgba(245, 158, 11, 0.25);
+  --sentinel: #384877;
+  --sentinel-deep: #2a3659;
+  --jade: #059669;
+  --alarm: #dc2626;
 
   /* 时段主题（默认午后，JS 按真实时间覆写 data-phase） */
-  --sky-a: #d2c2ff;
-  --sky-b: #eddccf;
-  --sky-c: #bfd9ff;
-  --sky-ink: #1c2340;
-  --sky-sub: rgba(28, 35, 64, 0.62);
+  --sky-a: #c7d2fe;
+  --sky-b: #e2e8f0;
+  --sky-c: #bcd3f7;
+  --sky-ink: #1e293b;
+  --sky-sub: rgba(30, 41, 59, 0.62);
   --sky-card: rgba(255, 255, 255, 0.55);
 
   --ease-reveal: cubic-bezier(0.22, 1, 0.36, 1);
@@ -38,26 +39,26 @@
 
 /* 夜间时段：哨兵值守的深色天幕 */
 .today-page[data-phase='night'] {
-  --sky-a: #16204a;
-  --sky-b: #223e86;
-  --sky-c: #0e1330;
-  --sky-ink: #f2f1ea;
-  --sky-sub: rgba(242, 241, 234, 0.6);
+  --sky-a: #1e293b;
+  --sky-b: #384877;
+  --sky-c: #0f172a;
+  --sky-ink: #f1f5f9;
+  --sky-sub: rgba(241, 245, 249, 0.6);
   --sky-card: rgba(255, 255, 255, 0.07);
 }
 
 .today-page[data-phase='night'] .sky-band {
   background:
-    radial-gradient(120% 150% at 12% -20%, rgba(196, 195, 255, 0.22) 0%, transparent 55%),
-    radial-gradient(110% 140% at 88% -30%, rgba(115, 149, 215, 0.20) 0%, transparent 52%),
-    radial-gradient(90% 120% at 50% 120%, rgba(34, 62, 134, 0.45) 0%, transparent 62%),
-    linear-gradient(180deg, #151c3e 0%, #0d1229 100%);
+    radial-gradient(120% 150% at 12% -20%, rgba(196, 195, 255, 0.16) 0%, transparent 55%),
+    radial-gradient(110% 140% at 88% -30%, rgba(91, 109, 174, 0.18) 0%, transparent 52%),
+    radial-gradient(90% 120% at 50% 120%, rgba(56, 72, 119, 0.5) 0%, transparent 62%),
+    linear-gradient(180deg, #16213e 0%, #0d1329 100%);
 }
 
 .today-page[data-phase='night'] .sky-chip {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.14);
-  color: rgba(242, 241, 234, 0.75);
+  color: rgba(241, 245, 249, 0.75);
 }
 
 /* ============ 天幕：缓慢漂移的时空渐变 ============ */
@@ -72,15 +73,17 @@
   transition: background 1.2s var(--ease-standard);
 }
 
+/* 漂移层限制在带内并开启合成层，避免大幅重绘导致滚动卡顿 */
 .today-page .sky-band::before {
   content: "";
   position: absolute;
-  inset: -60%;
+  inset: -30%;
   background:
     radial-gradient(28% 22% at 30% 38%, rgba(255, 255, 255, 0.5), transparent 70%),
     radial-gradient(22% 18% at 68% 30%, rgba(255, 255, 255, 0.32), transparent 70%);
   animation: xz-sky-drift 38s linear infinite alternate;
   pointer-events: none;
+  will-change: transform;
 }
 
 .today-page[data-phase='night'] .sky-band::before {
@@ -98,22 +101,19 @@
   to   { transform: translate3d(3%, 2.5%, 0) scale(1.06); }
 }
 
-/* ============ 入场揭示：错落浮现 ============ */
+/* ============ 入场揭示：错落浮现（只用透明度+位移，不用 blur，保证滚动流畅） ============ */
 .today-page .reveal {
   opacity: 0;
   transform: translateY(18px);
-  filter: blur(6px);
   transition:
     opacity 0.7s var(--ease-reveal),
-    transform 0.7s var(--ease-reveal),
-    filter 0.7s var(--ease-reveal);
+    transform 0.7s var(--ease-reveal);
   transition-delay: calc(var(--i, 0) * 70ms);
 }
 
 .today-page .reveal[data-revealed='true'] {
   opacity: 1;
   transform: translateY(0);
-  filter: blur(0);
 }
 
 /* ============ 轻唤脉冲：守护通知的呼吸点 ============ */
@@ -147,14 +147,29 @@
   50% { opacity: 1; filter: drop-shadow(0 0 6px var(--signal-glow)); }
 }
 
+/* ============ 执行管道流动 ============ */
+.today-page .pipe-flow {
+  background: linear-gradient(90deg,
+    var(--hairline-strong) 0%, var(--hairline-strong) 40%,
+    var(--signal) 50%,
+    var(--hairline-strong) 60%, var(--hairline-strong) 100%);
+  background-size: 240% 100%;
+  animation: xz-pipe-run 2.8s linear infinite;
+}
+
+@keyframes xz-pipe-run {
+  from { background-position: 120% 0; }
+  to   { background-position: -120% 0; }
+}
+
 /* ============ 回响卡片的诞生 / 离场 ============ */
 .today-page .echo-born {
   animation: xz-echo-in 0.72s var(--ease-reveal) both;
 }
 
 @keyframes xz-echo-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.985); filter: blur(4px); }
-  to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .today-page .echo-leave {
@@ -162,7 +177,7 @@
 }
 
 @keyframes xz-echo-out {
-  to { opacity: 0; transform: translateY(-8px) scale(0.99); filter: blur(3px); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.99); }
 }
 
 /* ============ 同步涟漪（全设备协同） ============ */
@@ -185,12 +200,12 @@
 
 /* ============ 回望柱状图 ============ */
 .today-page .bar-col {
-  background: rgba(34, 62, 134, 0.24);
+  background: rgba(56, 72, 119, 0.22);
   transition: background 0.3s var(--ease-standard), height 0.7s var(--ease-reveal);
 }
 
 .today-page .bar-col:hover {
-  background: rgba(34, 62, 134, 0.48);
+  background: rgba(56, 72, 119, 0.45);
 }
 
 .today-page .bar-today {
@@ -206,6 +221,43 @@
   0% { transform: scale(0.4); }
   60% { transform: scale(1.18); }
   100% { transform: scale(1); }
+}
+
+/* ============ 守护动态卡片 ============ */
+.today-page .guard-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(140% 120% at 0% 0%, var(--aura, rgba(245, 158, 11, 0.06)) 0%, transparent 55%),
+    rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 1px 2px rgba(22, 32, 74, 0.04), 0 12px 32px -18px rgba(22, 32, 74, 0.10);
+  transition: transform 0.5s var(--ease-reveal), box-shadow 0.5s var(--ease-reveal), border-color 0.5s var(--ease-standard);
+}
+
+.today-page .guard-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--hairline-strong);
+  box-shadow: 0 2px 4px rgba(22, 32, 74, 0.05), 0 20px 44px -18px rgba(22, 32, 74, 0.16);
+}
+
+.today-page .guard-medallion {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 1.5px;
+  background: conic-gradient(from 210deg, transparent 0deg, var(--med-c, var(--signal)) 70deg, transparent 140deg);
+}
+
+.today-page .guard-medallion > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--med-c, var(--signal));
 }
 
 /* ============ 通用工艺 ============ */
@@ -247,10 +299,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .today-page .reveal { opacity: 1; transform: none; filter: none; transition: none; }
+  .today-page .reveal { opacity: 1; transform: none; transition: none; }
   .today-page .sky-band::before,
   .today-page .pulse-dot::after,
   .today-page .now-thread,
+  .today-page .pipe-flow,
   .today-page .sync-ripple::before,
   .today-page .sync-ripple::after {
     animation: none;

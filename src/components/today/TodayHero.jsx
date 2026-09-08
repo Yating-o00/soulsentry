@@ -5,7 +5,7 @@ import { PHASE_GREETING } from '@/lib/todayPhase';
  * Hero 天幕带：时段问候 + 日期 + 今日心语 + 记忆的体温 chip
  * 视觉移植自参考稿 sections/HeroGate.tsx 的问候区
  */
-export default function TodayHero({ phase, dateLabel, whisper, memory, userName }) {
+export default function TodayHero({ phase, dateLabel, whisper, memory, userName, children }) {
   return (
     <section className="sky-band reveal rounded-[28px] px-6 pb-12 pt-12 sm:px-12" style={{ '--i': 0 }}>
       <div className="relative z-10 mx-auto max-w-[760px] text-center">
@@ -33,6 +33,16 @@ export default function TodayHero({ phase, dateLabel, whisper, memory, userName 
             心签 <b className="text-[var(--sky-ink)]">{memory.notes}</b> 枚
           </span>
         </div>
+
+        {/* 内容输入：并入天幕带，作为整页唯一的记忆入口 */}
+        {children && (
+          <div className="mt-8 text-left">
+            <p className="mb-3 text-center font-[var(--font-serif)] text-[17px] text-[var(--sky-ink)]">
+              告诉我，<span className="text-[var(--signal)]">任何事情</span>
+            </p>
+            {children}
+          </div>
+        )}
       </div>
     </section>
   );

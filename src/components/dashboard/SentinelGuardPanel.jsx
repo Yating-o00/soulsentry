@@ -1,10 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import GeoAwarenessCard from "@/components/smart/GeoAwarenessCard";
-import ForgettingRescueCard from "@/components/smart/ForgettingRescueCard";
-import AssociationRuleCard from "@/components/smart/AssociationRuleCard";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Shield, RefreshCw } from "lucide-react";
+import { Shield, RefreshCw, Bell, Compass, MapPin, HeartHandshake, Sparkles, AlarmClock } from "lucide-react";
 
 /**
  * 时空感知守护面板 - 聚合地理感知 + 遗忘拯救两类真实数据卡片
@@ -132,6 +130,9 @@ export default function SentinelGuardPanel() {
     toast('已稍后提醒');
   };
 
+  const navigate = useNavigate();
+  const goTask = (id) => { if (id) navigate(`/Tasks?taskId=${id}`); };
+
   const hasGeo = data?.geo_context && !dismissed.geo;
   const hasForget = data?.forgetting_rescue?.primary && !dismissed.forget;
   const hasAssoc = !!(assoc?.sequential_recommendation || assoc?.location_pattern);
@@ -170,26 +171,143 @@ export default function SentinelGuardPanel() {
     );
   }
 
+  // —— 守护动态卡片流：每张卡是一类「当前情境」（视觉对齐今日页 guardian feed 设计） ——
+  const LEVEL_META = {
+    urgent: { label: '紧要', color: 'var(--alarm)', Icon: Shield },
+    call: { label: '轻唤', color: 'var(--signal)', Icon: Bell },
+    calm: { label: '忆起', color: 'var(--sentinel)', Icon: Compass },
+  };
+
+  const cards = [];
+
+  if (hasGeo) {
+    const g = data.geo_context;
+    const urgent = (g.tasks || []).some((t) => t.overdue || t.priority === 'urgent');
+    const level = urgent ? 'urgent' : 'call';
+    cards.push({
+      key: 'geo',
+      level,
+      Icon: MapPin,
+      title: `${g.event === 'exit' ? '离开' : '进入'} · ${g.location_name || '附近'}`,
+      detail: g.contextual_reason || '这里有与你相关的约定，可以顺手处理。',
+      basis: `时空情境 × ${(g.tasks || []).length} 个相关约定${g.distance != null ? ` · 约 ${g.distance}m` : ''}`,
+      action: { label: '查看约定', onClick: () => goTask(g.tasks?.[0]?.id) },
+      snooze: () => handleSnooze('geo'),
+    });
+  }
+
+  if (hasForget) {
+    const f = data.forgetting_rescue;
+    const p = f.primary;
+    const others = [
+      ...(f.others || []).map((o) => `${o.title}（${o.days} 天）`),
+      ...(f.silent_notes || []).map((n) => `心签 · ${n.title}（${n.days} 天）`),
+    ];
+    cards.push({
+      key: 'forget',
+      level: p.overdue_days > 0 ? 'urgent' : 'call',
+      Icon: HeartHandshake,
+      title: `「${p.title}」已沉睡 ${p.days} 天`,
+      detail: p.context || '它可能被日子埋住了，轻轻捞起它。',
+      basis: `遗忘率 ${p.forget_rate ?? 0}%${p.overdue_days ? ` · 已逾期 ${p.overdue_days} 天` : ''}`,
+      extra: others.length > 0 ? `还有 ${others.length} 条在安静等待：${others.slice(0, 3).join('、')}` : null,
+      action: { label: '去看看', onClick: () => goTask(p.id) },
+      snooze: () => handleSnooze('forget'),
+    });
+  }
+
+  if (assoc?.sequential_recommendation) {
+    const s = assoc.sequential_recommendation;
+    const rules = (s.suggestions || [])
+      .map((r) => `${r.from_label} → ${r.to_label}（${r.confidence}%）`)
+      .join('、');
+    cards.push({
+      key: 'seq',
+      level: 'calm',
+      Icon: Sparkles,
+      title: s.trigger_task?.title ? `「${s.trigger_task.title}」之后，你通常会——` : '你的约定里藏着一条线索',
+      detail: rules ? `完成前者后，你接着做后者的概率很高：${rules}` : '有些约定总是前后脚出现。',
+      basis: '近 180 次兑现的约定 × 序贯规律',
+      action: s.suggestions?.[0]?.tasks?.[0]?.id
+        ? { label: '查看约定', onClick: () => goTask(s.suggestions[0].tasks[0].id) }
+        : null,
+    });
+  }
+
+  if (assoc?.location_pattern) {
+    const l = assoc.location_pattern;
+    const cats = (l.top_categories || []).map((c) => c.label).join('、');
+    cards.push({
+      key: 'loc',
+      level: 'calm',
+      Icon: Compass,
+      title: `在${l.location_name || '这里'}，你常做这些事`,
+      detail: [
+        cats && `常触及：${cats}`,
+        (l.top_titles || []).length > 0 && `出现过：${l.top_titles.map((t) => t.title).slice(0, 3).join('、')}`,
+      ].filter(Boolean).join('；'),
+      basis: `${l.history_sample_size ?? 0} 条此地记忆 × 地点规律`,
+      action: (l.suggested_tasks || [])[0]?.id
+        ? { label: '查看约定', onClick: () => goTask(l.suggested_tasks[0].id) }
+        : null,
+    });
+  }
+
   return (
-    <div className="space-y-4">
-      {hasGeo && (
-        <GeoAwarenessCard
-          data={data.geo_context}
-          onSnooze={() => handleSnooze('geo')}
-        />
-      )}
-      {hasForget && (
-        <ForgettingRescueCard
-          data={data.forgetting_rescue}
-          onSnooze={() => handleSnooze('forget')}
-        />
-      )}
-      {hasAssoc && (
-        <AssociationRuleCard
-          sequential={assoc.sequential_recommendation}
-          location={assoc.location_pattern}
-        />
-      )}
+    <div className="space-y-3.5">
+      {cards.map((c) => {
+        const meta = LEVEL_META[c.level];
+        return (
+          <div
+            key={c.key}
+            className="guard-card echo-born rounded-2xl p-4 sm:p-5"
+            style={{ '--aura': `color-mix(in srgb, ${meta.color} 7%, transparent)`, '--med-c': meta.color }}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="guard-medallion" style={{ '--med-c': meta.color }}>
+                <span>
+                  <c.Icon className="w-[18px] h-[18px]" />
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10.5px] font-medium"
+                    style={{ background: `color-mix(in srgb, ${meta.color} 12%, white)`, color: meta.color }}
+                  >
+                    {meta.label}
+                  </span>
+                  <h4 className="text-[14px] font-medium text-[var(--ink)]">{c.title}</h4>
+                </div>
+                {c.detail && <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink-2)]">{c.detail}</p>}
+                {c.extra && <p className="mt-1 text-[11.5px] text-[var(--ink-3)]">{c.extra}</p>}
+                {c.basis && (
+                  <p className="num mt-2 text-[10.5px] tracking-wide text-[var(--ink-4)]">情境依据 · {c.basis}</p>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  {c.action && (
+                    <button
+                      onClick={c.action.onClick}
+                      className="rounded-full px-3.5 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-85"
+                      style={{ background: 'var(--sentinel)' }}
+                    >
+                      {c.action.label}
+                    </button>
+                  )}
+                  {c.snooze && (
+                    <button
+                      onClick={c.snooze}
+                      className="rounded-full border border-[var(--hairline)] px-3.5 py-1.5 text-[12px] text-[var(--ink-3)] transition-colors hover:border-[var(--hairline-strong)] hover:text-[var(--ink-2)]"
+                    >
+                      稍后
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

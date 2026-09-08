@@ -140,8 +140,7 @@ export default function AutoExecutionPanel() {
   });
 
   const autoExecutions = executions.filter(e => e.automation_type && e.automation_type !== "none");
-  const allDone = autoExecutions.filter(e => e.execution_status === "completed");
-  const recentDone = recentExpanded ? allDone : allDone.slice(0, 3);
+  const deckItems = recentExpanded ? autoExecutions : autoExecutions.slice(0, 4);
 
   // 1) 发送：跳过候选清单，直接 plan → execute，结果对话框中查看产物
   const handleAnalyze = async (text, filesOverride) => {
@@ -289,21 +288,12 @@ export default function AutoExecutionPanel() {
 
   return (
     <>
-      <Card ref={panelRef} className="border-none shadow-sm bg-gradient-to-br from-white to-indigo-50/30 overflow-hidden">
-        <div className="p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
-                <Zap className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <h3 className="text-sm md:text-base font-semibold text-slate-900">添加自动执行项</h3>
-                <p className="text-[11px] text-slate-500">告诉 AI 你要的成果，直接生成对应内容 · 按次消耗 AI 点数</p>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm" asChild className="text-xs text-indigo-600 hover:bg-indigo-50">
+      <Card ref={panelRef} className="border-none shadow-none bg-transparent overflow-visible">
+        <div className="pb-2">
+          <div className="flex items-center justify-end mb-3">
+            <Button variant="ghost" size="sm" asChild className="text-xs text-[#384877] hover:bg-[#384877]/5 h-7">
               <Link to={createPageUrl("Notifications")}>
-                控制台<ChevronRight className="w-3 h-3 ml-0.5" />
+                执行控制台<ChevronRight className="w-3 h-3 ml-0.5" />
               </Link>
             </Button>
           </div>
@@ -415,32 +405,32 @@ export default function AutoExecutionPanel() {
           )}
 
           {/* 空态：仅在未输入时显示 */}
-          {!submitting && candidates.length === 0 && recentDone.length === 0 && (
+          {!submitting && candidates.length === 0 && deckItems.length === 0 && (
             <div className="text-center py-6 text-slate-400 mt-2">
               <Sparkles className="w-7 h-7 mx-auto mb-2 text-slate-300" />
-              <p className="text-xs">还没有自动执行任务，输入场景或点击上方快捷指令</p>
+              <p className="text-xs">把想办的差事托付给我：邮件、调研、PPT、笔记、账本……说完就去忙你的</p>
             </div>
           )}
 
-          {/* 最近完成 */}
-          {allDone.length > 0 && (
-            <div className="space-y-1.5 mt-4 pt-3 border-t border-slate-100">
-              <div className="flex items-center justify-between px-1">
+          {/* 编织卡片：聆听 → 理解 → 编织 → 回赠 */}
+          {autoExecutions.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between px-1 mb-2.5">
                 <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                  最近完成 {allDone.length > 3 && <span className="text-slate-400 normal-case ml-1">· {allDone.length}</span>}
+                  正在编织 {autoExecutions.length > 4 && <span className="text-slate-400 normal-case ml-1">· 共 {autoExecutions.length}</span>}
                 </div>
-                {allDone.length > 3 && (
+                {autoExecutions.length > 4 && (
                   <button
                     onClick={() => setRecentExpanded(v => !v)}
-                    className="flex items-center gap-0.5 text-[10px] text-indigo-600 hover:text-indigo-700 font-medium"
+                    className="flex items-center gap-0.5 text-[10px] text-[#384877] hover:opacity-80 font-medium"
                   >
                     {recentExpanded ? <>收起 <ChevronUp className="w-3 h-3" /></> : <>展开全部 <ChevronDown className="w-3 h-3" /></>}
                   </button>
                 )}
               </div>
-              <div className={recentExpanded ? "space-y-1.5 max-h-72 overflow-y-auto pr-1" : "space-y-1.5"}>
-                {recentDone.map(exec => (
-                  <ExecRow key={exec.id} exec={exec} onClick={() => setOpenExec(exec)} />
+              <div className={recentExpanded ? "grid gap-2.5 sm:grid-cols-2 max-h-96 overflow-y-auto pr-1" : "grid gap-2.5 sm:grid-cols-2"}>
+                {deckItems.map(exec => (
+                  <ExecutionCard key={exec.id} exec={exec} onClick={() => setOpenExec(exec)} />
                 ))}
               </div>
             </div>
@@ -562,18 +552,37 @@ export default function AutoExecutionPanel() {
   );
 }
 
-function ExecRow({ exec, onClick }) {
+// 阶段管道：聆听 → 理解 → 编织 → 回赠
+// 由 execution_status + plan/result 是否落库推导（后端无细分进度字段）
+const STAGES = ['聆听', '理解', '编织', '回赠'];
+
+function stageIndex(exec) {
+  switch (exec.execution_status) {
+    case 'parsing': return 0;
+    case 'pending':
+    case 'waiting_confirm': return 1;
+    case 'executing': return 2;
+    case 'waiting_acceptance':
+    case 'completed': return 3;
+    default: return -1; // failed / cancelled
+  }
+}
+
+function ExecutionCard({ exec, onClick }) {
   const cfg = AUTOMATION_TYPES[exec.automation_type] || AUTOMATION_TYPES.none;
-  const Icon = cfg.icon;
   const status = exec.execution_status;
+  const cur = stageIndex(exec);
+  const dead = status === 'failed' || status === 'cancelled';
 
   const statusInfo = {
-    parsing: { label: "规划中", color: "text-indigo-600 bg-indigo-50", pulse: true },
+    parsing: { label: "编织中", color: "text-amber-600 bg-amber-50", pulse: true },
     waiting_confirm: { label: "待确认", color: "text-amber-600 bg-amber-50" },
-    executing: { label: "执行中", color: "text-indigo-600 bg-indigo-50", pulse: true },
-    completed: { label: "已完成", color: "text-emerald-600 bg-emerald-50" },
-    failed: { label: "失败", color: "text-red-600 bg-red-50" },
-    pending: { label: "待执行", color: "text-slate-500 bg-slate-50" },
+    executing: { label: "编织中", color: "text-amber-600 bg-amber-50", pulse: true },
+    waiting_acceptance: { label: "待验收", color: "text-[#384877] bg-[#384877]/8" },
+    completed: { label: "已回赠", color: "text-emerald-600 bg-emerald-50" },
+    failed: { label: "未竟", color: "text-red-600 bg-red-50" },
+    cancelled: { label: "已取消", color: "text-slate-500 bg-slate-50" },
+    pending: { label: "排队中", color: "text-slate-500 bg-slate-50" },
   }[status] || { label: status, color: "text-slate-500 bg-slate-50" };
 
   return (
@@ -583,18 +592,52 @@ function ExecRow({ exec, onClick }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       onClick={onClick}
-      className="w-full flex items-center gap-2.5 p-2 rounded-lg bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all text-left"
+      className="w-full text-left rounded-xl bg-white border border-[var(--hairline)] hover:border-[var(--hairline-strong)] hover:shadow-sm transition-all p-3"
     >
-      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.iconBg}`}>
-        <Icon className="w-3.5 h-3.5" />
+      <div className="flex items-center gap-2.5">
+        <span className="text-lg leading-none">{cfg.emoji}</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-medium text-slate-800 truncate">{exec.task_title}</div>
+          <div className="text-[10px] text-slate-400 truncate">{cfg.label}</div>
+        </div>
+        <Badge variant="outline" className={`text-[10px] border-0 ${statusInfo.color} ${statusInfo.pulse ? 'animate-pulse' : ''}`}>
+          {statusInfo.label}
+        </Badge>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-slate-800 truncate">{exec.task_title}</div>
-        <div className="text-[10px] text-slate-400 truncate">{cfg.label}</div>
+
+      {/* 阶段管道 */}
+      <div className="mt-3 flex items-center gap-1.5">
+        {STAGES.map((s, i) => {
+          const passed = !dead && i < cur;
+          const current = !dead && i === cur && status !== 'completed' && status !== 'waiting_acceptance';
+          return (
+            <React.Fragment key={s}>
+              {i > 0 && (
+                <span className={`h-[3px] flex-1 rounded-full ${dead ? 'bg-slate-100' : passed ? 'bg-[var(--jade)]' : current ? 'pipe-flow' : 'bg-slate-100'}`} />
+              )}
+              <span
+                className={`flex items-center gap-1 text-[10px] ${
+                  dead ? 'text-slate-300' : passed ? 'text-[var(--jade)]' : current ? 'text-[var(--signal)] font-medium' : 'text-slate-300'
+                }`}
+              >
+                {passed ? '✓' : <span className={`inline-block h-1.5 w-1.5 rounded-full ${current ? 'bg-[var(--signal)]' : 'bg-slate-200'}`} />}
+                {s}
+              </span>
+            </React.Fragment>
+          );
+        })}
       </div>
-      <Badge variant="outline" className={`text-[10px] border-0 ${statusInfo.color} ${statusInfo.pulse ? 'animate-pulse' : ''}`}>
-        {statusInfo.label}
-      </Badge>
+
+      {(status === 'completed' || status === 'waiting_acceptance') && (
+        <p className="mt-2 text-[10.5px] text-slate-400 truncate">
+          {exec.automation_result?.preview
+            ? exec.automation_result.preview.replace(/[#*>`\n]/g, '').slice(0, 60)
+            : '成果已备好，点我查看'}
+        </p>
+      )}
+      {dead && exec.error_message && (
+        <p className="mt-2 text-[10.5px] text-red-400 truncate">{exec.error_message}</p>
+      )}
     </motion.button>
   );
 }

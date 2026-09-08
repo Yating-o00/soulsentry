@@ -28,6 +28,16 @@ export default function Pricing() {
     const creditsParam = params.get("credits");
     if (paymentStatus === "success" && creditsParam) {
       toast.success(`支付成功！${creditsParam} AI 点数将很快到账`);
+      if (typeof window !== 'undefined' && window.gtag) {
+        const amount = Number(params.get("amount"));
+        const sid = params.get("sid");
+        window.gtag('event', 'conversion', {
+          send_to: 'AW-18437176959/AeIMCPT6_vAcEP_8w9dE',
+          value: Number.isFinite(amount) ? amount : undefined,
+          currency: 'CNY',
+          ...(sid ? { transaction_id: sid } : {}),
+        });
+      }
       // Clear URL params
       window.history.replaceState({}, "", window.location.pathname);
       // Refresh credits after a short delay to allow webhook processing

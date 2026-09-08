@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
         pack_id: packId,
         credits: String(credits),
       },
-      success_url: `${req.headers.get('origin') || 'https://app.base44.com'}/Pricing?payment=success&credits=${credits}`,
+      success_url: `${req.headers.get('origin') || 'https://app.base44.com'}/Pricing?payment=success&credits=${credits}&amount=${price}&sid={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.get('origin') || 'https://app.base44.com'}/Pricing?payment=cancelled`,
     });
 

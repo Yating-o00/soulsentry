@@ -34,6 +34,14 @@ export default function PaymentMethodDialog({ open, onOpenChange, pack, onPaymen
         const res = await base44.functions.invoke("queryWechatOrder", { order_no: wechatQR.order_no });
         if (!stopped && res.data?.paid) {
           setPaid(true);
+          if (typeof window !== 'undefined' && window.gtag) {
+            window.gtag('event', 'conversion', {
+              send_to: 'AW-18437176959/AeIMCPT6_vAcEP_8w9dE',
+              value: pack?.price,
+              currency: 'CNY',
+              transaction_id: wechatQR.order_no,
+            });
+          }
           toast.success("支付成功！点数已到账");
           return;
         }
@@ -49,7 +57,7 @@ export default function PaymentMethodDialog({ open, onOpenChange, pack, onPaymen
       stopped = true;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [wechatQR, paid]);
+  }, [wechatQR, paid, pack]);
 
   // 关闭弹窗时重置状态
   useEffect(() => {

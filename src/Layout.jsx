@@ -222,6 +222,12 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+
+        <div className="flex items-center justify-center gap-3 pt-2 text-[11px] text-slate-400">
+          <Link to="/about" onClick={handleMobileClick} className="hover:text-[#384877] transition-colors">关于我们</Link>
+          <span>·</span>
+          <Link to="/contact" onClick={handleMobileClick} className="hover:text-[#384877] transition-colors">联系我们</Link>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

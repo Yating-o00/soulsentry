@@ -14,6 +14,8 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Collaborate from '@/pages/Collaborate';
 import ShareNote from '@/pages/ShareNote';
+import About from '@/pages/About';
+import Contact from '@/pages/Contact';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
@@ -52,6 +54,10 @@ const AuthenticatedApp = () => {
       {/* 协作分享页：未注册/未登录也可打开并参与 */}
       <Route path="/Collaborate" element={<Collaborate />} />
       <Route path="/ShareNote" element={<ShareNote />} />
+
+      {/* 公开信息页 */}
+      <Route path="/about" element={<About />} />
+      <Route path="/contact" element={<Contact />} />
 
       {/* 其余全部页面均需登录 */}
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>

@@ -54,8 +54,9 @@ export const AuthProvider = ({ children }) => {
       setAuthError(null);
 
       try {
-        // 生产环境不要自动登录 Demo 用户，避免用户看到空数据/测试数据
-        const shouldBootstrapDemo = import.meta.env.DEV && typeof base44.auth.bootstrapDevSession === "function";
+        // 独立部署（含生产环境）：无 token 时用 demo 账号自动登录，打开即进入 Demo 体验；
+        // demo 数据由 backend/prisma/seed.js 维护
+        const shouldBootstrapDemo = typeof base44.auth.bootstrapDevSession === "function";
         if (shouldBootstrapDemo && !base44.auth.isAuthenticated()) {
           try {
             const bootstrapUser = await base44.auth.bootstrapDevSession();

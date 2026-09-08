@@ -19,8 +19,9 @@ export default function TodayHero({ phase, dateLabel, whisper, memory, userName,
           {whisper}
         </p>
 
-        {/* 记忆的体温：不是待办与完成率，而是被记住的一切 */}
-        <div className="sky-chip num mt-5 inline-flex flex-wrap items-center justify-center gap-x-5 gap-y-1 rounded-full border border-[var(--hairline)] bg-white/40 px-5 py-2 text-[12.5px] text-[var(--sky-sub)] backdrop-blur-sm">
+        {/* 记忆的体温：不是待办与完成率，而是被记住的一切
+            不用 backdrop-filter：滚动时 behind 重绘代价高，纯色半透明替代 */}
+        <div className="sky-chip num mt-5 inline-flex flex-wrap items-center justify-center gap-x-5 gap-y-1 rounded-full border border-[var(--hairline)] bg-white/60 px-5 py-2 text-[12.5px] text-[var(--sky-sub)]">
           <span>
             今日已被记住 <b className="text-[var(--sky-ink)]">{memory.kept}</b> 件
           </span>
@@ -34,15 +35,8 @@ export default function TodayHero({ phase, dateLabel, whisper, memory, userName,
           </span>
         </div>
 
-        {/* 内容输入：并入天幕带，作为整页唯一的记忆入口 */}
-        {children && (
-          <div className="mt-8 text-left">
-            <p className="mb-3 text-center font-[var(--font-serif)] text-[17px] text-[var(--sky-ink)]">
-              告诉我，<span className="text-[var(--signal)]">任何事情</span>
-            </p>
-            {children}
-          </div>
-        )}
+        {/* 内容输入:心栈之门直接坐在天幕带里,作为整页唯一的记忆入口 */}
+        {children}
       </div>
     </section>
   );

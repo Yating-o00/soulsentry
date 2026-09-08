@@ -317,7 +317,7 @@ export default function AutoExecutionPanel() {
               }}
               placeholder="告诉 AI 你想自动完成什么...（Shift+Enter 换行）"
               rows={1}
-              className="flex-1 text-sm bg-white border border-slate-200 rounded-md px-3 py-2 resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 disabled:opacity-50 leading-relaxed"
+              className="flex-1 min-w-0 text-sm bg-white border border-slate-200 rounded-md px-3 py-2 resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 disabled:opacity-50 leading-relaxed"
               style={{ minHeight: "40px", maxHeight: "200px" }}
               disabled={submitting}
             />
@@ -342,7 +342,7 @@ export default function AutoExecutionPanel() {
             <Button
               onClick={() => handleAnalyze()}
               disabled={submitting || !input.trim()}
-              className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] flex-shrink-0"
+              className="bg-[#384877] hover:bg-[#2a3659] flex-shrink-0"
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>
@@ -575,9 +575,9 @@ function ExecutionCard({ exec, onClick }) {
   const dead = status === 'failed' || status === 'cancelled';
 
   const statusInfo = {
-    parsing: { label: "编织中", color: "text-amber-600 bg-amber-50", pulse: true },
-    waiting_confirm: { label: "待确认", color: "text-amber-600 bg-amber-50" },
-    executing: { label: "编织中", color: "text-amber-600 bg-amber-50", pulse: true },
+    parsing: { label: "编织中", color: "text-[#384877] bg-[#384877]/8", pulse: true },
+    waiting_confirm: { label: "待确认", color: "text-[#384877] bg-[#384877]/8" },
+    executing: { label: "编织中", color: "text-[#384877] bg-[#384877]/8", pulse: true },
     waiting_acceptance: { label: "待验收", color: "text-[#384877] bg-[#384877]/8" },
     completed: { label: "已回赠", color: "text-emerald-600 bg-emerald-50" },
     failed: { label: "未竟", color: "text-red-600 bg-red-50" },

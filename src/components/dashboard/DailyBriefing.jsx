@@ -87,18 +87,18 @@ export default function DailyBriefing() {
             className="bg-gradient-to-br from-white to-slate-50/50 rounded-2xl md:rounded-3xl p-4 md:p-8 border border-slate-100 shadow-sm mb-4 md:mb-8 relative overflow-hidden group hover:shadow-md transition-shadow duration-500"
         >
             {/* Decorative Background */}
-            <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-amber-100/10 to-orange-100/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+            <div className="absolute top-0 right-0 w-96 h-96 bg-[#384877]/[0.05] rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
 
             <div className="relative z-10">
                 <div className="flex justify-between items-start mb-5 md:mb-8">
                     <div className="flex items-center gap-3 md:gap-4 min-w-0">
-                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-gradient-to-br from-amber-200 to-orange-300 flex items-center justify-center text-white shadow-lg shadow-orange-200/50 shrink-0">
+                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[#384877] flex items-center justify-center text-white shadow-lg shadow-[#384877]/25 shrink-0">
                             <TimeIcon className="w-5 h-5 md:w-6 md:h-6" />
                         </div>
                         <div className="min-w-0">
                             <h2 className="text-base md:text-xl font-bold text-slate-800 tracking-tight truncate">{briefing.title || briefing.greeting}</h2>
                             <p className="text-[10px] md:text-xs text-slate-500 flex items-center gap-1.5 mt-0.5 md:mt-1 font-medium">
-                                <Sparkles className="w-3 h-3 text-amber-500" />
+                                <Sparkles className="w-3 h-3 text-[#384877]" />
                                 AI 每日简报
                             </p>
                         </div>
@@ -144,14 +144,14 @@ export default function DailyBriefing() {
                 {briefing.mindful_tip && (
                     <div className="mt-4 md:mt-8 pt-4 md:pt-6 border-t border-slate-100/60 flex flex-col items-center gap-3">
                         <div className="inline-flex items-center gap-2 text-slate-500 text-xs md:text-sm italic bg-white px-3 md:px-5 py-2 md:py-2.5 rounded-full border border-slate-100 shadow-sm max-w-full">
-                            <Sparkles className="w-3 h-3 md:w-3.5 md:h-3.5 text-amber-400 fill-amber-400 shrink-0" />
+                            <Sparkles className="w-3 h-3 md:w-3.5 md:h-3.5 text-[#384877] shrink-0" />
                             <span className="truncate">"{briefing.mindful_tip}"</span>
                         </div>
                         {briefing.task_stats && (
                             <div className="flex items-center gap-3 text-[10px] md:text-xs text-slate-400">
                                 <span>活跃 {briefing.task_stats.active}</span>
                                 {briefing.task_stats.urgent > 0 && <span className="text-rose-400">紧急 {briefing.task_stats.urgent}</span>}
-                                {briefing.task_stats.overdue > 0 && <span className="text-amber-500">逾期 {briefing.task_stats.overdue}</span>}
+                                {briefing.task_stats.overdue > 0 && <span className="text-rose-500">逾期 {briefing.task_stats.overdue}</span>}
                                 {briefing.task_stats.today_due > 0 && <span className="text-blue-400">今日到期 {briefing.task_stats.today_due}</span>}
                                 <span className="text-emerald-400">已完成 {briefing.task_stats.recent_completed}</span>
                             </div>

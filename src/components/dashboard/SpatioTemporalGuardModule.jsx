@@ -16,7 +16,7 @@ export default function SpatioTemporalGuardModule() {
       className="bg-white rounded-2xl md:rounded-3xl border border-slate-100 shadow-sm p-4 md:p-8"
     >
       <div className="flex items-center gap-2.5 mb-5 md:mb-6">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md">
+        <div className="w-8 h-8 rounded-xl bg-[#384877] flex items-center justify-center shadow-md">
           <Sparkles className="w-4 h-4 text-white" />
         </div>
         <div>

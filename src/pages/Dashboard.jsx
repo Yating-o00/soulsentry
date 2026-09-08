@@ -347,9 +347,7 @@ export default function Dashboard() {
               memory={memory}
               userName={user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")}
             >
-              <div className="module-shell">
-                <SmartInputBar />
-              </div>
+              <SmartInputBar />
             </TodayHero>
 
             {/* 01 今日印记（当日待完成） */}

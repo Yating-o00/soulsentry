@@ -12,9 +12,10 @@
   --hairline: rgba(15, 23, 42, 0.08);
   --hairline-strong: rgba(15, 23, 42, 0.16);
 
-  --signal: #f59e0b;
-  --signal-soft: rgba(245, 158, 11, 0.12);
-  --signal-glow: rgba(245, 158, 11, 0.25);
+  /* 信号色对齐品牌蓝（原琥珀黄，产品要求统一品牌色） */
+  --signal: #3b5aa2;
+  --signal-soft: rgba(59, 90, 162, 0.12);
+  --signal-glow: rgba(59, 90, 162, 0.25);
   --sentinel: #384877;
   --sentinel-deep: #2a3659;
   --jade: #059669;
@@ -223,16 +224,25 @@
   100% { transform: scale(1); }
 }
 
-/* ============ 守护动态卡片 ============ */
+/* ============ 守护动态卡片（扁平纯色，不用渐变） ============ */
 .today-page .guard-card {
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(140% 120% at 0% 0%, var(--aura, rgba(245, 158, 11, 0.06)) 0%, transparent 55%),
-    rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.78);
   border: 1px solid var(--hairline);
   box-shadow: 0 1px 2px rgba(22, 32, 74, 0.04), 0 12px 32px -18px rgba(22, 32, 74, 0.10);
   transition: transform 0.5s var(--ease-reveal), box-shadow 0.5s var(--ease-reveal), border-color 0.5s var(--ease-standard);
+}
+
+.today-page .guard-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--med-c, var(--signal));
+  opacity: 0.85;
 }
 
 .today-page .guard-card:hover {
@@ -242,11 +252,7 @@
 }
 
 .today-page .guard-medallion {
-  position: relative;
   flex-shrink: 0;
-  border-radius: 999px;
-  padding: 1.5px;
-  background: conic-gradient(from 210deg, transparent 0deg, var(--med-c, var(--signal)) 70deg, transparent 140deg);
 }
 
 .today-page .guard-medallion > span {
@@ -255,8 +261,8 @@
   justify-content: center;
   width: 38px;
   height: 38px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--med-c, var(--signal)) 10%, white);
   color: var(--med-c, var(--signal));
 }
 
@@ -296,6 +302,58 @@
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 1px 2px rgba(22, 32, 74, 0.04), 0 12px 32px -18px rgba(22, 32, 74, 0.10);
   overflow: hidden;
+}
+
+/* ============ 章节留白 + 离屏渲染优化（滚动卡顿根治） ============ */
+/* 1) 左右留白：手机端各板块不再紧贴屏幕边缘 */
+.today-page > section {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+@media (min-width: 640px) {
+  .today-page > section {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+/* 2) 离屏章节跳过渲染：长列表/图表只在进入视口时才绘制（Chromium 系生效，Safari 忽略无害）。
+      contain-intrinsic-size 预估占位高度，避免滚动条跳动 */
+.today-page > section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 640px;
+}
+
+/* ============ 心栈之门：Hero 内的统一记忆入口 ============ */
+/* 不用 backdrop-filter（滚动重绘卡顿源），以纯色半透明模拟玻璃质感 */
+.today-page .gate-vessel {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    inset 0 0.75px 0 rgba(255, 255, 255, 0.8),
+    0 1px 2px rgba(22, 32, 74, 0.05),
+    0 10px 30px -8px rgba(22, 32, 74, 0.12),
+    0 24px 60px -20px rgba(22, 32, 74, 0.18);
+  transition: border-color 0.4s var(--ease-standard), box-shadow 0.4s var(--ease-standard);
+}
+
+.today-page .gate-vessel.is-listening {
+  border-color: rgba(59, 90, 162, 0.55);
+  box-shadow:
+    inset 0 0.75px 0 rgba(255, 255, 255, 0.8),
+    0 0 0 4px var(--signal-soft),
+    0 0 24px var(--signal-glow),
+    0 24px 60px -20px rgba(22, 32, 74, 0.22);
+}
+
+.today-page[data-phase='night'] .gate-vessel {
+  background: rgba(30, 41, 59, 0.82);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--sky-ink);
+}
+
+.today-page[data-phase='night'] .gate-vessel textarea {
+  color: var(--sky-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {

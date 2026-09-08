@@ -231,6 +231,18 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies, r
   // 给每条任务打上场景标签,后面各设备按场景挑活
   const tagged = taskStrategies.map((s) => ({ ...s, _scene: classifyTaskScene(s) }));
 
+  // 「今天的约定」= 显示时间为纯 HH:mm 的任务;按真实时序升序
+  // 兜底分发时优先取最近 upcoming 的那条,而不是列表原序
+  const todayAnchors = (arr) =>
+    arr
+      .filter((s) => /^\d{2}:\d{2}$/.test(String(s.time || "")))
+      .sort((a, b) => String(a._sortKey || "").localeCompare(String(b._sortKey || "")));
+  const nowIso = new Date().toISOString();
+  const nextTodayAnchor = (arr) => {
+    const anchors = todayAnchors(arr);
+    return anchors.find((s) => (s._sortKey || "") >= nowIso) || anchors[0] || null;
+  };
+
   // 把用户作息转成小时阈值,缺省值兜底
   const r = routineHours(routine || {});
   const workStart = r.arriveOffice ?? 9;
@@ -247,7 +259,10 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies, r
       const picks = tagged.filter(
         (s) => s._scene === "mobile" || s._scene === "meeting" || s.priority === "high"
       );
-      out.push(...picks.map((s) => ({
+      // 兜底:一个都不命中时(如全是深度工作/阅读类中低优约定),
+      // 手机作为随身主控仍应拿到今天的约定,而不是空白
+      const finalPicks = picks.length > 0 ? picks : todayAnchors(tagged).slice(0, 6);
+      out.push(...finalPicks.map((s) => ({
         ...s,
         method: s._scene === "mobile" ? "出行推送" : s._scene === "meeting" ? "会前提示" : "随身推送",
       })));
@@ -290,18 +305,23 @@ function filterStrategiesForDevice(deviceType, taskStrategies, noteStrategies, r
     case "watch": {
       // 手表优势:贴身、抬腕可见、不打扰他人 — 极简哲学
       // → 只收紧急任务,内容截短到 14 字,只保留关键信息
+      const urgent = tagged.filter((s) => s.priority === "high").slice(0, 5); // 一天最多 5 条,守住贴身设备的克制
+      // 兜底:没有紧急约定时,手表作为贴身时间锚点,
+      // 至少应收到「下一个即将到来的约定」,而不是空白
+      let picks = urgent;
+      if (picks.length === 0) {
+        const nextAnchor = nextTodayAnchor(tagged);
+        if (nextAnchor) picks = [nextAnchor];
+      }
       out.push(
-        ...tagged
-          .filter((s) => s.priority === "high")
-          .slice(0, 5) // 一天最多 5 条,守住贴身设备的克制
-          .map((s) => ({
-            ...s,
-            content:
-              s.content && s.content.length > 14
-                ? s.content.slice(0, 14) + "…"
-                : s.content,
-            method: "腕上震动",
-          }))
+        ...picks.map((s) => ({
+          ...s,
+          content:
+            s.content && s.content.length > 14
+              ? s.content.slice(0, 14) + "…"
+              : s.content,
+          method: "腕上震动",
+        }))
       );
       break;
     }
@@ -659,7 +679,7 @@ export default function DeviceCollaborationModule() {
     >
       <div className="px-5 md:px-6 pt-5 pb-4 border-b border-slate-100/60">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#5b6dae] flex items-center justify-center shadow-lg shadow-[#384877]/25 shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-[#384877] flex items-center justify-center shadow-lg shadow-[#384877]/25 shrink-0">
             <Cpu className="w-5 h-5 text-white" />
           </div>
           <div className="min-w-0">

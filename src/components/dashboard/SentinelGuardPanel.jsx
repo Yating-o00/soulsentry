@@ -171,11 +171,11 @@ export default function SentinelGuardPanel() {
     );
   }
 
-  // —— 守护动态卡片流：每张卡是一类「当前情境」（视觉对齐今日页 guardian feed 设计） ——
+  // —— 守护动态卡片流：每张卡是一类「当前情境」（蓝紫灰冷色阶，与产品主色一致） ——
   const LEVEL_META = {
-    urgent: { label: '紧要', color: 'var(--alarm)', Icon: Shield },
-    call: { label: '轻唤', color: 'var(--signal)', Icon: Bell },
-    calm: { label: '忆起', color: 'var(--sentinel)', Icon: Compass },
+    urgent: { label: '紧要', color: '#6d5fd3', Icon: Shield },  // 紫：需要立即留意
+    call:   { label: '轻唤', color: '#3b5aa2', Icon: Bell },    // 蓝：品牌色轻提醒
+    calm:   { label: '忆起', color: '#64748b', Icon: Compass }, // 灰：温柔的回忆线索
   };
 
   const cards = [];

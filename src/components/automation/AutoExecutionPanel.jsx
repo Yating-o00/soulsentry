@@ -136,7 +136,9 @@ export default function AutoExecutionPanel() {
     queryKey: ['task-executions'],
     queryFn: () => base44.entities.TaskExecution.list("-created_date", 20),
     staleTime: 5000,
-    refetchInterval: 4000,
+    // 20s 轮询即可:执行进度主要由操作后的 invalidate 驱动,
+    // 4s 一轮的 refetch+重渲染是打开页面时滚动卡顿的主因之一
+    refetchInterval: 20000,
   });
 
   const autoExecutions = executions.filter(e => e.automation_type && e.automation_type !== "none");
@@ -289,7 +291,8 @@ export default function AutoExecutionPanel() {
   return (
     <>
       <Card ref={panelRef} className="border-none shadow-none bg-transparent overflow-visible">
-        <div className="pb-2">
+        {/* 内层留白:内容不顶满外壳(module-shell)的左右边缘 */}
+        <div className="px-3 sm:px-5 pt-3 pb-2">
           <div className="flex items-center justify-end mb-3">
             <Button variant="ghost" size="sm" asChild className="text-xs text-[#384877] hover:bg-[#384877]/5 h-7">
               <Link to={createPageUrl("Notifications")}>
@@ -592,7 +595,7 @@ function ExecutionCard({ exec, onClick }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       onClick={onClick}
-      className="w-full text-left rounded-xl bg-white border border-[var(--hairline)] hover:border-[var(--hairline-strong)] hover:shadow-sm transition-all p-3"
+      className="w-full min-w-0 text-left rounded-xl bg-white border border-[var(--hairline)] hover:border-[var(--hairline-strong)] hover:shadow-sm transition-all p-3"
     >
       <div className="flex items-center gap-2.5">
         <span className="text-lg leading-none">{cfg.emoji}</span>
@@ -613,10 +616,10 @@ function ExecutionCard({ exec, onClick }) {
           return (
             <React.Fragment key={s}>
               {i > 0 && (
-                <span className={`h-[3px] flex-1 rounded-full ${dead ? 'bg-slate-100' : passed ? 'bg-[var(--jade)]' : current ? 'pipe-flow' : 'bg-slate-100'}`} />
+                <span className={`h-[3px] min-w-[8px] flex-1 rounded-full ${dead ? 'bg-slate-100' : passed ? 'bg-[var(--jade)]' : current ? 'pipe-flow' : 'bg-slate-100'}`} />
               )}
               <span
-                className={`flex items-center gap-1 text-[10px] ${
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] ${
                   dead ? 'text-slate-300' : passed ? 'text-[var(--jade)]' : current ? 'text-[var(--signal)] font-medium' : 'text-slate-300'
                 }`}
               >

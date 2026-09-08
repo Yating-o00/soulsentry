@@ -4,20 +4,21 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
 const DEVICE_META = {
-  phone:   { icon: Smartphone, name: "手机",   role: "主控终端",  gradient: "from-[#384877] to-[#3b5aa2]", bg: "bg-[#384877]/5" },
-  watch:   { icon: Watch,      name: "手表",   role: "触觉提醒",  gradient: "from-[#3b5aa2] to-[#6366f1]", bg: "bg-slate-500/5" },
-  glasses: { icon: Glasses,    name: "眼镜",   role: "AR 视觉",   gradient: "from-[#6366f1] to-[#7c3aed]", bg: "bg-indigo-500/5" },
-  car:     { icon: Car,        name: "汽车",   role: "车载语音",  gradient: "from-emerald-600 to-teal-700", bg: "bg-emerald-500/5" },
-  home:    { icon: Home,       name: "家居",   role: "环境调节",  gradient: "from-amber-500 to-orange-600", bg: "bg-amber-500/5" },
-  speaker: { icon: Home,       name: "音箱",   role: "语音中枢",  gradient: "from-amber-500 to-orange-600", bg: "bg-amber-500/5" },
-  pc:      { icon: Monitor,    name: "工作站", role: "深度工作",  gradient: "from-rose-500 to-pink-600", bg: "bg-rose-500/5" },
-  tablet:  { icon: Monitor,    name: "平板",   role: "辅助屏",    gradient: "from-sky-500 to-indigo-500", bg: "bg-sky-500/5" },
+  phone:   { icon: Smartphone, name: "手机",   role: "主控终端",  solid: "bg-[#384877]", bg: "bg-[#384877]/5" },
+  watch:   { icon: Watch,      name: "手表",   role: "触觉提醒",  solid: "bg-[#3b5aa2]", bg: "bg-[#3b5aa2]/5" },
+  glasses: { icon: Glasses,    name: "眼镜",   role: "AR 视觉",   solid: "bg-[#6d5fd3]", bg: "bg-[#6d5fd3]/5" },
+  car:     { icon: Car,        name: "汽车",   role: "车载语音",  solid: "bg-[#64748b]", bg: "bg-slate-500/5" },
+  home:    { icon: Home,       name: "家居",   role: "环境调节",  solid: "bg-[#64748b]", bg: "bg-slate-500/5" },
+  speaker: { icon: Home,       name: "音箱",   role: "语音中枢",  solid: "bg-[#64748b]", bg: "bg-slate-500/5" },
+  pc:      { icon: Monitor,    name: "工作站", role: "深度工作",  solid: "bg-[#4a5f9e]", bg: "bg-[#4a5f9e]/5" },
+  tablet:  { icon: Monitor,    name: "平板",   role: "辅助屏",    solid: "bg-[#5b6dae]", bg: "bg-[#5b6dae]/5" },
 };
 
+// 优先级只留一个字:高 / 中 / 低
 const PRIORITY_CONFIG = {
-  high:   { label: "高优先", badge: "bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/20" },
-  medium: { label: "中优先", badge: "bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/20" },
-  low:    { label: "低优先", badge: "bg-slate-400/10 text-slate-500 ring-1 ring-slate-400/20" },
+  high:   { label: "高", badge: "bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/20" },
+  medium: { label: "中", badge: "bg-[#3b5aa2]/10 text-[#3b5aa2] ring-1 ring-[#3b5aa2]/20" },
+  low:    { label: "低", badge: "bg-slate-400/10 text-slate-500 ring-1 ring-slate-400/20" },
 };
 
 function formatTime(raw) {
@@ -56,11 +57,11 @@ export default function DeviceStrategyPanel({ deviceType, deviceName, strategies
         transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
         className="rounded-3xl overflow-hidden border border-slate-100 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
       >
-        <div className={cn("px-6 py-5 flex items-center justify-between", meta.bg)}>
+        <div className={cn("px-4 sm:px-6 py-5 flex items-center justify-between", meta.bg)}>
           <div className="flex items-center gap-3.5">
             <div className={cn(
-              "w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-md",
-              meta.gradient
+              "w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md",
+              meta.solid
             )}>
               {(() => { const Icon = meta.icon; return <Icon className="w-5 h-5" />; })()}
             </div>
@@ -77,51 +78,55 @@ export default function DeviceStrategyPanel({ deviceType, deviceName, strategies
           </span>
         </div>
 
-        <div className="px-6 py-4">
-          <div className="relative">
-            <div className="absolute left-[19px] top-6 bottom-6 w-px bg-gradient-to-b from-slate-200 via-slate-200 to-transparent" />
-            <div className="space-y-1">
-              {strategies.map((s, i) => {
-                const time = formatTime(s.time);
-                const priorityCfg = PRIORITY_CONFIG[s.priority] || PRIORITY_CONFIG.medium;
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.08, duration: 0.3 }}
-                    className="group relative pl-12 py-3.5 rounded-2xl hover:bg-slate-50/80 transition-colors"
+        {/* 策略行:整条撑满可用宽度 —— 时间 | 内容(撑开) | 优先级(单字) | 动作 */}
+        <div className="px-3 sm:px-4 pb-4">
+          <div className="space-y-0.5">
+            {strategies.map((s, i) => {
+              const time = formatTime(s.time);
+              const priorityCfg = PRIORITY_CONFIG[s.priority] || PRIORITY_CONFIG.medium;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.06, duration: 0.3 }}
+                  className="group flex items-center gap-2.5 sm:gap-3 rounded-xl px-2.5 sm:px-3 py-3 hover:bg-slate-50/80 transition-colors"
+                >
+                  {/* 优先级色点 */}
+                  <span
+                    className={cn(
+                      "h-2 w-2 shrink-0 rounded-full",
+                      s.priority === 'high' ? "bg-rose-500" :
+                      s.priority === 'medium' ? "bg-[#3b5aa2]" :
+                      "bg-slate-300"
+                    )}
+                  />
+                  {/* 时间 */}
+                  <span className="num w-[46px] shrink-0 text-[12.5px] font-semibold text-slate-700">
+                    {time}
+                  </span>
+                  {/* 内容:占满剩余宽度 */}
+                  <p className="min-w-0 flex-1 text-[13px] leading-snug text-slate-700">
+                    {s.content}
+                  </p>
+                  {/* 优先级:单字徽章 */}
+                  <span
+                    className={cn(
+                      "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md text-[11px] font-semibold",
+                      priorityCfg.badge
+                    )}
+                    title={`${priorityCfg.label}优先级`}
                   >
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10">
-                      <div className={cn(
-                        "w-3.5 h-3.5 rounded-full border-[2.5px] border-white ring-1 transition-all duration-300",
-                        s.priority === 'high' ? "bg-rose-500 ring-rose-200" :
-                        s.priority === 'medium' ? "bg-amber-500 ring-amber-200" :
-                        "bg-slate-400 ring-slate-200"
-                      )} />
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2.5 mb-1.5">
-                          <span className="text-[13px] font-bold text-[#0a0a0f] tracking-tight">{time}</span>
-                          <span className={cn(
-                            "px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider",
-                            priorityCfg.badge
-                          )}>
-                            {priorityCfg.label}
-                          </span>
-                        </div>
-                        <p className="text-sm text-[#0a0a0f]/60 leading-relaxed">{s.content}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0a0a0f]/[0.03] rounded-xl border border-[#0a0a0f]/[0.06] shrink-0 mt-0.5 group-hover:bg-[#0a0a0f]/[0.06] transition-colors">
-                        <Zap className="w-3 h-3 text-[#0a0a0f]/40" />
-                        <span className="text-xs font-medium text-[#0a0a0f]/60">{s.method}</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+                    {priorityCfg.label}
+                  </span>
+                  {/* 实施动作 */}
+                  <span className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200/80 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-500 group-hover:border-[#384877]/25 group-hover:text-[#384877] transition-colors">
+                    <Zap className="h-3 w-3" />
+                    {s.method}
+                  </span>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </motion.div>

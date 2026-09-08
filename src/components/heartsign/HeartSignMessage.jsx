@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, ListTodo, RefreshCw, BookOpen, Lock, Check, PenLine } from "lucide-react";
-import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, RefreshCw, BookOpen, Lock, Check, PenLine, Pin, Send } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import {
@@ -16,23 +14,7 @@ import {
 import KeywordExplorer from "@/components/heartsign/KeywordExplorer";
 import WarmResponseCard from "@/components/heartsign/WarmResponseCard";
 import HeartSignShareCard from "@/components/heartsign/HeartSignShareCard";
-
-// Notion 风的柔和色板：根据 note.color 切换气泡 + AI 卡片的配色
-const COLOR_SCHEMES = {
-  white:  { bubble: 'bg-white border-slate-200/80',       accent: 'bg-slate-50 border-slate-200/70 text-slate-600',     dot: 'bg-slate-300' },
-  red:    { bubble: 'bg-rose-50/60 border-rose-200/70',   accent: 'bg-rose-50 border-rose-200/70 text-rose-700',         dot: 'bg-rose-400' },
-  orange: { bubble: 'bg-orange-50/60 border-orange-200/70', accent: 'bg-orange-50 border-orange-200/70 text-orange-700', dot: 'bg-orange-400' },
-  yellow: { bubble: 'bg-amber-50/60 border-amber-200/70', accent: 'bg-amber-50 border-amber-200/70 text-amber-700',     dot: 'bg-amber-400' },
-  green:  { bubble: 'bg-emerald-50/60 border-emerald-200/70', accent: 'bg-emerald-50 border-emerald-200/70 text-emerald-700', dot: 'bg-emerald-400' },
-  teal:   { bubble: 'bg-teal-50/60 border-teal-200/70',   accent: 'bg-teal-50 border-teal-200/70 text-teal-700',         dot: 'bg-teal-400' },
-  blue:   { bubble: 'bg-sky-50/60 border-sky-200/70',     accent: 'bg-sky-50 border-sky-200/70 text-sky-700',             dot: 'bg-sky-400' },
-  darkblue:{ bubble: 'bg-indigo-50/60 border-indigo-200/70', accent: 'bg-indigo-50 border-indigo-200/70 text-indigo-700', dot: 'bg-indigo-400' },
-  purple: { bubble: 'bg-violet-50/60 border-violet-200/70', accent: 'bg-violet-50 border-violet-200/70 text-violet-700', dot: 'bg-violet-400' },
-  pink:   { bubble: 'bg-pink-50/60 border-pink-200/70',   accent: 'bg-pink-50 border-pink-200/70 text-pink-700',         dot: 'bg-pink-400' },
-  brown:  { bubble: 'bg-stone-50 border-stone-200/80',    accent: 'bg-stone-50 border-stone-200/70 text-stone-700',     dot: 'bg-stone-400' },
-  gray:   { bubble: 'bg-slate-50 border-slate-200/80',    accent: 'bg-slate-100 border-slate-200/70 text-slate-700',    dot: 'bg-slate-400' },
-};
-const getScheme = (color) => COLOR_SCHEMES[color] || COLOR_SCHEMES.white;
+import { TYPE_META, DENSITY_KEY, getNoteType, isPinnedNote } from "@/components/heartsign/heartSignMeta";
 
 // 心签五类分类（与 analyzeHeartSign 写入的 source_type / metadata.ai_analysis.category 对应）
 export const HEARTSIGN_CATEGORIES = [
@@ -42,7 +24,9 @@ export const HEARTSIGN_CATEGORIES = [
   { type: 'memo', label: '备忘' },
   { type: 'share', label: '分享' },
 ];
-const categoryLabelOf = (type) => HEARTSIGN_CATEGORIES.find(c => c.type === type)?.label || '';
+
+// 卡内小按钮（操作条 / 继续聊聊）
+const OP_CLS = "inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#384877] hover:bg-slate-50 rounded-md px-2 py-1 transition-colors";
 
 // 理性内容的「知识补充」卡：白色卡面 + 品牌蓝细条，底部关键词可拓展外部链接
 function KnowledgeCard({ ai, plain }) {
@@ -158,11 +142,57 @@ function SourceBadge({ note }) {
   );
 }
 
-export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeChange, onVaultRequest }) {
+// 卡内对话线程：渲染 followupHeartSign 写入 metadata.conversation 的多轮对话
+function ConversationThread({ conv, typing }) {
+  if (!conv.length && !typing) return null;
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5">
+      {conv.map((m, i) => m.role === 'user' ? (
+        <div key={i} className="flex justify-end">
+          <div className="max-w-[85%] bg-slate-50 border border-slate-200/70 rounded-2xl rounded-br-md px-3 py-2 text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
+            {m.text}
+          </div>
+        </div>
+      ) : m.typing ? (
+        <div key={i} className="flex justify-start">
+          <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 bg-white border border-slate-100 rounded-2xl px-3 py-2">
+            <Loader2 className="w-3 h-3 animate-spin" /> 另一个你 正在倾听…
+          </div>
+        </div>
+      ) : (
+        <div key={i} className="flex justify-start">
+          <div className="max-w-[85%]">
+            <div className="text-[10px] text-slate-400 mb-0.5">另一个你{m.tag ? ` · ${m.tag}` : ''}</div>
+            <div className="bg-white border border-slate-200/80 rounded-2xl rounded-bl-md px-3 py-2 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap break-words">
+              {m.text}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function HeartSignMessage({
+  note,
+  flash,
+  onDeleted,
+  onRestore,
+  onTypeChange,
+  onVaultRequest,
+  onPinnedChange,
+  onConvertToTask,
+  onSaveToKnowledge,
+}) {
   const [expanded, setExpanded] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [localConv, setLocalConv] = useState(null); // 卡内对话的本地乐观态
+  const [followText, setFollowText] = useState("");
+  const [followSending, setFollowSending] = useState(false);
   const ai = note.ai_analysis || {};
+  const typeKey = getNoteType(note);
+  const conv = localConv || note.metadata?.conversation || [];
 
   // 携带笔记内容一起传给后端，绕开后端"查不到笔记"的数据隔离问题
   const buildNoteData = () => ({
@@ -197,7 +227,7 @@ export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeCha
       note_id: note.id,
       note_data: buildNoteData(),
     }).catch(() => {});
-     
+
   }, [note.id]);
   const createdAt = note.created_date ? new Date(note.created_date) : null;
   const isValidDate = createdAt && !isNaN(createdAt.getTime());
@@ -239,7 +269,6 @@ export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeCha
   const isLong = plain.length > 300;
   const isReport = plain.length > 800;
   const displayText = expanded || !isLong ? plain : plain.slice(0, 280) + '…';
-  const scheme = getScheme(note.color);
   const isOptimistic = typeof note.id === 'string' && note.id.startsWith('tmp-');
   // 纯外部信息（外部订阅源 / 网页链接 / 微信转发）靠左对齐，与用户自建内容（靠右）区分
   const isExternal = ['external_feed', 'web_link', 'wechat_share'].includes(note.source_type);
@@ -257,55 +286,47 @@ export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeCha
     setShareOpen(true);
   };
 
-  const handleDelete = async () => {
+  // 删除交给父级统一处理（乐观移除 + 服务端软删除 + 失败回滚），避免双发
+  const handleDelete = () => {
     if (isOptimistic) return;
-    // 先乐观移除，保证点击即时有反馈（移动端/PWA 下 confirm 可能被静默拦截导致"无反应"）
     onDeleted?.(note.id);
+  };
+
+  // 卡内继续对话：乐观上屏 → followupHeartSign → 用服务端返回的完整会话替换
+  const handleFollow = async () => {
+    const text = followText.trim();
+    if (!text || followSending || isOptimistic) return;
+    const now = new Date().toISOString();
+    const optimisticConv = [...conv, { role: 'user', text, ts: now }];
+    setLocalConv(optimisticConv);
+    setFollowText('');
+    setFollowSending(true);
     try {
-      await base44.entities.Note.update(note.id, { deleted_at: new Date().toISOString() });
-      toast.success('已删除', { description: '可在回收站恢复' });
+      const round = conv.filter((m) => m.role === 'user').length + 1;
+      const density = localStorage.getItem(DENSITY_KEY) || 'light';
+      const { data } = await base44.functions.invoke('followupHeartSign', {
+        note_id: note.id,
+        text,
+        round,
+        density,
+      });
+      if (Array.isArray(data?.conversation)) {
+        setLocalConv(data.conversation);
+      } else {
+        setLocalConv(optimisticConv.filter((m) => !m.typing));
+      }
     } catch (e) {
-      toast.error('删除失败，请重试');
-      onRestore?.(note);
+      setLocalConv(conv);
+      toast.error('发送失败，请重试');
+    } finally {
+      setFollowSending(false);
     }
   };
 
-  const handleConvertToTask = async (category) => {
-    if (isOptimistic) return;
-    try {
-      const title = (ai.summary || plain).slice(0, 60) || '来自心签';
-      await base44.entities.Task.create({
-        title,
-        description: plain.slice(0, 1000),
-        category: category === 'promise' ? 'personal' : 'work',
-        priority: 'medium',
-        tags: note.tags || [],
-      });
-      toast.success(category === 'promise' ? '已转为约定' : '已转为任务');
-    } catch (e) {
-      toast.error('转换失败');
-    }
-  };
-
-  // 「分错了」纠正：乐观更新本地分类，失败时回滚并提示
-  const handleTypeChange = async (cat) => {
-    if (isOptimistic || cat.type === note.source_type) return;
-    const prevType = note.source_type;
-    const prevLabel = ai.category || categoryLabelOf(prevType);
-    onTypeChange?.(note.id, cat.type, cat.label);
-    try {
-      await base44.entities.Note.update(note.id, {
-        source_type: cat.type,
-        metadata: {
-          ...note.metadata,
-          ai_analysis: { ...(note.metadata?.ai_analysis || ai), category: cat.label },
-        },
-      });
-      toast.success(`已归类为「${cat.label}」`);
-    } catch (e) {
-      toast.error('分类更新失败，已恢复原分类');
-      onTypeChange?.(note.id, prevType, prevLabel);
-    }
+  // 「分错了」纠正：乐观更新由父级统一处理（缓存 + 服务端 + 回滚）
+  const handleTypeChange = (cat) => {
+    if (isOptimistic || cat.type === typeKey) return;
+    onTypeChange?.(note, cat.type, cat.label);
   };
 
   // 后端已标记的敏感心签：渲染锁定卡，不展示原文与 AI 卡
@@ -325,54 +346,46 @@ export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeCha
   const isRational = ai.emotional_response && (ai.is_emotional === false || ai.response_tag === '理性补充');
 
   return (
-   <div className="space-y-2">
+   <div data-hs-id={note.id} data-hs-type={typeKey} className={`hs-card ${flash ? 'hs-flash' : ''}`}>
     <HeartSignShareCard note={note} text={plain} open={shareOpen} onClose={() => setShareOpen(false)} />
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className={`flex ${isExternal ? 'justify-start' : 'justify-end'} gap-2 group`}>
-      <div className="max-w-[88%] md:max-w-[78%]">
-        {/* 用户气泡 - Notion 风格卡片（按 note.color 着色） */}
-        <div className={`relative ${scheme.bubble} border rounded-2xl px-4 py-3 shadow-[0_1px_2px_rgba(15,15,15,0.04),0_2px_8px_rgba(15,15,15,0.03)] hover:shadow-[0_2px_4px_rgba(15,15,15,0.05),0_4px_12px_rgba(15,15,15,0.04)] transition-all`}>
-          {note.color && note.color !== 'white' && (
-            <span className={`absolute -left-2 top-4 w-1 h-6 rounded-full ${scheme.dot}`} aria-hidden />
-          )}
 
-          {/* 操作菜单：悬停 / 移动端常驻 */}
-          {!isOptimistic && (
-            <div
-              className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity md:opacity-0"
+    {/* 卡头：类型 chip + 置顶标记 + 时间 + 分错了纠正 */}
+    <div className="flex items-center gap-2 mb-2">
+      <span className="hs-type-chip">{TYPE_META[typeKey]?.label || '心签'}签</span>
+      {isPinnedNote(note) && <Pin className="w-3 h-3 text-[#384877] fill-[#384877]" />}
+      <span className="text-[10px] text-slate-400 ml-auto" title={fullTime}>{time}</span>
+      {!isOptimistic && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
               onClick={(e) => e.stopPropagation()}
+              title="分错了？点击纠正"
+              className="inline-flex items-center gap-0.5 text-[10.5px] text-slate-400 hover:text-[#384877] transition-colors"
             >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-50 flex items-center justify-center text-slate-500"
-                    aria-label="更多操作"
-                  >
-                    <MoreHorizontal className="w-3.5 h-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); handleShare(); }}>
-                    <Share2 className="w-3.5 h-3.5 mr-2" /> 分享
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); handleCopy(); }}>
-                    <Copy className="w-3.5 h-3.5 mr-2" /> 复制文本
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); handleConvertToTask('promise'); }}>
-                    <CalendarPlus className="w-3.5 h-3.5 mr-2" /> 转为约定
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={(e) => { e.preventDefault?.(); handleDelete(); }}
-                    className="text-rose-600 focus:text-rose-700 focus:bg-rose-50"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-2" /> 删除
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
+              分错了<PenLine className="w-2.5 h-2.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuLabel className="text-[10.5px] text-slate-400">分错了？重新归类</DropdownMenuLabel>
+            {HEARTSIGN_CATEGORIES.map((c) => (
+              <DropdownMenuItem
+                key={c.type}
+                onSelect={(e) => { e.preventDefault?.(); handleTypeChange(c); }}
+                className="text-xs"
+              >
+                <Check className={`w-3.5 h-3.5 mr-2 ${typeKey === c.type ? 'opacity-100' : 'opacity-0'}`} />
+                {c.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
+
+    {/* 用户气泡 */}
+    <div className={`flex ${isExternal ? 'justify-start' : 'justify-end'}`}>
+      <div className="max-w-[88%] md:max-w-[78%] w-full">
+        <div className="relative bg-white border border-slate-200/80 rounded-2xl px-4 py-3">
           {(note.source_type !== 'manual' || isReport || note.source_url) && (
             <div className="flex items-center gap-1.5 mb-2 flex-wrap">
               <SourceBadge note={note} />
@@ -408,19 +421,15 @@ export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeCha
             </div>
           )}
         </div>
-
-        <div className={`mt-1 ${isExternal ? 'text-left pl-1' : 'text-right pr-1'}`}>
-          <span className="text-[10px] text-slate-400" title={fullTime}>{time}</span>
-        </div>
       </div>
-    </motion.div>
+    </div>
 
-    {/* 所有非用户编辑的 AI 内容 —— 统一置于对话框左侧 */}
-    <div className="flex justify-start">
+    {/* 所有非用户编辑的 AI 内容 —— 统一置于签卡左侧 */}
+    <div className="flex justify-start mt-2">
       <div className="max-w-[88%] md:max-w-[78%] w-full">
         {/* AI 处理状态 */}
         {(note.ai_status === 'pending' || note.ai_status === 'processing') && (
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200/70 rounded-md px-2.5 py-1">
+          <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200/70 rounded-md px-2.5 py-1">
             <Loader2 className="w-3 h-3 animate-spin" />
             AI 正在理解、整理、关联…
           </div>
@@ -429,7 +438,7 @@ export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeCha
           <button
             onClick={handleRetry}
             disabled={retrying}
-            className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-rose-600 bg-rose-50 border border-rose-200/70 rounded-md px-2.5 py-1 hover:bg-rose-100 transition disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 text-[11px] text-rose-600 bg-rose-50 border border-rose-200/70 rounded-md px-2.5 py-1 hover:bg-rose-100 transition disabled:opacity-60"
           >
             {retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
             AI 分析失败 · 点击重试
@@ -457,33 +466,6 @@ export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeCha
               <span className="text-[11.5px] font-medium text-[#384877]/80 tracking-wide">
                 {isReport ? '长文摘要' : note.source_type === 'external_feed' ? '外部信息已解析' : 'AI 智能处理'}
               </span>
-              {ai.category && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      onClick={(e) => e.stopPropagation()}
-                      title="分类不对？点击纠正"
-                      className="ml-auto inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 bg-white text-[#384877]/70 rounded-md border border-[#384877]/15 hover:border-[#384877]/40 hover:text-[#384877] transition"
-                    >
-                      {ai.category}
-                      <PenLine className="w-2.5 h-2.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-36" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuLabel className="text-[10.5px] text-slate-400">分错了？重新归类</DropdownMenuLabel>
-                    {HEARTSIGN_CATEGORIES.map((c) => (
-                      <DropdownMenuItem
-                        key={c.type}
-                        onSelect={(e) => { e.preventDefault?.(); handleTypeChange(c); }}
-                        className="text-xs"
-                      >
-                        <Check className={`w-3.5 h-3.5 mr-2 ${(ai.category === c.label || note.source_type === c.type) ? 'opacity-100' : 'opacity-0'}`} />
-                        {c.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
             </div>
 
             <p className="text-[13.5px] text-slate-800 leading-[1.7] mb-3">{ai.summary}</p>
@@ -522,6 +504,64 @@ export default function HeartSignMessage({ note, onDeleted, onRestore, onTypeCha
         )}
       </div>
     </div>
+
+    {/* 卡内对话线程（followupHeartSign → metadata.conversation） */}
+    <ConversationThread conv={conv} typing={followSending} />
+
+    {/* 卡内继续聊聊 */}
+    {!isOptimistic && (
+      <div
+        className="mt-3 pt-2 border-t border-dashed border-slate-100 flex items-center gap-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          value={followText}
+          onChange={(e) => setFollowText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleFollow(); } }}
+          placeholder="继续聊聊…"
+          className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-slate-700 placeholder:text-slate-300 px-1 py-1.5"
+        />
+        <button
+          onClick={handleFollow}
+          disabled={followSending || !followText.trim()}
+          title="发送"
+          className="w-7 h-7 rounded-lg text-[#384877] hover:bg-slate-50 flex items-center justify-center transition disabled:opacity-40"
+        >
+          {followSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+    )}
+
+    {/* 卡内操作条 */}
+    {!isOptimistic && (
+      <div
+        className="mt-1.5 flex items-center gap-0.5 flex-wrap"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button className={OP_CLS} onClick={() => onPinnedChange?.(note)} title={isPinnedNote(note) ? '取消置顶' : '置顶'}>
+          <Pin className={`w-3 h-3 ${isPinnedNote(note) ? 'text-[#384877] fill-[#384877]' : ''}`} />
+          {isPinnedNote(note) ? '已置顶' : '置顶'}
+        </button>
+        <button className={OP_CLS} onClick={() => onConvertToTask?.(note)}>
+          <CalendarPlus className="w-3 h-3" /> 转为约定
+        </button>
+        <button className={OP_CLS} onClick={() => onSaveToKnowledge?.(note)}>
+          <BookOpen className="w-3 h-3" /> 沉淀知识库
+        </button>
+        <button className={OP_CLS} onClick={handleShare}>
+          <Share2 className="w-3 h-3" /> 分享
+        </button>
+        <button className={OP_CLS} onClick={handleCopy}>
+          <Copy className="w-3 h-3" /> 复制
+        </button>
+        <button
+          className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md px-2 py-1 transition-colors"
+          onClick={handleDelete}
+        >
+          <Trash2 className="w-3 h-3" /> 删除
+        </button>
+      </div>
+    )}
    </div>
   );
 }

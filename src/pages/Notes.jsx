@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User, Lock, Dices } from "lucide-react";
 import AIText from "@/components/AIText";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
@@ -20,10 +20,17 @@ import AINotesOrganizer from "../components/notes/AINotesOrganizer";
 import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
 import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
 import ExternalHorizonPanel from "../components/heartsign/ExternalHorizonPanel";
+import CategoryFilterBar from "@/components/heartsign/CategoryFilterBar";
+import ReviewDialog from "@/components/heartsign/ReviewDialog";
+import VaultDialog from "@/components/heartsign/VaultDialog";
+import { detectSensitive } from "@/components/heartsign/detectSensitive";
+import { normalizeNote, getNoteType, isPinnedNote, DENSITY_KEY } from "@/components/heartsign/heartSignMeta";
+import { isStandaloneMode } from "@/api/platformConfig";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
 import { toast } from "sonner";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
+import "./heartsign-theme.css";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +54,13 @@ export default function Notes() {
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
   const [onlyMine, setOnlyMine] = useState(false);
+  // 五类过滤 / 回应浓度 / 回顾 / 保险柜 / 定位闪动
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [density, setDensity] = useState(() => localStorage.getItem(DENSITY_KEY) || "light");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultInitialValue, setVaultInitialValue] = useState(null);
+  const [flashId, setFlashId] = useState(null);
   const queryClient = useQueryClient();
 
   // 纯外部信息来源（外部订阅源 / 网页链接 / 微信转发）
@@ -87,6 +101,8 @@ export default function Notes() {
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date'),
+    // 独立后端把 AI 分析放在 metadata.ai_analysis，统一提升到 note.ai_analysis 便于读取
+    select: (list) => (list || []).map(normalizeNote),
     initialData: []
   });
 
@@ -107,24 +123,41 @@ export default function Notes() {
     }
   }, [searchParams, notes]);
 
+  // 独立后端无实时推送：分析是异步的，轮询补拉一次最新状态（最多约 30 秒）
+  const refreshNoteWhenDone = async (id) => {
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const fresh = normalizeNote(await base44.entities.Note.get(id));
+        if (fresh?.ai_status && fresh.ai_status !== 'pending' && fresh.ai_status !== 'processing') {
+          queryClient.setQueryData(['notes'], (old) =>
+            (old || []).map(n => (n.id === id ? { ...n, ...fresh } : n)));
+          return;
+        }
+      } catch (e) {
+        return;
+      }
+    }
+  };
+
   const handleSmartConvertToTask = async (note) => {
     setIsAnalyzingNote(true);
     toast.info("AI 正在分析笔记内容以生成约定...", { duration: 3000 });
 
     try {
         const content = note.plain_text || note.content || "";
-        
+
         // 调用 LLM 分析
         const analysis = await base44.integrations.Core.InvokeLLM({
             prompt: `请分析以下笔记内容，并将其转换为一个待办事项（约定）。提取或生成合适的标题、描述、优先级、分类和建议的截止时间（如果有时间相关描述）。
-            
+
             笔记内容：
             """
             ${content}
             """
-            
+
             当前时间：${new Date().toISOString()}
-            
+
             请返回 JSON 格式：
             {
                 "title": "简明扼要的任务标题",
@@ -151,7 +184,7 @@ export default function Notes() {
             ...note, // 保留原始笔记引用
             smartData: analysis // 附带智能分析数据
         });
-        
+
         toast.success("分析完成，请确认约定详情");
 
     } catch (error) {
@@ -182,8 +215,59 @@ export default function Notes() {
       }).then(() => {
         queryClient.invalidateQueries({ queryKey: ['task-executions'] });
       }).catch(e => console.warn("Execution tracking failed:", e));
+    },
+    onError: () => {
+      // P0 修复：失败必须显式反馈，不能静默吞签
+      toast.error("心签发送失败，请重试");
     }
   });
+
+  // 信息流发送管线：敏感预检 → 乐观上屏 → 创建 → 触发 AI 分析 → 轮询补拉
+  const handleSend = async (payload) => {
+    // 敏感信息拦截：不创建心签，引导存入保险柜
+    const hit = detectSensitive(payload.plain_text);
+    if (hit) {
+      toast.warning(`检测到敏感信息（${hit.label}），建议存入保险柜`, { description: '保险柜内容独立加密，不会进入 AI 分析' });
+      setVaultInitialValue(payload.plain_text);
+      setVaultOpen(true);
+      return;
+    }
+
+    const densityNow = localStorage.getItem(DENSITY_KEY) || 'light';
+    const withMeta = { ...payload, metadata: { ...(payload.metadata || {}), response_density: densityNow } };
+
+    // 乐观插入（P0 修复：先上屏，失败回滚并提示）
+    const optimistic = normalizeNote({
+      ...withMeta,
+      id: `tmp-${Date.now()}`,
+      created_date: new Date().toISOString(),
+    });
+    queryClient.setQueryData(['notes'], (old) => [optimistic, ...(old || [])]);
+
+    try {
+      const created = normalizeNote(await base44.entities.Note.create(withMeta));
+      queryClient.setQueryData(['notes'], (old) =>
+        (old || []).map(n => (n.id === optimistic.id ? created : n)));
+      // 触发 AI 分析（异步，不阻塞）——直接带上笔记内容，绕开后端"查不到笔记"的隔离问题
+      base44.functions.invoke('analyzeHeartSign', {
+        note_id: created.id,
+        note_data: {
+          plain_text: created.plain_text,
+          content: created.content,
+          source_type: created.source_type,
+          source_url: created.source_url,
+          attachments: created.attachments,
+          tags: created.tags,
+        },
+      }).catch(e => console.error(e));
+      // 独立后端无实时推送，轮询补拉分析结果
+      refreshNoteWhenDone(created.id);
+    } catch (e) {
+      queryClient.setQueryData(['notes'], (old) => (old || []).filter(n => n.id !== optimistic.id));
+      console.error(e);
+      toast.error('心签发送失败，请重试');
+    }
+  };
 
   const createTaskMutation = useMutation({
     mutationFn: (taskData) => base44.entities.Task.create(taskData),
@@ -252,7 +336,7 @@ export default function Notes() {
     mutationFn: async (note) => {
       const knowledgeData = {
         title: note.ai_analysis?.summary || note.plain_text?.slice(0, 50) || "未命名知识",
-        content: note.ai_analysis?.key_points ? 
+        content: note.ai_analysis?.key_points ?
           `${note.ai_analysis.summary}\n\n要点：\n${note.ai_analysis.key_points.map(p => `• ${p}`).join('\n')}\n\n原文：\n${note.plain_text}` :
           note.plain_text,
         source_type: "note",
@@ -272,6 +356,83 @@ export default function Notes() {
       toast.error("保存失败");
     }
   });
+
+  // 置顶：乐观改缓存 + 服务端持久化（metadata.pinned，与小程序口径一致）
+  const handlePinnedChange = (note) => {
+    if (typeof note.id === 'string' && note.id.startsWith('tmp-')) return;
+    const next = !(isPinnedNote(note) || note.is_pinned === true);
+    queryClient.setQueryData(['notes'], (old) =>
+      (old || []).map(n => (n.id === note.id
+        ? { ...n, metadata: { ...(n.metadata || {}), pinned: next }, is_pinned: next }
+        : n)));
+    base44.entities.Note.update(note.id, {
+      metadata: { ...(note.metadata || {}), pinned: next },
+      is_pinned: next,
+    }).catch(() => {
+      toast.error('置顶失败');
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    });
+  };
+
+  // 「分错了」纠正：乐观更新缓存，失败回滚
+  const handleTypeChange = (note, newType, newLabel) => {
+    const prevType = note.source_type;
+    const prevLabel = note.ai_analysis?.category;
+    queryClient.setQueryData(['notes'], (old) =>
+      (old || []).map(n => (n.id === note.id ? {
+        ...n,
+        source_type: newType,
+        ai_analysis: { ...(n.ai_analysis || {}), category: newLabel },
+        metadata: { ...(n.metadata || {}), ai_analysis: { ...(n.metadata?.ai_analysis || {}), category: newLabel } },
+      } : n)));
+    base44.entities.Note.update(note.id, {
+      source_type: newType,
+      metadata: {
+        ...(note.metadata || {}),
+        ai_analysis: { ...(note.metadata?.ai_analysis || note.ai_analysis || {}), category: newLabel },
+      },
+    }).then(() => {
+      toast.success(`已归类为「${newLabel}」，谢谢你教我`);
+    }).catch(() => {
+      queryClient.setQueryData(['notes'], (old) =>
+        (old || []).map(n => (n.id === note.id ? {
+          ...n,
+          source_type: prevType,
+          ai_analysis: { ...(n.ai_analysis || {}), category: prevLabel },
+          metadata: { ...(n.metadata || {}), ai_analysis: { ...(n.metadata?.ai_analysis || {}), category: prevLabel } },
+        } : n)));
+      toast.error('分类更新失败，已恢复原分类');
+    });
+  };
+
+  const handleVaultRequest = (note) => {
+    if (!isStandaloneMode) {
+      toast.error('当前环境不支持保险柜');
+      return;
+    }
+    setVaultInitialValue(note?.plain_text || null);
+    setVaultOpen(true);
+  };
+
+  // 回顾定位：重置过滤 → 闪动高亮 → 滚动到目标签卡
+  const handleLocate = (id) => {
+    setReviewOpen(false);
+    setCategoryFilter('all');
+    setFlashId(id);
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-hs-id="${id}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setTimeout(() => setFlashId(null), 2400);
+  };
+
+  // 回应浓度切换：持久化到 localStorage，后端 analyzeHeartSign / followupHeartSign 读取同一键
+  const handleDensityChange = (value) => {
+    setDensity(value);
+    localStorage.setItem(DENSITY_KEY, value);
+    toast.success(value === 'mute' ? '好，我只收不答，静静陪着你'
+      : value === 'light' ? '好，我轻轻回应就好' : '好，我会多陪你说说');
+  };
 
   // Get all unique tags
   const allTags = useMemo(() => {
@@ -293,6 +454,13 @@ export default function Notes() {
       result = result.filter((note) => !EXTERNAL_SOURCES.includes(note.source_type));
     }
 
+    // 五类签过滤 / 已置顶（与小程序口径一致：source_type 优先，回落 ai 分类）
+    if (categoryFilter === 'pinned') {
+      result = result.filter((note) => isPinnedNote(note) || note.is_pinned === true);
+    } else if (categoryFilter !== 'all') {
+      result = result.filter((note) => getNoteType(note) === categoryFilter);
+    }
+
     // Full-text search (content + tags)
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
@@ -310,25 +478,25 @@ export default function Notes() {
 
     // Tag filter
     if (filters.tags && filters.tags.length > 0) {
-      result = result.filter((note) => 
+      result = result.filter((note) =>
         note.tags && filters.tags.some(filterTag => note.tags.includes(filterTag))
       );
     }
 
     // Pinned filter
     if (filters.pinnedOnly === true) {
-      result = result.filter((note) => note.is_pinned === true);
+      result = result.filter((note) => note.is_pinned === true || isPinnedNote(note));
     }
 
     // Date range filter
     if (filters.dateRange?.from) {
       const fromDate = new Date(filters.dateRange.from);
       fromDate.setHours(0, 0, 0, 0);
-      
+
       result = result.filter((note) => {
         const noteDate = new Date(note.created_date);
         noteDate.setHours(0, 0, 0, 0);
-        
+
         if (filters.dateRange.to) {
           const toDate = new Date(filters.dateRange.to);
           toDate.setHours(23, 59, 59, 999);
@@ -340,21 +508,13 @@ export default function Notes() {
 
     // Sort: Pinned first, then by date
     return result.sort((a, b) => {
-      if (a.is_pinned && !b.is_pinned) return -1;
-      if (!a.is_pinned && b.is_pinned) return 1;
+      const pa = isPinnedNote(a) || a.is_pinned === true;
+      const pb = isPinnedNote(b) || b.is_pinned === true;
+      if (pa && !pb) return -1;
+      if (!pa && pb) return 1;
       return new Date(b.created_date) - new Date(a.created_date);
     });
-  }, [notes, searchQuery, filters, onlyMine]);
-
-  const handlePin = (note) => {
-    updateNoteMutation.mutate({
-      id: note.id,
-      data: { 
-        is_pinned: !note.is_pinned,
-        last_active_at: new Date().toISOString()
-      }
-    });
-  };
+  }, [notes, searchQuery, filters, onlyMine, categoryFilter]);
 
   // 更新心签活动时间
   const handleUpdateActivity = (note) => {
@@ -386,7 +546,7 @@ export default function Notes() {
           </div>
           <p className="text-xs md:text-base text-slate-600 hidden md:block"><AIText>让想法的碎片尽情落下</AIText></p>
         </div>
-        
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
           <TabsList className="bg-white shadow-md rounded-lg md:rounded-xl p-0.5 md:p-1 h-auto">
             <TabsTrigger value="notes" className="rounded-md md:rounded-lg px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white">
@@ -423,6 +583,21 @@ export default function Notes() {
 
       {activeTab === "notes" && (
         <>
+          {/* 五类过滤 + 回应浓度 */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.05 }}
+          >
+            <CategoryFilterBar
+              notes={notes.filter((n) => !n.deleted_at)}
+              filter={categoryFilter}
+              onFilterChange={setCategoryFilter}
+              density={density}
+              onDensityChange={handleDensityChange}
+            />
+          </motion.div>
+
           {/* Filters */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -430,13 +605,33 @@ export default function Notes() {
             transition={{ delay: 0.05 }}
             className="flex items-center justify-between gap-2 md:gap-3 flex-wrap"
           >
-            <NoteFilters 
-              filters={filters} 
+            <NoteFilters
+              filters={filters}
               onFiltersChange={setFilters}
               allTags={allTags}
             />
 
             <div className="flex items-center gap-1.5 md:gap-3">
+              <Button
+                onClick={() => setReviewOpen(true)}
+                variant="outline"
+                size="sm"
+                title="抽一签 / 按词回顾，与过去的自己重逢"
+                className="h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 border-[#384877]/30 bg-[#384877]/5 hover:bg-[#384877]/10 text-[#384877] text-xs md:text-sm"
+              >
+                <Dices className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span className="hidden sm:inline">回顾</span>
+              </Button>
+              <Button
+                onClick={() => handleVaultRequest(null)}
+                variant="outline"
+                size="sm"
+                title="保险柜：密码保护的私密信息，AI 不会阅读"
+                className="h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs md:text-sm"
+              >
+                <Lock className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span className="hidden sm:inline">保险柜</span>
+              </Button>
               <Button
                 onClick={() => setOnlyMine((v) => !v)}
                 variant="outline"
@@ -487,7 +682,7 @@ export default function Notes() {
           </motion.div>
 
           {/* 聊天信息流 */}
-          <div className="flex flex-col bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}>
+          <div className="hs-page flex flex-col bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden" style={{ height: 'calc(100vh - 320px)', minHeight: '500px' }}>
             <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4">
               {filteredNotes.length === 0 ? (
                 <div className="text-center py-16 max-w-md mx-auto">
@@ -501,18 +696,24 @@ export default function Notes() {
                 <div className="max-w-3xl mx-auto space-y-3">
                   {filteredNotes.map((note) => (
                     <div key={note.id} onClick={() => setEditingNote(note)} className="cursor-pointer">
-                      <HeartSignMessage note={note} />
+                      <HeartSignMessage
+                        note={note}
+                        flash={flashId === note.id}
+                        onDeleted={(id) => deleteNoteMutation.mutate(id)}
+                        onRestore={() => queryClient.invalidateQueries({ queryKey: ['notes'] })}
+                        onTypeChange={handleTypeChange}
+                        onVaultRequest={handleVaultRequest}
+                        onPinnedChange={handlePinnedChange}
+                        onConvertToTask={handleSmartConvertToTask}
+                        onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
+                      />
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            <HeartSignInput
-              onSend={async (payload) => {
-                await createNoteMutation.mutateAsync(payload);
-              }}
-            />
+            <HeartSignInput onSend={handleSend} />
           </div>
         </>
       )}
@@ -540,7 +741,7 @@ export default function Notes() {
                 onSave={(data) => updateNoteMutation.mutate({ id: editingNote.id, data })}
                 onClose={() => setEditingNote(null)}
               />
-              
+
               {/* Comments Section */}
               <div className="pt-6 border-t border-slate-200">
                 <NoteComments noteId={editingNote.id} />
@@ -577,6 +778,25 @@ export default function Notes() {
           <AIKnowledgeBase open={showKnowledgeBase} onOpenChange={setShowKnowledgeBase} />
         </DialogContent>
       </Dialog>
+
+      {/* 回顾：抽一签 / 按词回顾 */}
+      <ReviewDialog
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        notes={notes.filter((n) => !n.deleted_at)}
+        onLocate={handleLocate}
+      />
+
+      {/* 保险柜 */}
+      <VaultDialog
+        open={vaultOpen}
+        onOpenChange={(open) => {
+          setVaultOpen(open);
+          if (!open) setVaultInitialValue(null);
+        }}
+        initialValue={vaultInitialValue}
+        onVaulted={() => queryClient.invalidateQueries({ queryKey: ['notes'] })}
+      />
 
       {/* Create Task Dialog */}
       <Dialog open={!!taskCreationNote} onOpenChange={(open) => !open && setTaskCreationNote(null)}>

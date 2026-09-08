@@ -1,0 +1,82 @@
+/* 心签信息流 · 小程序品牌风主题
+   作用域限定在 .hs-page 内，避免影响全局样式。
+   品牌蓝 #384877（哨兵蓝），纸面 #fafbfb，五类签色与小程序 pages/notes 口径一致。 */
+
+.hs-page {
+  --hs-paper: #fafbfb;
+  --hs-card: #ffffff;
+  --hs-sentinel: #384877;
+  --hs-water: #5b82a0;
+  --hs-border: #e8ecef;
+  --hs-ink: #1c1c1e;
+  --hs-ink-2: #3a3a3c;
+  --hs-ink-3: #8e8e93;
+  --hs-ink-4: #b0b0b5;
+  /* 五类签色（--hs-type 文字/描边，--hs-type-bg 底） */
+  --hs-type: #5b82a0;
+  --hs-type-bg: #e8f0f5;
+}
+
+/* 按 data-hs-type 覆盖类型色 */
+.hs-page .hs-card[data-hs-type="emotion"]     { --hs-type: #c97b8a; --hs-type-bg: #fce8ec; }
+.hs-page .hs-card[data-hs-type="inspiration"] { --hs-type: #d97706; --hs-type-bg: #fef3c7; }
+.hs-page .hs-card[data-hs-type="material"]    { --hs-type: #5b82a0; --hs-type-bg: #e8f0f5; }
+.hs-page .hs-card[data-hs-type="memo"]        { --hs-type: #8a7d6b; --hs-type-bg: #f4f0ea; }
+.hs-page .hs-card[data-hs-type="share"]       { --hs-type: #6e8a73; --hs-type-bg: #e8f5e9; }
+
+/* 签卡：白底圆角细边，类型色在头部 chip 与左侧细条体现 */
+.hs-page .hs-card {
+  position: relative;
+  background: var(--hs-card);
+  border: 1px solid var(--hs-border);
+  border-radius: 18px;
+  padding: 14px 16px 12px;
+  box-shadow: 0 1px 3px rgba(122, 158, 184, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.hs-page .hs-card:hover {
+  border-color: #c5d5e0;
+  box-shadow: 0 4px 12px rgba(122, 158, 184, 0.1), 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+/* 类型色左侧细条 */
+.hs-page .hs-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--hs-type);
+  opacity: 0.55;
+}
+
+/* 类型 chip */
+.hs-page .hs-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--hs-type-bg);
+  color: var(--hs-type);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+/* 回顾/抽签定位时的闪动高亮 */
+.hs-page .hs-card.hs-flash {
+  animation: hs-flash 2.4s ease;
+}
+@keyframes hs-flash {
+  0%, 55% {
+    box-shadow: 0 0 0 2px var(--hs-sentinel), 0 8px 24px rgba(56, 72, 119, 0.18);
+    border-color: var(--hs-sentinel);
+  }
+  100% {
+    box-shadow: 0 1px 3px rgba(122, 158, 184, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    border-color: var(--hs-border);
+  }
+}

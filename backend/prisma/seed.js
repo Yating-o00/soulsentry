@@ -10,7 +10,8 @@ async function main() {
 
   const user = await prisma.user.upsert({
     where: { email },
-    update: {},
+    // 每次运行都重置密码与显示名：服务器上可能已有历史创建的同名账号（密码未知）
+    update: { passwordHash, displayName: "SoulSentry Demo" },
     create: {
       email,
       passwordHash,

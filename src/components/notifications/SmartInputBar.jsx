@@ -137,7 +137,25 @@ export default function SmartInputBar() {
       plain_text: text,
       tags: ['心签', flavor, catLabel, ...(semantic?.tags || [])].slice(0, 5),
       color: 'blue',
+      ai_status: 'pending',
     });
+
+    // 触发 AI 分析（与心签页同一链路）：没有这一步,从这里收进的心签永远不会有温暖回应
+    try {
+      base44.functions.invoke('analyzeHeartSign', {
+        note_id: note.id,
+        note_data: {
+          plain_text: note.plain_text ?? text,
+          content: note.content ?? text,
+          source_type: note.source_type,
+          source_url: note.source_url,
+          attachments: note.attachments,
+          tags: note.tags,
+        },
+      }).catch((e) => console.warn('analyzeHeartSign skipped:', e?.message));
+    } catch (e) {
+      console.warn('analyzeHeartSign invoke failed:', e?.message);
+    }
 
     // 轻量执行记录:category=note 且无 automation_type,不会混入「心栈为你编织」甲板
     try {

@@ -371,7 +371,8 @@ function LayoutContent({ children }) {
           </div>
         )}
 
-        <main className="flex-1 flex flex-col bg-gradient-to-br from-[#f9fafb] via-[#f9fafb]/50 to-[#eef2f7]/30 relative w-full overflow-hidden pb-20 md:pb-0">
+        {/* 背景必须是纯色:半透明渐变做滚动容器底色会让 iOS 每帧重合成整个视口,造成滚动卡顿 */}
+        <main className="flex-1 flex flex-col bg-[#f8f9fa] relative w-full overflow-hidden pb-20 md:pb-0">
           <FloatingAssistantButton />
           <MobileHeader />
 

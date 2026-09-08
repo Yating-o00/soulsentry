@@ -223,7 +223,8 @@ function MobileHeader() {
   const isMainPage = mainPaths.indexOf(location.pathname) !== -1;
 
   return (
-    <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-4 py-3 lg:hidden sticky top-0 z-10 min-h-[56px]">
+    <header className="bg-white border-b border-slate-200 px-4 py-3 lg:hidden sticky top-0 z-10 min-h-[56px]">
+      {/* 不用 backdrop-blur：sticky 头 + 背景模糊会让 iOS 滚动时每帧重绘整个视口,是移动端滚动卡顿的主要来源 */}
       <div className="flex items-center gap-3">
         {isMainPage ? (
           <SidebarTrigger className="hover:bg-slate-100 p-2.5 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center" />

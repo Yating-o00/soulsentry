@@ -93,8 +93,8 @@ export default function MobileNavigation() {
 
   return (
     <>
-      {/* 底部导航栏 */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/60 safe-area-inset-bottom shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+      {/* 底部导航栏:固定定位 + backdrop-blur 会让 iOS 滚动每帧重绘视口,改用纯色 */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200/60 safe-area-inset-bottom shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
         <div className="flex items-center justify-around h-[68px] px-1 pb-safe">
           {navItems.map((item, index) => {
             const Icon = item.icon;

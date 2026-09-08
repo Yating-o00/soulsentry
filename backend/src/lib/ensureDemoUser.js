@@ -2,7 +2,8 @@ import bcrypt from "bcryptjs";
 import { prisma } from "./prisma.js";
 
 const TEST_EMAIL = "demo@soulsentry.local";
-const TEST_PASSWORD = "123456";
+// 与前端自动登录（src/api/standaloneClient.js DEMO_PASSWORD）、backend/prisma/seed.js 保持一致
+const TEST_PASSWORD = "demo123456";
 const LEGACY_DEMO_EMAIL = "demo@gmail.com";
 const TEST_CREDITS = 10000;
 

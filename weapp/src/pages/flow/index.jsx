@@ -3163,123 +3163,83 @@ export default function Flow() {
 
     if (guardianRecords.length === 0 && !delegatedTask) return null;
 
-    const STATUS_META = {
-      waiting_acceptance: { tag: "待验收", tagColor: "#a8875a", tagBg: THEME.goldBg },
-      waiting_confirm: { tag: "待批准", tagColor: THEME.heartDeep, tagBg: THEME.heartBg },
-      running: { tag: "执行中…", tagColor: THEME.primary, tagBg: THEME.primaryMist },
-      plan: { tag: "执行中…", tagColor: THEME.primary, tagBg: THEME.primaryMist },
-      completed: { tag: "已完成", tagColor: THEME.inkQuaternary, tagBg: "#f2f2f2" }
+    // 极简行式列表：无卡片无底纹，状态用彩色圆点，操作是行尾文字链接
+    const STATUS_COLOR = {
+      waiting_acceptance: "#a8875a",
+      waiting_confirm: THEME.heartDeep,
+      running: THEME.primary,
+      plan: THEME.primary,
+      completed: THEME.inkQuaternary
     };
+
+    const statusHint = (s) =>
+      s === "waiting_acceptance"
+        ? "已预执行，等你验收"
+        : s === "waiting_confirm"
+          ? "已有计划，等你批准"
+          : s === "completed"
+            ? "已自动完成"
+            : "正在执行…";
 
     const acting = execActingId != null;
 
     return (
       <View style={{ padding: "18rpx 32rpx" }}>
-        <View style={{ display: "flex", alignItems: "center", marginBottom: "20rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", marginBottom: "4rpx" }}>
           <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
           <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>守护记录</Text>
         </View>
-        {guardianRecords.map((e) => {
-          const meta = STATUS_META[e.execution_status] || null;
-          return (
-            <View
-              key={e.id}
-              style={{
-                background: THEME.card,
-                borderRadius: "24rpx",
-                border: `1rpx solid ${THEME.border}`,
-                padding: "24rpx",
-                marginBottom: "16rpx"
-              }}
-            >
-              <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8rpx" }}>
-                <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink, flex: 1, lineHeight: "44rpx", wordBreak: "break-all", marginRight: "12rpx" }}>{e.task_title}</Text>
-                <View
-                  style={{
-                    padding: "4rpx 12rpx",
-                    borderRadius: "8rpx",
-                    background: meta ? meta.tagBg : THEME.primaryMist,
-                    flexShrink: 0
-                  }}
-                >
-                  <Text style={{ fontSize: "20rpx", color: meta ? meta.tagColor : THEME.primary }}>
-                    {meta ? meta.tag : "执行中…"}
-                  </Text>
-                </View>
-              </View>
-              <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx", wordBreak: "break-all" }}>
-                {e.execution_status === "waiting_acceptance"
-                  ? "这件事已预执行完成，等你验收。"
-                  : e.execution_status === "waiting_confirm"
-                    ? "这件事已有执行计划，等你批准。"
-                    : e.execution_status === "completed"
-                      ? "已经自动完成，无需你操心。"
-                      : "正在为你执行，完成后会出现在这里。"}
-              </Text>
-              {e.execution_status === "waiting_acceptance" && (
-                <View
-                  onClick={() => acceptExec(e.id)}
-                  style={{
-                    marginTop: "14rpx",
-                    alignSelf: "flex-start",
-                    padding: "10rpx 22rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.primary,
-                    opacity: acting ? 0.6 : 1
-                  }}
-                >
-                  <Text style={{ fontSize: "24rpx", color: "#fff" }}>验收通过</Text>
-                </View>
-              )}
-              {e.execution_status === "waiting_confirm" && (
-                <View
-                  onClick={() => approveExec(e.task_id)}
-                  style={{
-                    marginTop: "14rpx",
-                    alignSelf: "flex-start",
-                    padding: "10rpx 22rpx",
-                    borderRadius: "10rpx",
-                    background: THEME.card,
-                    border: `1rpx solid ${THEME.primaryFaint}`,
-                    opacity: acting ? 0.6 : 1
-                  }}
-                >
-                  <Text style={{ fontSize: "24rpx", color: THEME.primary }}>批准执行</Text>
-                </View>
-              )}
-            </View>
-          );
-        })}
-
-        {delegatedTask && (
+        {guardianRecords.map((e) => (
           <View
+            key={e.id}
             style={{
-              background: THEME.card,
-              borderRadius: "24rpx",
-              border: `1rpx dashed ${THEME.primaryFaint}`,
-              padding: "24rpx",
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between"
+              padding: "22rpx 4rpx",
+              borderBottom: `1rpx solid ${THEME.border}`
             }}
           >
-            <View style={{ flex: 1, marginRight: "16rpx" }}>
-              <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink, lineHeight: "40rpx", wordBreak: "break-all" }}>{delegatedTask.title}</Text>
-              <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "4rpx" }}>还没有执行单，可以让心栈先执行</Text>
+            <View style={{ flex: 1, marginRight: "24rpx" }}>
+              <Text style={{ fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx" }} numberOfLines={1}>
+                {e.task_title}
+              </Text>
+              <View style={{ display: "flex", alignItems: "center", marginTop: "4rpx" }}>
+                <View
+                  style={{
+                    width: "10rpx",
+                    height: "10rpx",
+                    borderRadius: "50%",
+                    background: STATUS_COLOR[e.execution_status] || THEME.primary,
+                    marginRight: "10rpx"
+                  }}
+                />
+                <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{statusHint(e.execution_status)}</Text>
+              </View>
             </View>
-            <View
+            {e.execution_status === "waiting_acceptance" && (
+              <Text onClick={() => acceptExec(e.id)} style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}>
+                验收通过
+              </Text>
+            )}
+            {e.execution_status === "waiting_confirm" && (
+              <Text onClick={() => approveExec(e.task_id)} style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}>
+                批准执行
+              </Text>
+            )}
+          </View>
+        ))}
+
+        {delegatedTask && (
+          <View style={{ display: "flex", alignItems: "center", padding: "22rpx 4rpx" }}>
+            <Text style={{ flex: 1, fontSize: "26rpx", color: THEME.inkTertiary, marginRight: "24rpx" }} numberOfLines={1}>
+              {delegatedTask.title}
+            </Text>
+            <Text
               onClick={() => delegateExec(delegatedTask.id)}
-              style={{
-                padding: "12rpx 24rpx",
-                borderRadius: "24rpx",
-                background: THEME.primaryMist,
-                border: `1rpx solid ${THEME.primaryFaint}`,
-                opacity: acting ? 0.6 : 1,
-                flexShrink: 0
-              }}
+              style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}
             >
-              <Text style={{ fontSize: "22rpx", color: THEME.primary }}>智能执行 · 让心栈先执行</Text>
-            </View>
+              让心栈先执行 ›
+            </Text>
           </View>
         )}
       </View>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Taro from "@tarojs/taro";
-import { getToken, clearToken } from "@/utils/auth";
+import { getToken, clearToken, rememberAccount } from "@/utils/auth";
 import { get } from "@/utils/api";
 
 export default function useAuth() {
@@ -23,6 +23,7 @@ export default function useAuth() {
     try {
       const data = await get("/users/me", {}, { silent: true });
       setUser(data);
+      rememberAccount({ ...data, token });
     } catch (err) {
       setUser(null);
     } finally {

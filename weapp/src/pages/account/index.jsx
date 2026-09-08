@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Button, ScrollView } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
-import { getToken, clearToken } from "@/utils/auth";
+import { getToken, clearToken, setToken, getAccounts } from "@/utils/auth";
 import { get, post, patch } from "@/utils/api";
 import theme from "@/components/tasks/theme";
 
@@ -246,6 +246,8 @@ function showDemoToast() {
 export default function Account() {
   const { user, logout, loading } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showSwitchAccounts, setShowSwitchAccounts] = useState(false);
+  const [accounts, setAccounts] = useState([]);
   const [demoShown, setDemoShown] = useState(false);
   const [period, setPeriod] = useState(14);
   const [notes, setNotes] = useState([]);
@@ -421,6 +423,32 @@ export default function Account() {
     clearToken();
     setShowLogoutConfirm(false);
     Taro.reLaunch({ url: "/pages/index/index" });
+  };
+
+  const openSwitchPanel = () => {
+    setAccounts(getAccounts());
+    setShowSwitchAccounts(true);
+  };
+
+  const accountLabel = (a) => a.name || a.email || a.phone || "未命名";
+
+  const switchToAccount = (acc) => {
+    setShowSwitchAccounts(false);
+    if (!acc.token) {
+      Taro.showToast({ title: "登录状态已过期，请重新登录", icon: "none" });
+      clearToken();
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
+    setToken(acc.token);
+    Taro.showToast({ title: `已切换到 ${accountLabel(acc)}`, icon: "none" });
+    Taro.reLaunch({ url: "/pages/index/index" });
+  };
+
+  const addAccount = () => {
+    setShowSwitchAccounts(false);
+    clearToken();
+    Taro.navigateTo({ url: "/pages/login/index" });
   };
 
   return (
@@ -796,7 +824,7 @@ export default function Account() {
               }}
             >
               <View
-                onClick={() => Taro.showToast({ title: "切换账户功能即将上线", icon: "none" })}
+                onClick={openSwitchPanel}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -936,6 +964,95 @@ export default function Account() {
                 ))
               )}
             </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {/* switch accounts panel */}
+      {showSwitchAccounts && (
+        <View
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-end"
+          }}
+          onClick={() => setShowSwitchAccounts(false)}
+        >
+          <View
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: theme.card,
+              borderRadius: "28rpx 28rpx 0 0",
+              padding: "32rpx 28rpx 48rpx"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx" }}>
+              <Text style={{ fontSize: "34rpx", fontWeight: 600, color: theme.ink }}>切换账户</Text>
+              <Text onClick={() => setShowSwitchAccounts(false)} style={{ fontSize: "30rpx", color: theme.inkQuaternary, padding: "8rpx" }}>
+                ✕
+              </Text>
+            </View>
+
+            {accounts.filter((a) => a.id !== user?.id).length === 0 ? (
+              <Text style={{ fontSize: "26rpx", color: theme.inkQuaternary, padding: "20rpx 4rpx 32rpx" }}>
+                这台设备上还没有登录过其他账户
+              </Text>
+            ) : (
+              accounts
+                .filter((a) => a.id !== user?.id)
+                .map((a) => (
+                  <View
+                    key={a.id}
+                    onClick={() => switchToAccount(a)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "20rpx",
+                      padding: "24rpx 8rpx",
+                      borderBottom: `1rpx solid ${theme.border}`
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: "72rpx",
+                        height: "72rpx",
+                        borderRadius: "36rpx",
+                        background: `linear-gradient(135deg, ${theme.primary}, ${theme.water})`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Text style={{ fontSize: "30rpx", color: "#fff" }}>{accountLabel(a).slice(0, 1)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: "28rpx", fontWeight: 500, color: theme.ink }}>{accountLabel(a)}</Text>
+                      {accountLabel(a) !== (a.email || a.phone) && (
+                        <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginTop: "2rpx" }}>{a.email || a.phone}</Text>
+                      )}
+                    </View>
+                    <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
+                  </View>
+                ))
+            )}
+
+            <View
+              onClick={addAccount}
+              style={{
+                marginTop: "28rpx",
+                padding: "24rpx",
+                borderRadius: "16rpx",
+                border: `1rpx dashed ${theme.primaryFaint}`,
+                textAlign: "center"
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", color: theme.primary }}>＋ 登录其他账户</Text>
+            </View>
           </View>
         </View>
       )}

@@ -90,40 +90,44 @@ export default function DeviceStrategyPanel({ deviceType, deviceName, strategies
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.06, duration: 0.3 }}
-                  className="group flex items-center gap-2.5 sm:gap-3 rounded-xl px-2.5 sm:px-3 py-3 hover:bg-slate-50/80 transition-colors"
+                  className="group rounded-xl px-2.5 sm:px-3 py-3 hover:bg-slate-50/80 transition-colors"
                 >
-                  {/* 优先级色点 */}
-                  <span
-                    className={cn(
-                      "h-2 w-2 shrink-0 rounded-full",
-                      s.priority === 'high' ? "bg-rose-500" :
-                      s.priority === 'medium' ? "bg-[#3b5aa2]" :
-                      "bg-slate-300"
-                    )}
-                  />
-                  {/* 时间 */}
-                  <span className="num w-[46px] shrink-0 text-[12.5px] font-semibold text-slate-700">
-                    {time}
-                  </span>
-                  {/* 内容:占满剩余宽度 */}
-                  <p className="min-w-0 flex-1 text-[13px] leading-snug text-slate-700">
+                  {/* 第一行:色点 | 时间 ……(撑开)…… 优先级 | 动作 */}
+                  <div className="flex items-center gap-2.5 sm:gap-3">
+                    {/* 优先级色点 */}
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full",
+                        s.priority === 'high' ? "bg-rose-500" :
+                        s.priority === 'medium' ? "bg-[#3b5aa2]" :
+                        "bg-slate-300"
+                      )}
+                    />
+                    {/* 时间 */}
+                    <span className="num w-[46px] shrink-0 text-[12.5px] font-semibold text-slate-700">
+                      {time}
+                    </span>
+                    <span className="min-w-0 flex-1" />
+                    {/* 优先级:单字徽章 */}
+                    <span
+                      className={cn(
+                        "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md text-[11px] font-semibold",
+                        priorityCfg.badge
+                      )}
+                      title={`${priorityCfg.label}优先级`}
+                    >
+                      {priorityCfg.label}
+                    </span>
+                    {/* 实施动作 */}
+                    <span className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200/80 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-500 group-hover:border-[#384877]/25 group-hover:text-[#384877] transition-colors">
+                      <Zap className="h-3 w-3" />
+                      {s.method}
+                    </span>
+                  </div>
+                  {/* 第二行:具体内容在时间标下换行,整行撑满 */}
+                  <p className="mt-1.5 pl-[18px] text-[13px] leading-snug text-slate-700">
                     {s.content}
                   </p>
-                  {/* 优先级:单字徽章 */}
-                  <span
-                    className={cn(
-                      "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md text-[11px] font-semibold",
-                      priorityCfg.badge
-                    )}
-                    title={`${priorityCfg.label}优先级`}
-                  >
-                    {priorityCfg.label}
-                  </span>
-                  {/* 实施动作 */}
-                  <span className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200/80 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-500 group-hover:border-[#384877]/25 group-hover:text-[#384877] transition-colors">
-                    <Zap className="h-3 w-3" />
-                    {s.method}
-                  </span>
                 </motion.div>
               );
             })}

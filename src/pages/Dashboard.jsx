@@ -53,6 +53,7 @@ import { phaseOf } from "@/lib/todayPhase";
 import TodayHero from "../components/today/TodayHero";
 import TodaySection from "../components/today/TodaySection";
 import TodayTimeline from "../components/today/TodayTimeline";
+import DeferredMount from "../components/today/DeferredMount";
 import MoodMirror from "../components/today/MoodMirror";
 import RetroBars from "../components/today/RetroBars";
 
@@ -443,36 +444,46 @@ export default function Dashboard() {
 
             {/* 02 心境（心签 + 约定的数据分析） */}
             <TodaySection no="02" title="心境" sub="心栈眼中的你" index={2}>
-              <MoodMirror notes={notesList} tasks={activeTasks} />
+              <DeferredMount minHeight={360}>
+                <MoodMirror notes={notesList} tasks={activeTasks} />
+              </DeferredMount>
             </TodaySection>
 
             {/* 03 守护动态（时空感知守护） */}
             <TodaySection no="03" title="守护动态" sub="记忆会在对的时候，回来找你" index={3}>
-              <div className="module-shell">
-                <SpatioTemporalGuardModule />
-              </div>
+              <DeferredMount minHeight={320}>
+                <div className="module-shell">
+                  <SpatioTemporalGuardModule />
+                </div>
+              </DeferredMount>
             </TodaySection>
 
             {/* 04 心栈为你编织（自动执行） */}
             <TodaySection no="04" title="心栈为你编织" sub="把零散的记录，织成理解" index={4}>
-              <div className="module-shell">
-                <AutoExecutionPanel />
-              </div>
+              <DeferredMount minHeight={380}>
+                <div className="module-shell">
+                  <AutoExecutionPanel />
+                </div>
+              </DeferredMount>
             </TodaySection>
 
             {/* 05 全设备协同 */}
             <TodaySection no="05" title="全设备协同" sub="你在哪里，记忆就在哪里" index={5}>
-              <div className="module-shell">
-                <DeviceCollaborationModule />
-              </div>
+              <DeferredMount minHeight={420}>
+                <div className="module-shell">
+                  <DeviceCollaborationModule />
+                </div>
+              </DeferredMount>
             </TodaySection>
 
             {/* 06 AI 简报 + 回望与远见 */}
             <TodaySection no="06" title="回望与远见" sub="数据是你的年轮，简报是我的心意" index={6}>
-              <div className="space-y-4">
-                <DailyBriefing />
-                <RetroBars tasks={activeTasks} notes={notesList} />
-              </div>
+              <DeferredMount minHeight={520}>
+                <div className="space-y-4">
+                  <DailyBriefing />
+                  <RetroBars tasks={activeTasks} notes={notesList} />
+                </div>
+              </DeferredMount>
               <div className="mt-12 pb-4 text-center">
                 <p className="font-[var(--font-serif)] text-[17px] tracking-[0.1em] text-[var(--ink-2)]">
                   观照自己，觉察当下

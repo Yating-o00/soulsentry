@@ -245,6 +245,21 @@ export default function Tasks() {
     }
   };
 
+  // 批准执行（待批准的执行单，如旧的邮件草稿）：跑 execute 阶段生成产物
+  const handleExecRun = async (task, autoExec) => {
+    try {
+      if (!autoExec?.executionId) {
+        showToast("未找到执行单");
+        return;
+      }
+      await post("/functions/executeAutomation", { execution_id: autoExec.executionId, phase: "execute" });
+      showToast("已开始执行，完成后可验收");
+      fetchData();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
   const handleShare = async (task) => {
     try {
       const share = await post(`/public/share/generate/task/${task.id}`);
@@ -404,6 +419,7 @@ export default function Tasks() {
                       onSnooze={setSnoozeTask}
                       onReview={setReviewTask}
                       onDelegate={handleDelegate}
+                      onExecRun={handleExecRun}
                       onSubtaskToggle={handleSubtaskToggle}
                       onShare={handleShare}
                     />

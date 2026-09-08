@@ -90,6 +90,7 @@ export default function PromiseCard({
   onSubtaskToggle,
   onShare,
   onDelegate,
+  onExecRun,
 }) {
   const done = task.status === "completed" || task.status === "done" || task.status === "archived";
   const p = priorityMark[task.priority] || priorityMark.medium;
@@ -138,6 +139,11 @@ export default function PromiseCard({
   const handleDelegate = (e) => {
     e.stopPropagation();
     if (onDelegate) onDelegate(task);
+  };
+
+  const handleExecRun = (e) => {
+    e.stopPropagation();
+    if (onExecRun) onExecRun(task, analysis?.autoExec);
   };
 
   return (
@@ -395,6 +401,7 @@ export default function PromiseCard({
                   </Text>
                   <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, letterSpacing: "2rpx" }}>
                     {analysis.autoExec.state === "ready" && "已预执行，待验收"}
+                    {analysis.autoExec.state === "confirm" && "待批准执行"}
                     {analysis.autoExec.state === "running" && "执行中…"}
                     {analysis.autoExec.state === "done" && "已完成 ✓"}
                     {analysis.autoExec.state === "manual" && "已转人工"}
@@ -420,7 +427,7 @@ export default function PromiseCard({
                     我来接管
                   </Text>
                   <View
-                    onClick={handleReview}
+                    onClick={analysis.autoExec.state === "confirm" ? handleExecRun : handleReview}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -431,7 +438,9 @@ export default function PromiseCard({
                       borderRadius: "6rpx",
                     }}
                   >
-                    <Text style={{ fontSize: "24rpx", color: theme.ink }}>验收</Text>
+                    <Text style={{ fontSize: "24rpx", color: theme.ink }}>
+                      {analysis.autoExec.state === "confirm" ? "批准执行" : "验收"}
+                    </Text>
                     <IconChevronRight size={20} color={theme.inkTertiary} />
                   </View>
                 </View>

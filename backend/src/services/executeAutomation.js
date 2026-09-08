@@ -577,8 +577,8 @@ async function generateAutomationPlan(execution) {
     automationType = aiType || detectedTypeFromInput || "summary_note";
   }
 
-  // 中国大陆部署：除邮件草稿外默认不需要二次确认
-  const requiresApproval = automationType === "email_draft" ? true : Boolean(data.requires_approval);
+  // 邮件草稿 handler 只生成草稿、不会真实发送，产物与其他类型一样走待验收，无需二次确认
+  const requiresApproval = Boolean(data.requires_approval);
 
   const rawPlan = data.plan || {};
   const steps = Array.isArray(rawPlan.steps)
@@ -1285,9 +1285,8 @@ export async function executeAutomation({ executionId, phase, userId, prisma }) 
     });
 
     const handlerResult = await handler(execution, prisma);
-    const requiresApproval = execution.automationType === "email_draft";
     // 产物型自动执行生成后进入待验收，由用户确认产物；验收不自动完成约定本身
-    const nextStatus = requiresApproval ? "waiting_confirm" : "waiting_acceptance";
+    const nextStatus = "waiting_acceptance";
 
     await prisma.taskExecution.update({
       where: { id: execution.id },

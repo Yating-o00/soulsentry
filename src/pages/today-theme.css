@@ -300,6 +300,14 @@
     padding-right: 24px;
   }
 }
+/* 3) 电脑端：信息流收敛为居中窄栏（720px），避免宽屏下卡片被拉满、行宽过长难阅读 */
+@media (min-width: 768px) {
+  .today-page > section {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
 
 /* 2) 离屏章节跳过渲染：长列表/图表只在进入视口时才绘制（Chromium 系生效，Safari 忽略无害）。
       contain-intrinsic-size 预估占位高度，避免滚动条跳动 */

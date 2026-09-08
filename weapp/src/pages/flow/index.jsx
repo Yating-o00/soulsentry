@@ -2671,12 +2671,12 @@ export default function Flow() {
                 title="地理情境感知"
                 subtitle={`${eventLabel} · 刚刚`}
                 tag="高优先级"
-                borderColor="#bfdbfe"
-                headerBg="#eff6ff"
-                tagColor="#2563eb"
-                tagBg="#dbeafe"
+                borderColor="#d8dde9"
+                headerBg="#eef0f5"
+                tagColor="#384877"
+                tagBg="#d8dde9"
               >
-                <View style={{ background: "#eff6ff", borderRadius: "16rpx", padding: "18rpx" }}>
+                <View style={{ background: "#eef0f5", borderRadius: "16rpx", padding: "18rpx" }}>
                   <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink, lineHeight: "44rpx" }}>
                     您已到达{g.location_name}附近（{g.distance}米）
                   </Text>
@@ -2704,7 +2704,7 @@ export default function Flow() {
                   ))}
                 </View>
                 <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
-                  <ActionBtn primary label="查看详情" onClick={() => goTask(first.id)} bg="#dbeafe" color="#2563eb" />
+                  <ActionBtn primary label="查看详情" onClick={() => goTask(first.id)} bg="#d8dde9" color="#384877" />
                   <ActionBtn label="稍后" onClick={() => Taro.showToast({ title: "已稍后提醒", icon: "none" })} />
                 </View>
               </CardShell>
@@ -2722,19 +2722,19 @@ export default function Flow() {
                 title="遗忘拯救"
                 subtitle="基于遗忘曲线预警"
                 tag="智能干预"
-                borderColor="#d8b4fe"
-                headerBg="#faf5ff"
-                tagColor="#9333ea"
-                tagBg="#f3e8ff"
+                borderColor="#d8dde9"
+                headerBg="#eef0f5"
+                tagColor="#384877"
+                tagBg="#d8dde9"
               >
-                <View style={{ background: "#faf5ff", borderRadius: "16rpx", padding: "18rpx" }}>
+                <View style={{ background: "#eef0f5", borderRadius: "16rpx", padding: "18rpx" }}>
                   <View style={{ display: "flex", alignItems: "flex-start" }}>
                     <View
                       style={{
                         width: "34rpx",
                         height: "34rpx",
                         borderRadius: "50%",
-                        background: "#a855f7",
+                        background: "#4a5d8f",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -2754,7 +2754,7 @@ export default function Flow() {
                     </View>
                   </View>
                   {f.context && (
-                    <View style={{ marginTop: "16rpx", padding: "14rpx", background: THEME.card, borderRadius: "12rpx", border: "1rpx solid #f3e8ff" }}>
+                    <View style={{ marginTop: "16rpx", padding: "14rpx", background: THEME.card, borderRadius: "12rpx", border: "1rpx solid #d8dde9" }}>
                       <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginBottom: "4rpx" }}>上下文：</Text>
                       <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary, lineHeight: "40rpx" }}>
                         {f.context}
@@ -2763,30 +2763,30 @@ export default function Flow() {
                     </View>
                   )}
                   {(others.length > 0 || silent.length > 0) && (
-                    <View style={{ marginTop: "16rpx", paddingTop: "14rpx", borderTop: "1rpx solid #f3e8ff" }}>
+                    <View style={{ marginTop: "16rpx", paddingTop: "14rpx", borderTop: "1rpx solid #d8dde9" }}>
                       {others.map((t) => (
                         <View key={t.id} style={{ display: "flex", alignItems: "center", marginBottom: "8rpx" }}>
-                          <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: "#c084fc", marginRight: "10rpx" }} />
+                          <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: "#4a5d8f", marginRight: "10rpx" }} />
                           <Text style={{ flex: 1, fontSize: "22rpx", color: THEME.inkTertiary }} numberOfLines={1}>
                             {t.title}
                           </Text>
-                          <Text style={{ fontSize: "20rpx", color: "#a855f7" }}>{t.days}天</Text>
+                          <Text style={{ fontSize: "20rpx", color: "#4a5d8f" }}>{t.days}天</Text>
                         </View>
                       ))}
                       {silent.map((n) => (
                         <View key={n.id} style={{ display: "flex", alignItems: "center", marginBottom: "8rpx" }}>
-                          <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: "#818cf8", marginRight: "10rpx" }} />
+                          <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: "#5b82a0", marginRight: "10rpx" }} />
                           <Text style={{ flex: 1, fontSize: "22rpx", color: THEME.inkTertiary }} numberOfLines={1}>
                             心签 · {n.title}
                           </Text>
-                          <Text style={{ fontSize: "20rpx", color: "#6366f1" }}>{n.days}天</Text>
+                          <Text style={{ fontSize: "20rpx", color: "#5b82a0" }}>{n.days}天</Text>
                         </View>
                       ))}
                     </View>
                   )}
                 </View>
                 <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
-                  <ActionBtn primary label="立即处理" onClick={() => goTask(f.id)} bg="#f3e8ff" color="#9333ea" />
+                  <ActionBtn primary label="立即处理" onClick={() => goTask(f.id)} bg="#d8dde9" color="#384877" />
                   <ActionBtn label="延后" onClick={() => rescheduleTask({ id: f.id, title: f.title }, "09:00")} />
                   <ActionBtn label="轻轻放下" onClick={() => letGoTask({ id: f.id, title: f.title })} />
                 </View>
@@ -2803,24 +2803,24 @@ export default function Flow() {
                 title="关联规则推荐"
                 subtitle="从你的历史中学到的隐藏逻辑"
                 tag="决策前置"
-                borderColor="#c7d2fe"
-                headerBg="#eef2ff"
-                tagColor="#4f46e5"
-                tagBg="#e0e7ff"
+                borderColor="#d8dde9"
+                headerBg="#eef0f5"
+                tagColor="#384877"
+                tagBg="#d8dde9"
               >
                 <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginBottom: "16rpx" }}>
                   完成「{s.trigger_task?.title || "上一件事"}」后，你通常会接着处理…
                 </Text>
                 {c.suggestions.map((su, idx) => (
-                  <View key={idx} style={{ background: "#f5f7ff", borderRadius: "16rpx", padding: "18rpx", marginBottom: "14rpx", border: "1rpx solid #e0e7ff" }}>
+                  <View key={idx} style={{ background: "#f6f7fa", borderRadius: "16rpx", padding: "18rpx", marginBottom: "14rpx", border: "1rpx solid #d8dde9" }}>
                     <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12rpx" }}>
                       <View style={{ display: "flex", alignItems: "center" }}>
                         <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary, fontWeight: 500 }}>{su.from_label}</Text>
                         <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginHorizontal: "8rpx" }}>→</Text>
-                        <Text style={{ fontSize: "22rpx", color: "#4f46e5", fontWeight: 500 }}>{su.to_label}</Text>
+                        <Text style={{ fontSize: "22rpx", color: "#384877", fontWeight: 500 }}>{su.to_label}</Text>
                       </View>
                       <Text style={{ fontSize: "18rpx", color: THEME.inkQuaternary }}>
-                        置信度 <Text style={{ color: "#4f46e5", fontWeight: 500 }}>{su.confidence}%</Text> · {su.support}次共现
+                        置信度 <Text style={{ color: "#384877", fontWeight: 500 }}>{su.confidence}%</Text> · {su.support}次共现
                       </Text>
                     </View>
                     {su.tasks.filter(isTaskVisible).map((t) => (
@@ -2835,7 +2835,7 @@ export default function Flow() {
                           borderRadius: "10rpx",
                           padding: "14rpx",
                           marginBottom: "10rpx",
-                          border: "1rpx solid #e0e7ff"
+                          border: "1rpx solid #d8dde9"
                         }}
                       >
                         <Text style={{ flex: 1, fontSize: "24rpx", color: THEME.inkSecondary }} numberOfLines={1}>
@@ -2870,10 +2870,10 @@ export default function Flow() {
                 title="地点情境推荐"
                 subtitle={`你在 ${l.icon || ""} ${l.location_name}（约${l.distance}m）附近`}
                 tag="决策前置"
-                borderColor="#a7f3d0"
-                headerBg="#f0fdf4"
-                tagColor="#059669"
-                tagBg="#d1fae5"
+                borderColor="#d8dde9"
+                headerBg="#eef0f5"
+                tagColor="#384877"
+                tagBg="#d8dde9"
               >
                 <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginBottom: "12rpx" }}>你在这里经常会做：</Text>
                 <View style={{ display: "flex", flexWrap: "wrap", marginBottom: "16rpx" }}>
@@ -2885,14 +2885,14 @@ export default function Flow() {
                         alignItems: "center",
                         padding: "6rpx 14rpx",
                         borderRadius: "100rpx",
-                        background: "#d1fae5",
-                        border: "1rpx solid #a7f3d0",
+                        background: "#d8dde9",
+                        border: "1rpx solid #d8dde9",
                         marginRight: "10rpx",
                         marginBottom: "10rpx"
                       }}
                     >
-                      <Text style={{ fontSize: "18rpx", color: "#059669", marginRight: "4rpx" }}>✦</Text>
-                      <Text style={{ fontSize: "20rpx", color: "#047857" }}>
+                      <Text style={{ fontSize: "18rpx", color: "#384877", marginRight: "4rpx" }}>✦</Text>
+                      <Text style={{ fontSize: "20rpx", color: "#384877" }}>
                         {cat.label} ×{cat.count}
                       </Text>
                     </View>
@@ -2930,12 +2930,12 @@ export default function Flow() {
                           borderRadius: "10rpx",
                           padding: "14rpx",
                           marginBottom: "10rpx",
-                          border: "1rpx solid #a7f3d0"
+                          border: "1rpx solid #d8dde9"
                         }}
                       >
                         <View style={{ display: "flex", alignItems: "center", flex: 1 }}>
-                          <View style={{ padding: "2rpx 8rpx", borderRadius: "6rpx", background: "#d1fae5", marginRight: "10rpx" }}>
-                            <Text style={{ fontSize: "18rpx", color: "#059669" }}>{t.category_label || CATEGORY_LABEL[t.category] || "其他"}</Text>
+                          <View style={{ padding: "2rpx 8rpx", borderRadius: "6rpx", background: "#d8dde9", marginRight: "10rpx" }}>
+                            <Text style={{ fontSize: "18rpx", color: "#384877" }}>{t.category_label || CATEGORY_LABEL[t.category] || "其他"}</Text>
                           </View>
                           <Text style={{ flex: 1, fontSize: "24rpx", color: THEME.inkSecondary }} numberOfLines={1}>
                             {t.title}

@@ -4,15 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
-import { Filter, X, Calendar as CalendarIcon, Tag, LayoutGrid } from "lucide-react";
+import { Filter, X, Pin, Calendar as CalendarIcon, Tag, LayoutGrid } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { TYPE_META, TYPE_ORDER } from "@/components/heartsign/heartSignMeta";
+import { TYPE_META, TYPE_ORDER, getNoteType } from "@/components/heartsign/heartSignMeta";
 
-export default function NoteFilters({ filters, onFiltersChange, allTags = [], onCategorySelect, activeCategory = "all" }) {
+export default function NoteFilters({ filters, onFiltersChange, allTags = [], notes = [], onCategorySelect, activeCategory = "all", onTogglePinned, activePinned = false }) {
   const [dateRange, setDateRange] = useState({ from: null, to: null });
   const [open, setOpen] = useState(false);
+
+  const countOf = (key) => notes.filter((n) => getNoteType(n) === key).length;
 
   const toggleTag = (tag) => {
     const newTags = filters.tags?.includes(tag)
@@ -37,6 +39,17 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [], on
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      {/* 已置顶快捷过滤（与高级筛选同风格） */}
+      <Button
+        variant={activePinned ? "default" : "outline"}
+        size="sm"
+        onClick={onTogglePinned}
+        className={`h-8 gap-1.5 ${activePinned ? 'bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white' : ''}`}
+      >
+        <Pin className="w-3.5 h-3.5" />
+        已置顶
+      </Button>
+
       {/* Advanced Filters Popover */}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -84,7 +97,7 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [], on
                       style={{ background: meta.bg, color: meta.color }}
                       title={`只看${meta.label}签`}
                     >
-                      {meta.label}签
+                      {meta.label}签（{countOf(key)}）
                     </button>
                   );
                 })}

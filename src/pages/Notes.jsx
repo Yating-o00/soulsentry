@@ -20,7 +20,6 @@ import AINotesOrganizer from "../components/notes/AINotesOrganizer";
 import AIKnowledgeBase from "../components/knowledge/AIKnowledgeBase";
 import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
 import ExternalHorizonPanel from "../components/heartsign/ExternalHorizonPanel";
-import CategoryFilterBar from "@/components/heartsign/CategoryFilterBar";
 import ReviewDialog from "@/components/heartsign/ReviewDialog";
 import JournalDialog from "@/components/heartsign/JournalDialog";
 import VaultDialog from "@/components/heartsign/VaultDialog";
@@ -613,64 +612,56 @@ export default function Notes() {
 
       {activeTab === "notes" && (
         <>
-          {/* 五类过滤（含账本签）+ 回应浓度 + 手账/回顾/保险柜 */}
+          {/* 工具行：手账 / 回顾 / 保险柜，回应浓度在最右 */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.05 }}
-            className="flex items-center gap-2 flex-wrap"
+            className="flex items-center gap-1.5 flex-wrap"
           >
-            <div className="flex-1 min-w-[260px]">
-              <CategoryFilterBar
-                notes={notes.filter((n) => !n.deleted_at)}
-                filter={categoryFilter}
-                onFilterChange={setCategoryFilter}
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                <span className="hidden sm:inline">回应</span>
-                <select
-                  value={density}
-                  onChange={(e) => handleDensityChange(e.target.value)}
-                  title="回应浓度：AI 回应你的方式"
-                  className="bg-white border border-slate-200 rounded-full px-2.5 py-1.5 text-xs text-slate-600 outline-none focus:border-[#384877]/50"
-                >
-                  {DENSITY_OPTIONS.map((o) => (
-                    <option key={o.key} value={o.key}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              <Button
-                onClick={() => setJournalOpen(true)}
-                variant="outline"
-                size="sm"
-                title="心签手账：近 7 天的记录与情绪晴雨"
-                className="h-8 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
+            <Button
+              onClick={() => setJournalOpen(true)}
+              variant="outline"
+              size="sm"
+              title="心签手账：近 7 天的记录与情绪晴雨"
+              className="h-8 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">手账</span>
+            </Button>
+            <Button
+              onClick={() => setReviewOpen(true)}
+              variant="outline"
+              size="sm"
+              title="抽一签 / 按词回顾，与过去的自己重逢"
+              className="h-8 px-2.5 gap-1.5 border-[#384877]/30 bg-[#384877]/5 hover:bg-[#384877]/10 text-[#384877] text-xs"
+            >
+              <Dices className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">回顾</span>
+            </Button>
+            <Button
+              onClick={() => handleVaultRequest(null)}
+              variant="outline"
+              size="sm"
+              title="保险柜：密码保护的私密信息，AI 不会阅读"
+              className="h-8 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">保险柜</span>
+            </Button>
+            <div className="flex-1" />
+            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="hidden sm:inline">回应</span>
+              <select
+                value={density}
+                onChange={(e) => handleDensityChange(e.target.value)}
+                title="回应浓度：AI 回应你的方式"
+                className="bg-white border border-slate-200 rounded-full px-2.5 py-1.5 text-xs text-slate-600 outline-none focus:border-[#384877]/50"
               >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">手账</span>
-              </Button>
-              <Button
-                onClick={() => setReviewOpen(true)}
-                variant="outline"
-                size="sm"
-                title="抽一签 / 按词回顾，与过去的自己重逢"
-                className="h-8 px-2.5 gap-1.5 border-[#384877]/30 bg-[#384877]/5 hover:bg-[#384877]/10 text-[#384877] text-xs"
-              >
-                <Dices className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">回顾</span>
-              </Button>
-              <Button
-                onClick={() => handleVaultRequest(null)}
-                variant="outline"
-                size="sm"
-                title="保险柜：密码保护的私密信息，AI 不会阅读"
-                className="h-8 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">保险柜</span>
-              </Button>
+                {DENSITY_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </select>
             </div>
           </motion.div>
 
@@ -685,8 +676,11 @@ export default function Notes() {
               filters={filters}
               onFiltersChange={setFilters}
               allTags={allTags}
+              notes={notes.filter((n) => !n.deleted_at)}
               onCategorySelect={setCategoryFilter}
               activeCategory={categoryFilter}
+              onTogglePinned={() => setCategoryFilter((v) => (v === 'pinned' ? 'all' : 'pinned'))}
+              activePinned={categoryFilter === 'pinned'}
             />
 
             <div className="flex items-center gap-1.5 md:gap-3">

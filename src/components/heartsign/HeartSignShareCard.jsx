@@ -8,8 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Download, Copy, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import { createPageUrl } from "@/utils";
 import QRCode from "qrcode";
+import { httpRequest } from "@/api/httpClient";
 import { getNoteType, TYPE_META } from "@/components/heartsign/heartSignMeta";
 
 const W = 1080;
@@ -41,6 +41,8 @@ function wrapLines(ctx, text, maxW, maxLines) {
 export default function HeartSignShareCard({ note, text, open, onClose }) {
   const canvasRef = useRef(null);
   const [generating, setGenerating] = useState(false);
+  // 公开分享链接（/share/<token>）：扫码者无需登录即可查看与评论
+  const [shareUrl, setShareUrl] = useState("");
 
   const content = (text || "").trim();
   // 五类签色作丝带点缀，无分类时回落哨兵蓝
@@ -50,10 +52,31 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   const lastReply = [...conv].reverse().find((m) => m.role === "other" && m.text && !m.typing);
   const replyText = ai.emotional_response || lastReply?.text || "";
 
-  // 二维码固定指向正式域名，避免微信将预览沙箱链接判定为风险站点而拦截
-  const noteUrl = note?.id ?
-  `https://xinzhan-soulsentry.com${createPageUrl("Notes")}?noteId=${note.id}` :
-  "";
+  // 打开卡片时确保存在公开分享 token：
+  // 二维码指向 /share/<token> 公开页，扫码者不用登录就能看签文、留评论
+  const isOptimistic = typeof note?.id === "string" && note.id.startsWith("tmp-");
+  useEffect(() => {
+    if (!open || !note?.id || isOptimistic) return;
+    if (shareUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await httpRequest(`/api/public/share/generate/note/${note.id}`, {
+          method: "POST",
+          body: { enabled: true },
+        });
+        if (!cancelled && result?.url) setShareUrl(result.url);
+      } catch (e) {
+        // 生成失败（如未登录/网络问题）：回落到已有的 share_token 或不出二维码
+        if (!cancelled && note?.share_token && typeof window !== "undefined") {
+          setShareUrl(`${window.location.origin}/share/${note.share_token}`);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, note?.id, note?.share_token, isOptimistic, shareUrl]);
+
+  const noteUrl = shareUrl;
 
   const dateStr = (() => {
     const d = note?.created_date ? new Date(note.created_date) : new Date();
@@ -172,7 +195,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
           ctx.fillStyle = "#b0b0b5";
           ctx.font = `400 18px ${SANS}`;
           ctx.textAlign = "right";
-          ctx.fillText("扫码查看", W - 90, H - 200);
+          ctx.fillText("扫码免登录回应", W - 90, H - 200);
           ctx.textAlign = "left";
         } catch {
           // 二维码生成失败时静默略过，不影响卡片主体
@@ -283,6 +306,24 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
               复制文
             </Button>
           </div>
+
+          {/* 公开链接：扫码/打开均免登录可评论 */}
+          {shareUrl && (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(shareUrl).then(
+                  () => toast.success("公开链接已复制，扫码或打开均可免登录评论"),
+                  () => toast.error("复制失败")
+                );
+              }}
+              className="w-full flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-left transition-colors hover:border-[#384877]/40 hover:bg-slate-50"
+            >
+              <Share2 className="w-3.5 h-3.5 shrink-0 text-[#384877]" />
+              <span className="min-w-0 flex-1 truncate text-[12px] text-slate-500">{shareUrl}</span>
+              <Copy className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+            </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>);

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User, Lock, Dices, BookOpen } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User, Lock, Dices, BookOpen, PenLine, Send } from "lucide-react";
 import AIText from "@/components/AIText";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
@@ -60,6 +60,7 @@ export default function Notes() {
   const [density, setDensity] = useState(() => localStorage.getItem(DENSITY_KEY) || "light");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultInitialValue, setVaultInitialValue] = useState(null);
   const [flashId, setFlashId] = useState(null);
@@ -271,10 +272,24 @@ export default function Notes() {
     }
   };
 
+  // 给心签打 metadata 标记（已转约定 / 已沉淀），乐观更新缓存并持久化
+  const flagNote = (noteId, patchMeta) => {
+    if (!noteId) return;
+    const note = (queryClient.getQueryData(['notes']) || []).find(n => n.id === noteId);
+    const metadata = { ...(note?.metadata || {}), ...patchMeta };
+    queryClient.setQueryData(['notes'], (old) =>
+      (old || []).map(n => (n.id === noteId ? { ...n, metadata } : n)));
+    base44.entities.Note.update(noteId, { metadata }).catch(() => {});
+  };
+
   const createTaskMutation = useMutation({
-    mutationFn: (taskData) => base44.entities.Task.create(taskData),
-    onSuccess: () => {
+    mutationFn: (taskData) => {
+      const { __noteId, ...rest } = taskData || {};
+      return base44.entities.Task.create(rest);
+    },
+    onSuccess: (data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] }); // Ideally invalidate tasks, but might not be mounted
+      if (vars?.__noteId) flagNote(vars.__noteId, { converted_task: true });
       setTaskCreationNote(null);
       toast.success("约定已创建");
     },
@@ -350,8 +365,9 @@ export default function Notes() {
       };
       return base44.entities.KnowledgeBase.create(knowledgeData);
     },
-    onSuccess: () => {
+    onSuccess: (data, note) => {
       queryClient.invalidateQueries({ queryKey: ['knowledge-base'] });
+      flagNote(note?.id, { in_knowledge_base: true });
       toast.success("已保存到知识库");
     },
     onError: () => {
@@ -695,39 +711,43 @@ export default function Notes() {
             </div>
           </motion.div>
 
-          {/* 聊天信息流 */}
-          <div className="hs-page flex flex-col bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden" style={{ height: 'calc(100vh - 320px)', minHeight: '500px' }}>
-            <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4">
-              {filteredNotes.length === 0 ? (
-                <div className="text-center py-16 max-w-md mx-auto">
-                  <div className="w-16 h-16 bg-gradient-to-br from-violet-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Sparkles className="w-7 h-7 text-violet-500" />
-                  </div>
-                  <h3 className="text-slate-800 font-medium mb-2"><AIText>暂无心签</AIText></h3>
-                  <p className="text-slate-500 text-sm"><AIText>像给文件传输助手发消息一样，随手记录想法</AIText></p>
-                </div>
-              ) : (
-                <div className="max-w-3xl mx-auto space-y-3">
-                  {filteredNotes.map((note) => (
-                    <div key={note.id} onClick={() => setEditingNote(note)} className="cursor-pointer">
-                      <HeartSignMessage
-                        note={note}
-                        flash={flashId === note.id}
-                        onDeleted={(id) => deleteNoteMutation.mutate(id)}
-                        onRestore={() => queryClient.invalidateQueries({ queryKey: ['notes'] })}
-                        onTypeChange={handleTypeChange}
-                        onVaultRequest={handleVaultRequest}
-                        onPinnedChange={handlePinnedChange}
-                        onConvertToTask={handleSmartConvertToTask}
-                        onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {/* 签列表（与小程序一致：无底部大输入框，每条内容一张签，整页滚动） */}
+          <div className="hs-page max-w-3xl mx-auto space-y-3 pb-6">
+            {/* 输入入口：点开弹出完整输入面板 */}
+            <button
+              onClick={() => setComposerOpen(true)}
+              className="hs-card w-full flex items-center gap-2.5 text-left text-sm text-slate-400 hover:text-slate-500 transition-colors"
+            >
+              <PenLine className="w-4 h-4 text-[#384877]/60 flex-shrink-0" />
+              说给另一个自己听……
+              <Send className="w-4 h-4 ml-auto text-[#384877]/40 flex-shrink-0" />
+            </button>
 
-            <HeartSignInput onSend={handleSend} />
+            {filteredNotes.length === 0 ? (
+              <div className="text-center py-16 max-w-md mx-auto">
+                <div className="w-16 h-16 bg-[#384877]/8 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl text-[#384877] font-serif">签</span>
+                </div>
+                <h3 className="text-slate-800 font-medium mb-2"><AIText>这里还空着</AIText></h3>
+                <p className="text-slate-500 text-sm"><AIText>此刻的心情、刷到的好文章、怕忘的号码……都可以丢进来</AIText></p>
+              </div>
+            ) : (
+              filteredNotes.map((note) => (
+                <div key={note.id} onClick={() => setEditingNote(note)} className="cursor-pointer">
+                  <HeartSignMessage
+                    note={note}
+                    flash={flashId === note.id}
+                    onDeleted={(id) => deleteNoteMutation.mutate(id)}
+                    onRestore={() => queryClient.invalidateQueries({ queryKey: ['notes'] })}
+                    onTypeChange={handleTypeChange}
+                    onVaultRequest={handleVaultRequest}
+                    onPinnedChange={handlePinnedChange}
+                    onConvertToTask={handleSmartConvertToTask}
+                    onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
+                  />
+                </div>
+              ))
+            )}
           </div>
         </>
       )}
@@ -801,6 +821,21 @@ export default function Notes() {
         onLocate={handleLocate}
       />
 
+      {/* 输入面板：完整输入能力（模板/附件/图片/链接/语音）集中在弹窗中 */}
+      <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
+        <DialogContent className="max-w-2xl w-[95vw] md:w-auto p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-4 pb-1">
+            <DialogTitle className="text-base">说给另一个自己听</DialogTitle>
+          </DialogHeader>
+          <HeartSignInput
+            onSend={async (payload) => {
+              await handleSend(payload);
+              setComposerOpen(false);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
       {/* 手账：近 7 天统计与情绪晴雨 */}
       <JournalDialog
         open={journalOpen}
@@ -845,7 +880,8 @@ export default function Notes() {
               // Ensure reminder_time is set if QuickAddTask doesn't enforce it strictly or if user didn't change it
               const dataToSubmit = {
                 ...taskData,
-                reminder_time: taskData.reminder_time || new Date().toISOString()
+                reminder_time: taskData.reminder_time || new Date().toISOString(),
+                __noteId: taskCreationNote?.id
               };
               createTaskMutation.mutate(dataToSubmit);
             }} />
@@ -867,14 +903,14 @@ export default function Notes() {
         )}
       </AnimatePresence>
 
-      {/* Mobile FAB - Only show on notes tab */}
+      {/* 右下角 +：与小程序一致的快捷记录入口（桌面/移动端通用） */}
       {activeTab === "notes" && (
         <motion.button
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           whileTap={{ scale: 0.9 }}
-          onClick={() => setShowMobileInput(true)}
-          className="md:hidden fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white shadow-2xl shadow-[#384877]/40 flex items-center justify-center active:shadow-lg transition-shadow"
+          onClick={() => setComposerOpen(true)}
+          className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white shadow-2xl shadow-[#384877]/40 flex items-center justify-center active:shadow-lg transition-shadow"
         >
           <Plus className="w-7 h-7" strokeWidth={2.5} />
         </motion.button>

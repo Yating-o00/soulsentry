@@ -28,6 +28,20 @@ export const HEARTSIGN_CATEGORIES = [
 // 卡内小按钮（操作条 / 继续聊聊）
 const OP_CLS = "inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#384877] hover:bg-slate-50 rounded-md px-2 py-1 transition-colors";
 
+// 状态小徽章（已置顶 / 已转约定 / 已沉淀 / 需要关注）
+function FlagBadge({ color, children, filled }) {
+  return (
+    <span
+      className={`text-[10px] px-1.5 py-0.5 rounded-full border leading-none ${filled ? 'text-white' : ''}`}
+      style={filled
+        ? { background: color, borderColor: color }
+        : { color, borderColor: `${color}55`, background: `${color}14` }}
+    >
+      {children}
+    </span>
+  );
+}
+
 // 理性内容的「知识补充」卡：白色卡面 + 品牌蓝细条，底部关键词可拓展外部链接
 function KnowledgeCard({ ai, plain }) {
   if (!ai?.emotional_response) return null;
@@ -142,31 +156,28 @@ function SourceBadge({ note }) {
   );
 }
 
-// 卡内对话线程：渲染 followupHeartSign 写入 metadata.conversation 的多轮对话
+// 卡内对话线程（followupHeartSign → metadata.conversation）
+// 小程序排版：用户文字通栏常规体，回应为「AI 回应」徽章 + 斜体水蓝文字
 function ConversationThread({ conv, typing }) {
   if (!conv.length && !typing) return null;
   return (
     <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5">
       {conv.map((m, i) => m.role === 'user' ? (
-        <div key={i} className="flex justify-end">
-          <div className="max-w-[85%] bg-slate-50 border border-slate-200/70 rounded-2xl rounded-br-md px-3 py-2 text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
-            {m.text}
-          </div>
-        </div>
+        <p key={i} className="text-[13.5px] leading-[1.8] text-slate-800 font-medium whitespace-pre-wrap break-words">
+          {m.text}
+        </p>
       ) : m.typing ? (
-        <div key={i} className="flex justify-start">
-          <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 bg-white border border-slate-100 rounded-2xl px-3 py-2">
-            <Loader2 className="w-3 h-3 animate-spin" /> 另一个你 正在倾听…
-          </div>
+        <div key={i} className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+          <Loader2 className="w-3 h-3 animate-spin" /> 正在倾听…
         </div>
       ) : (
-        <div key={i} className="flex justify-start">
-          <div className="max-w-[85%]">
-            <div className="text-[10px] text-slate-400 mb-0.5">另一个你{m.tag ? ` · ${m.tag}` : ''}</div>
-            <div className="bg-white border border-slate-200/80 rounded-2xl rounded-bl-md px-3 py-2 text-[13px] text-slate-600 leading-relaxed whitespace-pre-wrap break-words">
-              {m.text}
-            </div>
-          </div>
+        <div key={i}>
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#5b82a0]/10 border border-[#5b82a0]/20 text-[10px] text-[#5b82a0] mb-1">
+            AI 回应{m.tag ? ` · ${m.tag}` : ''}
+          </span>
+          <p className="text-[13.5px] leading-[1.8] italic text-[#5b82a0] whitespace-pre-wrap break-words">
+            {m.text}
+          </p>
         </div>
       ))}
     </div>
@@ -192,6 +203,7 @@ export default function HeartSignMessage({
   const [followSending, setFollowSending] = useState(false);
   const ai = note.ai_analysis || {};
   const typeKey = getNoteType(note);
+  const typeMeta = TYPE_META[typeKey] || TYPE_META.emotion;
   const conv = localConv || note.metadata?.conversation || [];
 
   // 携带笔记内容一起传给后端，绕开后端"查不到笔记"的数据隔离问题
@@ -270,8 +282,6 @@ export default function HeartSignMessage({
   const isReport = plain.length > 800;
   const displayText = expanded || !isLong ? plain : plain.slice(0, 280) + '…';
   const isOptimistic = typeof note.id === 'string' && note.id.startsWith('tmp-');
-  // 纯外部信息（外部订阅源 / 网页链接 / 微信转发）靠左对齐，与用户自建内容（靠右）区分
-  const isExternal = ['external_feed', 'web_link', 'wechat_share'].includes(note.source_type);
 
   const handleCopy = async () => {
     try {
@@ -313,7 +323,7 @@ export default function HeartSignMessage({
       if (Array.isArray(data?.conversation)) {
         setLocalConv(data.conversation);
       } else {
-        setLocalConv(optimisticConv.filter((m) => !m.typing));
+        setLocalConv(optimisticConv);
       }
     } catch (e) {
       setLocalConv(conv);
@@ -349,10 +359,13 @@ export default function HeartSignMessage({
    <div data-hs-id={note.id} data-hs-type={typeKey} className={`hs-card ${flash ? 'hs-flash' : ''}`}>
     <HeartSignShareCard note={note} text={plain} open={shareOpen} onClose={() => setShareOpen(false)} />
 
-    {/* 卡头：类型 chip + 置顶标记 + 时间 + 分错了纠正 */}
-    <div className="flex items-center gap-2 mb-2">
-      <span className="hs-type-chip">{TYPE_META[typeKey]?.label || '心签'}签</span>
-      {isPinnedNote(note) && <Pin className="w-3 h-3 text-[#384877] fill-[#384877]" />}
+    {/* 卡头：类型 chip + 状态徽章 + 时间 + 分错了纠正 */}
+    <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+      <span className="hs-type-chip">{typeMeta.label}签</span>
+      {isPinnedNote(note) && <FlagBadge color="#384877">已置顶</FlagBadge>}
+      {note.metadata?.converted_task && <FlagBadge color="#6e8a73">已转约定</FlagBadge>}
+      {note.metadata?.in_knowledge_base && <FlagBadge color="#5b82a0">已沉淀</FlagBadge>}
+      {note.metadata?.is_crisis && <FlagBadge color="#db3356">需要关注</FlagBadge>}
       <span className="text-[10px] text-slate-400 ml-auto" title={fullTime}>{time}</span>
       {!isOptimistic && (
         <DropdownMenu>
@@ -382,128 +395,117 @@ export default function HeartSignMessage({
       )}
     </div>
 
-    {/* 用户气泡 */}
-    <div className={`flex ${isExternal ? 'justify-start' : 'justify-end'}`}>
-      <div className="max-w-[88%] md:max-w-[78%] w-full">
-        <div className="relative bg-white border border-slate-200/80 rounded-2xl px-4 py-3">
-          {(note.source_type !== 'manual' || isReport || note.source_url) && (
-            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-              <SourceBadge note={note} />
-              {isReport && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/70 text-[10px] font-medium">
-                  <FileText className="w-3 h-3" /> 长文本 · {plain.length}字
-                </span>
-              )}
-              {note.source_url && (
-                <a href={note.source_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-[11px] text-slate-500 hover:text-slate-700 truncate max-w-[200px] inline-flex items-center gap-1">
-                  <LinkIcon className="w-3 h-3" />{note.source_url.replace(/^https?:\/\//, '')}
-                </a>
-              )}
-            </div>
-          )}
-          <div className="text-[14.5px] leading-[1.7] text-slate-800 whitespace-pre-wrap break-words">
-            {displayText || <span className="text-slate-400">（空内容）</span>}
+    {/* 用户签文：通栏排版（与小程序一致，非聊天气泡） */}
+    {(note.source_type !== 'manual' || isReport || note.source_url) && (
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+        <SourceBadge note={note} />
+        {isReport && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/70 text-[10px] font-medium">
+            <FileText className="w-3 h-3" /> 长文本 · {plain.length}字
+          </span>
+        )}
+        {note.source_url && (
+          <a href={note.source_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-[11px] text-slate-500 hover:text-slate-700 truncate max-w-[200px] inline-flex items-center gap-1">
+            <LinkIcon className="w-3 h-3" />{note.source_url.replace(/^https?:\/\//, '')}
+          </a>
+        )}
+      </div>
+    )}
+    <div className="text-[14.5px] leading-[1.8] text-slate-800 font-medium whitespace-pre-wrap break-words">
+      {displayText || <span className="text-slate-400">（空内容）</span>}
+    </div>
+    {isLong && (
+      <button onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }} className="mt-1.5 inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md px-2 py-1 transition">
+        {expanded ? <>收起 <ChevronUp className="w-3 h-3" /></> : <>展开全文 <ChevronDown className="w-3 h-3" /></>}
+      </button>
+    )}
+    {note.attachments?.length > 0 && (
+      <div className="mt-2.5 space-y-1.5">
+        {note.attachments.map((a, i) => (
+          <a key={i} href={a.file_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-2 px-2.5 py-2 bg-slate-50 border border-slate-200/70 rounded-lg text-[12px] text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition">
+            <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+            <span className="truncate flex-1">{a.file_name || '附件'}</span>
+          </a>
+        ))}
+      </div>
+    )}
+
+    {/* AI 内容区（状态 / 温暖回应 / 知识补充 / 智能处理卡） */}
+    {(note.ai_status === 'pending' || note.ai_status === 'processing') && (
+      <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200/70 rounded-md px-2.5 py-1">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        AI 正在理解、整理、关联…
+      </div>
+    )}
+    {note.ai_status === 'failed' && (
+      <button
+        onClick={handleRetry}
+        disabled={retrying}
+        className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-rose-600 bg-rose-50 border border-rose-200/70 rounded-md px-2.5 py-1 hover:bg-rose-100 transition disabled:opacity-60"
+      >
+        {retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+        AI 分析失败 · 点击重试
+      </button>
+    )}
+
+    {/* 感性温暖回应 / 理性知识补充 */}
+    {note.ai_status === 'completed' && (
+      isRational
+        ? <KnowledgeCard ai={ai} plain={plain} />
+        : <WarmResponseCard ai={ai} />
+    )}
+
+    {/* AI 知识卡片 - 主题色低调风格 */}
+    {note.ai_status === 'completed' && ai.summary && (
+      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+        className="relative mt-2 rounded-2xl p-4 border border-[#384877]/15 bg-[#384877]/[0.03] overflow-hidden">
+        {/* 左侧主题色细条 */}
+        <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#384877]/40" aria-hidden />
+
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-5 h-5 rounded-md bg-[#384877]/10 flex items-center justify-center">
+            <Sparkles className="w-3 h-3 text-[#384877]" />
           </div>
-          {isLong && (
-            <button onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }} className="mt-2 inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md px-2 py-1 transition">
-              {expanded ? <>收起 <ChevronUp className="w-3 h-3" /></> : <>展开全文 <ChevronDown className="w-3 h-3" /></>}
-            </button>
-          )}
-          {note.attachments?.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              {note.attachments.map((a, i) => (
-                <a key={i} href={a.file_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-2 px-2.5 py-2 bg-slate-50 border border-slate-200/70 rounded-lg text-[12px] text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition">
-                  <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="truncate flex-1">{a.file_name || '附件'}</span>
-                </a>
-              ))}
-            </div>
-          )}
+          <span className="text-[11.5px] font-medium text-[#384877]/80 tracking-wide">
+            {isReport ? '长文摘要' : note.source_type === 'external_feed' ? '外部信息已解析' : 'AI 智能处理'}
+          </span>
         </div>
-      </div>
-    </div>
 
-    {/* 所有非用户编辑的 AI 内容 —— 统一置于签卡左侧 */}
-    <div className="flex justify-start mt-2">
-      <div className="max-w-[88%] md:max-w-[78%] w-full">
-        {/* AI 处理状态 */}
-        {(note.ai_status === 'pending' || note.ai_status === 'processing') && (
-          <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200/70 rounded-md px-2.5 py-1">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            AI 正在理解、整理、关联…
+        <p className="text-[13.5px] text-slate-800 leading-[1.7] mb-3">{ai.summary}</p>
+
+        {ai.key_points?.length > 0 && (
+          <div className="mb-3 pl-3 border-l-2 border-[#384877]/20">
+            <ul className="space-y-1.5">
+              {ai.key_points.slice(0, isReport ? 6 : 4).map((p, i) => (
+                <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex flex-wrap gap-x-2 gap-y-1 items-start">
+                  <span className="text-[#384877]/40 mt-0.5">·</span>
+                  <KeywordExplorer keyword={p} context={ai.summary || plain} inline />
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 text-[10.5px] text-slate-400">点击关键词 · 展开外部相关内容与链接</div>
           </div>
         )}
-        {note.ai_status === 'failed' && (
-          <button
-            onClick={handleRetry}
-            disabled={retrying}
-            className="inline-flex items-center gap-1.5 text-[11px] text-rose-600 bg-rose-50 border border-rose-200/70 rounded-md px-2.5 py-1 hover:bg-rose-100 transition disabled:opacity-60"
-          >
-            {retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-            AI 分析失败 · 点击重试
-          </button>
-        )}
 
-        {/* 感性温暖回应 / 理性知识补充 —— 置于智能处理之前 */}
-        {note.ai_status === 'completed' && (
-          isRational
-            ? <KnowledgeCard ai={ai} plain={plain} />
-            : <WarmResponseCard ai={ai} />
-        )}
-
-        {/* AI 知识卡片 - 主题色低调风格 */}
-        {note.ai_status === 'completed' && ai.summary && (
-          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-            className="relative mt-2 rounded-2xl p-4 border border-[#384877]/15 bg-[#384877]/[0.03] hover:bg-[#384877]/[0.045] transition-all overflow-hidden">
-            {/* 左侧主题色细条 */}
-            <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#384877]/40" aria-hidden />
-
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-5 h-5 rounded-md bg-[#384877]/10 flex items-center justify-center">
-                <Sparkles className="w-3 h-3 text-[#384877]" />
-              </div>
-              <span className="text-[11.5px] font-medium text-[#384877]/80 tracking-wide">
-                {isReport ? '长文摘要' : note.source_type === 'external_feed' ? '外部信息已解析' : 'AI 智能处理'}
+        {note.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-[#384877]/10">
+            {note.tags.slice(0, 6).map((t, i) => (
+              <span key={i} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white text-[#384877]/75 text-[10.5px] rounded-md border border-[#384877]/15">
+                <Tag className="w-2.5 h-2.5" />{t}
               </span>
-            </div>
-
-            <p className="text-[13.5px] text-slate-800 leading-[1.7] mb-3">{ai.summary}</p>
-
-            {ai.key_points?.length > 0 && (
-              <div className="mb-3 pl-3 border-l-2 border-[#384877]/20">
-                <ul className="space-y-1.5">
-                  {ai.key_points.slice(0, isReport ? 6 : 4).map((p, i) => (
-                    <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex flex-wrap gap-x-2 gap-y-1 items-start">
-                      <span className="text-[#384877]/40 mt-0.5">·</span>
-                      <KeywordExplorer keyword={p} context={ai.summary || plain} inline />
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-2 text-[10.5px] text-slate-400">点击关键词 · 展开外部相关内容与链接</div>
-              </div>
-            )}
-
-            {note.tags?.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-[#384877]/10">
-                {note.tags.slice(0, 6).map((t, i) => (
-                  <span key={i} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white text-[#384877]/75 text-[10.5px] rounded-md border border-[#384877]/15">
-                    <Tag className="w-2.5 h-2.5" />{t}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {ai.related_topics?.length > 0 && (
-              <div className="mt-3 text-[11.5px] text-slate-600 bg-white/70 border border-[#384877]/12 rounded-lg px-3 py-2 leading-relaxed">
-                <span className="font-medium text-[#384877]/80">拓展视野 · </span>
-                {ai.related_topics.slice(0, 3).join(' · ')}
-              </div>
-            )}
-          </motion.div>
+            ))}
+          </div>
         )}
-      </div>
-    </div>
+
+        {ai.related_topics?.length > 0 && (
+          <div className="mt-3 text-[11.5px] text-slate-600 bg-white/70 border border-[#384877]/12 rounded-lg px-3 py-2 leading-relaxed">
+            <span className="font-medium text-[#384877]/80">拓展视野 · </span>
+            {ai.related_topics.slice(0, 3).join(' · ')}
+          </div>
+        )}
+      </motion.div>
+    )}
 
     {/* 卡内对话线程（followupHeartSign → metadata.conversation） */}
     <ConversationThread conv={conv} typing={followSending} />

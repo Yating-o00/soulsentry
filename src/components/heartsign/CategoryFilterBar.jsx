@@ -1,9 +1,9 @@
 import React from "react";
 import { Pin } from "lucide-react";
-import { TYPE_META, TYPE_ORDER, DENSITY_OPTIONS, getNoteType, isPinnedNote } from "./heartSignMeta";
+import { TYPE_META, TYPE_ORDER, getNoteType, isPinnedNote } from "./heartSignMeta";
 
-// 心签五类过滤 + 回应浓度（与小程序 pages/notes 口径一致）
-export default function CategoryFilterBar({ notes, filter, onFilterChange, density, onDensityChange }) {
+// 心签六类过滤（与小程序 pages/notes 口径一致）；回应浓度选择已移至页面按钮组
+export default function CategoryFilterBar({ notes, filter, onFilterChange }) {
   const chips = [
     { key: "all", label: "全部" },
     ...TYPE_ORDER.map((t) => ({ key: t, label: `${TYPE_META[t].label}签` })),
@@ -38,18 +38,6 @@ export default function CategoryFilterBar({ notes, filter, onFilterChange, densi
             </button>
           );
         })}
-      </div>
-      <div className="flex items-center gap-1.5 ml-auto text-xs text-slate-500">
-        <span className="hidden sm:inline">回应</span>
-        <select
-          value={density}
-          onChange={(e) => onDensityChange(e.target.value)}
-          className="bg-white border border-slate-200 rounded-full px-2.5 py-1 text-xs text-slate-600 outline-none focus:border-[#384877]/50"
-        >
-          {DENSITY_OPTIONS.map((o) => (
-            <option key={o.key} value={o.key}>{o.label}</option>
-          ))}
-        </select>
       </div>
     </div>
   );

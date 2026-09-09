@@ -25,7 +25,7 @@ import ReviewDialog from "@/components/heartsign/ReviewDialog";
 import JournalDialog from "@/components/heartsign/JournalDialog";
 import VaultDialog from "@/components/heartsign/VaultDialog";
 import { detectSensitive } from "@/components/heartsign/detectSensitive";
-import { normalizeNote, getNoteType, isPinnedNote, isVaultNote, DENSITY_KEY, classifyNoteText, notePlainText } from "@/components/heartsign/heartSignMeta";
+import { normalizeNote, getNoteType, isPinnedNote, isVaultNote, DENSITY_KEY, DENSITY_OPTIONS, classifyNoteText, notePlainText } from "@/components/heartsign/heartSignMeta";
 import { isStandaloneMode } from "@/api/platformConfig";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
@@ -500,11 +500,6 @@ export default function Notes() {
       );
     }
 
-    // Color filter
-    if (filters.colors && filters.colors.length > 0) {
-      result = result.filter((note) => filters.colors.includes(note.color || 'white'));
-    }
-
     // Tag filter
     if (filters.tags && filters.tags.length > 0) {
       result = result.filter((note) =>
@@ -630,11 +625,22 @@ export default function Notes() {
                 notes={notes.filter((n) => !n.deleted_at)}
                 filter={categoryFilter}
                 onFilterChange={setCategoryFilter}
-                density={density}
-                onDensityChange={handleDensityChange}
               />
             </div>
             <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span className="hidden sm:inline">回应</span>
+                <select
+                  value={density}
+                  onChange={(e) => handleDensityChange(e.target.value)}
+                  title="回应浓度：AI 回应你的方式"
+                  className="bg-white border border-slate-200 rounded-full px-2.5 py-1.5 text-xs text-slate-600 outline-none focus:border-[#384877]/50"
+                >
+                  {DENSITY_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
               <Button
                 onClick={() => setJournalOpen(true)}
                 variant="outline"
@@ -679,6 +685,8 @@ export default function Notes() {
               filters={filters}
               onFiltersChange={setFilters}
               allTags={allTags}
+              onCategorySelect={setCategoryFilter}
+              activeCategory={categoryFilter}
             />
 
             <div className="flex items-center gap-1.5 md:gap-3">

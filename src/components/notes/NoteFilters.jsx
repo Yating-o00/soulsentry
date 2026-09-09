@@ -4,44 +4,21 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
-import { Filter, X, Pin, Calendar as CalendarIcon, Tag, Palette } from "lucide-react";
+import { Filter, X, Calendar as CalendarIcon, Tag, LayoutGrid } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
+import { TYPE_META, TYPE_ORDER } from "@/components/heartsign/heartSignMeta";
 
-const COLORS = [
-  { name: "white", label: "白色", class: "bg-white" },
-  { name: "red", label: "红色", class: "bg-red-100" },
-  { name: "orange", label: "橙色", class: "bg-orange-100" },
-  { name: "yellow", label: "黄色", class: "bg-yellow-100" },
-  { name: "green", label: "绿色", class: "bg-green-100" },
-  { name: "blue", label: "蓝色", class: "bg-blue-100" },
-  { name: "purple", label: "紫色", class: "bg-purple-100" },
-  { name: "pink", label: "粉色", class: "bg-pink-100" },
-];
-
-export default function NoteFilters({ filters, onFiltersChange, allTags = [] }) {
+export default function NoteFilters({ filters, onFiltersChange, allTags = [], onCategorySelect, activeCategory = "all" }) {
   const [dateRange, setDateRange] = useState({ from: null, to: null });
-
-  const toggleColor = (color) => {
-    const newColors = filters.colors?.includes(color)
-      ? filters.colors.filter(c => c !== color)
-      : [...(filters.colors || []), color];
-    onFiltersChange({ ...filters, colors: newColors });
-  };
+  const [open, setOpen] = useState(false);
 
   const toggleTag = (tag) => {
     const newTags = filters.tags?.includes(tag)
       ? filters.tags.filter(t => t !== tag)
       : [...(filters.tags || []), tag];
     onFiltersChange({ ...filters, tags: newTags });
-  };
-
-  const togglePinned = () => {
-    onFiltersChange({ 
-      ...filters, 
-      pinnedOnly: filters.pinnedOnly === true ? null : true 
-    });
   };
 
   const handleDateRangeChange = (range) => {
@@ -54,27 +31,14 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [] }) 
     onFiltersChange({});
   };
 
-  const activeFilterCount = 
-    (filters.colors?.length || 0) + 
-    (filters.tags?.length || 0) + 
-    (filters.pinnedOnly ? 1 : 0) + 
+  const activeFilterCount =
+    (filters.tags?.length || 0) +
     (filters.dateRange?.from ? 1 : 0);
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Quick Pinned Filter */}
-      <Button
-        variant={filters.pinnedOnly ? "default" : "outline"}
-        size="sm"
-        onClick={togglePinned}
-        className={`h-8 gap-1.5 ${filters.pinnedOnly ? 'bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white' : ''}`}
-      >
-        <Pin className="w-3.5 h-3.5" />
-        已置顶
-      </Button>
-
       {/* Advanced Filters Popover */}
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className="h-8 gap-1.5 relative">
             <Filter className="w-3.5 h-3.5" />
@@ -97,29 +61,33 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [] }) 
               )}
             </div>
 
-            {/* Color Filter */}
+            {/* 按分类筛选：类别与签色一一对应，点击跳转 */}
             <div className="space-y-2">
               <Label className="text-xs flex items-center gap-1.5">
-                <Palette className="w-3.5 h-3.5" />
-                按颜色筛选
+                <LayoutGrid className="w-3.5 h-3.5" />
+                按分类筛选
               </Label>
-              <div className="grid grid-cols-4 gap-2">
-                {COLORS.map(color => (
-                  <button
-                    key={color.name}
-                    onClick={() => toggleColor(color.name)}
-                    className={`h-10 rounded-lg border-2 transition-all ${color.class} ${
-                      filters.colors?.includes(color.name)
-                        ? 'ring-2 ring-[#384877] ring-offset-2 scale-105'
-                        : 'hover:scale-105 border-slate-200'
-                    }`}
-                    title={color.label}
-                  >
-                    {filters.colors?.includes(color.name) && (
-                      <div className="text-[#384877] font-bold">✓</div>
-                    )}
-                  </button>
-                ))}
+              <div className="grid grid-cols-3 gap-2">
+                {TYPE_ORDER.map((key) => {
+                  const meta = TYPE_META[key];
+                  const active = activeCategory === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        onCategorySelect?.(key);
+                        setOpen(false);
+                      }}
+                      className={`h-10 rounded-lg text-xs font-medium border transition-all ${
+                        active ? 'ring-2 ring-[#384877] ring-offset-2 scale-105' : 'hover:scale-105 border-transparent'
+                      }`}
+                      style={{ background: meta.bg, color: meta.color }}
+                      title={`只看${meta.label}签`}
+                    >
+                      {meta.label}签
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -189,20 +157,6 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [] }) 
 
       {/* Active Filter Tags */}
       <AnimatePresence mode="popLayout">
-        {filters.colors?.map(color => (
-          <motion.div
-            key={`color-${color}`}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-          >
-            <Badge variant="secondary" className="gap-1.5">
-              <div className={`w-3 h-3 rounded-full ${COLORS.find(c => c.name === color)?.class}`} />
-              {COLORS.find(c => c.name === color)?.label}
-              <X className="w-3 h-3 cursor-pointer" onClick={() => toggleColor(color)} />
-            </Badge>
-          </motion.div>
-        ))}
         {filters.tags?.map(tag => (
           <motion.div
             key={`tag-${tag}`}

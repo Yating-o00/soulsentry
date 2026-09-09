@@ -55,6 +55,8 @@ export default function SmartInputBar() {
   const [isListeningVoice, setIsListeningVoice] = useState(false);
   const [showChatRecognizer, setShowChatRecognizer] = useState(false);
   const [converting, setConverting] = useState(false);
+  // 用户在预览里手动点的类型(约定/心签),优先于 AI 判定
+  const [previewOverride, setPreviewOverride] = useState(null);
   const aiTimerRef = useRef(null);
   const recognitionRef = useRef(null);
   const queryClient = useQueryClient();
@@ -79,6 +81,7 @@ export default function SmartInputBar() {
 
   useEffect(() => {
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
+    setPreviewOverride(null); // 内容一变,手动改判失效,重新听 AI 的
     if (!inputValue || inputValue.trim().length < 3) {
       setSemanticAnalysis(null);
       return;
@@ -91,21 +94,20 @@ export default function SmartInputBar() {
     try { recognitionRef.current?.stop?.(); } catch {}
   }, []);
 
-  // —— 预览分类:优先用 AI 意图,关键词补充「自动执行」判定 ——
+  // —— 预览分类:用户手动选择 > AI 意图;关键词补充「自动执行」判定 ——
   const preview = (() => {
     const text = inputValue.trim();
     if (text.length < 4) return null;
     const intent = semanticAnalysis?.primary_intent;
-    const isHeartSign = intent === 'note' || intent === 'wish';
-    const auto = AUTO_RE.test(text);
-    const kindLabel = isHeartSign ? '心签' : '约定';
-    const artifacts = isHeartSign ? ['心签'] : auto ? ['约定', '自动执行'] : ['约定'];
+    const aiIsNote = intent === 'note' || intent === 'wish';
+    const isHeartSign = previewOverride ? previewOverride === 'note' : aiIsNote;
+    const auto = !isHeartSign && AUTO_RE.test(text);
     const timeEntity = semanticAnalysis?.time_entities?.find(
       (t) => t.resolved_datetime && t.time_confidence !== 'low'
     );
     return {
-      kindLabel,
-      artifacts,
+      isHeartSign,
+      auto,
       time: timeEntity?.resolved_datetime ? fmtDayTime(timeEntity.resolved_datetime) : null,
       analyzing: isAiAnalyzing && !semanticAnalysis,
     };
@@ -339,7 +341,7 @@ export default function SmartInputBar() {
 
       // 兜底：规划成功但链路里没有任何 create_task 时，直接补建约定，
       // 避免"界面提示执行完成、约定页却找不到卡片"
-      if (!taskId && plan.category !== 'note' && plan.category !== 'wish') {
+      if (!taskId && (taskData._forceTask || (plan.category !== 'note' && plan.category !== 'wish'))) {
         try {
           const result = await executeStep(
             { action_key: "create_task", step_name: "创建约定" },
@@ -508,7 +510,9 @@ export default function SmartInputBar() {
     setSubmitting(true);
     try {
       const semantic = await resolveSemanticNow();
-      const isHeartSign = semantic?.primary_intent === 'note' || semantic?.primary_intent === 'wish';
+      // 用户在预览里点过的选择优先于 AI 判定
+      const isHeartSign = previewOverride === 'note' ||
+        (previewOverride !== 'task' && (semantic?.primary_intent === 'note' || semantic?.primary_intent === 'wish'));
 
       if (isHeartSign) {
         try {
@@ -549,6 +553,7 @@ export default function SmartInputBar() {
         reminder_time: rawReminderTime,
         tags,
         _semantic: semantic,
+        _forceTask: previewOverride === 'task',
       });
     } finally {
       setSubmitting(false);
@@ -680,7 +685,7 @@ export default function SmartInputBar() {
           className="w-full resize-none bg-transparent px-5 sm:px-6 pt-5 text-[15.5px] leading-relaxed text-[var(--sky-ink)] placeholder:text-[var(--sky-sub)]/70 focus:outline-none"
         />
 
-        {/* 实时倾听预览:自动分类 + 产物预告 */}
+        {/* 实时倾听预览:可点击改判 约定 ↔ 心签 */}
         {preview && (
           <div className="parse-preview echo-born mx-4 sm:mx-5 mb-1 rounded-xl bg-[var(--sentinel)]/[0.06] px-4 py-2.5 text-[12px] text-[var(--ink-2)]">
             <div className="flex flex-wrap items-center gap-2">
@@ -691,9 +696,24 @@ export default function SmartInputBar() {
               ) : (
                 <>
                   <span className="text-[var(--signal)]">◈</span>
-                  <span>
-                    我会把它收进 <b>{preview.kindLabel}</b>
-                  </span>
+                  <span className="text-[var(--ink-3)]">将为你生成</span>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewOverride(preview.isHeartSign ? 'task' : 'note')}
+                    title="点我切换：约定 ↔ 心签"
+                    className={`rounded-full px-2.5 py-0.5 font-medium transition-opacity hover:opacity-75 ${
+                      preview.isHeartSign
+                        ? 'bg-[var(--sentinel)]/[0.09] text-[var(--sentinel)]'
+                        : 'bg-[var(--signal-soft)] text-[var(--signal)]'
+                    }`}
+                  >
+                    {preview.isHeartSign ? '✦ 心签' : '♪ 约定'}
+                  </button>
+                  {preview.auto && (
+                    <span className="rounded-full bg-[var(--jade)]/10 px-2.5 py-0.5 font-medium text-[var(--jade)]">
+                      ⚙ 自动执行
+                    </span>
+                  )}
                 </>
               )}
               {preview.time && (
@@ -701,23 +721,6 @@ export default function SmartInputBar() {
                   {preview.time}，我记得
                 </span>
               )}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--hairline)] pt-2">
-              <span className="text-[var(--ink-3)]">将为你生成</span>
-              {preview.artifacts.map((a) => (
-                <span
-                  key={a}
-                  className={`rounded-full px-2.5 py-0.5 font-medium ${
-                    a === '约定'
-                      ? 'bg-[var(--signal-soft)] text-[var(--signal)]'
-                      : a === '心签'
-                        ? 'bg-[var(--sentinel)]/[0.09] text-[var(--sentinel)]'
-                        : 'bg-[var(--jade)]/10 text-[var(--jade)]'
-                  }`}
-                >
-                  {a === '约定' ? '♪' : a === '心签' ? '✦' : '⚙'} {a}
-                </span>
-              ))}
             </div>
           </div>
         )}

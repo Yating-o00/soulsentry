@@ -54,6 +54,7 @@ export default function SmartInputBar() {
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [isListeningVoice, setIsListeningVoice] = useState(false);
   const [showChatRecognizer, setShowChatRecognizer] = useState(false);
+  const [converting, setConverting] = useState(false);
   const aiTimerRef = useRef(null);
   const recognitionRef = useRef(null);
   const queryClient = useQueryClient();
@@ -266,6 +267,7 @@ export default function SmartInputBar() {
       }
 
       let taskId = null;
+      let childTaskIds = [];
       const confirmsNeeded = [];
       const completedSteps = [];
 
@@ -386,7 +388,8 @@ export default function SmartInputBar() {
               };
             });
           if (childPayloads.length > 0) {
-            await base44.entities.Task.bulkCreate(childPayloads);
+            const createdChildren = await base44.entities.Task.bulkCreate(childPayloads);
+            childTaskIds = (createdChildren || []).map((c) => c.id).filter(Boolean);
             queryClient.invalidateQueries({ queryKey: ['tasks'] });
           }
         } catch (e) {
@@ -445,6 +448,7 @@ export default function SmartInputBar() {
         kind: autoPlanned ? 'auto' : 'task',
         title: mergedTaskData.title,
         time: mergedTaskData.reminder_time ? fmtDayTime(mergedTaskData.reminder_time) : null,
+        entity: taskId ? { id: taskId, title: mergedTaskData.title, description: mergedTaskData.description, childIds: childTaskIds } : null,
       });
     } else {
       // Fallback: simple task creation
@@ -477,6 +481,7 @@ export default function SmartInputBar() {
           kind: 'task',
           title: userInput,
           time: taskData.reminder_time ? fmtDayTime(taskData.reminder_time) : null,
+          entity: { id: newTask.id, title: userInput, description: taskData.description || '', childIds: [] },
         });
       } catch (error) {
         console.error("Task creation failed:", error);
@@ -507,12 +512,13 @@ export default function SmartInputBar() {
 
       if (isHeartSign) {
         try {
-          await createHeartSign(text, semantic);
+          const note = await createHeartSign(text, semantic);
           const flavor = noteFlavor(text, semantic?.primary_intent);
           setEcho({
             kind: 'note',
             title: semantic?.refined_title || text.slice(0, 24),
             flavor,
+            entity: { id: note.id, title: semantic?.refined_title || text.slice(0, 24), content: text },
           });
           toast.success('已收进心签', { icon: '✦' });
           setInputValue("");
@@ -546,6 +552,56 @@ export default function SmartInputBar() {
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // —— 手动改判:回响卡上把收错的内容互转(约定 ↔ 心签) ——
+  const convertEcho = async (target) => {
+    const src = echo?.entity;
+    if (!src?.id || converting) return;
+    setConverting(true);
+    try {
+      if (target === 'task' && echo.kind === 'note') {
+        // 心签 → 约定:建约定卡片,原签移入回收站
+        await base44.entities.Task.create({
+          title: src.title,
+          description: src.content || '',
+          category: 'personal',
+          priority: 'medium',
+          status: 'pending',
+          reminder_time: getShanghaiNow().toISOString(),
+          tags: [],
+        });
+        await base44.entities.Note.update(src.id, { deleted_at: new Date().toISOString() });
+        setEcho((prev) => prev && { ...prev, kind: 'task', entity: null, flavor: undefined });
+        toast.success('已改为约定，请到约定页查看');
+      } else if (target === 'note' && (echo.kind === 'task' || echo.kind === 'auto')) {
+        // 约定 → 心签:建心签(自动判签型),原约定及其子约定删除
+        const content = src.description ? `${src.title}\n\n${src.description}` : src.title;
+        await base44.entities.Note.create({
+          title: src.title,
+          content,
+          plain_text: content,
+          tags: ['心签', noteFlavor(content, 'note')],
+          color: 'blue',
+          ai_status: 'pending',
+        });
+        if (Array.isArray(src.childIds) && src.childIds.length > 0) {
+          await Promise.all(src.childIds.map((id) => base44.entities.Task.delete(id).catch(() => {})));
+        }
+        await base44.entities.Task.delete(src.id).catch(() => {});
+        setEcho((prev) => prev && { ...prev, kind: 'note', flavor: noteFlavor(content, 'note'), entity: null });
+        toast.success('已改为心签，请到心签页查看');
+      } else {
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    } catch (e) {
+      console.error('convert echo failed:', e);
+      toast.error('改判失败，请重试');
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -735,6 +791,31 @@ export default function SmartInputBar() {
                   </>
                 )}
               </div>
+              {echo.entity?.id && (
+                <div className="mt-3 flex items-center gap-2.5 text-[11.5px]">
+                  <span className="text-[var(--ink-3)]">分错了？</span>
+                  {echo.kind === 'note' ? (
+                    <button
+                      type="button"
+                      onClick={() => convertEcho('task')}
+                      disabled={converting}
+                      className="font-medium text-[var(--signal)] hover:underline disabled:opacity-40"
+                    >
+                      改为约定 →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => convertEcho('note')}
+                      disabled={converting}
+                      className="font-medium text-[var(--signal)] hover:underline disabled:opacity-40"
+                    >
+                      改为心签 →
+                    </button>
+                  )}
+                  {converting && <Loader2 className="w-3 h-3 animate-spin text-[var(--ink-3)]" />}
+                </div>
+              )}
             </div>
           </div>
         </div>

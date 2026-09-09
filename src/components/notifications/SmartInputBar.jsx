@@ -269,8 +269,33 @@ export default function SmartInputBar() {
       const confirmsNeeded = [];
       const completedSteps = [];
 
-      for (let i = 0; i < plan.execution_steps.length; i++) {
-        const step = plan.execution_steps[i];
+      // system_actions 才是真正要执行的产品动作（含 create_task），
+      // execution_steps 是展示给用户的现实事项链路（无 action_key，不执行创建）
+      const ACTION_LABELS = {
+        create_task: "创建约定",
+        sync_calendar: "同步日历",
+        set_reminder: "设置提醒",
+        send_email: "发送邮件",
+        create_note: "创建心签",
+        sync_google_tasks: "同步 Google Tasks",
+        create_wish: "加入愿望清单",
+      };
+      const systemActions = (plan._system_actions || plan.system_actions || [])
+        .filter((a) => a && a.action_key);
+      // create_task 必须最先执行：set_reminder / sync_calendar 等依赖 taskId
+      systemActions.sort((a, b) =>
+        (a.action_key === "create_task" ? -1 : 0) - (b.action_key === "create_task" ? -1 : 0)
+      );
+      const executableSteps = [
+        ...systemActions.map((a) => ({
+          ...a,
+          step_name: ACTION_LABELS[a.action_key] || a.action_key,
+        })),
+        ...plan.execution_steps,
+      ];
+
+      for (let i = 0; i < executableSteps.length; i++) {
+        const step = executableSteps[i];
 
         if (step.action_type === "confirm") {
           confirmsNeeded.push(step);
@@ -307,6 +332,35 @@ export default function SmartInputBar() {
             execution_steps: completedSteps,
           });
           queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+        }
+      }
+
+      // 兜底：规划成功但链路里没有任何 create_task 时，直接补建约定，
+      // 避免"界面提示执行完成、约定页却找不到卡片"
+      if (!taskId && plan.category !== 'note' && plan.category !== 'wish') {
+        try {
+          const result = await executeStep(
+            { action_key: "create_task", step_name: "创建约定" },
+            null,
+            mergedTaskData,
+            execution
+          );
+          if (result.taskId) {
+            taskId = result.taskId;
+            completedSteps.push({
+              step_name: "创建约定",
+              status: "completed",
+              detail: result.detail,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        } catch (e) {
+          completedSteps.push({
+            step_name: "创建约定",
+            status: "failed",
+            detail: e.message || "创建失败",
+            timestamp: new Date().toISOString(),
+          });
         }
       }
 

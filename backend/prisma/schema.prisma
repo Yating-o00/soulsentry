@@ -22,6 +22,7 @@ model User {
   updatedAt         DateTime              @updatedAt
   creditTxs         AICreditTransaction[]
   comments          Comment[]
+  corrections       UserCorrection[]
   dailyPlans        DailyPlan[]
   devices           Device[]
   externalFeeds     ExternalFeed[]
@@ -577,6 +578,20 @@ model Feedback {
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+}
+
+model UserCorrection {
+  id         String   @id @default(cuid())
+  userId     String
+  noteId     String?
+  fromType   String
+  toType     String
+  keywords   Json // 纠错时从原文提取的关键词数组（前 10 个）
+  textSample String // 原文截断 200 字
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model ExternalFeed {

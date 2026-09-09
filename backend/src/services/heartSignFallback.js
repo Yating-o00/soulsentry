@@ -38,8 +38,87 @@ export function detectCrisis(text) {
   return CRISIS_PATTERNS.some((re) => re.test(t));
 }
 
-// ========== 五类签规则 ==========
+// ========== 账本签（记账内容解析） ==========
+const MONEY_RE = /(\d+(?:\.\d+)?)\s*(?:元|块|RMB|rmb)?/;
+
+const LEDGER_CATEGORIES = [
+  { key: "餐饮", words: ["饭", "餐", "吃", "咖啡", "奶茶", "外卖", "早餐", "午餐", "午饭", "晚餐", "晚饭", "夜宵", "火锅", "烧烤", "面", "粉", "寿司", "水果", "零食", "超市", "买菜", "早餐店"] },
+  { key: "交通", words: ["打车", "出租", "地铁", "公交", "高铁", "火车", "机票", "加油", "停车", "骑行", "滴滴", "车费", "高速", "过路费"] },
+  { key: "购物", words: ["买", "购", "淘宝", "京东", "拼多多", "口红", "衣服", "鞋", "包", "化妆品", "数码", "手机", "耳机", "书"] },
+  { key: "居住", words: ["房租", "房租", "水电", "物业", "燃气", "宽带", "话费", "租金"] },
+  { key: "娱乐", words: ["电影", "游戏", "会员", "充值", "ktv", "KTV", "门票", "演出", "旅行", "酒店", "民宿"] },
+  { key: "收入", words: ["工资", "奖金", "报销", "退款", "红包", "转账", "收入", "稿费", "利息", "到账", "进账"] }
+];
+
+// 是否像记账内容：≥2 处「数字+元/块」，或 ≥3 个数字片段且含收支动词
+export function looksLikeLedger(text) {
+  const t = String(text || "");
+  const withUnit = t.match(/\d+(?:\.\d+)?\s*(?:元|块|RMB|rmb)/g) || [];
+  if (withUnit.length >= 2) return true;
+  const numbers = t.match(/\d+(?:\.\d+)?/g) || [];
+  if (numbers.length >= 3 && /(花|买|支|付|收|账|工资|报销|收入|消费)/.test(t)) return true;
+  return false;
+}
+
+// 从自由文本解析收支明细：[{name, category, amount, type}]
+export function parseLedgerEntries(text) {
+  const t = String(text || "");
+  const segments = t.split(/[\n,，;；、。]/).map(s => s.trim()).filter(Boolean);
+  const items = [];
+  for (const seg of segments) {
+    const m = seg.match(MONEY_RE);
+    if (!m) continue;
+    const amount = parseFloat(m[1]);
+    if (!isFinite(amount) || amount <= 0 || amount > 1000000) continue;
+    let name = (seg.slice(0, m.index).trim() || seg.replace(MONEY_RE, "").trim() || "一笔账")
+      .replace(/(花了|支出|收入|消费|记账|用了|付了|买了|转了|收到)/g, "")
+      .trim() || "一笔账";
+    const isIncome = /(收入|工资|奖金|报销|退款|红包|到账|进账|收到)/.test(seg);
+    let category = "其他";
+    for (const c of LEDGER_CATEGORIES) {
+      if (c.words.some(w => seg.includes(w))) { category = c.key; break; }
+    }
+    if (isIncome) category = "收入";
+    items.push({
+      name: name.slice(0, 12),
+      category,
+      amount: Math.round(amount * 100) / 100,
+      type: isIncome ? "income" : "expense"
+    });
+  }
+  return items.slice(0, 20);
+}
+
+function buildLedgerAdvice(items) {
+  const expense = items.filter(i => i.type === "expense");
+  const byCat = {};
+  let totalExpense = 0;
+  for (const i of expense) {
+    totalExpense += i.amount;
+    byCat[i.category] = (byCat[i.category] || 0) + i.amount;
+  }
+  const top = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+  if (top && totalExpense > 0 && top[1] / totalExpense >= 0.5 && top[0] !== "其他") {
+    return `${top[0]}占了今天支出的一半以上，留意这部分，会更容易攒下钱。`;
+  }
+  return "坚持记下去，月底回看时，你会感谢现在认真记账的自己。";
+}
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// ========== 六类签规则 ==========
 const TYPE_RULES = [
+  {
+    key: "ledger",
+    label: "账本",
+    keys: [], // 账本由 looksLikeLedger 前置判断，不走关键词
+    defaultTitle: "记一笔账",
+    responses: {
+      full: ["已帮你整理成账本：明细和汇总都在卡片里。", "想按周/按月看汇总，或者设个预算提醒，跟我说一声。"],
+      light: ["已帮你整理成账本，看看明细和汇总。"],
+      mute: ["已收好。"]
+    }
+  },
   {
     key: "material",
     label: "资料",
@@ -125,6 +204,8 @@ function pick(arr) {
 
 export function classify(text) {
   const t = String(text || "");
+  // 账本前置判断：金额模式比关键词更可靠
+  if (looksLikeLedger(t)) return "ledger";
   for (const rule of TYPE_RULES) {
     if (rule.keys.some((k) => t.toLowerCase().includes(k.toLowerCase()))) {
       return rule.key;
@@ -158,7 +239,7 @@ function extractKeywords(text) {
 
 function getResponseTag(type) {
   if (["emotion", "inspiration", "share"].includes(type)) return "感性回应";
-  if (type === "material") return "理性补充";
+  if (type === "material" || type === "ledger") return "理性补充";
   return "收录";
 }
 
@@ -269,6 +350,7 @@ export function buildHeartSignFallback({ content, plainText, density = "light" }
   const response = buildResponse(type, text, density);
 
   const categoryMap = {
+    ledger: "账本",
     material: "资料",
     share: "分享",
     memo: "备忘",
@@ -276,7 +358,7 @@ export function buildHeartSignFallback({ content, plainText, density = "light" }
     emotion: "情绪"
   };
 
-  return {
+  const result = {
     title,
     summary,
     key_points: tags.slice(0, 3),
@@ -292,6 +374,24 @@ export function buildHeartSignFallback({ content, plainText, density = "light" }
     source: "local_fallback",
     note_type: type
   };
+
+  // 账本签：附明细、汇总与一句建议
+  if (type === "ledger") {
+    const items = parseLedgerEntries(text);
+    if (items.length) {
+      const totalExpense = round2(items.filter(i => i.type === "expense").reduce((s, i) => s + i.amount, 0));
+      const totalIncome = round2(items.filter(i => i.type === "income").reduce((s, i) => s + i.amount, 0));
+      result.ledger = {
+        items,
+        total_expense: totalExpense,
+        total_income: totalIncome,
+        balance: round2(totalIncome - totalExpense),
+        advice: buildLedgerAdvice(items)
+      };
+    }
+  }
+
+  return result;
 }
 
 // 简易哈希，用于保险柜密码校验（非加密存储内容）

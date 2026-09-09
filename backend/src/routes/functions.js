@@ -7,7 +7,7 @@ import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { parseTaskInput } from "../services/parseTaskInput.js";
 import { getUserHabitProfile } from "../services/habitProfile.js";
 import { delegateAutoExecute } from "../services/autoAutomation.js";
-import { buildHeartSignFallback, detectVault, detectCrisis } from "../services/heartSignFallback.js";
+import { buildHeartSignFallback, detectVault, detectCrisis, looksLikeLedger, parseLedgerEntries } from "../services/heartSignFallback.js";
 import { executeAutomation } from "../services/executeAutomation.js";
 import { sendTestPush } from "../services/reminderSender.js";
 import { getCreditPack } from "../config/creditPacks.js";
@@ -51,6 +51,39 @@ functionsRouter.use((req, res, next) => {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+// 心签分类：英文 key ↔ 中文标签
+const HEARTSIGN_TYPE_ZH = {
+  emotion: "情绪",
+  inspiration: "灵感",
+  material: "资料",
+  memo: "备忘",
+  share: "分享",
+  ledger: "账本"
+};
+const HEARTSIGN_ZH_TO_TYPE = Object.fromEntries(
+  Object.entries(HEARTSIGN_TYPE_ZH).map(([k, v]) => [v, k])
+);
+
+// 从纠错文本提取关键词（2-6 字中文片段，按频次取前 10）
+function extractCorrectionKeywords(text) {
+  const stop = new Set(["的", "了", "是", "我", "你", "在", "和", "就", "都", "也", "有", "这", "那", "个", "与", "及", "等", "要", "会", "能", "很", "一", "不", "人"]);
+  const t = String(text || "").replace(/https?:\/\/[^\s]+/g, "");
+  const freq = {};
+  for (let i = 0; i < t.length - 1; i++) {
+    for (let len = 6; len >= 2; len--) {
+      const s = t.slice(i, i + len);
+      if (stop.has(s)) continue;
+      if (/^[\u4e00-\u9fa5]+$/.test(s) && !/^(.)(\1)+$/.test(s)) {
+        freq[s] = (freq[s] || 0) + 1;
+      }
+    }
+  }
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([k]) => k);
 }
 
 function getPreferenceExtraFields(preferences) {
@@ -2251,6 +2284,37 @@ functionsRouter.post("/:name", async (req, res) => {
       return res.json({ file_url: fileUrl, file_name: fileName });
     }
 
+    if (name === "recordHeartSignCorrection") {
+      const { note_id: corrNoteId, from_type: corrFrom, to_type: corrTo, text: corrText = "" } = payload;
+      if (!corrNoteId || !corrFrom || !corrTo) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 note_id / from_type / to_type" });
+      }
+      // 存中文分类标签（AI prompt 按中文分类）；英文 key 自动转换
+      const fromType = HEARTSIGN_TYPE_ZH[corrFrom] || String(corrFrom);
+      const toType = HEARTSIGN_TYPE_ZH[corrTo] || String(corrTo);
+      if (fromType === toType) {
+        return res.json({ ok: true, skipped: true, message: "分类未变化" });
+      }
+      // 幂等：同一 note 同一目标分类已记录过则跳过
+      const existed = await prisma.userCorrection.findFirst({
+        where: { noteId: corrNoteId, toType }
+      });
+      if (existed) {
+        return res.json({ ok: true, skipped: true, id: existed.id });
+      }
+      const created = await prisma.userCorrection.create({
+        data: {
+          userId: req.user.id,
+          noteId: corrNoteId,
+          fromType,
+          toType,
+          keywords: extractCorrectionKeywords(corrText),
+          textSample: String(corrText || "").slice(0, 200)
+        }
+      });
+      return res.json({ ok: true, id: created.id });
+    }
+
     if (name === "analyzeHeartSign") {
       const noteId = payload.note_id;
       const noteData = payload.note_data || {};
@@ -2328,6 +2392,27 @@ functionsRouter.post("/:name", async (req, res) => {
 
       const density = note.metadata?.response_density || "light";
 
+      // 账本检测：金额模式 ≥2 即按账本签处理（AI 精解析 + 本地兜底双保险）
+      const isLedger = looksLikeLedger(materialText);
+
+      // 纠错学习：参考用户历史「分错了」纠正，同类内容越分越准
+      const corrections = await prisma.userCorrection.findMany({
+        where: { userId: req.user.id },
+        orderBy: { createdAt: "desc" },
+        take: 50
+      });
+      const correctionHints = [];
+      let strongCorrection = null;
+      for (const c of corrections) {
+        const kws = Array.isArray(c.keywords) ? c.keywords.filter((k) => k && String(k).length >= 2) : [];
+        const hits = kws.filter((k) => materialText.includes(String(k)));
+        if (hits.length >= 2) strongCorrection = c;
+        if (hits.length >= 1) {
+          correctionHints.push(`用户曾把包含「${hits[0]}」的内容从「${c.fromType}」纠正为「${c.toType}」，遇到相似内容请优先按「${c.toType}」分类`);
+        }
+        if (correctionHints.length >= 3) break;
+      }
+
       const schema = {
         type: "object",
         properties: {
@@ -2335,35 +2420,57 @@ functionsRouter.post("/:name", async (req, res) => {
           summary: { type: "string", description: "1-2 句话精炼摘要" },
           key_points: { type: "array", items: { type: "string" }, description: "3-5 个核心要点" },
           tags: { type: "array", items: { type: "string" }, description: "3-6 个智能标签，不含 #" },
-          category: { type: "string", description: "分类：情绪/灵感/资料/备忘/分享" },
+          category: { type: "string", description: "分类：情绪/灵感/资料/备忘/分享/账本" },
           is_emotional: { type: "boolean", description: "是否值得温柔回应" },
           response_persona: { type: "string", description: "回应身份：comforter/mentor/clerk/friend/poet" },
           response_title: { type: "string", description: "回应标题" },
-          emotional_response: { type: "string", description: "简短回应，情绪签80字内、资料签60字内、备忘签20字内、灵感签50字内、分享签40字内" },
-          response_tag: { type: "string", description: "回应标签：感性回应/理性补充/收录" }
+          emotional_response: { type: "string", description: "简短回应，情绪签80字内、资料/账本签60字内、备忘签20字内、灵感签50字内、分享签40字内" },
+          response_tag: { type: "string", description: "回应标签：感性回应/理性补充/收录" },
+          ...(isLedger ? {
+            ledger: {
+              type: "object",
+              description: "账本明细（仅账本签返回）",
+              properties: {
+                items: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string", description: "事项名称，≤12字" },
+                      category: { type: "string", description: "类别：餐饮/交通/购物/居住/娱乐/收入/其他" },
+                      amount: { type: "number", description: "金额，正数" },
+                      type: { type: "string", description: "expense 支出 / income 收入" }
+                    }
+                  }
+                },
+                advice: { type: "string", description: "一句正向建议：先肯定记账习惯，再轻点一个留意项，≤60字" }
+              }
+            }
+          } : {})
         },
         required: ["title", "summary", "tags", "category"]
       };
 
       const systemPrompt = `你是用户的"另一个自己"，更温柔、更克制、更懂用户。
 处理流程：
-1. 先判断这条心签属于哪一类：情绪/灵感/资料/备忘/分享。
-2. 根据分类决定回应方式，回应要让人一眼就看出这是为这类签量身定做的。
+1. 先判断这条心签属于哪一类：情绪/灵感/资料/备忘/分享${isLedger ? "/账本（本条内容很像账本）" : ""}。
+2. 根据分类决定回应方式，回应要让人一眼就看出这是为这类签量身定做的：先给正能量，再给一点轻推。
 
 分类与回应策略：
-- 情绪签：先简短镜像用户的感受（"被否定确实不好受"），再给一句轻托举，不要讲道理、不要给建议。
-- 灵感签：接住这个念头，轻推一句"它最想解决的是哪一个瞬间？"，帮用户把灵感落地。
-- 资料签：给出这条资料的核心要点，并建议下一步（沉淀知识库 / 转成约定 / 延伸阅读）。
+- 情绪签：先简短镜像用户的感受（"被否定确实不好受"），再给一句轻托举。不要讲道理、不要给建议。
+- 灵感签：先肯定这个念头值得留下，再轻推一句"它最想解决的是哪一个瞬间？"，帮用户把灵感落地。
+- 资料签：提炼核心要点，并建议下一步（沉淀知识库 / 转成约定 / 延伸阅读）。
 - 备忘签：只确认"已收好"，不展开。
 - 分享签：鼓励传播，提到可以生成签卡。
+${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类别/金额/收支），并用 ledger.advice 给一句正向建议：先肯定记账习惯，再轻点一个留意项。" : ""}
 
 约束：
-- 情绪≤80字，资料≤60字，备忘≤20字，灵感≤50字，分享≤40字。
+- 情绪≤80字，资料/账本≤60字，备忘≤20字，灵感≤50字，分享≤40字。
 - 当前回应浓度为"${density}"：mute 只输出"已收好。"；light 一句；full 最多两句。
-- 危机词：若用户表达自杀/自伤意图，只返回固定话"谢谢你愿意说出来。你现在可能很难受，可以拨打心理援助热线 400-161-9995。我一直都在。"
-- response_tag：情绪/灵感/分享→"感性回应"；资料→"理性补充"；备忘→"收录"。
+- 危机词：若用户表达自杀/自伤意图，只返回固定话"谢谢你愿意说出来。你现在可能很难受，可以拨打心理援助热线 400-161-9995。我一直在。"
+- response_tag：情绪/灵感/分享→"感性回应"；资料/账本→"理性补充"；备忘→"收录"。
 - 输入≤50字时 title 返回空字符串。
-严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
+${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correctionHints.join("\n- ")}\n` : ""}严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
 
       try {
         // Kimi 只给 5 秒；超时或失败立即走本地规则兜底
@@ -2387,6 +2494,39 @@ functionsRouter.post("/:name", async (req, res) => {
           usedFallback = true;
         }
 
+        // 纠错强匹配：用户已明确纠正过同类内容，直接覆盖分类
+        if (strongCorrection && HEARTSIGN_ZH_TO_TYPE[strongCorrection.toType]) {
+          parsed.category = strongCorrection.toType;
+        }
+
+        // 账本签：AI 未给出明细时用本地解析兜底，并规整金额/收支字段
+        if (isLedger) {
+          const rawItems = Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length
+            ? parsed.ledger.items
+            : parseLedgerEntries(materialText);
+          const normItems = rawItems
+            .map((i) => ({
+              name: String(i?.name || "一笔账").slice(0, 12),
+              category: String(i?.category || "其他"),
+              amount: Math.abs(Number(i?.amount) || 0),
+              type: /(income|收入)/.test(String(i?.type || "")) ? "income" : "expense"
+            }))
+            .filter((i) => i.amount > 0)
+            .slice(0, 20);
+          if (normItems.length) {
+            const totalExpense = Math.round(normItems.filter((i) => i.type === "expense").reduce((s, i) => s + i.amount, 0) * 100) / 100;
+            const totalIncome = Math.round(normItems.filter((i) => i.type === "income").reduce((s, i) => s + i.amount, 0) * 100) / 100;
+            parsed.ledger = {
+              items: normItems,
+              total_expense: totalExpense,
+              total_income: totalIncome,
+              balance: Math.round((totalIncome - totalExpense) * 100) / 100,
+              advice: String(parsed.ledger?.advice || "").slice(0, 120)
+            };
+            parsed.category = "账本";
+          }
+        }
+
         const ai_analysis = {
           summary: parsed.summary || "",
           key_points: parsed.key_points || [],
@@ -2398,7 +2538,8 @@ functionsRouter.post("/:name", async (req, res) => {
           response_tag: parsed.response_tag || (parsed.is_emotional ? "感性回应" : "收录"),
           analyzed_at: new Date().toISOString(),
           source: usedFallback ? "local_fallback" : "kimi",
-          note_type: parsed.note_type || null
+          note_type: parsed.note_type || null,
+          ledger: parsed.ledger || null
         };
 
         const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
@@ -2406,8 +2547,8 @@ functionsRouter.post("/:name", async (req, res) => {
         const title = plainTextLen <= 50
           ? ""
           : (parsed.title ? parsed.title.slice(0, 60) : (parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签")));
-        const sourceType = parsed.category && ["情绪", "灵感", "资料", "备忘", "分享"].includes(parsed.category)
-          ? { 情绪: "emotion", 灵感: "inspiration", 资料: "material", 备忘: "memo", 分享: "share" }[parsed.category]
+        const sourceType = parsed.category && HEARTSIGN_ZH_TO_TYPE[parsed.category]
+          ? HEARTSIGN_ZH_TO_TYPE[parsed.category]
           : (parsed.note_type || note.sourceType);
 
         const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
@@ -2471,7 +2612,8 @@ functionsRouter.post("/:name", async (req, res) => {
         inspiration: "灵感",
         material: "资料",
         memo: "备忘",
-        share: "分享"
+        share: "分享",
+        ledger: "账本"
       };
       const category = categoryMap[noteType] || "情绪";
 
@@ -2530,6 +2672,16 @@ functionsRouter.post("/:name", async (req, res) => {
       } else if (category === "分享") {
         replyText = density === "mute" ? "已收好。" : "好，分享的内容我都放进签卡里了。";
         tag = density === "mute" ? "收录" : "感性回应";
+      } else if (category === "账本") {
+        if (density === "mute") {
+          replyText = "已收好。";
+          tag = "收录";
+        } else {
+          replyText = density === "full"
+            ? "账本我先记着了。想按周或按月看汇总，或者给某个类别设个预算提醒，跟我说一声就好。"
+            : "账本我先记着了。想看汇总或设预算提醒，随时跟我说。";
+          tag = "理性补充";
+        }
       } else {
         replyText = "我记下了。";
         tag = "感性回应";

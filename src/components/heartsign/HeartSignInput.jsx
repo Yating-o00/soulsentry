@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { Send, Plus, Paperclip, Link as LinkIcon, Image as ImageIcon, Mic, MicOff, X, Loader2 } from "lucide-react";
+import { Send, Plus, Paperclip, Link as LinkIcon, Image as ImageIcon, Mic, MicOff, X, Loader2, LayoutTemplate } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import QuickTemplates from "./QuickTemplates";
@@ -15,6 +15,7 @@ export default function HeartSignInput({ onSend }) {
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const fileRef = useRef(null);
   const imgRef = useRef(null);
   const { isListening, toggle: toggleVoice } = useVoiceInput((transcript) => {
@@ -148,31 +149,42 @@ export default function HeartSignInput({ onSend }) {
           </div>
         )}
 
-        {/* 工具栏 */}
+        {/* 工具行：默认收起，点开「+」展开模板/附件/图片/链接/语音 */}
         <div className="flex items-center gap-1 mb-2 text-slate-500">
-          <button onClick={() => setShowTemplates(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="快速模板">
-            <Plus className="w-4 h-4" />
-          </button>
-          <button onClick={() => fileRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="文件">
-            <Paperclip className="w-4 h-4" />
-          </button>
-          <button onClick={() => imgRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="图片">
-            <ImageIcon className="w-4 h-4" />
-          </button>
-          <button onClick={() => setShowUrlInput(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="链接">
-            <LinkIcon className="w-4 h-4" />
-          </button>
           <button
-            onClick={toggleVoice}
-            className={`p-2 rounded-lg transition-colors ${isListening ? 'bg-red-100 text-red-500 animate-pulse' : 'hover:bg-slate-100'}`}
-            title={isListening ? '点击停止' : '语音输入'}
+            onClick={() => setToolsOpen(v => !v)}
+            className={`p-2 rounded-lg transition-transform ${toolsOpen ? 'rotate-45 bg-slate-100 text-[#384877]' : 'hover:bg-slate-100'}`}
+            title={toolsOpen ? '收起工具' : '更多输入方式'}
           >
-            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            <Plus className="w-4 h-4" />
           </button>
           <div className="flex-1" />
           {uploading && <span className="text-xs text-violet-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />上传中</span>}
           <span className="hidden md:inline text-[11px] text-slate-400">Enter 发送 · Shift+Enter 换行</span>
         </div>
+        {toolsOpen && (
+          <div className="mb-2 flex items-center gap-1 text-slate-500 animate-in fade-in slide-in-from-top-1 duration-200">
+            <button onClick={() => setShowTemplates(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="快速模板">
+              <LayoutTemplate className="w-4 h-4" />
+            </button>
+            <button onClick={() => fileRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="文件">
+              <Paperclip className="w-4 h-4" />
+            </button>
+            <button onClick={() => imgRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="图片">
+              <ImageIcon className="w-4 h-4" />
+            </button>
+            <button onClick={() => setShowUrlInput(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="链接">
+              <LinkIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={toggleVoice}
+              className={`p-2 rounded-lg transition-colors ${isListening ? 'bg-red-100 text-red-500 animate-pulse' : 'hover:bg-slate-100'}`}
+              title={isListening ? '点击停止' : '语音输入'}
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+          </div>
+        )}
 
         {/* 输入框 */}
         <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 transition">
@@ -182,7 +194,7 @@ export default function HeartSignInput({ onSend }) {
             onChange={(e) => { setText(e.target.value); detectUrlInText(e.target.value); autoResize(e.target); }}
             onPaste={handlePaste}
             onKeyDown={onKey}
-            placeholder="发给自己 — 想法、链接、报告、文件，AI 会自动整理归档..."
+            placeholder="发给自己 —— 心情、链接、账目、灵感，丢进来就好"
             className="flex-1 bg-transparent outline-none resize-none text-[15px] text-slate-800 placeholder-slate-400 px-2 py-2 max-h-[200px]"
           />
           <button

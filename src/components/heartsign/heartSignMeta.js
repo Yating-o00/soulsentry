@@ -7,9 +7,10 @@ export const TYPE_META = {
   material:    { label: "资料", color: "#5b82a0", bg: "#e8f0f5" },
   memo:        { label: "备忘", color: "#8a7d6b", bg: "#f4f0ea" },
   share:       { label: "分享", color: "#6e8a73", bg: "#e8f5e9" },
+  ledger:      { label: "账本", color: "#a08452", bg: "#f7efe4" },
 };
 
-export const TYPE_ORDER = ["emotion", "inspiration", "material", "memo", "share"];
+export const TYPE_ORDER = ["emotion", "inspiration", "material", "memo", "share", "ledger"];
 
 export const CATEGORY_LABEL_TO_TYPE = {
   情绪: "emotion",
@@ -17,7 +18,25 @@ export const CATEGORY_LABEL_TO_TYPE = {
   资料: "material",
   备忘: "memo",
   分享: "share",
+  账本: "ledger",
 };
+
+// 发送前的本地预分类：敏感内容由后端 vault 拦截；此处只给后端一个提示，
+// 真正的分类以 AI/兜底为准（纠错学习闭环也在后端）。
+export function classifyNoteText(text) {
+  const t = String(text || "").trim();
+  if (!t) return "emotion";
+  // 账本：≥2 处「数字+元/块/RMB」或 ≥3 个数字片段 + 收支动词
+  const moneyHits = (t.match(/\d+(?:\.\d+)?\s*(?:元|块|块钱|rmb|RMB)/g) || []).length;
+  const numSegments = (t.match(/\d+(?:\.\d+)?/g) || []).length;
+  const ledgerVerbs = /(花|买|买了|吃|打车|付|付|支付|工资|报销|转账|收入|支出|花了|一共|预算|记账|退款)/.test(t);
+  if (moneyHits >= 2 || (numSegments >= 3 && ledgerVerbs)) return "ledger";
+  if (/(https?:\/\/|www\.|刷到|读到|文章|视频|播客|收藏|教程|知乎|公众号|B站|bilibili)/i.test(t)) return "material";
+  if (/(分享|发给|朋友圈|给大家|晒一?下|想让.*看到)/.test(t)) return "share";
+  if (/(记得|别忘了|号码|尾号|电话|地址|取件码|提醒我)/.test(t)) return "memo";
+  if (/(突然想到|点子|想法|灵感|如果.*可以|也许能)/.test(t)) return "inspiration";
+  return "emotion";
+}
 
 // 回应浓度三档（后端 analyzeHeartSign / followupHeartSign 均已支持）
 export const DENSITY_KEY = "ss_heart_density";

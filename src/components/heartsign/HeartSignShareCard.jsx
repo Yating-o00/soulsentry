@@ -92,111 +92,107 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     if (!ctx) return;
 
     const draw = async () => {
-      // 纸面渐变底
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, "#fbfcfd");
-      g.addColorStop(1, "#eef2f7");
-      ctx.fillStyle = g;
+      // 纸面底：暖白
+      ctx.fillStyle = "#fbfaf7";
       ctx.fillRect(0, 0, W, H);
 
-      // 右上「签」丝带（五类签色）
-      ctx.fillStyle = typeColor;
-      ctx.fillRect(W - 190, 0, 74, 130);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = `700 44px ${SERIF}`;
+      // 内缩细线框：一道主框 + 一道更浅的副框（极简装裱感）
+      ctx.strokeStyle = "rgba(56,72,119,0.28)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(30, 30, W - 60, H - 60);
+      ctx.strokeStyle = "rgba(56,72,119,0.10)";
+      ctx.strokeRect(38, 38, W - 76, H - 76);
+
+      // 顶部：细线圆圈「心」+ 字距拉开的品牌小字
+      ctx.strokeStyle = "rgba(56,72,119,0.5)";
+      ctx.beginPath();
+      ctx.arc(W / 2, 170, 34, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#384877";
+      ctx.font = `500 32px ${SERIF}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
-      ctx.fillText("签", W - 153, 86);
+      ctx.fillText("心", W / 2, 181);
+      ctx.fillStyle = "#9aa3b5";
+      ctx.font = `400 20px ${SANS}`;
+      const brand = "S O U L S E N T R Y";
+      ctx.fillText(brand, W / 2, 244);
 
-      // 头部：logo + 标题 + 日期
-      ctx.textAlign = "left";
-      ctx.fillStyle = typeColor;
-      const rr = (x, y, w, h, r) => {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.arcTo(x + w, y, x + w, y + h, r);
-        ctx.arcTo(x + w, y + h, x, y + h, r);
-        ctx.arcTo(x, y + h, x, y, r);
-        ctx.arcTo(x, y, x + w, y, r);
-        ctx.closePath();
-        ctx.fill();
-      };
-      rr(90, 64, 56, 56, 14);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = `700 30px ${SERIF}`;
-      ctx.textAlign = "center";
-      ctx.fillText("心", 118, 104);
-      ctx.textAlign = "left";
-      ctx.fillStyle = "#1c1c1e";
-      ctx.font = `600 30px ${SANS}`;
-      ctx.fillText("心栈 · 心签", 166, 102);
-      ctx.fillStyle = "#8e8e93";
-      ctx.font = `400 22px ${SANS}`;
-      ctx.textAlign = "right";
-      ctx.fillText(dateStr, W - 90, 100);
-      ctx.textAlign = "left";
-      ctx.strokeStyle = "#e2e8f0";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(90, 150);
-      ctx.lineTo(W - 90, 150);
-      ctx.stroke();
-
-      // 正文签文：字号随长度自适应
-      const len = content.length;
-      const fontSize = len > 280 ? 34 : len > 160 ? 38 : len > 60 ? 44 : 52;
-      const lineHeight = Math.round(fontSize * 1.75);
-      ctx.fillStyle = typeColor;
-      ctx.globalAlpha = 0.3;
-      ctx.font = `700 ${fontSize + 38}px ${SERIF}`;
-      ctx.fillText("“", 86, 250 + fontSize);
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#1c1c1e";
+      // 签文：衬线居中，一枚浅色大引号
+      const fontSize = 34;
+      const lineHeight = Math.round(fontSize * 1.9);
+      ctx.fillStyle = "rgba(56,72,119,0.10)";
+      ctx.font = `700 96px ${SERIF}`;
+      ctx.fillText("“", W / 2, 400);
+      ctx.fillStyle = "#2c3244";
       ctx.font = `400 ${fontSize}px ${SERIF}`;
-      const lines = wrapLines(ctx, content || "（空内容）", 900, 9);
-      lines.forEach((l, i) => ctx.fillText(l, 90, 320 + i * lineHeight));
+      const lines = wrapLines(ctx, content || "（空内容）", 760, 10);
+      const textTop = 470;
+      lines.forEach((l, i) => ctx.fillText(l, W / 2, textTop + i * lineHeight));
 
-      // AI 回应（另一个你）
-      const replyTop = H - (replyText ? 420 : 240);
+      // 日期 + 类型色圆点小标签（签文下方居中）
+      const typeLabel = TYPE_META[getNoteType(note)]?.label || "心签";
+      const metaY = textTop + lines.length * lineHeight + 26;
+      ctx.font = `400 22px ${SANS}`;
+      const dateW = ctx.measureText(dateStr).width;
+      const dotR = 5;
+      const gap = 14;
+      const totalW = dateW + gap + dotR * 2 + gap + ctx.measureText(typeLabel).width;
+      let mx = W / 2 - totalW / 2;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#8e8e93";
+      ctx.fillText(dateStr, mx, metaY);
+      mx += dateW + gap;
+      ctx.fillStyle = typeColor;
+      ctx.beginPath();
+      ctx.arc(mx + dotR, metaY - 7, dotR, 0, Math.PI * 2);
+      ctx.fill();
+      mx += dotR * 2 + gap;
+      ctx.fillStyle = "#8e8e93";
+      ctx.fillText(typeLabel, mx, metaY);
+
+      // AI 回应（另一个你）：细线分隔后小字斜体灰蓝
       if (replyText) {
-        ctx.fillStyle = typeColor;
-        ctx.font = `500 22px ${SANS}`;
-        ctx.textAlign = "left";
-        ctx.fillText("— 另一个你 —", 90, replyTop);
-        ctx.fillStyle = "#5b6572";
-        ctx.font = `400 30px ${SERIF}`;
-        const rl = wrapLines(ctx, replyText, 700, 3);
-        rl.forEach((l, i) => ctx.fillText(l, 90, replyTop + 62 + i * 52));
+        const replyTop = H - (noteUrl ? 460 : 400);
+        ctx.strokeStyle = "rgba(56,72,119,0.16)";
+        ctx.beginPath();
+        ctx.moveTo(W / 2 - 60, replyTop - 40);
+        ctx.lineTo(W / 2 + 60, replyTop - 40);
+        ctx.stroke();
+        ctx.fillStyle = "#6b7a99";
+        ctx.font = `italic 400 26px ${SERIF}`;
+        const rl = wrapLines(ctx, replyText, 680, 3);
+        rl.forEach((l, i) => {
+          ctx.textAlign = "center";
+          ctx.fillText(l, W / 2, replyTop + i * 48);
+        });
       }
 
-      // 底部：日期 + 品牌语 + 二维码
-      ctx.strokeStyle = "#e2e8f0";
+      // 底部：细线 + 品牌语居中
+      ctx.strokeStyle = "rgba(56,72,119,0.16)";
       ctx.beginPath();
-      ctx.moveTo(90, H - 150);
-      ctx.lineTo(W - 90, H - 150);
+      ctx.moveTo(90, H - 190);
+      ctx.lineTo(W - 90, H - 190);
       ctx.stroke();
       ctx.fillStyle = "#8e8e93";
       ctx.font = `400 22px ${SANS}`;
-      ctx.textAlign = "left";
-      ctx.fillText(dateStr, 90, H - 96);
-      ctx.textAlign = "right";
-      ctx.fillText("心栈 SoulSentry · 说给另一个自己听", W - 90, H - 96);
-      ctx.textAlign = "left";
+      ctx.textAlign = "center";
+      ctx.fillText("心栈 · 说给另一个自己听", W / 2, H - 130);
 
+      // 右下二维码（90px）+「扫码回应」
       if (noteUrl) {
         try {
           const qrUrl = await QRCode.toDataURL(noteUrl, { width: 260, margin: 1, errorCorrectionLevel: "M" });
           await new Promise((resolve) => {
             const img = new Image();
-            img.onload = () => { ctx.drawImage(img, W - 90 - 104, H - 330, 104, 104); resolve(); };
+            img.onload = () => { ctx.drawImage(img, W - 90 - 90, H - 360, 90, 90); resolve(); };
             img.onerror = () => resolve();
             img.src = qrUrl;
           });
           ctx.fillStyle = "#b0b0b5";
           ctx.font = `400 18px ${SANS}`;
-          ctx.textAlign = "right";
-          ctx.fillText("扫码免登录回应", W - 90, H - 200);
-          ctx.textAlign = "left";
+          ctx.textAlign = "center";
+          ctx.fillText("扫码回应", W - 90 - 45, H - 246);
         } catch {
           // 二维码生成失败时静默略过，不影响卡片主体
         }

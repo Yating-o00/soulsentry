@@ -23,6 +23,7 @@ export const HEARTSIGN_CATEGORIES = [
   { type: 'material', label: '资料' },
   { type: 'memo', label: '备忘' },
   { type: 'share', label: '分享' },
+  { type: 'ledger', label: '账本' },
 ];
 
 // 卡内小按钮（操作条 / 继续聊聊）
@@ -72,6 +73,50 @@ function KnowledgeCard({ ai, plain }) {
           </div>
           <div className="mt-2 text-[10.5px] text-slate-400">点击关键词 · 拓展相关知识与链接</div>
         </div>
+      )}
+    </motion.div>
+  );
+}
+
+// 账本签：收支明细表 + 合计 + AI 正向建议
+const LEDGER_ACCENT = "#a08452";
+function LedgerCard({ ledger }) {
+  if (!ledger?.items?.length) return null;
+  const fmt = (n) => (Number(n) || 0).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  const expenseColor = "#b07d4f";
+  const incomeColor = "#4f8a7a";
+  return (
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+      className="relative mt-2 rounded-2xl p-4 border border-[#a08452]/25 bg-[#f7efe4]/60 overflow-hidden">
+      <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#a08452]/50" aria-hidden />
+
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className="w-5 h-5 rounded-md bg-[#a08452]/10 flex items-center justify-center">
+          <FileText className="w-3 h-3 text-[#a08452]" />
+        </div>
+        <span className="text-[11.5px] font-medium text-[#a08452] tracking-wide">账本明细</span>
+      </div>
+
+      <div className="rounded-xl border border-[#a08452]/15 bg-white overflow-hidden">
+        {ledger.items.map((it, i) => (
+          <div key={i} className={`flex items-center gap-2 px-3 py-2 text-[12.5px] ${i > 0 ? 'border-t border-slate-100' : ''}`}>
+            <span className="text-slate-700 truncate flex-1 min-w-0">{it.name || '一笔账'}</span>
+            <span className="text-[10.5px] text-slate-400 bg-slate-50 border border-slate-200/60 rounded px-1.5 py-0.5 flex-shrink-0">{it.category || '其他'}</span>
+            <span className="font-medium tabular-nums flex-shrink-0 w-20 text-right"
+              style={{ color: it.type === 'income' ? incomeColor : expenseColor }}>
+              {it.type === 'income' ? '+' : '-'}{fmt(it.amount)}
+            </span>
+          </div>
+        ))}
+        <div className="flex items-center gap-3 px-3 py-2 border-t border-[#a08452]/20 bg-[#f7efe4]/50 text-[11.5px]">
+          <span className="text-slate-500">支出 <b className="tabular-nums" style={{ color: expenseColor }}>{fmt(ledger.total_expense)}</b></span>
+          <span className="text-slate-500">收入 <b className="tabular-nums" style={{ color: incomeColor }}>{fmt(ledger.total_income)}</b></span>
+          <span className="ml-auto text-slate-600">结余 <b className="tabular-nums text-slate-800">{fmt(ledger.balance)}</b></span>
+        </div>
+      </div>
+
+      {ledger.advice && (
+        <p className="mt-2.5 text-[12.5px] text-slate-600 leading-[1.7]">{ledger.advice}</p>
       )}
     </motion.div>
   );
@@ -449,12 +494,13 @@ export default function HeartSignMessage({
       </button>
     )}
 
-    {/* 感性温暖回应 / 理性知识补充 */}
+    {/* 感性温暖回应 / 理性知识补充 / 账本明细 */}
     {note.ai_status === 'completed' && (
       isRational
         ? <KnowledgeCard ai={ai} plain={plain} />
         : <WarmResponseCard ai={ai} />
     )}
+    {note.ai_status === 'completed' && ai.ledger?.items?.length > 0 && <LedgerCard ledger={ai.ledger} />}
 
     {/* AI 知识卡片 - 主题色低调风格 */}
     {note.ai_status === 'completed' && ai.summary && (

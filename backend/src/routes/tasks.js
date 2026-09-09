@@ -7,21 +7,26 @@ import { maybeGenerateRealityChain } from "../services/realityChain.js";
 
 export const tasksRouter = Router();
 
+const isoDateTime = z.string().refine(
+  (v) => !Number.isNaN(Date.parse(v)),
+  { message: "Invalid datetime" }
+);
+
 const taskInputSchema = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(5000).optional(),
   status: z.string().optional(),
   priority: z.string().min(1).max(20).optional(),
   category: z.string().optional(),
-  due_at: z.string().datetime().optional().nullable(),
-  reminder_time: z.string().datetime().optional().nullable(),
-  end_time: z.string().datetime().optional().nullable(),
+  due_at: isoDateTime.optional().nullable(),
+  reminder_time: isoDateTime.optional().nullable(),
+  end_time: isoDateTime.optional().nullable(),
   is_all_day: z.boolean().optional(),
   parent_task_id: z.string().optional().nullable(),
   gcal_sync_enabled: z.boolean().optional(),
   progress: z.number().int().min(0).max(100).optional(),
-  completed_at: z.string().datetime().optional().nullable(),
-  deleted_at: z.string().datetime().optional().nullable(),
+  completed_at: isoDateTime.optional().nullable(),
+  deleted_at: isoDateTime.optional().nullable(),
   tags: z.any().optional(),
   reminder_strategy: z.any().optional(),
   metadata: z.any().optional()

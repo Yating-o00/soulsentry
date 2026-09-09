@@ -93,6 +93,32 @@ export default function Account() {
     }
   };
 
+  // 压缩头像：等比缩到最长边 512px 的 JPEG（约 50-100KB，顺便避开网关 1MB 限制）
+  const compressAvatar = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 512;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(new File([blob], 'avatar.jpg', { type: 'image/jpeg' }));
+          else reject(new Error('图片压缩失败'));
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = () => reject(new Error('图片读取失败'));
+      img.src = String(reader.result);
+    };
+    reader.onerror = () => reject(new Error('图片读取失败'));
+    reader.readAsDataURL(file);
+  });
+
   const handleAvatarUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -102,18 +128,19 @@ export default function Account() {
       toast.error('请上传图片文件');
       return;
     }
-    
-    if (file.size > 5 * 1024 * 1024) { // 5MB
-      toast.error('图片大小不能超过 5MB');
+
+    if (file.size > 10 * 1024 * 1024) { // 压缩前原图上限 10MB
+      toast.error('图片大小不能超过 10MB');
       return;
     }
 
     const toastId = toast.loading('正在上传头像...');
-    
+
     try {
-      // 1. Upload to Base44 storage
+      // 1. 压缩后上传到后端存储
+      const compressed = await compressAvatar(file).catch(() => file);
       const result = await base44.integrations.Core.UploadFile({
-        file: file
+        file: compressed
       });
       
       const fileUrl = result.file_url;

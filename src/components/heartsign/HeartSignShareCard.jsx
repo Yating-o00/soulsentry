@@ -75,12 +75,11 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     e.target.value = '';
   };
 
-  // 头像画到卡片右上角：圆形裁切 + 细线圆环
-  const drawAvatar = (ctx) => new Promise((resolve) => {
+  // 头像画到卡片上：圆形裁切 + 细线圆环
+  const drawAvatar = (ctx, cx, cy, r) => new Promise((resolve) => {
     if (!avatar) return resolve();
     const img = new Image();
     img.onload = () => {
-      const cx = W - 140, cy = 170, r = 40;
       ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -161,23 +160,24 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       ctx.strokeStyle = "rgba(56,72,119,0.10)";
       ctx.strokeRect(38, 38, W - 76, H - 76);
 
-      // 顶部：细线圆圈「心」+ 字距拉开的品牌小字
-      ctx.strokeStyle = "rgba(56,72,119,0.5)";
-      ctx.beginPath();
-      ctx.arc(W / 2, 170, 34, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = "#384877";
-      ctx.font = `500 32px ${SERIF}`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText("心", W / 2, 181);
+      // 顶部：有头像时头像替代「心」圆圈位置，否则细线圆圈「心」；下接字距拉开的品牌小字
+      if (avatar) {
+        await drawAvatar(ctx, W / 2, 170, 34);
+      } else {
+        ctx.strokeStyle = "rgba(56,72,119,0.5)";
+        ctx.beginPath();
+        ctx.arc(W / 2, 170, 34, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "#384877";
+        ctx.font = `500 32px ${SERIF}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText("心", W / 2, 181);
+      }
       ctx.fillStyle = "#9aa3b5";
       ctx.font = `400 20px ${SANS}`;
       const brand = "S O U L S E N T R Y";
       ctx.fillText(brand, W / 2, 244);
-
-      // 用户头像（右上，圆形）
-      await drawAvatar(ctx);
 
       // 签文：衬线居中，一枚浅色大引号
       const fontSize = 34;
@@ -312,7 +312,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[94vw] max-w-md max-h-[92vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Share2 className="w-4 h-4" style={{ color: typeColor }} />
@@ -320,14 +320,14 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5">
-          {/* 预览区 */}
-          <div className="flex justify-center p-4 rounded-2xl bg-slate-50">
+        <div className="space-y-4">
+          {/* 预览区：窄屏占满、大屏加大 */}
+          <div className="flex justify-center p-3 sm:p-4 rounded-2xl bg-slate-50">
             <canvas
               ref={canvasRef}
               width={W}
               height={H}
-              className="w-[320px] rounded-2xl"
+              className="w-full max-w-[300px] sm:max-w-[340px] md:max-w-[380px] h-auto rounded-2xl"
               style={{ boxShadow: "0 10px 34px rgba(56,72,119,0.18)" }}
             />
           </div>
@@ -346,7 +346,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
               )}
             </button>
             <div className="text-xs text-slate-500 flex-1 min-w-0">
-              {avatar ? '头像将显示在签卡右上角' : '可选：给签卡贴上你的头像'}
+              {avatar ? '头像将替代签卡顶部「心」的位置' : '可选：给签卡贴上你的头像'}
             </div>
             {avatar && accountAvatar && avatar !== accountAvatar && (
               <button

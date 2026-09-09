@@ -10,7 +10,7 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { setupIframeMessaging } from './lib/iframe-messaging';
 import PageNotFound from './lib/PageNotFound';
-import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { AuthProvider, useAuth, isPublicSharePage } from '@/lib/AuthContext';
 import { isStandaloneMode } from '@/api/platformConfig';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import OnboardingHost from '@/components/onboarding/OnboardingHost';
@@ -51,8 +51,9 @@ const AuthenticatedApp = () => {
   }
 
   // 独立部署下鉴权检查已结束但未登录（token 丢失/过期且 demo 自动登录不可用）：
-  // 直接渲染登录页兜底，避免挂着空应用壳不停重试
-  if (!isAuthenticated && isStandaloneMode) {
+  // 直接渲染登录页兜底，避免挂着空应用壳不停重试；
+  // 公开分享页（/share/:token）除外——扫码访客无需登录即可查看与协作
+  if (!isAuthenticated && isStandaloneMode && !isPublicSharePage()) {
     return <Login />;
   }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import OnboardingModal from "./OnboardingModal";
 import { useAuth } from "@/lib/AuthContext";
+import { isPublicSharePage } from "@/lib/AuthContext";
 
 const TOUR_KEY = "ss_tour_completed_v1";
 const NEW_USER_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -13,6 +14,9 @@ export default function OnboardingHost() {
     try {
       if (window.localStorage.getItem(TOUR_KEY)) return;
     } catch {}
+
+    // 公开分享页（扫码进入）不弹新手引导，访客直接看到分享内容
+    if (isPublicSharePage()) return;
 
     if (!isAuthenticated || !user) return;
 

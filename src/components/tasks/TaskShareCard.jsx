@@ -84,6 +84,36 @@ export default function TaskShareCard({ task, open, onClose }) {
       .finally(() => setCollabLoading(false));
   }, [publicShareEnabled, task?.share_token]);
 
+  // 打开卡片时确保公开分享链接已生成：二维码始终指向 /share/<token> 公开协作页，
+  // 扫码者无需登录即可留言、勾选进度、订阅提醒
+  React.useEffect(() => {
+    if (!open || !task?.id || publicShareUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await httpRequest(`/api/public/share/generate/task/${task.id}`, {
+          method: "POST",
+          body: { enabled: true },
+        });
+        if (cancelled) return;
+        if (result?.enabled) {
+          setPublicShareEnabled(true);
+          if (result.url) {
+            setPublicShareUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
+          }
+          if (result.token) {
+            httpRequest(`/api/public/share/${result.token}/logs`)
+              .then(setCollabLogs)
+              .catch(() => {});
+          }
+        }
+      } catch {
+        // 生成失败：二维码暂时回落到应用内链接
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, task?.id, publicShareUrl]);
+
   const getSubtaskLastLog = (subtaskId) => {
     if (!collabLogs?.recent_logs) return null;
     return collabLogs.recent_logs.find(
@@ -142,7 +172,8 @@ export default function TaskShareCard({ task, open, onClose }) {
     ? `${window.location.origin}${createPageUrl("Tasks")}?taskId=${task.id}`
     : "";
 
-  const qrCodeValue = publicShareEnabled && publicShareUrl ? publicShareUrl : taskUrl;
+  // 二维码始终指向公开协作页（/share/<token>）；仅当链接生成失败时才回落到应用内链接
+  const qrCodeValue = publicShareUrl || taskUrl;
 
   // Detect language
   const isEnglish = React.useMemo(() => {
@@ -329,7 +360,8 @@ export default function TaskShareCard({ task, open, onClose }) {
       });
       setPublicShareEnabled(result.enabled);
       if (result.enabled && result.url) {
-        setPublicShareUrl(result.url);
+        // 后端在反代后可能生成 http:// 链接，统一改成本页源（生产即 https 域名）
+        setPublicShareUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
         // Refresh collaboration summary after enabling
         setCollabLoading(true);
         httpRequest(`/api/public/share/${result.token}/logs`)

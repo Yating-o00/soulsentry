@@ -8,7 +8,7 @@ const isStandalonePricingPreview = () => {
   if (typeof window === "undefined") return false;
   return ["/pricing", "/Pricing"].includes(window.location.pathname);
 };
-const isPublicSharePage = () => {
+export const isPublicSharePage = () => {
   if (typeof window === "undefined") return false;
   const path = window.location.pathname;
   return path.startsWith("/share/") || path.startsWith("/Share/");

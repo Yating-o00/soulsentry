@@ -282,17 +282,31 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   const handleCopyImage = async () => {
     if (!canvasRef.current) return;
     setGenerating(true);
+    let blob = null;
     try {
-      const blob = await new Promise((r) => canvasRef.current.toBlob(r, "image/png", 0.95));
+      blob = await new Promise((r) => canvasRef.current.toBlob(r, "image/png", 0.95));
       if (!blob) throw new Error("生成失败");
-      if (navigator.clipboard && navigator.clipboard.write) {
+      if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
         await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
         toast.success("签卡已复制到剪贴板");
       } else {
-        throw new Error("浏览器不支持复制图片");
+        throw new Error("UNSUPPORTED");
       }
     } catch (e) {
-      toast.error(e.message || "复制失败，请重试");
+      // Safari/部分浏览器拒绝图片剪贴板权限：自动降级为下载 PNG
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `心签-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        toast.success("浏览器限制了图片复制，已改为下载到本地");
+      } else {
+        toast.error(e.message || "复制失败，请重试");
+      }
     } finally {
       setGenerating(false);
     }

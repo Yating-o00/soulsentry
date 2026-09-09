@@ -147,10 +147,20 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
                 return;
             }
             try {
+                if (typeof ClipboardItem === "undefined") throw new Error("UNSUPPORTED");
                 await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
                 toast.success("图片已复制");
             } catch (err) {
-                toast.error("复制失败");
+                // Safari/部分浏览器拒绝图片剪贴板权限：自动降级为下载 PNG
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `约定清单-${Date.now()}.png`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+                toast.success("浏览器限制了图片复制，已改为下载到本地");
             }
         });
       } catch (error) {

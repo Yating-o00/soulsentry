@@ -207,6 +207,23 @@ export default function Notes() {
       setIsCreating(false);
       toast.success("心签已创建");
 
+      // 触发 AI 分析（与信息流同一链路），否则从编辑器/语音入口创建的签永远没有回应
+      if (data?.id) {
+        const normalized = normalizeNote(data);
+        base44.functions.invoke('analyzeHeartSign', {
+          note_id: normalized.id,
+          note_data: {
+            plain_text: normalized.plain_text,
+            content: normalized.content,
+            source_type: normalized.source_type,
+            source_url: normalized.source_url,
+            attachments: normalized.attachments,
+            tags: normalized.tags,
+          },
+        }).catch((e) => console.warn('analyzeHeartSign skipped:', e?.message));
+        refreshNoteWhenDone(normalized.id);
+      }
+
       // 同步执行动态到通知页面（非阻塞）
       const noteTitle = data?.plain_text?.slice(0, 60) || data?.ai_analysis?.summary || "新心签";
       createExecutionRecord({

@@ -10,6 +10,7 @@ const updateMeSchema = z.object({
   subscription_plan: z.string().min(1).optional(),
   ai_credits: z.number().int().min(0).optional(),
   theme_preferences: z.record(z.any()).optional(),
+  avatar_url: z.union([z.literal(""), z.string().max(500)]).optional(),
   dnd_settings: z.object({
     enabled: z.boolean().optional(),
     start_time: z.string().optional(),
@@ -38,6 +39,12 @@ function getDndSettings(preferences) {
     start_time: storedDnd.start_time || preferences?.quietHoursStart || "22:00",
     end_time: storedDnd.end_time || preferences?.quietHoursEnd || "08:00"
   };
+}
+
+// 头像存放在 preferences.metadata._extraFields.avatar_url（免 User 表变更）
+function getAvatarUrl(preferences) {
+  const extraFields = getPreferenceExtraFields(preferences);
+  return typeof extraFields.avatar_url === "string" ? extraFields.avatar_url : null;
 }
 
 function serializePreference(preferences) {
@@ -85,6 +92,7 @@ usersRouter.get("/me", async (req, res) => {
     email: req.user.email,
     full_name: req.user.displayName || req.user.email,
     display_name: req.user.displayName,
+    avatar_url: getAvatarUrl(req.user.preferences),
     role: req.user.role.toLowerCase(),
     subscription_plan: req.user.subscriptionPlan,
     ai_credits: req.user.aiCredits,
@@ -150,6 +158,34 @@ usersRouter.patch("/me", async (req, res) => {
       });
     }
 
+    // 头像：写入 preferences.metadata._extraFields.avatar_url（空字符串 = 清除）
+    if (payload.data.avatar_url !== undefined) {
+      const latestPreferences = await tx.userPreference.findUnique({
+        where: { userId: req.user.id }
+      });
+      const previousExtraFields = getPreferenceExtraFields(latestPreferences);
+      const { avatar_url: _omit, ...restExtra } = previousExtraFields;
+      const nextMetadata = {
+        ...(latestPreferences?.metadata && typeof latestPreferences.metadata === "object" && !Array.isArray(latestPreferences.metadata)
+          ? latestPreferences.metadata
+          : {}),
+        _extraFields: payload.data.avatar_url
+          ? { ...restExtra, avatar_url: payload.data.avatar_url }
+          : restExtra
+      };
+
+      await tx.userPreference.upsert({
+        where: { userId: req.user.id },
+        update: { metadata: nextMetadata },
+        create: {
+          userId: req.user.id,
+          locale: "zh-CN",
+          timezone: "Asia/Shanghai",
+          metadata: nextMetadata
+        }
+      });
+    }
+
     return tx.user.findUnique({
       where: { id: req.user.id },
       include: { preferences: true }
@@ -161,6 +197,7 @@ usersRouter.patch("/me", async (req, res) => {
     email: nextUser.email,
     full_name: nextUser.displayName || nextUser.email,
     display_name: nextUser.displayName,
+    avatar_url: getAvatarUrl(nextUser.preferences),
     role: nextUser.role.toLowerCase(),
     subscription_plan: nextUser.subscriptionPlan,
     ai_credits: nextUser.aiCredits,

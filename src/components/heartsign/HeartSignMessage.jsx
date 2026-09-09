@@ -239,6 +239,7 @@ export default function HeartSignMessage({
   onPinnedChange,
   onConvertToTask,
   onSaveToKnowledge,
+  onShareOpenChange,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -339,6 +340,7 @@ export default function HeartSignMessage({
 
   const handleShare = () => {
     setShareOpen(true);
+    onShareOpenChange?.(true);
   };
 
   // 删除交给父级统一处理（乐观移除 + 服务端软删除 + 失败回滚），避免双发
@@ -402,7 +404,7 @@ export default function HeartSignMessage({
 
   return (
    <div data-hs-id={note.id} data-hs-type={typeKey} className={`hs-card ${flash ? 'hs-flash' : ''}`}>
-    <HeartSignShareCard note={note} text={plain} open={shareOpen} onClose={() => setShareOpen(false)} />
+    <HeartSignShareCard note={note} text={plain} open={shareOpen} onClose={() => { setShareOpen(false); onShareOpenChange?.(false); }} />
 
     {/* 卡头：类型 chip + 状态徽章 + 时间 + 分错了纠正 */}
     <div className="flex items-center gap-1.5 mb-2 flex-wrap">

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -43,6 +43,13 @@ export default function Notes() {
   const [isCreating, setIsCreating] = useState(false);
   const [isAnalyzingNote, setIsAnalyzingNote] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
+  // 分享签卡打开/刚关闭的短暂窗口内，忽略落到签卡上的点击，避免「取消分享卡后连带弹起编辑心签」
+  const shareGuardRef = useRef({ open: false, closedAt: 0 });
+  const handleNoteCardClick = (note) => {
+    const g = shareGuardRef.current;
+    if (g.open || Date.now() - g.closedAt < 600) return;
+    setEditingNote(note);
+  };
   const [taskCreationNote, setTaskCreationNote] = useState(null);
   const [sharingNote, setSharingNote] = useState(null);
   const [showAIOrganizer, setShowAIOrganizer] = useState(false);
@@ -771,7 +778,7 @@ export default function Notes() {
               </div>
             ) : (
               filteredNotes.map((note) => (
-                <div key={note.id} onClick={() => setEditingNote(note)} className="cursor-pointer">
+                <div key={note.id} onClick={() => handleNoteCardClick(note)} className="cursor-pointer">
                   <HeartSignMessage
                     note={note}
                     flash={flashId === note.id}
@@ -782,6 +789,11 @@ export default function Notes() {
                     onPinnedChange={handlePinnedChange}
                     onConvertToTask={handleSmartConvertToTask}
                     onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
+                    onShareOpenChange={(open) => {
+                      shareGuardRef.current = open
+                        ? { ...shareGuardRef.current, open: true }
+                        : { open: false, closedAt: Date.now() };
+                    }}
                   />
                 </div>
               ))

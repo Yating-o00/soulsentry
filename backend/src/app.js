@@ -37,6 +37,9 @@ import { handleWechatNotify } from "./routes/wechatNotify.js";
 
 export const app = express();
 
+// 位于 nginx 反代之后：信任转发头，req.protocol 才能拿到 X-Forwarded-Proto（https）
+app.set("trust proxy", 1);
+
 app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {

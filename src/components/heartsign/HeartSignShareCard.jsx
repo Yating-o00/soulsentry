@@ -122,7 +122,10 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
           method: "POST",
           body: { enabled: true },
         });
-        if (!cancelled && result?.url) setShareUrl(result.url);
+        if (!cancelled && result?.url) {
+          // 后端在反代后可能生成 http:// 链接，统一改成本页源（生产即 https 域名）
+          setShareUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
+        }
       } catch (e) {
         // 生成失败（如未登录/网络问题）：回落到已有的 share_token 或不出二维码
         if (!cancelled && note?.share_token && typeof window !== "undefined") {
@@ -229,31 +232,41 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
         });
       }
 
-      // 底部：细线 + 品牌语居中
+      // 底部一栏：细线之上，左侧品牌语，右侧二维码 +「扫码回应」
       ctx.strokeStyle = "rgba(56,72,119,0.16)";
       ctx.beginPath();
       ctx.moveTo(90, H - 190);
       ctx.lineTo(W - 90, H - 190);
       ctx.stroke();
+
+      // 无二维码时品牌语居中，有二维码时靠左与二维码同栏
       ctx.fillStyle = "#8e8e93";
       ctx.font = `400 22px ${SANS}`;
-      ctx.textAlign = "center";
-      ctx.fillText("心栈 · 说给另一个自己听", W / 2, H - 130);
+      if (noteUrl) {
+        ctx.textAlign = "left";
+        ctx.fillText("心栈 · 说给另一个自己听", 90, H - 118);
+      } else {
+        ctx.textAlign = "center";
+        ctx.fillText("心栈 · 说给另一个自己听", W / 2, H - 130);
+      }
 
-      // 右下二维码（90px）+「扫码回应」
+      // 底栏右侧二维码（110px）+「扫码回应」小字
       if (noteUrl) {
         try {
-          const qrUrl = await QRCode.toDataURL(noteUrl, { width: 260, margin: 1, errorCorrectionLevel: "M" });
+          const qrUrl = await QRCode.toDataURL(noteUrl, { width: 320, margin: 1, errorCorrectionLevel: "M" });
+          const qrSize = 110;
+          const qrX = W - 90 - qrSize;
+          const qrY = H - 172;
           await new Promise((resolve) => {
             const img = new Image();
-            img.onload = () => { ctx.drawImage(img, W - 90 - 90, H - 360, 90, 90); resolve(); };
+            img.onload = () => { ctx.drawImage(img, qrX, qrY, qrSize, qrSize); resolve(); };
             img.onerror = () => resolve();
             img.src = qrUrl;
           });
           ctx.fillStyle = "#b0b0b5";
           ctx.font = `400 18px ${SANS}`;
-          ctx.textAlign = "center";
-          ctx.fillText("扫码回应", W - 90 - 45, H - 246);
+          ctx.textAlign = "right";
+          ctx.fillText("扫码回应", qrX - 22, H - 112);
         } catch {
           // 二维码生成失败时静默略过，不影响卡片主体
         }

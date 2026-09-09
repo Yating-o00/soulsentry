@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Link as LinkIcon, FileText, Sparkles, Tag, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, RefreshCw, BookOpen, Lock, Check, PenLine, Pin, Send } from "lucide-react";
+import { Link as LinkIcon, FileText, Image as ImageIcon, Mic, Paperclip, ExternalLink, Loader2, ChevronDown, ChevronUp, Globe, MoreHorizontal, Share2, Copy, Trash2, CalendarPlus, RefreshCw, BookOpen, Lock, Check, PenLine, Pin, Send } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import {
@@ -501,57 +501,6 @@ export default function HeartSignMessage({
         : <WarmResponseCard ai={ai} />
     )}
     {note.ai_status === 'completed' && ai.ledger?.items?.length > 0 && <LedgerCard ledger={ai.ledger} />}
-
-    {/* AI 知识卡片 - 主题色低调风格 */}
-    {note.ai_status === 'completed' && ai.summary && (
-      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-        className="relative mt-2 rounded-2xl p-4 border border-[#384877]/15 bg-[#384877]/[0.03] overflow-hidden">
-        {/* 左侧主题色细条 */}
-        <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#384877]/40" aria-hidden />
-
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-5 h-5 rounded-md bg-[#384877]/10 flex items-center justify-center">
-            <Sparkles className="w-3 h-3 text-[#384877]" />
-          </div>
-          <span className="text-[11.5px] font-medium text-[#384877]/80 tracking-wide">
-            {isReport ? '长文摘要' : note.source_type === 'external_feed' ? '外部信息已解析' : 'AI 智能处理'}
-          </span>
-        </div>
-
-        <p className="text-[13.5px] text-slate-800 leading-[1.7] mb-3">{ai.summary}</p>
-
-        {ai.key_points?.length > 0 && (
-          <div className="mb-3 pl-3 border-l-2 border-[#384877]/20">
-            <ul className="space-y-1.5">
-              {ai.key_points.slice(0, isReport ? 6 : 4).map((p, i) => (
-                <li key={i} className="text-[12.5px] text-slate-600 leading-relaxed flex flex-wrap gap-x-2 gap-y-1 items-start">
-                  <span className="text-[#384877]/40 mt-0.5">·</span>
-                  <KeywordExplorer keyword={p} context={ai.summary || plain} inline />
-                </li>
-              ))}
-            </ul>
-            <div className="mt-2 text-[10.5px] text-slate-400">点击关键词 · 展开外部相关内容与链接</div>
-          </div>
-        )}
-
-        {note.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-[#384877]/10">
-            {note.tags.slice(0, 6).map((t, i) => (
-              <span key={i} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white text-[#384877]/75 text-[10.5px] rounded-md border border-[#384877]/15">
-                <Tag className="w-2.5 h-2.5" />{t}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {ai.related_topics?.length > 0 && (
-          <div className="mt-3 text-[11.5px] text-slate-600 bg-white/70 border border-[#384877]/12 rounded-lg px-3 py-2 leading-relaxed">
-            <span className="font-medium text-[#384877]/80">拓展视野 · </span>
-            {ai.related_topics.slice(0, 3).join(' · ')}
-          </div>
-        )}
-      </motion.div>
-    )}
 
     {/* 卡内对话线程（followupHeartSign → metadata.conversation） */}
     <ConversationThread conv={conv} typing={followSending} />

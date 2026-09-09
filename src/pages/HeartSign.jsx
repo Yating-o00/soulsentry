@@ -5,7 +5,8 @@ import { createPageUrl } from "@/utils";
 // 旧 /HeartSign 路由保留为重定向，避免收藏链接与小程序 web-view 失效
 export default function HeartSign() {
   useEffect(() => {
-    window.location.replace(createPageUrl("Notes"));
+    // 保留 query（签卡二维码带 ?noteId=），让 Notes 页能直接打开对应心签
+    window.location.replace(createPageUrl("Notes") + window.location.search);
   }, []);
   return null;
 }

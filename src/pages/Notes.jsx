@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User, Lock, Dices } from "lucide-react";
+import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User, Lock, Dices, BookOpen } from "lucide-react";
 import AIText from "@/components/AIText";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
@@ -22,9 +22,10 @@ import KnowledgeBaseManager from "../components/knowledge/KnowledgeBaseManager";
 import ExternalHorizonPanel from "../components/heartsign/ExternalHorizonPanel";
 import CategoryFilterBar from "@/components/heartsign/CategoryFilterBar";
 import ReviewDialog from "@/components/heartsign/ReviewDialog";
+import JournalDialog from "@/components/heartsign/JournalDialog";
 import VaultDialog from "@/components/heartsign/VaultDialog";
 import { detectSensitive } from "@/components/heartsign/detectSensitive";
-import { normalizeNote, getNoteType, isPinnedNote, DENSITY_KEY } from "@/components/heartsign/heartSignMeta";
+import { normalizeNote, getNoteType, isPinnedNote, isVaultNote, DENSITY_KEY } from "@/components/heartsign/heartSignMeta";
 import { isStandaloneMode } from "@/api/platformConfig";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
@@ -58,6 +59,7 @@ export default function Notes() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [density, setDensity] = useState(() => localStorage.getItem(DENSITY_KEY) || "light");
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [journalOpen, setJournalOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultInitialValue, setVaultInitialValue] = useState(null);
   const [flashId, setFlashId] = useState(null);
@@ -462,12 +464,14 @@ export default function Notes() {
     }
 
     // Full-text search (content + tags)
+    // 打码：保险柜内容不参与关键词检索——避免用关键词探测敏感签文的存在
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
       result = result.filter((note) =>
+        !isVaultNote(note) && (
         (note.plain_text && note.plain_text.toLowerCase().includes(lowerQuery)) ||
         (note.content && note.content.toLowerCase().includes(lowerQuery)) ||
-        (note.tags && note.tags.some((tag) => tag.toLowerCase().includes(lowerQuery)))
+        (note.tags && note.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))))
       );
     }
 
@@ -612,6 +616,16 @@ export default function Notes() {
             />
 
             <div className="flex items-center gap-1.5 md:gap-3">
+              <Button
+                onClick={() => setJournalOpen(true)}
+                variant="outline"
+                size="sm"
+                title="心签手账：近 7 天的记录与情绪晴雨"
+                className="h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs md:text-sm"
+              >
+                <BookOpen className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span className="hidden sm:inline">手账</span>
+              </Button>
               <Button
                 onClick={() => setReviewOpen(true)}
                 variant="outline"
@@ -785,6 +799,13 @@ export default function Notes() {
         onOpenChange={setReviewOpen}
         notes={notes.filter((n) => !n.deleted_at)}
         onLocate={handleLocate}
+      />
+
+      {/* 手账：近 7 天统计与情绪晴雨 */}
+      <JournalDialog
+        open={journalOpen}
+        onOpenChange={setJournalOpen}
+        notes={notes.filter((n) => !n.deleted_at)}
       />
 
       {/* 保险柜 */}

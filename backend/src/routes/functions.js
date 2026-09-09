@@ -2473,7 +2473,8 @@ ${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类�
 ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correctionHints.join("\n- ")}\n` : ""}严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
 
       try {
-        // Kimi 只给 5 秒；超时或失败立即走本地规则兜底
+        // Kimi 只给 12 秒：K2 冷启动 + 生成式回应常超过 5 秒,
+        // 之前的 5 秒上限会过早打落到模板兜底,用户收到"没有温度的回应"
         const kimiPromise = invokeKimiText({
           prompt: `请分析以下心签内容（当前回应浓度：${density}）：\n\n${materialText}`,
           systemPrompt,
@@ -2481,7 +2482,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           temperature: 0.9
         });
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("TIMEOUT")), 5000)
+          setTimeout(() => reject(new Error("TIMEOUT")), 12000)
         );
 
         let parsed;

@@ -125,10 +125,10 @@ export default function Notes() {
     }
   }, [searchParams, notes]);
 
-  // 独立后端无实时推送：分析是异步的，轮询补拉一次最新状态（最多约 30 秒）
+  // 独立后端无实时推送：分析是异步的，轮询补拉一次最新状态（前 4 次 1.5s 快速轮询，之后 3s，最多约 24 秒）
   const refreshNoteWhenDone = async (id) => {
     for (let i = 0; i < 10; i++) {
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, i < 4 ? 1500 : 3000));
       try {
         const fresh = normalizeNote(await base44.entities.Note.get(id));
         if (fresh?.ai_status && fresh.ai_status !== 'pending' && fresh.ai_status !== 'processing') {

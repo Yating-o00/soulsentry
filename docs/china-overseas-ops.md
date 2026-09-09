@@ -41,6 +41,8 @@ server {
     listen [::]:443 ssl http2;
     server_name xinzhan-soulsentry.cn;
 
+    client_max_body_size 50M;
+
     ssl_certificate /etc/letsencrypt/live/www.xinzhan-soulsentry.cn/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/www.xinzhan-soulsentry.cn/privkey.pem;
 

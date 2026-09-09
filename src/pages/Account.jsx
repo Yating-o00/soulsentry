@@ -133,7 +133,7 @@ export default function Account() {
       }
     } catch (error) {
       console.error('Upload failed:', error);
-      toast.error('头像上传失败，请重试');
+      toast.error(error?.status === 413 ? '图片太大被网关拒绝，请压缩到 5MB 以内再试' : '头像上传失败，请重试');
     } finally {
       toast.dismiss(toastId);
     }

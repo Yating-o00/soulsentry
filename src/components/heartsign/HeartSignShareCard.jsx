@@ -6,10 +6,11 @@ import {
   DialogTitle } from
 "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2 } from "lucide-react";
+import { Download, Copy, Share2, ImagePlus, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "qrcode";
 import { httpRequest } from "@/api/httpClient";
+import { base44 } from "@/api/base44Client";
 import { getNoteType, TYPE_META } from "@/components/heartsign/heartSignMeta";
 
 const W = 1080;
@@ -43,6 +44,63 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   const [generating, setGenerating] = useState(false);
   // 公开分享链接（/share/<token>）：扫码者无需登录即可查看与评论
   const [shareUrl, setShareUrl] = useState("");
+  // 签卡头像：默认取账号头像，也支持本地上传/移除
+  const [avatar, setAvatar] = useState(null);       // dataURL 或同源 URL，null = 不画
+  const [accountAvatar, setAccountAvatar] = useState(null);
+  const avatarRef = useRef(null);
+
+  // 打开卡片时加载账号头像（仅当用户还没手动换过头像时）
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await base44.auth.me();
+        const url = me?.avatar_url || null;
+        if (cancelled) return;
+        setAccountAvatar(url);
+        setAvatar((prev) => prev ?? url);
+      } catch { /* 未登录等场景：不出头像 */ }
+    })();
+    return () => { cancelled = true; };
+  }, [open]);
+
+  const handleAvatarFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { toast.error('请选择图片文件'); return; }
+    const reader = new FileReader();
+    reader.onload = () => { setAvatar(String(reader.result)); toast.success('头像已贴上'); };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  };
+
+  // 头像画到卡片右上角：圆形裁切 + 细线圆环
+  const drawAvatar = (ctx) => new Promise((resolve) => {
+    if (!avatar) return resolve();
+    const img = new Image();
+    img.onload = () => {
+      const cx = W - 140, cy = 170, r = 40;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      // cover 裁切
+      const scale = Math.max((r * 2) / img.width, (r * 2) / img.height);
+      const w = img.width * scale, h = img.height * scale;
+      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+      ctx.restore();
+      ctx.strokeStyle = "rgba(56,72,119,0.4)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      resolve();
+    };
+    img.onerror = () => resolve();
+    img.src = avatar;
+  });
 
   const content = (text || "").trim();
   // 五类签色作丝带点缀，无分类时回落哨兵蓝
@@ -117,6 +175,9 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       ctx.font = `400 20px ${SANS}`;
       const brand = "S O U L S E N T R Y";
       ctx.fillText(brand, W / 2, 244);
+
+      // 用户头像（右上，圆形）
+      await drawAvatar(ctx);
 
       // 签文：衬线居中，一枚浅色大引号
       const fontSize = 34;
@@ -200,7 +261,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     };
 
     draw().catch(() => {});
-  }, [open, note, content, replyText, noteUrl, dateStr, typeColor]);
+  }, [open, note, content, replyText, noteUrl, dateStr, typeColor, avatar]);
 
   const handleDownload = async () => {
     if (!canvasRef.current) return;
@@ -269,6 +330,43 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
               className="w-[320px] rounded-2xl"
               style={{ boxShadow: "0 10px 34px rgba(56,72,119,0.18)" }}
             />
+          </div>
+
+          {/* 头像：贴上 / 换回账号头像 / 移除 */}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => avatarRef.current?.click()}
+              title="上传图片作为签卡头像"
+              className="h-10 w-10 rounded-full overflow-hidden flex items-center justify-center border border-dashed border-slate-300 hover:border-[#384877]/50 hover:bg-slate-50 transition-colors flex-shrink-0"
+            >
+              {avatar ? (
+                <img src={avatar} alt="头像" className="h-full w-full object-cover" />
+              ) : (
+                <ImagePlus className="w-4 h-4 text-slate-400" />
+              )}
+            </button>
+            <div className="text-xs text-slate-500 flex-1 min-w-0">
+              {avatar ? '头像将显示在签卡右上角' : '可选：给签卡贴上你的头像'}
+            </div>
+            {avatar && accountAvatar && avatar !== accountAvatar && (
+              <button
+                onClick={() => setAvatar(accountAvatar)}
+                title="换回账号头像"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-[#384877] hover:bg-slate-100 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {avatar && (
+              <button
+                onClick={() => setAvatar(null)}
+                title="移除头像"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <input ref={avatarRef} type="file" accept="image/*" hidden onChange={handleAvatarFile} />
           </div>
 
           {/* 操作按钮 */}

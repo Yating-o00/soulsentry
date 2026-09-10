@@ -1158,6 +1158,9 @@ export default function Flow() {
   const [notes, setNotes] = useState([]);
   const [executions, setExecutions] = useState([]);
   const [execActingId, setExecActingId] = useState(null);
+  const [reviewExec, setReviewExec] = useState(null); // 守护记录「查看并确认」弹层
+  const execPollRef = useRef(null);
+  const execPollTicksRef = useRef(0);
   const [sentinel, setSentinel] = useState(null);
   const [assoc, setAssoc] = useState(null);
   const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
@@ -1311,6 +1314,38 @@ export default function Flow() {
       .slice(0, 3);
   }, [executions]);
 
+  // 守护记录执行轮询：有待执行/执行中的单子时每 3s 静默刷新，
+  // 后台执行完成后列表自动出现「查看并确认」，无需退出页面重进
+  useEffect(() => {
+    const hasActive = (executions || []).some((e) =>
+      ["pending", "parsing", "executing"].includes(e.execution_status)
+    );
+    if (hasActive && !execPollRef.current) {
+      execPollTicksRef.current = 0;
+      execPollRef.current = setInterval(() => {
+        execPollTicksRef.current += 1;
+        if (execPollTicksRef.current > 20) {
+          // 最长约 60s，避免无限轮询
+          clearInterval(execPollRef.current);
+          execPollRef.current = null;
+          return;
+        }
+        get("/task-executions", { limit: 20 }, { silent: true })
+          .then((list) => {
+            if (Array.isArray(list)) setExecutions(list);
+          })
+          .catch(() => {});
+      }, 3000);
+    } else if (!hasActive && execPollRef.current) {
+      clearInterval(execPollRef.current);
+      execPollRef.current = null;
+    }
+  }, [executions]);
+
+  useEffect(() => () => {
+    if (execPollRef.current) clearInterval(execPollRef.current);
+  }, []);
+
   const loadAll = async () => {
     setLoading(true);
     try {
@@ -1383,12 +1418,32 @@ export default function Flow() {
     }
   };
 
+  // 执行单产物预览文案：结果 previewBody → 计划 previewBody → 结果摘要 → 计划步骤
+  const execPreviewLines = (e) => {
+    const plan = e.automation_plan || {};
+    const result = e.automation_result || {};
+    let body = result.previewBody || plan.previewBody;
+    if (!body && result.summary) body = [String(result.summary)];
+    if (!body && Array.isArray(plan.steps) && plan.steps.length) {
+      body = plan.steps.map((s) => `· ${s}`);
+    }
+    if (!body || (Array.isArray(body) && body.length === 0)) {
+      body = ["执行已完成，暂无详细产物。"];
+    }
+    return Array.isArray(body) ? body.map(String) : [String(body)];
+  };
+
   const acceptExec = async (id) => {
     if (execActingId) return;
     setExecActingId(`accept-${id}`);
     try {
-      await patch(`/task-executions/${id}`, { execution_status: "completed", rating: 5 });
+      // 验收：写结构化反馈，服务端同步把关联约定标为完成
+      await patch(`/task-executions/${id}`, {
+        execution_status: "completed",
+        user_feedback: { rating: 5, comment: "验收通过", rated_at: new Date().toISOString() }
+      });
       Taro.showToast({ title: "已验收通过", icon: "success" });
+      setReviewExec(null);
       loadAll();
     } catch (_err) {
       Taro.showToast({ title: "验收失败，请检查网络", icon: "none" });
@@ -1397,15 +1452,36 @@ export default function Flow() {
     }
   };
 
-  const approveExec = async (taskId) => {
-    if (execActingId || !taskId) return;
-    setExecActingId(`approve-${taskId}`);
+  // 有问题：只记录反馈，约定保持待处理，执行单仍待验收
+  const feedbackExec = async (e) => {
+    if (execActingId) return;
+    setExecActingId(`fb-${e.id}`);
     try {
-      await post("/functions/executeAutomation", { task_id: taskId, phase: "execute" });
+      await patch(`/task-executions/${e.id}`, {
+        user_feedback: { rating: 2, comment: "用户标记有问题", rated_at: new Date().toISOString() }
+      });
+      Taro.showToast({ title: "已记录反馈", icon: "success" });
+      setReviewExec(null);
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "操作失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  const approveExec = async (execItem) => {
+    if (execActingId || !execItem?.id) return;
+    setExecActingId(`approve-${execItem.id}`);
+    // 乐观置为「正在执行」，让用户立刻看到点击后的变化
+    setExecutions((prev) => prev.map((x) => (x.id === execItem.id ? { ...x, execution_status: "executing" } : x)));
+    try {
+      await post("/functions/executeAutomation", { execution_id: execItem.id, phase: "execute" });
       Taro.showToast({ title: "已批准执行", icon: "success" });
       loadAll();
     } catch (_err) {
       Taro.showToast({ title: "批准失败，请检查网络", icon: "none" });
+      loadAll();
     } finally {
       setExecActingId(null);
     }
@@ -3169,17 +3245,20 @@ export default function Flow() {
       waiting_confirm: THEME.heartDeep,
       running: THEME.primary,
       plan: THEME.primary,
+      failed: "#c0564f",
       completed: THEME.inkQuaternary
     };
 
     const statusHint = (s) =>
       s === "waiting_acceptance"
-        ? "已预执行，等你验收"
+        ? "已执行完成，点击查看并确认"
         : s === "waiting_confirm"
           ? "已有计划，等你批准"
           : s === "completed"
             ? "已自动完成"
-            : "正在执行…";
+            : s === "failed"
+              ? "执行失败，请稍后再试"
+              : "正在执行…";
 
     const acting = execActingId != null;
 
@@ -3217,12 +3296,12 @@ export default function Flow() {
               </View>
             </View>
             {e.execution_status === "waiting_acceptance" && (
-              <Text onClick={() => acceptExec(e.id)} style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}>
-                验收通过
+              <Text onClick={() => setReviewExec(e)} style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}>
+                查看并确认
               </Text>
             )}
             {e.execution_status === "waiting_confirm" && (
-              <Text onClick={() => approveExec(e.task_id)} style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}>
+              <Text onClick={() => approveExec(e)} style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}>
                 批准执行
               </Text>
             )}
@@ -3426,6 +3505,93 @@ export default function Flow() {
         </View>
       </ScrollView>
       {renderBottomBar()}
+
+      {/* 守护记录 · 查看并确认：展示执行产物，确认后约定完成 */}
+      {reviewExec && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+          onClick={() => setReviewExec(null)}
+        >
+          <View
+            style={{
+              width: "620rpx",
+              maxHeight: "80vh",
+              background: THEME.card,
+              borderRadius: "32rpx",
+              padding: "40rpx 36rpx",
+              display: "flex",
+              flexDirection: "column"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink }} numberOfLines={2}>
+              {reviewExec.task_title}
+            </Text>
+            <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginTop: "8rpx", marginBottom: "24rpx" }}>
+              守护执行 · 已完成，等你验收
+            </Text>
+            <ScrollView scrollY style={{ maxHeight: "46vh" }}>
+              <View
+                style={{
+                  border: `1rpx dashed ${THEME.primaryLight}`,
+                  background: "rgba(91,130,160,0.08)",
+                  padding: "24rpx",
+                  borderRadius: "12rpx"
+                }}
+              >
+                {execPreviewLines(reviewExec).map((line, i) => (
+                  <Text key={i} style={{ fontSize: "26rpx", color: THEME.inkSecondary || THEME.ink, lineHeight: "42rpx" }}>
+                    {line || "\u00A0"}
+                  </Text>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={{ display: "flex", gap: "16rpx", marginTop: "28rpx" }}>
+              <View
+                onClick={() => !execActingId && acceptExec(reviewExec.id)}
+                style={{
+                  flex: 1,
+                  padding: "20rpx 0",
+                  borderRadius: "12rpx",
+                  background: THEME.primary,
+                  textAlign: "center",
+                  opacity: execActingId ? 0.5 : 1
+                }}
+              >
+                <Text style={{ fontSize: "27rpx", color: "#fff" }}>验收，没问题</Text>
+              </View>
+              <View
+                onClick={() => !execActingId && feedbackExec(reviewExec)}
+                style={{
+                  flex: 1,
+                  padding: "20rpx 0",
+                  borderRadius: "12rpx",
+                  background: THEME.paper,
+                  border: `1rpx solid ${THEME.border}`,
+                  textAlign: "center",
+                  opacity: execActingId ? 0.5 : 1
+                }}
+              >
+                <Text style={{ fontSize: "27rpx", color: THEME.inkTertiary }}>有问题</Text>
+              </View>
+            </View>
+            <View onClick={() => setReviewExec(null)} style={{ marginTop: "20rpx", padding: "12rpx 0", textAlign: "center" }}>
+              <Text style={{ fontSize: "26rpx", color: THEME.inkQuaternary }}>我再想想</Text>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }

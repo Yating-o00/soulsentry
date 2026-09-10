@@ -52,23 +52,33 @@ async function callKimi(base44, prompt, response_json_schema, system_prompt, fil
     if (wantsJson) sys += `\n\n⚠️ 你必须返回一个【符合下方 Schema 的 JSON 实例对象】，而不是返回 Schema 本身。\n- 正确：直接输出 schema 中 properties 描述的真实字段及其真实取值，例如 schema 中要求 {subject,body} 就输出 {"subject":"...","body":"..."}。\n- 禁止：① 不要输出 {"type":"object","properties":{...}} 这种 schema 元描述；② 不要画蛇添足把所有字段塞到额外的 wrapper 对象里（如 {"plan":{...}}、{"data":{...}}），除非 schema 明确要求这种嵌套。\n\nSchema 参考：\n${JSON.stringify(response_json_schema)}`;
     const models = ["kimi-k2.6", "kimi-k3"];
     let resp = null, lastErr = '', lastStatus = 0;
+    outer:
     for (const m of models) {
       const body = { model: m, messages: [{ role: "system", content: sys }, { role: "user", content: prompt }], temperature: 1 };
       if (wantsJson) body.response_format = { type: "json_object" };
-      try {
-        // 剩余时间预算内中止，避免整个函数被平台 120s 掐断
-        const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), Math.max(10000, budgetLeft(startedAt)));
-        resp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-          body: JSON.stringify(body),
-          signal: ac.signal,
-        }).finally(() => clearTimeout(timer));
-        if (resp.ok) break;
-        lastErr = await resp.text(); lastStatus = resp.status;
-        if (resp.status !== 404 && resp.status !== 403) break;
-      } catch (e) { lastErr = e?.message || String(e); lastStatus = 0; }
+      // 上游 429/5xx（服务过载）时做 2 次指数退避重试，避免偶发 503 直接判失败
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          // 剩余时间预算内中止，避免整个函数被平台 120s 掐断
+          const ac = new AbortController();
+          const timer = setTimeout(() => ac.abort(), Math.max(10000, budgetLeft(startedAt)));
+          resp = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+            body: JSON.stringify(body),
+            signal: ac.signal,
+          }).finally(() => clearTimeout(timer));
+          if (resp.ok) break outer;
+          lastErr = await resp.text(); lastStatus = resp.status;
+          const retriable = resp.status === 429 || resp.status >= 500;
+          if (retriable && attempt < 2 && budgetLeft(startedAt) > 25000) {
+            await new Promise((r) => setTimeout(r, 1500 * Math.pow(2, attempt)));
+            continue;
+          }
+          if (resp.status === 404 || resp.status === 403) break; // 换下一个模型
+          break outer;
+        } catch (e) { lastErr = e?.message || String(e); lastStatus = 0; break; }
+      }
     }
     if (!resp || !resp.ok) throw new Error(`Kimi API ${lastStatus}: ${String(lastErr).slice(0, 200)}`);
     const j = await resp.json();
@@ -1901,6 +1911,9 @@ function humanizeError(msg) {
   const s = String(msg || '');
   if (/\b429\b|rate limit|too many requests|exceeded/i.test(s)) {
     return 'AI 服务当前排队繁忙（额度或频率受限），心栈稍后可以重试这条约定';
+  }
+  if (/\b(500|502|503|504)\b|service unavailable|bad gateway|overload|timeout|timed out/i.test(s)) {
+    return 'AI 服务暂时过载（上游 503），心栈已自动重试仍未成功，请稍等一两分钟再点一次「开始执行」';
   }
   return s || '执行失败';
 }

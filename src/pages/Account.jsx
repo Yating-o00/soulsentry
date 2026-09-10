@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight, Brain, AlertCircle } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight, Brain, AlertCircle, Globe } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
@@ -547,6 +547,56 @@ export default function Account() {
               executions={executions}
               relationships={relationships}
             />
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* 产品入口 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.195 }}
+      >
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-sky-50 to-blue-50">
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-sky-600" />
+              产品入口
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 pb-2">
+            {[
+              { key: "oversea", label: "海外版", sub: "www.xinzhan-soulsentry.com", url: "https://www.xinzhan-soulsentry.com" },
+              { key: "cn", label: "国内版", sub: "www.xinzhan-soulsentry.cn", url: "https://www.xinzhan-soulsentry.cn" },
+              { key: "miniprogram", label: "小程序", sub: "微信搜索「心栈SoulSentry」", url: "" }
+            ].map((p, idx) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => {
+                  if (p.url) {
+                    navigator.clipboard.writeText(p.url).then(
+                      () => toast.success("链接已复制"),
+                      () => toast.error("复制失败")
+                    );
+                  } else {
+                    toast.info("微信搜索小程序「心栈SoulSentry」");
+                  }
+                }}
+                className={`w-full flex items-center gap-3 px-2 py-3 text-left transition-colors hover:bg-slate-50 rounded-lg ${
+                  idx > 0 ? "border-t border-slate-100" : ""
+                }`}
+              >
+                <div className="w-9 h-9 rounded-xl bg-[#384877] flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-sm font-medium">{p.label.slice(0, 1)}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800">{p.label}</p>
+                  <p className="text-xs text-slate-400 truncate">{p.sub}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+              </button>
+            ))}
           </CardContent>
         </Card>
       </motion.div>

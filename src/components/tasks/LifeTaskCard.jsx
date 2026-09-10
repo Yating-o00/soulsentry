@@ -909,9 +909,14 @@ export default function LifeTaskCard({
                     {autoExec.previewTitle && (
                         <p className="mt-1.5 text-[11px] text-slate-500 truncate leading-relaxed">
                             {autoExec.previewTitle}
-                            {Array.isArray(autoExec.previewBody) && autoExec.previewBody.length > 0 && (
-                                <span className="text-slate-400"> · {autoExec.previewBody[0]}</span>
-                            )}
+                            {Array.isArray(autoExec.previewBody) && autoExec.previewBody.length > 0 && (() => {
+                                // previewBody 元素可能是 AI 生成的对象，归一化成文本再展示
+                                const first = autoExec.previewBody[0];
+                                const text = typeof first === "string"
+                                    ? first
+                                    : [first?.title, first?.detail || first?.text || first?.content].filter(Boolean).join("：");
+                                return text ? <span className="text-slate-400"> · {text}</span> : null;
+                            })()}
                         </p>
                     )}
 

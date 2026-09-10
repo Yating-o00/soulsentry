@@ -12,6 +12,22 @@ function toChinaIso(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:00+08:00`;
 }
 
+// previewBody 由 AI 生成，元素可能是对象（如 {title, detail}），统一归一化成文本，避免 [object Object]
+function previewLineText(item) {
+  if (item == null) return "";
+  if (typeof item === "string") return item;
+  if (typeof item === "number" || typeof item === "boolean") return String(item);
+  if (typeof item === "object") {
+    const o = item;
+    const title = o.title || o.name || o.label || o.heading || o.step || "";
+    const detail = o.detail || o.text || o.content || o.body || o.desc || o.description || o.summary || "";
+    if (title && detail) return `${title}：${detail}`;
+    if (title || detail) return String(title || detail);
+    return Object.values(o).map(previewLineText).filter(Boolean).join(" · ");
+  }
+  return String(item);
+}
+
 function computeSnoozeTime(when) {
   const now = new Date();
   const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -230,19 +246,22 @@ export function ExecPreview({ task, analysis, onClose, onApprove, onFeedback }) 
               borderRadius: "8rpx",
             }}
           >
-            {(ax.previewBody || []).map((line, i) => (
-              <Text
-                key={i}
-                style={{
-                  fontSize: line.startsWith("——") ? "22rpx" : "26rpx",
-                  color: line.startsWith("——") ? theme.inkTertiary : theme.inkSecondary,
-                  lineHeight: "40rpx",
-                  marginTop: line.startsWith("——") ? "20rpx" : "0",
-                }}
-              >
-                {line || "\u00A0"}
-              </Text>
-            ))}
+            {(ax.previewBody || []).map((raw, i) => {
+              const line = previewLineText(raw);
+              return (
+                <Text
+                  key={i}
+                  style={{
+                    fontSize: line.startsWith("——") ? "22rpx" : "26rpx",
+                    color: line.startsWith("——") ? theme.inkTertiary : theme.inkSecondary,
+                    lineHeight: "40rpx",
+                    marginTop: line.startsWith("——") ? "20rpx" : "0",
+                  }}
+                >
+                  {line || "\u00A0"}
+                </Text>
+              );
+            })}
           </View>
 
           {sent ? (

@@ -1419,18 +1419,35 @@ export default function Flow() {
   };
 
   // 执行单产物预览文案：结果 previewBody → 计划 previewBody → 结果摘要 → 计划步骤
+  // previewBody 是 AI 写入的结构，元素可能是对象，统一归一化成文本行
+  const execLineText = (item) => {
+    if (item == null) return "";
+    if (typeof item === "string") return item;
+    if (typeof item === "number" || typeof item === "boolean") return String(item);
+    if (typeof item === "object") {
+      const o = item;
+      const title = o.title || o.name || o.label || o.heading || o.step || "";
+      const detail = o.detail || o.text || o.content || o.body || o.desc || o.description || o.summary || "";
+      if (title && detail) return `${title}：${detail}`;
+      if (title || detail) return String(title || detail);
+      // 兜底：拼接所有叶子文本
+      return Object.values(o).map(execLineText).filter(Boolean).join(" · ");
+    }
+    return String(item);
+  };
+
   const execPreviewLines = (e) => {
     const plan = e.automation_plan || {};
     const result = e.automation_result || {};
     let body = result.previewBody || plan.previewBody;
-    if (!body && result.summary) body = [String(result.summary)];
+    if (!body && result.summary) body = [result.summary];
     if (!body && Array.isArray(plan.steps) && plan.steps.length) {
-      body = plan.steps.map((s) => `· ${s}`);
+      body = plan.steps;
     }
-    if (!body || (Array.isArray(body) && body.length === 0)) {
-      body = ["执行已完成，暂无详细产物。"];
-    }
-    return Array.isArray(body) ? body.map(String) : [String(body)];
+    const lines = (Array.isArray(body) ? body : [body])
+      .map(execLineText)
+      .filter((s) => s && s.trim());
+    return lines.length > 0 ? lines : ["执行已完成，暂无详细产物。"];
   };
 
   const acceptExec = async (id) => {

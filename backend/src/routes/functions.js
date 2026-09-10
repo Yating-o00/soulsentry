@@ -216,6 +216,89 @@ function computeTrustScores(executions) {
   return scores;
 }
 
+// 从执行结果 result.data 提取「可验收的产物文案」（结果优先）；
+// 只有计划没有结果时，才退回计划步骤（动作）作为占位
+function buildExecPreview(automationType, plan, result) {
+  const lines = [];
+  const push = (s) => {
+    if (s == null) return;
+    const t = String(s).trim();
+    if (t) lines.push(t);
+  };
+  if (result && typeof result.preview === "string" && result.preview.trim()) {
+    push(`—— ${result.preview.trim()}`);
+  }
+  const data = result && isPlainObject(result.data) ? result.data : {};
+  const str = (v) => (v == null ? "" : String(v));
+  switch (automationType) {
+    case "email_draft":
+      if (data.to) push(`收件人：${data.to}`);
+      if (data.cc) push(`抄送：${data.cc}`);
+      push(`主题：${data.subject}`);
+      push(data.body);
+      break;
+    case "summary_note":
+      push(data.title);
+      push(data.content);
+      (Array.isArray(data.key_points) ? data.key_points : []).slice(0, 7).forEach((k) => push(`· ${str(k)}`));
+      break;
+    case "web_research":
+      push(data.title);
+      push(data.executive_summary);
+      (Array.isArray(data.key_findings) ? data.key_findings : []).slice(0, 6).forEach((k) =>
+        push(`· ${typeof k === "string" ? k : str(k?.finding || k?.text || k?.title)}`)
+      );
+      (Array.isArray(data.recommendations) ? data.recommendations : []).slice(0, 4).forEach((r) => push(`→ ${str(r)}`));
+      if (data.file_url) push(`📎 文件：${data.file_url}`);
+      break;
+    case "office_doc":
+    case "ppt_doc":
+      push(data.title);
+      if (data.subtitle) push(data.subtitle);
+      (Array.isArray(data.sections) ? data.sections : []).slice(0, 8).forEach((s) =>
+        push(`· ${str(s?.heading || s?.title)}${s?.body ? "：" + str(s.body) : ""}`)
+      );
+      (Array.isArray(data.slides) ? data.slides : []).slice(0, 10).forEach((s, i) =>
+        push(`${i + 1}. ${str(s?.title)}${s?.bullets ? " — " + (Array.isArray(s.bullets) ? s.bullets.map(str).join("；") : str(s.bullets)) : ""}`)
+      );
+      if (data.file_url) push(`📎 文件：${data.file_url}`);
+      break;
+    case "calendar_event":
+      push(data.title);
+      if (data.start_time) push(`时间：${str(data.start_time)}${data.end_time ? " ~ " + str(data.end_time) : ""}`);
+      if (data.location) push(`地点：${str(data.location)}`);
+      if (Array.isArray(data.participants) && data.participants.length) push(`参与人：${data.participants.map(str).join("、")}`);
+      push(data.description);
+      break;
+    case "ledger_organize":
+      (Array.isArray(data.entries) ? data.entries : []).slice(0, 12).forEach((en) =>
+        push([en?.date, en?.category, en?.item || en?.note, en?.amount].map(str).filter(Boolean).join(" "))
+      );
+      if (isPlainObject(data.stats)) push(`—— 收入 ${str(data.stats.total_income ?? "-")} · 支出 ${str(data.stats.total_expense ?? "-")}`);
+      break;
+    case "file_organize":
+      push(data.summary);
+      (Array.isArray(result?.diff) ? result.diff : []).slice(0, 10).forEach((d) => push(`· ${str(d?.detail || d?.target)}`));
+      break;
+    default:
+      break;
+  }
+  // 兜底：该类型没有专属渲染时，平铺 data 的文本字段
+  if (lines.filter((l) => !l.startsWith("——")).length === 0) {
+    Object.values(data).forEach((v) => {
+      if (typeof v === "string" && v.trim()) push(v);
+    });
+  }
+  // 最后兜底：计划步骤（动作），仅在完全没有结果产物时展示
+  if (lines.length === 0) {
+    (Array.isArray(plan?.steps) ? plan.steps : []).slice(0, 8).forEach((s) => {
+      push(typeof s === "string" ? s : str(s?.name && s?.detail ? `${s.name}：${s.detail}` : s?.name || s?.detail));
+    });
+  }
+  if (lines.length === 0) push("心栈已根据约定内容生成执行方案，验收后即可自动完成。");
+  return lines;
+}
+
 function buildAutoExec(task, executions, trustScores) {
   const done = task.status === "completed" || task.status === "done" || task.status === "archived";
   if (done) return undefined;
@@ -262,18 +345,8 @@ function buildAutoExec(task, executions, trustScores) {
   const plan = isPlainObject(exec.automation_plan) ? exec.automation_plan : {};
   const result = isPlainObject(exec.automation_result) ? exec.automation_result : {};
   const previewTitle = `${label} · ${state === "ready" ? "已备好，待你验收" : state === "confirm" ? "待你批准" : state === "running" ? "AI 生成中" : "信任度不足，已转人工"}`;
-  const previewBody = [];
-  if (Array.isArray(plan.previewBody) && plan.previewBody.length > 0) {
-    previewBody.push(...plan.previewBody);
-  } else if (Array.isArray(result.previewBody) && result.previewBody.length > 0) {
-    previewBody.push(...result.previewBody);
-  } else if (Array.isArray(plan.steps) && plan.steps.length > 0) {
-    previewBody.push(...plan.steps.map((s) => (typeof s === "string" ? s : s.detail || s.text || s.name || "")).filter(Boolean));
-  } else if (result.summary) {
-    previewBody.push(String(result.summary));
-  } else {
-    previewBody.push("心栈已根据约定内容生成执行方案，验收后即可自动完成。");
-  }
+  // 结果优先：展示执行产物（草稿正文/纪要/账目等），不再把计划动作当成验收内容
+  const previewBody = buildExecPreview(kind, plan, result);
 
   return {
     kind,

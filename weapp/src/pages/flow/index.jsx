@@ -1418,8 +1418,8 @@ export default function Flow() {
     }
   };
 
-  // 执行单产物预览文案：结果 previewBody → 计划 previewBody → 结果摘要 → 计划步骤
-  // previewBody 是 AI 写入的结构，元素可能是对象，统一归一化成文本行
+  // 执行单产物预览：结果优先（草稿正文/纪要/账目等可验收的产物），
+  // 只有计划没有结果时才退回计划步骤（动作）占位；previewBody 是 AI 写入的结构，元素可能是对象
   const execLineText = (item) => {
     if (item == null) return "";
     if (typeof item === "string") return item;
@@ -1439,14 +1439,86 @@ export default function Flow() {
   const execPreviewLines = (e) => {
     const plan = e.automation_plan || {};
     const result = e.automation_result || {};
-    let body = result.previewBody || plan.previewBody;
-    if (!body && result.summary) body = [result.summary];
-    if (!body && Array.isArray(plan.steps) && plan.steps.length) {
-      body = plan.steps;
+    const data = result.data && typeof result.data === "object" ? result.data : {};
+    const lines = [];
+    const push = (s) => {
+      if (s == null) return;
+      const t = execLineText(s).trim();
+      if (t) lines.push(t);
+    };
+
+    if (typeof result.preview === "string" && result.preview.trim()) {
+      push(`—— ${result.preview.trim()}`);
     }
-    const lines = (Array.isArray(body) ? body : [body])
-      .map(execLineText)
-      .filter((s) => s && s.trim());
+
+    switch (e.automation_type) {
+      case "email_draft":
+        if (data.to) push(`收件人：${data.to}`);
+        if (data.cc) push(`抄送：${data.cc}`);
+        push(`主题：${data.subject}`);
+        push(data.body);
+        break;
+      case "summary_note":
+        push(data.title);
+        push(data.content);
+        (Array.isArray(data.key_points) ? data.key_points : []).slice(0, 7).forEach((k) => push(`· ${k}`));
+        break;
+      case "web_research":
+        push(data.title);
+        push(data.executive_summary);
+        (Array.isArray(data.key_findings) ? data.key_findings : []).slice(0, 6).forEach((k) =>
+          push(`· ${typeof k === "string" ? k : k?.finding || k?.text || k?.title || ""}`)
+        );
+        (Array.isArray(data.recommendations) ? data.recommendations : []).slice(0, 4).forEach((r) => push(`→ ${r}`));
+        if (data.file_url) push(`📎 文件：${data.file_url}`);
+        break;
+      case "office_doc":
+      case "ppt_doc":
+        push(data.title);
+        if (data.subtitle) push(data.subtitle);
+        (Array.isArray(data.sections) ? data.sections : []).slice(0, 8).forEach((s) =>
+          push(`· ${s?.heading || s?.title || ""}${s?.body ? "：" + s.body : ""}`)
+        );
+        (Array.isArray(data.slides) ? data.slides : []).slice(0, 10).forEach((s, i) =>
+          push(`${i + 1}. ${s?.title || ""}${s?.bullets ? " — " + (Array.isArray(s.bullets) ? s.bullets.map(execLineText).join("；") : s.bullets) : ""}`)
+        );
+        if (data.file_url) push(`📎 文件：${data.file_url}`);
+        break;
+      case "calendar_event":
+        push(data.title);
+        if (data.start_time) push(`时间：${data.start_time}${data.end_time ? " ~ " + data.end_time : ""}`);
+        if (data.location) push(`地点：${data.location}`);
+        if (Array.isArray(data.participants) && data.participants.length) push(`参与人：${data.participants.map(execLineText).join("、")}`);
+        push(data.description);
+        break;
+      case "ledger_organize":
+        (Array.isArray(data.entries) ? data.entries : []).slice(0, 12).forEach((en) =>
+          push([en?.date, en?.category, en?.item || en?.note, en?.amount].map(execLineText).filter(Boolean).join(" "))
+        );
+        if (data.stats && typeof data.stats === "object") {
+          push(`—— 收入 ${data.stats.total_income ?? "-"} · 支出 ${data.stats.total_expense ?? "-"}`);
+        }
+        break;
+      case "file_organize":
+        push(data.summary);
+        (Array.isArray(result.diff) ? result.diff : []).slice(0, 10).forEach((d) => push(`· ${d?.detail || d?.target || ""}`));
+        break;
+      default:
+        break;
+    }
+
+    // 兜底：该类型没有专属渲染时，平铺 data 的文本字段
+    if (lines.filter((l) => !l.startsWith("——")).length === 0) {
+      Object.values(data).forEach((v) => {
+        if (typeof v === "string" && v.trim()) push(v);
+      });
+    }
+    // 最后兜底：计划步骤（动作），仅在完全没有结果产物时展示
+    if (lines.length === 0) {
+      (Array.isArray(plan.steps) ? plan.steps : []).slice(0, 8).forEach((s) => {
+        push(typeof s === "string" ? s : s?.name && s?.detail ? `${s.name}：${s.detail}` : s?.name || s?.detail || "");
+      });
+    }
     return lines.length > 0 ? lines : ["执行已完成，暂无详细产物。"];
   };
 

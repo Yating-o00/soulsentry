@@ -30,7 +30,7 @@ const BADGE_FALLBACKS = [
 const PLATFORMS = [
   { key: "web_oversea", label: "海外版", sub: "https://www.xinzhan-soulsentry.com", url: "https://www.xinzhan-soulsentry.com" },
   { key: "web_cn", label: "国内版", sub: "https://www.xinzhan-soulsentry.cn", url: "https://www.xinzhan-soulsentry.cn" },
-  { key: "miniprogram", label: "小程序", sub: "搜索「转眼科技」" }
+  { key: "miniprogram", label: "小程序", sub: "搜索「转眼科技」或「心栈SoulSentry」" }
 ];
 
 function pad(n) {
@@ -748,7 +748,7 @@ export default function Account() {
                   key={p.key}
                   onClick={() => {
                     if (p.url) Taro.setClipboardData({ data: p.url });
-                    else Taro.showToast({ title: "搜索「转眼科技」", icon: "none" });
+                    else Taro.showToast({ title: "搜索「转眼科技」或「心栈SoulSentry」", icon: "none" });
                   }}
                   style={{
                     display: "flex",

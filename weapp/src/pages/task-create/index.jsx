@@ -144,6 +144,8 @@ export default function TaskCreate() {
   const [rawInput, setRawInput] = useState("");
   const [parsedMetadata, setParsedMetadata] = useState(null);
   const [parsedRepeat, setParsedRepeat] = useState(null);
+  const [parsedSubtasks, setParsedSubtasks] = useState([]);
+  const [newParsedSubtaskText, setNewParsedSubtaskText] = useState("");
   const [loading, setLoading] = useState(false);
   const [createdTask, setCreatedTask] = useState(null);
   const [posterUrl, setPosterUrl] = useState("");
@@ -327,28 +329,62 @@ export default function TaskCreate() {
     });
   };
 
+  // 逐项独立保存，单个失败不影响其他；返回未保存成功的子约定标题
   const saveSubtasks = async () => {
-    for (const s of subtaskList) {
-      if (s._isDeleted) {
-        if (!s._isNew) {
-          await del(`/tasks/${s.id}`);
-        }
-        continue;
+    const failed = [];
+
+    // 1. 先删（二级在前，避免父已删导致子删除 404 中断后续）
+    for (const s of [...subtaskList].reverse().filter((x) => x._isDeleted && !x._isNew)) {
+      try {
+        await del(`/tasks/${s.id}`);
+      } catch (e) {
+        console.error("delete subtask failed", s.id, e);
+        failed.push(s.title);
       }
-      if (s._isNew) {
-        await post("/tasks", {
+    }
+    // 2. 新建一级子约定，记录真实 id 供二级挂接
+    const idMap = {};
+    for (const s of subtaskList.filter((x) => x._isNew && !x._isDeleted && x.parent_task_id === editId)) {
+      try {
+        const created = await post("/tasks", {
           title: s.title.trim(),
-          parent_task_id: s.parent_task_id,
+          parent_task_id: editId,
           priority: s.priority,
           category: s.category,
           status: s.status
         });
-        continue;
-      }
-      if (s._isModified) {
-        await patch(`/tasks/${s.id}`, { title: s.title.trim() });
+        if (created?.id) idMap[s.id] = created.id;
+      } catch (e) {
+        console.error("create top subtask failed", e);
+        failed.push(s.title);
       }
     }
+    // 3. 新建二级子约定（父级是新建一级时用真实 id，挂不上时跳过而不是中断）
+    for (const s of subtaskList.filter((x) => x._isNew && !x._isDeleted && x.parent_task_id !== editId)) {
+      const realParent = idMap[s.parent_task_id] || s.parent_task_id;
+      try {
+        await post("/tasks", {
+          title: s.title.trim(),
+          parent_task_id: realParent,
+          priority: s.priority,
+          category: s.category,
+          status: s.status
+        });
+      } catch (e) {
+        console.error("create child subtask failed", e);
+        failed.push(s.title);
+      }
+    }
+    // 4. 修改已有
+    for (const s of subtaskList.filter((x) => !x._isNew && !x._isDeleted && x._isModified)) {
+      try {
+        await patch(`/tasks/${s.id}`, { title: s.title.trim() });
+      } catch (e) {
+        console.error("update subtask failed", s.id, e);
+        failed.push(s.title);
+      }
+    }
+    return failed;
   };
 
   const buildLocalAnalysis = () => {
@@ -461,7 +497,10 @@ export default function TaskCreate() {
       if (isEdit && editId) {
         await patch(`/tasks/${editId}`, payload);
         if (subtaskList.length > 0) {
-          await saveSubtasks();
+          const failedSubs = await saveSubtasks();
+          if (failedSubs.length > 0) {
+            Taro.showToast({ title: `部分子约定未保存：${failedSubs[0]}等`, icon: "none", duration: 2500 });
+          }
         }
         Taro.showToast({ title: "更新成功", icon: "success" });
         setTimeout(() => Taro.navigateBack(), 500);
@@ -470,6 +509,21 @@ export default function TaskCreate() {
 
       const task = await post("/tasks", payload);
       setCreatedTask(task);
+
+      // 确认页编辑过的子约定随约定一并创建
+      if (parsedSubtasks.length > 0) {
+        for (const st of parsedSubtasks) {
+          const t = (st.title || "").trim();
+          if (!t) continue;
+          await post("/tasks", {
+            title: t.slice(0, 120),
+            parent_task_id: task.id,
+            priority: payload.priority,
+            category: payload.category,
+            status: "pending"
+          }).catch(() => {});
+        }
+      }
 
       try {
         const share = await post(`/public/share/generate/task/${task.id}`);
@@ -783,6 +837,21 @@ export default function TaskCreate() {
       const task = await post("/tasks", payload);
       setCreatedTask(task);
 
+      // 语音/直达创建同样带上 AI 拆解的子约定
+      if (Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0) {
+        for (const st of parsed.subtasks) {
+          const t = String(st || "").trim();
+          if (!t) continue;
+          await post("/tasks", {
+            title: t.slice(0, 120),
+            parent_task_id: task.id,
+            priority: payload.priority,
+            category: payload.category,
+            status: "pending"
+          }).catch(() => {});
+        }
+      }
+
       try {
         const share = await post(`/public/share/generate/task/${task.id}`);
         setShareToken(share.token || "");
@@ -864,6 +933,15 @@ export default function TaskCreate() {
         repeat_rule: parsed.repeat_rule,
         custom_recurrence: parsed.custom_recurrence || undefined
       });
+    }
+
+    // 子约定：AI 拆解的步骤清单，确认页可编辑
+    if (Array.isArray(parsed.subtasks)) {
+      setParsedSubtasks(
+        parsed.subtasks
+          .map((s) => ({ title: String(s || "").slice(0, 60) }))
+          .filter((s) => s.title.trim())
+      );
     }
 
     // 提示
@@ -1199,6 +1277,50 @@ export default function TaskCreate() {
           />
         </View>
       </SectionCard>
+
+      {parsedSubtasks.length > 0 && (
+        <SectionCard title="子约定" hint="AI 拆解出的步骤，可以继续修改或增删">
+          {parsedSubtasks.map((st, idx) => (
+            <View key={idx} style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
+              <Input
+                className="ss-input"
+                style={{ flex: 1, height: "68rpx", marginRight: "12rpx" }}
+                value={st.title}
+                onInput={(e) =>
+                  setParsedSubtasks((prev) => prev.map((x, i) => (i === idx ? { ...x, title: e.detail.value } : x)))
+                }
+              />
+              <View
+                onClick={() => setParsedSubtasks((prev) => prev.filter((_, i) => i !== idx))}
+                style={{ width: "44rpx", height: "44rpx", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <Text style={{ color: "#e53935", fontSize: "36rpx", lineHeight: "36rpx" }}>×</Text>
+              </View>
+            </View>
+          ))}
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <Input
+              className="ss-input"
+              style={{ flex: 1, height: "68rpx", marginRight: "12rpx" }}
+              placeholder="添加一个子约定"
+              value={newParsedSubtaskText}
+              onInput={(e) => setNewParsedSubtaskText(e.detail.value)}
+            />
+            <Button
+              className="ss-btn ss-btn-sm"
+              style={{ height: "56rpx", lineHeight: "56rpx" }}
+              onClick={() => {
+                const t = newParsedSubtaskText.trim();
+                if (!t) return;
+                setParsedSubtasks((prev) => [...prev, { title: t.slice(0, 60) }]);
+                setNewParsedSubtaskText("");
+              }}
+            >
+              添加
+            </Button>
+          </View>
+        </SectionCard>
+      )}
 
       <SectionCard title="属性">
         <View style={{ display: "flex", gap: "16rpx" }}>

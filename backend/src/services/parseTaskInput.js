@@ -347,6 +347,29 @@ function parseExplicitTimeLocal(text, baseDate = new Date()) {
   return null;
 }
 
+// 本地子约定兜底：序号列举（1. xxx 2、xxx）或步骤词（先…然后…最后…）
+function parseSubtasksLocal(text) {
+  const t = String(text || "").trim();
+  if (!t) return [];
+  const clean = (s) => s.replace(/^[，,、。.;；:：\s]+|[，,、。.;；:：\s]+$/g, "").trim();
+
+  const numbered = [...t.matchAll(/(?:^|[\s:：,，、;；])(\d{1,2}[.、)）])\s*(.{2,30}?)(?=\s*\d{1,2}[.、)）]|$)/g)]
+    .map((m) => clean(m[2]))
+    .filter((s) => s.length >= 2 && s.length <= 30);
+  if (numbered.length >= 2) return numbered.slice(0, 8);
+
+  if (!/(先|然后|接着|之后|随后|最后|第[一二三四五六七八1-8]步)/.test(t)) return [];
+  let parts = t
+    .split(/然后|接着|之后|随后|最后|第[一二三四五六七八1-8]步|先|[、，;；]/)
+    .map((s) => clean(s).replace(/^(再|还|并|然后)\s*/, ""))
+    .filter((s) => s.length >= 2 && s.length <= 30);
+  // 首段多半是时间/主题状语（"下周三前…""明天下午3点…"），含时间词则丢弃
+  if (parts.length && /(\d{1,2}\s*[点:：]|\d{1,2}\s*[日号天月周]|周[一二三四五六日天]|星期[一二三四五六日天]|礼拜[一二三四五六日天]|明天|今天|后天|上午|下午|晚上|早上|今晚)/.test(parts[0])) {
+    parts = parts.slice(1);
+  }
+  return parts.slice(0, 8);
+}
+
 export async function parseTaskInput({ input, date, savedLocations = [], currentCoords = null, habitProfileText = "" }) {
   const now = new Date();
   const fallbackDate = date || toYmd(now);
@@ -377,6 +400,11 @@ export async function parseTaskInput({ input, date, savedLocations = [], current
       priority: { type: "string", enum: ["urgent", "high", "medium", "low"], description: "优先级" },
       category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"], description: "分类" },
       repeat_rule: { type: "string", enum: ["none", "daily", "weekly", "monthly", "custom"], description: "重复规则：每天/每日→daily，每周X/工作日/周末→weekly，每月X号→monthly，每隔N天→custom，无重复→none" },
+      subtasks: {
+        type: "array",
+        description: "子约定/步骤清单：输入里用'先…然后…最后…'、序号、顿号列举的多个待办步骤，最多 8 个；没有则返回空数组",
+        items: { type: "string", description: "单个步骤，≤30字" }
+      },
       custom_recurrence: {
         type: "object",
         description: "重复细节，仅当 repeat_rule 不是 none 时给出",
@@ -426,7 +454,8 @@ ${habitText}
 5. 从输入中提取地点（location）、地点类型（location_type）和事件类型（event_type）。
 6. 如果用户没有明确说地点，请使用上面给出的"地点候选"；如果候选也没有，返回空字符串。
 7. 如果输入包含重复语义（"每天/每日/每晚"、"每周三/每周三五/工作日/周末"、"每月15号"、"每隔3天"），repeat_rule 填 daily/weekly/monthly/custom，reminder_time 用今天或明天该时刻（今天的已过则取明天），custom_recurrence 填具体星期几/几号/间隔；没有重复语义则 repeat_rule 填 none。
-8. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
+8. 如果输入包含多个步骤/子约定（"先…然后…最后…"、"1. … 2. …"、顿号/分号列举的动作），提取到 subtasks，每项≤30字、最多8个；只有一个整体约定则返回空数组。
+9. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
         systemPrompt: "你是 SoulSentry 的约定解析器。把中文自然语言输入转成可创建的约定字段。严格返回 JSON。",
         responseJsonSchema: schema,
         temperature: 0.2
@@ -531,6 +560,7 @@ ${habitText}
     ...(recurrence
       ? { repeat_rule: recurrence.repeat_rule, custom_recurrence: recurrence.custom_recurrence }
       : {}),
+    subtasks: parseSubtasksLocal(text).length ? parseSubtasksLocal(text) : (Array.isArray(kimiResult?.subtasks) ? kimiResult.subtasks.map(String).map((s) => s.slice(0, 30)).filter(Boolean).slice(0, 8) : []),
     time_source: chosen.source,
     spatiotemporal: {
       ...spatiotemporal.context_at_creation,

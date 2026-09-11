@@ -256,15 +256,37 @@ export default function TaskCreate() {
     );
   };
 
+  // 删除子约定：确认后立即从服务端删除并移出列表（本地未落库的直接移除）
   const deleteSubtask = (id) => {
-    setSubtaskList((prev) =>
-      prev.map((s) => {
-        if (s.id === id) return { ...s, _isDeleted: true };
-        // 删除父约定时，同步删除其下所有二级子约定
-        if (s.parent_task_id === id) return { ...s, _isDeleted: true };
-        return s;
-      })
-    );
+    const target = subtaskList.find((s) => s.id === id);
+    if (!target) return;
+    Taro.showModal({
+      title: "删除子约定",
+      content: `确定删除「${target.title || "这条子约定"}」吗？`,
+      confirmColor: "#e53935",
+      success: (res) => {
+        if (!res.confirm) return;
+        // 本地新增、还没落库的：直接从列表移除（含其二级）
+        if (target._isNew) {
+          setSubtaskList((prev) => prev.filter((s) => s.id !== id && s.parent_task_id !== id));
+          return;
+        }
+        // 已落库的：立即删除（先二级后父级），成功后移出列表
+        const ids = [id, ...subtaskList.filter((s) => s.parent_task_id === id).map((s) => s.id)];
+        (async () => {
+          try {
+            for (const sid of ids.reverse()) {
+              await del(`/tasks/${sid}`);
+            }
+            setSubtaskList((prev) => prev.filter((s) => !ids.includes(s.id)));
+            Taro.showToast({ title: "已删除", icon: "success" });
+          } catch (e) {
+            console.error("delete subtask failed", id, e);
+            Taro.showToast({ title: "删除失败，请重试", icon: "none" });
+          }
+        })();
+      }
+    });
   };
 
   const restoreSubtask = (id) => {
@@ -1278,9 +1300,11 @@ export default function TaskCreate() {
         </View>
       </SectionCard>
 
-      {parsedSubtasks.length > 0 && (
-        <SectionCard title="子约定" hint="AI 拆解出的步骤，可以继续修改或增删">
-          {parsedSubtasks.map((st, idx) => (
+      <SectionCard title="子约定" hint="AI 拆解出的步骤（没有可手动添加），可以继续修改或增删">
+        {parsedSubtasks.length === 0 && (
+          <View className="ss-empty" style={{ padding: "8rpx 0 16rpx" }}>AI 没有拆解出步骤，可以直接添加</View>
+        )}
+        {parsedSubtasks.map((st, idx) => (
             <View key={idx} style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
               <Input
                 className="ss-input"
@@ -1320,7 +1344,6 @@ export default function TaskCreate() {
             </Button>
           </View>
         </SectionCard>
-      )}
 
       <SectionCard title="属性">
         <View style={{ display: "flex", gap: "16rpx" }}>

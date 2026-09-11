@@ -50,6 +50,14 @@ const vaultItemInputSchema = z.object({
   password: z.string().min(4).max(40)
 });
 
+vaultRouter.get("/status", async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    select: { vaultPwdHash: true }
+  });
+  return res.json({ vault_set: Boolean(user?.vaultPwdHash) });
+});
+
 vaultRouter.get("/", async (req, res) => {
   const items = await prisma.vaultItem.findMany({
     where: { userId: req.user.id },

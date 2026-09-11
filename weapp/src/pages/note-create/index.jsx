@@ -41,14 +41,10 @@ export default function NoteCreate() {
 
   const checkVaultStatus = async () => {
     try {
-      await get("/vault", {}, { silent: true });
-      setVaultStep("unlock");
+      const status = await get("/vault/status", {}, { silent: true });
+      setVaultStep(status?.vault_set ? "unlock" : "setup");
     } catch (err) {
-      if (String(err?.message || "").includes("VAULT_NOT_SET")) {
-        setVaultStep("setup");
-      } else {
-        setVaultStep("unlock");
-      }
+      setVaultStep("unlock");
     }
   };
 
@@ -126,7 +122,10 @@ export default function NoteCreate() {
     } catch (err) {
       console.error("saveToVault failed", err);
       const msg = String(err?.message || "");
-      Taro.showToast({ title: msg.includes("WRONG_PASSWORD") ? "密码错误" : "保存失败", icon: "none" });
+      Taro.showToast({
+        title: msg.includes("WRONG_PASSWORD") ? "密码错误" : msg.includes("VAULT_NOT_SET") ? "请先设置保险柜密码" : "保存失败",
+        icon: "none"
+      });
     } finally {
       setLoading(false);
     }

@@ -19,14 +19,10 @@ export default function VaultSheet({ visible, onClose, theme }) {
   const checkStatus = async () => {
     setLoading(true);
     try {
-      await get("/vault", {}, { silent: true });
-      setStatus("unlock");
+      const status = await get("/vault/status", {}, { silent: true });
+      setStatus(status?.vault_set ? "unlock" : "setup");
     } catch (err) {
-      if (String(err?.message || "").includes("VAULT_NOT_SET")) {
-        setStatus("setup");
-      } else {
-        setStatus("unlock");
-      }
+      setStatus("unlock");
     } finally {
       setLoading(false);
     }

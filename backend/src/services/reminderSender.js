@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { sendPushNotification, isWebPushConfigured } from "../lib/webPush.js";
 import { sendWechatSubscribeMessage } from "../lib/wechatSubscribeMessage.js";
+import { computeNextReminderTime } from "../lib/recurrence.js";
 
 function getUserExtraFields(preferences) {
   if (!preferences?.metadata || typeof preferences.metadata !== "object") return {};
@@ -194,11 +195,20 @@ export async function sendDueReminders() {
     else skipped += 1;
 
     // 无论发送成功与否，都更新 metadata 里的 reminder_sent_at，避免同一分钟重复尝试
+    // 重复约定（每天/每周/每月）：同时把 reminderTime/endTime 推进到下一周期
+    const nextReminder = ["daily", "weekly", "monthly", "custom"].includes(extraFields.repeat_rule)
+      ? computeNextReminderTime(task.reminderTime, extraFields.repeat_rule, extraFields.custom_recurrence, now)
+      : null;
     try {
-      await prisma.task.update({
-        where: { id: task.id },
-        data: { metadata: buildTaskMetadataWithExtra(task, { reminder_sent_at: now.toISOString() }) },
-      });
+      const data = { metadata: buildTaskMetadataWithExtra(task, { reminder_sent_at: now.toISOString() }) };
+      if (nextReminder) {
+        data.reminderTime = nextReminder;
+        if (task.endTime) {
+          data.endTime = new Date(task.endTime.getTime() + (nextReminder.getTime() - task.reminderTime.getTime()));
+        }
+        console.log(`[reminderSender] task=${task.id} 重复约定已推进到下一周期 ${nextReminder.toISOString()}`);
+      }
+      await prisma.task.update({ where: { id: task.id }, data });
     } catch (updateErr) {
       console.warn(`[reminderSender] task=${task.id} failed to update reminder_sent_at:`, updateErr);
     }

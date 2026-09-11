@@ -5,6 +5,7 @@ import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { parseTaskInput } from "../services/parseTaskInput.js";
+import { recurrenceLabel } from "../lib/recurrence.js";
 import { getUserHabitProfile } from "../services/habitProfile.js";
 import { delegateAutoExecute } from "../services/autoAutomation.js";
 import { buildHeartSignFallback, detectVault, detectCrisis, looksLikeLedger, parseLedgerEntries } from "../services/heartSignFallback.js";
@@ -169,6 +170,11 @@ function getTaskRecurringLabel(task) {
   const meta = isPlainObject(task.metadata) ? task.metadata : {};
   const extra = isPlainObject(meta._extraFields) ? meta._extraFields : {};
   if (extra.recurring || meta.recurring) return String(extra.recurring || meta.recurring);
+  // 结构化重复规则（每天/每周/每月）优先于标题关键词猜测
+  if (extra.repeat_rule && extra.repeat_rule !== "none") {
+    const label = recurrenceLabel(extra.repeat_rule, extra.custom_recurrence);
+    if (label) return label;
+  }
   const map = { "每天": "每天", "每周": "每周", "每月": "每月" };
   for (const k of Object.keys(map)) {
     if (tags.includes(k) || task.title?.includes(k)) return map[k];

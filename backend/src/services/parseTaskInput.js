@@ -1,5 +1,6 @@
 import { invokeKimiText } from "../lib/kimi.js";
 import { resolveSpatiotemporalContext } from "./extractContext.js";
+import { parseRecurrenceFromText, parseTimeOfDay, alignFirstOccurrence } from "../lib/recurrence.js";
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -374,7 +375,19 @@ export async function parseTaskInput({ input, date, savedLocations = [], current
       location_type: { type: "string", description: "地点类型：office/home/hospital/school/gym/shopping/restaurant/transit/other" },
       event_type: { type: "string", description: "事件类型：会议/用餐/就医/出行/生活/工作/学习/运动/社交/其他" },
       priority: { type: "string", enum: ["urgent", "high", "medium", "low"], description: "优先级" },
-      category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"], description: "分类" }
+      category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"], description: "分类" },
+      repeat_rule: { type: "string", enum: ["none", "daily", "weekly", "monthly", "custom"], description: "重复规则：每天/每日→daily，每周X/工作日/周末→weekly，每月X号→monthly，每隔N天→custom，无重复→none" },
+      custom_recurrence: {
+        type: "object",
+        description: "重复细节，仅当 repeat_rule 不是 none 时给出",
+        properties: {
+          frequency: { type: "string", enum: ["daily", "weekly", "monthly"] },
+          interval: { type: "integer", description: "间隔（如每隔3天 interval=3）" },
+          days_of_week: { type: "array", items: { type: "integer" }, description: "每周几，0=周日" },
+          days_of_month: { type: "array", items: { type: "integer" }, description: "每月几号" },
+          end_date: { type: "string", description: "重复结束日期 YYYY-MM-DD，可为空" }
+        }
+      }
     },
     required: ["title", "reminder_time", "end_time", "priority", "category"]
   };
@@ -412,7 +425,8 @@ ${habitText}
 4. 时间必须使用 ISO 8601 格式并包含 +08:00 时区，例如 "2026-08-26T14:35:00+08:00"。
 5. 从输入中提取地点（location）、地点类型（location_type）和事件类型（event_type）。
 6. 如果用户没有明确说地点，请使用上面给出的"地点候选"；如果候选也没有，返回空字符串。
-7. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
+7. 如果输入包含重复语义（"每天/每日/每晚"、"每周三/每周三五/工作日/周末"、"每月15号"、"每隔3天"），repeat_rule 填 daily/weekly/monthly/custom，reminder_time 用今天或明天该时刻（今天的已过则取明天），custom_recurrence 填具体星期几/几号/间隔；没有重复语义则 repeat_rule 填 none。
+8. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
         systemPrompt: "你是 SoulSentry 的约定解析器。把中文自然语言输入转成可创建的约定字段。严格返回 JSON。",
         responseJsonSchema: schema,
         temperature: 0.2
@@ -459,7 +473,33 @@ ${habitText}
   const commonSense = applyCommonSenseTime(text);
 
   // 最终选择时间：显式（Kimi 校验后）> 本地显式 > 创建时间+5分钟
-  const chosen = explicitTime || localExplicit || applyDefaultTime();
+  let chosen = explicitTime || localExplicit || null;
+
+  // 重复语义：本地正则为准（可靠），AI 结果兜底
+  let recurrence = parseRecurrenceFromText(text);
+  if (!recurrence && ["daily", "weekly", "monthly", "custom"].includes(kimiResult?.repeat_rule)) {
+    recurrence = {
+      repeat_rule: kimiResult.repeat_rule,
+      custom_recurrence: kimiResult.custom_recurrence || { frequency: kimiResult.repeat_rule === "custom" ? "daily" : kimiResult.repeat_rule }
+    };
+  }
+
+  // 重复约定但没解析出具体时间：从文本提取当日时刻（晚6-7点 → 18:00，已过取明天）
+  if (recurrence && !chosen) {
+    const tod = parseTimeOfDay(text);
+    if (tod) {
+      const d = new Date();
+      d.setHours(tod.hour, tod.minute, 0, 0);
+      if (d <= now) d.setDate(d.getDate() + 1);
+      chosen = { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "recurring" };
+    }
+  }
+  if (!chosen) chosen = applyDefaultTime();
+
+  // 每周/每月重复：把首次提醒对齐到周期内正确的星期/日期
+  if (recurrence) {
+    chosen = { ...alignFirstOccurrence(chosen.date, chosen.time, recurrence.repeat_rule, recurrence.custom_recurrence, now), source: chosen.source };
+  }
 
   const reminderISO = toISODateTime(chosen.date, chosen.time);
 
@@ -488,6 +528,9 @@ ${habitText}
     event_type: eventType,
     priority,
     category,
+    ...(recurrence
+      ? { repeat_rule: recurrence.repeat_rule, custom_recurrence: recurrence.custom_recurrence }
+      : {}),
     time_source: chosen.source,
     spatiotemporal: {
       ...spatiotemporal.context_at_creation,

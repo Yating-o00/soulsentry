@@ -143,6 +143,7 @@ export default function TaskCreate() {
   const [parsedHint, setParsedHint] = useState("");
   const [rawInput, setRawInput] = useState("");
   const [parsedMetadata, setParsedMetadata] = useState(null);
+  const [parsedRepeat, setParsedRepeat] = useState(null);
   const [loading, setLoading] = useState(false);
   const [createdTask, setCreatedTask] = useState(null);
   const [posterUrl, setPosterUrl] = useState("");
@@ -450,6 +451,10 @@ export default function TaskCreate() {
     if (reminderISO) payload.reminder_time = reminderISO;
     if (endISO) payload.end_time = endISO;
     if (parsedMetadata) payload.metadata = parsedMetadata;
+    if (parsedRepeat) {
+      payload.repeat_rule = parsedRepeat.repeat_rule;
+      if (parsedRepeat.custom_recurrence) payload.custom_recurrence = parsedRepeat.custom_recurrence;
+    }
 
     setLoading(true);
     try {
@@ -765,6 +770,10 @@ export default function TaskCreate() {
       };
       if (parsed.reminder_time) payload.reminder_time = parsed.reminder_time;
       if (parsed.end_time) payload.end_time = parsed.end_time;
+      if (parsedRepeat) {
+        payload.repeat_rule = parsedRepeat.repeat_rule;
+        if (parsedRepeat.custom_recurrence) payload.custom_recurrence = parsedRepeat.custom_recurrence;
+      }
       if (parsed.spatiotemporal) {
         payload.metadata = {
           _extraFields: { spatiotemporal: parsed.spatiotemporal }
@@ -849,10 +858,26 @@ export default function TaskCreate() {
       });
     }
 
+    // 重复提醒：每天/每周/每月，创建时透传给后端，由后端按周期推进提醒
+    if (parsed.repeat_rule && parsed.repeat_rule !== "none") {
+      setParsedRepeat({
+        repeat_rule: parsed.repeat_rule,
+        custom_recurrence: parsed.custom_recurrence || undefined
+      });
+    }
+
     // 提示
     const hints = [];
     if (parsed.location) hints.push(`地点：${parsed.location}`);
     if (parsed.event_type) hints.push(`类型：${parsed.event_type}`);
+    if (parsed.repeat_rule && parsed.repeat_rule !== "none") {
+      const freq = parsed.custom_recurrence?.frequency || parsed.repeat_rule;
+      const interval = parsed.custom_recurrence?.interval;
+      const label = interval > 1
+        ? `每隔${interval}天`
+        : { daily: "每天", weekly: "每周", monthly: "每月" }[freq] || "周期";
+      hints.push(`已设为${label}重复提醒`);
+    }
     if (parsed.time_source === "common_sense") hints.push("已按生活常识填充时间");
     else if (parsed.time_source === "now") hints.push("未识别到时间，已设为当前时间附近");
     if (hints.length > 0) setParsedHint(hints.join(" · "));

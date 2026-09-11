@@ -241,64 +241,42 @@ function getTaskLocation(task) {
   return null;
 }
 
-// 同日账本签合并：继续在当天账本上新添类目时，并入已有账本签并给新明细打 is_new 标识，
-// 而不是新建第二条账本签。返回 { id, addedCount, ai_analysis } 或 null（无合并目标）
-async function mergeLedgerIntoDailyNote({ userId, currentNoteId, newLedger, materialText }) {
-  const now = new Date();
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const existing = await prisma.note.findFirst({
-    where: {
-      userId,
-      id: { not: currentNoteId },
-      sourceType: "ledger",
-      deletedAt: null,
-      createdAt: { gte: dayStart }
-    },
-    orderBy: { updatedAt: "desc" }
-  });
-  if (!existing) return null;
-  const oldMeta = isPlainObject(existing.metadata) ? existing.metadata : {};
-  const oldAnalysis = isPlainObject(oldMeta.ai_analysis) ? oldMeta.ai_analysis : {};
-  const oldLedger = Array.isArray(oldAnalysis.ledger?.items) && oldAnalysis.ledger.items.length
-    ? oldAnalysis.ledger
-    : null;
-  // 旧签还没分析出账本结构时不合并，避免写坏数据
-  if (!oldLedger) return null;
+// 账本签内补录：用户在账本签里继续对话输入新的收支明细时，并入本条签（不新建签），
+// 重算合计，新明细带 is_new/added_at。返回新的 ledger 对象或 null（未识别到明细）
+function parseLedgerPatch(existingLedger, text) {
+  if (!existingLedger || !Array.isArray(existingLedger.items)) return null;
+  const t = String(text || "");
+  // 金额语境门槛：带 元/块 单位、含收支动词、或出现 2 个以上数字（如"奶茶15不是18"），
+  // 避免"明天3点开会"这类单数字文本误入账本
+  const moneyLike = /(\d+(?:\.\d+)?\s*(?:元|块|块钱|rmb|RMB))|([花买吃付]|买了|打车|支付|工资|报销|转账|收入|支出|花了|退款|记账|多少钱|预算)/.test(t)
+    || (t.match(/\d+(?:\.\d+)?/g) || []).length >= 2;
+  if (!moneyLike) return null;
+  const normItems = parseLedgerEntries(t)
+    .map((i) => ({
+      name: String(i?.name || "一笔账").slice(0, 12),
+      category: String(i?.category || "其他"),
+      amount: Math.abs(Number(i?.amount) || 0),
+      type: /(income|收入)/.test(String(i?.type || "")) ? "income" : "expense"
+    }))
+    .filter((i) => i.amount > 0)
+    .slice(0, 20);
+  if (!normItems.length) return null;
 
   const round2 = (n) => Math.round(n * 100) / 100;
-  const addedAt = now.toISOString();
+  const addedAt = new Date().toISOString();
   const items = [
-    ...oldLedger.items.map((i) => ({ ...i, is_new: false })),
-    ...newLedger.items.map((i) => ({ ...i, is_new: true, added_at: addedAt }))
+    ...existingLedger.items.map((i) => ({ ...i, is_new: false })),
+    ...normItems.map((i) => ({ ...i, is_new: true, added_at: addedAt }))
   ].slice(0, 50);
   const totalExpense = round2(items.filter((i) => i.type === "expense").reduce((s, i) => s + (Number(i.amount) || 0), 0));
   const totalIncome = round2(items.filter((i) => i.type === "income").reduce((s, i) => s + (Number(i.amount) || 0), 0));
-  const ai_analysis = {
-    ...oldAnalysis,
-    ledger: {
-      ...newLedger,
-      items,
-      total_expense: totalExpense,
-      total_income: totalIncome,
-      balance: round2(totalIncome - totalExpense)
-    },
-    // 回应语更新为针对新入账的那句，旧回应不保留
-    emotional_response: newLedger.advice || oldAnalysis.emotional_response || "",
-    analyzed_at: addedAt
+  return {
+    items,
+    total_expense: totalExpense,
+    total_income: totalIncome,
+    balance: round2(totalIncome - totalExpense),
+    advice: existingLedger.advice || ""
   };
-  const updated = await prisma.note.update({
-    where: { id: existing.id },
-    data: {
-      plainText: [existing.plainText, materialText].filter(Boolean).join("\n"),
-      metadata: { ...oldMeta, ai_analysis }
-    }
-  });
-  // 新签不单独存在：软删，避免列表里出现两条同日账本
-  await prisma.note.update({
-    where: { id: currentNoteId },
-    data: { deletedAt: now, aiStatus: "completed" }
-  });
-  return { id: updated.id, addedCount: newLedger.items.length, ai_analysis };
 }
 
 // 信任度动态评分：按用户按 automation_type 统计最近执行历史
@@ -2775,26 +2753,6 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           }
         }
 
-        // 同日账本签合并：新明细并入当天已有账本签并标识 is_new，而不是新建第二条
-        if (isLedger && Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length) {
-          const mergeResult = await mergeLedgerIntoDailyNote({
-            userId: req.user.id,
-            currentNoteId: noteId,
-            newLedger: parsed.ledger,
-            materialText
-          });
-          if (mergeResult) {
-            console.log(`[analyzeHeartSign] ledger merged: ${noteId} -> ${mergeResult.id}, +${mergeResult.addedCount} items`);
-            return res.json({
-              ok: true,
-              merged: true,
-              merged_into: mergeResult.id,
-              added_items: mergeResult.addedCount,
-              ai_analysis: mergeResult.ai_analysis
-            });
-          }
-        }
-
         const ai_analysis = {
           summary: parsed.summary || "",
           key_points: parsed.key_points || [],
@@ -2885,6 +2843,12 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
       };
       const category = categoryMap[noteType] || "情绪";
 
+      // 账本签内补录：继续对话输入的收支明细并入本条签（不新建签），重算合计
+      const existingLedger = followNote.metadata?.ai_analysis?.ledger;
+      const ledgerPatch = noteType === "ledger"
+        ? parseLedgerPatch(existingLedger, text)
+        : null;
+
       let replyText = "";
       let closing = false;
       let tag = "感性回应";
@@ -2944,6 +2908,12 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
         if (density === "mute") {
           replyText = "已收好。";
           tag = "收录";
+        } else if (ledgerPatch) {
+          // 签内补录：报出刚记上的明细，签里同步更新
+          const added = ledgerPatch.items.filter((i) => i.is_new);
+          const names = added.map((i) => `${i.name} ${i.type === "income" ? "+" : "-"}${i.amount}`).join("、");
+          replyText = `记上了：${names}。这笔账我帮你拢在这条签里。`;
+          tag = "理性补充";
         } else {
           replyText = density === "full"
             ? "账本我先记着了。想按周或按月看汇总，或者给某个类别设个预算提醒，跟我说一声就好。"
@@ -2960,11 +2930,17 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
       const conversation = Array.isArray(currentMeta.conversation) ? currentMeta.conversation : [];
       const nextConversation = [...conversation, { role: "user", text, ts: now }, { role: "other", text: replyText, tag, ts: now }];
 
+      const nextMeta = { ...currentMeta, conversation: nextConversation };
+      if (ledgerPatch) {
+        nextMeta.ai_analysis = {
+          ...(isPlainObject(currentMeta.ai_analysis) ? currentMeta.ai_analysis : {}),
+          ledger: ledgerPatch
+        };
+      }
+
       await prisma.note.update({
         where: { id: followNoteId },
-        data: {
-          metadata: { ...currentMeta, conversation: nextConversation }
-        }
+        data: { metadata: nextMeta }
       });
 
       return res.json({ ok: true, text: replyText, tag, closing, conversation: nextConversation });

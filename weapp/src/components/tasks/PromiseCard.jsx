@@ -366,7 +366,6 @@ export default function PromiseCard({
               <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
                 <IconBot size={28} color={theme.primary} />
                 <Text style={{ fontSize: "26rpx", color: theme.ink, fontWeight: 500 }}>智能执行</Text>
-                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>让心栈把能做的先做了</Text>
               </View>
               <View
                 onClick={handleDelegate}

@@ -15,6 +15,18 @@ import { getCreditPack } from "../config/creditPacks.js";
 import { createWechatNativeOrder, generateOutTradeNo, getWechatMerchantConfig, queryWechatOrder as wechatQueryOrder } from "../lib/wechatPay.js";
 import { markWechatOrderPaid } from "../services/wechatOrders.js";
 import { savePptHtml } from "../lib/renderPpt.js";
+import QRCode from "qrcode";
+
+// 把微信支付 Native 下单返回的 code_url 转成 PNG data URL，
+// 小程序端 Image 组件可直接渲染 base64 data URL（小程序无 qrcode 库）
+async function wechatCodeUrlToQrDataUrl(codeUrl) {
+  try {
+    return await QRCode.toDataURL(codeUrl, { margin: 1, width: 280 });
+  } catch (err) {
+    console.error("[wechatQr] generate qr data url failed:", err?.message || err);
+    return null;
+  }
+}
 
 export const functionsRouter = Router();
 
@@ -52,6 +64,39 @@ functionsRouter.use((req, res, next) => {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+// 统一 AI 点数扣费：预检余额，事务内扣减并记账
+// 余额不足时抛出 402 INSUFFICIENT_CREDITS（带 balance/required），由调用方决定阻断还是降级
+async function chargeAICredits({ userId, cost, feature, description }) {
+  const amount = Math.max(1, Math.ceil(Number(cost) || 0));
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const balance = user?.aiCredits ?? 0;
+  if (balance < amount) {
+    const error = new Error("AI 点数不足");
+    error.status = 402;
+    error.code = "INSUFFICIENT_CREDITS";
+    error.required = amount;
+    error.balance = balance;
+    throw error;
+  }
+  const [updatedUser] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { aiCredits: { decrement: amount } }
+    }),
+    prisma.aICreditTransaction.create({
+      data: {
+        userId,
+        type: "CONSUME",
+        amount: -amount,
+        balanceAfter: balance - amount,
+        feature: feature || "ai_call",
+        description: description || "AI 调用"
+      }
+    })
+  ]);
+  return { charged: amount, balance: updatedUser.aiCredits };
 }
 
 // 心签分类：英文 key ↔ 中文标签
@@ -1468,21 +1513,61 @@ functionsRouter.post("/:name", async (req, res) => {
 
     if (name === "callAI") {
       try {
-        const data = await invokeKimiText({
+        // 预检余额：不足直接 402，不白嫖 AI 调用
+        if ((req.user.aiCredits ?? 0) < 1) {
+          return res.status(402).json({
+            error: "INSUFFICIENT_CREDITS",
+            message: "AI 点数不足，请先充值",
+            balance: req.user.aiCredits ?? 0,
+            required: 1
+          });
+        }
+
+        const { data, usage } = await invokeKimiText({
           prompt: payload.prompt,
           systemPrompt: payload.system_prompt,
           responseJsonSchema: payload.response_json_schema,
           model: payload.model,
           temperature: payload.temperature,
-          maxTokens: 2500
+          maxTokens: 2500,
+          withUsage: true
         });
+
+        // 按实际 token 用量扣费：1 点 / 1000 token（缓存命中的输入不计费），最少 1 点
+        const u = usage || {};
+        const billableTokens = Math.max(
+          0,
+          (Number(u.prompt_tokens) || 0) + (Number(u.completion_tokens) || 0) - (Number(u.prompt_cache_hit_tokens) || 0)
+        );
+        const cost = Math.max(1, Math.ceil(billableTokens / 1000));
+        let balance = req.user.aiCredits;
+        try {
+          const charge = await chargeAICredits({
+            userId: req.user.id,
+            cost,
+            feature: "ai_call",
+            description: `AI 对话（${Math.round(billableTokens)} tokens）`
+          });
+          balance = charge.balance;
+        } catch (chargeErr) {
+          // AI 已调用成功但扣费失败（如并发余额变动）：不阻断用户，仅记录
+          console.error("[callAI] charge failed after successful AI call:", chargeErr?.message || chargeErr);
+        }
 
         return res.json({
           data,
-          balance: req.user.aiCredits
+          balance
         });
       } catch (error) {
         const message = error?.message || String(error);
+        if (error?.code === "INSUFFICIENT_CREDITS") {
+          return res.status(402).json({
+            error: "INSUFFICIENT_CREDITS",
+            message: "AI 点数不足，请先充值",
+            balance: error.balance ?? 0,
+            required: error.required ?? 1
+          });
+        }
         if (message.includes("KIMI_API_KEY") || message.includes("MOONSHOT_API_KEY") || message.includes("未配置")) {
           return res.status(503).json({
             error: "AI_SERVICE_NOT_CONFIGURED",
@@ -2311,6 +2396,7 @@ functionsRouter.post("/:name", async (req, res) => {
       if (existing?.codeUrl) {
         return res.json({
           code_url: existing.codeUrl,
+          qr_data_url: await wechatCodeUrlToQrDataUrl(existing.codeUrl),
           order_no: existing.orderNo
         });
       }
@@ -2347,7 +2433,11 @@ functionsRouter.post("/:name", async (req, res) => {
         }
       });
 
-      return res.json({ code_url: codeUrl, order_no: outTradeNo });
+      return res.json({
+        code_url: codeUrl,
+        qr_data_url: await wechatCodeUrlToQrDataUrl(codeUrl),
+        order_no: outTradeNo
+      });
     }
 
     if (name === "queryWechatOrder") {
@@ -2632,6 +2722,24 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           console.error("[analyzeHeartSign] Kimi failed or timeout, use local fallback", kimiErr?.message || kimiErr);
           parsed = buildHeartSignFallback({ content: note.content, plainText: note.plainText, density });
           usedFallback = true;
+        }
+
+        // Kimi 成功路径按次扣 2 点；余额不足不阻断回应（降级照常返回），只记警告
+        if (!usedFallback) {
+          try {
+            await chargeAICredits({
+              userId: req.user.id,
+              cost: 2,
+              feature: "analyze_heart_sign",
+              description: "心签 AI 分析"
+            });
+          } catch (chargeErr) {
+            if (chargeErr?.code === "INSUFFICIENT_CREDITS") {
+              console.warn(`[analyzeHeartSign] user=${req.user.id} 点数不足（余额 ${chargeErr.balance}），本次分析免费`);
+            } else {
+              console.error("[analyzeHeartSign] charge failed:", chargeErr?.message || chargeErr);
+            }
+          }
         }
 
         // 纠错强匹配：用户已明确纠正过同类内容，直接覆盖分类

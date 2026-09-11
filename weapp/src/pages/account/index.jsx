@@ -1,10 +1,18 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, Button, ScrollView } from "@tarojs/components";
+import { View, Text, Button, ScrollView, Image } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
 import { getToken, clearToken, setToken, getAccounts } from "@/utils/auth";
 import { get, post, patch } from "@/utils/api";
 import theme from "@/components/tasks/theme";
+
+// 点数包，与后端 backend/src/config/creditPacks.js 保持一致
+const CREDIT_PACKS = [
+  { id: "starter", name: "体验包", credits: 50, price: "¥5" },
+  { id: "standard", name: "标准包", credits: 200, price: "¥15" },
+  { id: "premium", name: "专业包", credits: 500, price: "¥30" },
+  { id: "ultimate", name: "旗舰包", credits: 1500, price: "¥75" }
+];
 
 const BADGE_TEMPLATES = [
   { key: "morning", label: "晨型人", icon: "☀", color: "#d97706", condition: (data) => data.morningTasks >= 3 },
@@ -244,7 +252,7 @@ function showDemoToast() {
 }
 
 export default function Account() {
-  const { user, logout, loading } = useAuth();
+  const { user, logout, loading, refresh } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSwitchAccounts, setShowSwitchAccounts] = useState(false);
   const [accounts, setAccounts] = useState([]);
@@ -257,6 +265,64 @@ export default function Account() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [moodData, setMoodData] = useState(null);
+  const [showRecharge, setShowRecharge] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [qrInfo, setQrInfo] = useState(null); // { qr, orderNo, packName, credits }
+  const pollTimerRef = useRef(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  const pollOrder = useCallback(async (orderNo) => {
+    try {
+      const res = await post("/functions/queryWechatOrder", { order_no: orderNo }, { silent: true, timeout: 10000 });
+      if (res?.paid) {
+        stopPolling();
+        setQrInfo(null);
+        setShowRecharge(false);
+        Taro.showToast({ title: "充值成功", icon: "success" });
+        refresh();
+      }
+    } catch (_err) {
+      // 轮询期间的瞬时错误忽略，下一轮继续
+    }
+  }, [refresh, stopPolling]);
+
+  const startRecharge = async (pack) => {
+    if (paying) return;
+    setPaying(true);
+    try {
+      const res = await post("/functions/createWechatOrder", { pack_id: pack.id }, { silent: true, timeout: 15000 });
+      if (!res?.code_url) {
+        Taro.showToast({ title: "下单失败，请稍后重试", icon: "none" });
+        return;
+      }
+      setQrInfo({ qr: res.qr_data_url || "", orderNo: res.order_no, packName: pack.name, credits: pack.credits });
+      stopPolling();
+      pollTimerRef.current = setInterval(() => pollOrder(res.order_no), 2000);
+    } catch (err) {
+      const msg = err?.message || "";
+      if (msg.includes("微信支付未配置")) {
+        Taro.showToast({ title: "微信支付未配置", icon: "none" });
+      } else {
+        Taro.showToast({ title: msg || "下单失败", icon: "none" });
+      }
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const closeRecharge = () => {
+    stopPolling();
+    setQrInfo(null);
+    setShowRecharge(false);
+  };
 
   const loadData = useCallback(async () => {
     if (!getToken()) return;
@@ -610,6 +676,54 @@ export default function Account() {
                 <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginTop: "6rpx" }}>{s.label}</Text>
               </View>
             ))}
+          </View>
+
+          {/* AI 点数 */}
+          <View style={{ marginBottom: "48rpx" }}>
+            <View
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "28rpx",
+                borderRadius: "18rpx",
+                background: theme.card,
+                border: `1rpx solid ${theme.border}`
+              }}
+            >
+              <View style={{ display: "flex", alignItems: "center", gap: "16rpx" }}>
+                <View
+                  style={{
+                    width: "56rpx",
+                    height: "56rpx",
+                    borderRadius: "14rpx",
+                    background: theme.primaryFaint,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "26rpx", color: theme.primary }}>✦</Text>
+                </View>
+                <View>
+                  <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>AI 点数</Text>
+                  <Text style={{ fontSize: "32rpx", fontWeight: 600, color: theme.ink }}>
+                    {user?.ai_credits ?? 0}
+                    <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, fontWeight: 400 }}> 点</Text>
+                  </Text>
+                </View>
+              </View>
+              <View
+                onClick={() => setShowRecharge(true)}
+                style={{
+                  padding: "12rpx 28rpx",
+                  borderRadius: "28rpx",
+                  background: theme.primary
+                }}
+              >
+                <Text style={{ fontSize: "24rpx", color: "#fff" }}>充值</Text>
+              </View>
+            </View>
           </View>
 
           {/* mood river */}
@@ -1053,6 +1167,111 @@ export default function Account() {
             >
               <Text style={{ fontSize: "28rpx", color: theme.primary }}>＋ 登录其他账户</Text>
             </View>
+          </View>
+        </View>
+      )}
+
+      {/* recharge modal */}
+      {showRecharge && (
+        <View
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40rpx"
+          }}
+          onClick={closeRecharge}
+        >
+          <View
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: "560rpx",
+              background: theme.card,
+              borderRadius: "24rpx",
+              padding: "40rpx"
+            }}
+          >
+            {qrInfo ? (
+              <View>
+                <Text style={{ fontSize: "32rpx", fontWeight: 600, color: theme.ink, textAlign: "center", marginBottom: "8rpx" }}>
+                  微信扫码支付
+                </Text>
+                <Text style={{ fontSize: "24rpx", color: theme.inkTertiary, textAlign: "center", marginBottom: "28rpx" }}>
+                  {qrInfo.packName} · {qrInfo.credits} 点
+                </Text>
+                {qrInfo.qr ? (
+                  <View style={{ display: "flex", justifyContent: "center", marginBottom: "28rpx" }}>
+                    <Image
+                      src={qrInfo.qr}
+                      style={{ width: "380rpx", height: "380rpx", borderRadius: "12rpx" }}
+                      showMenuByLongpress
+                    />
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, textAlign: "center", marginBottom: "28rpx", wordBreak: "break-all" }}>
+                    {qrInfo.orderNo}
+                  </Text>
+                )}
+                <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, textAlign: "center", marginBottom: "28rpx" }}>
+                  请使用微信「扫一扫」完成支付，支付成功后自动到账
+                </Text>
+                <Button
+                  size="mini"
+                  onClick={closeRecharge}
+                  style={{
+                    width: "100%",
+                    height: "76rpx",
+                    lineHeight: "76rpx",
+                    background: theme.paper,
+                    color: theme.inkSecondary,
+                    borderRadius: "12rpx",
+                    fontSize: "28rpx",
+                    margin: 0,
+                    border: `1rpx solid ${theme.border}`
+                  }}
+                >
+                  取消支付
+                </Button>
+              </View>
+            ) : (
+              <View>
+                <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx" }}>
+                  <Text style={{ fontSize: "34rpx", fontWeight: 600, color: theme.ink }}>充值 AI 点数</Text>
+                  <Text onClick={closeRecharge} style={{ fontSize: "30rpx", color: theme.inkQuaternary, padding: "8rpx" }}>
+                    ✕
+                  </Text>
+                </View>
+                {CREDIT_PACKS.map((pack) => (
+                  <View
+                    key={pack.id}
+                    onClick={() => startRecharge(pack)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "26rpx 8rpx",
+                      borderBottom: `1rpx solid ${theme.border}`,
+                      opacity: paying ? 0.5 : 1
+                    }}
+                  >
+                    <View>
+                      <Text style={{ fontSize: "28rpx", fontWeight: 500, color: theme.ink }}>
+                        {pack.name} · {pack.credits} 点
+                      </Text>
+                      <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginTop: "4rpx" }}>
+                        约可分析 {Math.floor(pack.credits / 2)} 条心签
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.primary }}>{pack.price}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </View>
       )}

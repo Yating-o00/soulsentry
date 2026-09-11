@@ -194,7 +194,8 @@ export async function invokeKimiText({
   responseJsonSchema,
   model,
   temperature,
-  fetchTimeout
+  fetchTimeout,
+  withUsage = false
 }) {
   const messages = [];
   if (systemPrompt) {
@@ -209,6 +210,15 @@ export async function invokeKimiText({
     temperature,
     fetchTimeout
   });
+
+  const usage = result.raw?.usage || null;
+
+  if (withUsage) {
+    const data = responseJsonSchema
+      ? parseModelJson(result.content)
+      : { text: result.content, model: result.model };
+    return { data, usage, model: result.model };
+  }
 
   if (responseJsonSchema) {
     return parseModelJson(result.content);

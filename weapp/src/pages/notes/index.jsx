@@ -136,6 +136,21 @@ function LedgerCard({ ledger }) {
             <Text style={{ flex: 1, fontSize: "25rpx", color: "#334155", marginRight: "12rpx" }} numberOfLines={1}>
               {it.name || "一笔账"}
             </Text>
+            {!!it.is_new && (
+              <Text
+                style={{
+                  fontSize: "18rpx",
+                  color: "#a08452",
+                  background: "#f7efe4",
+                  borderRadius: "8rpx",
+                  padding: "2rpx 10rpx",
+                  marginRight: "12rpx",
+                  flexShrink: 0
+                }}
+              >
+                新
+              </Text>
+            )}
             <Text
               style={{
                 fontSize: "20rpx",
@@ -207,7 +222,19 @@ export default function Notes() {
     setLoading(true);
     try {
       const data = await get("/notes", { sort: "-updated_date", limit: 200 });
-      setNotes(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setNotes(list);
+      // 账本签新并入的明细：本次会话保留「新」标识，后台静默清除，下次进入不再高亮
+      list.forEach((n) => {
+        const ledger = n.metadata?.ai_analysis?.ledger;
+        if (!ledger?.items?.some((it) => it.is_new)) return;
+        const items = ledger.items.map((it) => {
+          const { is_new, added_at, ...rest } = it;
+          return rest;
+        });
+        const metadata = { ...n.metadata, ai_analysis: { ...n.metadata.ai_analysis, ledger: { ...ledger, items } } };
+        patch(`/notes/${n.id}`, { metadata }).catch(() => {});
+      });
     } catch (err) {
       setNotes([]);
     } finally {

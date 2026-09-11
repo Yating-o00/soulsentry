@@ -196,6 +196,66 @@ function getTaskLocation(task) {
   return null;
 }
 
+// 同日账本签合并：继续在当天账本上新添类目时，并入已有账本签并给新明细打 is_new 标识，
+// 而不是新建第二条账本签。返回 { id, addedCount, ai_analysis } 或 null（无合并目标）
+async function mergeLedgerIntoDailyNote({ userId, currentNoteId, newLedger, materialText }) {
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const existing = await prisma.note.findFirst({
+    where: {
+      userId,
+      id: { not: currentNoteId },
+      sourceType: "ledger",
+      deletedAt: null,
+      createdAt: { gte: dayStart }
+    },
+    orderBy: { updatedAt: "desc" }
+  });
+  if (!existing) return null;
+  const oldMeta = isPlainObject(existing.metadata) ? existing.metadata : {};
+  const oldAnalysis = isPlainObject(oldMeta.ai_analysis) ? oldMeta.ai_analysis : {};
+  const oldLedger = Array.isArray(oldAnalysis.ledger?.items) && oldAnalysis.ledger.items.length
+    ? oldAnalysis.ledger
+    : null;
+  // 旧签还没分析出账本结构时不合并，避免写坏数据
+  if (!oldLedger) return null;
+
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const addedAt = now.toISOString();
+  const items = [
+    ...oldLedger.items.map((i) => ({ ...i, is_new: false })),
+    ...newLedger.items.map((i) => ({ ...i, is_new: true, added_at: addedAt }))
+  ].slice(0, 50);
+  const totalExpense = round2(items.filter((i) => i.type === "expense").reduce((s, i) => s + (Number(i.amount) || 0), 0));
+  const totalIncome = round2(items.filter((i) => i.type === "income").reduce((s, i) => s + (Number(i.amount) || 0), 0));
+  const ai_analysis = {
+    ...oldAnalysis,
+    ledger: {
+      ...newLedger,
+      items,
+      total_expense: totalExpense,
+      total_income: totalIncome,
+      balance: round2(totalIncome - totalExpense)
+    },
+    // 回应语更新为针对新入账的那句，旧回应不保留
+    emotional_response: newLedger.advice || oldAnalysis.emotional_response || "",
+    analyzed_at: addedAt
+  };
+  const updated = await prisma.note.update({
+    where: { id: existing.id },
+    data: {
+      plainText: [existing.plainText, materialText].filter(Boolean).join("\n"),
+      metadata: { ...oldMeta, ai_analysis }
+    }
+  });
+  // 新签不单独存在：软删，避免列表里出现两条同日账本
+  await prisma.note.update({
+    where: { id: currentNoteId },
+    data: { deletedAt: now, aiStatus: "completed" }
+  });
+  return { id: updated.id, addedCount: newLedger.items.length, ai_analysis };
+}
+
 // 信任度动态评分：按用户按 automation_type 统计最近执行历史
 // 公式（移植海外版 getAutomationTrust）：成功率×60 + 平均评分/5×40（无评分按 3.5 计）
 // 样本 <3 条返回 null，调用方沿用默认值
@@ -2604,6 +2664,26 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
               advice: String(parsed.ledger?.advice || "").slice(0, 120)
             };
             parsed.category = "账本";
+          }
+        }
+
+        // 同日账本签合并：新明细并入当天已有账本签并标识 is_new，而不是新建第二条
+        if (isLedger && Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length) {
+          const mergeResult = await mergeLedgerIntoDailyNote({
+            userId: req.user.id,
+            currentNoteId: noteId,
+            newLedger: parsed.ledger,
+            materialText
+          });
+          if (mergeResult) {
+            console.log(`[analyzeHeartSign] ledger merged: ${noteId} -> ${mergeResult.id}, +${mergeResult.addedCount} items`);
+            return res.json({
+              ok: true,
+              merged: true,
+              merged_into: mergeResult.id,
+              added_items: mergeResult.addedCount,
+              ai_analysis: mergeResult.ai_analysis
+            });
           }
         }
 

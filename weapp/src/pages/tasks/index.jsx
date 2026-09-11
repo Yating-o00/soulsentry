@@ -152,17 +152,29 @@ export default function Tasks() {
   const evo = useMemo(() => computeEvolution(tasks, executions), [tasks, executions]);
 
   const handleComplete = (task) => {
-    const nextStatus = isTaskDone(task) ? "pending" : "completed";
+    const markingDone = !isTaskDone(task);
     const prevStatus = task.status;
-    // 乐观更新：点击瞬间勾划/还原 + 立即提示，不等网络；失败再回滚
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)));
-    showToast(nextStatus === "completed" ? "已盖章 · 如约而至" : "已取消完成");
-    patch(`/tasks/${task.id}`, { status: nextStatus })
-      .then(() => fetchData())
-      .catch(() => {
-        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus } : t)));
-        showToast("网络开小差了，请再试一次");
+    const prevIndex = tasks.findIndex((t) => t.id === task.id);
+    // 立即从列表移除（或还原），不等网络、不触发整页刷新，页面不跳动
+    setTasks((prev) =>
+      markingDone
+        ? prev.filter((t) => t.id !== task.id)
+        : prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus === "completed" ? "pending" : "completed" } : t))
+    );
+    showToast(markingDone ? "已盖章 · 如约而至" : "已取消完成");
+    patch(`/tasks/${task.id}`, { status: markingDone ? "completed" : "pending" }).catch(() => {
+      // 失败回滚：按原位置放回 / 还原状态
+      setTasks((prev) => {
+        if (markingDone) {
+          const next = [...prev];
+          const idx = prevIndex >= 0 ? Math.min(prevIndex, next.length) : next.length;
+          next.splice(idx, 0, task);
+          return next;
+        }
+        return prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus } : t));
       });
+      showToast("网络开小差了，请再试一次");
+    });
   };
 
   const handleSubtaskToggle = async (sub) => {

@@ -37,6 +37,7 @@ const FILTERS = [
   { key: "material", label: "资料签" },
   { key: "memo", label: "备忘签" },
   { key: "share", label: "分享签" },
+  { key: "ledger", label: "账本签" },
   { key: "pinned", label: "已置顶" }
 ];
 
@@ -45,10 +46,11 @@ const TYPE_META = {
   inspiration: { label: "灵感", color: "#d97706", bg: "#fef3c7" },
   material: { label: "资料", color: "#5b82a0", bg: "#e8f0f5" },
   memo: { label: "备忘", color: "#8a7d6b", bg: "#f4f0ea" },
-  share: { label: "分享", color: "#6e8a73", bg: "#e8f5e9" }
+  share: { label: "分享", color: "#6e8a73", bg: "#e8f5e9" },
+  ledger: { label: "账本", color: "#a08452", bg: "#f7efe4" }
 };
 
-const TYPE_ORDER = ["emotion", "inspiration", "material", "memo", "share"];
+const TYPE_ORDER = ["emotion", "inspiration", "material", "memo", "share", "ledger"];
 
 function greeting() {
   const h = new Date().getHours();
@@ -83,7 +85,7 @@ function getNoteType(note) {
   const st = note.source_type;
   if (TYPE_META[st]) return st;
   const cat = note.metadata?.ai_analysis?.category;
-  const map = { 情绪: "emotion", 灵感: "inspiration", 资料: "material", 备忘: "memo", 分享: "share" };
+  const map = { 情绪: "emotion", 灵感: "inspiration", 资料: "material", 备忘: "memo", 分享: "share", 账本: "ledger" };
   if (map[cat]) return map[cat];
   return "emotion";
 }
@@ -100,6 +102,85 @@ function getTitle(note) {
   const text = note.plain_text || note.content || "";
   if (text.length <= 50) return null;
   return note.title || null;
+}
+
+// 账本签：收支明细表 + 合计 + AI 吐槽式回应
+function LedgerCard({ ledger }) {
+  if (!ledger?.items?.length) return null;
+  const fmt = (n) => (Number(n) || 0).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  const expenseColor = "#b07d4f";
+  const incomeColor = "#4f8a7a";
+  return (
+    <View
+      style={{
+        marginTop: "4rpx",
+        marginBottom: "20rpx",
+        borderRadius: "16rpx",
+        border: "1rpx solid rgba(160,132,82,0.25)",
+        background: "rgba(247,239,228,0.6)",
+        padding: "20rpx"
+      }}
+    >
+      <Text style={{ fontSize: "22rpx", color: "#a08452", fontWeight: 600 }}>📒 账本明细</Text>
+      <View style={{ marginTop: "12rpx", borderRadius: "12rpx", border: "1rpx solid rgba(160,132,82,0.15)", background: "#fff", overflow: "hidden" }}>
+        {ledger.items.map((it, i) => (
+          <View
+            key={i}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              padding: "14rpx 20rpx",
+              borderTop: i > 0 ? "1rpx solid #f1f5f9" : "none"
+            }}
+          >
+            <Text style={{ flex: 1, fontSize: "25rpx", color: "#334155", marginRight: "12rpx" }} numberOfLines={1}>
+              {it.name || "一笔账"}
+            </Text>
+            <Text
+              style={{
+                fontSize: "20rpx",
+                color: "#94a3b8",
+                background: "#f8fafc",
+                borderRadius: "8rpx",
+                padding: "2rpx 10rpx",
+                marginRight: "12rpx",
+                flexShrink: 0
+              }}
+            >
+              {it.category || "其他"}
+            </Text>
+            <Text style={{ fontSize: "25rpx", fontWeight: 600, color: it.type === "income" ? incomeColor : expenseColor, flexShrink: 0 }}>
+              {it.type === "income" ? "+" : "-"}{fmt(it.amount)}
+            </Text>
+          </View>
+        ))}
+        <View
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "14rpx 20rpx",
+            borderTop: "1rpx solid rgba(160,132,82,0.2)",
+            background: "rgba(247,239,228,0.5)"
+          }}
+        >
+          <Text style={{ fontSize: "22rpx", color: "#64748b" }}>
+            支出 <Text style={{ color: expenseColor, fontWeight: 600 }}>{fmt(ledger.total_expense)}</Text>
+          </Text>
+          <Text style={{ fontSize: "22rpx", color: "#64748b", marginLeft: "20rpx" }}>
+            收入 <Text style={{ color: incomeColor, fontWeight: 600 }}>{fmt(ledger.total_income)}</Text>
+          </Text>
+          <Text style={{ fontSize: "22rpx", color: "#475569", marginLeft: "auto" }}>
+            结余 <Text style={{ color: "#1e293b", fontWeight: 700 }}>{fmt(ledger.balance)}</Text>
+          </Text>
+        </View>
+      </View>
+      {!!ledger.advice && (
+        <Text style={{ marginTop: "14rpx", fontSize: "24rpx", color: "#475569", lineHeight: "40rpx", fontStyle: "italic" }}>
+          {ledger.advice}
+        </Text>
+      )}
+    </View>
+  );
 }
 
 export default function Notes() {
@@ -593,6 +674,8 @@ export default function Notes() {
             {note.plain_text || note.content || ""}
           </Text>
         </View>
+
+        {type === "ledger" && <LedgerCard ledger={note.metadata?.ai_analysis?.ledger} />}
 
         {response ? (
           <View style={{ borderRadius: "12rpx", padding: "4rpx 0 16rpx", marginBottom: "12rpx" }}>

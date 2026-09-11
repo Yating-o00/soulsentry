@@ -30,6 +30,8 @@ export default function NoteCreate() {
   const [vaultNewPwd, setVaultNewPwd] = useState("");
   const [vaultConfirmPwd, setVaultConfirmPwd] = useState("");
   const [vaultLabel, setVaultLabel] = useState("");
+  // emotion=心签 | ledger=账本签(记一笔)
+  const [mode, setMode] = useState("emotion");
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router.params || {};
@@ -68,20 +70,20 @@ export default function NoteCreate() {
       const note = await post("/notes", {
         content: text,
         plain_text: text,
-        source_type: "emotion",
+        source_type: mode,
         metadata: { response_density: density }
       });
 
       try {
         await post("/functions/analyzeHeartSign", {
           note_id: note.id,
-          note_data: { plain_text: text, content: text, metadata: { response_density: density } }
+          note_data: { plain_text: text, content: text, source_type: mode, metadata: { response_density: density } }
         }, { silent: true, timeout: 8000 });
       } catch (aiErr) {
         console.error("analyzeHeartSign failed", aiErr);
       }
 
-      Taro.showToast({ title: "心签已保存", icon: "success" });
+      Taro.showToast({ title: mode === "ledger" ? "账已记下" : "心签已保存", icon: "success" });
       setTimeout(() => Taro.navigateBack(), 400);
     } catch (err) {
       Taro.showToast({ title: "保存失败", icon: "none" });
@@ -188,7 +190,32 @@ export default function NoteCreate() {
       </View>
 
       <View style={{ padding: "20rpx 28rpx" }}>
-        <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>发给自己 —— 什么都可以说……</Text>
+        <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>
+          {mode === "ledger" ? "记一笔 —— 花了/赚了多少钱，随手丢给我" : "发给自己 —— 什么都可以说……"}
+        </Text>
+      </View>
+
+      <View style={{ display: "flex", gap: "12rpx", padding: "0 28rpx 16rpx" }}>
+        {[
+          { k: "emotion", l: "✦ 心签" },
+          { k: "ledger", l: "📒 记一笔" }
+        ].map((m) => {
+          const active = mode === m.k;
+          return (
+            <View
+              key={m.k}
+              onClick={() => setMode(m.k)}
+              style={{
+                padding: "8rpx 22rpx",
+                borderRadius: "999rpx",
+                border: `1rpx solid ${active ? theme.primary : theme.border}`,
+                background: active ? theme.primary : theme.card
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: active ? "#fff" : theme.inkTertiary }}>{m.l}</Text>
+            </View>
+          );
+        })}
       </View>
 
       <View style={{ flex: 1, padding: "0 28rpx" }}>
@@ -205,7 +232,7 @@ export default function NoteCreate() {
             boxSizing: "border-box",
             border: `1rpx solid ${theme.border}`
           }}
-          placeholder="此刻的心情、刷到的好文章、怕忘的号码、想分享的瞬间……"
+          placeholder={mode === "ledger" ? "例如：午餐 25，打车 18，稿费 500……我帮你整理成账本" : "此刻的心情、刷到的好文章、怕忘的号码、想分享的瞬间……"}
           value={content}
           maxlength={2000}
           autoHeight

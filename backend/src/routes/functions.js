@@ -2465,8 +2465,8 @@ functionsRouter.post("/:name", async (req, res) => {
 
       const density = note.metadata?.response_density || "light";
 
-      // 账本检测：金额模式 ≥2 即按账本签处理（AI 精解析 + 本地兜底双保险）
-      const isLedger = looksLikeLedger(materialText);
+      // 账本检测：金额模式 ≥2 即按账本签处理；显式 source_type=ledger 也强制走账本（AI 精解析 + 本地兜底双保险）
+      const isLedger = looksLikeLedger(materialText) || note.sourceType === "ledger" || note.source_type === "ledger";
 
       // 纠错学习：参考用户历史「分错了」纠正，同类内容越分越准
       const corrections = await prisma.userCorrection.findMany({
@@ -2516,7 +2516,7 @@ functionsRouter.post("/:name", async (req, res) => {
                     }
                   }
                 },
-                advice: { type: "string", description: "一句正向建议：先肯定记账习惯，再轻点一个留意项，≤60字" }
+                advice: { type: "string", description: "一句吐槽式回应：像损友一样幽默调侃这笔花销（轻松、毒舌但不伤人），≤60字" }
               }
             }
           } : {})
@@ -2535,7 +2535,7 @@ functionsRouter.post("/:name", async (req, res) => {
 - 资料签：提炼核心要点，并建议下一步（沉淀知识库 / 转成约定 / 延伸阅读）。
 - 备忘签：只确认"已收好"，不展开。
 - 分享签：鼓励传播，提到可以生成签卡。
-${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类别/金额/收支），并用 ledger.advice 给一句正向建议：先肯定记账习惯，再轻点一个留意项。" : ""}
+${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类别/金额/收支），并用 ledger.advice 以吐槽口吻回应——像最熟悉你的损友那样开玩笑式调侃这笔花销（比如'又点外卖？这个月第几杯奶茶了'），轻松幽默、不评判不伤人，结尾可轻点一个花钱留意项。" : ""}
 
 约束：
 - 情绪≤80字，资料/账本≤60字，备忘≤20字，灵感≤50字，分享≤40字。

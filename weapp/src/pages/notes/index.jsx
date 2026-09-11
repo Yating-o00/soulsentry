@@ -839,6 +839,8 @@ export default function Notes() {
           visible
           onClose={closePoster}
           type="note"
+          noteType={getNoteType(posterNote)}
+          date={posterNote.created_date}
           title={getTitle(posterNote) || "心签"}
           description={posterNote.plain_text || posterNote.content || ""}
           extra={getAiResponse(posterNote) || undefined}

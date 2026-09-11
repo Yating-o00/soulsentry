@@ -2,10 +2,28 @@ import { useEffect, useRef, useState } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text, Button, Image } from "@tarojs/components";
 import createQRCode from "@/lib/qrcode";
+import { get } from "@/utils/api";
 
 const BASE_WIDTH = 640;
 const THEME = "#384877";
 const THEME_LIGHT = "#3b5aa2";
+
+// 心签类型色（与 Web 端 heartSignMeta 口径一致）
+const NOTE_TYPE_META = {
+  emotion: { label: "情绪", color: "#c97b8a" },
+  inspiration: { label: "灵感", color: "#d97706" },
+  material: { label: "资料", color: "#5b82a0" },
+  memo: { label: "备忘", color: "#8a7d6b" },
+  share: { label: "分享", color: "#6e8a73" },
+  ledger: { label: "账本", color: "#a08452" }
+};
+
+// 签卡日期：YYYY年M月D日（与 Web 端 Intl zh-CN long 格式一致）
+function formatCardDate(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
 
 // 所有尺寸基于 640px 基准画布，实际绘制时按 s = W / BASE_WIDTH 缩放。
 // 统一使用 textBaseline = 'top'，y 坐标表示当前文字/元素的顶部位置，
@@ -196,7 +214,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
   };
 }
 
-export default function SharePoster({ visible, onClose, type, title, description, extra, subtasks = [], shareToken, canvasId }) {
+export default function SharePoster({ visible, onClose, type, title, description, extra, subtasks = [], shareToken, canvasId, noteType, date }) {
   const [posterUrl, setPosterUrl] = useState("");
   const [generating, setGenerating] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: BASE_WIDTH, height: 960 });
@@ -235,6 +253,25 @@ export default function SharePoster({ visible, onClose, type, title, description
       const sys = Taro.getSystemInfoSync();
       const winWidth = sys.windowWidth || 375;
       const widthPx = Math.round(winWidth * 0.9);
+
+      // 心签：与 Web 端签卡一致的固定比例（1080×1350 布局等比缩放）
+      if (isNote) {
+        const totalHeight = Math.round(widthPx * 1.25);
+        setCanvasSize({ width: widthPx, height: totalHeight });
+        const canvas = createOffscreenCanvas(widthPx, totalHeight);
+        const ctx = canvas.getContext("2d");
+        loadAvatarImage(canvas).then((avatarImg) => {
+          try {
+            drawNotePoster(ctx, widthPx, totalHeight, { avatarImg });
+            exportCanvas(canvas, widthPx, totalHeight);
+          } catch (err) {
+            console.error("generate poster failed", err);
+            setGenerating(false);
+            generatingRef.current = false;
+          }
+        });
+        return;
+      }
 
       // 先用一个临时 canvas 测量布局
       const measureCanvas = createOffscreenCanvas(widthPx, 3000);
@@ -293,6 +330,169 @@ export default function SharePoster({ visible, onClose, type, title, description
           Taro.showToast({ title: "卡片生成失败", icon: "none" });
         }
       });
+    }
+  };
+
+  // 账号头像 → canvas Image（失败时返回 null，回落「心」圆圈）
+  const loadAvatarImage = (canvas) =>
+    new Promise((resolve) => {
+      (async () => {
+        try {
+          const me = await get("/users/me", {}, { silent: true });
+          let url = me?.avatar_url;
+          if (!url) return resolve(null);
+          if (url.startsWith("/")) {
+            const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+            const origin = rawApi.replace(/\/api\/?$/, "");
+            url = origin + url;
+          }
+          const info = await Taro.getImageInfo({ src: url });
+          const img = canvas.createImage();
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(null);
+          img.src = info.path;
+        } catch {
+          resolve(null);
+        }
+      })();
+    });
+
+  // 心签签卡：复刻 Web 端 HeartSignShareCard 布局（1080×1350 基准，s = W/1080）
+  const drawNotePoster = (ctx, W, H, { avatarImg } = {}) => {
+    const s = W / 1080;
+    const SERIF = '"Songti SC","STSong",serif';
+    const SANS = '"PingFang SC","Microsoft YaHei",sans-serif';
+    const meta = NOTE_TYPE_META[noteType] || { label: "心签", color: "#384877" };
+    const typeColor = meta.color;
+    const content = String(description || "").trim() || "（空内容）";
+    const replyText = String(extra || "").trim();
+    const dateStr = formatCardDate(date);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+
+    // 纸面底：暖白
+    ctx.fillStyle = "#fbfaf7";
+    ctx.fillRect(0, 0, W, H);
+
+    // 内缩双细线框
+    ctx.lineWidth = Math.max(1, s);
+    ctx.strokeStyle = "rgba(56,72,119,0.28)";
+    ctx.strokeRect(30 * s, 30 * s, W - 60 * s, H - 60 * s);
+    ctx.strokeStyle = "rgba(56,72,119,0.10)";
+    ctx.strokeRect(38 * s, 38 * s, W - 76 * s, H - 76 * s);
+
+    // 顶部：有头像时圆形头像替代「心」圆圈，否则细线圆圈「心」
+    const cx = W / 2, cy = 170 * s, r = 34 * s;
+    if (avatarImg) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      const scale = Math.max((r * 2) / avatarImg.width, (r * 2) / avatarImg.height);
+      const iw = avatarImg.width * scale, ih = avatarImg.height * scale;
+      ctx.drawImage(avatarImg, cx - iw / 2, cy - ih / 2, iw, ih);
+      ctx.restore();
+      ctx.strokeStyle = "rgba(56,72,119,0.4)";
+      ctx.lineWidth = Math.max(1, 2 * s);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 3 * s, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = "rgba(56,72,119,0.5)";
+      ctx.lineWidth = Math.max(1, s);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#384877";
+      ctx.font = `500 ${Math.round(32 * s)}px ${SERIF}`;
+      ctx.fillText("心", cx, cy + 11 * s);
+    }
+    ctx.fillStyle = "#9aa3b5";
+    ctx.font = `400 ${Math.round(20 * s)}px ${SANS}`;
+    ctx.fillText("S O U L S E N T R Y", W / 2, 244 * s);
+
+    // 签文：浅色大引号 + 衬线居中，最多 10 行
+    const fontSize = 34 * s;
+    const lineHeight = Math.round(34 * 1.9) * s;
+    ctx.fillStyle = "rgba(56,72,119,0.10)";
+    ctx.font = `700 ${Math.round(96 * s)}px ${SERIF}`;
+    ctx.fillText("“", W / 2, 400 * s);
+    ctx.fillStyle = "#2c3244";
+    ctx.font = `400 ${Math.round(fontSize)}px ${SERIF}`;
+    const lines = wrapText(ctx, content, 760 * s).slice(0, 10);
+    const textTop = 470 * s;
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, textTop + i * lineHeight));
+
+    // 日期 + 类型色圆点 + 类型标签（整体居中）
+    const metaY = textTop + lines.length * lineHeight + 26 * s;
+    ctx.font = `400 ${Math.round(22 * s)}px ${SANS}`;
+    const dateW = dateStr ? ctx.measureText(dateStr).width : 0;
+    const dotR = 5 * s;
+    const gap = 14 * s;
+    const labelW = ctx.measureText(meta.label).width;
+    const totalW = dateW + (dateStr ? gap : 0) + dotR * 2 + gap + labelW;
+    let mx = W / 2 - totalW / 2;
+    ctx.textAlign = "left";
+    if (dateStr) {
+      ctx.fillStyle = "#8e8e93";
+      ctx.fillText(dateStr, mx, metaY);
+      mx += dateW + gap;
+    }
+    ctx.fillStyle = typeColor;
+    ctx.beginPath();
+    ctx.arc(mx + dotR, metaY - 7 * s, dotR, 0, Math.PI * 2);
+    ctx.fill();
+    mx += dotR * 2 + gap;
+    ctx.fillStyle = "#8e8e93";
+    ctx.fillText(meta.label, mx, metaY);
+
+    // AI 回应（另一个你）：短线分隔 + 斜体灰蓝，最多 3 行
+    if (replyText) {
+      const replyTop = H - (link ? 460 : 400) * s;
+      ctx.strokeStyle = "rgba(56,72,119,0.16)";
+      ctx.lineWidth = Math.max(1, s);
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - 60 * s, replyTop - 40 * s);
+      ctx.lineTo(W / 2 + 60 * s, replyTop - 40 * s);
+      ctx.stroke();
+      ctx.fillStyle = "#6b7a99";
+      ctx.font = `italic 400 ${Math.round(26 * s)}px ${SERIF}`;
+      const rl = wrapText(ctx, replyText, 680 * s).slice(0, 3);
+      ctx.textAlign = "center";
+      rl.forEach((l, i) => ctx.fillText(l, W / 2, replyTop + i * 48 * s));
+    }
+
+    // 底部一栏：细线之上，左侧品牌语，右侧二维码 +「扫码回应」
+    ctx.strokeStyle = "rgba(56,72,119,0.16)";
+    ctx.lineWidth = Math.max(1, s);
+    ctx.beginPath();
+    ctx.moveTo(90 * s, H - 190 * s);
+    ctx.lineTo(W - 90 * s, H - 190 * s);
+    ctx.stroke();
+
+    ctx.fillStyle = "#8e8e93";
+    ctx.font = `400 ${Math.round(22 * s)}px ${SANS}`;
+    if (link) {
+      ctx.textAlign = "left";
+      ctx.fillText("心栈 · 说给另一个自己听", 90 * s, H - 118 * s);
+    } else {
+      ctx.textAlign = "center";
+      ctx.fillText("心栈 · 说给另一个自己听", W / 2, H - 130 * s);
+    }
+
+    if (link) {
+      const qrSize = 110 * s;
+      const qrX = W - 90 * s - qrSize;
+      const qrY = H - 172 * s;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(qrX, qrY, qrSize, qrSize);
+      drawQRCode(ctx, link, qrX, qrY, qrSize);
+      ctx.fillStyle = "#b0b0b5";
+      ctx.font = `400 ${Math.round(18 * s)}px ${SANS}`;
+      ctx.textAlign = "right";
+      ctx.fillText("扫码回应", qrX - 22 * s, H - 112 * s);
     }
   };
 

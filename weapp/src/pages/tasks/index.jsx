@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
@@ -83,9 +83,11 @@ export default function Tasks() {
   const [toast, setToast] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
 
+  const toastTimerRef = useRef(null);
   const showToast = (msg) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 2600);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 2600);
   };
 
   const fetchData = useCallback(async () => {
@@ -149,15 +151,18 @@ export default function Tasks() {
 
   const evo = useMemo(() => computeEvolution(tasks, executions), [tasks, executions]);
 
-  const handleComplete = async (task) => {
+  const handleComplete = (task) => {
     const nextStatus = isTaskDone(task) ? "pending" : "completed";
-    try {
-      await patch(`/tasks/${task.id}`, { status: nextStatus });
-      showToast(nextStatus === "completed" ? "已盖章 · 如约而至" : "已取消完成");
-      fetchData();
-    } catch (err) {
-      // handled globally
-    }
+    const prevStatus = task.status;
+    // 乐观更新：点击瞬间勾划/还原 + 立即提示，不等网络；失败再回滚
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)));
+    showToast(nextStatus === "completed" ? "已盖章 · 如约而至" : "已取消完成");
+    patch(`/tasks/${task.id}`, { status: nextStatus })
+      .then(() => fetchData())
+      .catch(() => {
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus } : t)));
+        showToast("网络开小差了，请再试一次");
+      });
   };
 
   const handleSubtaskToggle = async (sub) => {

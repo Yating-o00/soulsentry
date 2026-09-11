@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
 import Taro, { useDidShow, useDidHide } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Image, Canvas } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
@@ -1153,6 +1153,108 @@ function RiverCanvas({ points, deep, heartNotes }) {
   );
 }
 
+// 底部输入栏独立成 memo 组件：输入文字只重渲染本组件，
+// 不再触发整页（大量板块 + 河流 Canvas）重渲染，避免每次按键产生大量 setData 导致键盘卡顿、吞点击。
+// 注意：不绑定受控 focus 属性——微信基础库在 input 聚焦期间收到 setData 会按 focus=false 强制收起键盘，
+// 这正是"要点好几次键盘才稳定"的根因。程序聚焦改用 key+focus 重挂载实现。
+const FlowComposer = memo(function FlowComposer({ placeholder, busy, focusNonce, onSend, onQuickAction }) {
+  const [text, setText] = useState("");
+  const [focusTick, setFocusTick] = useState(0);
+  const lastNonceRef = useRef(0);
+
+  useEffect(() => {
+    if (focusNonce > 0 && focusNonce !== lastNonceRef.current) {
+      lastNonceRef.current = focusNonce;
+      setFocusTick(focusNonce);
+    }
+  }, [focusNonce]);
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t || busy) return;
+    setText("");
+    onSend?.(t);
+  };
+
+  const inputEl = focusTick > 0 ? (
+    <Input
+      key={`focus-${focusTick}`}
+      focus
+      style={{ flex: 1, fontSize: "30rpx", color: THEME.ink, height: "64rpx" }}
+      placeholder={placeholder}
+      value={text}
+      onInput={(e) => setText(e.detail.value)}
+      onConfirm={submit}
+      onBlur={() => setFocusTick(0)}
+    />
+  ) : (
+    <Input
+      key="plain"
+      style={{ flex: 1, fontSize: "30rpx", color: THEME.ink, height: "64rpx" }}
+      placeholder={placeholder}
+      value={text}
+      onInput={(e) => setText(e.detail.value)}
+      onConfirm={submit}
+    />
+  );
+
+  return (
+    <View
+      style={{
+        paddingBottom: "env(safe-area-inset-bottom)",
+        background: "rgba(250,251,251,0.92)",
+        borderTop: "1rpx solid rgba(232,236,239,0.6)",
+        flexShrink: 0
+      }}
+    >
+      <View style={{ padding: "16rpx 28rpx 12rpx" }}>
+        <View
+          style={{
+            display: "flex",
+            alignItems: "center",
+            background: THEME.card,
+            borderRadius: "40rpx",
+            border: `1rpx solid ${THEME.border}`,
+            padding: "8rpx 8rpx 8rpx 24rpx",
+            boxShadow: "0 2rpx 8rpx rgba(0,0,0,0.04)"
+          }}
+        >
+          {inputEl}
+          <View
+            onClick={submit}
+            style={{
+              width: "64rpx",
+              height: "64rpx",
+              borderRadius: "50%",
+              background: text.trim() ? THEME.primary : THEME.border,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              marginLeft: "12rpx"
+            }}
+          >
+            <Text style={{ fontSize: "32rpx", color: "#fff" }}>➤</Text>
+          </View>
+        </View>
+        <View style={{ display: "flex", justifyContent: "space-around", marginTop: "12rpx" }}>
+          {[
+            { key: "heart", icon: "♡", label: "心签", color: THEME.heartDeep },
+            { key: "voice", icon: "🎤", label: "语音", color: THEME.inkQuaternary },
+            { key: "photo", icon: "📷", label: "拍照", color: THEME.inkQuaternary },
+            { key: "task", icon: "📋", label: "约定", color: THEME.inkQuaternary }
+          ].map((q) => (
+            <View key={q.key} onClick={() => onQuickAction?.(q.key)} style={{ display: "flex", alignItems: "center", padding: "8rpx 12rpx" }}>
+              <Text style={{ fontSize: "28rpx", color: q.color, marginRight: "8rpx" }}>{q.icon}</Text>
+              <Text style={{ fontSize: "24rpx", color: q.color }}>{q.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+});
+
 export default function Flow() {
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -1166,9 +1268,8 @@ export default function Flow() {
   const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
-  const [inputText, setInputText] = useState("");
   const [inputPlaceholder, setInputPlaceholder] = useState("此刻想记下什么？");
-  const [inputFocus, setInputFocus] = useState(false);
+  const [focusNonce, setFocusNonce] = useState(0); // 递增触发底部输入框程序聚焦
   const [analyzing, setAnalyzing] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showAllDue, setShowAllDue] = useState(false);
@@ -1819,11 +1920,8 @@ export default function Flow() {
       Taro.navigateTo({ url: "/pages/login/index" });
       return;
     }
-    const text = String(explicitText || inputText).trim();
+    const text = String(explicitText || "").trim();
     if (!text || analyzing) return;
-    if (!explicitText) {
-      setInputText("");
-    }
     setInputPlaceholder("已收下，晚些时候一起看看");
     setTimeout(() => setInputPlaceholder("此刻想记下什么？"), 2500);
     if (extractUrl(text)) {
@@ -2075,7 +2173,7 @@ export default function Flow() {
                 } else if (riverInsight.action === "go-task" && riverInsight.payload?.id) {
                   goTask(riverInsight.payload.id);
                 } else {
-                  setInputFocus(true);
+                  setFocusNonce((n) => n + 1);
                 }
               }}
               style={{
@@ -3449,66 +3547,14 @@ export default function Flow() {
   );
 
   const renderBottomBar = () => (
-    <View
-      style={{
-        paddingBottom: "env(safe-area-inset-bottom)",
-        background: "rgba(250,251,251,0.92)",
-        borderTop: "1rpx solid rgba(232,236,239,0.6)",
-        flexShrink: 0
-      }}
-    >
-      <View style={{ padding: "16rpx 28rpx 12rpx" }}>
-        <View
-          style={{
-            display: "flex",
-            alignItems: "center",
-            background: THEME.card,
-            borderRadius: "40rpx",
-            border: `1rpx solid ${THEME.border}`,
-            padding: "8rpx 8rpx 8rpx 24rpx",
-            boxShadow: "0 2rpx 8rpx rgba(0,0,0,0.04)"
-          }}
-        >
-          <Input
-            style={{ flex: 1, fontSize: "30rpx", color: THEME.ink, height: "64rpx" }}
-            placeholder={inputPlaceholder}
-            value={inputText}
-            focus={inputFocus}
-            onInput={(e) => setInputText(e.detail.value)}
-            onConfirm={handleSend}
-            onBlur={() => setInputFocus(false)}
-          />
-          <View
-            onClick={() => handleSend()}
-            style={{
-              width: "64rpx",
-              height: "64rpx",
-              borderRadius: "50%",
-              background: inputText.trim() ? THEME.primary : THEME.border,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-              marginLeft: "12rpx"
-            }}
-          >
-            <Text style={{ fontSize: "32rpx", color: "#fff" }}>➤</Text>
-          </View>
-        </View>
-        <View style={{ display: "flex", justifyContent: "space-around", marginTop: "12rpx" }}>
-          {[
-            { key: "heart", icon: "♡", label: "心签", color: THEME.heartDeep },
-            { key: "voice", icon: "🎤", label: "语音", color: THEME.inkQuaternary },
-            { key: "photo", icon: "📷", label: "拍照", color: THEME.inkQuaternary },
-            { key: "task", icon: "📋", label: "约定", color: THEME.inkQuaternary }
-          ].map((q) => (
-            <View key={q.key} onClick={() => quickAction(q.key)} style={{ display: "flex", alignItems: "center", padding: "8rpx 12rpx" }}>
-              <Text style={{ fontSize: "28rpx", color: q.color, marginRight: "8rpx" }}>{q.icon}</Text>
-              <Text style={{ fontSize: "24rpx", color: q.color }}>{q.label}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
+    <>
+      <FlowComposer
+        placeholder={inputPlaceholder}
+        busy={analyzing}
+        focusNonce={focusNonce}
+        onSend={handleSend}
+        onQuickAction={quickAction}
+      />
 
       {showVoiceModal && (
         <View
@@ -3556,7 +3602,7 @@ export default function Flow() {
           </View>
         </View>
       )}
-    </View>
+    </>
   );
 
   return (

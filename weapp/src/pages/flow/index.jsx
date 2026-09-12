@@ -1155,19 +1155,10 @@ function RiverCanvas({ points, deep, heartNotes }) {
 
 // 底部输入栏独立成 memo 组件：输入文字只重渲染本组件，
 // 不再触发整页（大量板块 + 河流 Canvas）重渲染，避免每次按键产生大量 setData 导致键盘卡顿、吞点击。
-// 注意：不绑定受控 focus 属性——微信基础库在 input 聚焦期间收到 setData 会按 focus=false 强制收起键盘，
-// 这正是"要点好几次键盘才稳定"的根因。程序聚焦改用 key+focus 重挂载实现。
-const FlowComposer = memo(function FlowComposer({ placeholder, busy, focusNonce, onSend, onQuickAction }) {
+// 注意：不绑定受控 focus 属性，也不做 key+focus 重挂载——微信基础库在 input 聚焦期间
+// 收到 setData 会强制收起键盘，任何在输入中触发重渲染的聚焦 hack 都会打断连续打字。
+const FlowComposer = memo(function FlowComposer({ placeholder, busy, onSend, onQuickAction }) {
   const [text, setText] = useState("");
-  const [focusTick, setFocusTick] = useState(0);
-  const lastNonceRef = useRef(0);
-
-  useEffect(() => {
-    if (focusNonce > 0 && focusNonce !== lastNonceRef.current) {
-      lastNonceRef.current = focusNonce;
-      setFocusTick(focusNonce);
-    }
-  }, [focusNonce]);
 
   const submit = () => {
     const t = text.trim();
@@ -1176,20 +1167,8 @@ const FlowComposer = memo(function FlowComposer({ placeholder, busy, focusNonce,
     onSend?.(t);
   };
 
-  const inputEl = focusTick > 0 ? (
+  const inputEl = (
     <Input
-      key={`focus-${focusTick}`}
-      focus
-      style={{ flex: 1, fontSize: "30rpx", color: THEME.ink, height: "64rpx" }}
-      placeholder={placeholder}
-      value={text}
-      onInput={(e) => setText(e.detail.value)}
-      onConfirm={submit}
-      onBlur={() => setFocusTick(0)}
-    />
-  ) : (
-    <Input
-      key="plain"
       style={{ flex: 1, fontSize: "30rpx", color: THEME.ink, height: "64rpx" }}
       placeholder={placeholder}
       value={text}
@@ -1269,7 +1248,6 @@ export default function Flow() {
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
   const [inputPlaceholder, setInputPlaceholder] = useState("此刻想记下什么？");
-  const [focusNonce, setFocusNonce] = useState(0); // 递增触发底部输入框程序聚焦
   const [analyzing, setAnalyzing] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showAllDue, setShowAllDue] = useState(false);
@@ -2172,8 +2150,6 @@ export default function Flow() {
                   Taro.navigateTo({ url: "/pages/tasks/index" });
                 } else if (riverInsight.action === "go-task" && riverInsight.payload?.id) {
                   goTask(riverInsight.payload.id);
-                } else {
-                  setFocusNonce((n) => n + 1);
                 }
               }}
               style={{
@@ -3551,7 +3527,6 @@ export default function Flow() {
       <FlowComposer
         placeholder={inputPlaceholder}
         busy={analyzing}
-        focusNonce={focusNonce}
         onSend={handleSend}
         onQuickAction={quickAction}
       />

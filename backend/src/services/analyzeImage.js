@@ -43,7 +43,8 @@ suggestion 按类型给字段：
 
 拿不准的字段留空或给默认值，不要编造图中没有的信息。`;
 
-// 视觉模型全部不可用时的兜底：阿里云文字识别 OCR（纯文本），再交 Kimi 分类结构化
+// 视觉模型全部不可用时的兜底：阿里云文字识别 OCR（OCR统一识别 RecognizeAllText），
+// 图片以二进制放 HTTP body，参数签名后放查询串；提取的文字再交 Kimi 分类结构化
 const TEXT_FALLBACK_PROMPT = `以下是用户图片经 OCR 得到的转录文本（可能有个别错字）：
 """
 {ocrText}
@@ -68,39 +69,36 @@ function percentEncode(str) {
     .replace(/%7E/g, "~");
 }
 
-// 阿里云 RPC API V1 签名（HMAC-SHA1）
+// 阿里云 RPC API V1 签名（HMAC-SHA1）；图片二进制作为 POST body
 async function ocrWithAliyun(filePath) {
   const creds = getAliyunOcrCredentials();
   if (!creds) return null;
 
-  const base64 = fs.readFileSync(filePath).toString("base64");
   const params = {
     AccessKeyId: creds.keyId,
-    Action: process.env.ALIYUN_OCR_ACTION || "RecognizeGeneral",
+    Action: process.env.ALIYUN_OCR_ACTION || "RecognizeAllText",
     Format: "JSON",
-    ImageBase64: base64,
     SignatureMethod: "HMAC-SHA1",
     SignatureNonce: crypto.randomUUID(),
     SignatureVersion: "1.0",
     Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    Type: process.env.ALIYUN_OCR_TYPE || "General",
     Version: process.env.ALIYUN_OCR_VERSION || "2021-07-07"
   };
 
-  // 签名覆盖全部参数，但参数放 POST body（x-www-form-urlencoded），
-  // 避免 base64 图片塞进 URL 查询串导致网关返回 HTML 错误页
-  const sortedBody = Object.keys(params).sort()
+  const sortedQuery = Object.keys(params).sort()
     .map((k) => `${percentEncode(k)}=${percentEncode(params[k])}`)
     .join("&");
-  const stringToSign = `POST&%2F&${percentEncode(sortedBody)}`;
+  const stringToSign = `POST&%2F&${percentEncode(sortedQuery)}`;
   const signature = crypto.createHmac("sha1", `${creds.secret}&`)
     .update(stringToSign)
     .digest("base64");
-  const url = `https://ocr-api.${process.env.ALIYUN_OCR_REGION || "cn-hangzhou"}.aliyuncs.com/?Signature=${percentEncode(signature)}`;
+  const url = `https://ocr-api.${process.env.ALIYUN_OCR_REGION || "cn-hangzhou"}.aliyuncs.com/?${sortedQuery}&Signature=${percentEncode(signature)}`;
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: sortedBody,
+    headers: { "Content-Type": "application/octet-stream" },
+    body: fs.readFileSync(filePath),
     signal: AbortSignal.timeout(30000)
   });
   const raw = await response.text();
@@ -118,12 +116,18 @@ async function ocrWithAliyun(filePath) {
     throw error;
   }
 
-  const lines = Array.isArray(data?.data) ? data.data : [];
-  const text = lines
-    .map((l) => (typeof l === "string" ? l : (l?.text || l?.word || "")))
-    .filter(Boolean)
-    .join("\n");
-  if (!text.trim()) {
+  // 优先取汇总文字 Content，其次拼文字块
+  let text = String(data?.Data?.Content || "").trim();
+  if (!text) {
+    const blocks = [];
+    for (const sub of data?.Data?.SubImages || []) {
+      for (const b of sub?.BlockInfo?.BlockDetails || []) {
+        if (b?.BlockContent) blocks.push(String(b.BlockContent));
+      }
+    }
+    text = blocks.join("\n").trim();
+  }
+  if (!text) {
     const error = new Error("图片中没有识别到文字");
     error.status = 422;
     throw error;

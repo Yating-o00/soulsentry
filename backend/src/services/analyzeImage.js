@@ -83,7 +83,7 @@ async function ocrWithAliyun(filePath) {
     SignatureNonce: crypto.randomUUID(),
     SignatureVersion: "1.0",
     Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-    Version: process.env.ALIYUN_OCR_VERSION || "2018-12-10"
+    Version: process.env.ALIYUN_OCR_VERSION || "2021-07-07"
   };
 
   // 签名覆盖全部参数，但参数放 POST body（x-www-form-urlencoded），

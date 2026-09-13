@@ -3758,12 +3758,11 @@ export default function Flow() {
                   <Text style={fieldLabel}>识别出的文字（可编辑）</Text>
                   <Textarea
                     value={imageDraft.extractedText}
-                    autoHeight
                     maxlength={4000}
                     onInput={(e) =>
                       setImageDraft((prev) => (prev ? { ...prev, extractedText: e.detail.value } : prev))
                     }
-                    style={{ ...fieldInput, minHeight: "140rpx", width: "100%", boxSizing: "border-box" }}
+                    style={{ ...fieldInput, height: "200rpx", width: "100%", boxSizing: "border-box" }}
                   />
                   <Text style={fieldLabel}>生成类型</Text>
                   <View style={{ display: "flex", flexDirection: "row", flexWrap: "wrap" }}>

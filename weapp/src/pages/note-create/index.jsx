@@ -222,7 +222,7 @@ export default function NoteCreate() {
         <Textarea
           style={{
             width: "100%",
-            minHeight: "480rpx",
+            height: "480rpx",
             background: theme.card,
             borderRadius: "18rpx",
             padding: "28rpx",
@@ -235,7 +235,6 @@ export default function NoteCreate() {
           placeholder={mode === "ledger" ? "例如：午餐 25，打车 18，稿费 500……我帮你整理成账本" : "此刻的心情、刷到的好文章、怕忘的号码、想分享的瞬间……"}
           value={content}
           maxlength={2000}
-          autoHeight
           disableDefaultPadding
           showConfirmBar={false}
           onInput={(e) => setContent(e.detail.value)}

@@ -2793,6 +2793,20 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           ledger: parsed.ledger || null
         };
 
+        // 表格去重：回应只是在复述用户输入（与原文高度重叠）时，只保留表格，
+        // 回应改成一句过渡语，避免"原文、回应、表格"三份重复内容
+        if (ai_analysis.table_md && ai_analysis.emotional_response) {
+          const norm = (s) => String(s || "").replace(/[\s|｜，。、：:；;！!？?·\-—*#>`]/g, "");
+          const respNorm = norm(ai_analysis.emotional_response);
+          const noteNorm = norm(materialText);
+          if (respNorm.length >= 10 && noteNorm.length >= 10) {
+            const overlap = [...respNorm].filter((ch) => noteNorm.includes(ch)).length / respNorm.length;
+            if (overlap > 0.7) {
+              ai_analysis.emotional_response = "内容已经整理成上面的表格啦，一目了然。";
+            }
+          }
+        }
+
         const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
         const plainTextLen = String(note.plainText || note.content || "").trim().length;
         const title = plainTextLen <= 50

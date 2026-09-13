@@ -247,18 +247,20 @@ function parseExplicitTimeLocal(text, baseDate = new Date()) {
     if (offset === 0 && d <= now) d.setDate(d.getDate() + 1);
     return { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "explicit" };
   }
-  // 本周/下周/下星期/下礼拜 X + 可选时刻
-  const weekMatch = t.match(/(本|下)(?:周|星期|礼拜)([一二三四五六日天])\s*(?:上午|下午|晚上|今晚)?\s*(?:(\d{1,2})\s*[点:：]\s*(?:(\d{1,2})|半|一刻|三刻)?)?/);
+  // (本/下)周X/星期X/礼拜X + 可选时刻；前缀可省略："周五前交报告"= 本周五
+  const weekMatch = t.match(/(本|下)?(?:周|星期|礼拜)([一二三四五六日天])\s*(?:上午|下午|晚上|今晚)?\s*(?:(\d{1,2})\s*[点:：]\s*(?:(\d{1,2})|半|一刻|三刻)?)?/);
   if (weekMatch) {
     const weekdayMap = { 日: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 天: 0 };
     const targetDow = weekdayMap[weekMatch[2]];
     const d = new Date(baseDate);
     const curDow = d.getDay();
     let diff = (targetDow - curDow + 7) % 7;
-    if (weekMatch[1] === "下" || (diff === 0 && /下周|下星期|下礼拜/.test(t))) {
-      diff = diff === 0 ? 7 : diff;
+    if (weekMatch[1] === "下") {
+      // "下X"一律取下个星期：当天（diff=0）→ +7，其余 → 本周差值 +7
+      diff = diff === 0 ? 7 : diff + 7;
+    } else if (diff === 0 && /下周|下星期|下礼拜/.test(t)) {
+      diff = 7;
     }
-    if (weekMatch[1] === "下") diff += 7;
 
     let hour = weekMatch[3] ? parseInt(weekMatch[3], 10) : 9;
     let minute = 0;
@@ -402,7 +404,7 @@ export async function parseTaskInput({ input, date, savedLocations = [], current
       repeat_rule: { type: "string", enum: ["none", "daily", "weekly", "monthly", "custom"], description: "重复规则：每天/每日→daily，每周X/工作日/周末→weekly，每月X号→monthly，每隔N天→custom，无重复→none" },
       subtasks: {
         type: "array",
-        description: "子约定/步骤清单：输入里用'先…然后…最后…'、序号、顿号列举的多个待办步骤，最多 8 个；没有则返回空数组",
+        description: "子约定/步骤清单：输入里用'先…然后…最后…'、序号、顿号列举的多个待办步骤，或交付类任务按'收集→制作→交付'拆解的 2-4 步，最多 8 个；没有则返回空数组",
         items: { type: "string", description: "单个步骤，≤30字" }
       },
       custom_recurrence: {
@@ -436,7 +438,8 @@ export async function parseTaskInput({ input, date, savedLocations = [], current
 
   try {
     const currentTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    // Kimi 只给 5 秒，超时立即 fallback 到本地规则，避免前端等 25 秒
+    // Kimi 给 15 秒：5 秒上限会在 K2 冷启动时过早打落到本地兜底，
+    // 导致子约定/相对时间丢失；前端 parseInputAndConfirm 有 30s 超时兜底
     kimiResult = await Promise.race([
       invokeKimiText({
         prompt: `用户输入：${text}
@@ -454,13 +457,13 @@ ${habitText}
 5. 从输入中提取地点（location）、地点类型（location_type）和事件类型（event_type）。
 6. 如果用户没有明确说地点，请使用上面给出的"地点候选"；如果候选也没有，返回空字符串。
 7. 如果输入包含重复语义（"每天/每日/每晚"、"每周三/每周三五/工作日/周末"、"每月15号"、"每隔3天"），repeat_rule 填 daily/weekly/monthly/custom，reminder_time 用今天或明天该时刻（今天的已过则取明天），custom_recurrence 填具体星期几/几号/间隔；没有重复语义则 repeat_rule 填 none。
-8. 如果输入包含多个步骤/子约定（"先…然后…最后…"、"1. … 2. …"、顿号/分号列举的动作），提取到 subtasks，每项≤30字、最多8个；只有一个整体约定则返回空数组。
+8. 如果输入包含多个步骤/子约定（"先…然后…最后…"、"1. … 2. …"、顿号/分号列举的动作），提取到 subtasks，每项≤30字、最多8个；只有一个整体约定则返回空数组。另外，若输入是交付类任务（如"给某人发某报告/表格"、"完成某方案"），即使未显式列举步骤，也按"收集信息→整理制作→交付确认"拆出 2-4 个可执行步骤。
 9. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
         systemPrompt: "你是 SoulSentry 的约定解析器。把中文自然语言输入转成可创建的约定字段。严格返回 JSON。",
         responseJsonSchema: schema,
         temperature: 0.2
       }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 5000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000))
     ]);
     kimiSucceeded = true;
   } catch (err) {

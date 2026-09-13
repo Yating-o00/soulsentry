@@ -346,7 +346,7 @@ export function detectAutomationTypeFromInput(text) {
     // 2. PPT / 演示
     { type: "ppt_doc", regex: /做ppt|做PPT|生成ppt|生成PPT|做.*ppt|做.*PPT|生成.*ppt|生成.*PPT|幻灯片|演示稿|演示文稿|演讲稿|路演|pitch deck/ },
     // 3. 调研
-    { type: "web_research", regex: /调研|研究|考察|比对|对比分析|联网搜索|查.*资料|了解一下|分析报告|尽调/ },
+    { type: "web_research", regex: /调研|研究|考察|比对|对比分析|联网搜索|查.*资料|了解一下|分析报告|尽调|竞品|竟品|对比表|分类表/ },
     // 4. 账本：明确关键词兜底
     { type: "ledger_organize", regex: /整理账本|记账|账本|收支|报销|账单|记账本|支出.*收入|统计.*钱/ },
     // 5. 文件整理

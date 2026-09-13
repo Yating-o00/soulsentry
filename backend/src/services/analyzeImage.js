@@ -86,17 +86,32 @@ async function ocrWithAliyun(filePath) {
     Version: process.env.ALIYUN_OCR_VERSION || "2018-12-10"
   };
 
-  const sortedQuery = Object.keys(params).sort()
+  // 签名覆盖全部参数，但参数放 POST body（x-www-form-urlencoded），
+  // 避免 base64 图片塞进 URL 查询串导致网关返回 HTML 错误页
+  const sortedBody = Object.keys(params).sort()
     .map((k) => `${percentEncode(k)}=${percentEncode(params[k])}`)
     .join("&");
-  const stringToSign = `POST&%2F&${percentEncode(sortedQuery)}`;
+  const stringToSign = `POST&%2F&${percentEncode(sortedBody)}`;
   const signature = crypto.createHmac("sha1", `${creds.secret}&`)
     .update(stringToSign)
     .digest("base64");
-  const url = `https://ocr-api.${process.env.ALIYUN_OCR_REGION || "cn-hangzhou"}.aliyuncs.com/?${sortedQuery}&Signature=${percentEncode(signature)}`;
+  const url = `https://ocr-api.${process.env.ALIYUN_OCR_REGION || "cn-hangzhou"}.aliyuncs.com/?Signature=${percentEncode(signature)}`;
 
-  const response = await fetch(url, { method: "POST", signal: AbortSignal.timeout(30000) });
-  const data = await response.json();
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: sortedBody,
+    signal: AbortSignal.timeout(30000)
+  });
+  const raw = await response.text();
+  let data = null;
+  try {
+    data = JSON.parse(raw);
+  } catch (_e) {
+    const error = new Error(`阿里云 OCR 返回异常（HTTP ${response.status}）：${raw.slice(0, 120)}`);
+    error.status = 502;
+    throw error;
+  }
   if (!response.ok || data?.Code) {
     const error = new Error(`阿里云 OCR 错误：${data?.Message || data?.Code || response.status}`);
     error.status = 502;

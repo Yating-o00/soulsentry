@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
+import { analyzeImage } from "../services/analyzeImage.js";
 import { parseTaskInput } from "../services/parseTaskInput.js";
 import { recurrenceLabel } from "../lib/recurrence.js";
 import { getUserHabitProfile } from "../services/habitProfile.js";
@@ -1441,6 +1442,26 @@ functionsRouter.post("/:name", async (req, res) => {
           });
         }
         throw error;
+      }
+    }
+
+    if (name === "analyzeImage") {
+      const fileUrl = String(payload.file_url || "").trim();
+      if (!fileUrl) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 file_url" });
+      }
+
+      try {
+        const data = await analyzeImage({ fileUrl });
+        return res.json(data);
+      } catch (error) {
+        const status = error?.status || 502;
+        const message = error?.message || String(error);
+        if (status === 400) {
+          return res.status(400).json({ error: "INVALID_IMAGE", message });
+        }
+        console.error("[analyzeImage] failed", error);
+        return res.status(502).json({ error: "AI_SERVICE_ERROR", message: `图片识别失败：${message}` });
       }
     }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
 import Taro, { useDidShow, useDidHide } from "@tarojs/taro";
-import { View, Text, ScrollView, Input, Image, Canvas } from "@tarojs/components";
+import { View, Text, ScrollView, Input, Textarea, Image, Canvas } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
 import { getToken } from "@/utils/auth";
 import VoiceInput from "@/components/VoiceInput";
@@ -1248,6 +1248,8 @@ export default function Flow() {
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
   const [inputPlaceholder, setInputPlaceholder] = useState("此刻想记下什么？");
+  const [imageDraft, setImageDraft] = useState(null); // { imageUrl, extractedText, contentType, suggestion }
+  const [imageDraftBusy, setImageDraftBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showAllDue, setShowAllDue] = useState(false);
@@ -1793,6 +1795,97 @@ export default function Flow() {
     loadAll();
   };
 
+  // ===== 图片识别草稿 =====
+  const DRAFT_TYPES = [
+    { k: "task", l: "约定" },
+    { k: "note", l: "记录" },
+    { k: "heart", l: "心签" },
+    { k: "ledger", l: "账本" }
+  ];
+
+  const updateImageDraft = (updater) => {
+    setImageDraft((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, suggestion: { ...(prev.suggestion || {}) } };
+      updater(next);
+      return next;
+    });
+  };
+
+  const confirmImageDraft = async () => {
+    if (!imageDraft || imageDraftBusy) return;
+    setImageDraftBusy(true);
+    try {
+      const { contentType, extractedText, imageUrl, suggestion } = imageDraft;
+      const s = suggestion || {};
+      const text = (extractedText || "").trim() || String(s.content || "").trim();
+      if (contentType === "task") {
+        const category = s.category === "learning" ? "study" : s.category;
+        await post("/tasks", {
+          title: String(s.title || "").trim() || text.slice(0, 60) || "图片约定",
+          description: [s.description, text, imageUrl].filter(Boolean).join("\n"),
+          priority: ["low", "medium", "high", "urgent"].includes(s.priority) ? s.priority : "medium",
+          category: ["work", "health", "family", "personal", "shopping", "study", "finance", "other"].includes(category) ? category : "other",
+          end_time: s.date && s.time ? chinaIso(s.date, s.time) : undefined,
+          metadata: {
+            image_url: imageUrl,
+            subtasks: (Array.isArray(s.subtasks) ? s.subtasks : []).map((x) => String(x || "").trim()).filter(Boolean)
+          }
+        });
+        Taro.showToast({ title: "约定已创建", icon: "success" });
+      } else if (contentType === "ledger") {
+        const entries = (Array.isArray(s.entries) ? s.entries : []).filter((en) => en && (String(en.item || "").trim() || Number(en.amount)));
+        const lines = entries.map((en) => {
+          const parts = [String(en.item || "未命名").trim(), `¥${Number(en.amount) || 0}`];
+          if (en.category) parts.push(`（${en.category}）`);
+          if (en.note) parts.push(String(en.note));
+          return parts.join(" ");
+        });
+        const total = entries.reduce((sum, en) => sum + (Number(en.amount) || 0), 0);
+        const content = [String(s.summary || "").trim(), ...lines, `合计 ¥${total.toFixed(2)}`].filter(Boolean).join("\n");
+        await post("/notes", {
+          title: String(s.summary || "").trim() || "账本",
+          content,
+          plain_text: content,
+          source_type: "ledger",
+          tags: ["账本"],
+          metadata: { image_url: imageUrl, ledger_entries: entries }
+        });
+        Taro.showToast({ title: "账已记下", icon: "success" });
+      } else if (contentType === "heart") {
+        const content = text || "（来自图片的心签）";
+        const note = await post("/notes", {
+          title: String(s.title || "").trim() || "心签",
+          content,
+          plain_text: content,
+          source_type: "heart",
+          tags: Array.isArray(s.tags) && s.tags.length ? s.tags.map(String) : ["心签"],
+          metadata: { image_url: imageUrl }
+        });
+        Taro.showToast({ title: "心签已保存", icon: "success" });
+        if (note?.id) {
+          runHeartAnalysis(note.id, { plain_text: content, content, source_type: "heart" });
+        }
+      } else {
+        const content = [text, text ? "" : null, imageUrl].filter(Boolean).join("\n");
+        await post("/notes", {
+          title: String(s.title || "").trim() || "图片记录",
+          content,
+          plain_text: text,
+          tags: Array.isArray(s.tags) && s.tags.length ? s.tags.map(String) : ["外部信息", "图片"],
+          metadata: { image_url: imageUrl }
+        });
+        Taro.showToast({ title: "已记录", icon: "success" });
+      }
+      setImageDraft(null);
+      loadAll();
+    } catch (err) {
+      Taro.showToast({ title: err?.message || "生成失败", icon: "none" });
+    } finally {
+      setImageDraftBusy(false);
+    }
+  };
+
   function parseQuickTime(text) {
     const now = new Date();
     const t = String(text || "");
@@ -1936,6 +2029,7 @@ export default function Flow() {
         count: 1,
         mediaType: ["image"],
         sourceType: ["album", "camera"],
+        sizeType: ["compressed"],
         success: async (res) => {
           const file = res.tempFiles?.[0];
           if (!file?.tempFilePath) return;
@@ -1953,15 +2047,19 @@ export default function Flow() {
               timeout: 60000
             });
             const data = JSON.parse(uploadRes.data || "{}");
-            if (uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url) {
-              await post("/notes", { title: "图片记录", content: data.file_url, tags: ["外部信息", "图片"] });
-              Taro.showToast({ title: "图片已保存", icon: "success" });
-              loadAll();
-            } else {
+            if (!(uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url)) {
               throw new Error(data?.message || "上传失败");
             }
+            Taro.showLoading({ title: "识别中" });
+            const draft = await post("/functions/analyzeImage", { file_url: data.file_url }, { silent: true });
+            setImageDraft({
+              imageUrl: data.file_url,
+              extractedText: draft?.extracted_text || "",
+              contentType: ["task", "note", "heart", "ledger"].includes(draft?.content_type) ? draft.content_type : "note",
+              suggestion: draft?.suggestion && typeof draft.suggestion === "object" ? draft.suggestion : {}
+            });
           } catch (err) {
-            Taro.showToast({ title: err?.message || "上传失败", icon: "none" });
+            Taro.showToast({ title: err?.message || "识别失败，请手动输入", icon: "none" });
           } finally {
             Taro.hideLoading();
           }
@@ -3577,6 +3675,321 @@ export default function Flow() {
           </View>
         </View>
       )}
+
+      {imageDraft && (() => {
+        const s = imageDraft.suggestion || {};
+        const apiOrigin = (process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api").replace(/\/api\/?$/, "");
+        const absUrl = `${apiOrigin}${imageDraft.imageUrl}`;
+        const draftType = imageDraft.contentType;
+        const subtasks = Array.isArray(s.subtasks) ? s.subtasks : [];
+        const entries = Array.isArray(s.entries) ? s.entries : [];
+        const fieldLabel = { fontSize: "24rpx", color: THEME.inkTertiary, margin: "20rpx 0 10rpx" };
+        const fieldInput = {
+          background: THEME.paper,
+          border: `1rpx solid ${THEME.border}`,
+          borderRadius: "12rpx",
+          padding: "14rpx 20rpx",
+          fontSize: "26rpx",
+          color: THEME.ink
+        };
+        return (
+          <View
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.5)",
+              zIndex: 210,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onClick={() => setImageDraft(null)}
+          >
+            <View
+              style={{
+                width: "660rpx",
+                maxHeight: "84vh",
+                background: THEME.card,
+                borderRadius: "28rpx",
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden"
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <View
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "28rpx 32rpx 16rpx"
+                }}
+              >
+                <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink }}>识别草稿</Text>
+                <Text
+                  style={{ fontSize: "40rpx", color: THEME.inkQuaternary, padding: "0 8rpx" }}
+                  onClick={() => setImageDraft(null)}
+                >
+                  ×
+                </Text>
+              </View>
+              <ScrollView scrollY style={{ maxHeight: "62vh" }} showScrollbar={false}>
+                <View style={{ padding: "0 32rpx" }}>
+                  <Image
+                    src={absUrl}
+                    mode="aspectFill"
+                    onClick={() => Taro.previewImage({ urls: [absUrl] })}
+                    style={{ width: "140rpx", height: "140rpx", borderRadius: "16rpx", background: THEME.paper }}
+                  />
+                  <Text style={fieldLabel}>识别出的文字（可编辑）</Text>
+                  <Textarea
+                    value={imageDraft.extractedText}
+                    autoHeight
+                    maxlength={4000}
+                    onInput={(e) =>
+                      setImageDraft((prev) => (prev ? { ...prev, extractedText: e.detail.value } : prev))
+                    }
+                    style={{ ...fieldInput, minHeight: "140rpx", width: "100%", boxSizing: "border-box" }}
+                  />
+                  <Text style={fieldLabel}>生成类型</Text>
+                  <View style={{ display: "flex", flexDirection: "row", flexWrap: "wrap" }}>
+                    {DRAFT_TYPES.map((t) => (
+                      <View
+                        key={t.k}
+                        onClick={() => setImageDraft((prev) => (prev ? { ...prev, contentType: t.k } : prev))}
+                        style={{
+                          padding: "10rpx 28rpx",
+                          borderRadius: "100rpx",
+                          marginRight: "16rpx",
+                          marginBottom: "12rpx",
+                          background: draftType === t.k ? THEME.water : THEME.paper,
+                          border: `1rpx solid ${draftType === t.k ? THEME.water : THEME.border}`
+                        }}
+                      >
+                        <Text style={{ fontSize: "26rpx", color: draftType === t.k ? "#fff" : THEME.inkSecondary }}>
+                          {t.l}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {draftType === "task" && (
+                    <>
+                      <Text style={fieldLabel}>标题</Text>
+                      <Input
+                        value={String(s.title || "")}
+                        placeholder="要做什么"
+                        onInput={(e) => updateImageDraft((n) => { n.suggestion.title = e.detail.value; })}
+                        style={fieldInput}
+                      />
+                      <View style={{ display: "flex", flexDirection: "row" }}>
+                        <View style={{ flex: 3, marginRight: "16rpx" }}>
+                          <Text style={fieldLabel}>日期</Text>
+                          <Input
+                            value={String(s.date || "")}
+                            placeholder="YYYY-MM-DD"
+                            onInput={(e) => updateImageDraft((n) => { n.suggestion.date = e.detail.value; })}
+                            style={fieldInput}
+                          />
+                        </View>
+                        <View style={{ flex: 2 }}>
+                          <Text style={fieldLabel}>时间</Text>
+                          <Input
+                            value={String(s.time || "")}
+                            placeholder="HH:mm"
+                            onInput={(e) => updateImageDraft((n) => { n.suggestion.time = e.detail.value; })}
+                            style={fieldInput}
+                          />
+                        </View>
+                      </View>
+                      <Text style={fieldLabel}>备注</Text>
+                      <Input
+                        value={String(s.description || "")}
+                        placeholder="补充说明"
+                        onInput={(e) => updateImageDraft((n) => { n.suggestion.description = e.detail.value; })}
+                        style={fieldInput}
+                      />
+                      <Text style={fieldLabel}>子约定</Text>
+                      {subtasks.map((st, i) => (
+                        <View key={i} style={{ display: "flex", flexDirection: "row", alignItems: "center", marginBottom: "12rpx" }}>
+                          <Input
+                            value={String(st || "")}
+                            placeholder={`子约定 ${i + 1}`}
+                            onInput={(e) =>
+                              updateImageDraft((n) => {
+                                const arr = [...(n.suggestion.subtasks || [])];
+                                arr[i] = e.detail.value;
+                                n.suggestion.subtasks = arr;
+                              })
+                            }
+                            style={{ ...fieldInput, flex: 1, marginRight: "12rpx" }}
+                          />
+                          <Text
+                            style={{ fontSize: "36rpx", color: THEME.inkQuaternary, padding: "0 10rpx" }}
+                            onClick={() =>
+                              updateImageDraft((n) => {
+                                n.suggestion.subtasks = (n.suggestion.subtasks || []).filter((_, idx) => idx !== i);
+                              })
+                            }
+                          >
+                            ×
+                          </Text>
+                        </View>
+                      ))}
+                      <Text
+                        style={{ fontSize: "26rpx", color: THEME.water, padding: "6rpx 0 16rpx" }}
+                        onClick={() =>
+                          updateImageDraft((n) => {
+                            n.suggestion.subtasks = [...(n.suggestion.subtasks || []), ""];
+                          })
+                        }
+                      >
+                        + 添加子约定
+                      </Text>
+                    </>
+                  )}
+
+                  {draftType === "ledger" && (
+                    <>
+                      <Text style={fieldLabel}>账本说明</Text>
+                      <Input
+                        value={String(s.summary || "")}
+                        placeholder="例如：3月12日超市采购"
+                        onInput={(e) => updateImageDraft((n) => { n.suggestion.summary = e.detail.value; })}
+                        style={fieldInput}
+                      />
+                      <Text style={fieldLabel}>明细条目</Text>
+                      {entries.map((en, i) => (
+                        <View key={i} style={{ display: "flex", flexDirection: "row", alignItems: "center", marginBottom: "12rpx" }}>
+                          <Input
+                            value={String(en?.item || "")}
+                            placeholder="品名"
+                            onInput={(e) =>
+                              updateImageDraft((n) => {
+                                const arr = [...(n.suggestion.entries || [])];
+                                arr[i] = { ...(arr[i] || {}), item: e.detail.value };
+                                n.suggestion.entries = arr;
+                              })
+                            }
+                            style={{ ...fieldInput, flex: 2, marginRight: "10rpx" }}
+                          />
+                          <Input
+                            value={String(en?.category || "")}
+                            placeholder="分类"
+                            onInput={(e) =>
+                              updateImageDraft((n) => {
+                                const arr = [...(n.suggestion.entries || [])];
+                                arr[i] = { ...(arr[i] || {}), category: e.detail.value };
+                                n.suggestion.entries = arr;
+                              })
+                            }
+                            style={{ ...fieldInput, flex: 1.2, marginRight: "10rpx" }}
+                          />
+                          <Input
+                            value={en?.amount != null ? String(en.amount) : ""}
+                            type="digit"
+                            placeholder="金额"
+                            onInput={(e) =>
+                              updateImageDraft((n) => {
+                                const arr = [...(n.suggestion.entries || [])];
+                                arr[i] = { ...(arr[i] || {}), amount: e.detail.value };
+                                n.suggestion.entries = arr;
+                              })
+                            }
+                            style={{ ...fieldInput, flex: 1 }}
+                          />
+                          <Text
+                            style={{ fontSize: "36rpx", color: THEME.inkQuaternary, padding: "0 6rpx 0 10rpx" }}
+                            onClick={() =>
+                              updateImageDraft((n) => {
+                                n.suggestion.entries = (n.suggestion.entries || []).filter((_, idx) => idx !== i);
+                              })
+                            }
+                          >
+                            ×
+                          </Text>
+                        </View>
+                      ))}
+                      <Text
+                        style={{ fontSize: "26rpx", color: THEME.water, padding: "6rpx 0 4rpx" }}
+                        onClick={() =>
+                          updateImageDraft((n) => {
+                            n.suggestion.entries = [...(n.suggestion.entries || []), { item: "", category: "", amount: "" }];
+                          })
+                        }
+                      >
+                        + 加一行
+                      </Text>
+                      <Text style={{ ...fieldLabel, marginBottom: "16rpx" }}>
+                        合计 ¥
+                        {entries.reduce((sum, en) => sum + (Number(en?.amount) || 0), 0).toFixed(2)}
+                      </Text>
+                    </>
+                  )}
+
+                  {(draftType === "note" || draftType === "heart") && (
+                    <>
+                      <Text style={fieldLabel}>标题（可选）</Text>
+                      <Input
+                        value={String(s.title || "")}
+                        placeholder="给这条内容起个名字"
+                        onInput={(e) => updateImageDraft((n) => { n.suggestion.title = e.detail.value; })}
+                        style={fieldInput}
+                      />
+                    </>
+                  )}
+                  <View style={{ height: "20rpx" }} />
+                </View>
+              </ScrollView>
+              <View
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  padding: "20rpx 32rpx",
+                  paddingBottom: "calc(20rpx + env(safe-area-inset-bottom))",
+                  borderTop: `1rpx solid ${THEME.border}`
+                }}
+              >
+                <View
+                  onClick={() => setImageDraft(null)}
+                  style={{
+                    flex: 1,
+                    padding: "18rpx 0",
+                    borderRadius: "100rpx",
+                    background: THEME.paper,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: "20rpx"
+                  }}
+                >
+                  <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>取消</Text>
+                </View>
+                <View
+                  onClick={confirmImageDraft}
+                  style={{
+                    flex: 2,
+                    padding: "18rpx 0",
+                    borderRadius: "100rpx",
+                    background: imageDraftBusy ? THEME.waterFaint : THEME.water,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "28rpx", color: "#fff", fontWeight: 500 }}>
+                    {imageDraftBusy ? "生成中…" : "确认生成"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        );
+      })()}
     </>
   );
 

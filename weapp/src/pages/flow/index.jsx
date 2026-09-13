@@ -2051,7 +2051,7 @@ export default function Flow() {
               throw new Error(data?.message || "上传失败");
             }
             Taro.showLoading({ title: "识别中" });
-            const draft = await post("/functions/analyzeImage", { file_url: data.file_url }, { silent: true });
+            const draft = await post("/functions/analyzeImage", { file_url: data.file_url }, { silent: true, timeout: 120000 });
             setImageDraft({
               imageUrl: data.file_url,
               extractedText: draft?.extracted_text || "",

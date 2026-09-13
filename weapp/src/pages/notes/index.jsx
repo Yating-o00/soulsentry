@@ -6,6 +6,7 @@ import { getToken } from "@/utils/auth";
 import SharePoster from "@/components/SharePoster";
 import VaultSheet from "@/components/VaultSheet";
 import ReviewDrawer from "@/components/ReviewDrawer";
+import RichText from "@/components/RichText";
 import theme from "@/components/tasks/theme";
 
 function AiBadge({ text = "AI 生成" }) {
@@ -697,9 +698,12 @@ export default function Notes() {
         ) : null}
 
         <View style={{ marginBottom: "20rpx" }}>
-          <Text style={{ fontSize: "30rpx", color: theme.ink, lineHeight: "50rpx", whiteSpace: "pre-wrap", wordBreak: "break-word", fontWeight: 500 }}>
-            {note.plain_text || note.content || ""}
-          </Text>
+          <RichText
+            text={note.plain_text || note.content || ""}
+            textStyle={{ fontSize: "30rpx", color: theme.ink, lineHeight: "50rpx", fontWeight: 500 }}
+            accent={theme.primary}
+            ink={theme.ink}
+          />
         </View>
 
         {type === "ledger" && <LedgerCard ledger={note.metadata?.ai_analysis?.ledger} />}
@@ -709,26 +713,38 @@ export default function Notes() {
             <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "10rpx" }}>
               <AiBadge text="AI 回应" />
             </View>
-            <Text style={{ fontSize: "28rpx", color: theme.water, lineHeight: "50rpx", fontStyle: "italic" }}>
-              {response}
-            </Text>
+            <RichText
+              text={response}
+              textStyle={{ fontSize: "28rpx", color: theme.water, lineHeight: "50rpx", fontStyle: "italic" }}
+              accent={theme.primary}
+              ink={theme.water}
+            />
           </View>
+        ) : null}
+
+        {note.metadata?.ai_analysis?.table_md ? (
+          <RichText
+            text={note.metadata.ai_analysis.table_md}
+            textStyle={{ fontSize: "26rpx", color: theme.inkSecondary, lineHeight: "44rpx" }}
+            accent={theme.primary}
+            ink={theme.inkSecondary}
+          />
         ) : null}
 
         {conversation.map((m, idx) => (
           <View key={idx} style={{ marginBottom: "16rpx" }}>
-            <Text
-              style={{
+            <RichText
+              text={m.text}
+              textStyle={{
                 fontSize: "28rpx",
                 color: m.role === "user" ? theme.ink : theme.water,
                 lineHeight: "50rpx",
-                whiteSpace: "pre-wrap",
                 fontStyle: m.role === "user" ? "normal" : "italic",
                 fontWeight: m.role === "user" ? 500 : 400
               }}
-            >
-              {m.text}
-            </Text>
+              accent={theme.primary}
+              ink={m.role === "user" ? theme.ink : theme.water}
+            />
           </View>
         ))}
 

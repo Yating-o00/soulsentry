@@ -14,6 +14,7 @@ import {
 import KeywordExplorer from "@/components/heartsign/KeywordExplorer";
 import WarmResponseCard from "@/components/heartsign/WarmResponseCard";
 import HeartSignShareCard from "@/components/heartsign/HeartSignShareCard";
+import RichText from "@/components/RichText";
 import { TYPE_META, DENSITY_KEY, getNoteType, isPinnedNote } from "@/components/heartsign/heartSignMeta";
 
 // 心签五类分类（与 analyzeHeartSign 写入的 source_type / metadata.ai_analysis.category 对应）
@@ -62,7 +63,9 @@ function KnowledgeCard({ ai, plain }) {
         </span>
       </div>
 
-      <p className="text-[13.5px] text-slate-700 leading-[1.8] whitespace-pre-wrap break-words">{ai.emotional_response}</p>
+      <p className="text-[13.5px] text-slate-700 leading-[1.8] whitespace-pre-wrap break-words">
+        <RichText text={ai.emotional_response} />
+      </p>
 
       {keywords.length > 0 && (
         <div className="mt-3 pt-3 border-t border-slate-100">
@@ -208,9 +211,7 @@ function ConversationThread({ conv, typing }) {
   return (
     <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5">
       {conv.map((m, i) => m.role === 'user' ? (
-        <p key={i} className="text-[13.5px] leading-[1.8] text-slate-800 font-medium whitespace-pre-wrap break-words">
-          {m.text}
-        </p>
+        <RichText key={i} text={m.text} className="text-[13.5px] leading-[1.8] text-slate-800 font-medium" />
       ) : m.typing ? (
         <div key={i} className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
           <Loader2 className="w-3 h-3 animate-spin" /> 正在倾听…
@@ -220,9 +221,7 @@ function ConversationThread({ conv, typing }) {
           <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#5b82a0]/10 border border-[#5b82a0]/20 text-[10px] text-[#5b82a0] mb-1">
             AI 回应{m.tag ? ` · ${m.tag}` : ''}
           </span>
-          <p className="text-[13.5px] leading-[1.8] italic text-[#5b82a0] whitespace-pre-wrap break-words">
-            {m.text}
-          </p>
+          <RichText text={m.text} className="text-[13.5px] leading-[1.8] italic text-[#5b82a0]" />
         </div>
       ))}
     </div>
@@ -458,9 +457,9 @@ export default function HeartSignMessage({
         )}
       </div>
     )}
-    <div className="text-[14.5px] leading-[1.8] text-slate-800 font-medium whitespace-pre-wrap break-words">
-      {displayText || <span className="text-slate-400">（空内容）</span>}
-    </div>
+    {displayText
+      ? <RichText text={displayText} className="text-[14.5px] leading-[1.8] text-slate-800 font-medium" />
+      : <div className="text-[14.5px] leading-[1.8] text-slate-800 font-medium"><span className="text-slate-400">（空内容）</span></div>}
     {isLong && (
       <button onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }} className="mt-1.5 inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md px-2 py-1 transition">
         {expanded ? <>收起 <ChevronUp className="w-3 h-3" /></> : <>展开全文 <ChevronDown className="w-3 h-3" /></>}
@@ -501,6 +500,9 @@ export default function HeartSignMessage({
       isRational
         ? <KnowledgeCard ai={ai} plain={plain} />
         : <WarmResponseCard ai={ai} />
+    )}
+    {note.ai_status === 'completed' && ai.table_md && (
+      <RichText text={ai.table_md} className="mt-2 text-[13px] leading-[1.7] text-slate-600" />
     )}
     {note.ai_status === 'completed' && ai.ledger?.items?.length > 0 && <LedgerCard ledger={ai.ledger} />}
 

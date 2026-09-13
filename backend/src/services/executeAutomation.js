@@ -104,6 +104,20 @@ function escapeHtml(text) {
     .replace(/'/g, "&#39;");
 }
 
+function isTableSeparatorLine(line) {
+  // Markdown 表格分隔行：仅含 | - : 空白，且至少有一个 -
+  return /^\|?[\s\-:|]+\|?$/.test(line) && line.includes("-");
+}
+
+function splitTableRow(line) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
+}
+
 function markdownToBasicHtml(markdown) {
   const lines = String(markdown || "").split("\n");
   const out = [];
@@ -117,20 +131,47 @@ function markdownToBasicHtml(markdown) {
     }
   }
 
-  for (const raw of lines) {
+  function closeList() {
+    if (inList) {
+      out.push("</ul>");
+      inList = false;
+    }
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
     const line = raw.trim();
     if (!line) {
       flushParagraph();
-      if (inList) {
-        out.push("</ul>");
-        inList = false;
+      closeList();
+      continue;
+    }
+
+    // Markdown 表格：| 表头 | + |---| 分隔行 + 数据行
+    if (line.startsWith("|") && i + 1 < lines.length && isTableSeparatorLine(lines[i + 1].trim())) {
+      flushParagraph();
+      closeList();
+      const header = splitTableRow(line);
+      const rows = [];
+      i += 2; // 跳过表头与分隔行
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        rows.push(splitTableRow(lines[i].trim()));
+        i += 1;
       }
+      i -= 1; // for 循环会再 +1
+
+      const thead = `<thead><tr>${header.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`;
+      const tbody = rows.length
+        ? `<tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}</tbody>`
+        : "";
+      out.push(`<table>${thead}${tbody}</table>`);
       continue;
     }
 
     const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {
       flushParagraph();
+      closeList();
       const level = headingMatch[1].length;
       out.push(`<h${level}>${escapeHtml(headingMatch[2])}</h${level}>`);
       continue;
@@ -146,15 +187,12 @@ function markdownToBasicHtml(markdown) {
       continue;
     }
 
-    if (inList) {
-      out.push("</ul>");
-      inList = false;
-    }
+    closeList();
     paragraph.push(escapeHtml(line));
   }
 
   flushParagraph();
-  if (inList) out.push("</ul>");
+  closeList();
   return out.join("\n");
 }
 
@@ -171,6 +209,10 @@ h1, h2, h3 { color: #1e293b; }
 h1 { border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
 a { color: #2563eb; }
 ul { padding-left: 1.5rem; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; background: #fff; }
+th, td { border: 1px solid #e2e8f0; padding: 7px 12px; text-align: left; vertical-align: top; line-height: 1.5; }
+th { background: #f1f5f9; color: #1e293b; font-weight: 600; }
+tbody tr:nth-child(even) { background: #f8fafc; }
 </style>
 </head>
 <body>
@@ -777,7 +819,8 @@ async function handleWebResearch(execution) {
       "references 为 URL 字符串数组。",
       "markdown 为完整报告正文（Markdown 格式），必须包含实质性内容，不要为空。",
       "重要：sections 与 markdown 不要重复相同内容；如果已提供 sections，markdown 中不要再重复展开每个章节，只需给出精简概述即可。",
-      "不要连续重复同样的标题或段落；每个章节 heading 必须唯一。"
+      "不要连续重复同样的标题或段落；每个章节 heading 必须唯一。",
+      "涉及竞品对比、多产品/多方案对比、价格或数据罗列时，必须使用 Markdown 表格呈现：首行表头（| 维度 | A | B |），次行分隔符（|---|---|），随后每行一条数据。"
     ].join("\n"),
     prompt: [
       `研究主题：${execution.originalInput || ""}`,

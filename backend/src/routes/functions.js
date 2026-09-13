@@ -1457,11 +1457,11 @@ functionsRouter.post("/:name", async (req, res) => {
       } catch (error) {
         const status = error?.status || 502;
         const message = error?.message || String(error);
-        if (status === 400) {
-          return res.status(400).json({ error: "INVALID_IMAGE", message });
+        if (status === 400 || status === 422) {
+          return res.status(status).json({ error: "INVALID_IMAGE", message });
         }
         console.error("[analyzeImage] failed", error);
-        return res.status(502).json({ error: "AI_SERVICE_ERROR", message: `图片识别失败：${message}` });
+        return res.status(status >= 500 ? status : 502).json({ error: "AI_SERVICE_ERROR", message: `图片识别失败：${message}` });
       }
     }
 
@@ -2654,6 +2654,7 @@ functionsRouter.post("/:name", async (req, res) => {
           response_title: { type: "string", description: "回应标题" },
           emotional_response: { type: "string", description: "简短回应，情绪签80字内、资料/账本签60字内、备忘签20字内、灵感签50字内、分享签40字内" },
           response_tag: { type: "string", description: "回应标签：感性回应/理性补充/收录" },
+          table_md: { type: "string", description: "可选：内容适合表格化表达时（资料对比/清单/价格/日程排列），用 Markdown 表格呈现：首行 | 表头 |、次行 |---| 分隔、随后每行数据；不适合则返回空字符串" },
           ...(isLedger ? {
             ledger: {
               type: "object",
@@ -2698,6 +2699,7 @@ ${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类�
 - 危机词：若用户表达自杀/自伤意图，只返回固定话"谢谢你愿意说出来。你现在可能很难受，可以拨打心理援助热线 400-161-9995。我一直在。"
 - response_tag：情绪/灵感/分享→"感性回应"；资料/账本→"理性补充"；备忘→"收录"。
 - 输入≤50字时 title 返回空字符串。
+- 若内容适合表格化表达（多个事物的对比、清单、价格、日程排列等），把 Markdown 表格写进 table_md 字段（首行 | 表头 |、次行 |---| 分隔、每行一条数据），不适合则 table_md 返回空字符串。
 ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correctionHints.join("\n- ")}\n` : ""}严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
 
       try {
@@ -2786,6 +2788,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           analyzed_at: new Date().toISOString(),
           source: usedFallback ? "local_fallback" : "kimi",
           note_type: parsed.note_type || null,
+          table_md: parsed.table_md || null,
           ledger: parsed.ledger || null
         };
 

@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Heart, GraduationCap, Coffee, Sparkles } from "lucide-react";
+import RichText from "@/components/RichText";
 
 // 不同回应身份的视觉与文案配置
 const PERSONA_CONFIG = {
@@ -87,7 +88,7 @@ export default function WarmResponseCard({ ai }) {
         </div>
 
         <p className="text-slate-700/95 leading-[1.85] tracking-wide whitespace-pre-wrap break-words font-handwriting selectable-text text-[15px] opacity-80">
-          {ai.emotional_response}
+          <RichText text={ai.emotional_response} />
         </p>
 
         <div className="mt-2.5 flex items-center justify-end gap-2">

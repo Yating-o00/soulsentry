@@ -179,7 +179,15 @@ export default function TaskDetail() {
     <View className="ss-page">
       <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
         <View className="ss-card">
-          <View className="ss-title">{task.title}</View>
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <View className="ss-title" style={{ flex: 1, marginRight: "16rpx" }}>{task.title}</View>
+            <Text
+              onClick={() => Taro.navigateTo({ url: `/pages/task-create/index?id=${task.id}&mode=edit` })}
+              style={{ fontSize: "26rpx", color: "#384877", padding: "8rpx 16rpx", border: "1rpx solid #384877", borderRadius: "10rpx", flexShrink: 0 }}
+            >
+              编辑
+            </Text>
+          </View>
           <Text className="ss-tag ss-tag-primary">{statusLabel[task.status] || task.status}</Text>
           {task.description ? (
             <View style={{ marginTop: "20rpx" }}>

@@ -1821,17 +1821,27 @@ export default function Flow() {
       const text = (extractedText || "").trim() || String(s.content || "").trim();
       if (contentType === "task") {
         const category = s.category === "learning" ? "study" : s.category;
-        await post("/tasks", {
+        const priority = ["low", "medium", "high", "urgent"].includes(s.priority) ? s.priority : "medium";
+        const taskCategory = ["work", "health", "family", "personal", "shopping", "study", "finance", "other"].includes(category) ? category : "other";
+        const task = await post("/tasks", {
           title: String(s.title || "").trim() || text.slice(0, 60) || "图片约定",
           description: [s.description, text, imageUrl].filter(Boolean).join("\n"),
-          priority: ["low", "medium", "high", "urgent"].includes(s.priority) ? s.priority : "medium",
-          category: ["work", "health", "family", "personal", "shopping", "study", "finance", "other"].includes(category) ? category : "other",
+          priority,
+          category: taskCategory,
           end_time: s.date && s.time ? chinaIso(s.date, s.time) : undefined,
-          metadata: {
-            image_url: imageUrl,
-            subtasks: (Array.isArray(s.subtasks) ? s.subtasks : []).map((x) => String(x || "").trim()).filter(Boolean)
-          }
+          metadata: { image_url: imageUrl }
         });
+        // 子约定创建为真正的子任务，列表/详情/编辑页才能一致展示
+        const subList = (Array.isArray(s.subtasks) ? s.subtasks : []).map((x) => String(x || "").trim()).filter(Boolean);
+        for (const st of subList) {
+          await post("/tasks", {
+            title: st.slice(0, 120),
+            parent_task_id: task.id,
+            priority,
+            category: taskCategory,
+            status: "pending"
+          }).catch(() => {});
+        }
         Taro.showToast({ title: "约定已创建", icon: "success" });
       } else if (contentType === "ledger") {
         const entries = (Array.isArray(s.entries) ? s.entries : []).filter((en) => en && (String(en.item || "").trim() || Number(en.amount)));

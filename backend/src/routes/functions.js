@@ -2700,6 +2700,7 @@ ${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类�
 - response_tag：情绪/灵感/分享→"感性回应"；资料/账本→"理性补充"；备忘→"收录"。
 - 输入≤50字时 title 返回空字符串。
 - 若内容适合表格化表达（多个事物的对比、清单、价格、日程排列等），把 Markdown 表格写进 table_md 字段（首行 | 表头 |、次行 |---| 分隔、每行一条数据），不适合则 table_md 返回空字符串。
+- table_md 必须是「重新组织后的结构化提炼」：表格与原文表述不得重复，原文已逐条罗列的内容不要再原样搬进表格；只有当表格能比原文更清晰（对比、归类、汇总）时才生成。
 ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correctionHints.join("\n- ")}\n` : ""}严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
 
       try {

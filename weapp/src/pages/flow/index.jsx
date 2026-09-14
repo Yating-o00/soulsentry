@@ -1311,7 +1311,8 @@ export default function Flow() {
     );
 
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("AI 回应超时，已切换本地兜底")), 10000);
+      // 后端 Kimi 回应上限 12s+计费，前端至少等 20s 再放弃，避免过早打落本地兜底
+      setTimeout(() => reject(new Error("AI 回应超时，已切换本地兜底")), 20000);
     });
 
     return Promise.race([requestPromise, timeoutPromise])
@@ -1395,7 +1396,7 @@ export default function Flow() {
   const guardianRecords = useMemo(() => {
     return (executions || [])
       .filter((e) => e.automation_type && e.automation_type !== "none")
-      .slice(0, 3);
+      .slice(0, 8);
   }, [executions]);
 
   // 守护记录执行轮询：有待执行/执行中的单子时每 3s 静默刷新，
@@ -1895,7 +1896,26 @@ export default function Flow() {
         });
         Taro.showToast({ title: "表格已保存", icon: "success" });
       } else if (contentType === "heart") {
-        const content = text || "（来自图片的心签）";
+        // 心签含表格结构时保持表格格式，其余用识别文字
+        const hasTable = Array.isArray(s.columns) && s.columns.length > 0 && Array.isArray(s.rows);
+        let content;
+        if (hasTable) {
+          const columns = s.columns.map((c) => String(c ?? "").trim());
+          const rows = s.rows.map((r) => (Array.isArray(r) ? r.map((v) => String(v ?? "")) : []));
+          const marked = Array.isArray(s.marked) ? s.marked.map(Boolean) : [];
+          const esc = (v) => String(v ?? "").replace(/\|/g, "｜").replace(/\n/g, " ");
+          const md = [
+            `| ${columns.map(esc).join(" | ")} |`,
+            `| ${columns.map(() => "---").join(" | ")} |`,
+            ...rows.map((r, i) => {
+              const prefix = marked[i] ? "⭐ " : "";
+              return `| ${columns.map((_, ci) => esc(ci === 0 ? prefix + (r[ci] ?? "") : (r[ci] ?? ""))).join(" | ")} |`;
+            })
+          ].join("\n");
+          content = [text, md].filter(Boolean).join("\n\n");
+        } else {
+          content = text || "（来自图片的心签）";
+        }
         const note = await post("/notes", {
           title: String(s.title || "").trim() || "心签",
           content,
@@ -3554,6 +3574,29 @@ export default function Flow() {
       completed: THEME.inkQuaternary
     };
 
+    const EXEC_TYPE_LABEL = {
+      email_draft: "邮件草稿",
+      web_research: "联网调研",
+      ppt_doc: "演示稿",
+      office_doc: "办公文档",
+      summary_note: "笔记总结",
+      ledger_organize: "整理账本",
+      file_organize: "文件整理",
+      calendar_event: "日程创建"
+    };
+
+    // 真实执行内容摘要：优先产物预览，其次产物标题/主题，再次计划标题
+    const execWhatLine = (e) => {
+      const plan = e.automation_plan || {};
+      const result = e.automation_result || {};
+      const data = result.data && typeof result.data === "object" ? result.data : {};
+      if (typeof result.preview === "string" && result.preview.trim()) {
+        return result.preview.trim().replace(/\s+/g, " ").slice(0, 60);
+      }
+      const t = data.subject || data.title || plan.title || plan.description || "";
+      return String(t || "").replace(/\s+/g, " ").trim().slice(0, 60);
+    };
+
     const statusHint = (s) =>
       s === "waiting_acceptance"
         ? "已执行完成，点击查看并确认"
@@ -3587,6 +3630,16 @@ export default function Flow() {
               <Text style={{ fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx" }} numberOfLines={1}>
                 {e.task_title}
               </Text>
+              {(() => {
+                const what = execWhatLine(e);
+                return (
+                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginTop: "4rpx" }} numberOfLines={1}>
+                    {EXEC_TYPE_LABEL[e.automation_type] || "自动执行"}
+                    {what ? ` · ${what}` : ""}
+                    {` · ${formatTime(e.completed_at || e.updated_date || e.created_date)}`}
+                  </Text>
+                );
+              })()}
               <View style={{ display: "flex", alignItems: "center", marginTop: "4rpx" }}>
                 <View
                   style={{

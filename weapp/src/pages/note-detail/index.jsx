@@ -1,13 +1,18 @@
 import { useState, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
-import { get, post } from "@/utils/api";
+import { View, Text, Input, Textarea, Button, ScrollView } from "@tarojs/components";
+import { get, post, patch } from "@/utils/api";
+import RichText from "@/components/RichText";
 
 export default function NoteDetail() {
   const [note, setNote] = useState(null);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState("");
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const noteId = Taro.getCurrentInstance().router.params.id;
 
@@ -34,6 +39,32 @@ export default function NoteDetail() {
   useEffect(() => {
     fetchAll();
   }, [noteId]);
+
+  const startEdit = () => {
+    setEditTitle(note?.title || "");
+    setEditContent(note?.content || "");
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    const title = editTitle.trim();
+    const content = editContent.trim();
+    if (!content) {
+      Taro.showToast({ title: "内容不能为空", icon: "none" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await patch(`/notes/${noteId}`, { title, content, plain_text: content });
+      setNote(updated);
+      setEditing(false);
+      Taro.showToast({ title: "已保存", icon: "success" });
+    } catch (err) {
+      // handled globally
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const submitComment = async () => {
     if (!commentText.trim()) {
@@ -69,10 +100,69 @@ export default function NoteDetail() {
     <View className="ss-page">
       <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
         <View className="ss-card">
-          <View className="ss-title">{note.title || "未命名心签"}</View>
-          <View style={{ marginTop: "20rpx" }}>
-            <Text style={{ fontSize: "30rpx", color: "#333", lineHeight: "52rpx" }}>{note.content}</Text>
+          <View style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <View className="ss-title" style={{ flex: 1 }}>{note.title || "未命名心签"}</View>
+            {!editing ? (
+              <Text
+                style={{ fontSize: "26rpx", color: "#384877", padding: "8rpx 0 8rpx 24rpx", flexShrink: 0 }}
+                onClick={startEdit}
+              >
+                编辑
+              </Text>
+            ) : (
+              <View style={{ display: "flex", flexShrink: 0 }}>
+                <Text
+                  style={{ fontSize: "26rpx", color: "#86909c", padding: "8rpx 0 8rpx 24rpx" }}
+                  onClick={() => setEditing(false)}
+                >
+                  取消
+                </Text>
+                <Text
+                  style={{ fontSize: "26rpx", color: "#384877", fontWeight: 500, padding: "8rpx 0 8rpx 24rpx" }}
+                  onClick={saveEdit}
+                >
+                  {saving ? "保存中…" : "保存"}
+                </Text>
+              </View>
+            )}
           </View>
+          {editing ? (
+            <View style={{ marginTop: "20rpx" }}>
+              <Input
+                className="ss-input"
+                placeholder="标题"
+                value={editTitle}
+                onInput={(e) => setEditTitle(e.detail.value)}
+              />
+              <Textarea
+                value={editContent}
+                autoHeight
+                maxlength={8000}
+                placeholder="心签内容（支持 Markdown 表格）"
+                onInput={(e) => setEditContent(e.detail.value)}
+                style={{
+                  marginTop: "16rpx",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  minHeight: "320rpx",
+                  background: "#f7f8fa",
+                  border: "1rpx solid #e5e6eb",
+                  borderRadius: "12rpx",
+                  padding: "20rpx",
+                  fontSize: "30rpx",
+                  color: "#333",
+                  lineHeight: "48rpx"
+                }}
+              />
+            </View>
+          ) : (
+            <View style={{ marginTop: "20rpx" }}>
+              <RichText
+                text={note.content}
+                textStyle={{ fontSize: "30rpx", color: "#333", lineHeight: "52rpx" }}
+              />
+            </View>
+          )}
         </View>
 
         <View className="ss-card">

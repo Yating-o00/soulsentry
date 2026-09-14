@@ -1806,19 +1806,32 @@ export default function Flow() {
     }
   };
 
+  // 轻量账本识别：带金额单位，或「事项+数字」对 ≥2 组，后端 looksLikeLedger 会二次校验
+  const detectLedgerLike = (t) => {
+    const s = String(t || "");
+    if ((s.match(/\d+(?:\.\d{1,2})?\s*(?:元|块|¥)/g) || []).length >= 1) return true;
+    const pairs = s.match(/[一-龥]{1,6}\s*[-+]?\d+(?:\.\d{1,2})?(?!\d)/g) || [];
+    return pairs.length >= 2;
+  };
+
   const saveHeart = async (text) => {
+    // 按心签规则先入类型：账本签走账本格式+吐槽，其余默认情绪签（AI 再细化分类）
+    const isLedger = detectLedgerLike(text);
+    const sourceType = isLedger ? "ledger" : "emotion";
+    const tags = isLedger ? ["账本", "心签"] : ["情绪", "心签"];
     // 先快速保存默认心签，避免用户等待
     const note = await post("/notes", {
-      title: "心签",
+      title: isLedger ? "账本" : "心签",
       content: text,
       plain_text: text,
-      tags: ["情绪", "心签"]
+      source_type: sourceType,
+      tags
     });
-    Taro.showToast({ title: "心签已保存", icon: "success" });
+    Taro.showToast({ title: isLedger ? "账已记下" : "心签已保存", icon: "success" });
 
-    // 后台调用 analyzeHeartSign 生成标题、标签和温暖回应
+    // 后台调用 analyzeHeartSign 生成标题、标签和对应类目的回应
     if (note?.id) {
-      runHeartAnalysis(note.id, { plain_text: text, content: text, tags: ["情绪", "心签"] });
+      runHeartAnalysis(note.id, { plain_text: text, content: text, source_type: sourceType, tags });
     }
   };
 
@@ -3480,7 +3493,47 @@ export default function Flow() {
               <Text style={{ fontSize: "28rpx", color: THEME.inkSecondary, lineHeight: "48rpx", wordBreak: "break-all" }}>{item.title || item.text.slice(0, 80)}</Text>
             )}
 
-            {item.type === "heart" && (
+            {item.type === "heart" && (() => {
+              const ledger = item.metadata?.ai_analysis?.ledger;
+              const ledgerItems = Array.isArray(ledger?.items) ? ledger.items : [];
+              if (!ledger && heartLoadingIds.has(item.id)) {
+                return (
+                  <View style={{ marginTop: "16rpx", padding: "16rpx 18rpx", borderRadius: "14rpx", background: THEME.heartBg, display: "flex" }}>
+                    <Text style={{ fontSize: "24rpx", color: "#c97b8a" }}>🧾 AI 正在整理账本…</Text>
+                  </View>
+                );
+              }
+              if (ledgerItems.length > 0) {
+                return (
+                  <View style={{ marginTop: "16rpx", padding: "16rpx 18rpx", borderRadius: "14rpx", background: THEME.heartBg }}>
+                    <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10rpx" }}>
+                      <Text style={{ fontSize: "20rpx", color: "#c97b8a", fontWeight: 500 }}>🧾 账本</Text>
+                      <View style={{ display: "flex", gap: "16rpx" }}>
+                        {!!ledger.total_income && (
+                          <Text style={{ fontSize: "22rpx", color: "#4f8a7a" }}>收入 ¥{ledger.total_income}</Text>
+                        )}
+                        {!!ledger.total_expense && (
+                          <Text style={{ fontSize: "22rpx", color: "#b07d4f" }}>支出 ¥{ledger.total_expense}</Text>
+                        )}
+                      </View>
+                    </View>
+                    {ledgerItems.slice(0, 5).map((it, idx) => (
+                      <View key={idx} style={{ display: "flex", justifyContent: "space-between", marginBottom: "4rpx" }}>
+                        <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary }}>{it.item || it.name || "支出"}</Text>
+                        <Text style={{ fontSize: "22rpx", color: it.type === "income" ? "#4f8a7a" : "#b07d4f" }}>
+                          {it.type === "income" ? "+" : "-"}¥{it.amount}
+                        </Text>
+                      </View>
+                    ))}
+                    {!!ledger.advice && (
+                      <Text style={{ marginTop: "10rpx", fontSize: "22rpx", color: "#9a5f6e", lineHeight: "36rpx", wordBreak: "break-all" }}>
+                        {ledger.advice}
+                      </Text>
+                    )}
+                  </View>
+                );
+              }
+              return (
               <View
                 style={{
                   marginTop: "16rpx",
@@ -3524,7 +3577,8 @@ export default function Flow() {
                   </Text>
                 </View>
               </View>
-            )}
+              );
+            })()}
 
             {item.type === "link" && item.url && (
               <View

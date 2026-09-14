@@ -4,6 +4,7 @@ import { View, Text, ScrollView, Input, Textarea, Image, Canvas } from "@tarojs/
 import { get, post, patch } from "@/utils/api";
 import { getToken } from "@/utils/auth";
 import VoiceInput from "@/components/VoiceInput";
+import RichText from "@/components/RichText";
 
 const THEME = {
   primary: "#384877",
@@ -1521,90 +1522,123 @@ export default function Flow() {
     return String(item);
   };
 
-  const execPreviewLines = (e) => {
+  // 执行单验收弹层的结构化排版：按类型拆成带小标题的区块，正文走 RichText（支持 Markdown 表格）
+  const execReviewBlocks = (e) => {
     const plan = e.automation_plan || {};
     const result = e.automation_result || {};
     const data = result.data && typeof result.data === "object" ? result.data : {};
-    const lines = [];
-    const push = (s) => {
-      if (s == null) return;
-      const t = execLineText(s).trim();
-      if (t) lines.push(t);
+    const blocks = [];
+    const add = (text, label) => {
+      const t = execLineText(text).trim();
+      if (t) blocks.push({ label, text: t });
     };
-
-    if (typeof result.preview === "string" && result.preview.trim()) {
-      push(`—— ${result.preview.trim()}`);
-    }
 
     switch (e.automation_type) {
       case "email_draft":
-        if (data.to) push(`收件人：${data.to}`);
-        if (data.cc) push(`抄送：${data.cc}`);
-        push(`主题：${data.subject}`);
-        push(data.body);
+        add(data.to, "收件人");
+        add(data.cc, "抄送");
+        add(data.subject, "主题");
+        add(data.body, "正文");
         break;
       case "summary_note":
-        push(data.title);
-        push(data.content);
-        (Array.isArray(data.key_points) ? data.key_points : []).slice(0, 7).forEach((k) => push(`· ${k}`));
-        break;
-      case "web_research":
-        push(data.title);
-        push(data.executive_summary);
-        (Array.isArray(data.key_findings) ? data.key_findings : []).slice(0, 6).forEach((k) =>
-          push(`· ${typeof k === "string" ? k : k?.finding || k?.text || k?.title || ""}`)
-        );
-        (Array.isArray(data.recommendations) ? data.recommendations : []).slice(0, 4).forEach((r) => push(`→ ${r}`));
-        if (data.file_url) push(`📎 文件：${data.file_url}`);
-        break;
-      case "office_doc":
-      case "ppt_doc":
-        push(data.title);
-        if (data.subtitle) push(data.subtitle);
-        (Array.isArray(data.sections) ? data.sections : []).slice(0, 8).forEach((s) =>
-          push(`· ${s?.heading || s?.title || ""}${s?.body ? "：" + s.body : ""}`)
-        );
-        (Array.isArray(data.slides) ? data.slides : []).slice(0, 10).forEach((s, i) =>
-          push(`${i + 1}. ${s?.title || ""}${s?.bullets ? " — " + (Array.isArray(s.bullets) ? s.bullets.map(execLineText).join("；") : s.bullets) : ""}`)
-        );
-        if (data.file_url) push(`📎 文件：${data.file_url}`);
-        break;
-      case "calendar_event":
-        push(data.title);
-        if (data.start_time) push(`时间：${data.start_time}${data.end_time ? " ~ " + data.end_time : ""}`);
-        if (data.location) push(`地点：${data.location}`);
-        if (Array.isArray(data.participants) && data.participants.length) push(`参与人：${data.participants.map(execLineText).join("、")}`);
-        push(data.description);
-        break;
-      case "ledger_organize":
-        (Array.isArray(data.entries) ? data.entries : []).slice(0, 12).forEach((en) =>
-          push([en?.date, en?.category, en?.item || en?.note, en?.amount].map(execLineText).filter(Boolean).join(" "))
-        );
-        if (data.stats && typeof data.stats === "object") {
-          push(`—— 收入 ${data.stats.total_income ?? "-"} · 支出 ${data.stats.total_expense ?? "-"}`);
+        add(data.title, "标题");
+        add(data.content, "内容");
+        if (Array.isArray(data.key_points) && data.key_points.length) {
+          add(data.key_points.slice(0, 8).map((k) => `· ${execLineText(k)}`).join("\n"), "要点");
         }
         break;
+      case "web_research":
+        add(data.title, "标题");
+        add(data.executive_summary, "摘要");
+        if (Array.isArray(data.key_findings) && data.key_findings.length) {
+          add(
+            data.key_findings.slice(0, 6).map((k) => `· ${execLineText(typeof k === "string" ? k : k?.finding || k?.text || k?.title || "")}`).join("\n"),
+            "关键发现"
+          );
+        }
+        if (Array.isArray(data.recommendations) && data.recommendations.length) {
+          add(data.recommendations.slice(0, 4).map((r) => `→ ${execLineText(r)}`).join("\n"), "建议");
+        }
+        if (data.file_url) add(data.file_url, "附件");
+        break;
+      case "office_doc":
+      case "ppt_doc": {
+        add(data.title, "标题");
+        add(data.subtitle, "副标题");
+        const secs = (Array.isArray(data.sections) ? data.sections : []).slice(0, 8);
+        if (secs.length) {
+          add(
+            secs.map((s) => `· ${execLineText(s?.heading || s?.title || "")}${s?.body ? `\n${execLineText(s.body)}` : ""}`).join("\n"),
+            "章节"
+          );
+        }
+        const slides = (Array.isArray(data.slides) ? data.slides : []).slice(0, 10);
+        if (slides.length) {
+          add(
+            slides
+              .map((s, i) => `${i + 1}. ${execLineText(s?.title || "")}${s?.bullets ? `\n${(Array.isArray(s.bullets) ? s.bullets : [s.bullets]).map((b) => `· ${execLineText(b)}`).join("\n")}` : ""}`)
+              .join("\n"),
+            e.automation_type === "ppt_doc" ? "页面" : "内容"
+          );
+        }
+        if (data.file_url) add(data.file_url, "附件");
+        break;
+      }
+      case "calendar_event": {
+        add(data.title, "标题");
+        const meta = [
+          data.start_time ? `时间：${data.start_time}${data.end_time ? " ~ " + data.end_time : ""}` : "",
+          data.location ? `地点：${data.location}` : "",
+          Array.isArray(data.participants) && data.participants.length ? `参与人：${data.participants.map(execLineText).join("、")}` : ""
+        ].filter(Boolean).join("\n");
+        add(meta, "信息");
+        add(data.description, "说明");
+        break;
+      }
+      case "ledger_organize": {
+        const entries = (Array.isArray(data.entries) ? data.entries : []).slice(0, 15);
+        if (entries.length) {
+          const cols = ["date", "category", "item", "amount"];
+          const labels = { date: "日期", category: "分类", item: "项目", amount: "金额" };
+          const used = cols.filter((c) => entries.some((en) => en?.[c] != null && String(en[c]).trim()));
+          if (used.length) {
+            const esc = (v) => String(v ?? "").replace(/\|/g, "｜").replace(/\n/g, " ");
+            const md = [
+              `| ${used.map((c) => labels[c]).join(" | ")} |`,
+              `| ${used.map(() => "---").join(" | ")} |`,
+              ...entries.map((en) => `| ${used.map((c) => esc(en?.[c] ?? "")).join(" | ")} |`)
+            ].join("\n");
+            add(md, "明细");
+          }
+        }
+        if (data.stats && typeof data.stats === "object") {
+          add(`收入 ${data.stats.total_income ?? "-"} · 支出 ${data.stats.total_expense ?? "-"}`, "汇总");
+        }
+        break;
+      }
       case "file_organize":
-        push(data.summary);
-        (Array.isArray(result.diff) ? result.diff : []).slice(0, 10).forEach((d) => push(`· ${d?.detail || d?.target || ""}`));
+        add(data.summary, "总结");
+        if (Array.isArray(result.diff) && result.diff.length) {
+          add(result.diff.slice(0, 10).map((d) => `· ${execLineText(d?.detail || d?.target || "")}`).join("\n"), "变更");
+        }
         break;
       default:
         break;
     }
 
     // 兜底：该类型没有专属渲染时，平铺 data 的文本字段
-    if (lines.filter((l) => !l.startsWith("——")).length === 0) {
-      Object.values(data).forEach((v) => {
-        if (typeof v === "string" && v.trim()) push(v);
-      });
+    if (!blocks.length) {
+      const texts = Object.values(data).filter((v) => typeof v === "string" && v.trim());
+      if (texts.length) add(texts.join("\n\n"), "执行结果");
     }
     // 最后兜底：计划步骤（动作），仅在完全没有结果产物时展示
-    if (lines.length === 0) {
-      (Array.isArray(plan.steps) ? plan.steps : []).slice(0, 8).forEach((s) => {
-        push(typeof s === "string" ? s : s?.name && s?.detail ? `${s.name}：${s.detail}` : s?.name || s?.detail || "");
-      });
+    if (!blocks.length && Array.isArray(plan.steps) && plan.steps.length) {
+      add(
+        plan.steps.slice(0, 8).map((s) => `· ${execLineText(typeof s === "string" ? s : (s?.name && s?.detail ? `${s.name}：${s.detail}` : s?.name || s?.detail || ""))}`).join("\n"),
+        "执行动作"
+      );
     }
-    return lines.length > 0 ? lines : ["执行已完成，暂无详细产物。"];
+    return blocks;
   };
 
   const acceptExec = async (id) => {
@@ -4285,21 +4319,58 @@ export default function Flow() {
             <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginTop: "8rpx", marginBottom: "24rpx" }}>
               守护执行 · 已完成，等你验收
             </Text>
-            <ScrollView scrollY style={{ maxHeight: "46vh" }}>
-              <View
-                style={{
-                  border: `1rpx dashed ${THEME.primaryLight}`,
-                  background: "rgba(91,130,160,0.08)",
-                  padding: "24rpx",
-                  borderRadius: "12rpx"
-                }}
-              >
-                {execPreviewLines(reviewExec).map((line, i) => (
-                  <Text key={i} style={{ fontSize: "26rpx", color: THEME.inkSecondary || THEME.ink, lineHeight: "42rpx" }}>
-                    {line || "\u00A0"}
+            <ScrollView scrollY style={{ maxHeight: "46vh" }} showScrollbar={false}>
+              {typeof reviewExec.automation_result?.preview === "string" && reviewExec.automation_result.preview.trim() ? (
+                <View
+                  style={{
+                    borderLeft: `4rpx solid ${THEME.waterLight}`,
+                    background: "rgba(91,130,160,0.06)",
+                    padding: "14rpx 20rpx",
+                    borderRadius: "0 10rpx 10rpx 0"
+                  }}
+                >
+                  <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>
+                    {reviewExec.automation_result.preview.trim()}
                   </Text>
-                ))}
-              </View>
+                </View>
+              ) : null}
+              {execReviewBlocks(reviewExec).length === 0 ? (
+                <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, lineHeight: "44rpx" }}>
+                  执行已完成，暂无详细产物。
+                </Text>
+              ) : (
+                execReviewBlocks(reviewExec).map((b, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      marginTop:
+                        i === 0 && !(typeof reviewExec.automation_result?.preview === "string" && reviewExec.automation_result.preview.trim())
+                          ? 0
+                          : "22rpx"
+                    }}
+                  >
+                    {b.label ? (
+                      <Text style={{ fontSize: "22rpx", color: THEME.water, fontWeight: 500, letterSpacing: "2rpx" }}>
+                        {b.label}
+                      </Text>
+                    ) : null}
+                    <View
+                      style={{
+                        marginTop: b.label ? "8rpx" : 0,
+                        background: THEME.paper,
+                        border: `1rpx solid ${THEME.border}`,
+                        borderRadius: "12rpx",
+                        padding: "18rpx 20rpx"
+                      }}
+                    >
+                      <RichText
+                        text={b.text}
+                        textStyle={{ fontSize: "26rpx", color: THEME.ink, lineHeight: "44rpx" }}
+                      />
+                    </View>
+                  </View>
+                ))
+              )}
             </ScrollView>
             <View style={{ display: "flex", gap: "16rpx", marginTop: "28rpx" }}>
               <View

@@ -269,7 +269,8 @@ export default function Notes() {
     }
     list.sort((a, b) => {
       if (isPinned(a) !== isPinned(b)) return isPinned(a) ? -1 : 1;
-      return new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date);
+      // 按创建时间倒序：最新生成的心签排在最前（updated_date 会因对话/编辑变化，不用它排序）
+      return new Date(b.created_date) - new Date(a.created_date);
     });
     return list;
   }, [notes, filter]);
@@ -735,7 +736,7 @@ export default function Notes() {
           </View>
         ) : null}
 
-        {note.metadata?.ai_analysis?.table_md ? (
+        {type !== "ledger" && note.metadata?.ai_analysis?.table_md ? (
           <RichText
             text={note.metadata.ai_analysis.table_md}
             textStyle={{ fontSize: "26rpx", color: theme.inkSecondary, lineHeight: "44rpx" }}

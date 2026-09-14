@@ -516,7 +516,7 @@ export default function HeartSignMessage({
         ? <KnowledgeCard ai={ai} plain={plain} />
         : <WarmResponseCard ai={ai} />
     )}
-    {note.ai_status === 'completed' && ai.table_md && !tableReplacesText && (
+    {note.ai_status === 'completed' && ai.table_md && !tableReplacesText && !(ai.ledger?.items?.length > 0) && (
       <RichText text={ai.table_md} className="mt-2 text-[13px] leading-[1.7] text-slate-600" />
     )}
     {note.ai_status === 'completed' && ai.ledger?.items?.length > 0 && <LedgerCard ledger={ai.ledger} />}

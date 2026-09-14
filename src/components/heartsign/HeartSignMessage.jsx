@@ -28,6 +28,17 @@ export const HEARTSIGN_CATEGORIES = [
 ];
 
 // 卡内小按钮（操作条 / 继续聊聊）
+
+// 表格与原文去重：表格内容和用户输入几乎一样时，只渲染表格，不再重复展示原文
+function normForTableCompare(s) {
+  return String(s || "").replace(/[\s|｜，。、：:；;！!？?·\-—*#>`（）()【】[\]"'“”‘’]/g, "");
+}
+export function isTableDuplicateOfText(text, tableMd) {
+  const t = normForTableCompare(text);
+  const b = normForTableCompare(tableMd);
+  if (t.length < 10 || b.length < 10) return false;
+  return [...b].filter((ch) => t.includes(ch)).length / b.length > 0.75;
+}
 const OP_CLS = "inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#384877] hover:bg-slate-50 rounded-md px-2 py-1 transition-colors";
 
 // 状态小徽章（已置顶 / 已转约定 / 已沉淀 / 需要关注）
@@ -326,6 +337,8 @@ export default function HeartSignMessage({
   const isLong = plain.length > 300;
   const isReport = plain.length > 800;
   const displayText = expanded || !isLong ? plain : plain.slice(0, 280) + '…';
+  // 表格与原文基本相同时只保留表格，避免同一份内容出现两次
+  const tableReplacesText = !!ai.table_md && isTableDuplicateOfText(plain, ai.table_md);
   const isOptimistic = typeof note.id === 'string' && note.id.startsWith('tmp-');
 
   const handleCopy = async () => {
@@ -457,10 +470,12 @@ export default function HeartSignMessage({
         )}
       </div>
     )}
-    {displayText
-      ? <RichText text={displayText} className="text-[14.5px] leading-[1.8] text-slate-800 font-medium" />
-      : <div className="text-[14.5px] leading-[1.8] text-slate-800 font-medium"><span className="text-slate-400">（空内容）</span></div>}
-    {isLong && (
+    {tableReplacesText
+      ? <RichText text={ai.table_md} className="text-[14.5px] leading-[1.8] text-slate-800 font-medium" />
+      : displayText
+        ? <RichText text={displayText} className="text-[14.5px] leading-[1.8] text-slate-800 font-medium" />
+        : <div className="text-[14.5px] leading-[1.8] text-slate-800 font-medium"><span className="text-slate-400">（空内容）</span></div>}
+    {isLong && !tableReplacesText && (
       <button onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }} className="mt-1.5 inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md px-2 py-1 transition">
         {expanded ? <>收起 <ChevronUp className="w-3 h-3" /></> : <>展开全文 <ChevronDown className="w-3 h-3" /></>}
       </button>
@@ -501,7 +516,7 @@ export default function HeartSignMessage({
         ? <KnowledgeCard ai={ai} plain={plain} />
         : <WarmResponseCard ai={ai} />
     )}
-    {note.ai_status === 'completed' && ai.table_md && (
+    {note.ai_status === 'completed' && ai.table_md && !tableReplacesText && (
       <RichText text={ai.table_md} className="mt-2 text-[13px] leading-[1.7] text-slate-600" />
     )}
     {note.ai_status === 'completed' && ai.ledger?.items?.length > 0 && <LedgerCard ledger={ai.ledger} />}

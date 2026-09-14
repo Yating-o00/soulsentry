@@ -128,6 +128,31 @@ function buildFallbackAutomations(timeline, devices) {
   return list;
 }
 
+// 注意：必须定义在组件外部。若放在 TaskCreate 内部，每次输入 setState 都会生成新的
+// 组件类型，React 会卸载重建整个子树，输入框原生组件被销毁——iOS 上即表现为
+// 键盘收起、需反复点击才能重新唤起。
+function SectionCard({ children, title, hint }) {
+  return (
+    <View
+      style={{
+        marginTop: "28rpx",
+        padding: "24rpx",
+        borderRadius: "16rpx",
+        background: "#ffffff",
+        border: "1rpx solid #e8ecef"
+      }}
+    >
+      {title && (
+        <View style={{ marginBottom: "16rpx" }}>
+          <Text style={{ fontSize: "26rpx", fontWeight: 600, color: "#384877" }}>{title}</Text>
+          {hint && <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginTop: "4rpx" }}>{hint}</Text>}
+        </View>
+      )}
+      {children}
+    </View>
+  );
+}
+
 export default function TaskCreate() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -1057,26 +1082,6 @@ export default function TaskCreate() {
     // 在用户主动按下语音按钮的同步调用栈内请求订阅授权
     requestReminderSubscribeSync();
   };
-
-  const SectionCard = ({ children, title, hint }) => (
-    <View
-      style={{
-        marginTop: "28rpx",
-        padding: "24rpx",
-        borderRadius: "16rpx",
-        background: "#ffffff",
-        border: "1rpx solid #e8ecef"
-      }}
-    >
-      {title && (
-        <View style={{ marginBottom: "16rpx" }}>
-          <Text style={{ fontSize: "26rpx", fontWeight: 600, color: "#384877" }}>{title}</Text>
-          {hint && <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginTop: "4rpx" }}>{hint}</Text>}
-        </View>
-      )}
-      {children}
-    </View>
-  );
 
   const renderForm = () => (
     <View>

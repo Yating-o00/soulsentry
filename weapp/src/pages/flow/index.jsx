@@ -1157,14 +1157,16 @@ function RiverCanvas({ points, deep, heartNotes }) {
 // 不再触发整页（大量板块 + 河流 Canvas）重渲染，避免每次按键产生大量 setData 导致键盘卡顿、吞点击。
 // 注意：不绑定受控 focus 属性，也不做 key+focus 重挂载——微信基础库在 input 聚焦期间
 // 收到 setData 会强制收起键盘，任何在输入中触发重渲染的聚焦 hack 都会打断连续打字。
-const FlowComposer = memo(function FlowComposer({ placeholder, busy, onSend, onQuickAction }) {
+// 回调经父级 ref 转发：父组件每次渲染都会刷新 ref 内容，但传给本组件的 ref 对象
+// 引用不变，memo 的 props 比较只看 placeholder/busy，守护轮询等页面级 setState 不会牵连输入栏。
+const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRef }) {
   const [text, setText] = useState("");
 
   const submit = () => {
     const t = text.trim();
     if (!t || busy) return;
     setText("");
-    onSend?.(t);
+    callbacksRef.current?.onSend?.(t);
   };
 
   const inputEl = (
@@ -1223,7 +1225,7 @@ const FlowComposer = memo(function FlowComposer({ placeholder, busy, onSend, onQ
             { key: "photo", icon: "📷", label: "拍照", color: THEME.inkQuaternary },
             { key: "task", icon: "📋", label: "约定", color: THEME.inkQuaternary }
           ].map((q) => (
-            <View key={q.key} onClick={() => onQuickAction?.(q.key)} style={{ display: "flex", alignItems: "center", padding: "8rpx 12rpx" }}>
+            <View key={q.key} onClick={() => callbacksRef.current?.onQuickAction?.(q.key)} style={{ display: "flex", alignItems: "center", padding: "8rpx 12rpx" }}>
               <Text style={{ fontSize: "28rpx", color: q.color, marginRight: "8rpx" }}>{q.icon}</Text>
               <Text style={{ fontSize: "24rpx", color: q.color }}>{q.label}</Text>
             </View>
@@ -1251,6 +1253,7 @@ export default function Flow() {
   const [imageDraft, setImageDraft] = useState(null); // { imageUrl, extractedText, contentType, suggestion }
   const [imageDraftBusy, setImageDraftBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const composerCallbacksRef = useRef({}); // 底部输入栏回调的最新引用，供 memo 后的 FlowComposer 读取
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showAllDue, setShowAllDue] = useState(false);
   const [showCompletedDue, setShowCompletedDue] = useState(false);
@@ -2078,6 +2081,8 @@ export default function Flow() {
       });
     }
   };
+  // 每次页面渲染刷新回调引用，供 memo 化的 FlowComposer 通过 ref 读取最新实现
+  composerCallbacksRef.current = { onSend: handleSend, onQuickAction: quickAction };
 
   const renderGuestBanner = () => {
     if (!isGuest) return null;
@@ -3635,8 +3640,7 @@ export default function Flow() {
       <FlowComposer
         placeholder={inputPlaceholder}
         busy={analyzing}
-        onSend={handleSend}
-        onQuickAction={quickAction}
+        callbacksRef={composerCallbacksRef}
       />
 
       {showVoiceModal && (

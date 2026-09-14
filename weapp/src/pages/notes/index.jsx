@@ -25,6 +25,17 @@ function AiBadge({ text = "AI 生成" }) {
 }
 
 const DENSITY_KEY = "heart_response_density";
+
+// 表格与原文去重：表格内容和用户输入几乎一样时，只渲染表格，不再重复展示原文
+function normForTableCompare(s) {
+  return String(s || "").replace(/[\s|｜，。、：:；;！!？?·\-—*#>`（）()【】[\]"'“”‘’]/g, "");
+}
+function isTableDuplicateOfText(text, tableMd) {
+  const t = normForTableCompare(text);
+  const b = normForTableCompare(tableMd);
+  if (t.length < 10 || b.length < 10) return false;
+  return [...b].filter((ch) => t.includes(ch)).length / b.length > 0.75;
+}
 const DENSITY_OPTIONS = [
   { key: "full", label: "多陪我说说" },
   { key: "light", label: "轻轻回应" },
@@ -697,14 +708,16 @@ export default function Notes() {
           </Text>
         ) : null}
 
-        <View style={{ marginBottom: "20rpx" }}>
-          <RichText
-            text={note.plain_text || note.content || ""}
-            textStyle={{ fontSize: "30rpx", color: theme.ink, lineHeight: "50rpx", fontWeight: 500 }}
-            accent={theme.primary}
-            ink={theme.ink}
-          />
-        </View>
+        {!(note.metadata?.ai_analysis?.table_md && isTableDuplicateOfText(note.plain_text || note.content || "", note.metadata.ai_analysis.table_md)) && (
+          <View style={{ marginBottom: "20rpx" }}>
+            <RichText
+              text={note.plain_text || note.content || ""}
+              textStyle={{ fontSize: "30rpx", color: theme.ink, lineHeight: "50rpx", fontWeight: 500 }}
+              accent={theme.primary}
+              ink={theme.ink}
+            />
+          </View>
+        )}
 
         {type === "ledger" && <LedgerCard ledger={note.metadata?.ai_analysis?.ledger} />}
 

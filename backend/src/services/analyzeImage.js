@@ -23,14 +23,15 @@ const SYSTEM_PROMPT = `你是「心栈 SoulSentry」的图片识别助手。用�
 只输出 JSON，格式：
 {
   "extracted_text": "图中全部文字的转录",
-  "content_type": "task | note | heart | ledger | link | other",
+  "content_type": "task | note | heart | ledger | table | link | other",
   "confidence": 0到1之间的数字,
   "suggestion": { ... }
 }
 
 content_type 判定规则：
 - task：图中含有待办/日程/会议/就诊/服药/截止日期等需要提醒或执行的事项（如白板、便签、药盒说明、账单缴费单、海报活动信息）
-- ledger：图中是消费/收支明细（如购物小票、账单、外卖订单、记账截图）
+- ledger：图中是消费/收支明细，且只有「品名+金额」这类简单两列结构（如简易记账截图、外卖订单）
+- table：图中的核心内容是一张多列表格（如购物小票、账单明细、报价单、课程表、排班表、库存表、成绩单、体检指标表）；优先保留图中全部列，一行对应图中一行
 - heart：图中文字偏心情/感悟/想对自己说的话
 - note：图中是需要留存的资料信息（如说明书要点、联系方式、地址、文章截图、名片）
 - link：图的核心是一个网址/二维码指向的链接
@@ -39,6 +40,7 @@ content_type 判定规则：
 suggestion 按类型给字段：
 - task: {"title","description","date":"YYYY-MM-DD","time":"HH:mm","end_time":"ISO8601或空","priority":"low|medium|high|urgent","category":"work|health|family|personal|shopping|learning|finance","subtasks":["..."]}；date/time 从图中信息推断，推断不出就填空字符串，不要编造
 - ledger: {"summary":"一句话说明","entries":[{"item":"品名","category":"餐饮|交通|购物|居住|娱乐|医疗|收入|其他","amount":数字,"note":""}]}；金额必须是图中出现的数字
+- table: {"title":"表格标题","summary":"一句话说明","columns":["列1","列2","列3"],"rows":[["行1列1","行1列2","行1列3"],["行2列1","行2列2","行2列3"]]}；columns 是表头数组，rows 是与 columns 等长的字符串数组的数组；数字保持图中原文（如 12.00），合计行也要保留
 - note/heart/link: {"title","content","tags":["..."]}，content 默认用转录文字提炼
 
 拿不准的字段留空或给默认值，不要编造图中没有的信息。`;
@@ -145,7 +147,7 @@ function resolveUploadPath(fileUrl) {
 }
 
 function normalizeDraft(result) {
-  const type = ["task", "note", "heart", "ledger", "link", "other"].includes(result?.content_type)
+  const type = ["task", "note", "heart", "ledger", "table", "link", "other"].includes(result?.content_type)
     ? result.content_type
     : "note";
   const suggestion = result?.suggestion && typeof result.suggestion === "object" ? result.suggestion : {};

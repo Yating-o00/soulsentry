@@ -1803,7 +1803,8 @@ export default function Flow() {
     { k: "task", l: "约定" },
     { k: "note", l: "记录" },
     { k: "heart", l: "心签" },
-    { k: "ledger", l: "账本" }
+    { k: "ledger", l: "账本" },
+    { k: "table", l: "表格" }
   ];
 
   const updateImageDraft = (updater) => {
@@ -1865,6 +1866,34 @@ export default function Flow() {
           metadata: { image_url: imageUrl, ledger_entries: entries }
         });
         Taro.showToast({ title: "账已记下", icon: "success" });
+      } else if (contentType === "table") {
+        const columns = (Array.isArray(s.columns) ? s.columns : []).map((c) => String(c ?? "").trim());
+        const rows = (Array.isArray(s.rows) ? s.rows : []).map((r) => (Array.isArray(r) ? r.map((v) => String(v ?? "")) : []));
+        const marked = Array.isArray(s.marked) ? s.marked.map(Boolean) : [];
+        if (!columns.length || columns.every((c) => !c)) {
+          throw new Error("表格至少需要一列表头");
+        }
+        const esc = (v) => String(v ?? "").replace(/\|/g, "｜").replace(/\n/g, " ");
+        const md = [
+          `| ${columns.map(esc).join(" | ")} |`,
+          `| ${columns.map(() => "---").join(" | ")} |`,
+          ...rows.map((r, i) => {
+            const prefix = marked[i] ? "⭐ " : "";
+            return `| ${columns.map((_, ci) => esc(ci === 0 ? prefix + (r[ci] ?? "") : (r[ci] ?? ""))).join(" | ")} |`;
+          })
+        ].join("\n");
+        const content = [String(s.title || "").trim() || "表格", String(s.summary || "").trim(), md]
+          .filter(Boolean)
+          .join("\n\n");
+        await post("/notes", {
+          title: String(s.title || "").trim() || "表格",
+          content,
+          plain_text: content,
+          source_type: "table",
+          tags: ["表格"],
+          metadata: { image_url: imageUrl, table: { columns, rows, marked } }
+        });
+        Taro.showToast({ title: "表格已保存", icon: "success" });
       } else if (contentType === "heart") {
         const content = text || "（来自图片的心签）";
         const note = await post("/notes", {
@@ -2068,7 +2097,7 @@ export default function Flow() {
             setImageDraft({
               imageUrl: data.file_url,
               extractedText: draft?.extracted_text || "",
-              contentType: ["task", "note", "heart", "ledger"].includes(draft?.content_type) ? draft.content_type : "note",
+              contentType: ["task", "note", "heart", "ledger", "table"].includes(draft?.content_type) ? draft.content_type : "note",
               suggestion: draft?.suggestion && typeof draft.suggestion === "object" ? draft.suggestion : {}
             });
           } catch (err) {
@@ -3943,6 +3972,132 @@ export default function Flow() {
                       </Text>
                     </>
                   )}
+
+                  {draftType === "table" && (() => {
+                    const cols = Array.isArray(s.columns) ? s.columns.map(String) : [];
+                    const rows = Array.isArray(s.rows) ? s.rows : [];
+                    const marked = Array.isArray(s.marked) ? s.marked.map(Boolean) : [];
+                    const cellInput = {
+                      ...fieldInput,
+                      flex: 1,
+                      minWidth: "140rpx",
+                      padding: "10rpx 14rpx",
+                      fontSize: "24rpx",
+                      marginRight: "8rpx"
+                    };
+                    return (
+                      <>
+                        <Text style={fieldLabel}>表格标题</Text>
+                        <Input
+                          value={String(s.title || "")}
+                          placeholder="例如：3月超市采购小票"
+                          onInput={(e) => updateImageDraft((n) => { n.suggestion.title = e.detail.value; })}
+                          style={fieldInput}
+                        />
+                        <Text style={fieldLabel}>说明（可选）</Text>
+                        <Input
+                          value={String(s.summary || "")}
+                          placeholder="一句话说明这张表"
+                          onInput={(e) => updateImageDraft((n) => { n.suggestion.summary = e.detail.value; })}
+                          style={fieldInput}
+                        />
+                        <Text style={fieldLabel}>表格（点单元格可修改，⭐ 标记重点行）</Text>
+                        <ScrollView scrollX showScrollbar={false} style={{ width: "100%" }}>
+                          <View style={{ minWidth: "100%" }}>
+                            <View style={{ display: "flex", flexDirection: "row", alignItems: "center", marginBottom: "10rpx" }}>
+                              <View style={{ width: "56rpx", flexShrink: 0 }} />
+                              {cols.map((c, ci) => (
+                                <Input
+                                  key={ci}
+                                  value={c}
+                                  placeholder={`列${ci + 1}`}
+                                  onInput={(e) =>
+                                    updateImageDraft((n) => {
+                                      const arr = [...(n.suggestion.columns || [])];
+                                      arr[ci] = e.detail.value;
+                                      n.suggestion.columns = arr;
+                                    })
+                                  }
+                                  style={{ ...cellInput, background: THEME.waterMist, borderColor: THEME.waterFaint, fontWeight: 500 }}
+                                />
+                              ))}
+                              <Text
+                                style={{ fontSize: "26rpx", color: THEME.water, padding: "0 10rpx", flexShrink: 0 }}
+                                onClick={() =>
+                                  updateImageDraft((n) => {
+                                    const arr = [...(n.suggestion.columns || []), `列${(n.suggestion.columns || []).length + 1}`];
+                                    n.suggestion.columns = arr;
+                                    n.suggestion.rows = (n.suggestion.rows || []).map((r) => [...(Array.isArray(r) ? r : []), ""]);
+                                  })
+                                }
+                              >
+                                +列
+                              </Text>
+                            </View>
+                            {rows.map((r, ri) => (
+                              <View key={ri} style={{ display: "flex", flexDirection: "row", alignItems: "center", marginBottom: "10rpx" }}>
+                                <View
+                                  style={{ width: "56rpx", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                  onClick={() =>
+                                    updateImageDraft((n) => {
+                                      const m = [...(Array.isArray(n.suggestion.marked) ? n.suggestion.marked : [])];
+                                      while (m.length <= ri) m.push(false);
+                                      m[ri] = !m[ri];
+                                      n.suggestion.marked = m;
+                                    })
+                                  }
+                                >
+                                  <Text style={{ fontSize: "30rpx", color: marked[ri] ? "#e6b93f" : THEME.inkQuaternary }}>
+                                    {marked[ri] ? "★" : "☆"}
+                                  </Text>
+                                </View>
+                                {cols.map((_, ci) => (
+                                  <Input
+                                    key={ci}
+                                    value={Array.isArray(r) ? String(r[ci] ?? "") : ""}
+                                    onInput={(e) =>
+                                      updateImageDraft((n) => {
+                                        const arr = (n.suggestion.rows || []).map((row) => [...(Array.isArray(row) ? row : [])]);
+                                        while ((arr[ri] || []).length < cols.length) arr[ri].push("");
+                                        arr[ri][ci] = e.detail.value;
+                                        n.suggestion.rows = arr;
+                                      })
+                                    }
+                                    style={{
+                                      ...cellInput,
+                                      background: marked[ri] ? "#fdf6e3" : THEME.paper,
+                                      borderColor: marked[ri] ? "#ecd9a0" : THEME.border
+                                    }}
+                                  />
+                                ))}
+                                <Text
+                                  style={{ fontSize: "36rpx", color: THEME.inkQuaternary, padding: "0 10rpx", flexShrink: 0 }}
+                                  onClick={() =>
+                                    updateImageDraft((n) => {
+                                      n.suggestion.rows = (n.suggestion.rows || []).filter((_, idx) => idx !== ri);
+                                      n.suggestion.marked = (n.suggestion.marked || []).filter((_, idx) => idx !== ri);
+                                    })
+                                  }
+                                >
+                                  ×
+                                </Text>
+                              </View>
+                            ))}
+                            <Text
+                              style={{ fontSize: "26rpx", color: THEME.water, padding: "6rpx 0 16rpx" }}
+                              onClick={() =>
+                                updateImageDraft((n) => {
+                                  n.suggestion.rows = [...(n.suggestion.rows || []), cols.map(() => "")];
+                                })
+                              }
+                            >
+                              + 加一行
+                            </Text>
+                          </View>
+                        </ScrollView>
+                      </>
+                    );
+                  })()}
 
                   {(draftType === "note" || draftType === "heart") && (
                     <>

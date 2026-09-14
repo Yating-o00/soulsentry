@@ -2561,7 +2561,8 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       const existingAi = note.metadata?.ai_analysis;
-      if (note.aiStatus === "completed" && existingAi?.analyzed_at) {
+      // 已分析且有回应的才跳过；早期 bug 导致部分签 analyzed 但回应为空，放行重跑自愈
+      if (note.aiStatus === "completed" && existingAi?.analyzed_at && existingAi?.emotional_response) {
         return res.json({ ok: true, skipped: true, ai_analysis: existingAi });
       }
       if (note.aiStatus === "processing") {
@@ -2652,7 +2653,7 @@ functionsRouter.post("/:name", async (req, res) => {
           is_emotional: { type: "boolean", description: "是否值得温柔回应" },
           response_persona: { type: "string", description: "回应身份：comforter/mentor/clerk/friend/poet" },
           response_title: { type: "string", description: "回应标题" },
-          emotional_response: { type: "string", description: "简短回应，情绪签80字内、资料/账本签60字内、备忘签20字内、灵感签50字内、分享签40字内" },
+          emotional_response: { type: "string", description: "简短回应，每条签都必须给出：情绪签80字内、资料/账本签60字内、备忘签20字内、灵感签50字内、分享签40字内" },
           response_tag: { type: "string", description: "回应标签：感性回应/理性补充/收录" },
           table_md: { type: "string", description: "可选：内容适合表格化表达时（资料对比/清单/价格/日程排列），用 Markdown 表格呈现：首行 | 表头 |、次行 |---| 分隔、随后每行数据；不适合则返回空字符串" },
           ...(isLedger ? {
@@ -2784,7 +2785,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           is_emotional: !!parsed.is_emotional,
           response_persona: parsed.is_emotional ? (parsed.response_persona || "friend") : "",
           response_title: parsed.is_emotional ? (parsed.response_title || "") : "",
-          emotional_response: parsed.is_emotional ? (parsed.emotional_response || "") : "",
+          emotional_response: parsed.emotional_response || "",
           response_tag: parsed.response_tag || (parsed.is_emotional ? "感性回应" : "收录"),
           analyzed_at: new Date().toISOString(),
           source: usedFallback ? "local_fallback" : "kimi",
@@ -2805,6 +2806,19 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
               ai_analysis.emotional_response = "内容已经整理成表格啦，一目了然。";
             }
           }
+        }
+
+        // 兜底：任何分类都必须给出一条回应，避免"生成后没有 AI 回复"
+        if (!ai_analysis.emotional_response) {
+          const FALLBACK_REPLY = {
+            "资料": "这条资料我帮你收好了，要点已提炼，需要时一搜就能找到。",
+            "备忘": "已收好，到点会提醒你。",
+            "账本": "账已记好，明细见上方。",
+            "灵感": "这个念头值得留下，想落地的时候随时说。",
+            "分享": "收到这份分享，已好好安放。",
+            "情绪": "收到了，都在。"
+          };
+          ai_analysis.emotional_response = FALLBACK_REPLY[ai_analysis.category] || "收到了，都在。";
         }
 
         const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);

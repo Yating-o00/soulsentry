@@ -8,6 +8,7 @@ import Composer from "@/components/tasks/Composer";
 import PromiseCard from "@/components/tasks/PromiseCard";
 import { SnoozeSheet, ExecPreview } from "@/components/tasks/Sheets";
 import EvolutionRail, { computeEvolution } from "@/components/tasks/EvolutionRail";
+import DailyReviewSheet from "@/components/tasks/DailyReviewSheet";
 import theme from "@/components/tasks/theme";
 
 function AiBadge({ text = "AI 生成" }) {
@@ -82,6 +83,7 @@ export default function Tasks() {
   const [posterToken, setPosterToken] = useState("");
   const [toast, setToast] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
+  const [showDailyReview, setShowDailyReview] = useState(false);
 
   const toastTimerRef = useRef(null);
   const showToast = (msg) => {
@@ -466,7 +468,15 @@ export default function Tasks() {
         {/* evolution rail */}
         <EvolutionRail
           evo={evo}
-          onReview={() => showToast("晚间复盘功能即将上线")}
+          onReview={() => setShowDailyReview(true)}
+        />
+
+        {/* 今日复盘 */}
+        <DailyReviewSheet
+          visible={showDailyReview}
+          onClose={() => setShowDailyReview(false)}
+          tasks={tasks}
+          onSaved={fetchData}
         />
 
         {/* footer brand line */}

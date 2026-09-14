@@ -70,7 +70,7 @@ function percentEncode(str) {
 }
 
 // 阿里云 RPC API V1 签名（HMAC-SHA1）；图片二进制作为 POST body
-async function ocrWithAliyun(filePath) {
+async function ocrWithAliyun(filePath, type = "Advanced") {
   const creds = getAliyunOcrCredentials();
   if (!creds) return null;
 
@@ -82,7 +82,7 @@ async function ocrWithAliyun(filePath) {
     SignatureNonce: crypto.randomUUID(),
     SignatureVersion: "1.0",
     Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-    Type: process.env.ALIYUN_OCR_TYPE || "General",
+    Type: type,
     Version: process.env.ALIYUN_OCR_VERSION || "2021-07-07"
   };
 
@@ -213,7 +213,19 @@ export async function analyzeImage({ fileUrl }) {
   // 视觉模型不可用（key 未开通）：降级为阿里云 OCR 提文字 + Kimi 文本分类
   console.log("[analyzeImage] vision models unavailable, fallback to Aliyun OCR");
   try {
-    const ocrText = await ocrWithAliyun(filePath);
+    const preferredType = process.env.ALIYUN_OCR_TYPE || "Advanced";
+    let ocrText = null;
+    try {
+      ocrText = await ocrWithAliyun(filePath, preferredType);
+    } catch (ocrError) {
+      // 高精版能力未开通/未授权时自动降级基础版再试一次
+      if (preferredType !== "General" && /not activated|activated|forbidden|permission|denied|not valid|未开通/i.test(ocrError?.message || "")) {
+        console.log(`[analyzeImage] OCR type ${preferredType} unavailable (${ocrError?.message}), retry with General`);
+        ocrText = await ocrWithAliyun(filePath, "General");
+      } else {
+        throw ocrError;
+      }
+    }
     if (!ocrText) {
       const error = new Error("图片识别暂不可用：请联系管理员配置阿里云 OCR（ALIYUN_OCR_ACCESS_KEY_ID/SECRET）");
       error.status = 503;

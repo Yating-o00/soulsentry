@@ -562,7 +562,7 @@ function buildRiverInsight(river, tasks, notes) {
   if (currentSegment?.type === "relax" || currentSegment?.type === "heart") {
     const top = tasks.filter((t) => !isDone(t)).sort((a, b) => dueWeight(b) - dueWeight(a))[0];
     return {
-      text: "此刻的河流很平缓，适合休息。等你想动的时候，我可以先帮你挑一件最小的事。",
+      text: "河流平缓，适合休息。想动时我帮你挑一件最小的事。",
       actionText: top ? "挑一件最小的事" : "记一条",
       action: top ? "go-task" : "note",
       payload: top ? { id: top.id } : null,
@@ -620,7 +620,7 @@ function buildRiverInsight(river, tasks, notes) {
   if (river.doneToday > 0) {
     const top = tasks.filter((t) => !isDone(t)).sort((a, b) => dueWeight(b) - dueWeight(a))[0];
     return {
-      text: `今天已经完成 ${river.doneToday} 件事，河流正在流动。${top ? `再顺水推一件「${top.title}」就好。` : "不用急，等你想动的时候再开始。"}`,
+      text: `今天已完成 ${river.doneToday} 件事，${top ? `再顺水推一件「${top.title}」就好。` : "再顺水推一件就好。"}`,
       actionText: top ? "现在推进" : "记一条",
       action: top ? "go-task" : "note",
       payload: top ? { id: top.id } : null,
@@ -629,7 +629,7 @@ function buildRiverInsight(river, tasks, notes) {
   }
 
   return {
-    text: "今天的河流还在等待第一条波纹。记录或完成一件小事，它会自己展开。",
+    text: "今天还没有波纹。记录或完成一件小事，它会自己展开。",
     actionText: "记一条",
     action: "note",
     smartReason: "empty"
@@ -2262,14 +2262,12 @@ export default function Flow() {
       if (river?.doneToday) {
         return `今天已完成 ${river.doneToday} 件，河流正在流动`;
       }
-      return "今天的河流还在等待第一条波纹";
+      return "今天还没有波纹";
     })();
 
     const sub = deep
-      ? "深流、心签、习惯、放松、约定，河流会根据你的一天自动调整形状。"
-      : river?.doneToday
-        ? "继续往前划，河流会自己延续。"
-        : "记录或完成一件小事，心流就会开始。";
+      ? "河流会随你的一天自动调整。"
+      : "记录或完成一件小事，心流就会开始。";
 
     return (
       <View style={{ padding: "8rpx 32rpx 18rpx" }}>
@@ -2458,7 +2456,7 @@ export default function Flow() {
               </View>
             </View>
             <Text style={{ fontSize: "26rpx", color: THEME.inkQuaternary, lineHeight: "44rpx" }}>
-              {isTodaySelected ? "今天还没有到期的约定，河流可以慢一点。" : "这一天没有约定。"}
+              {"这一天没有约定。"}
             </Text>
           </View>
         </View>
@@ -3405,7 +3403,7 @@ export default function Flow() {
                     ))}
                   </>
                 ) : (
-                  <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>基于 {l.history_sample_size || 0} 条历史记录推断，目前暂无匹配的待办。</Text>
+                  <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>暂无匹配的待办。</Text>
                 )}
               </CardShell>
             );

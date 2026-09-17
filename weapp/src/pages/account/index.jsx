@@ -242,7 +242,7 @@ function MoodLineChart({ series, color }) {
 function showDemoToast() {
   Taro.showModal({
     title: "Demo 账号体验中",
-    content: "当前为游客模式，数据不会保存。登录后即可拥有你的心栈专属空间。",
+    content: "游客数据不会保存，登录后同步你的心栈",
     confirmText: "去登录",
     cancelText: "先逛逛",
     success: (res) => {
@@ -456,7 +456,7 @@ export default function Account() {
           </View>
           <Text style={{ fontSize: "36rpx", fontWeight: 600, color: theme.ink, marginBottom: "16rpx" }}>游客模式</Text>
           <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx" }}>这是 Demo 账号体验版</Text>
-          <Text style={{ fontSize: "26rpx", color: theme.inkQuaternary, lineHeight: "44rpx" }}>登录后即可保存你的心签、约定与成长数据</Text>
+          <Text style={{ fontSize: "26rpx", color: theme.inkQuaternary, lineHeight: "44rpx" }}>登录后同步你的心签、约定与成长数据</Text>
         </View>
 
         <Button
@@ -747,7 +747,6 @@ export default function Account() {
                     </View>
                   )}
                 </View>
-                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginTop: "4rpx" }}>由你的心签、约定与执行记录汇聚而成</Text>
               </View>
               <View style={{ display: "flex", gap: "8rpx" }}>
                 {[14, 30].map((p) => (
@@ -784,8 +783,7 @@ export default function Account() {
               ) : (
                 <View style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
                   <View style={{ width: "96rpx", height: "4rpx", borderRadius: "2rpx", background: theme.border, marginBottom: "16rpx" }} />
-                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary, marginBottom: "8rpx" }}>还没有足够的数据</Text>
-                  <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary }}>记录心签或完成约定后，河流会在这里出现</Text>
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>还没有足够的数据</Text>
                 </View>
               )}
             </View>
@@ -835,11 +833,6 @@ export default function Account() {
                     </View>
                   </View>
                   <Text style={{ fontSize: "28rpx", color: theme.ink, lineHeight: "48rpx", fontWeight: 400 }}>{insight}</Text>
-                  {errorHint && rawSource !== "ai" && rawSource !== "local-empty" && (
-                    <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "12rpx" }}>
-                      诊断：{errorHint}
-                    </Text>
-                  )}
                 </View>
               </View>
             </View>
@@ -848,7 +841,6 @@ export default function Account() {
           {/* platforms */}
           <View style={{ marginBottom: "48rpx" }}>
             <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "4rpx" }}>多方位沉淀</Text>
-            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginBottom: "20rpx" }}>数据可在多平台同步查看</Text>
             <View
               style={{
                 background: theme.card,
@@ -899,7 +891,6 @@ export default function Account() {
           {/* badges */}
           <View style={{ marginBottom: "48rpx" }}>
             <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "4rpx" }}>心灵成就</Text>
-            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginBottom: "20rpx" }}>AI 根据你的数据生成的正能量人格</Text>
             <View style={{ display: "flex", flexWrap: "wrap", gap: "24rpx" }}>
               {badges.map((b) => (
                 <View key={b.key} style={{ textAlign: "center", width: "104rpx" }}>
@@ -950,7 +941,6 @@ export default function Account() {
                 <Text style={{ fontSize: "32rpx", color: theme.inkQuaternary }}>⇄</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: "28rpx", color: theme.ink, fontWeight: 500 }}>切换账户</Text>
-                  <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginTop: "2rpx" }}>在当前设备上登录其他账户</Text>
                 </View>
                 <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
               </View>
@@ -966,7 +956,6 @@ export default function Account() {
                 <Text style={{ fontSize: "32rpx", color: theme.seal }}>⎋</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: "28rpx", color: theme.ink, fontWeight: 500 }}>退出账户</Text>
-                  <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginTop: "2rpx" }}>安全退出当前登录状态</Text>
                 </View>
                 <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
               </View>
@@ -1000,7 +989,7 @@ export default function Account() {
               <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
             </View>
             <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
-              部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
+              内容由 AI 生成，仅供参考
             </Text>
           </View>
 

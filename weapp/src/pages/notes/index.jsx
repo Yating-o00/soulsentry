@@ -617,9 +617,7 @@ export default function Notes() {
         {isGuest ? "登录后开启心签" : "这里还空着"}
       </Text>
       <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx" }}>
-        {isGuest
-          ? "心签是说给另一个自己听的地方，登录后即可记录。"
-          : "此刻的心情、刷到的好文章、怕忘的号码……都可以丢进来。"}
+        {isGuest ? "登录后开始记录" : ""}
       </Text>
       {isGuest ? (
         <View
@@ -865,7 +863,7 @@ export default function Notes() {
             <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
           </View>
           <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
-            部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
+            内容由 AI 生成，仅供参考
           </Text>
         </View>
 

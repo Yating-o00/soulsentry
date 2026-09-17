@@ -300,7 +300,7 @@ export default function NoteCreate() {
               检测到敏感信息
             </Text>
             <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx", marginBottom: "24rpx" }}>
-              内容可能包含密码、证件号等敏感信息。存入加密保险柜后，不会进入 AI 分析管道，查看时需要输入保险柜密码。
+              存入加密保险柜后不会进入 AI 分析，查看需输入保险柜密码。
             </Text>
 
             <Input

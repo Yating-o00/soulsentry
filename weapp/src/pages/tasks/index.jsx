@@ -27,10 +27,10 @@ function AiBadge({ text = "AI 生成" }) {
 }
 
 const groups = [
-  { key: "now", zh: "现在能做", en: "NOW", hint: "长期计划里当下可推进的" },
-  { key: "due", zh: "即将截止", en: "DUE", hint: "24 小时内到期或已逾期" },
-  { key: "suggested", zh: "哨兵建议", en: "SUGGESTED", hint: "AI 已选好最佳时机" },
-  { key: "fixed", zh: "固定安排", en: "FIXED", hint: "周期与长期约定" },
+  { key: "now", zh: "现在能做" },
+  { key: "due", zh: "即将截止" },
+  { key: "suggested", zh: "哨兵建议" },
+  { key: "fixed", zh: "固定安排" },
 ];
 
 const categoryMap = {
@@ -396,11 +396,10 @@ export default function Tasks() {
           {grouped.map((g) => (
             <View key={g.key} style={{ marginBottom: "48rpx" }}>
               <View style={{ display: "flex", alignItems: "baseline", gap: "16rpx", marginBottom: "24rpx", flexWrap: "wrap" }}>
-                <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "8rpx" }}>{g.en}</Text>
                 <Text style={{ fontSize: "34rpx", fontWeight: 700, color: theme.primary }}>{g.zh}</Text>
                 {g.key === "suggested" && <AiBadge />}
                 <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>
-                  {g.items.length} 个约定 · {g.hint}
+                  {g.items.length}
                 </Text>
                 <View style={{ flex: 1, height: "1rpx", background: theme.border }} />
               </View>
@@ -413,7 +412,7 @@ export default function Tasks() {
                     borderRadius: "8rpx",
                   }}
                 >
-                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>暂无 —— 有约定到达这个阶段时会出现在这里</Text>
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>暂无</Text>
                 </View>
               ) : (
                 <View style={{ position: "relative", paddingLeft: "20rpx" }}>

@@ -1003,8 +1003,6 @@ export default function TaskCreate() {
         : { daily: "每天", weekly: "每周", monthly: "每月" }[freq] || "周期";
       hints.push(`已设为${label}重复提醒`);
     }
-    if (parsed.time_source === "common_sense") hints.push("已按生活常识填充时间");
-    else if (parsed.time_source === "now") hints.push("未识别到时间，已设为当前时间附近");
     if (hints.length > 0) setParsedHint(hints.join(" · "));
   };
 
@@ -1087,7 +1085,6 @@ export default function TaskCreate() {
     <View>
       <View className="ss-card" style={{ paddingBottom: "16rpx" }}>
         <View className="ss-title">{isEdit ? "编辑约定" : "新建约定"}</View>
-        <Text className="ss-subtitle">{isEdit ? "修改约定信息" : "输入或说出约定，SoulSentry 会帮你解析并填表"}</Text>
       </View>
 
       {!isEdit && (
@@ -1116,7 +1113,7 @@ export default function TaskCreate() {
         </View>
       ) : null}
 
-      <SectionCard title={isEdit ? "基本信息" : "你的输入"} hint={isEdit ? "" : "可以输入完整句子，AI 会提取关键信息"}>
+      <SectionCard title={isEdit ? "基本信息" : "你的输入"}>
         {!isEdit && (
           <View style={{ marginBottom: "20rpx" }}>
             <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>完整内容</Text>
@@ -1253,11 +1250,10 @@ export default function TaskCreate() {
     <View>
       <View className="ss-card" style={{ paddingBottom: "16rpx" }}>
         <View className="ss-title">确认约定信息</View>
-        <Text className="ss-subtitle">SoulSentry 已理解你的输入，你可以再调整细节</Text>
       </View>
 
       {rawInput ? (
-        <SectionCard title="你的原话" hint="AI 基于以下内容理解">
+        <SectionCard title="你的原话">
           <Text style={{ fontSize: "30rpx", color: "#1c1c1e", lineHeight: "48rpx" }}>{rawInput}</Text>
         </SectionCard>
       ) : null}
@@ -1302,9 +1298,9 @@ export default function TaskCreate() {
         </View>
       </SectionCard>
 
-      <SectionCard title="子约定" hint="AI 拆解出的步骤（没有可手动添加），可以继续修改或增删">
+      <SectionCard title="子约定">
         {parsedSubtasks.length === 0 && (
-          <View className="ss-empty" style={{ padding: "8rpx 0 16rpx" }}>AI 没有拆解出步骤，可以直接添加</View>
+          <View className="ss-empty" style={{ padding: "8rpx 0 16rpx" }}>暂无子约定</View>
         )}
         {parsedSubtasks.map((st, idx) => (
             <View key={idx} style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
@@ -1437,7 +1433,7 @@ export default function TaskCreate() {
           <View className="ss-title">AI 分析结果</View>
           <AiBadge />
         </View>
-        <Text className="ss-subtitle">基于你的约定，SoulSentry 给出的执行建议</Text>
+        <Text className="ss-subtitle">执行建议</Text>
 
         {analysis?.resolved_date && (
           <View style={{ marginTop: "16rpx" }}>
@@ -1541,7 +1537,6 @@ export default function TaskCreate() {
 
       <View className="ss-card">
         <View className="ss-title">分享卡片</View>
-        <Text className="ss-subtitle">生成分享卡片，保存到相册或转发给伙伴。</Text>
 
         {shareToken ? (
           <View>

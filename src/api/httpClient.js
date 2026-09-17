@@ -78,6 +78,11 @@ export async function httpRequest(path, { method = "GET", body, headers = {} } =
   }
 
   if (!response.ok) {
+    // 401 时清除本地 token：过期/失效凭证不应永久占位，
+    // 清除后调用方（如 standalone 的 demo 自动登录）才能重新认证
+    if (response.status === 401) {
+      setAccessToken(null);
+    }
     const error = new Error(data?.message || `请求失败: ${response.status}`);
     error.status = response.status;
     error.data = data;

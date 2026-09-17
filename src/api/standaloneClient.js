@@ -22,8 +22,37 @@ const DEMO_PASSWORD = "demo123456";
 // demo 自动登录失败一次后不再重试：避免每个 API 调用都触发一次登录请求形成 401 风暴
 let demoLoginFailed = false;
 
+// 仅本地解析 JWT 负载（不校验签名），用于判断过期与账号归属
+function decodeTokenPayload(token) {
+  try {
+    const [, payload] = String(token || "").split(".");
+    if (!payload) return null;
+    const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return json && typeof json === "object" ? json : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function isDemoToken(token) {
+  return decodeTokenPayload(token)?.email === DEMO_EMAIL;
+}
+
+function isTokenExpired(token) {
+  const exp = decodeTokenPayload(token)?.exp;
+  return typeof exp === "number" && exp * 1000 <= Date.now() + 30000;
+}
+
 async function ensureStandaloneSession() {
-  if (getAccessToken()) return true;
+  const existingToken = getAccessToken();
+  if (existingToken) {
+    // demo token 过期后自动清除并重新走 demo 登录；
+    // 其他账号的 token 不做本地过期判断，交给请求层按 401 处理
+    if (!(isDemoToken(existingToken) && isTokenExpired(existingToken))) {
+      return true;
+    }
+    setAccessToken(null);
+  }
   if (demoLoginFailed) {
     const err = new Error("未登录或登录已过期");
     err.status = 401;

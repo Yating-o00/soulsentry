@@ -782,6 +782,7 @@ export default function Notes() {
                   <HeartSignMessage
                     note={note}
                     flash={flashId === note.id}
+                    onEdit={(n) => setEditingNote(n)}
                     onDeleted={(id) => deleteNoteMutation.mutate(id)}
                     onRestore={() => queryClient.invalidateQueries({ queryKey: ['notes'] })}
                     onTypeChange={handleTypeChange}

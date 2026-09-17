@@ -250,6 +250,7 @@ export default function HeartSignMessage({
   onConvertToTask,
   onSaveToKnowledge,
   onShareOpenChange,
+  onEdit,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -554,6 +555,9 @@ export default function HeartSignMessage({
         className="mt-1.5 flex items-center gap-0.5 flex-wrap"
         onClick={(e) => e.stopPropagation()}
       >
+        <button className={OP_CLS} onClick={() => onEdit?.(note)}>
+          <PenLine className="w-3 h-3" /> 编辑
+        </button>
         <button className={OP_CLS} onClick={() => onPinnedChange?.(note)} title={isPinnedNote(note) ? '取消置顶' : '置顶'}>
           <Pin className={`w-3 h-3 ${isPinnedNote(note) ? 'text-[#384877] fill-[#384877]' : ''}`} />
           {isPinnedNote(note) ? '已置顶' : '置顶'}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Taro from "@tarojs/taro";
-import { getToken, clearToken, rememberAccount } from "@/utils/auth";
+import { getToken, clearToken, rememberAccount, isDemoMode, setDemoMode } from "@/utils/auth";
 import { get } from "@/utils/api";
 
 export default function useAuth() {
@@ -9,7 +9,8 @@ export default function useAuth() {
 
   const refresh = useCallback(async () => {
     const token = getToken();
-    if (!token) {
+    // Demo 会话不算真实登录：不拉用户信息、不记入账户切换列表
+    if (!token || isDemoMode()) {
       setUser(null);
       setLoading(false);
       return;
@@ -34,6 +35,7 @@ export default function useAuth() {
 
   const logout = useCallback(() => {
     clearToken();
+    setDemoMode(false);
     setUser(null);
     Taro.reLaunch({ url: "/pages/index/index" });
   }, []);

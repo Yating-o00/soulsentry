@@ -18,6 +18,18 @@ export function isLoggedIn() {
   return Boolean(getToken());
 }
 
+// Demo 模式：未登录时静默使用 demo 账号会话，让用户先逛起来
+const DEMO_KEY = "ss_demo_mode";
+
+export function setDemoMode(v) {
+  if (v) Taro.setStorageSync(DEMO_KEY, "1");
+  else Taro.removeStorageSync(DEMO_KEY);
+}
+
+export function isDemoMode() {
+  return Taro.getStorageSync(DEMO_KEY) === "1";
+}
+
 const ACCOUNTS_KEY = "ss_accounts";
 const ACCOUNTS_CAP = 5;
 

@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
-import { getToken } from "@/utils/auth";
+import { getToken, isDemoMode } from "@/utils/auth";
+import { ensureDemoSession } from "@/utils/demo";
 import SharePoster from "@/components/SharePoster";
 import Composer from "@/components/tasks/Composer";
 import PromiseCard from "@/components/tasks/PromiseCard";
@@ -132,9 +133,13 @@ export default function Tasks() {
   }, []);
 
   useDidShow(() => {
-    const guest = !getToken();
-    setIsGuest(guest);
-    if (!guest) fetchData();
+    (async () => {
+      await ensureDemoSession();
+      const guest = !getToken() || isDemoMode();
+      setIsGuest(guest);
+      if (getToken()) fetchData();
+      else setLoading(false);
+    })();
   });
 
   const grouped = useMemo(() => {

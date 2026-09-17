@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Button, ScrollView, Image } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
-import { getToken, clearToken, setToken, getAccounts } from "@/utils/auth";
+import { getToken, clearToken, setToken, getAccounts, isDemoMode } from "@/utils/auth";
 import { get, post, patch } from "@/utils/api";
 import theme from "@/components/tasks/theme";
 
@@ -325,7 +325,7 @@ export default function Account() {
   };
 
   const loadData = useCallback(async () => {
-    if (!getToken()) return;
+    if (!getToken() || isDemoMode()) return;
     setDataLoading(true);
     try {
       const [notesRes, tasksRes, execRes, notiRes] = await Promise.allSettled([
@@ -348,8 +348,8 @@ export default function Account() {
   const loadMoodRiver = useCallback(async (p) => {
     const token = getToken();
     console.log("[loadMoodRiver] token present=", Boolean(token), "period=", p);
-    if (!token) {
-      console.log("[loadMoodRiver] no token, skip");
+    if (!token || isDemoMode()) {
+      console.log("[loadMoodRiver] no token or demo mode, skip");
       return;
     }
     setMoodData(null);
@@ -384,7 +384,7 @@ export default function Account() {
   });
 
   useEffect(() => {
-    if (!getToken() && !demoShown) {
+    if (isDemoMode() && !demoShown) {
       setDemoShown(true);
       setTimeout(() => showDemoToast(), 400);
     }
@@ -487,6 +487,7 @@ export default function Account() {
 
   const handleLogout = () => {
     clearToken();
+    setDemoMode(false);
     setShowLogoutConfirm(false);
     Taro.reLaunch({ url: "/pages/index/index" });
   };
@@ -507,6 +508,7 @@ export default function Account() {
       return;
     }
     setToken(acc.token);
+    setDemoMode(false);
     Taro.showToast({ title: `已切换到 ${accountLabel(acc)}`, icon: "none" });
     Taro.reLaunch({ url: "/pages/index/index" });
   };
@@ -514,6 +516,7 @@ export default function Account() {
   const addAccount = () => {
     setShowSwitchAccounts(false);
     clearToken();
+    setDemoMode(false);
     Taro.navigateTo({ url: "/pages/login/index" });
   };
 

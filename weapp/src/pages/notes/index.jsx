@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Button } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
-import { getToken } from "@/utils/auth";
+import { getToken, isDemoMode } from "@/utils/auth";
+import { ensureDemoSession } from "@/utils/demo";
 import SharePoster from "@/components/SharePoster";
 import VaultSheet from "@/components/VaultSheet";
 import ReviewDrawer from "@/components/ReviewDrawer";
@@ -255,9 +256,12 @@ export default function Notes() {
   }, []);
 
   useDidShow(() => {
-    const guest = !getToken();
-    setIsGuest(guest);
-    if (!guest) fetchNotes();
+    (async () => {
+      await ensureDemoSession();
+      const guest = !getToken() || isDemoMode();
+      setIsGuest(guest);
+      if (getToken()) fetchNotes();
+    })();
   });
 
   const filteredNotes = useMemo(() => {

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text, Input, Button } from "@tarojs/components";
 import { post } from "@/utils/api";
-import { setToken } from "@/utils/auth";
+import { setToken, setDemoMode } from "@/utils/auth";
 
 async function bindWechatOpenid() {
   if (process.env.TARO_ENV !== "weapp") return;
@@ -112,6 +112,7 @@ export default function Login() {
 
       if (data.token) {
         setToken(data.token);
+        setDemoMode(false);
         // 静默绑定微信小程序 openid，用于后续订阅消息推送
         bindWechatOpenid();
         Taro.showToast({ title: "登录成功", icon: "success" });

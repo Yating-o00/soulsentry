@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
 import Taro, { useDidShow, useDidHide } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Textarea, Image, Canvas } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
-import { getToken } from "@/utils/auth";
+import { getToken, isDemoMode } from "@/utils/auth";
+import { ensureDemoSession } from "@/utils/demo";
 import VoiceInput from "@/components/VoiceInput";
 import RichText from "@/components/RichText";
 
@@ -1268,8 +1269,11 @@ export default function Flow() {
   const analyzedHeartIdsRef = useRef(new Set());
 
   useDidShow(() => {
-    setIsGuest(!getToken());
-    loadAll();
+    (async () => {
+      await ensureDemoSession();
+      setIsGuest(!getToken() || isDemoMode());
+      loadAll();
+    })();
   });
 
   useDidHide(() => {

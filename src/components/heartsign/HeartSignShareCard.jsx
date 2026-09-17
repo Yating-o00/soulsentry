@@ -18,22 +18,29 @@ const H = 1350;
 const SERIF = '"Songti SC","STSong","SimSun",serif';
 const SANS = '"-apple-system","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
 
-// 正文换行：按像素宽度折行，超长截断并加省略号
+// 正文换行：按像素宽度折行，超出 maxLines 截断并加省略号
 function wrapLines(ctx, text, maxW, maxLines) {
   const lines = [];
+  let truncated = false;
   for (const para of String(text || "").split("\n")) {
     let line = "";
     for (const ch of para) {
       if (ctx.measureText(line + ch).width > maxW) {
         lines.push(line);
         line = ch;
-        if (lines.length >= maxLines) return lines;
+        if (lines.length >= maxLines) { truncated = true; break; }
       } else {
         line += ch;
       }
     }
+    if (truncated) break;
     lines.push(line);
-    if (lines.length >= maxLines) return lines;
+    if (lines.length >= maxLines) { truncated = true; break; }
+  }
+  if (truncated && lines.length) {
+    let last = lines[lines.length - 1] || "";
+    while (last && ctx.measureText(last + "…").width > maxW) last = last.slice(0, -1);
+    lines[lines.length - 1] = last + "…";
   }
   return lines;
 }
@@ -152,16 +159,34 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     if (!ctx) return;
 
     const draw = async () => {
+      // —— 先排版测量：内容长时自动加高画布，避免签文与 AI 回应/底栏重叠 ——
+      const fontSize = 34;
+      const lineHeight = Math.round(fontSize * 1.9);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.font = `400 ${fontSize}px ${SERIF}`;
+      const MAX_CONTENT_LINES = 48;
+      const lines = wrapLines(ctx, content || "（空内容）", 760, MAX_CONTENT_LINES);
+      const textTop = 470;
+      const metaY = textTop + lines.length * lineHeight + 30;
+
+      ctx.font = `italic 400 26px ${SERIF}`;
+      const rl = replyText ? wrapLines(ctx, replyText, 680, 5) : [];
+      const replyTop = metaY + 90;
+      const contentBottom = rl.length ? replyTop + (rl.length - 1) * 48 + 30 : metaY;
+      const canvasH = Math.max(H, contentBottom + 260);
+      if (canvas.height !== canvasH) canvas.height = canvasH;
+
       // 纸面底：暖白
       ctx.fillStyle = "#fbfaf7";
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, W, canvasH);
 
       // 内缩细线框：一道主框 + 一道更浅的副框（极简装裱感）
       ctx.strokeStyle = "rgba(56,72,119,0.28)";
       ctx.lineWidth = 1;
-      ctx.strokeRect(30, 30, W - 60, H - 60);
+      ctx.strokeRect(30, 30, W - 60, canvasH - 60);
       ctx.strokeStyle = "rgba(56,72,119,0.10)";
-      ctx.strokeRect(38, 38, W - 76, H - 76);
+      ctx.strokeRect(38, 38, W - 76, canvasH - 76);
 
       // 顶部：有头像时头像替代「心」圆圈位置，否则细线圆圈「心」；下接字距拉开的品牌小字
       if (avatar) {
@@ -183,20 +208,15 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       ctx.fillText(brand, W / 2, 244);
 
       // 签文：衬线居中，一枚浅色大引号
-      const fontSize = 34;
-      const lineHeight = Math.round(fontSize * 1.9);
       ctx.fillStyle = "rgba(56,72,119,0.10)";
       ctx.font = `700 96px ${SERIF}`;
       ctx.fillText("“", W / 2, 400);
       ctx.fillStyle = "#2c3244";
       ctx.font = `400 ${fontSize}px ${SERIF}`;
-      const lines = wrapLines(ctx, content || "（空内容）", 760, 10);
-      const textTop = 470;
       lines.forEach((l, i) => ctx.fillText(l, W / 2, textTop + i * lineHeight));
 
       // 日期 + 类型色圆点小标签（签文下方居中）
       const typeLabel = TYPE_META[getNoteType(note)]?.label || "心签";
-      const metaY = textTop + lines.length * lineHeight + 26;
       ctx.font = `400 22px ${SANS}`;
       const dateW = ctx.measureText(dateStr).width;
       const dotR = 5;
@@ -215,9 +235,8 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       ctx.fillStyle = "#8e8e93";
       ctx.fillText(typeLabel, mx, metaY);
 
-      // AI 回应（另一个你）：细线分隔后小字斜体灰蓝
-      if (replyText) {
-        const replyTop = H - (noteUrl ? 460 : 400);
+      // AI 回应（另一个你）：细线分隔后小字斜体灰蓝，位置随签文长度下移
+      if (replyText && rl.length) {
         ctx.strokeStyle = "rgba(56,72,119,0.16)";
         ctx.beginPath();
         ctx.moveTo(W / 2 - 60, replyTop - 40);
@@ -225,7 +244,6 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
         ctx.stroke();
         ctx.fillStyle = "#6b7a99";
         ctx.font = `italic 400 26px ${SERIF}`;
-        const rl = wrapLines(ctx, replyText, 680, 3);
         rl.forEach((l, i) => {
           ctx.textAlign = "center";
           ctx.fillText(l, W / 2, replyTop + i * 48);
@@ -235,8 +253,8 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       // 底部一栏：细线之上，左侧品牌语，右侧二维码 +「扫码回应」
       ctx.strokeStyle = "rgba(56,72,119,0.16)";
       ctx.beginPath();
-      ctx.moveTo(90, H - 190);
-      ctx.lineTo(W - 90, H - 190);
+      ctx.moveTo(90, canvasH - 190);
+      ctx.lineTo(W - 90, canvasH - 190);
       ctx.stroke();
 
       // 无二维码时品牌语居中，有二维码时靠左与二维码同栏
@@ -244,10 +262,10 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       ctx.font = `400 22px ${SANS}`;
       if (noteUrl) {
         ctx.textAlign = "left";
-        ctx.fillText("心栈 · 说给另一个自己听", 90, H - 118);
+        ctx.fillText("心栈 · 说给另一个自己听", 90, canvasH - 118);
       } else {
         ctx.textAlign = "center";
-        ctx.fillText("心栈 · 说给另一个自己听", W / 2, H - 130);
+        ctx.fillText("心栈 · 说给另一个自己听", W / 2, canvasH - 130);
       }
 
       // 底栏右侧二维码（110px）+「扫码回应」小字
@@ -256,7 +274,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
           const qrUrl = await QRCode.toDataURL(noteUrl, { width: 320, margin: 1, errorCorrectionLevel: "M" });
           const qrSize = 110;
           const qrX = W - 90 - qrSize;
-          const qrY = H - 172;
+          const qrY = canvasH - 172;
           await new Promise((resolve) => {
             const img = new Image();
             img.onload = () => { ctx.drawImage(img, qrX, qrY, qrSize, qrSize); resolve(); };
@@ -266,7 +284,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
           ctx.fillStyle = "#b0b0b5";
           ctx.font = `400 18px ${SANS}`;
           ctx.textAlign = "right";
-          ctx.fillText("扫码回应", qrX - 22, H - 112);
+          ctx.fillText("扫码回应", qrX - 22, canvasH - 112);
         } catch {
           // 二维码生成失败时静默略过，不影响卡片主体
         }

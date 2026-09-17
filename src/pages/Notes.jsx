@@ -873,7 +873,7 @@ export default function Notes() {
 
       {/* 输入面板：完整输入能力（模板/附件/图片/链接/语音）集中在弹窗中 */}
       <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
-        <DialogContent className="max-w-2xl w-[95vw] md:w-auto p-0 gap-0 overflow-hidden">
+        <DialogContent className="max-w-2xl md:max-w-3xl w-[95vw] md:w-auto p-0 gap-0 overflow-hidden">
           <DialogHeader className="px-5 pt-4 pb-1">
             <DialogTitle className="text-base">说给另一个自己听</DialogTitle>
           </DialogHeader>

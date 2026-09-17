@@ -33,9 +33,12 @@ export default function HeartSignInput({ onSend }) {
     if (looksLikeChatLog(combined)) setShowChatRecognizer(true);
   };
 
+  // 输入框高度上限随设备变化：手机紧凑、桌面更舒展
+  const heightCap = () => (window.innerWidth < 768 ? 200 : 380);
+
   const autoResize = (el) => {
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    el.style.height = Math.min(el.scrollHeight, heightCap()) + 'px';
   };
 
   const handleFile = async (e, kind = 'file') => {
@@ -187,7 +190,7 @@ export default function HeartSignInput({ onSend }) {
         )}
 
         {/* 输入框 */}
-        <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 transition">
+        <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 md:p-2.5 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 transition">
           <textarea
             rows={1}
             value={text}
@@ -195,14 +198,14 @@ export default function HeartSignInput({ onSend }) {
             onPaste={handlePaste}
             onKeyDown={onKey}
             placeholder="发给自己 —— 心情、链接、账目、灵感，丢进来就好"
-            className="flex-1 bg-transparent outline-none resize-none text-[15px] text-slate-800 placeholder-slate-400 px-2 py-2 max-h-[200px]"
+            className="flex-1 bg-transparent outline-none resize-none text-[15px] md:text-base text-slate-800 placeholder-slate-400 px-2 py-2 max-h-[200px] md:max-h-[380px]"
           />
           <button
             onClick={submit}
             disabled={uploading}
-            className="p-2.5 bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition hover:scale-105 active:scale-95"
+            className="p-2.5 md:p-3 bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition hover:scale-105 active:scale-95"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-4 h-4 md:w-[18px] md:h-[18px]" />
           </button>
         </div>
 

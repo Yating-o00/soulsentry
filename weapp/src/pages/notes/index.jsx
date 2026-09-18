@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, ScrollView, Input, Button } from "@tarojs/components";
+import { View, Text, ScrollView, Input, Button, Image } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
@@ -64,6 +64,16 @@ const TYPE_META = {
 };
 
 const TYPE_ORDER = ["emotion", "inspiration", "material", "memo", "share", "ledger"];
+
+// 心签配图：metadata.image_url 可能是字符串或数组，返回可显示绝对地址
+function getNoteImage(note) {
+  const raw = note?.metadata?.image_url;
+  const rel = Array.isArray(raw) ? raw[0] : raw;
+  if (!rel || typeof rel !== "string") return "";
+  if (rel.startsWith("http")) return rel;
+  const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+  return rawApi.replace(/\/api\/?$/, "") + rel;
+}
 
 function greeting() {
   const h = new Date().getHours();
@@ -722,6 +732,18 @@ export default function Notes() {
           </View>
         )}
 
+        {getNoteImage(note) ? (
+          <Image
+            src={getNoteImage(note)}
+            mode="widthFix"
+            style={{ width: "100%", borderRadius: "14rpx", marginBottom: "20rpx", background: theme.paper }}
+            onClick={(e) => {
+              e?.stopPropagation?.();
+              Taro.previewImage({ urls: [getNoteImage(note)] });
+            }}
+          />
+        ) : null}
+
         {type === "ledger" && <LedgerCard ledger={note.metadata?.ai_analysis?.ledger} />}
 
         {response ? (
@@ -903,6 +925,7 @@ export default function Notes() {
           title={getTitle(posterNote) || "心签"}
           description={posterNote.plain_text || posterNote.content || ""}
           extra={getAiResponse(posterNote) || undefined}
+          image={getNoteImage(posterNote) || undefined}
           shareToken={posterToken}
         />
       )}

@@ -214,7 +214,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
   };
 }
 
-export default function SharePoster({ visible, onClose, type, title, description, extra, subtasks = [], shareToken, canvasId, noteType, date }) {
+export default function SharePoster({ visible, onClose, type, title, description, extra, subtasks = [], shareToken, canvasId, noteType, date, image }) {
   const [posterUrl, setPosterUrl] = useState("");
   const [generating, setGenerating] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: BASE_WIDTH, height: 960 });
@@ -254,15 +254,15 @@ export default function SharePoster({ visible, onClose, type, title, description
       const winWidth = sys.windowWidth || 375;
       const widthPx = Math.round(winWidth * 0.9);
 
-      // 心签：与 Web 端签卡一致的固定比例（1080×1350 布局等比缩放）
+      // 心签：与 Web 端签卡一致的固定比例（1080×1350 布局等比缩放；带图时加高给图片留位）
       if (isNote) {
-        const totalHeight = Math.round(widthPx * 1.25);
+        const totalHeight = Math.round(widthPx * (image ? 1.62 : 1.25));
         setCanvasSize({ width: widthPx, height: totalHeight });
         const canvas = createOffscreenCanvas(widthPx, totalHeight);
         const ctx = canvas.getContext("2d");
-        loadAvatarImage(canvas).then((avatarImg) => {
+        Promise.all([loadAvatarImage(canvas), image ? loadCanvasImage(canvas, image) : Promise.resolve(null)]).then(([avatarImg, noteImg]) => {
           try {
-            drawNotePoster(ctx, widthPx, totalHeight, { avatarImg });
+            drawNotePoster(ctx, widthPx, totalHeight, { avatarImg, noteImg });
             exportCanvas(canvas, widthPx, totalHeight);
           } catch (err) {
             console.error("generate poster failed", err);
@@ -333,6 +333,28 @@ export default function SharePoster({ visible, onClose, type, title, description
     }
   };
 
+  // 通用网络/本地图片 → canvas Image（失败返回 null）
+  const loadCanvasImage = (canvas, url) =>
+    new Promise((resolve) => {
+      (async () => {
+        try {
+          let u = String(url || "").trim();
+          if (!u) return resolve(null);
+          if (u.startsWith("/")) {
+            const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+            u = rawApi.replace(/\/api\/?$/, "") + u;
+          }
+          const info = await Taro.getImageInfo({ src: u });
+          const img = canvas.createImage();
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(null);
+          img.src = info.path;
+        } catch {
+          resolve(null);
+        }
+      })();
+    });
+
   // 账号头像 → canvas Image（失败时返回 null，回落「心」圆圈）
   const loadAvatarImage = (canvas) =>
     new Promise((resolve) => {
@@ -358,7 +380,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     });
 
   // 心签签卡：复刻 Web 端 HeartSignShareCard 布局（1080×1350 基准，s = W/1080）
-  const drawNotePoster = (ctx, W, H, { avatarImg } = {}) => {
+  const drawNotePoster = (ctx, W, H, { avatarImg, noteImg } = {}) => {
     const s = W / 1080;
     const SERIF = '"Songti SC","STSong",serif';
     const SANS = '"PingFang SC","Microsoft YaHei",sans-serif';
@@ -421,7 +443,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     ctx.fillText("“", W / 2, 400 * s);
     ctx.fillStyle = "#2c3244";
     ctx.font = `400 ${Math.round(fontSize)}px ${SERIF}`;
-    const lines = wrapText(ctx, content, 760 * s).slice(0, 10);
+    const lines = wrapText(ctx, content, 760 * s).slice(0, noteImg ? 5 : 10);
     const textTop = 470 * s;
     lines.forEach((l, i) => ctx.fillText(l, W / 2, textTop + i * lineHeight));
 
@@ -447,6 +469,29 @@ export default function SharePoster({ visible, onClose, type, title, description
     mx += dotR * 2 + gap;
     ctx.fillStyle = "#8e8e93";
     ctx.fillText(meta.label, mx, metaY);
+
+    // 配图：圆角裁切、cover 填充，位于签文与 AI 回应之间
+    if (noteImg) {
+      const imgW = 760 * s, imgH = 210 * s, radius = 16 * s;
+      const imgX = (W - imgW) / 2;
+      const imgY = metaY + 36 * s;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(imgX + radius, imgY);
+      ctx.arcTo(imgX + imgW, imgY, imgX + imgW, imgY + imgH, radius);
+      ctx.arcTo(imgX + imgW, imgY + imgH, imgX, imgY + imgH, radius);
+      ctx.arcTo(imgX, imgY + imgH, imgX, imgY, radius);
+      ctx.arcTo(imgX, imgY, imgX + imgW, imgY, radius);
+      ctx.closePath();
+      ctx.clip();
+      const scale = Math.max(imgW / noteImg.width, imgH / noteImg.height);
+      const dw = noteImg.width * scale, dh = noteImg.height * scale;
+      ctx.drawImage(noteImg, imgX + (imgW - dw) / 2, imgY + (imgH - dh) / 2, dw, dh);
+      ctx.restore();
+      ctx.strokeStyle = "rgba(56,72,119,0.14)";
+      ctx.lineWidth = Math.max(1, s);
+      ctx.strokeRect(imgX, imgY, imgW, imgH);
+    }
 
     // AI 回应（另一个你）：短线分隔 + 斜体灰蓝，最多 3 行
     if (replyText) {

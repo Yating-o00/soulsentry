@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
-import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
+import { invokeKimiText, invokeKimiWebSearch, callKimiChat, parseModelJson } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
-import { analyzeImage } from "../services/analyzeImage.js";
+import { analyzeImage, buildImageContentPart, VISION_MODELS } from "../services/analyzeImage.js";
 import { parseTaskInput } from "../services/parseTaskInput.js";
 import { recurrenceLabel } from "../lib/recurrence.js";
 import { getUserHabitProfile } from "../services/habitProfile.js";
@@ -2706,14 +2706,50 @@ ${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类�
 ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correctionHints.join("\n- ")}\n` : ""}严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
 
       try {
+        // 图片心签：把 /uploads/ 图片一并送进视觉模型，回应会结合图中内容
+        const rawImageUrls = [].concat(note.metadata?.image_url || []).filter(Boolean).slice(0, 3);
+        const imageParts = rawImageUrls.map((u) => buildImageContentPart(u)).filter(Boolean);
+        const hasImage = imageParts.length > 0;
+
+        const analysisPrompt = hasImage
+          ? `用户把心签做成了一张图片${materialText ? "，并附上文字" : ""}（当前回应浓度：${density}）${materialText ? `：\n\n${materialText}` : "。"}`
+          : `请分析以下心签内容（当前回应浓度：${density}）：\n\n${materialText}`;
+        const imageGuidance = hasImage
+          ? `\n- 这条心签包含图片：你必须先识别图片内容（画面是什么、图中文字、氛围），回应要像真的看到了这张图——可以说出你看到的东西并顺势回应，不要假装没图。`
+          : "";
+
         // Kimi 只给 12 秒：K2 冷启动 + 生成式回应常超过 5 秒,
         // 之前的 5 秒上限会过早打落到模板兜底,用户收到"没有温度的回应"
-        const kimiPromise = invokeKimiText({
-          prompt: `请分析以下心签内容（当前回应浓度：${density}）：\n\n${materialText}`,
-          systemPrompt,
-          responseJsonSchema: schema,
-          temperature: 0.9
-        });
+        const kimiPromise = hasImage
+          ? (async () => {
+              let lastErr = null;
+              for (const model of VISION_MODELS) {
+                try {
+                  const result = await callKimiChat({
+                    messages: [
+                      { role: "system", content: systemPrompt + imageGuidance },
+                      { role: "user", content: [{ type: "text", text: analysisPrompt }, ...imageParts] }
+                    ],
+                    model,
+                    responseJsonSchema: true,
+                    temperature: 0.9,
+                    maxTokens: 4000,
+                    fetchTimeout: 30000
+                  });
+                  return parseModelJson(result.content);
+                } catch (err) {
+                  lastErr = err;
+                  console.log(`[analyzeHeartSign] vision model ${model} failed: ${err?.message || err}`);
+                }
+              }
+              throw lastErr || new Error("vision models unavailable");
+            })()
+          : invokeKimiText({
+              prompt: analysisPrompt,
+              systemPrompt,
+              responseJsonSchema: schema,
+              temperature: 0.9
+            });
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("TIMEOUT")), 12000)
         );

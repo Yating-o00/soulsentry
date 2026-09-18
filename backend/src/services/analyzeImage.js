@@ -5,7 +5,7 @@ import { env } from "../config/env.js";
 import { callKimiChat, invokeKimiText, parseModelJson } from "../lib/kimi.js";
 
 // 视觉模型候选：按顺序逐个尝试，全部失败才报错
-const VISION_MODELS = ["moonshot-v1-8k-vision-preview", "moonshot-v1-32k-vision-preview", "kimi-latest"];
+export const VISION_MODELS = ["moonshot-v1-8k-vision-preview", "moonshot-v1-32k-vision-preview", "kimi-latest"];
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 
 const MIME_BY_EXT = {
@@ -144,6 +144,21 @@ function resolveUploadPath(fileUrl) {
   const name = decodeURIComponent(raw.slice("/uploads/".length)).split("/")[0];
   if (!name || name.includes("..")) return null;
   return path.resolve(process.cwd(), env.UPLOAD_DIR, name);
+}
+
+// 供其他 AI 管道（如心签分析）复用：把 /uploads/ 图片转成多模态消息 part；无效/不存在返回 null
+export function buildImageContentPart(fileUrl) {
+  try {
+    const filePath = resolveUploadPath(fileUrl);
+    if (!filePath || !fs.existsSync(filePath)) return null;
+    if (fs.statSync(filePath).size > MAX_FILE_SIZE) return null;
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = MIME_BY_EXT[ext] || "image/jpeg";
+    const dataUri = `data:${mime};base64,${fs.readFileSync(filePath).toString("base64")}`;
+    return { type: "image_url", image_url: { url: dataUri } };
+  } catch {
+    return null;
+  }
 }
 
 function normalizeDraft(result) {

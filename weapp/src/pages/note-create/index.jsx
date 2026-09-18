@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import Taro from "@tarojs/taro";
-import { View, Text, Textarea, Button, Input } from "@tarojs/components";
+import { View, Text, Textarea, Button, Input, Image } from "@tarojs/components";
 import { post, get } from "@/utils/api";
+import { getToken } from "@/utils/auth";
 import VoiceInput from "@/components/VoiceInput";
 import theme from "@/components/tasks/theme";
 
@@ -32,6 +33,9 @@ export default function NoteCreate() {
   const [vaultLabel, setVaultLabel] = useState("");
   // emotion=心签 | ledger=账本签(记一笔)
   const [mode, setMode] = useState("emotion");
+  // 配图：上传后存 /uploads/ 相对路径，随心签一起保存
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router.params || {};
@@ -52,12 +56,12 @@ export default function NoteCreate() {
 
   const submit = async () => {
     const text = content.trim();
-    if (!text) {
-      Taro.showToast({ title: "请输入心签内容", icon: "none" });
+    if (!text && !imageUrl) {
+      Taro.showToast({ title: "请输入心签内容或配一张图", icon: "none" });
       return;
     }
 
-    if (detectSensitive(text)) {
+    if (text && detectSensitive(text)) {
       setVaultMode(true);
       setVaultLabel("敏感信息");
       await checkVaultStatus();
@@ -71,13 +75,13 @@ export default function NoteCreate() {
         content: text,
         plain_text: text,
         source_type: mode,
-        metadata: { response_density: density }
+        metadata: { response_density: density, ...(imageUrl ? { image_url: imageUrl } : {}) }
       });
 
       try {
         await post("/functions/analyzeHeartSign", {
           note_id: note.id,
-          note_data: { plain_text: text, content: text, source_type: mode, metadata: { response_density: density } }
+          note_data: { plain_text: text, content: text, source_type: mode, metadata: { response_density: density, ...(imageUrl ? { image_url: imageUrl } : {}) } }
         }, { silent: true, timeout: 8000 });
       } catch (aiErr) {
         console.error("analyzeHeartSign failed", aiErr);
@@ -90,6 +94,45 @@ export default function NoteCreate() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const pickImage = () => {
+    Taro.chooseMedia({
+      count: 1,
+      mediaType: ["image"],
+      sourceType: ["album", "camera"],
+      sizeType: ["compressed"],
+      success: async (res) => {
+        const file = res.tempFiles?.[0];
+        if (!file?.tempFilePath) return;
+        setUploading(true);
+        Taro.showLoading({ title: "上传中" });
+        try {
+          const token = getToken();
+          const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+          const apiBase = rawApi.replace(/\/$/, "");
+          const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
+          const uploadRes = await Taro.uploadFile({
+            url: uploadUrl,
+            filePath: file.tempFilePath,
+            name: "file",
+            header: token ? { Authorization: `Bearer ${token}` } : {},
+            timeout: 60000
+          });
+          const data = JSON.parse(uploadRes.data || "{}");
+          if (!(uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url)) {
+            throw new Error(data?.message || "上传失败");
+          }
+          setImageUrl(data.file_url);
+        } catch (err) {
+          Taro.showToast({ title: err?.message || "上传失败", icon: "none" });
+        } finally {
+          setUploading(false);
+          Taro.hideLoading();
+        }
+      },
+      fail: () => {}
+    });
   };
 
   const saveToVault = async () => {
@@ -172,14 +215,14 @@ export default function NoteCreate() {
         <Button
           size="mini"
           loading={loading}
-          disabled={!content.trim() || loading}
+          disabled={(!content.trim() && !imageUrl) || loading || uploading}
           onClick={submit}
           style={{
             margin: 0,
             padding: "0 24rpx",
             height: "56rpx",
             lineHeight: "56rpx",
-            background: content.trim() && !loading ? theme.primary : theme.border,
+            background: (content.trim() || imageUrl) && !loading ? theme.primary : theme.border,
             color: "#fff",
             borderRadius: "999rpx",
             fontSize: "26rpx"
@@ -218,6 +261,35 @@ export default function NoteCreate() {
         })}
       </View>
 
+      {imageUrl ? (
+        <View style={{ padding: "0 28rpx 16rpx" }}>
+          <View style={{ position: "relative", display: "inline-block" }}>
+            <Image
+              src={imageUrl.startsWith("http") ? imageUrl : `${(process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api").replace(/\/api\/?$/, "")}${imageUrl}`}
+              mode="aspectFill"
+              style={{ width: "200rpx", height: "200rpx", borderRadius: "16rpx", background: theme.paper }}
+            />
+            <View
+              onClick={() => setImageUrl("")}
+              style={{
+                position: "absolute",
+                top: "-12rpx",
+                right: "-12rpx",
+                width: "40rpx",
+                height: "40rpx",
+                borderRadius: "50%",
+                background: "rgba(0,0,0,0.55)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: "#fff", lineHeight: "40rpx" }}>✕</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
       <View style={{ flex: 1, padding: "0 28rpx" }}>
         <Textarea
           style={{
@@ -253,6 +325,21 @@ export default function NoteCreate() {
         }}
       >
         <View
+          onClick={pickImage}
+          style={{
+            width: "64rpx",
+            height: "64rpx",
+            borderRadius: "16rpx",
+            background: theme.paper,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: `1rpx solid ${theme.border}`
+          }}
+        >
+          <Text style={{ fontSize: "30rpx", color: theme.inkTertiary }}>{uploading ? "…" : "📷"}</Text>
+        </View>
+        <View
           onClick={insertLink}
           style={{
             width: "64rpx",
@@ -268,7 +355,7 @@ export default function NoteCreate() {
           <Text style={{ fontSize: "30rpx", color: theme.inkTertiary }}>🔗</Text>
         </View>
         <VoiceInput size={64} onResult={handleVoiceResult} onError={handleVoiceError} />
-        <Text style={{ marginLeft: "auto", fontSize: "22rpx", color: theme.inkQuaternary }}>语音输入 · 链接 · 文字</Text>
+        <Text style={{ marginLeft: "auto", fontSize: "22rpx", color: theme.inkQuaternary }}>语音 · 图片 · 链接 · 文字</Text>
       </View>
 
       {vaultMode && (

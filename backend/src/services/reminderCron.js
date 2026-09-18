@@ -1,5 +1,5 @@
 import { schedule } from "node-cron";
-import { sendDueReminders, sendEndTimeFollowUps } from "./reminderSender.js";
+import { sendDueReminders, sendEndTimeFollowUps, sendForgetReminders } from "./reminderSender.js";
 import { configureWebPush } from "../lib/webPush.js";
 
 let started = false;
@@ -34,5 +34,17 @@ export function startReminderCron() {
     }
   });
 
-  console.log("[reminderCron] scheduled to run every minute (reminders + follow-ups)");
+  // 每 10 分钟检查一次遗忘对抗提醒（过期/创建满一周未完成的约定）
+  schedule("*/10 * * * *", async () => {
+    try {
+      const result = await sendForgetReminders();
+      if (result.sent > 0 || result.total > 0) {
+        console.log("[reminderCron] forget reminders:", result);
+      }
+    } catch (err) {
+      console.error("[reminderCron] forget reminder failed:", err);
+    }
+  });
+
+  console.log("[reminderCron] scheduled to run every minute (reminders + follow-ups) + every 10 minutes (forget reminders)");
 }

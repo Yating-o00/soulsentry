@@ -293,6 +293,86 @@ export async function sendEndTimeFollowUps() {
   return result;
 }
 
+/**
+ * 遗忘对抗提醒：约定过期满一周，或创建满一周仍未完成，自动提醒一次。
+ * 依据艾宾浩斯遗忘曲线——一周后记忆留存最低，此时一次提示最能挽回遗忘的约定。
+ */
+export async function sendForgetReminders() {
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  if (!isWebPushConfigured()) {
+    console.log("[reminderSender] web push not configured, skipping forget reminders (will still create in-app notifications)");
+  }
+
+  const candidates = await prisma.task.findMany({
+    where: {
+      deletedAt: null,
+      status: { notIn: ["DONE", "ARCHIVED"] },
+      OR: [
+        { dueAt: { not: null, lte: oneWeekAgo } },
+        { createdAt: { lte: oneWeekAgo } }
+      ]
+    },
+    include: { user: { include: { preferences: true } } },
+  });
+
+  let sent = 0;
+  let skipped = 0;
+  let inAppFallback = 0;
+
+  for (const task of candidates) {
+    const extra = getTaskExtraFields(task);
+    // 每个约定只提醒一次，避免反复打扰
+    if (extra.forget_reminder_sent_at) continue;
+
+    const overdueByDue = task.dueAt && task.dueAt <= oneWeekAgo;
+    const days = overdueByDue
+      ? Math.floor((now.getTime() - task.dueAt.getTime()) / (24 * 60 * 60 * 1000))
+      : Math.floor((now.getTime() - task.createdAt.getTime()) / (24 * 60 * 60 * 1000));
+
+    const payload = {
+      title: `别忘了这个约定：${task.title}`,
+      body: overdueByDue
+        ? `它已经过期 ${days} 天了。对抗遗忘曲线，现在处理它，或者调整为更合适的安排。`
+        : `创建至今 ${days} 天了，一直没有完成。还记得当初为什么定下它吗？现在推进一小步也好。`,
+      url: `/tasks?id=${task.id}`,
+      tag: `forget-${task.id}`,
+      requireInteraction: false,
+      vibrate: [200, 100, 200],
+      data: { taskId: task.id, type: "forget_reminder" },
+    };
+
+    const result = await trySendPush({
+      userId: task.userId,
+      preferences: task.user.preferences,
+      payload,
+      task,
+      logPrefix: `forget-reminder task=${task.id}`,
+    });
+
+    if (result.ok) sent += 1;
+    else if (result.inAppFallback) inAppFallback += 1;
+    else skipped += 1;
+
+    try {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          metadata: buildTaskMetadataWithExtra(task, { forget_reminder_sent_at: now.toISOString() }),
+        },
+      });
+    } catch (updateErr) {
+      console.warn(`[reminderSender] task=${task.id} failed to update forget_reminder_sent_at:`, updateErr);
+    }
+  }
+
+  const result = { sent, skipped, inAppFallback, total: candidates.length };
+  if (candidates.length > 0) {
+    console.log("[reminderSender] forget reminders:", result);
+  }
+  return result;
+}
+
 export async function sendTestPush(userId) {
   if (!isWebPushConfigured()) {
     return { ok: false, error: "web_push_not_configured" };

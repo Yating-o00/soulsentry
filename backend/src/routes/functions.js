@@ -2815,6 +2815,16 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
                   temperature: 0.9
                 });
               } catch (ocrErr) {
+                // 图中没有文字（风景/物品照片）：以「分享了一张照片」为线索走文本分析，
+                // 给出有温度的回应，而不是降级成无感模板
+                if (/没有识别到文字/.test(String(ocrErr?.message || ""))) {
+                  return invokeKimiText({
+                    prompt: `用户上传了一张图片作为心签（当前回应浓度：${density}），但图中没有可识别的文字，可能是一张生活照片、风景、手绘或物品照片${materialText ? `。用户的附言：${materialText}` : ""}。请像真的看到了这张照片一样回应：接纳用户分享此刻的心情，并轻轻邀请用户说说这张照片背后的故事或当时的心情。`,
+                    systemPrompt: systemPrompt + `\n- 用户分享了一张没有文字的图片，你看不到它，回应要承认这份分享、表达接纳，并好奇地邀请用户讲讲照片背后的故事，不要假装知道图里具体是什么。`,
+                    responseJsonSchema: schema,
+                    temperature: 0.9
+                  });
+                }
                 throw lastErr || ocrErr;
               }
             })()

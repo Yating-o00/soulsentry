@@ -5,7 +5,12 @@ import { env } from "../config/env.js";
 import { callKimiChat, invokeKimiText, parseModelJson } from "../lib/kimi.js";
 
 // 视觉模型候选：按顺序逐个尝试，全部失败才报错
-export const VISION_MODELS = ["moonshot-v1-8k-vision-preview", "moonshot-v1-32k-vision-preview", "kimi-latest"];
+export const VISION_MODELS = [
+  "moonshot-v1-8k-vision-preview",
+  "moonshot-v1-32k-vision-preview",
+  "moonshot-v1-128k-vision-preview",
+  "kimi-latest"
+];
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 
 const MIME_BY_EXT = {

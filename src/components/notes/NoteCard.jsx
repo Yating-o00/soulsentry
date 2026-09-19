@@ -98,6 +98,22 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
               dangerouslySetInnerHTML={{ __html: note.content }}
             />
           )}
+
+          {/* 配图 */}
+          {(() => {
+            const raw = note.metadata?.image_url;
+            const rel = Array.isArray(raw) ? raw[0] : raw;
+            if (!rel || typeof rel !== "string") return null;
+            const src = rel.startsWith("http") ? rel : `${window.location.origin}${rel}`;
+            return (
+              <img
+                src={src}
+                alt="心签配图"
+                className="w-full rounded-xl mb-3 object-cover max-h-72"
+                loading="lazy"
+              />
+            );
+          })()}
           
           {note.ai_analysis && (
             <div className="mb-3 space-y-2">

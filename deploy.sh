@@ -106,6 +106,18 @@ fi
 log "Install backend dependencies"
 npm --prefix "$RELEASE_PATH/$BACKEND_DIRNAME" ci
 
+# 上传文件存共享目录并软链进 release：否则每次部署新建干净 release 都会清空历史上传的图片
+log "Link shared uploads directory"
+UPLOADS_SHARED="$SHARED_DIR/uploads"
+mkdir -p "$UPLOADS_SHARED"
+PREV_UPLOADS="$(readlink -f "$CURRENT_LINK")/$BACKEND_DIRNAME/uploads"
+if [[ -d "$PREV_UPLOADS" && ! -L "$PREV_UPLOADS" ]]; then
+  log "Migrate existing uploads into shared directory"
+  rsync -a "$PREV_UPLOADS/" "$UPLOADS_SHARED/"
+fi
+rm -rf "$RELEASE_PATH/$BACKEND_DIRNAME/uploads"
+ln -sfn "$UPLOADS_SHARED" "$RELEASE_PATH/$BACKEND_DIRNAME/uploads"
+
 log "Prepare backend runtime env"
 cp "$SHARED_ENV" "$RELEASE_PATH/$BACKEND_DIRNAME/.env"
 

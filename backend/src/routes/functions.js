@@ -1784,6 +1784,10 @@ functionsRouter.post("/:name", async (req, res) => {
 
       const results = [];
 
+      // 命中的地点（不论是否有绑定约定的地点），最近的一个用于到达 Top3 提醒
+      let hitLocation = null;
+      let hitDistance = Infinity;
+
       for (const location of locations) {
         const distance = haversineMeters(
           { latitude: payload.latitude, longitude: payload.longitude },
@@ -1791,26 +1795,82 @@ functionsRouter.post("/:name", async (req, res) => {
         );
 
         if (distance > location.radius) continue;
+        if (distance < hitDistance) {
+          hitLocation = location;
+          hitDistance = distance;
+        }
 
         const linkedTask = tasks.find((task) => {
           const locationReminder = getTaskLocationReminder(task);
           return locationReminder?.enabled && locationReminder.location_name === location.name;
         });
 
-        if (!linkedTask) continue;
+        if (linkedTask) {
+          results.push({
+            event: "enter",
+            level: "standard",
+            location_name: location.name,
+            task_id: linkedTask.id,
+            task_title: linkedTask.title,
+            context_summary: `${linkedTask.title} 已进入 ${location.name} 附近可提醒范围`,
+            distance: Math.round(distance)
+          });
+        }
+      }
 
-        results.push({
-          event: "enter",
-          level: "standard",
-          location_name: location.name,
-          task_id: linkedTask.id,
-          task_title: linkedTask.title,
-          context_summary: `${linkedTask.title} 已进入 ${location.name} 附近可提醒范围`,
-          distance: Math.round(distance)
-        });
+      // 到达提醒：对最近命中的地点，取相关未完成约定 Top3 推送（安静期内不重复）
+      if (hitLocation) {
+        try {
+          const { maybeSendArrivalReminder, rankTopTasksForLocation, maybeSendPoiReminder } = await import("../services/contextReminder.js");
+          const userWithPrefs = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            include: { preferences: true }
+          });
+          if (userWithPrefs) {
+            const topTasks = await rankTopTasksForLocation(req.user.id, hitLocation, 3);
+            const arrival = await maybeSendArrivalReminder(userWithPrefs, hitLocation, topTasks);
+            if (arrival.topTasks?.length) {
+              const hitResult = results.find((r) => r.location_name === hitLocation.name) || results[0];
+              if (hitResult) {
+                hitResult.top_tasks = arrival.topTasks.map((t) => ({ task_id: t.id, title: t.title, priority: t.priority }));
+              } else {
+                results.push({
+                  event: "enter",
+                  level: "standard",
+                  location_name: hitLocation.name,
+                  task_id: topTasks[0].id,
+                  task_title: topTasks[0].title,
+                  context_summary: `到了${hitLocation.name}，有 ${topTasks.length} 件事最值得现在处理`,
+                  distance: Math.round(hitDistance),
+                  top_tasks: arrival.topTasks.map((t) => ({ task_id: t.id, title: t.title, priority: t.priority }))
+                });
+              }
+            }
+            // 到家时近似“家附近快递柜”场景：顺带检查取快递类约定
+            if (arrival.pushed && hitLocation.locationType === "home") {
+              void maybeSendPoiReminder(userWithPrefs, { poiName: "快递柜", poiType: "parcel_locker" }).catch(() => {});
+            }
+          }
+        } catch (err) {
+          console.warn("[sentinelGeofenceTrigger] arrival reminder failed:", err?.message || err);
+        }
       }
 
       return res.json({ results });
+    }
+
+    // POI 情境触发：客户端识别到附近 POI（如快递柜）时上报，匹配相关约定并提醒
+    if (name === "poiContextTrigger") {
+      const { maybeSendPoiReminder } = await import("../services/contextReminder.js");
+      const userWithPrefs = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        include: { preferences: true }
+      });
+      const result = await maybeSendPoiReminder(userWithPrefs || { id: req.user.id, preferences: null }, {
+        poiName: String(payload.poi_name || ""),
+        poiType: String(payload.poi_type || "")
+      });
+      return res.json({ ok: true, ...result });
     }
 
     if (name === "getSentinelGuard") {

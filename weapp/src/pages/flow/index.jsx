@@ -1475,6 +1475,10 @@ export default function Flow() {
   const loadSentinel = async () => {
     try {
       const coords = await getLocationSafe();
+      // 顺带触发一次地理围栏到达检查：服务端命中地点时直接推送 Top3 约定提醒
+      if (coords && typeof coords.latitude === "number") {
+        post("/functions/sentinelGeofenceTrigger", coords, { silent: true }).catch(() => {});
+      }
       return await post("/functions/getSentinelGuard", coords || {}, { silent: true });
     } catch (_err) {
       return null;

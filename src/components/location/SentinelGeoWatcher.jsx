@@ -70,8 +70,12 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
               if (!style) return; // silent
               const Icon = style.icon;
               const eventLabel = r.event === 'enter' ? '到达' : '离开';
+              // 到达提醒带 Top3 约定列表时，展开展示
+              const tops = Array.isArray(r.top_tasks) && r.top_tasks.length
+                ? r.top_tasks.map((t, i) => `${i + 1}. ${t.title}`).join('\n')
+                : null;
               toast(`📍 ${eventLabel}「${r.location_name}」附近`, {
-                description: r.context_summary || r.task_title,
+                description: tops || r.context_summary || r.task_title,
                 icon: <Icon className={`w-4 h-4 ${style.className}`} />,
                 duration: style.duration,
                 action: {

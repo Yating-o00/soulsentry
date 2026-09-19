@@ -58,7 +58,7 @@ function getOpenid(preferences) {
   return extra.openid || null;
 }
 
-async function trySendPush({ userId, preferences, payload, task, logPrefix }) {
+export async function trySendPush({ userId, preferences, payload, task, logPrefix }) {
   const subscription = getPushSubscription(preferences);
   const pushEnabled = shouldSendPush(preferences);
   const openid = getOpenid(preferences);

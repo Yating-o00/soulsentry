@@ -25,6 +25,11 @@ export default function ShareNote() {
       return;
     }
     load()
+      .then(() => {
+        try {
+          base44.analytics.track({ eventName: "share_link_opened", properties: { resource_type: "note" } });
+        } catch (_) { /* ignore */ }
+      })
       .catch((e) => setError(e?.response?.data?.error || "邀请链接无效或已过期"))
       .finally(() => setLoading(false));
   }, [token, load]);

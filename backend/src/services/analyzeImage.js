@@ -5,7 +5,9 @@ import { env } from "../config/env.js";
 import { callKimiChat, invokeKimiText, parseModelJson } from "../lib/kimi.js";
 
 // 视觉模型候选：按顺序逐个尝试，全部失败才报错
+// kimi-k3 实测支持图片输入（该 key 下 moonshot-v1-*-vision 无权限）
 export const VISION_MODELS = [
+  "kimi-k3",
   "moonshot-v1-8k-vision-preview",
   "moonshot-v1-32k-vision-preview",
   "moonshot-v1-128k-vision-preview",

@@ -2802,7 +2802,21 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
                   console.log(`[analyzeHeartSign] vision model ${model} failed: ${err?.message || err}`);
                 }
               }
-              throw lastErr || new Error("vision models unavailable");
+              // 视觉模型不可用：降级为 analyzeImage 的 OCR 通道提取图中文字，再走文本心签分析
+              console.log("[analyzeHeartSign] vision unavailable, fallback to OCR text extraction");
+              try {
+                const draft = await analyzeImage({ fileUrl: rawImageUrls[0] });
+                const ocrText = String(draft?.extracted_text || "").trim();
+                if (!ocrText) throw lastErr || new Error("image has no recognizable text");
+                return invokeKimiText({
+                  prompt: `用户的心签包含一张图片（当前回应浓度：${density}）。${materialText ? `附言：${materialText}\n\n` : ""}【图片中的文字内容】\n${ocrText}\n\n请结合图片文字分析这条心签并回应。`,
+                  systemPrompt: systemPrompt + `\n- 这条心签的文字来自用户上传图片的识别结果，回应要结合图中内容。`,
+                  responseJsonSchema: schema,
+                  temperature: 0.9
+                });
+              } catch (ocrErr) {
+                throw lastErr || ocrErr;
+              }
             })()
           : invokeKimiText({
               prompt: analysisPrompt,
@@ -2810,8 +2824,10 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
               responseJsonSchema: schema,
               temperature: 0.9
             });
+        // 图片心签可能走 OCR 降级链（识图+文本分析），超时放宽到 25 秒
+        const timeoutMs = hasImage ? 25000 : 12000;
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("TIMEOUT")), 12000)
+          setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs)
         );
 
         let parsed;

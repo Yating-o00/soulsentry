@@ -71,18 +71,21 @@ export default function NoteCreate() {
     setLoading(true);
     try {
       const density = Taro.getStorageSync("heart_response_density") || "light";
+      // 纯图片心签：后端 content 必填，无文字时用占位标记
+      const finalText = text || "[配图]";
+      const metadata = { response_density: density, ...(imageUrl ? { image_url: imageUrl } : {}) };
       const note = await post("/notes", {
-        content: text,
-        plain_text: text,
+        content: finalText,
+        plain_text: finalText,
         source_type: mode,
-        metadata: { response_density: density, ...(imageUrl ? { image_url: imageUrl } : {}) }
+        metadata
       });
 
       try {
         await post("/functions/analyzeHeartSign", {
           note_id: note.id,
-          note_data: { plain_text: text, content: text, source_type: mode, metadata: { response_density: density, ...(imageUrl ? { image_url: imageUrl } : {}) } }
-        }, { silent: true, timeout: 8000 });
+          note_data: { plain_text: finalText, content: finalText, source_type: mode, metadata }
+        }, { silent: true, timeout: 25000 });
       } catch (aiErr) {
         console.error("analyzeHeartSign failed", aiErr);
       }

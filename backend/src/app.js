@@ -92,6 +92,12 @@ app.use("/api/task-change-logs", taskChangeLogsRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/functions", functionsRouter);
 
+// 上传的图片会被小程序/网页跨域嵌入展示：helmet 默认 CORP same-origin 会挡住 <Image> 加载，
+// 对 /uploads 静态资源显式放宽为 cross-origin
+app.use("/uploads", (req, res, next) => {
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+});
 app.use("/uploads", express.static(path.resolve(process.cwd(), env.UPLOAD_DIR)));
 
 app.use((err, _req, res, _next) => {

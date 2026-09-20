@@ -434,6 +434,30 @@ tasksRouter.patch("/:id", async (req, res) => {
     void maybeAutoExecute(task, req.user.id, prisma);
   }
 
+  // 约定直接勾掉完成时，关联的待验收/待批准/执行中的执行单一并自动验收归档，
+  // 避免守护记录里残留「等你确认」的已完成约定
+  if (task.status === "DONE" && existing.status !== "DONE") {
+    try {
+      const autoAccepted = await prisma.taskExecution.updateMany({
+        where: {
+          taskId: task.id,
+          userId: req.user.id,
+          executionStatus: { in: ["pending", "waiting_confirm", "executing", "waiting_acceptance", "failed"] }
+        },
+        data: {
+          executionStatus: "completed",
+          completedAt: new Date(),
+          userFeedback: { auto_accepted: true, note: "约定已完成，自动验收" }
+        }
+      });
+      if (autoAccepted.count > 0) {
+        console.log(`[tasks] task=${task.id} 完成时自动验收执行单 ${autoAccepted.count} 条`);
+      }
+    } catch (err) {
+      console.warn(`[tasks] task=${task.id} 自动验收执行单失败:`, err?.message || err);
+    }
+  }
+
   return res.json(serializeTask(task));
 });
 

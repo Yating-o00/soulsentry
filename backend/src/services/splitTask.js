@@ -8,11 +8,27 @@ const FALLBACK_STEPS = [
   { title: "检查结果并顺手收尾", minutes: 10 }
 ];
 
+function pickTitle(s) {
+  // K2 在 temperature=1 下输出不稳定，模型偶尔把 title 包成对象（如 {title:{title:"…"}}），逐层解包取字符串
+  let t;
+  if (s !== null && typeof s === "object") {
+    t = s.title;
+    let guard = 0;
+    while (t !== null && typeof t === "object" && guard < 4) {
+      t = t.title ?? t.text ?? t.content ?? t.name ?? t.step ?? Object.values(t)[0];
+      guard += 1;
+    }
+  } else {
+    t = s;
+  }
+  return String(t ?? "").trim();
+}
+
 function normalizeSteps(steps) {
   if (!Array.isArray(steps)) return null;
   const cleaned = steps
     .map((s) => {
-      const title = String(s?.title ?? s ?? "").trim();
+      const title = pickTitle(s);
       if (!title) return null;
       const minutes = Math.max(5, Math.min(120, parseInt(s?.minutes, 10) || 15));
       return { title: title.slice(0, 30), minutes };

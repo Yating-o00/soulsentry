@@ -3926,133 +3926,6 @@ export default function Flow() {
         </View>
       )}
 
-      {splitSheet && (() => {
-        const { task, steps, busy, creating } = splitSheet;
-        return (
-          <View
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(0,0,0,0.5)",
-              zIndex: 220,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-            onClick={() => !creating && setSplitSheet(null)}
-          >
-            <View
-              style={{
-                width: "640rpx",
-                maxHeight: "80vh",
-                background: THEME.card,
-                borderRadius: "32rpx",
-                padding: "40rpx 36rpx",
-                display: "flex",
-                flexDirection: "column"
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "10rpx" }}>把约定拆小</Text>
-              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary, marginBottom: "28rpx" }} numberOfLines={2}>
-                「{task.title}」
-              </Text>
-
-              {busy ? (
-                <View style={{ padding: "60rpx 0", alignItems: "center" }}>
-                  <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>AI 正在理解这件约定…</Text>
-                </View>
-              ) : (
-                <ScrollView style={{ maxHeight: "46vh" }}>
-                  {steps.map((s, i) => (
-                    <View
-                      key={`${i}-${s.title}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        background: THEME.paper,
-                        border: `1rpx solid ${THEME.border}`,
-                        borderRadius: "16rpx",
-                        padding: "20rpx 22rpx",
-                        marginBottom: "14rpx"
-                      }}
-                    >
-                      <View
-                        style={{
-                          width: "40rpx",
-                          height: "40rpx",
-                          borderRadius: "20rpx",
-                          background: THEME.primaryMist,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginRight: "18rpx",
-                          flexShrink: 0
-                        }}
-                      >
-                        <Text style={{ fontSize: "22rpx", color: THEME.primary, fontWeight: 600 }}>{i + 1}</Text>
-                      </View>
-                      <Text style={{ flex: 1, fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx" }}>{s.title}</Text>
-                      {!!s.minutes && (
-                        <View
-                          style={{
-                            padding: "4rpx 12rpx",
-                            borderRadius: "100rpx",
-                            background: THEME.goldBg,
-                            marginLeft: "14rpx",
-                            flexShrink: 0
-                          }}
-                        >
-                          <Text style={{ fontSize: "20rpx", color: THEME.gold }}>约{s.minutes}分钟</Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </ScrollView>
-              )}
-
-              {!busy && (
-                <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "10rpx" }}>
-                  内容由 AI 拆解，确认后将作为子约定挂在这件约定下，可以一件一件完成
-                </Text>
-              )}
-
-              <View style={{ display: "flex", marginTop: "30rpx" }}>
-                <View
-                  onClick={() => !creating && setSplitSheet(null)}
-                  style={{
-                    flex: 1,
-                    padding: "18rpx 0",
-                    borderRadius: "14rpx",
-                    background: THEME.paper,
-                    alignItems: "center",
-                    marginRight: "18rpx"
-                  }}
-                >
-                  <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>再想想</Text>
-                </View>
-                <View
-                  onClick={confirmSplit}
-                  style={{
-                    flex: 2,
-                    padding: "18rpx 0",
-                    borderRadius: "14rpx",
-                    background: busy || creating ? THEME.primaryFaint : THEME.primary,
-                    alignItems: "center"
-                  }}
-                >
-                  <Text style={{ fontSize: "28rpx", fontWeight: 500, color: "#fff" }}>
-                    {creating ? "正在拆分…" : busy ? "拆解中…" : `确认拆成 ${steps.length} 件`}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        );
-      })}
 
       {imageDraft && (() => {
         const s = imageDraft.suggestion || {};
@@ -4532,6 +4405,117 @@ export default function Flow() {
       </ScrollView>
       {renderBottomBar()}
 
+      {splitSheet ? (
+        <View
+          style={{
+            position: "fixed",
+            top: "22%",
+            left: "40rpx",
+            right: "40rpx",
+            zIndex: 999,
+            background: THEME.card,
+            borderRadius: "32rpx",
+            padding: "40rpx 36rpx",
+            boxShadow: "0 12rpx 48rpx rgba(0,0,0,0.22)"
+          }}
+        >
+          <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "10rpx" }}>把约定拆小</Text>
+          <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary, marginBottom: "28rpx" }} numberOfLines={2}>
+            「{splitSheet.task.title}」
+          </Text>
+
+          {splitSheet.busy ? (
+            <View style={{ padding: "60rpx 0", alignItems: "center" }}>
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>AI 正在理解这件约定…</Text>
+            </View>
+          ) : (
+            <ScrollView style={{ maxHeight: "46vh" }}>
+              {splitSheet.steps.map((s, i) => (
+                <View
+                  key={`${i}-${s.title}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: THEME.paper,
+                    border: `1rpx solid ${THEME.border}`,
+                    borderRadius: "16rpx",
+                    padding: "20rpx 22rpx",
+                    marginBottom: "14rpx"
+                  }}
+                >
+                  <View
+                    style={{
+                      width: "40rpx",
+                      height: "40rpx",
+                      borderRadius: "20rpx",
+                      background: THEME.primaryMist,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: "18rpx",
+                      flexShrink: 0
+                    }}
+                  >
+                    <Text style={{ fontSize: "22rpx", color: THEME.primary, fontWeight: 600 }}>{i + 1}</Text>
+                  </View>
+                  <Text style={{ flex: 1, fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx" }}>{s.title}</Text>
+                  {!!s.minutes && (
+                    <View
+                      style={{
+                        padding: "4rpx 12rpx",
+                        borderRadius: "100rpx",
+                        background: THEME.goldBg,
+                        marginLeft: "14rpx",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Text style={{ fontSize: "20rpx", color: THEME.gold }}>约{s.minutes}分钟</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          {!splitSheet.busy && (
+            <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "10rpx" }}>
+              内容由 AI 拆解，确认后将作为子约定挂在这件约定下，可以一件一件完成
+            </Text>
+          )}
+
+          <View style={{ display: "flex", marginTop: "30rpx" }}>
+            <View
+              onClick={() => !splitSheet.creating && setSplitSheet(null)}
+              style={{
+                width: "31%",
+                padding: "18rpx 0",
+                borderRadius: "14rpx",
+                background: THEME.paper,
+                alignItems: "center",
+                marginRight: "3%"
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>再想想</Text>
+            </View>
+            <View
+              onClick={confirmSplit}
+              style={{
+                width: "66%",
+                padding: "18rpx 0",
+                borderRadius: "14rpx",
+                background: splitSheet.busy || splitSheet.creating ? THEME.primaryFaint : THEME.primary,
+                alignItems: "center"
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", fontWeight: 500, color: "#fff" }}>
+                {splitSheet.creating ? "正在拆分…" : splitSheet.busy ? "拆解中…" : `确认拆成 ${splitSheet.steps.length} 件`}
+              </Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+
       {/* 守护记录 · 查看并确认：展示执行产物，确认后约定完成 */}
       {reviewExec && (
         <View
@@ -4655,6 +4639,7 @@ export default function Flow() {
           </View>
         </View>
       )}
+
     </View>
   );
 }

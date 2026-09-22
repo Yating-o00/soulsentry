@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
-import { get, patch, post } from "@/utils/api";
+import { get, post, patch, del } from "@/utils/api";
 
 const statusLabel = {
   pending: "待办",

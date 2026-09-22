@@ -43,6 +43,8 @@ const CATEGORY_LABEL = {
   other: "其他"
 };
 
+const SPLIT_PRIORITY_LABEL = { urgent: "紧急", high: "高", medium: "中", low: "低" };
+
 const LOCATION_TYPE_LABEL = {
   office: "工作",
   home: "生活",
@@ -1757,11 +1759,9 @@ export default function Flow() {
     } else if (rhythm.action === "create-small") {
       Taro.navigateTo({ url: "/pages/task-create/index?title=最小的一步" });
     } else if (rhythm.action === "split-next") {
-      const next = tasks
-        .filter((t) => !isDone(t))
-        .sort((a, b) => dueWeight(b) - dueWeight(a))[0];
-      if (next?.id) {
-        openSplitSheet(next);
+      const candidates = splitCandidates();
+      if (candidates.length > 0) {
+        openSplitSheet(candidates[0], candidates);
       } else {
         Taro.navigateTo({ url: "/pages/tasks/index" });
       }
@@ -1771,17 +1771,56 @@ export default function Flow() {
   };
 
   // ===== AI 拆小事：理解约定内容，拆成可以分件完成的小事 =====
-  const openSplitSheet = async (task) => {
+  // 推荐评分：重要性(优先级) + 逾期 + 今日到期 + 内容复杂度(动作词/描述长度) + 遗忘周期(越久没动越优先)
+  const splitRecommendScore = (t) => {
+    let w = 0;
+    const tt = taskTime(t);
+    if (isOverdue(t)) w += 60;
+    if (t.priority === "urgent") w += 40;
+    else if (t.priority === "high") w += 25;
+    else if (t.priority === "medium") w += 10;
+    if (tt && isToday(tt)) w += 20;
+    const text = `${t.title || ""} ${t.description || ""}`;
+    const actionHits = (text.match(/然后|接着|随后|并|以及|先|再|、|，|,|。/g) || []).length;
+    w += Math.min(20, actionHits * 3);
+    if (String(t.description || "").length > 40) w += 10;
+    const idleMs = Date.now() - new Date(t.updated_date || t.created_date || Date.now()).getTime();
+    w += Math.min(25, Math.floor(Math.max(0, idleMs) / 86400000) * 3);
+    return w;
+  };
+
+  const splitCandidates = () =>
+    tasks
+      .filter((t) => !isDone(t) && t.status !== "cancelled")
+      .map((t) => ({ t, w: splitRecommendScore(t) }))
+      .sort((a, b) => b.w - a.w)
+      .map((x) => x.t)
+      .slice(0, 8);
+
+  const loadSplitFor = (task, candidates = [], candIndex = 0) => {
+    setSplitSheet({ task, steps: [], busy: true, creating: false, candidates, candIndex });
+    post(`/tasks/${task.id}/split`)
+      .then((res) => {
+        setSplitSheet((prev) =>
+          prev && prev.task?.id === task.id ? { ...prev, steps: res?.steps || [], busy: false } : prev
+        );
+      })
+      .catch(() => {
+        setSplitSheet((prev) => (prev && prev.task?.id === task.id ? null : prev));
+      });
+  };
+
+  const openSplitSheet = (task, candidates = []) => {
     if (!task?.id || splitSheet) return;
-    setSplitSheet({ task, steps: [], busy: true, creating: false });
-    try {
-      const res = await post(`/tasks/${task.id}/split`);
-      setSplitSheet((prev) =>
-        prev && prev.task?.id === task.id ? { ...prev, steps: res?.steps || [], busy: false } : prev
-      );
-    } catch (_err) {
-      setSplitSheet((prev) => (prev && prev.task?.id === task.id ? null : prev));
-    }
+    loadSplitFor(task, candidates, 0);
+  };
+
+  // 用户觉得当前推荐的约定不合适，切换到候选列表中的下一件再拆
+  const switchSplitCandidate = () => {
+    const sheet = splitSheet;
+    if (!sheet?.candidates?.length || sheet.busy || sheet.creating) return;
+    const nextIdx = (sheet.candIndex + 1) % sheet.candidates.length;
+    loadSplitFor(sheet.candidates[nextIdx], sheet.candidates, nextIdx);
   };
 
   const confirmSplit = async () => {
@@ -4420,9 +4459,32 @@ export default function Flow() {
           }}
         >
           <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "10rpx" }}>把约定拆小</Text>
-          <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary, marginBottom: "28rpx" }} numberOfLines={2}>
-            「{splitSheet.task.title}」
-          </Text>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <Text style={{ flex: 1, fontSize: "28rpx", fontWeight: 500, color: THEME.ink, lineHeight: "42rpx", marginRight: "16rpx" }} numberOfLines={2}>
+              {splitSheet.task.title}
+            </Text>
+            {splitSheet.candidates?.length > 1 && (
+              <Text onClick={switchSplitCandidate} style={{ fontSize: "24rpx", color: THEME.primary, flexShrink: 0, padding: "6rpx 2rpx" }}>
+                换一件 ›
+              </Text>
+            )}
+          </View>
+          <View style={{ display: "flex", alignItems: "center", marginTop: "10rpx", marginBottom: "20rpx" }}>
+            <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: THEME.primaryMist, marginRight: "12rpx" }}>
+              <Text style={{ fontSize: "20rpx", color: THEME.primary }}>{CATEGORY_LABEL[splitSheet.task.category] || "其他"}</Text>
+            </View>
+            <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: THEME.primaryMist, marginRight: "12rpx" }}>
+              <Text style={{ fontSize: "20rpx", color: THEME.primary }}>{SPLIT_PRIORITY_LABEL[splitSheet.task.priority] || "中"}</Text>
+            </View>
+            <Text style={{ fontSize: "20rpx", color: isOverdue(splitSheet.task) ? THEME.heartDeep : THEME.inkQuaternary }}>
+              {isOverdue(splitSheet.task) ? "已逾期" : taskTime(splitSheet.task) ? formatTime(taskTime(splitSheet.task)) : "未定时"}
+            </Text>
+          </View>
+          {!!splitSheet.task.description && (
+            <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "38rpx", marginBottom: "20rpx" }} numberOfLines={2}>
+              {splitSheet.task.description}
+            </Text>
+          )}
 
           {splitSheet.busy ? (
             <View style={{ padding: "60rpx 0", alignItems: "center" }}>

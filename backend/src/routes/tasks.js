@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { maybeAutoExecute } from "../services/autoAutomation.js";
 import { maybeGenerateRealityChain } from "../services/realityChain.js";
+import { suggestTaskSplit } from "../services/splitTask.js";
 
 export const tasksRouter = Router();
 
@@ -356,6 +357,22 @@ tasksRouter.post("/batch", async (req, res) => {
   });
 
   return res.status(201).json(tasks.map(serializeTask));
+});
+
+tasksRouter.post("/:id/split", async (req, res) => {
+  const task = await prisma.task.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    }
+  });
+
+  if (!task) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "任务不存在" });
+  }
+
+  const result = await suggestTaskSplit(task);
+  return res.json(result);
 });
 
 tasksRouter.patch("/:id", async (req, res) => {

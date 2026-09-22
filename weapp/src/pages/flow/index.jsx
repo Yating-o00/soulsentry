@@ -1260,6 +1260,7 @@ export default function Flow() {
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showAllDue, setShowAllDue] = useState(false);
   const [showCompletedDue, setShowCompletedDue] = useState(false);
+  const [splitSheet, setSplitSheet] = useState(null); // { task, steps, busy, creating } AI 拆小事弹层
   const [selectedDueDate, setSelectedDueDate] = useState(toChinaYmd(new Date()));
   const [briefing, setBriefing] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1760,14 +1761,49 @@ export default function Flow() {
         .filter((t) => !isDone(t))
         .sort((a, b) => dueWeight(b) - dueWeight(a))[0];
       if (next?.id) {
-        Taro.navigateTo({
-          url: `/pages/task-create/index?parent_task_id=${next.id}&title=${encodeURIComponent(next.title)}`
-        });
+        openSplitSheet(next);
       } else {
         Taro.navigateTo({ url: "/pages/tasks/index" });
       }
     } else if (rhythm.action === "view-tasks") {
       Taro.navigateTo({ url: "/pages/tasks/index" });
+    }
+  };
+
+  // ===== AI 拆小事：理解约定内容，拆成可以分件完成的小事 =====
+  const openSplitSheet = async (task) => {
+    if (!task?.id || splitSheet) return;
+    setSplitSheet({ task, steps: [], busy: true, creating: false });
+    try {
+      const res = await post(`/tasks/${task.id}/split`);
+      setSplitSheet((prev) =>
+        prev && prev.task?.id === task.id ? { ...prev, steps: res?.steps || [], busy: false } : prev
+      );
+    } catch (_err) {
+      setSplitSheet((prev) => (prev && prev.task?.id === task.id ? null : prev));
+    }
+  };
+
+  const confirmSplit = async () => {
+    const sheet = splitSheet;
+    if (!sheet?.task?.id || !sheet.steps?.length || sheet.creating) return;
+    setSplitSheet({ ...sheet, creating: true });
+    const parent = sheet.task;
+    const endTime = parent.end_time || parent.due_at || null;
+    const payload = sheet.steps.map((s) => ({
+      title: s.title,
+      parent_task_id: parent.id,
+      category: parent.category,
+      priority: parent.priority,
+      end_time: endTime
+    }));
+    try {
+      await post("/tasks/batch", payload);
+      Taro.showToast({ title: `已拆成 ${sheet.steps.length} 件小事`, icon: "success" });
+      setSplitSheet(null);
+      loadAll();
+    } catch (_err) {
+      setSplitSheet({ ...sheet, creating: false });
     }
   };
 
@@ -2971,9 +3007,7 @@ export default function Flow() {
                 <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>稍后</Text>
               </View>
               <View
-                onClick={() =>
-                  Taro.navigateTo({ url: `/pages/task-create/index?parent_task_id=${t.id}&title=${encodeURIComponent(t.title)}` })
-                }
+                onClick={() => openSplitSheet(t)}
                 style={{
                   padding: "10rpx 18rpx",
                   borderRadius: "10rpx",
@@ -3705,9 +3739,12 @@ export default function Flow() {
 
     const acting = execActingId != null;
 
-    // 未完成的进主列表；已完成的（含约定勾掉后自动验收的）归入历史记录折叠区
-    const activeRecords = guardianRecords.filter((e) => e.execution_status !== "completed");
-    const historyRecords = guardianRecords.filter((e) => e.execution_status === "completed");
+    // 只直接展示最近 4 条执行记录（按更新时间倒序），多余的收进折叠区
+    const sortedRecords = [...guardianRecords].sort(
+      (a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date)
+    );
+    const recentRecords = sortedRecords.slice(0, 4);
+    const foldedRecords = sortedRecords.slice(4);
 
     const recordRow = (e, isHistory) => (
       <View
@@ -3766,20 +3803,20 @@ export default function Flow() {
           <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
           <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>守护记录</Text>
         </View>
-        {activeRecords.map((e) => recordRow(e, false))}
+        {recentRecords.map((e) => recordRow(e, e.execution_status === "completed"))}
 
-        {historyRecords.length > 0 && (
+        {foldedRecords.length > 0 && (
           <View>
             <View
               onClick={() => setShowExecHistory((v) => !v)}
               style={{ display: "flex", alignItems: "center", padding: "20rpx 4rpx 12rpx" }}
             >
               <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary, flex: 1 }}>
-                历史记录（{historyRecords.length}）
+                其余记录（{foldedRecords.length}）
               </Text>
               <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{showExecHistory ? "收起 ▲" : "展开 ▼"}</Text>
             </View>
-            {showExecHistory && historyRecords.map((e) => recordRow(e, true))}
+            {showExecHistory && foldedRecords.map((e) => recordRow(e, e.execution_status === "completed"))}
           </View>
         )}
 
@@ -3888,6 +3925,134 @@ export default function Flow() {
           </View>
         </View>
       )}
+
+      {splitSheet && (() => {
+        const { task, steps, busy, creating } = splitSheet;
+        return (
+          <View
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.5)",
+              zIndex: 220,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onClick={() => !creating && setSplitSheet(null)}
+          >
+            <View
+              style={{
+                width: "640rpx",
+                maxHeight: "80vh",
+                background: THEME.card,
+                borderRadius: "32rpx",
+                padding: "40rpx 36rpx",
+                display: "flex",
+                flexDirection: "column"
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "10rpx" }}>把约定拆小</Text>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary, marginBottom: "28rpx" }} numberOfLines={2}>
+                「{task.title}」
+              </Text>
+
+              {busy ? (
+                <View style={{ padding: "60rpx 0", alignItems: "center" }}>
+                  <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>AI 正在理解这件约定…</Text>
+                </View>
+              ) : (
+                <ScrollView style={{ maxHeight: "46vh" }}>
+                  {steps.map((s, i) => (
+                    <View
+                      key={`${i}-${s.title}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        background: THEME.paper,
+                        border: `1rpx solid ${THEME.border}`,
+                        borderRadius: "16rpx",
+                        padding: "20rpx 22rpx",
+                        marginBottom: "14rpx"
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: "40rpx",
+                          height: "40rpx",
+                          borderRadius: "20rpx",
+                          background: THEME.primaryMist,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: "18rpx",
+                          flexShrink: 0
+                        }}
+                      >
+                        <Text style={{ fontSize: "22rpx", color: THEME.primary, fontWeight: 600 }}>{i + 1}</Text>
+                      </View>
+                      <Text style={{ flex: 1, fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx" }}>{s.title}</Text>
+                      {!!s.minutes && (
+                        <View
+                          style={{
+                            padding: "4rpx 12rpx",
+                            borderRadius: "100rpx",
+                            background: THEME.goldBg,
+                            marginLeft: "14rpx",
+                            flexShrink: 0
+                          }}
+                        >
+                          <Text style={{ fontSize: "20rpx", color: THEME.gold }}>约{s.minutes}分钟</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+
+              {!busy && (
+                <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "10rpx" }}>
+                  内容由 AI 拆解，确认后将作为子约定挂在这件约定下，可以一件一件完成
+                </Text>
+              )}
+
+              <View style={{ display: "flex", marginTop: "30rpx" }}>
+                <View
+                  onClick={() => !creating && setSplitSheet(null)}
+                  style={{
+                    flex: 1,
+                    padding: "18rpx 0",
+                    borderRadius: "14rpx",
+                    background: THEME.paper,
+                    alignItems: "center",
+                    marginRight: "18rpx"
+                  }}
+                >
+                  <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>再想想</Text>
+                </View>
+                <View
+                  onClick={confirmSplit}
+                  style={{
+                    flex: 2,
+                    padding: "18rpx 0",
+                    borderRadius: "14rpx",
+                    background: busy || creating ? THEME.primaryFaint : THEME.primary,
+                    alignItems: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "28rpx", fontWeight: 500, color: "#fff" }}>
+                    {creating ? "正在拆分…" : busy ? "拆解中…" : `确认拆成 ${steps.length} 件`}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        );
+      })}
 
       {imageDraft && (() => {
         const s = imageDraft.suggestion || {};

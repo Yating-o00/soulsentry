@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendPushNotification, isWebPushConfigured } from "../lib/webPush.js";
 import { sendWechatSubscribeMessage } from "../lib/wechatSubscribeMessage.js";
 import { computeNextReminderTime } from "../lib/recurrence.js";
+import { buildReminderCopy } from "./reminderCopy.js";
 
 function getUserExtraFields(preferences) {
   if (!preferences?.metadata || typeof preferences.metadata !== "object") return {};
@@ -94,7 +95,7 @@ export async function trySendPush({ userId, preferences, payload, task, logPrefi
   // 2. 同时尝试微信小程序订阅消息（与 Web Push 独立，不互相阻塞）
   if (openid && task) {
     const type = payload.data?.type === "follow_up" ? "follow_up" : "reminder";
-    const wechatResult = await sendWechatSubscribeMessage(openid, task, type);
+    const wechatResult = await sendWechatSubscribeMessage(openid, task, type, payload.body);
     if (wechatResult.ok) {
       console.log(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe sent`);
       wechatOk = true;
@@ -161,20 +162,18 @@ export async function sendDueReminders() {
   for (const task of dueTasks) {
     const extraFields = getTaskExtraFields(task);
     const st = extraFields.spatiotemporal;
-    let body = task.description ? task.description.slice(0, 120) : "您有一个约定到时间了";
-    if (st?.current_place_name) {
-      body = `${body} · 地点：${st.current_place_name}`;
-    } else if (st?.location_type && st.location_type !== "unknown") {
-      const typeLabel = { office: "公司", home: "家", hospital: "医院", school: "学校", gym: "健身房", shopping: "购物", restaurant: "餐厅", transit: "途中" }[st.location_type] || st.location_type;
-      body = `${body} · 地点：${typeLabel}`;
-    }
-    if (st?.input && st.time_source === "now") {
-      body = `你随手记下的约定：${body}`;
-    }
+    const copy = await buildReminderCopy({
+      task,
+      kind: "reminder",
+      context: {
+        location: st?.current_place_name || null,
+        timeText: task.reminderTime ? new Date(task.reminderTime).toLocaleString("zh-CN", { hour12: false }) : null
+      }
+    });
 
     const payload = {
-      title: `约定提醒：${task.title}`,
-      body,
+      title: copy.title,
+      body: copy.body,
       url: `/tasks?id=${task.id}`,
       tag: `reminder-${task.id}`,
       requireInteraction: false,
@@ -252,9 +251,17 @@ export async function sendEndTimeFollowUps() {
       continue;
     }
 
+    const copy = await buildReminderCopy({
+      task,
+      kind: "follow_up",
+      context: {
+        timeText: task.endTime ? new Date(task.endTime).toLocaleString("zh-CN", { hour12: false }) : null
+      }
+    });
+
     const payload = {
-      title: `约定跟进：${task.title}`,
-      body: "约定的预计时间到了，完成了吗？需要延长或调整吗？",
+      title: copy.title,
+      body: copy.body,
       url: `/tasks?id=${task.id}`,
       tag: `followup-${task.id}`,
       requireInteraction: false,
@@ -330,11 +337,11 @@ export async function sendForgetReminders() {
       ? Math.floor((now.getTime() - task.dueAt.getTime()) / (24 * 60 * 60 * 1000))
       : Math.floor((now.getTime() - task.createdAt.getTime()) / (24 * 60 * 60 * 1000));
 
+    const copy = await buildReminderCopy({ task, kind: "forget", context: { days } });
+
     const payload = {
-      title: `别忘了这个约定：${task.title}`,
-      body: overdueByDue
-        ? `它已经过期 ${days} 天了。对抗遗忘曲线，现在处理它，或者调整为更合适的安排。`
-        : `创建至今 ${days} 天了，一直没有完成。还记得当初为什么定下它吗？现在推进一小步也好。`,
+      title: copy.title,
+      body: copy.body,
       url: `/tasks?id=${task.id}`,
       tag: `forget-${task.id}`,
       requireInteraction: false,

@@ -46,7 +46,7 @@ function statusLabel(status) {
   return map[status] || "进行中";
 }
 
-function buildReminderData(task) {
+function buildReminderData(task, gentleNote) {
   const tmplId = env.WECHAT_SUBSCRIBE_REMINDER_TMPL_ID;
   if (!tmplId) return null;
 
@@ -59,7 +59,7 @@ function buildReminderData(task) {
   const progressField = env.WECHAT_SUBSCRIBE_REMINDER_PROGRESS_FIELD || "short_thing21";
 
   const title = task.title ? String(task.title).slice(0, 20) : "约定提醒";
-  const desc = task.description ? String(task.description).slice(0, 40) : "您有一个约定到时间了";
+  const desc = gentleNote ? String(gentleNote).slice(0, 18) : task.description ? String(task.description).slice(0, 40) : "您有一个约定到时间了";
   const time = fmtWechatTime(task.reminderTime);
   const urgency = priorityLabel(task.priority);
   const progress = statusLabel(task.status);
@@ -78,7 +78,7 @@ function buildReminderData(task) {
   };
 }
 
-function buildFollowUpData(task) {
+function buildFollowUpData(task, gentleNote) {
   const tmplId = env.WECHAT_SUBSCRIBE_FOLLOWUP_TMPL_ID;
   if (!tmplId) return null;
 
@@ -94,7 +94,7 @@ function buildFollowUpData(task) {
   const type = categoryLabel(task.category);
   const endTime = fmtWechatTime(task.endTime);
   const status = statusLabel(task.status);
-  const note = "约定的预计时间到了，完成了吗？";
+  const note = gentleNote ? String(gentleNote).slice(0, 18) : "约定的预计时间到了，完成了吗？";
 
   return {
     template_id: tmplId,
@@ -110,12 +110,12 @@ function buildFollowUpData(task) {
   };
 }
 
-export async function sendWechatSubscribeMessage(openid, task, type = "reminder") {
+export async function sendWechatSubscribeMessage(openid, task, type = "reminder", gentleNote = null) {
   if (!isConfigured() || !openid) {
     return { ok: false, reason: "wechat_not_configured_or_no_openid" };
   }
 
-  const payloadBase = type === "follow_up" ? buildFollowUpData(task) : buildReminderData(task);
+  const payloadBase = type === "follow_up" ? buildFollowUpData(task, gentleNote) : buildReminderData(task, gentleNote);
   if (!payloadBase) {
     return { ok: false, reason: "template_not_configured" };
   }

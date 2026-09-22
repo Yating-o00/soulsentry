@@ -7,18 +7,25 @@ import VoiceInput from "@/components/VoiceInput";
 import theme from "@/components/tasks/theme";
 
 // 前端敏感检测规则，与后端保持一致
+// 密码/验证码/密钥兼容「密码：xxx」「密码是xxx」「密码xxx」等写法；
+// 值必须是连续字母数字/符号串，避免误伤"忘记密码""密码锁"这类日常表述
 const VAULT_PATTERNS = [
   /\b\d{17}[\dXx]\b/,
   /\b\d{15}\b/,
   /\b(?:\d{4}[ -]?){3,4}\d{1,4}\b/,
-  /密码[:：]\s*\S+/i,
-  /验证码[:：]\s*\S+/i,
-  /密钥[:：]\s*\S+/i,
+  /密码(?:是|为|[:：])?\s*[A-Za-z0-9@#$%^&*!~?.+-]{3,}/i,
+  /验证码(?:是|为|[:：])?\s*\d{4,8}/i,
+  /密钥(?:是|为|[:：])?\s*[A-Za-z0-9+/=._-]{6,}/i,
   /私钥|token|api\s*key|护照|驾照|驾驶证/i
 ];
 
+const VAULT_LABELS = ["身份证", "证件号", "银行卡/卡号", "密码", "验证码", "密钥", "敏感凭证"];
+
 function detectSensitive(text) {
-  return VAULT_PATTERNS.some((re) => re.test(text));
+  for (let i = 0; i < VAULT_PATTERNS.length; i++) {
+    if (VAULT_PATTERNS[i].test(text)) return VAULT_LABELS[i];
+  }
+  return null;
 }
 
 export default function NoteCreate() {
@@ -31,6 +38,7 @@ export default function NoteCreate() {
   const [vaultNewPwd, setVaultNewPwd] = useState("");
   const [vaultConfirmPwd, setVaultConfirmPwd] = useState("");
   const [vaultLabel, setVaultLabel] = useState("");
+  const [vaultHitLabel, setVaultHitLabel] = useState("敏感");
   // emotion=心签 | ledger=账本签(记一笔)
   const [mode, setMode] = useState("emotion");
   // 配图：上传后存 /uploads/ 相对路径，随心签一起保存
@@ -61,11 +69,15 @@ export default function NoteCreate() {
       return;
     }
 
-    if (text && detectSensitive(text)) {
-      setVaultMode(true);
-      setVaultLabel("敏感信息");
-      await checkVaultStatus();
-      return;
+    if (text) {
+      const hitLabel = detectSensitive(text);
+      if (hitLabel) {
+        setVaultMode(true);
+        setVaultHitLabel(hitLabel);
+        setVaultLabel(`敏感信息 · ${hitLabel}`);
+        await checkVaultStatus();
+        return;
+      }
     }
 
     setLoading(true);
@@ -159,11 +171,35 @@ export default function NoteCreate() {
         await post("/vault/setup", { password: vaultNewPwd });
       }
 
-      await post("/vault", {
+      const created = await post("/vault", {
         label: vaultLabel || "敏感信息",
         value: text,
         password
       });
+
+      // 与 Web 端口径一致：同步落一条保险柜锁定心签（只写脱敏标题，原文只存保险柜密文，不进 AI 分析）
+      try {
+        const safeTitle = `敏感信息 · ${vaultHitLabel || "敏感"}`;
+        await post("/notes", {
+          content: safeTitle,
+          plain_text: safeTitle,
+          source_type: "vault",
+          ai_status: "completed",
+          metadata: {
+            is_vault: true,
+            vault_item_id: created?.id || null,
+            ai_analysis: {
+              title: `${vaultHitLabel || "敏感"}已加密存放`,
+              category: "保险柜",
+              is_vault: true,
+              source: "vault_fallback",
+              analyzed_at: new Date().toISOString()
+            }
+          }
+        });
+      } catch (e) {
+        console.error("vault note create failed", e);
+      }
 
       Taro.showToast({ title: "已加密存入保险柜", icon: "success" });
       setTimeout(() => Taro.navigateBack(), 600);

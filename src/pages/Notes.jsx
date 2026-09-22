@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
-import { httpRequest } from "@/api/httpClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -70,9 +69,8 @@ export default function Notes() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultInitialValue, setVaultInitialValue] = useState(null);
-  // 保险柜密码会话级缓存（仅内存，页面刷新即失效）：已解锁时会话内发送敏感内容全自动入库
-  const [vaultPwd, setVaultPwd] = useState(null);
   // 待自动存入的敏感内容 { text, hitLabel }：未解锁时弹保险柜，解锁后自动存入
+  // 高密级：不做任何密码会话缓存，关闭弹层即上锁，每次打开都需重新输密码
   const [pendingVault, setPendingVault] = useState(null);
   // 锁定卡「输入密码查看」定位的保险柜条目 id
   const [vaultFocusId, setVaultFocusId] = useState(null);
@@ -296,29 +294,11 @@ export default function Notes() {
     }
   };
 
-  // 统一敏感拦截：命中则自动/引导入保险柜，返回 true 表示已拦截（信息流/语音入口共用）
+  // 统一敏感拦截：命中则引导入保险柜（解锁后自动存入并落锁定心签），返回 true 表示已拦截
+  // 信息流/语音入口/输入框「转入保险柜」共用；高密级：不缓存密码，每次入柜都需解锁
   const interceptSensitiveText = (text) => {
     const hit = detectSensitive(text);
     if (!hit) return false;
-    if (vaultPwd) {
-      // 本会话已解锁：全自动加密入库 + 建签，无需弹窗
-      httpRequest("/api/vault", {
-        method: "POST",
-        body: { label: `敏感信息 · ${hit.label}`, value: String(text), password: vaultPwd },
-      })
-        .then((item) => {
-          toast.success(`检测到敏感信息（${hit.label}），已自动加密存入保险柜`);
-          createVaultNote(item, hit.label);
-        })
-        .catch(() => {
-          // 密码可能已在别处变更：清缓存回落到解锁流程
-          setVaultPwd(null);
-          toast.warning(`检测到敏感信息（${hit.label}），请解锁保险柜后自动存入`);
-          setPendingVault({ text: String(text), hitLabel: hit.label });
-          setVaultOpen(true);
-        });
-      return true;
-    }
     toast.warning(`检测到敏感信息（${hit.label}），解锁后自动加密存入保险柜`, {
       description: '保险柜内容独立加密，不会进入 AI 分析',
     });
@@ -967,6 +947,10 @@ export default function Notes() {
               await handleSend(payload);
               setComposerOpen(false);
             }}
+            onVaultTransfer={(text) => {
+              setComposerOpen(false);
+              interceptSensitiveText(text);
+            }}
           />
         </DialogContent>
       </Dialog>
@@ -992,8 +976,6 @@ export default function Notes() {
         initialValue={vaultInitialValue}
         autoSave={pendingVault ? { text: pendingVault.text, label: `敏感信息 · ${pendingVault.hitLabel}` } : undefined}
         focusItemId={vaultFocusId}
-        presetPassword={vaultPwd}
-        onUnlocked={setVaultPwd}
         onAutoSaved={(item) => {
           createVaultNote(item, pendingVault?.hitLabel || '敏感');
           setPendingVault(null);

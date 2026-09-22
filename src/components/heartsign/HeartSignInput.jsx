@@ -1,13 +1,14 @@
 import React, { useState, useRef } from "react";
-import { Send, Plus, Paperclip, Link as LinkIcon, Image as ImageIcon, Mic, MicOff, X, Loader2, LayoutTemplate } from "lucide-react";
+import { Send, Plus, Paperclip, Link as LinkIcon, Image as ImageIcon, Mic, MicOff, X, Loader2, LayoutTemplate, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import QuickTemplates from "./QuickTemplates";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import ChatPasteRecognizer from "./ChatPasteRecognizer";
 import { looksLikeChatLog } from "@/components/utils/processPastedContent";
+import { detectSensitive } from "./detectSensitive";
 
-export default function HeartSignInput({ onSend }) {
+export default function HeartSignInput({ onSend, onVaultTransfer }) {
   const [text, setText] = useState("");
   const [showChatRecognizer, setShowChatRecognizer] = useState(false);
   const [attachments, setAttachments] = useState([]);
@@ -25,6 +26,18 @@ export default function HeartSignInput({ onSend }) {
   const detectUrlInText = (val) => {
     const m = val.match(/https?:\/\/\S+/);
     if (m && !sourceUrl) setSourceUrl(m[0]);
+  };
+
+  // 输入过程实时监测敏感信息（密码/证件号等），命中即提醒转入保险柜（发送时仍有最终拦截）
+  const sensitiveHit = text.trim() ? detectSensitive(text) : null;
+
+  // 一键转入保险柜：清空输入并把当前内容交给父组件走保险柜流程
+  const transferToVault = () => {
+    const t = text.trim();
+    if (!t) return;
+    setText('');
+    setShowUrlInput(false);
+    onVaultTransfer?.(t);
   };
 
   const handlePaste = (e) => {
@@ -185,6 +198,22 @@ export default function HeartSignInput({ onSend }) {
               title={isListening ? '点击停止' : '语音输入'}
             >
               {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+          </div>
+        )}
+
+        {/* 输入过程敏感监测提醒：非阻塞，直接发送仍会在提交时被拦截 */}
+        {sensitiveHit && (
+          <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-200/70 bg-amber-50/80 px-3 py-2">
+            <Lock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+            <span className="flex-1 min-w-0 text-[12px] text-amber-700 leading-snug">
+              检测到疑似敏感信息（{sensitiveHit.label}），建议转入保险柜 —— 加密保存，AI 不会阅读
+            </span>
+            <button
+              onClick={transferToVault}
+              className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-[#384877] border border-[#384877]/30 rounded-lg px-2.5 py-1 hover:bg-[#384877]/8 transition"
+            >
+              <Lock className="w-3 h-3" /> 转入保险柜
             </button>
           </div>
         )}

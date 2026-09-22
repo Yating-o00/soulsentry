@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Lock, Eye, EyeOff, Plus, Trash2, Loader2, Inbox } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Lock, Plus, Trash2, Loader2, Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest, getAccessToken } from "@/api/httpClient";
 import { base44 } from "@/api/base44Client";
@@ -12,17 +12,20 @@ import {
 } from "@/components/ui/dialog";
 
 // 后端 /api/vault 实际行为（backend/src/routes/vault.js）：
-//   GET    /api/vault          → 200 [{ id, label, created_date, updated_date }]（仅元数据，不暴露是否已设密码）
+//   GET    /api/vault          → 200 { ok: true, count }（不返回任何柜内信息，仅探测可用性）
 //   POST   /api/vault/unlock   → 200 [{ id, label, value, created_date }]（服务端解密返回明文）
 //                                400 { error: 'VAULT_NOT_SET' } / 403 { error: 'WRONG_PASSWORD' }
 //   POST   /api/vault/setup    → { ok: true }，密码 ≥ 4 位
 //   POST   /api/vault          → 201 { id, label, created_date }，body { label, value, password }
 //   DELETE /api/vault/:id      → 204
 // 是否已设密码只能通过 unlock/新增返回的 VAULT_NOT_SET 判断，因此默认进 locked 态，命中后转 setup。
+// 高密级约定：关闭弹层即清空全部明文与密码（立即上锁）；柜内内容默认模糊打码，点「显示」15 秒内临时可见。
 
 function errCode(e) {
   return e?.data?.error || "";
 }
+
+const REVEAL_MS = 15000; // 「显示」后临时可见时长，超时自动重新打码
 
 export default function VaultDialog({
   open,
@@ -32,9 +35,7 @@ export default function VaultDialog({
   onVaulted,
   autoSave,        // { text, label } 自动保存模式：解锁/设置密码成功后自动加密存入并关闭
   onAutoSaved,     // (item) => void 自动存入成功回调（父组件据此建锁定心签）
-  focusItemId,     // 解锁成功后自动展开该条目的明文（锁定卡「查看」进入）
-  presetPassword,  // 会话已解锁：用缓存密码静默解锁，免重复输入
-  onUnlocked,      // (password) => void 解锁成功后回调（父组件做会话级缓存）
+  focusItemId,     // 解锁成功后自动「显示」该条目（锁定卡「查看」进入）
 }) {
   const [status, setStatus] = useState("checking"); // checking | setup | locked | unlocked
   const [items, setItems] = useState([]); // 解锁后的明文列表，关闭弹层即清空
@@ -47,13 +48,26 @@ export default function VaultDialog({
   const [addValue, setAddValue] = useState("");
   const [adding, setAdding] = useState(false);
   const [autoSaving, setAutoSaving] = useState(false);
+  const revealTimers = useRef({}); // 条目 id -> 「显示」超时定时器
 
-  // 解锁成功后的统一出口：会话回调 → 自动存入（autoSave 模式）/ 查看定位（focusItemId）
+  // 「显示」：临时可见，超时自动重新打码；关闭弹层时统一清理（立即上锁）
+  const revealItem = (id) => {
+    setShowValues((v) => ({ ...v, [id]: true }));
+    clearTimeout(revealTimers.current[id]);
+    revealTimers.current[id] = setTimeout(() => {
+      setShowValues((v) => ({ ...v, [id]: false }));
+    }, REVEAL_MS);
+  };
+  const hideItem = (id) => {
+    clearTimeout(revealTimers.current[id]);
+    setShowValues((v) => ({ ...v, [id]: false }));
+  };
+
+  // 解锁成功后的统一出口：自动存入（autoSave 模式）/ 查看定位（focusItemId）
   const afterUnlocked = async (pwd, data) => {
     setPassword(pwd);
     setItems(Array.isArray(data) ? data : []);
     setStatus("unlocked");
-    onUnlocked?.(pwd);
     if (autoSave?.text && autoSave?.label) {
       setAutoSaving(true);
       try {
@@ -74,7 +88,7 @@ export default function VaultDialog({
       return;
     }
     if (focusItemId) {
-      setShowValues((v) => ({ ...v, [focusItemId]: true }));
+      revealItem(focusItemId);
     }
   };
 
@@ -100,16 +114,6 @@ export default function VaultDialog({
       onOpenChange(false);
       return;
     }
-    // 会话已解锁：静默解锁直接进入已解锁态
-    if (presetPassword) {
-      httpRequest("/api/vault/unlock", { method: "POST", body: { password: presetPassword } })
-        .then((data) => afterUnlocked(presetPassword, data))
-        .catch((e) => {
-          if (errCode(e) === "WRONG_PASSWORD") toast.error("保险柜密码已变更，请重新输入");
-          setStatus("locked");
-        });
-      return;
-    }
     // GET /api/vault 不返回是否已设密码，仅用于确认后端可用；未设密码在解锁时经 VAULT_NOT_SET 转到 setup 态
     httpRequest("/api/vault")
       .then(() => setStatus("locked"))
@@ -120,11 +124,15 @@ export default function VaultDialog({
 
   }, [open]);
 
+  // 关闭弹层立即上锁：清空内存中的明文、密码与「显示」定时器
   useEffect(() => {
     if (!open) {
       setItems([]);
       setPassword("");
       setAutoSaving(false);
+      setShowValues({});
+      Object.values(revealTimers.current).forEach(clearTimeout);
+      revealTimers.current = {};
     }
   }, [open]);
 
@@ -350,11 +358,11 @@ export default function VaultDialog({
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-medium text-slate-700 flex-1 truncate">{it.label}</span>
                       <button
-                        onClick={() => setShowValues((v) => ({ ...v, [it.id]: !v[it.id] }))}
-                        className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                        title={showValues[it.id] ? "隐藏内容" : "查看内容"}
+                        onClick={() => (showValues[it.id] ? hideItem(it.id) : revealItem(it.id))}
+                        className="text-[11px] text-[#384877] border border-[#384877]/25 rounded-md px-2 py-0.5 hover:bg-[#384877]/8 transition"
+                        title={showValues[it.id] ? "立即打码" : `临时可见 ${REVEAL_MS / 1000} 秒`}
                       >
-                        {showValues[it.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showValues[it.id] ? "隐藏" : "显示"}
                       </button>
                       <button
                         onClick={() => handleDelete(it.id)}
@@ -364,8 +372,11 @@ export default function VaultDialog({
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                    {/* 全程模糊打码：点「显示」后临时可见，超时/关闭自动打码 */}
                     <div className="mt-1 text-[12.5px] text-slate-500 break-all leading-relaxed">
-                      {showValues[it.id] ? it.value : "••••••••"}
+                      <span className={showValues[it.id] ? "transition" : "blur-[5px] select-none transition"}>
+                        {it.value}
+                      </span>
                     </div>
                   </div>
                 ))}

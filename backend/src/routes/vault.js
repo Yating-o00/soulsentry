@@ -59,18 +59,9 @@ vaultRouter.get("/status", async (req, res) => {
 });
 
 vaultRouter.get("/", async (req, res) => {
-  const items = await prisma.vaultItem.findMany({
-    where: { userId: req.user.id },
-    orderBy: { createdAt: "desc" }
-  });
-  return res.json(
-    items.map((it) => ({
-      id: it.id,
-      label: it.label,
-      created_date: it.createdAt,
-      updated_date: it.updatedAt
-    }))
-  );
+  // 高密级：未解锁前不返回任何柜内信息（旧实现会返回全部 label），仅用于前端探测保险柜服务可用
+  const count = await prisma.vaultItem.count({ where: { userId: req.user.id } });
+  return res.json({ ok: true, count });
 });
 
 vaultRouter.post("/unlock", async (req, res) => {

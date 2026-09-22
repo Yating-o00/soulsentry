@@ -136,12 +136,14 @@ function LedgerCard({ ledger }) {
   );
 }
 
-// 后端标记的敏感心签：原文不展示，引导在保险柜中查看
-function VaultLockedCard({ note, onDelete, onVaultRequest, isOptimistic }) {
+// 保险柜锁定心签：原文不展示，已入库的可输密码查看，未入库的旧签可移入保险柜
+function VaultLockedCard({ note, onDelete, onVaultRequest, onVaultView, isOptimistic }) {
   const createdAt = note.created_date ? new Date(note.created_date) : null;
   const time = createdAt && !isNaN(createdAt.getTime())
     ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(createdAt)
     : '';
+  const title = note.ai_analysis?.title || '敏感内容已被保护';
+  const vaultItemId = note.metadata?.vault_item_id;
   return (
     <div className="space-y-2">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex justify-end gap-2 group">
@@ -163,10 +165,14 @@ function VaultLockedCard({ note, onDelete, onVaultRequest, isOptimistic }) {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); onVaultRequest?.(note); }}>
-                      <Lock className="w-3.5 h-3.5 mr-2" /> 移入保险柜
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
+                    {!vaultItemId && (
+                      <>
+                        <DropdownMenuItem onSelect={(e) => { e.preventDefault?.(); onVaultRequest?.(note); }}>
+                          <Lock className="w-3.5 h-3.5 mr-2" /> 移入保险柜
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem
                       onSelect={(e) => { e.preventDefault?.(); onDelete(); }}
                       className="text-rose-600 focus:text-rose-700 focus:bg-rose-50"
@@ -181,10 +187,20 @@ function VaultLockedCard({ note, onDelete, onVaultRequest, isOptimistic }) {
               <span className="w-9 h-9 rounded-full bg-[#384877]/8 border border-[#384877]/15 flex items-center justify-center flex-shrink-0">
                 <Lock className="w-4 h-4 text-[#384877]" />
               </span>
-              <div>
-                <div className="text-[13.5px] font-medium text-slate-700">敏感内容已被保护</div>
-                <div className="text-[11.5px] text-slate-400 mt-0.5">原文已加密存证，不在信息流中展示</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13.5px] font-medium text-slate-700">{title}</div>
+                <div className="text-[11.5px] text-slate-400 mt-0.5">
+                  {vaultItemId ? '原文已加密存入保险柜 · 输入密码可查看' : '原文已加密存证，不在信息流中展示'}
+                </div>
               </div>
+              {vaultItemId && !isOptimistic && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onVaultView?.(note); }}
+                  className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] text-[#384877] border border-[#384877]/25 rounded-lg px-2.5 py-1.5 hover:bg-[#384877]/8 transition"
+                >
+                  <Lock className="w-3 h-3" /> 输入密码查看
+                </button>
+              )}
             </div>
           </div>
           <div className="mt-1 text-right pr-1">
@@ -246,6 +262,7 @@ export default function HeartSignMessage({
   onRestore,
   onTypeChange,
   onVaultRequest,
+  onVaultView,
   onPinnedChange,
   onConvertToTask,
   onSaveToKnowledge,
@@ -408,6 +425,7 @@ export default function HeartSignMessage({
         isOptimistic={isOptimistic}
         onDelete={handleDelete}
         onVaultRequest={onVaultRequest}
+        onVaultView={onVaultView}
       />
     );
   }

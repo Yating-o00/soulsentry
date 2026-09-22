@@ -24,7 +24,18 @@ function errCode(e) {
   return e?.data?.error || "";
 }
 
-export default function VaultDialog({ open, onOpenChange, initialValue, pendingNote, onVaulted }) {
+export default function VaultDialog({
+  open,
+  onOpenChange,
+  initialValue,
+  pendingNote,
+  onVaulted,
+  autoSave,        // { text, label } 自动保存模式：解锁/设置密码成功后自动加密存入并关闭
+  onAutoSaved,     // (item) => void 自动存入成功回调（父组件据此建锁定心签）
+  focusItemId,     // 解锁成功后自动展开该条目的明文（锁定卡「查看」进入）
+  presetPassword,  // 会话已解锁：用缓存密码静默解锁，免重复输入
+  onUnlocked,      // (password) => void 解锁成功后回调（父组件做会话级缓存）
+}) {
   const [status, setStatus] = useState("checking"); // checking | setup | locked | unlocked
   const [items, setItems] = useState([]); // 解锁后的明文列表，关闭弹层即清空
   const [password, setPassword] = useState(""); // 解锁密码（解锁后暂存内存，用于新增条目）
@@ -35,6 +46,37 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
   const [addLabel, setAddLabel] = useState("");
   const [addValue, setAddValue] = useState("");
   const [adding, setAdding] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+
+  // 解锁成功后的统一出口：会话回调 → 自动存入（autoSave 模式）/ 查看定位（focusItemId）
+  const afterUnlocked = async (pwd, data) => {
+    setPassword(pwd);
+    setItems(Array.isArray(data) ? data : []);
+    setStatus("unlocked");
+    onUnlocked?.(pwd);
+    if (autoSave?.text && autoSave?.label) {
+      setAutoSaving(true);
+      try {
+        const created = await httpRequest("/api/vault", {
+          method: "POST",
+          body: { label: autoSave.label, value: autoSave.text, password: pwd },
+        });
+        toast.success("已自动加密存入保险柜");
+        onAutoSaved?.(created);
+        onOpenChange(false);
+      } catch (e) {
+        toast.error(e?.data?.error === "WRONG_PASSWORD"
+          ? "保险柜密码已变更，请重新解锁后手动存入"
+          : (e?.message || "自动存入失败，请手动存入"));
+      } finally {
+        setAutoSaving(false);
+      }
+      return;
+    }
+    if (focusItemId) {
+      setShowValues((v) => ({ ...v, [focusItemId]: true }));
+    }
+  };
 
   // 打开时重置并探测登录态；关闭时清空内存中的明文与密码
   useEffect(() => {
@@ -45,11 +87,27 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
     setNewPwd("");
     setConfirmPwd("");
     setShowValues({});
-    setAddLabel(pendingNote ? (pendingNote.plain_text || "").slice(0, 20) : "");
-    setAddValue(pendingNote?.plain_text || initialValue || "");
+    setAutoSaving(false);
+    if (autoSave?.text) {
+      setAddLabel(autoSave.label || "");
+      setAddValue(autoSave.text);
+    } else {
+      setAddLabel(pendingNote ? (pendingNote.plain_text || "").slice(0, 20) : "");
+      setAddValue(pendingNote?.plain_text || initialValue || "");
+    }
     if (!getAccessToken()) {
       toast.error("请先登录后再使用保险柜");
       onOpenChange(false);
+      return;
+    }
+    // 会话已解锁：静默解锁直接进入已解锁态
+    if (presetPassword) {
+      httpRequest("/api/vault/unlock", { method: "POST", body: { password: presetPassword } })
+        .then((data) => afterUnlocked(presetPassword, data))
+        .catch((e) => {
+          if (errCode(e) === "WRONG_PASSWORD") toast.error("保险柜密码已变更，请重新输入");
+          setStatus("locked");
+        });
       return;
     }
     // GET /api/vault 不返回是否已设密码，仅用于确认后端可用；未设密码在解锁时经 VAULT_NOT_SET 转到 setup 态
@@ -59,13 +117,14 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
         toast.error(e?.message || "保险柜暂不可用");
         onOpenChange(false);
       });
-     
+
   }, [open]);
 
   useEffect(() => {
     if (!open) {
       setItems([]);
       setPassword("");
+      setAutoSaving(false);
     }
   }, [open]);
 
@@ -83,10 +142,8 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
       await httpRequest("/api/vault/setup", { method: "POST", body: { password: newPwd } });
       // 设置成功后直接用新密码解锁，一步进入已解锁态
       const data = await httpRequest("/api/vault/unlock", { method: "POST", body: { password: newPwd } });
-      setPassword(newPwd);
-      setItems(Array.isArray(data) ? data : []);
-      setStatus("unlocked");
-      toast.success("保险柜已开启");
+      await afterUnlocked(newPwd, data);
+      if (!(autoSave?.text && autoSave?.label)) toast.success("保险柜已开启");
     } catch (e) {
       toast.error(e?.message || "设置失败，请重试");
     } finally {
@@ -99,8 +156,7 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
     setLoading(true);
     try {
       const data = await httpRequest("/api/vault/unlock", { method: "POST", body: { password } });
-      setItems(Array.isArray(data) ? data : []);
-      setStatus("unlocked");
+      await afterUnlocked(password, data);
     } catch (e) {
       if (errCode(e) === "VAULT_NOT_SET") {
         setStatus("setup");
@@ -130,8 +186,13 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
       setItems((prev) => [{ ...created, value }, ...prev]);
       setAddLabel("");
       setAddValue("");
-      // 移入心签：入库成功后软删原心签并通知父组件移除
-      if (pendingNote?.id) {
+      if (autoSave?.text) {
+        // 自动存入失败后的手动补存：同样回调父组件建锁定心签并关闭
+        toast.success("已加密存入保险柜");
+        onAutoSaved?.(created);
+        onOpenChange(false);
+      } else if (pendingNote?.id) {
+        // 移入心签：入库成功后软删原心签并通知父组件移除
         await base44.entities.Note.update(pendingNote.id, { deleted_at: new Date().toISOString() });
         onVaulted?.(pendingNote.id);
         toast.success("已移入保险柜，原心签已删除");
@@ -169,7 +230,9 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
             保险柜
           </DialogTitle>
           <DialogDescription className="text-left">
-            敏感信息独立加密保存，密码仅用于加解密，不会上传明文密码。
+            {autoSave?.text
+              ? "检测到敏感信息。解锁后将自动加密存入保险柜，原文不会进入 AI 分析。"
+              : "敏感信息独立加密保存，密码仅用于加解密，不会上传明文密码。"}
           </DialogDescription>
         </DialogHeader>
 
@@ -182,7 +245,9 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
         {status === "setup" && (
           <div className="space-y-3">
             <p className="text-[13px] text-slate-600 leading-relaxed">
-              第一次使用保险柜，请设置一个独立密码（至少 4 位）。密码用于加密你的敏感信息，请牢记。
+              {autoSave?.text
+                ? "第一次使用保险柜，请设置一个独立密码（至少 4 位）。设置完成后，这条敏感信息将自动加密存入。"
+                : "第一次使用保险柜，请设置一个独立密码（至少 4 位）。密码用于加密你的敏感信息，请牢记。"}
             </p>
             <input
               type="password"
@@ -217,7 +282,7 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
-              placeholder="输入保险柜密码"
+              placeholder={autoSave?.text ? "输入保险柜密码，解锁后自动存入" : "输入保险柜密码"}
               className={inputCls}
               autoFocus
             />
@@ -234,6 +299,11 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
 
         {status === "unlocked" && (
           <div className="space-y-3">
+            {autoSaving && (
+              <div className="flex items-center justify-center gap-2 py-2 text-[12px] text-slate-500">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> 正在自动加密存入…
+              </div>
+            )}
             {pendingNote && (
               <div className="rounded-xl border border-amber-200/70 bg-amber-50/70 px-3 py-2 text-[12px] text-amber-700">
                 正在将这条心签移入保险柜，存入后原文心签会被删除。
@@ -260,7 +330,7 @@ export default function VaultDialog({ open, onOpenChange, initialValue, pendingN
               />
               <button
                 onClick={handleAdd}
-                disabled={adding}
+                disabled={adding || autoSaving}
                 className="w-full py-2 rounded-lg bg-[#384877] hover:bg-[#2d3a5f] text-white text-xs font-medium transition disabled:opacity-60 flex items-center justify-center gap-1.5"
               >
                 {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />}

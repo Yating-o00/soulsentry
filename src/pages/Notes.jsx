@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
+import { httpRequest } from "@/api/httpClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -69,6 +70,12 @@ export default function Notes() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultInitialValue, setVaultInitialValue] = useState(null);
+  // 保险柜密码会话级缓存（仅内存，页面刷新即失效）：已解锁时会话内发送敏感内容全自动入库
+  const [vaultPwd, setVaultPwd] = useState(null);
+  // 待自动存入的敏感内容 { text, hitLabel }：未解锁时弹保险柜，解锁后自动存入
+  const [pendingVault, setPendingVault] = useState(null);
+  // 锁定卡「输入密码查看」定位的保险柜条目 id
+  const [vaultFocusId, setVaultFocusId] = useState(null);
   const [flashId, setFlashId] = useState(null);
   const queryClient = useQueryClient();
 
@@ -248,16 +255,82 @@ export default function Notes() {
     }
   });
 
+  // 保险柜条目落一条锁定心签：只写脱敏标题，敏感原文只存在于保险柜密文，不进入心签库
+  const createVaultNote = async (item, hitLabel) => {
+    const safeTitle = `敏感信息 · ${hitLabel}`;
+    const metadata = {
+      is_vault: true,
+      vault_item_id: item?.id || null,
+      ai_analysis: {
+        title: `${hitLabel}已加密存放`,
+        category: "保险柜",
+        is_vault: true,
+        source: "vault_fallback",
+        analyzed_at: new Date().toISOString(),
+      },
+    };
+    const optimistic = normalizeNote({
+      plain_text: safeTitle,
+      content: safeTitle,
+      source_type: "vault",
+      ai_status: "completed",
+      metadata,
+      id: `tmp-${Date.now()}`,
+      created_date: new Date().toISOString(),
+    });
+    queryClient.setQueryData(['notes'], (old) => [optimistic, ...(old || [])]);
+    try {
+      const created = normalizeNote(await base44.entities.Note.create({
+        plain_text: safeTitle,
+        content: safeTitle,
+        source_type: "vault",
+        ai_status: "completed",
+        metadata,
+      }));
+      queryClient.setQueryData(['notes'], (old) =>
+        (old || []).map((n) => (n.id === optimistic.id ? created : n)));
+    } catch (e) {
+      queryClient.setQueryData(['notes'], (old) => (old || []).filter((n) => n.id !== optimistic.id));
+      console.error(e);
+      toast.error("保险柜心签创建失败，内容已在保险柜中");
+    }
+  };
+
+  // 统一敏感拦截：命中则自动/引导入保险柜，返回 true 表示已拦截（信息流/语音入口共用）
+  const interceptSensitiveText = (text) => {
+    const hit = detectSensitive(text);
+    if (!hit) return false;
+    if (vaultPwd) {
+      // 本会话已解锁：全自动加密入库 + 建签，无需弹窗
+      httpRequest("/api/vault", {
+        method: "POST",
+        body: { label: `敏感信息 · ${hit.label}`, value: String(text), password: vaultPwd },
+      })
+        .then((item) => {
+          toast.success(`检测到敏感信息（${hit.label}），已自动加密存入保险柜`);
+          createVaultNote(item, hit.label);
+        })
+        .catch(() => {
+          // 密码可能已在别处变更：清缓存回落到解锁流程
+          setVaultPwd(null);
+          toast.warning(`检测到敏感信息（${hit.label}），请解锁保险柜后自动存入`);
+          setPendingVault({ text: String(text), hitLabel: hit.label });
+          setVaultOpen(true);
+        });
+      return true;
+    }
+    toast.warning(`检测到敏感信息（${hit.label}），解锁后自动加密存入保险柜`, {
+      description: '保险柜内容独立加密，不会进入 AI 分析',
+    });
+    setPendingVault({ text: String(text), hitLabel: hit.label });
+    setVaultOpen(true);
+    return true;
+  };
+
   // 信息流发送管线：敏感预检 → 乐观上屏 → 创建 → 触发 AI 分析 → 轮询补拉
   const handleSend = async (payload) => {
-    // 敏感信息拦截：不创建心签，引导存入保险柜
-    const hit = detectSensitive(payload.plain_text);
-    if (hit) {
-      toast.warning(`检测到敏感信息（${hit.label}），建议存入保险柜`, { description: '保险柜内容独立加密，不会进入 AI 分析' });
-      setVaultInitialValue(payload.plain_text);
-      setVaultOpen(true);
-      return;
-    }
+    // 敏感信息：自动加密存入保险柜并落锁定心签（原文不进心签库、不进 AI 管道）
+    if (interceptSensitiveText(payload.plain_text)) return;
 
     const densityNow = localStorage.getItem(DENSITY_KEY) || 'light';
     // 本地预分类：给后端一个提示，最终以 AI/兜底 + 纠错学习闭环为准
@@ -461,6 +534,16 @@ export default function Notes() {
       return;
     }
     setVaultInitialValue(note?.plain_text || null);
+    setVaultOpen(true);
+  };
+
+  // 锁定卡「输入密码查看」：打开保险柜并定位到对应条目，解锁后自动展开明文
+  const handleVaultView = (note) => {
+    if (!isStandaloneMode) {
+      toast.error('当前环境不支持保险柜');
+      return;
+    }
+    setVaultFocusId(note?.metadata?.vault_item_id || null);
     setVaultOpen(true);
   };
 
@@ -787,6 +870,7 @@ export default function Notes() {
                     onRestore={() => queryClient.invalidateQueries({ queryKey: ['notes'] })}
                     onTypeChange={handleTypeChange}
                     onVaultRequest={handleVaultRequest}
+                    onVaultView={handleVaultView}
                     onPinnedChange={handlePinnedChange}
                     onConvertToTask={handleSmartConvertToTask}
                     onSaveToKnowledge={(n) => saveToKnowledgeMutation.mutate(n)}
@@ -899,9 +983,21 @@ export default function Notes() {
         open={vaultOpen}
         onOpenChange={(open) => {
           setVaultOpen(open);
-          if (!open) setVaultInitialValue(null);
+          if (!open) {
+            setVaultInitialValue(null);
+            setPendingVault(null);
+            setVaultFocusId(null);
+          }
         }}
         initialValue={vaultInitialValue}
+        autoSave={pendingVault ? { text: pendingVault.text, label: `敏感信息 · ${pendingVault.hitLabel}` } : undefined}
+        focusItemId={vaultFocusId}
+        presetPassword={vaultPwd}
+        onUnlocked={setVaultPwd}
+        onAutoSaved={(item) => {
+          createVaultNote(item, pendingVault?.hitLabel || '敏感');
+          setPendingVault(null);
+        }}
         onVaulted={() => queryClient.invalidateQueries({ queryKey: ['notes'] })}
       />
 
@@ -946,8 +1042,11 @@ export default function Notes() {
         {showMobileInput && (
           <MobileVoiceNoteInput
             onSave={(data) => {
-              createNoteMutation.mutate(data);
               setShowMobileInput(false);
+              // 语音入口同样先过敏感预检：命中入保险柜，不建明文签
+              const text = data?.plain_text || data?.content || '';
+              if (interceptSensitiveText(text)) return;
+              createNoteMutation.mutate(data);
             }}
             onClose={() => setShowMobileInput(false)}
           />

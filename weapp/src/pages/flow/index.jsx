@@ -1797,8 +1797,22 @@ export default function Flow() {
       .map((x) => x.t)
       .slice(0, 8);
 
+  // 打开弹层先进入预览态：只展示将要拆解的约定，等用户确认后再调 AI 拆解
   const loadSplitFor = (task, candidates = [], candIndex = 0) => {
-    setSplitSheet({ task, steps: [], busy: true, creating: false, candidates, candIndex });
+    setSplitSheet({ task, steps: [], busy: false, creating: false, confirmed: false, candidates, candIndex });
+  };
+
+  const openSplitSheet = (task, candidates = []) => {
+    if (!task?.id || splitSheet) return;
+    loadSplitFor(task, candidates, 0);
+  };
+
+  // 用户确认"就拆这件"后才调用 AI 拆解
+  const confirmSplitTask = () => {
+    const sheet = splitSheet;
+    if (!sheet?.task?.id || sheet.busy || sheet.creating) return;
+    const task = sheet.task;
+    setSplitSheet((prev) => (prev && prev.task?.id === task.id ? { ...prev, busy: true, confirmed: true } : prev));
     post(`/tasks/${task.id}/split`)
       .then((res) => {
         setSplitSheet((prev) =>
@@ -1810,12 +1824,7 @@ export default function Flow() {
       });
   };
 
-  const openSplitSheet = (task, candidates = []) => {
-    if (!task?.id || splitSheet) return;
-    loadSplitFor(task, candidates, 0);
-  };
-
-  // 用户觉得当前推荐的约定不合适，切换到候选列表中的下一件再拆
+  // 用户觉得当前推荐的约定不合适，切换到候选列表中的下一件（仍停留在预览态）
   const switchSplitCandidate = () => {
     const sheet = splitSheet;
     if (!sheet?.candidates?.length || sheet.busy || sheet.creating) return;
@@ -4454,6 +4463,7 @@ export default function Flow() {
             zIndex: 999,
             background: THEME.card,
             borderRadius: "32rpx",
+            maxHeight: "72vh",
             padding: "40rpx 36rpx",
             boxShadow: "0 12rpx 48rpx rgba(0,0,0,0.22)"
           }}
@@ -4490,8 +4500,14 @@ export default function Flow() {
             <View style={{ padding: "60rpx 0", alignItems: "center" }}>
               <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>AI 正在理解这件约定…</Text>
             </View>
+          ) : !splitSheet.confirmed ? (
+            <View style={{ padding: "40rpx 0", alignItems: "center" }}>
+              <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, lineHeight: "42rpx", textAlign: "center" }}>
+                确认后，AI 会理解这件约定的内容，把它拆成一件件可以分步完成的小事
+              </Text>
+            </View>
           ) : (
-            <ScrollView style={{ maxHeight: "46vh" }}>
+            <ScrollView scrollY showScrollbar={false} style={{ maxHeight: "40vh" }}>
               {splitSheet.steps.map((s, i) => (
                 <View
                   key={`${i}-${s.title}`}
@@ -4539,7 +4555,7 @@ export default function Flow() {
             </ScrollView>
           )}
 
-          {!splitSheet.busy && (
+          {!splitSheet.busy && !!splitSheet.confirmed && (
             <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "10rpx" }}>
               内容由 AI 拆解，确认后将作为子约定挂在这件约定下，可以一件一件完成
             </Text>
@@ -4560,7 +4576,7 @@ export default function Flow() {
               <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>再想想</Text>
             </View>
             <View
-              onClick={confirmSplit}
+              onClick={splitSheet.busy ? undefined : splitSheet.confirmed ? confirmSplit : confirmSplitTask}
               style={{
                 width: "66%",
                 padding: "18rpx 0",
@@ -4570,7 +4586,13 @@ export default function Flow() {
               }}
             >
               <Text style={{ fontSize: "28rpx", fontWeight: 500, color: "#fff" }}>
-                {splitSheet.creating ? "正在拆分…" : splitSheet.busy ? "拆解中…" : `确认拆成 ${splitSheet.steps.length} 件`}
+                {splitSheet.creating
+                  ? "正在拆分…"
+                  : splitSheet.busy
+                    ? "拆解中…"
+                    : splitSheet.confirmed
+                      ? `确认拆成 ${splitSheet.steps.length} 件`
+                      : "就拆这件"}
               </Text>
             </View>
           </View>

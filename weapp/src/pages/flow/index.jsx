@@ -4507,7 +4507,11 @@ export default function Flow() {
               </Text>
             </View>
           ) : (
-            <ScrollView scrollY showScrollbar={false} style={{ maxHeight: "40vh" }}>
+            <ScrollView
+              scrollY
+              showScrollbar={false}
+              style={{ height: `${Math.min(36, splitSheet.steps.length * 6 + 2)}vh`, maxHeight: "38vh" }}
+            >
               {splitSheet.steps.map((s, i) => (
                 <View
                   key={`${i}-${s.title}`}
@@ -4517,8 +4521,8 @@ export default function Flow() {
                     background: THEME.paper,
                     border: `1rpx solid ${THEME.border}`,
                     borderRadius: "16rpx",
-                    padding: "20rpx 22rpx",
-                    marginBottom: "14rpx"
+                    padding: "16rpx 20rpx",
+                    marginBottom: "10rpx"
                   }}
                 >
                   <View

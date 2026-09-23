@@ -1318,6 +1318,7 @@ export default function Flow() {
   const [showAllDue, setShowAllDue] = useState(false);
   const [showCompletedDue, setShowCompletedDue] = useState(false);
   const [splitSheet, setSplitSheet] = useState(null); // { task, steps, busy, creating } AI 拆小事弹层
+  const [splitNewStepText, setSplitNewStepText] = useState(""); // 拆小结果「添加一步」输入
   const [selectedDueDate, setSelectedDueDate] = useState(toChinaYmd(new Date()));
   const [briefing, setBriefing] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1729,13 +1730,61 @@ export default function Flow() {
   const advanceToNextExec = (doneId) => {
     const next = (executions || [])
       .filter((e) => e.automation_type && e.automation_type !== "none")
-      .filter((e) => e.id !== doneId && e.execution_status !== "completed" && e.execution_status !== "cancelled")
+      .filter((e) => e.id !== doneId && !["completed", "cancelled", "parked"].includes(e.execution_status))
       .sort((a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date))[0];
     if (next) {
       setReviewExec(next);
       return;
     }
     closeReviewModal();
+  };
+
+  // 失败/排队中的执行单重新发起（plan → execute 重跑）
+  const retryExec = async (e) => {
+    if (execActingId || !e?.id) return;
+    setExecActingId(`retry-${e.id}`);
+    try {
+      await post(`/task-executions/${e.id}/retry`);
+      Taro.showToast({ title: "已重新发起执行", icon: "success" });
+      advanceToNextExec(e.id);
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "发起失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  // 排队中：优先执行（立即触发，等价于重跑相位）
+  const bumpExec = async (e) => {
+    if (execActingId || !e?.id) return;
+    setExecActingId(`bump-${e.id}`);
+    try {
+      await post(`/task-executions/${e.id}/retry`);
+      Taro.showToast({ title: "已优先开始执行", icon: "success" });
+      advanceToNextExec(e.id);
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "发起失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  // 排队中：缓缓放下（不取消，只是挪出守护队列，随时可以重试）
+  const parkExec = async (e) => {
+    if (execActingId || !e?.id) return;
+    setExecActingId(`park-${e.id}`);
+    try {
+      await patch(`/task-executions/${e.id}`, { execution_status: "parked" });
+      Taro.showToast({ title: "已缓缓放下", icon: "success" });
+      closeReviewModal();
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "操作失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
   };
 
   const acceptExec = async (id) => {
@@ -1926,6 +1975,24 @@ export default function Flow() {
       });
   };
 
+  // ===== 拆小结果编辑：改标题 / 删一步 / 加一步，确认时按用户确认版创建 =====
+  const updateSplitStep = (i, title) =>
+    setSplitSheet((prev) =>
+      prev ? { ...prev, steps: prev.steps.map((s, idx) => (idx === i ? { ...s, title } : s)) } : prev
+    );
+  const removeSplitStep = (i) =>
+    setSplitSheet((prev) => (prev ? { ...prev, steps: prev.steps.filter((_, idx) => idx !== i) } : prev));
+  const addSplitStep = () => {
+    const t = splitNewStepText.trim();
+    if (!t) return;
+    setSplitSheet((prev) => (prev ? { ...prev, steps: [...prev.steps, { title: t.slice(0, 60), minutes: null }] } : prev));
+    setSplitNewStepText("");
+  };
+  // 非空步数：确认按钮的 N 与禁用判断都以它为准
+  const validSplitCount = splitSheet
+    ? splitSheet.steps.filter((s) => (s.title || "").trim()).length
+    : 0;
+
   // 用户觉得当前推荐的约定不合适，切换到候选列表中的下一件（仍停留在预览态）
   const switchSplitCandidate = () => {
     const sheet = splitSheet;
@@ -1936,12 +2003,20 @@ export default function Flow() {
 
   const confirmSplit = async () => {
     const sheet = splitSheet;
-    if (!sheet?.task?.id || !sheet.steps?.length || sheet.creating) return;
-    setSplitSheet({ ...sheet, creating: true });
+    if (!sheet?.task?.id || sheet.creating) return;
+    // 按用户确认版创建：过滤空标题，全空则拒绝
+    const steps = (sheet.steps || [])
+      .map((s) => ({ ...s, title: String(s.title || "").trim() }))
+      .filter((s) => s.title);
+    if (steps.length === 0) {
+      Taro.showToast({ title: "请至少保留一步", icon: "none" });
+      return;
+    }
+    setSplitSheet({ ...sheet, creating: true, steps });
     const parent = sheet.task;
     const endTime = parent.end_time || parent.due_at || null;
-    const payload = sheet.steps.map((s) => ({
-      title: s.title,
+    const payload = steps.map((s) => ({
+      title: s.title.slice(0, 120),
       parent_task_id: parent.id,
       category: parent.category,
       priority: parent.priority,
@@ -1949,7 +2024,7 @@ export default function Flow() {
     }));
     try {
       await post("/tasks/batch", payload);
-      Taro.showToast({ title: `已拆成 ${sheet.steps.length} 件小事`, icon: "success" });
+      Taro.showToast({ title: `已拆成 ${steps.length} 件小事`, icon: "success" });
       setSplitSheet(null);
       loadAll();
     } catch (_err) {
@@ -3890,7 +3965,8 @@ export default function Flow() {
       plan: { label: "已计划", color: THEME.primary, bg: THEME.primaryMist },
       completed: { label: "已完成", color: "#7a9a7e", bg: "#eaf4ea" },
       failed: { label: "未成功", color: "#c0564f", bg: "#f9eaea" },
-      cancelled: { label: "已取消", color: THEME.inkQuaternary, bg: "#f2f3f5" }
+      cancelled: { label: "已取消", color: THEME.inkQuaternary, bg: "#f2f3f5" },
+      parked: { label: "已放下", color: THEME.inkQuaternary, bg: "#f2f3f5" }
     };
 
     const EXEC_TYPE_ICON = {
@@ -3933,9 +4009,13 @@ export default function Flow() {
         ? "查看并确认"
         : status === "waiting_confirm"
           ? "查看计划"
-          : ["executing", "pending", "parsing", "running", "plan"].includes(status)
-            ? "查看进度"
-            : "查看";
+          : status === "failed"
+            ? "再试一次"
+            : status === "pending"
+              ? "调整优先"
+              : ["executing", "parsing", "running", "plan"].includes(status)
+                ? "查看进度"
+                : "查看";
 
     const acting = execActingId != null;
 
@@ -3943,7 +4023,7 @@ export default function Flow() {
     const sortedRecords = [...guardianRecords].sort(
       (a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date)
     );
-    const isActiveRecord = (e) => e.execution_status !== "completed" && e.execution_status !== "cancelled";
+    const isActiveRecord = (e) => !["completed", "cancelled", "parked"].includes(e.execution_status);
     const activeRecords = sortedRecords.filter(isActiveRecord);
     const historyRecords = sortedRecords.filter((e) => !isActiveRecord(e));
     const recentActive = activeRecords.slice(0, 4);
@@ -4675,7 +4755,7 @@ export default function Flow() {
             >
               {splitSheet.steps.map((s, i) => (
                 <View
-                  key={`${i}-${s.title}`}
+                  key={`split-step-${i}`}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -4701,7 +4781,11 @@ export default function Flow() {
                   >
                     <Text style={{ fontSize: "22rpx", color: THEME.primary, fontWeight: 600 }}>{i + 1}</Text>
                   </View>
-                  <Text style={{ flex: 1, fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx" }}>{s.title}</Text>
+                  <Input
+                    style={{ flex: 1, fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx", minWidth: 0 }}
+                    value={s.title}
+                    onInput={(e) => updateSplitStep(i, e.detail.value)}
+                  />
                   {!!s.minutes && (
                     <View
                       style={{
@@ -4715,14 +4799,59 @@ export default function Flow() {
                       <Text style={{ fontSize: "20rpx", color: THEME.gold }}>约{s.minutes}分钟</Text>
                     </View>
                   )}
+                  <View
+                    onClick={() => removeSplitStep(i)}
+                    style={{
+                      width: "44rpx",
+                      height: "44rpx",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginLeft: "8rpx",
+                      flexShrink: 0
+                    }}
+                  >
+                    <Text style={{ color: "#e53935", fontSize: "34rpx", lineHeight: "34rpx" }}>×</Text>
+                  </View>
                 </View>
               ))}
+              <View
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  background: THEME.paper,
+                  border: `1rpx dashed ${THEME.border}`,
+                  borderRadius: "16rpx",
+                  padding: "10rpx 20rpx",
+                  marginBottom: "10rpx"
+                }}
+              >
+                <Input
+                  style={{ flex: 1, fontSize: "26rpx", color: THEME.ink, minWidth: 0 }}
+                  placeholder="添加一步"
+                  placeholderStyle={{ color: THEME.inkQuaternary }}
+                  value={splitNewStepText}
+                  onInput={(e) => setSplitNewStepText(e.detail.value)}
+                />
+                <View
+                  onClick={addSplitStep}
+                  style={{
+                    padding: "8rpx 20rpx",
+                    borderRadius: "100rpx",
+                    background: THEME.primaryMist,
+                    marginLeft: "14rpx",
+                    flexShrink: 0
+                  }}
+                >
+                  <Text style={{ fontSize: "22rpx", color: THEME.primary }}>＋ 添加</Text>
+                </View>
+              </View>
             </ScrollView>
           )}
 
           {!splitSheet.busy && !!splitSheet.confirmed && (
             <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "10rpx" }}>
-              内容由 AI 拆解，确认后将作为子约定挂在这件约定下，可以一件一件完成
+              可修改或增删每一步，确认后将按你确认的版本作为子约定创建
             </Text>
           )}
 
@@ -4741,12 +4870,21 @@ export default function Flow() {
               <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>再想想</Text>
             </View>
             <View
-              onClick={splitSheet.busy ? undefined : splitSheet.confirmed ? confirmSplit : confirmSplitTask}
+              onClick={
+                splitSheet.busy || (splitSheet.confirmed && validSplitCount === 0)
+                  ? undefined
+                  : splitSheet.confirmed
+                    ? confirmSplit
+                    : confirmSplitTask
+              }
               style={{
                 width: "66%",
                 padding: "18rpx 0",
                 borderRadius: "14rpx",
-                background: splitSheet.busy || splitSheet.creating ? THEME.primaryFaint : THEME.primary,
+                background:
+                  splitSheet.busy || splitSheet.creating || (splitSheet.confirmed && validSplitCount === 0)
+                    ? THEME.primaryFaint
+                    : THEME.primary,
                 alignItems: "center"
               }}
             >
@@ -4756,7 +4894,9 @@ export default function Flow() {
                   : splitSheet.busy
                     ? "拆解中…"
                     : splitSheet.confirmed
-                      ? `确认拆成 ${splitSheet.steps.length} 件`
+                      ? validSplitCount > 0
+                        ? `确认拆成 ${validSplitCount} 件`
+                        : "请至少保留一步"
                       : "就拆这件"}
               </Text>
             </View>
@@ -4805,10 +4945,14 @@ export default function Flow() {
                   : reviewExec.execution_status === "completed"
                     ? "守护执行 · 已完成"
                     : reviewExec.execution_status === "failed"
-                      ? "守护执行 · 未成功"
-                      : reviewExec.execution_status === "cancelled"
-                        ? "守护执行 · 已取消"
-                        : "守护执行 · 正在进行"}
+                      ? "守护执行 · 未成功，可以再试一次"
+                      : reviewExec.execution_status === "pending"
+                        ? "守护执行 · 排队中"
+                        : reviewExec.execution_status === "cancelled"
+                          ? "守护执行 · 已取消"
+                          : reviewExec.execution_status === "parked"
+                            ? "守护执行 · 已缓缓放下"
+                            : "守护执行 · 正在进行"}
             </Text>
             {reviewExec.execution_status === "failed" && reviewExec.error_message ? (
               <View
@@ -4941,7 +5085,53 @@ export default function Flow() {
                   </View>
                 </>
               )}
-              {!["waiting_acceptance", "waiting_confirm"].includes(reviewExec.execution_status) && (
+              {reviewExec.execution_status === "failed" && (
+                <View
+                  onClick={() => !execActingId && retryExec(reviewExec)}
+                  style={{
+                    flex: 1,
+                    padding: "20rpx 0",
+                    borderRadius: "12rpx",
+                    background: THEME.primary,
+                    textAlign: "center",
+                    opacity: execActingId ? 0.5 : 1
+                  }}
+                >
+                  <Text style={{ fontSize: "27rpx", color: "#fff" }}>再试一次</Text>
+                </View>
+              )}
+              {reviewExec.execution_status === "pending" && (
+                <>
+                  <View
+                    onClick={() => !execActingId && bumpExec(reviewExec)}
+                    style={{
+                      flex: 2,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.primary,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: "#fff" }}>优先执行</Text>
+                  </View>
+                  <View
+                    onClick={() => !execActingId && parkExec(reviewExec)}
+                    style={{
+                      flex: 1,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.paper,
+                      border: `1rpx solid ${THEME.border}`,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: THEME.inkTertiary }}>缓缓放下</Text>
+                  </View>
+                </>
+              )}
+              {!["waiting_acceptance", "waiting_confirm", "failed", "pending"].includes(reviewExec.execution_status) && (
                 <View
                   onClick={closeReviewModal}
                   style={{

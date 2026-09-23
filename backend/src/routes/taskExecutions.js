@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { runAutoPhases } from "../services/autoAutomation.js";
 
 export const taskExecutionsRouter = Router();
 
@@ -125,6 +126,41 @@ taskExecutionsRouter.post("/", async (req, res) => {
   });
 
   return res.status(201).json(serializeTaskExecution(execution));
+});
+
+taskExecutionsRouter.post("/:id/retry", async (req, res) => {
+  const existing = await prisma.taskExecution.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    }
+  });
+
+  if (!existing) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "执行记录不存在" });
+  }
+
+  // 仅失败/排队中/已取消/已放下的执行单允许重新发起
+  const retryable = ["failed", "pending", "cancelled", "parked"];
+  if (!retryable.includes(existing.executionStatus)) {
+    return res.status(400).json({ error: "INVALID_STATE", message: "当前状态不支持重新执行" });
+  }
+
+  const execution = await prisma.taskExecution.update({
+    where: { id: existing.id },
+    data: {
+      executionStatus: "pending",
+      errorMessage: null,
+      completedAt: null
+    }
+  });
+
+  // 异步重跑 plan → execute，不阻塞请求
+  runAutoPhases(execution.id, req.user.id, prisma).catch((err) => {
+    console.error(`[taskExecutions] retry 执行失败 execution=${execution.id}:`, err?.message || err);
+  });
+
+  return res.json(serializeTaskExecution(execution));
 });
 
 taskExecutionsRouter.patch("/:id", async (req, res) => {

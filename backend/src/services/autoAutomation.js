@@ -90,7 +90,7 @@ export async function maybeAutoExecute(task, userId, prisma) {
   }
 }
 
-async function runAutoPhases(executionId, userId, prisma) {
+export async function runAutoPhases(executionId, userId, prisma) {
   const planResult = await executeAutomation({ executionId, phase: "plan", userId, prisma });
   // 副作用型（会真实创建日程）不继续执行，停在待确认由用户手动发起
   if (planResult?.data?.automation_type === "calendar_event") return;

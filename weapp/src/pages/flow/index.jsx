@@ -5,7 +5,6 @@ import { get, post, patch } from "@/utils/api";
 import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
-import VoiceInput from "@/components/VoiceInput";
 import RichText from "@/components/RichText";
 
 const THEME = {
@@ -1254,6 +1253,23 @@ const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRe
             boxShadow: "0 2rpx 8rpx rgba(0,0,0,0.04)"
           }}
         >
+          <View
+            onClick={() => callbacksRef.current?.onAttach?.()}
+            style={{
+              width: "56rpx",
+              height: "56rpx",
+              borderRadius: "50%",
+              background: THEME.primaryMist,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              marginRight: "12rpx",
+              marginLeft: "2rpx"
+            }}
+          >
+            <Text style={{ fontSize: "40rpx", color: THEME.primary, lineHeight: "48rpx" }}>＋</Text>
+          </View>
           {inputEl}
           <View
             onClick={submit}
@@ -1271,19 +1287,6 @@ const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRe
           >
             <Text style={{ fontSize: "32rpx", color: "#fff" }}>➤</Text>
           </View>
-        </View>
-        <View style={{ display: "flex", justifyContent: "space-around", marginTop: "12rpx" }}>
-          {[
-            { key: "heart", icon: "♡", label: "心签", color: THEME.heartDeep },
-            { key: "voice", icon: "🎤", label: "语音", color: THEME.inkQuaternary },
-            { key: "photo", icon: "📷", label: "拍照", color: THEME.inkQuaternary },
-            { key: "task", icon: "📋", label: "约定", color: THEME.inkQuaternary }
-          ].map((q) => (
-            <View key={q.key} onClick={() => callbacksRef.current?.onQuickAction?.(q.key)} style={{ display: "flex", alignItems: "center", padding: "8rpx 12rpx" }}>
-              <Text style={{ fontSize: "28rpx", color: q.color, marginRight: "8rpx" }}>{q.icon}</Text>
-              <Text style={{ fontSize: "24rpx", color: q.color }}>{q.label}</Text>
-            </View>
-          ))}
         </View>
       </View>
     </View>
@@ -1304,12 +1307,11 @@ export default function Flow() {
   const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
-  const [inputPlaceholder, setInputPlaceholder] = useState("此刻想记下什么？");
+  const [inputPlaceholder, setInputPlaceholder] = useState("此刻想记下什么？直接输入或长按语音");
   const [imageDraft, setImageDraft] = useState(null); // { imageUrl, extractedText, contentType, suggestion }
   const [imageDraftBusy, setImageDraftBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const composerCallbacksRef = useRef({}); // 底部输入栏回调的最新引用，供 memo 后的 FlowComposer 读取
-  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showAllDue, setShowAllDue] = useState(false);
   const [showCompletedDue, setShowCompletedDue] = useState(false);
   const [splitSheet, setSplitSheet] = useState(null); // { task, steps, busy, creating } AI 拆小事弹层
@@ -2246,7 +2248,7 @@ export default function Flow() {
     const text = String(explicitText || "").trim();
     if (!text || analyzing) return;
     setInputPlaceholder("已收下，晚些时候一起看看");
-    setTimeout(() => setInputPlaceholder("此刻想记下什么？"), 2500);
+    setTimeout(() => setInputPlaceholder("此刻想记下什么？直接输入或长按语音"), 2500);
     if (extractUrl(text)) {
       await saveLink(text);
     } else if (
@@ -2259,71 +2261,105 @@ export default function Flow() {
     }
   };
 
-  const handleVoiceResult = (text) => {
-    setShowVoiceModal(false);
-    if (!text.trim()) return;
-    // 识别结果填入输入框（可手动修改），不自动发送
-    composerCallbacksRef.current?.fillText?.(text);
-    Taro.showToast({ title: "已填入输入框，可修改后再发送", icon: "none" });
+  // 上传文件到服务端，返回 file_url
+  const uploadFileToServer = async (filePath) => {
+    const token = getToken();
+    const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+    const apiBase = rawApi.replace(/\/$/, "");
+    const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
+    const uploadRes = await Taro.uploadFile({
+      url: uploadUrl,
+      filePath,
+      name: "file",
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: 60000
+    });
+    const data = JSON.parse(uploadRes.data || "{}");
+    if (!(uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url)) {
+      throw new Error(data?.message || "上传失败");
+    }
+    return data.file_url;
   };
 
-  const quickAction = (type) => {
+  // 拍照/相册图片：上传后走图片识别草稿
+  const pickAndAnalyzeImage = (sourceType) => {
+    Taro.chooseMedia({
+      count: 1,
+      mediaType: ["image"],
+      sourceType,
+      sizeType: ["compressed"],
+      success: async (res) => {
+        const file = res.tempFiles?.[0];
+        if (!file?.tempFilePath) return;
+        Taro.showLoading({ title: "上传中" });
+        try {
+          const fileUrl = await uploadFileToServer(file.tempFilePath);
+          Taro.showLoading({ title: "识别中" });
+          const draft = await post("/functions/analyzeImage", { file_url: fileUrl }, { silent: true, timeout: 120000 });
+          setImageDraft({
+            imageUrl: fileUrl,
+            extractedText: draft?.extracted_text || "",
+            contentType: ["task", "note", "heart", "ledger", "table"].includes(draft?.content_type) ? draft.content_type : "note",
+            suggestion: draft?.suggestion && typeof draft.suggestion === "object" ? draft.suggestion : {}
+          });
+        } catch (err) {
+          Taro.showToast({ title: err?.message || "识别失败，请手动输入", icon: "none" });
+        } finally {
+          Taro.hideLoading();
+        }
+      },
+      fail: () => Taro.showToast({ title: "选择图片失败", icon: "none" })
+    });
+  };
+
+  // 上传文件（微信聊天记录等）：存入记录并附文件链接
+  const pickAndSaveFile = () => {
+    Taro.chooseMessageFile({
+      count: 1,
+      type: "all",
+      success: async (res) => {
+        const file = res.tempFiles?.[0];
+        if (!file?.path) return;
+        Taro.showLoading({ title: "上传中" });
+        try {
+          const fileUrl = await uploadFileToServer(file.path);
+          const name = file.name || "未命名文件";
+          await post("/notes", {
+            title: `📎 ${name}`.slice(0, 60),
+            content: `📎 文件：${name}\n${fileUrl}`,
+            plain_text: `📎 ${name}`,
+            tags: ["文件"]
+          });
+          Taro.showToast({ title: "文件已存入记录", icon: "success" });
+          loadAll();
+        } catch (err) {
+          Taro.showToast({ title: err?.message || "上传失败", icon: "none" });
+        } finally {
+          Taro.hideLoading();
+        }
+      },
+      fail: () => {}
+    });
+  };
+
+  const handleAttach = () => {
     if (isGuest) {
       Taro.navigateTo({ url: "/pages/login/index" });
       return;
     }
-    if (type === "heart") {
-      Taro.navigateTo({ url: "/pages/note-create/index?tag=heart" });
-    } else if (type === "task") {
-      Taro.navigateTo({ url: "/pages/task-create/index" });
-    } else if (type === "voice") {
-      setShowVoiceModal(true);
-    } else if (type === "photo") {
-      Taro.chooseMedia({
-        count: 1,
-        mediaType: ["image"],
-        sourceType: ["album", "camera"],
-        sizeType: ["compressed"],
-        success: async (res) => {
-          const file = res.tempFiles?.[0];
-          if (!file?.tempFilePath) return;
-          Taro.showLoading({ title: "上传中" });
-          try {
-            const token = getToken();
-            const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
-            const apiBase = rawApi.replace(/\/$/, "");
-            const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
-            const uploadRes = await Taro.uploadFile({
-              url: uploadUrl,
-              filePath: file.tempFilePath,
-              name: "file",
-              header: token ? { Authorization: `Bearer ${token}` } : {},
-              timeout: 60000
-            });
-            const data = JSON.parse(uploadRes.data || "{}");
-            if (!(uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url)) {
-              throw new Error(data?.message || "上传失败");
-            }
-            Taro.showLoading({ title: "识别中" });
-            const draft = await post("/functions/analyzeImage", { file_url: data.file_url }, { silent: true, timeout: 120000 });
-            setImageDraft({
-              imageUrl: data.file_url,
-              extractedText: draft?.extracted_text || "",
-              contentType: ["task", "note", "heart", "ledger", "table"].includes(draft?.content_type) ? draft.content_type : "note",
-              suggestion: draft?.suggestion && typeof draft.suggestion === "object" ? draft.suggestion : {}
-            });
-          } catch (err) {
-            Taro.showToast({ title: err?.message || "识别失败，请手动输入", icon: "none" });
-          } finally {
-            Taro.hideLoading();
-          }
-        },
-        fail: () => Taro.showToast({ title: "选择图片失败", icon: "none" })
-      });
-    }
+    Taro.showActionSheet({
+      itemList: ["拍照", "上传照片", "上传文件"],
+      success: (res) => {
+        if (res.tapIndex === 0) pickAndAnalyzeImage(["camera"]);
+        else if (res.tapIndex === 1) pickAndAnalyzeImage(["album"]);
+        else pickAndSaveFile();
+      },
+      fail: () => {}
+    });
   };
   // 每次页面渲染刷新回调引用，供 memo 化的 FlowComposer 通过 ref 读取最新实现
-  composerCallbacksRef.current = { onSend: handleSend, onQuickAction: quickAction };
+  // 注意合并而非整体替换，保留 FlowComposer 注册进来的 fillText 等回调
+  composerCallbacksRef.current = { ...composerCallbacksRef.current, onSend: handleSend, onAttach: handleAttach };
 
   const renderGuestBanner = () => {
     if (!isGuest) return null;
@@ -3979,52 +4015,6 @@ export default function Flow() {
         callbacksRef={composerCallbacksRef}
       />
 
-      {showVoiceModal && (
-        <View
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            zIndex: 200,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center"
-          }}
-          onClick={() => setShowVoiceModal(false)}
-        >
-          <View
-            style={{
-              width: "620rpx",
-              background: THEME.card,
-              borderRadius: "32rpx",
-              padding: "48rpx",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center"
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "12rpx" }}>语音输入</Text>
-            <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, marginBottom: "36rpx", textAlign: "center" }}>
-              按住下方按钮说话，说完后松开即可
-            </Text>
-            <VoiceInput
-              onResult={handleVoiceResult}
-              onError={(err) => Taro.showToast({ title: err, icon: "none" })}
-              size={120}
-            />
-            <View
-              onClick={() => setShowVoiceModal(false)}
-              style={{ marginTop: "40rpx", padding: "16rpx 48rpx", borderRadius: "12rpx", background: THEME.paper }}
-            >
-              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>取消</Text>
-            </View>
-          </View>
-        </View>
-      )}
 
 
       {imageDraft && (() => {

@@ -34,13 +34,22 @@ function trimBody(s) {
 }
 
 // 暖色兜底：同样基于约定内容、不催促，保证 AI 不可用时体验也不掉线
+function weatherSentence(weather) {
+  if (!weather) return "";
+  if (weather.advice) return `${weather.advice}。`;
+  if (weather.is_raining) return "外面在下雨，出门记得带伞，慢慢来。";
+  if (weather.is_snowing) return "外面在下雪，路有点滑，不着急。";
+  return "";
+}
+
 function warmFallback(task, kind, context) {
   const title = String(task?.title || "这件事").trim();
   const short = title.length > 12 ? `${title.slice(0, 12)}…` : title;
+  const weather = weatherSentence(context?.weather);
   if (kind === "follow_up") {
     return {
       title: `「${short}」的预计时间到了`,
-      body: `它进行得怎么样啦？如果这会儿不太方便，把它移到更合适的时候也完全没关系。`
+      body: `它进行得怎么样啦？如果这会儿不太方便，把它移到更合适的时候也完全没关系。${weather}`
     };
   }
   if (kind === "forget") {
@@ -53,7 +62,7 @@ function warmFallback(task, kind, context) {
   const desc = task?.description ? String(task.description).trim().slice(0, 36) : "";
   return {
     title: `「${short}」的时间到了`,
-    body: `${desc ? `你之前记下的${title}：${desc}。` : `${title}。`}不急，喝口水，按你自己的节奏来，我在这里陪你。`
+    body: `${desc ? `你之前记下的${title}：${desc}。` : `${title}。`}不急，喝口水，按你自己的节奏来，我在这里陪你。${weather}`
   };
 }
 
@@ -67,7 +76,10 @@ export async function buildReminderCopy({ task, kind, context = {} }) {
     const contextLines = [
       context.days ? `这条约定已经被搁置约 ${context.days} 天。` : "",
       context.location ? `相关地点：${context.location}` : "",
-      context.timeText ? `提醒触发时间：${context.timeText}` : ""
+      context.timeText ? `提醒触发时间：${context.timeText}` : "",
+      context.weather
+        ? `当前天气：${context.weather.text}${context.weather.advice ? `；与这条约定相关的天气建议：${context.weather.advice}` : ""}`
+        : ""
     ].filter(Boolean).join("\n");
 
     generated = await Promise.race([
@@ -84,8 +96,9 @@ ${contextLines}
 2. 口吻像一个了解TA、关心TA的朋友：温柔、从容、有温度；可以点一下这件事对TA的意义，或把下一步说得小而轻，给一点开始的动力。
 3. 绝对不要催促、不要制造焦虑：不要用"必须、赶紧、马上、已经逾期、超时、再不……就……、你还没有"这类压迫性表达，不罗列后果。
 4. 允许用户按自己的节奏来，可以轻轻带一句"不方便的话可以换个时间"，让TA感到被支持，而不是被监督。
-5. title 不超过 16 字，像一句轻轻的话，不要写成"约定提醒："这种标签；body 不超过 60 字，一到两句自然口语。
-6. 直接返回 JSON 对象，不要输出 markdown 或解释。`,
+5. 如果提供了天气且与这条约定相关（例如户外事项遇雨、高温），用一句话把温柔的提示或替代建议自然织进文案；与天气无关就不要硬提。
+6. title 不超过 16 字，像一句轻轻的话，不要写成"约定提醒："这种标签；body 不超过 60 字，一到两句自然口语。
+7. 直接返回 JSON 对象，不要输出 markdown 或解释。`,
         systemPrompt: "你是 SoulSentry 的温柔提醒写手。你写的提醒让人被轻轻唤起，而不是被推动。严格返回 JSON。",
         responseJsonSchema: {
           type: "object",

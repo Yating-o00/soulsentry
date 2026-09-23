@@ -1321,6 +1321,7 @@ export default function Flow() {
   const [splitNewStepText, setSplitNewStepText] = useState(""); // 拆小结果「添加一步」输入
   const [selectedDueDate, setSelectedDueDate] = useState(toChinaYmd(new Date()));
   const [briefing, setBriefing] = useState(null);
+  const [weather, setWeather] = useState(null); // 看板天气小标注 { current, today, notice, task_advice }
   const [refreshing, setRefreshing] = useState(false);
   const [focusTask, setFocusTask] = useState(null);
   const [focusSeconds, setFocusSeconds] = useState(0);
@@ -1496,16 +1497,31 @@ export default function Flow() {
     if (execPollRef.current) clearInterval(execPollRef.current);
   }, []);
 
+  const loadWeather = async () => {
+    try {
+      const coords = await getLocationSafe();
+      const params = coords && typeof coords.latitude === "number"
+        ? { lat: coords.latitude, lon: coords.longitude }
+        : {};
+      const res = await get("/weather", params, { silent: true });
+      if (res && res.ok) return res;
+      return null;
+    } catch (_err) {
+      return null;
+    }
+  };
+
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [tasksRes, notesRes, execRes, sentinelRes, assocRes, briefingRes] = await Promise.allSettled([
+      const [tasksRes, notesRes, execRes, sentinelRes, assocRes, briefingRes, weatherRes] = await Promise.allSettled([
         get("/tasks", { parent_task_id: "", limit: 200 }, { silent: true }),
         get("/notes", { limit: 100 }, { silent: true }),
         get("/task-executions", { limit: 20 }, { silent: true }),
         loadSentinel(),
         loadAssoc(),
-        post("/functions/generateDailyBriefing", {}, { silent: true })
+        post("/functions/generateDailyBriefing", {}, { silent: true }),
+        loadWeather()
       ]);
       const taskList = tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value) ? tasksRes.value : [];
       const noteList = notesRes.status === "fulfilled" && Array.isArray(notesRes.value) ? notesRes.value : [];
@@ -1513,12 +1529,14 @@ export default function Flow() {
       const sentinelData = sentinelRes.status === "fulfilled" ? sentinelRes.value : null;
       const assocData = assocRes.status === "fulfilled" ? assocRes.value : null;
       const briefingData = briefingRes.status === "fulfilled" && briefingRes.value ? briefingRes.value : null;
+      const weatherData = weatherRes.status === "fulfilled" && weatherRes.value ? weatherRes.value : null;
       setTasks(taskList);
       setNotes(noteList);
       setExecutions(execList);
       setSentinel(sentinelData);
       setAssoc(assocData);
       setBriefing(briefingData);
+      setWeather(weatherData);
     } catch (_err) {
       // ignore
     } finally {
@@ -2587,7 +2605,25 @@ export default function Flow() {
             overflow: "hidden"
           }}
         >
-          <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)", letterSpacing: "2rpx" }}>今天的河流</Text>
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)", letterSpacing: "2rpx" }}>今天的河流</Text>
+            {weather?.current && (
+              <View
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "4rpx 14rpx",
+                  borderRadius: "999rpx",
+                  background: "rgba(255,255,255,0.12)"
+                }}
+              >
+                <Text style={{ fontSize: "20rpx", marginRight: "8rpx" }}>{weather.current.icon}</Text>
+                <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.75)" }}>
+                  {weather.current.text} {weather.current.temp}°
+                </Text>
+              </View>
+            )}
+          </View>
           <Text
             style={{
               fontSize: "34rpx",
@@ -2611,6 +2647,45 @@ export default function Flow() {
           >
             {sub}
           </Text>
+
+          {(weather?.task_advice?.length > 0 || weather?.notice) && (
+            <View
+              style={{
+                marginTop: "14rpx",
+                padding: "12rpx 18rpx",
+                borderRadius: "12rpx",
+                background: "rgba(255,255,255,0.07)"
+              }}
+            >
+              {weather?.task_advice?.slice(0, 2).map((ta) => (
+                <Text
+                  key={ta.task_id}
+                  style={{
+                    fontSize: "22rpx",
+                    color: "rgba(255,255,255,0.7)",
+                    lineHeight: "36rpx",
+                    wordBreak: "break-all",
+                    display: "block"
+                  }}
+                >
+                  {ta.advice}
+                </Text>
+              ))}
+              {weather?.notice && (
+                <Text
+                  style={{
+                    fontSize: "22rpx",
+                    color: "rgba(255,255,255,0.6)",
+                    lineHeight: "36rpx",
+                    wordBreak: "break-all",
+                    display: "block"
+                  }}
+                >
+                  {weather.notice}
+                </Text>
+              )}
+            </View>
+          )}
 
           <View style={{ marginTop: "24rpx", height: "200rpx" }}>
             <RiverCanvas points={points} deep={deep} heartNotes={heartNotes} />

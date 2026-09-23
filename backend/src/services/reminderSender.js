@@ -3,6 +3,22 @@ import { sendPushNotification, isWebPushConfigured } from "../lib/webPush.js";
 import { sendWechatSubscribeMessage } from "../lib/wechatSubscribeMessage.js";
 import { computeNextReminderTime } from "../lib/recurrence.js";
 import { buildReminderCopy } from "./reminderCopy.js";
+import { getWeatherForCoords, weatherContextForReminder } from "./weatherService.js";
+
+// 提醒场景的天气上下文：用用户最近上报的位置（看板请求 /api/weather 时持久化），
+// 天气数据有 30 分钟进程内缓存，cron 每分钟跑也不会重复打外部接口
+async function getWeatherContextForUser(preferences, task) {
+  const loc = preferences?.metadata?.last_location;
+  const lat = Number(loc?.latitude);
+  const lon = Number(loc?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  try {
+    const weather = await getWeatherForCoords(lat, lon);
+    return weatherContextForReminder(weather, task);
+  } catch (_err) {
+    return null;
+  }
+}
 
 function getUserExtraFields(preferences) {
   if (!preferences?.metadata || typeof preferences.metadata !== "object") return {};
@@ -162,12 +178,14 @@ export async function sendDueReminders() {
   for (const task of dueTasks) {
     const extraFields = getTaskExtraFields(task);
     const st = extraFields.spatiotemporal;
+    const weather = await getWeatherContextForUser(task.user?.preferences, task);
     const copy = await buildReminderCopy({
       task,
       kind: "reminder",
       context: {
         location: st?.current_place_name || null,
-        timeText: task.reminderTime ? new Date(task.reminderTime).toLocaleString("zh-CN", { hour12: false }) : null
+        timeText: task.reminderTime ? new Date(task.reminderTime).toLocaleString("zh-CN", { hour12: false }) : null,
+        weather
       }
     });
 

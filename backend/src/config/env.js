@@ -47,6 +47,10 @@ const envSchema = z.object({
   KIMI_API_KEY: z.string().optional(),
   MOONSHOT_API_KEY: z.string().optional(),
 
+  // 天气兜底城市（可选；用户未授权定位且没有历史位置时使用）
+  WEATHER_DEFAULT_LAT: z.coerce.number().optional(),
+  WEATHER_DEFAULT_LON: z.coerce.number().optional(),
+
   // 阿里云短信（可选，未配置时短信登录/注册走 mock）
   // 兼容多种命名：生产 env 中使用的 SMS_* / ALIYUN_SMS_* / ALIYUN_*
   SMS_PROVIDER: z.string().optional(),

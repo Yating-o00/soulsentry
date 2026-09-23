@@ -33,6 +33,7 @@ import { taskCompletionsRouter } from "./routes/taskCompletions.js";
 import { taskChangeLogsRouter } from "./routes/taskChangeLogs.js";
 import { uploadsRouter } from "./routes/uploads.js";
 import { functionsRouter } from "./routes/functions.js";
+import { weatherRouter } from "./routes/weather.js";
 import { handleWechatNotify } from "./routes/wechatNotify.js";
 
 export const app = express();
@@ -91,6 +92,7 @@ app.use("/api/task-completions", taskCompletionsRouter);
 app.use("/api/task-change-logs", taskChangeLogsRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/functions", functionsRouter);
+app.use("/api/weather", weatherRouter);
 
 // 上传的图片会被小程序/网页跨域嵌入展示：helmet 默认 CORP same-origin 会挡住 <Image> 加载，
 // 对 /uploads 静态资源显式放宽为 cross-origin

@@ -1298,8 +1298,9 @@ export default function Flow() {
   const [notes, setNotes] = useState([]);
   const [executions, setExecutions] = useState([]);
   const [execActingId, setExecActingId] = useState(null);
-  const [reviewExec, setReviewExec] = useState(null); // 守护记录「查看并确认」弹层
+  const [reviewExec, setReviewExec] = useState(null); // 守护记录「环节查看/确认」弹层
   const [showExecHistory, setShowExecHistory] = useState(false); // 守护记录-历史记录折叠
+  const [showActiveMore, setShowActiveMore] = useState(false); // 守护记录-其余进行中折叠
   const execPollRef = useRef(null);
   const execPollTicksRef = useRef(0);
   const [sentinel, setSentinel] = useState(null);
@@ -1754,6 +1755,22 @@ export default function Flow() {
     } catch (_err) {
       Taro.showToast({ title: "批准失败，请检查网络", icon: "none" });
       loadAll();
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  // 取消这次执行（仅「待批准」环节可干预；执行中由运行器推进，不中途打断以免状态错乱）
+  const cancelExec = async (e) => {
+    if (execActingId || !e?.id) return;
+    setExecActingId(`cancel-${e.id}`);
+    try {
+      await patch(`/task-executions/${e.id}`, { execution_status: "cancelled" });
+      Taro.showToast({ title: "已取消这次执行", icon: "success" });
+      setReviewExec(null);
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "取消失败，请检查网络", icon: "none" });
     } finally {
       setExecActingId(null);
     }
@@ -3831,7 +3848,7 @@ export default function Flow() {
 
     // 状态标签：柔和的 tinted pill，与产品暖色调一致
     const STATUS_META = {
-      waiting_acceptance: { label: "待确认", color: "#a8875a", bg: "#f6efe3" },
+      waiting_acceptance: { label: "待验收", color: "#a8875a", bg: "#f6efe3" },
       waiting_confirm: { label: "待批准", color: THEME.heartDeep, bg: THEME.heartBg },
       running: { label: "执行中", color: THEME.primary, bg: THEME.primaryMist },
       executing: { label: "执行中", color: THEME.primary, bg: THEME.primaryMist },
@@ -3839,7 +3856,8 @@ export default function Flow() {
       parsing: { label: "解析中", color: THEME.primary, bg: THEME.primaryMist },
       plan: { label: "已计划", color: THEME.primary, bg: THEME.primaryMist },
       completed: { label: "已完成", color: "#7a9a7e", bg: "#eaf4ea" },
-      failed: { label: "未成功", color: "#c0564f", bg: "#f9eaea" }
+      failed: { label: "未成功", color: "#c0564f", bg: "#f9eaea" },
+      cancelled: { label: "已取消", color: THEME.inkQuaternary, bg: "#f2f3f5" }
     };
 
     const EXEC_TYPE_ICON = {
@@ -3875,28 +3893,41 @@ export default function Flow() {
       return String(t || "").replace(/\s+/g, " ").trim().slice(0, 48);
     };
 
+    // 每个环节的查看入口：未完成可逐环节查看并干预，已完成可点开回顾
+    const openExec = (e) => setReviewExec(e);
+    const actionLabel = (status) =>
+      status === "waiting_acceptance"
+        ? "查看并确认"
+        : status === "waiting_confirm"
+          ? "查看计划"
+          : ["executing", "pending", "parsing", "running", "plan"].includes(status)
+            ? "查看进度"
+            : "查看";
+
     const acting = execActingId != null;
 
-    // 只直接展示最近 4 条执行记录（按更新时间倒序），多余的收进折叠区
+    // 按时间倒序；未完成的留在主列表，已完成/已取消的进入历史折叠
     const sortedRecords = [...guardianRecords].sort(
       (a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date)
     );
-    const recentRecords = sortedRecords.slice(0, 4);
-    const foldedRecords = sortedRecords.slice(4);
-    const activeCount = guardianRecords.filter((e) => e.execution_status !== "completed").length;
+    const isActiveRecord = (e) => e.execution_status !== "completed" && e.execution_status !== "cancelled";
+    const activeRecords = sortedRecords.filter(isActiveRecord);
+    const historyRecords = sortedRecords.filter((e) => !isActiveRecord(e));
+    const recentActive = activeRecords.slice(0, 4);
+    const foldedActive = activeRecords.slice(4);
 
     const cardShell = { background: THEME.card, borderRadius: "24rpx", border: `1rpx solid ${THEME.border}`, boxShadow: "0 2rpx 14rpx rgba(30,42,64,0.04)" };
 
-    const recordRow = (e, isHistory) => {
+    const recordRow = (e) => {
       const meta = STATUS_META[e.execution_status] || STATUS_META.running;
       const what = execWhatLine(e);
-      const action = e.execution_status === "waiting_acceptance"
-        ? { label: "查看并确认", onClick: () => setReviewExec(e) }
-        : e.execution_status === "waiting_confirm"
-          ? { label: "批准执行", onClick: () => approveExec(e) }
-          : null;
+      const isDoneRecord = !isActiveRecord(e);
       return (
-        <View key={e.id} style={{ display: "flex", alignItems: "center", padding: "20rpx 0", opacity: isHistory ? 0.62 : 1 }}>
+        <View
+          key={e.id}
+          onClick={() => openExec(e)}
+          style={{ display: "flex", alignItems: "center", padding: "20rpx 0", opacity: isDoneRecord ? 0.62 : 1 }}
+        >
           <View
             style={{
               width: "68rpx",
@@ -3913,7 +3944,7 @@ export default function Flow() {
             <Text style={{ fontSize: "32rpx" }}>{EXEC_TYPE_ICON[e.automation_type] || "🤖"}</Text>
           </View>
           <View style={{ flex: 1, marginRight: "20rpx", minWidth: 0 }}>
-            <Text style={{ fontSize: "27rpx", fontWeight: 500, color: isHistory ? THEME.inkTertiary : THEME.ink, lineHeight: "40rpx" }} numberOfLines={1}>
+            <Text style={{ fontSize: "27rpx", fontWeight: 500, color: isDoneRecord ? THEME.inkTertiary : THEME.ink, lineHeight: "40rpx" }} numberOfLines={1}>
               {e.task_title}
             </Text>
             <Text style={{ fontSize: "21rpx", color: THEME.inkQuaternary, marginTop: "2rpx" }} numberOfLines={1}>
@@ -3926,20 +3957,17 @@ export default function Flow() {
             <View style={{ padding: "3rpx 14rpx", borderRadius: "100rpx", background: meta.bg }}>
               <Text style={{ fontSize: "19rpx", color: meta.color }}>{meta.label}</Text>
             </View>
-            {action && (
-              <View
-                onClick={action.onClick}
-                style={{
-                  marginTop: "10rpx",
-                  padding: "7rpx 20rpx",
-                  borderRadius: "100rpx",
-                  border: `1rpx solid ${THEME.primary}`,
-                  opacity: acting ? 0.5 : 1
-                }}
-              >
-                <Text style={{ fontSize: "22rpx", color: THEME.primary }}>{action.label}</Text>
-              </View>
-            )}
+            <View
+              style={{
+                marginTop: "10rpx",
+                padding: "7rpx 20rpx",
+                borderRadius: "100rpx",
+                border: `1rpx solid ${THEME.primary}`,
+                opacity: acting ? 0.5 : 1
+              }}
+            >
+              <Text style={{ fontSize: "22rpx", color: THEME.primary }}>{actionLabel(e.execution_status)}</Text>
+            </View>
           </View>
         </View>
       );
@@ -3952,34 +3980,51 @@ export default function Flow() {
             <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
             <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>守护记录</Text>
           </View>
-          {activeCount > 0 && (
+          {activeRecords.length > 0 && (
             <View style={{ display: "flex", alignItems: "center" }}>
               <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: THEME.water, marginRight: "8rpx" }} />
-              <Text style={{ fontSize: "22rpx", color: THEME.water }}>守护中 · {activeCount}</Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.water }}>守护中 · {activeRecords.length}</Text>
             </View>
           )}
         </View>
 
-        {recentRecords.length > 0 && (
+        {recentActive.length > 0 && (
           <View style={{ ...cardShell, padding: "4rpx 24rpx" }}>
-            {recentRecords.map((e) => recordRow(e, e.execution_status === "completed"))}
+            {recentActive.map((e) => recordRow(e))}
           </View>
         )}
 
-        {foldedRecords.length > 0 && (
+        {foldedActive.length > 0 && (
+          <View
+            onClick={() => setShowActiveMore((v) => !v)}
+            style={{ alignSelf: "center", marginTop: "18rpx", padding: "10rpx 30rpx", borderRadius: "100rpx", background: THEME.card, border: `1rpx solid ${THEME.border}` }}
+          >
+            <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>
+              {showActiveMore ? "收起 ⌃" : `其余进行中 ${foldedActive.length} 条 ⌄`}
+            </Text>
+          </View>
+        )}
+
+        {showActiveMore && foldedActive.length > 0 && (
+          <View style={{ ...cardShell, marginTop: "14rpx", padding: "4rpx 24rpx" }}>
+            {foldedActive.map((e) => recordRow(e))}
+          </View>
+        )}
+
+        {historyRecords.length > 0 && (
           <View
             onClick={() => setShowExecHistory((v) => !v)}
             style={{ alignSelf: "center", marginTop: "18rpx", padding: "10rpx 30rpx", borderRadius: "100rpx", background: THEME.card, border: `1rpx solid ${THEME.border}` }}
           >
             <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>
-              {showExecHistory ? "收起 ⌃" : `展开其余 ${foldedRecords.length} 条 ⌄`}
+              {showExecHistory ? "收起 ⌃" : `历史记录 ${historyRecords.length} 条 ⌄`}
             </Text>
           </View>
         )}
 
-        {showExecHistory && foldedRecords.length > 0 && (
+        {showExecHistory && historyRecords.length > 0 && (
           <View style={{ ...cardShell, marginTop: "14rpx", padding: "4rpx 24rpx" }}>
-            {foldedRecords.map((e) => recordRow(e, e.execution_status === "completed"))}
+            {historyRecords.map((e) => recordRow(e))}
           </View>
         )}
 
@@ -4718,8 +4763,33 @@ export default function Flow() {
               {reviewExec.task_title}
             </Text>
             <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginTop: "8rpx", marginBottom: "24rpx" }}>
-              守护执行 · 已完成，等你验收
+              {reviewExec.execution_status === "waiting_acceptance"
+                ? "守护执行 · 已完成，等你验收"
+                : reviewExec.execution_status === "waiting_confirm"
+                  ? "守护执行 · 已有计划，等你批准"
+                  : reviewExec.execution_status === "completed"
+                    ? "守护执行 · 已完成"
+                    : reviewExec.execution_status === "failed"
+                      ? "守护执行 · 未成功"
+                      : reviewExec.execution_status === "cancelled"
+                        ? "守护执行 · 已取消"
+                        : "守护执行 · 正在进行"}
             </Text>
+            {reviewExec.execution_status === "failed" && reviewExec.error_message ? (
+              <View
+                style={{
+                  borderLeft: "4rpx solid #c0564f",
+                  background: "rgba(192,86,79,0.06)",
+                  padding: "14rpx 20rpx",
+                  borderRadius: "0 10rpx 10rpx 0",
+                  marginBottom: "20rpx"
+                }}
+              >
+                <Text style={{ fontSize: "24rpx", color: "#c0564f", lineHeight: "40rpx" }}>
+                  {String(reviewExec.error_message).slice(0, 120)}
+                </Text>
+              </View>
+            ) : null}
             <ScrollView scrollY style={{ maxHeight: "46vh" }} showScrollbar={false}>
               {typeof reviewExec.automation_result?.preview === "string" && reviewExec.automation_result.preview.trim() ? (
                 <View
@@ -4774,33 +4844,82 @@ export default function Flow() {
               )}
             </ScrollView>
             <View style={{ display: "flex", gap: "16rpx", marginTop: "28rpx" }}>
-              <View
-                onClick={() => !execActingId && acceptExec(reviewExec.id)}
-                style={{
-                  flex: 1,
-                  padding: "20rpx 0",
-                  borderRadius: "12rpx",
-                  background: THEME.primary,
-                  textAlign: "center",
-                  opacity: execActingId ? 0.5 : 1
-                }}
-              >
-                <Text style={{ fontSize: "27rpx", color: "#fff" }}>验收，没问题</Text>
-              </View>
-              <View
-                onClick={() => !execActingId && feedbackExec(reviewExec)}
-                style={{
-                  flex: 1,
-                  padding: "20rpx 0",
-                  borderRadius: "12rpx",
-                  background: THEME.paper,
-                  border: `1rpx solid ${THEME.border}`,
-                  textAlign: "center",
-                  opacity: execActingId ? 0.5 : 1
-                }}
-              >
-                <Text style={{ fontSize: "27rpx", color: THEME.inkTertiary }}>有问题</Text>
-              </View>
+              {reviewExec.execution_status === "waiting_acceptance" && (
+                <>
+                  <View
+                    onClick={() => !execActingId && acceptExec(reviewExec.id)}
+                    style={{
+                      flex: 1,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.primary,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: "#fff" }}>验收，没问题</Text>
+                  </View>
+                  <View
+                    onClick={() => !execActingId && feedbackExec(reviewExec)}
+                    style={{
+                      flex: 1,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.paper,
+                      border: `1rpx solid ${THEME.border}`,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: THEME.inkTertiary }}>有问题</Text>
+                  </View>
+                </>
+              )}
+              {reviewExec.execution_status === "waiting_confirm" && (
+                <>
+                  <View
+                    onClick={() => !execActingId && approveExec(reviewExec)}
+                    style={{
+                      flex: 2,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.primary,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: "#fff" }}>批准执行</Text>
+                  </View>
+                  <View
+                    onClick={() => !execActingId && cancelExec(reviewExec)}
+                    style={{
+                      flex: 1,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.paper,
+                      border: `1rpx solid ${THEME.border}`,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: THEME.inkTertiary }}>取消计划</Text>
+                  </View>
+                </>
+              )}
+              {!["waiting_acceptance", "waiting_confirm"].includes(reviewExec.execution_status) && (
+                <View
+                  onClick={() => setReviewExec(null)}
+                  style={{
+                    flex: 1,
+                    padding: "20rpx 0",
+                    borderRadius: "12rpx",
+                    background: THEME.primaryMist,
+                    textAlign: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "27rpx", color: THEME.primary }}>知道了</Text>
+                </View>
+              )}
             </View>
             <View onClick={() => setReviewExec(null)} style={{ marginTop: "20rpx", padding: "12rpx 0", textAlign: "center" }}>
               <Text style={{ fontSize: "26rpx", color: THEME.inkQuaternary }}>我再想想</Text>

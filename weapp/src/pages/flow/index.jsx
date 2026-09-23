@@ -3829,16 +3829,29 @@ export default function Flow() {
 
     if (guardianRecords.length === 0 && !delegatedTask) return null;
 
-    // 极简行式列表：无卡片无底纹，状态用彩色圆点，操作是行尾文字链接
-    const STATUS_COLOR = {
-      waiting_acceptance: "#a8875a",
-      waiting_confirm: THEME.heartDeep,
-      running: THEME.primary,
-      plan: THEME.primary,
-      failed: "#c0564f",
-      completed: THEME.inkQuaternary
+    // 状态标签：柔和的 tinted pill，与产品暖色调一致
+    const STATUS_META = {
+      waiting_acceptance: { label: "待确认", color: "#a8875a", bg: "#f6efe3" },
+      waiting_confirm: { label: "待批准", color: THEME.heartDeep, bg: THEME.heartBg },
+      running: { label: "执行中", color: THEME.primary, bg: THEME.primaryMist },
+      executing: { label: "执行中", color: THEME.primary, bg: THEME.primaryMist },
+      pending: { label: "排队中", color: THEME.primary, bg: THEME.primaryMist },
+      parsing: { label: "解析中", color: THEME.primary, bg: THEME.primaryMist },
+      plan: { label: "已计划", color: THEME.primary, bg: THEME.primaryMist },
+      completed: { label: "已完成", color: "#7a9a7e", bg: "#eaf4ea" },
+      failed: { label: "未成功", color: "#c0564f", bg: "#f9eaea" }
     };
 
+    const EXEC_TYPE_ICON = {
+      email_draft: "✉️",
+      web_research: "🌐",
+      ppt_doc: "📊",
+      office_doc: "📄",
+      summary_note: "📝",
+      ledger_organize: "📒",
+      file_organize: "🗂️",
+      calendar_event: "📅"
+    };
     const EXEC_TYPE_LABEL = {
       email_draft: "邮件草稿",
       web_research: "联网调研",
@@ -3856,22 +3869,11 @@ export default function Flow() {
       const result = e.automation_result || {};
       const data = result.data && typeof result.data === "object" ? result.data : {};
       if (typeof result.preview === "string" && result.preview.trim()) {
-        return result.preview.trim().replace(/\s+/g, " ").slice(0, 60);
+        return result.preview.trim().replace(/\s+/g, " ").slice(0, 48);
       }
       const t = data.subject || data.title || plan.title || plan.description || "";
-      return String(t || "").replace(/\s+/g, " ").trim().slice(0, 60);
+      return String(t || "").replace(/\s+/g, " ").trim().slice(0, 48);
     };
-
-    const statusHint = (s) =>
-      s === "waiting_acceptance"
-        ? "已执行完成，点击查看并确认"
-        : s === "waiting_confirm"
-          ? "已有计划，等你批准"
-          : s === "completed"
-            ? "已自动完成"
-            : s === "failed"
-              ? "执行失败，请稍后再试"
-              : "正在执行…";
 
     const acting = execActingId != null;
 
@@ -3881,97 +3883,134 @@ export default function Flow() {
     );
     const recentRecords = sortedRecords.slice(0, 4);
     const foldedRecords = sortedRecords.slice(4);
+    const activeCount = guardianRecords.filter((e) => e.execution_status !== "completed").length;
 
-    const recordRow = (e, isHistory) => (
-      <View
-        key={e.id}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          padding: "22rpx 4rpx",
-          borderBottom: `1rpx solid ${THEME.border}`,
-          opacity: isHistory ? 0.72 : 1
-        }}
-      >
-        <View style={{ flex: 1, marginRight: "24rpx" }}>
-          <Text style={{ fontSize: "27rpx", color: isHistory ? THEME.inkTertiary : THEME.ink, lineHeight: "40rpx", textDecoration: isHistory ? "line-through" : "none" }} numberOfLines={1}>
-            {e.task_title}
-          </Text>
-          {(() => {
-            const what = execWhatLine(e);
-            return (
-              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginTop: "4rpx" }} numberOfLines={1}>
-                {EXEC_TYPE_LABEL[e.automation_type] || "自动执行"}
-                {what ? ` · ${what}` : ""}
-                {` · ${formatTime(e.completed_at || e.updated_date || e.created_date)}`}
-              </Text>
-            );
-          })()}
-          <View style={{ display: "flex", alignItems: "center", marginTop: "4rpx" }}>
-            <View
-              style={{
-                width: "10rpx",
-                height: "10rpx",
-                borderRadius: "50%",
-                background: STATUS_COLOR[e.execution_status] || THEME.primary,
-                marginRight: "10rpx"
-              }}
-            />
-            <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{statusHint(e.execution_status)}</Text>
+    const cardShell = { background: THEME.card, borderRadius: "24rpx", border: `1rpx solid ${THEME.border}`, boxShadow: "0 2rpx 14rpx rgba(30,42,64,0.04)" };
+
+    const recordRow = (e, isHistory) => {
+      const meta = STATUS_META[e.execution_status] || STATUS_META.running;
+      const what = execWhatLine(e);
+      const action = e.execution_status === "waiting_acceptance"
+        ? { label: "查看并确认", onClick: () => setReviewExec(e) }
+        : e.execution_status === "waiting_confirm"
+          ? { label: "批准执行", onClick: () => approveExec(e) }
+          : null;
+      return (
+        <View key={e.id} style={{ display: "flex", alignItems: "center", padding: "20rpx 0", opacity: isHistory ? 0.62 : 1 }}>
+          <View
+            style={{
+              width: "68rpx",
+              height: "68rpx",
+              borderRadius: "18rpx",
+              background: THEME.waterMist,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "20rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ fontSize: "32rpx" }}>{EXEC_TYPE_ICON[e.automation_type] || "🤖"}</Text>
+          </View>
+          <View style={{ flex: 1, marginRight: "20rpx", minWidth: 0 }}>
+            <Text style={{ fontSize: "27rpx", fontWeight: 500, color: isHistory ? THEME.inkTertiary : THEME.ink, lineHeight: "40rpx" }} numberOfLines={1}>
+              {e.task_title}
+            </Text>
+            <Text style={{ fontSize: "21rpx", color: THEME.inkQuaternary, marginTop: "2rpx" }} numberOfLines={1}>
+              {EXEC_TYPE_LABEL[e.automation_type] || "自动执行"}
+              {what ? ` · ${what}` : ""}
+              {` · ${formatTime(e.completed_at || e.updated_date || e.created_date)}`}
+            </Text>
+          </View>
+          <View style={{ flexShrink: 0, alignItems: "flex-end" }}>
+            <View style={{ padding: "3rpx 14rpx", borderRadius: "100rpx", background: meta.bg }}>
+              <Text style={{ fontSize: "19rpx", color: meta.color }}>{meta.label}</Text>
+            </View>
+            {action && (
+              <View
+                onClick={action.onClick}
+                style={{
+                  marginTop: "10rpx",
+                  padding: "7rpx 20rpx",
+                  borderRadius: "100rpx",
+                  border: `1rpx solid ${THEME.primary}`,
+                  opacity: acting ? 0.5 : 1
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.primary }}>{action.label}</Text>
+              </View>
+            )}
           </View>
         </View>
-        {e.execution_status === "waiting_acceptance" && (
-          <Text onClick={() => setReviewExec(e)} style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}>
-            查看并确认
-          </Text>
-        )}
-        {e.execution_status === "waiting_confirm" && (
-          <Text onClick={() => approveExec(e)} style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}>
-            批准执行
-          </Text>
-        )}
-      </View>
-    );
+      );
+    };
 
     return (
       <View style={{ padding: "18rpx 32rpx" }}>
-        <View style={{ display: "flex", alignItems: "center", marginBottom: "4rpx" }}>
-          <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
-          <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>守护记录</Text>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16rpx" }}>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
+            <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>守护记录</Text>
+          </View>
+          {activeCount > 0 && (
+            <View style={{ display: "flex", alignItems: "center" }}>
+              <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: THEME.water, marginRight: "8rpx" }} />
+              <Text style={{ fontSize: "22rpx", color: THEME.water }}>守护中 · {activeCount}</Text>
+            </View>
+          )}
         </View>
-        {recentRecords.map((e) => recordRow(e, e.execution_status === "completed"))}
+
+        {recentRecords.length > 0 && (
+          <View style={{ ...cardShell, padding: "4rpx 24rpx" }}>
+            {recentRecords.map((e) => recordRow(e, e.execution_status === "completed"))}
+          </View>
+        )}
 
         {foldedRecords.length > 0 && (
-          <View>
-            <View
-              onClick={() => setShowExecHistory((v) => !v)}
-              style={{ display: "flex", alignItems: "center", padding: "20rpx 4rpx 12rpx" }}
-            >
-              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary, flex: 1 }}>
-                其余记录（{foldedRecords.length}）
-              </Text>
-              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{showExecHistory ? "收起 ▲" : "展开 ▼"}</Text>
-            </View>
-            {showExecHistory && foldedRecords.map((e) => recordRow(e, e.execution_status === "completed"))}
+          <View
+            onClick={() => setShowExecHistory((v) => !v)}
+            style={{ alignSelf: "center", marginTop: "18rpx", padding: "10rpx 30rpx", borderRadius: "100rpx", background: THEME.card, border: `1rpx solid ${THEME.border}` }}
+          >
+            <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>
+              {showExecHistory ? "收起 ⌃" : `展开其余 ${foldedRecords.length} 条 ⌄`}
+            </Text>
+          </View>
+        )}
+
+        {showExecHistory && foldedRecords.length > 0 && (
+          <View style={{ ...cardShell, marginTop: "14rpx", padding: "4rpx 24rpx" }}>
+            {foldedRecords.map((e) => recordRow(e, e.execution_status === "completed"))}
           </View>
         )}
 
         {delegatedTask && (
-          <View style={{ display: "flex", alignItems: "center", padding: "22rpx 4rpx" }}>
-            <Text style={{ flex: 1, fontSize: "26rpx", color: THEME.inkTertiary, marginRight: "24rpx" }} numberOfLines={1}>
+          <View
+            style={{
+              marginTop: "16rpx",
+              display: "flex",
+              alignItems: "center",
+              background: THEME.waterMist,
+              borderRadius: "24rpx",
+              border: "1rpx solid rgba(91,130,160,0.14)",
+              padding: "22rpx 24rpx"
+            }}
+          >
+            <Text style={{ fontSize: "28rpx", color: THEME.water, marginRight: "14rpx" }}>✦</Text>
+            <Text style={{ flex: 1, fontSize: "26rpx", color: THEME.inkSecondary, marginRight: "20rpx" }} numberOfLines={1}>
               {delegatedTask.title}
             </Text>
-            <Text
+            <View
               onClick={() => delegateExec(delegatedTask.id)}
-              style={{ fontSize: "24rpx", color: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}
+              style={{ padding: "10rpx 24rpx", borderRadius: "100rpx", background: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}
             >
-              让心栈先执行 ›
-            </Text>
+              <Text style={{ fontSize: "22rpx", color: "#fff" }}>让心栈先执行</Text>
+            </View>
           </View>
         )}
       </View>
     );
   };
+
 
   const renderAiDisclaimer = () => (
     <View style={{ padding: "24rpx 32rpx 40rpx" }}>

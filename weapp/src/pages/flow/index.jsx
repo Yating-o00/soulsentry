@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
 import Taro, { useDidShow, useDidHide } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Textarea, Image, Canvas } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
+import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import VoiceInput from "@/components/VoiceInput";
@@ -1166,6 +1167,27 @@ function RiverCanvas({ points, deep, heartNotes }) {
 const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRef }) {
   const [text, setText] = useState("");
 
+  // 语音结果填入输入框（追加到已有内容后），不自动发送，用户可手动修改
+  const fillText = useCallback((t) => {
+    const spoken = String(t || "").trim();
+    if (!spoken) return;
+    setText((prev) => {
+      const base = prev.trim();
+      return base ? `${base}，${spoken}` : spoken;
+    });
+  }, []);
+
+  const voice = useVoiceRecognition({
+    onResult: fillText,
+    onError: (err) => Taro.showToast({ title: err || "语音识别失败", icon: "none" })
+  });
+
+  // 暴露 fillText 给父组件（语音弹层等入口的结果也填入输入框）
+  useEffect(() => {
+    if (!callbacksRef.current) callbacksRef.current = {};
+    callbacksRef.current.fillText = fillText;
+  }, [callbacksRef, fillText]);
+
   const submit = () => {
     const t = text.trim();
     if (!t || busy) return;
@@ -1176,7 +1198,7 @@ const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRe
   const inputEl = (
     <Input
       style={{ flex: 1, fontSize: "30rpx", color: THEME.ink, height: "64rpx" }}
-      placeholder={placeholder}
+      placeholder={voice.recording ? "正在聆听…松开手指即可" : placeholder}
       value={text}
       onInput={(e) => setText(e.detail.value)}
       onConfirm={submit}
@@ -1192,14 +1214,42 @@ const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRe
         flexShrink: 0
       }}
     >
+      {/* 录音中的悬浮提示（微信/豆包同款交互：长按说话，松手填入） */}
+      {voice.recording && (
+        <View
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: "240rpx",
+            transform: "translateX(-50%)",
+            background: "rgba(28,28,30,0.86)",
+            borderRadius: "24rpx",
+            padding: "36rpx 48rpx",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            zIndex: 1200,
+            width: "420rpx"
+          }}
+        >
+          <Text style={{ fontSize: "72rpx", marginBottom: "16rpx" }}>🎙️</Text>
+          <Text style={{ fontSize: "30rpx", color: "#fff", fontWeight: 500 }}>正在聆听…</Text>
+          <Text style={{ fontSize: "22rpx", color: "rgba(255,255,255,0.65)", marginTop: "8rpx" }}>
+            {voice.hint || "松开手指，文字会填入输入框"}
+          </Text>
+        </View>
+      )}
       <View style={{ padding: "16rpx 28rpx 12rpx" }}>
         <View
+          onLongPress={voice.start}
+          onTouchEnd={voice.recording ? voice.stop : undefined}
+          onTouchCancel={voice.recording ? voice.stop : undefined}
           style={{
             display: "flex",
             alignItems: "center",
-            background: THEME.card,
+            background: voice.recording ? THEME.heartBg : THEME.card,
             borderRadius: "40rpx",
-            border: `1rpx solid ${THEME.border}`,
+            border: `1rpx solid ${voice.recording ? THEME.heart : THEME.border}`,
             padding: "8rpx 8rpx 8rpx 24rpx",
             boxShadow: "0 2rpx 8rpx rgba(0,0,0,0.04)"
           }}
@@ -2212,7 +2262,9 @@ export default function Flow() {
   const handleVoiceResult = (text) => {
     setShowVoiceModal(false);
     if (!text.trim()) return;
-    handleSend(text);
+    // 识别结果填入输入框（可手动修改），不自动发送
+    composerCallbacksRef.current?.fillText?.(text);
+    Taro.showToast({ title: "已填入输入框，可修改后再发送", icon: "none" });
   };
 
   const quickAction = (type) => {

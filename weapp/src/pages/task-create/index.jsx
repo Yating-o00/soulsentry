@@ -166,8 +166,8 @@ export default function TaskCreate() {
   const [shareToken, setShareToken] = useState("");
   const [step, setStep] = useState("form");
   const [parsedHint, setParsedHint] = useState("");
-  const [rawInput, setRawInput] = useState("");
   const [parsedMetadata, setParsedMetadata] = useState(null);
+  const [parsedLocation, setParsedLocation] = useState(""); // AI 识别出的地点，确认页可改
   const [parsedRepeat, setParsedRepeat] = useState(null);
   const [parsedSubtasks, setParsedSubtasks] = useState([]);
   const [newParsedSubtaskText, setNewParsedSubtaskText] = useState("");
@@ -212,7 +212,6 @@ export default function TaskCreate() {
     // 来自心签等外部来源的预填数据
     if (params.title) setTitle(decodeURIComponent(params.title));
     if (params.description) setDescription(decodeURIComponent(params.description));
-    if (params.raw_input) setRawInput(decodeURIComponent(params.raw_input));
 
     if (params.reminder_time) setDateTimeFromISO(decodeURIComponent(params.reminder_time), setReminderDate, setReminderTime);
     if (params.end_time) setDateTimeFromISO(decodeURIComponent(params.end_time), setEndDate, setEndTime);
@@ -533,7 +532,24 @@ export default function TaskCreate() {
 
     if (reminderISO) payload.reminder_time = reminderISO;
     if (endISO) payload.end_time = endISO;
-    if (parsedMetadata) payload.metadata = parsedMetadata;
+    if (parsedMetadata || parsedLocation) {
+      // 地点以确认页用户编辑后的版本为准，随 spatiotemporal 元数据透传
+      const extra = parsedMetadata?._extraFields || {};
+      const spatiotemporal = extra.spatiotemporal || {
+        created_at: new Date().toISOString(),
+        input: (title || "").slice(0, 500),
+        location_type: "unknown",
+        event_type: null,
+        time_source: "unknown"
+      };
+      payload.metadata = {
+        ...parsedMetadata,
+        _extraFields: {
+          ...extra,
+          spatiotemporal: { ...spatiotemporal, location: parsedLocation.trim() || null }
+        }
+      };
+    }
     if (parsedRepeat) {
       payload.repeat_rule = parsedRepeat.repeat_rule;
       if (parsedRepeat.custom_recurrence) payload.custom_recurrence = parsedRepeat.custom_recurrence;
@@ -960,6 +976,7 @@ export default function TaskCreate() {
 
     // 保存解析出的时空元数据，创建时透传给后端
     if (parsed.spatiotemporal || parsed.location || parsed.location_type || parsed.event_type) {
+      setParsedLocation(parsed.location || "");
       setParsedMetadata({
         _extraFields: {
           spatiotemporal: parsed.spatiotemporal || {
@@ -1032,7 +1049,6 @@ export default function TaskCreate() {
       Taro.showToast({ title: "请先输入约定内容", icon: "none" });
       return;
     }
-    setRawInput(inputText);
 
     setLoading(true);
     let timeoutId = null;
@@ -1056,6 +1072,8 @@ export default function TaskCreate() {
         forcePriority: true,
         forceCategory: true
       });
+      // 用户输入的完整内容存入约定详情（确认页可再改），AI 拟定的简明标题作为约定卡片标题
+      setDescription(inputText);
       setStep("confirm");
     } catch (err) {
       clearTimeout(timeoutId);
@@ -1066,14 +1084,18 @@ export default function TaskCreate() {
     }
   };
 
-  const handleVoiceResult = async (text) => {
-    if (!text.trim()) return;
-    setRawInput(text);
-    await parseInputAndConfirm(text);
+  const handleVoiceResult = (text) => {
+    const t = String(text || "").trim();
+    if (!t) return;
+    // 语音内容追加到输入框末尾：不覆盖原文、不自动分析，用户可继续手动修改后点「分析约定」
+    setTitle((prev) => {
+      const base = String(prev || "").replace(/\s+$/, "");
+      return base ? `${base} ${t}` : t;
+    });
   };
 
   const handleInputBlur = () => {
-    // 新流程：失焦时不再自动解析，统一由用户点击「约定」触发
+    // 新流程：失焦时不再自动解析，统一由用户点击「分析约定」触发
   };
 
   const handleVoiceTouchStart = () => {
@@ -1115,18 +1137,20 @@ export default function TaskCreate() {
 
       <SectionCard title={isEdit ? "基本信息" : "你的输入"}>
         {!isEdit && (
-          <View style={{ marginBottom: "20rpx" }}>
-            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>完整内容</Text>
+          <View>
             <Textarea
               className="ss-textarea"
               style={{ height: "360rpx" }}
-              placeholder="例如：周五前完成报告 / 明天下午3点开会 / 记得吃早餐"
+              placeholder="例如：周五前完成报告 / 明天下午3点在三楼会议室开会 / 记得每天睡前读书20分钟"
               value={title}
               maxlength={500}
               disableDefaultPadding
               showConfirmBar={false}
               onInput={(e) => setTitle(e.detail.value)}
             />
+            <Text style={{ fontSize: "20rpx", color: "#9ca0a8", marginTop: "10rpx" }}>
+              时间、地点、想分几步都可以写进去，点下方「分析约定」自动识别，识别后还能改
+            </Text>
           </View>
         )}
         {isEdit && (
@@ -1140,6 +1164,7 @@ export default function TaskCreate() {
             />
           </View>
         )}
+        {isEdit && (
         <View>
           <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>补充说明</Text>
           <Textarea
@@ -1153,10 +1178,12 @@ export default function TaskCreate() {
             onInput={(e) => setDescription(e.detail.value)}
           />
         </View>
+        )}
       </SectionCard>
 
       {isEdit && renderSubtaskEditor()}
 
+      {isEdit && (
       <SectionCard title="属性">
         <View style={{ display: "flex", gap: "16rpx" }}>
           <View style={{ flex: 1 }}>
@@ -1187,7 +1214,9 @@ export default function TaskCreate() {
           </View>
         </View>
       </SectionCard>
+      )}
 
+      {isEdit && (
       <SectionCard title="时间">
         <View style={{ marginBottom: "20rpx" }}>
           <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>截止时间</Text>
@@ -1220,13 +1249,9 @@ export default function TaskCreate() {
           </View>
         </View>
       </SectionCard>
+      )}
 
       <View className="ss-card" style={{ marginTop: "32rpx" }}>
-        {!isEdit && (
-          <Button className="ss-btn ss-btn-plain" loading={loading} disabled={loading || !isFormValid} onClick={analyze}>
-            🤖 AI 分析并预览
-          </Button>
-        )}
         <Button
           className="ss-btn"
           loading={loading}
@@ -1240,7 +1265,7 @@ export default function TaskCreate() {
             }
           }}
         >
-          {isEdit ? "保存修改" : "约定"}
+          {isEdit ? "保存修改" : "分析约定"}
         </Button>
       </View>
     </View>
@@ -1251,12 +1276,6 @@ export default function TaskCreate() {
       <View className="ss-card" style={{ paddingBottom: "16rpx" }}>
         <View className="ss-title">确认约定信息</View>
       </View>
-
-      {rawInput ? (
-        <SectionCard title="你的原话">
-          <Text style={{ fontSize: "30rpx", color: "#1c1c1e", lineHeight: "48rpx" }}>{rawInput}</Text>
-        </SectionCard>
-      ) : null}
 
       {parsedHint ? (
         <View
@@ -1296,12 +1315,23 @@ export default function TaskCreate() {
             onInput={(e) => setDescription(e.detail.value)}
           />
         </View>
+        <View style={{ marginTop: "20rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>地点（可选）</Text>
+          <Input
+            className="ss-input"
+            placeholder="如：三楼会议室 / 家里，未识别可不填"
+            value={parsedLocation}
+            onInput={(e) => setParsedLocation(e.detail.value)}
+          />
+        </View>
       </SectionCard>
 
       <SectionCard title="子约定">
-        {parsedSubtasks.length === 0 && (
-          <View className="ss-empty" style={{ padding: "8rpx 0 16rpx" }}>暂无子约定</View>
-        )}
+        <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "12rpx" }}>
+          {parsedSubtasks.length > 0
+            ? `识别到 ${parsedSubtasks.length} 件子约定，将随约定一并创建，可直接修改`
+            : "AI 未识别出子约定；需要分步完成的话，可在下方手动添加"}
+        </Text>
         {parsedSubtasks.map((st, idx) => (
             <View key={idx} style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
               <Input

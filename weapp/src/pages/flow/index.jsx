@@ -1301,6 +1301,8 @@ export default function Flow() {
   const [reviewExec, setReviewExec] = useState(null); // 守护记录「环节查看/确认」弹层
   const [showExecHistory, setShowExecHistory] = useState(false); // 守护记录-历史记录折叠
   const [showActiveMore, setShowActiveMore] = useState(false); // 守护记录-其余进行中折叠
+  const [svScrollTop, setSvScrollTop] = useState(0); // 心流 ScrollView 滚动位置恢复（关弹层时不跳回页眉）
+  const svTopRef = useRef(0);
   const execPollRef = useRef(null);
   const execPollTicksRef = useRef(0);
   const [sentinel, setSentinel] = useState(null);
@@ -1696,14 +1698,44 @@ export default function Flow() {
       const texts = Object.values(data).filter((v) => typeof v === "string" && v.trim());
       if (texts.length) add(texts.join("\n\n"), "执行结果");
     }
-    // 最后兜底：计划步骤（动作），仅在完全没有结果产物时展示
-    if (!blocks.length && Array.isArray(plan.steps) && plan.steps.length) {
-      add(
-        plan.steps.slice(0, 8).map((s) => `· ${execLineText(typeof s === "string" ? s : (s?.name && s?.detail ? `${s.name}：${s.detail}` : s?.name || s?.detail || ""))}`).join("\n"),
-        "执行动作"
-      );
+    // 最后兜底：没有结果产物时，用计划的自然语言摘要（标题+说明），不做步骤分解
+    if (!blocks.length) {
+      const planSummary = [plan.description, plan.title].map(execLineText).filter(Boolean).join("\n");
+      if (planSummary) add(planSummary, "计划");
     }
     return blocks;
+  };
+
+  // 记录心流 ScrollView 当前滚动位置
+  const captureSvScroll = () => {
+    Taro.createSelectorQuery()
+      .select("#flowScroll")
+      .fields({ scrollOffset: true })
+      .exec((res) => {
+        svTopRef.current = res?.[0]?.scrollTop || 0;
+      });
+  };
+
+  // 关闭环节弹层并保持页面滚动位置（不跳回页眉）
+  const closeReviewModal = () => {
+    captureSvScroll();
+    setReviewExec(null);
+    setTimeout(() => {
+      if (svTopRef.current > 10) setSvScrollTop(svTopRef.current);
+    }, 120);
+  };
+
+  // 用户审核/验证通过后，自动打开下一条进行中的执行单（一轮接一轮）
+  const advanceToNextExec = (doneId) => {
+    const next = (executions || [])
+      .filter((e) => e.automation_type && e.automation_type !== "none")
+      .filter((e) => e.id !== doneId && e.execution_status !== "completed" && e.execution_status !== "cancelled")
+      .sort((a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date))[0];
+    if (next) {
+      setReviewExec(next);
+      return;
+    }
+    closeReviewModal();
   };
 
   const acceptExec = async (id) => {
@@ -1716,7 +1748,7 @@ export default function Flow() {
         user_feedback: { rating: 5, comment: "验收通过", rated_at: new Date().toISOString() }
       });
       Taro.showToast({ title: "已验收通过", icon: "success" });
-      setReviewExec(null);
+      advanceToNextExec(id);
       loadAll();
     } catch (_err) {
       Taro.showToast({ title: "验收失败，请检查网络", icon: "none" });
@@ -1734,7 +1766,7 @@ export default function Flow() {
         user_feedback: { rating: 2, comment: "用户标记有问题", rated_at: new Date().toISOString() }
       });
       Taro.showToast({ title: "已记录反馈", icon: "success" });
-      setReviewExec(null);
+      closeReviewModal();
       loadAll();
     } catch (_err) {
       Taro.showToast({ title: "操作失败，请检查网络", icon: "none" });
@@ -1751,6 +1783,7 @@ export default function Flow() {
     try {
       await post("/functions/executeAutomation", { execution_id: execItem.id, phase: "execute" });
       Taro.showToast({ title: "已批准执行", icon: "success" });
+      advanceToNextExec(execItem.id);
       loadAll();
     } catch (_err) {
       Taro.showToast({ title: "批准失败，请检查网络", icon: "none" });
@@ -1767,7 +1800,7 @@ export default function Flow() {
     try {
       await patch(`/task-executions/${e.id}`, { execution_status: "cancelled" });
       Taro.showToast({ title: "已取消这次执行", icon: "success" });
-      setReviewExec(null);
+      closeReviewModal();
       loadAll();
     } catch (_err) {
       Taro.showToast({ title: "取消失败，请检查网络", icon: "none" });
@@ -4548,8 +4581,10 @@ export default function Flow() {
       {renderHeader()}
       {renderGuestBanner()}
       <ScrollView
+        id="flowScroll"
         scrollY
         style={{ flex: 1, minHeight: 0 }}
+        scrollTop={svScrollTop}
         refresherEnabled
         refresherTriggered={refreshing}
         onRefresherRefresh={onRefresh}
@@ -4908,7 +4943,7 @@ export default function Flow() {
               )}
               {!["waiting_acceptance", "waiting_confirm"].includes(reviewExec.execution_status) && (
                 <View
-                  onClick={() => setReviewExec(null)}
+                  onClick={closeReviewModal}
                   style={{
                     flex: 1,
                     padding: "20rpx 0",
@@ -4921,7 +4956,7 @@ export default function Flow() {
                 </View>
               )}
             </View>
-            <View onClick={() => setReviewExec(null)} style={{ marginTop: "20rpx", padding: "12rpx 0", textAlign: "center" }}>
+            <View onClick={closeReviewModal} style={{ marginTop: "20rpx", padding: "12rpx 0", textAlign: "center" }}>
               <Text style={{ fontSize: "26rpx", color: THEME.inkQuaternary }}>我再想想</Text>
             </View>
           </View>

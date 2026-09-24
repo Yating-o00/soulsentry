@@ -6,6 +6,7 @@ import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import RichText from "@/components/RichText";
+import FlowChatSheet from "@/components/FlowChatSheet";
 
 const THEME = {
   primary: "#384877",
@@ -1310,15 +1311,15 @@ export default function Flow() {
   const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
-  const [inputPlaceholder, setInputPlaceholder] = useState("此刻想记下什么？直接输入或长按语音");
   const [imageDraft, setImageDraft] = useState(null); // { imageUrl, extractedText, contentType, suggestion }
   const [imageDraftBusy, setImageDraftBusy] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
   const composerCallbacksRef = useRef({}); // 底部输入栏回调的最新引用，供 memo 后的 FlowComposer 读取
   const [showAllDue, setShowAllDue] = useState(false);
   const [showCompletedDue, setShowCompletedDue] = useState(false);
   const [splitSheet, setSplitSheet] = useState(null); // { task, steps, busy, creating } AI 拆小事弹层
   const [splitNewStepText, setSplitNewStepText] = useState(""); // 拆小结果「添加一步」输入
+  const [chatVisible, setChatVisible] = useState(false); // AI 对话弹层（输入改走对话确认后生成）
+  const [chatSeed, setChatSeed] = useState(""); // 打开对话弹层时的首条用户消息
   const [selectedDueDate, setSelectedDueDate] = useState(toChinaYmd(new Date()));
   const [briefing, setBriefing] = useState(null);
   const [weather, setWeather] = useState(null); // 看板天气小标注 { current, today, notice, task_advice }
@@ -1580,10 +1581,9 @@ export default function Flow() {
       await patch(`/tasks/${task.id}`, { status: isDone(task) ? "pending" : "completed" });
       await loadAll();
       const top = svTopRef.current;
-      if (top > 10) {
-        setSvScrollTop(top + 1); // 先错位触发 scroll-top 重新生效
-        setTimeout(() => setSvScrollTop(top), 100);
-      }
+      // 等列表重渲染落定后再恢复，并二次校正，防止新渲染把位置重置回顶部
+      setTimeout(() => restoreSvScroll(top), 300);
+      setTimeout(() => restoreSvScroll(top), 800);
     } catch (_err) {}
   };
 
@@ -1740,6 +1740,26 @@ export default function Flow() {
       .fields({ scrollOffset: true })
       .exec((res) => {
         svTopRef.current = res?.[0]?.scrollTop || 0;
+      });
+  };
+
+  // 恢复心流 ScrollView 滚动位置：优先用 enhanced 节点 scrollTo（命令式直改，
+  // 不受受控 scroll-top 同值不生效的限制）；节点不可用时回退受控属性错位触发
+  const restoreSvScroll = (top) => {
+    if (!(top > 10)) return;
+    Taro.createSelectorQuery()
+      .select("#flowScroll")
+      .node()
+      .exec((res) => {
+        const node = res?.[0]?.node;
+        if (node && typeof node.scrollTo === "function") {
+          try {
+            node.scrollTo({ top, duration: 0 });
+            return;
+          } catch (_e) {}
+        }
+        setSvScrollTop(top + 1);
+        setTimeout(() => setSvScrollTop(top), 100);
       });
   };
 
@@ -2102,46 +2122,6 @@ export default function Flow() {
     }
   };
 
-  // 轻量账本识别：带金额单位，或「事项+数字」对 ≥2 组，后端 looksLikeLedger 会二次校验
-  const detectLedgerLike = (t) => {
-    const s = String(t || "");
-    if ((s.match(/\d+(?:\.\d{1,2})?\s*(?:元|块|¥)/g) || []).length >= 1) return true;
-    const pairs = s.match(/[一-龥]{1,6}\s*[-+]?\d+(?:\.\d{1,2})?(?!\d)/g) || [];
-    return pairs.length >= 2;
-  };
-
-  const saveHeart = async (text) => {
-    // 按心签规则先入类型：账本签走账本格式+吐槽，其余默认情绪签（AI 再细化分类）
-    const isLedger = detectLedgerLike(text);
-    const sourceType = isLedger ? "ledger" : "emotion";
-    const tags = isLedger ? ["账本", "心签"] : ["情绪", "心签"];
-    // 先快速保存默认心签，避免用户等待
-    const note = await post("/notes", {
-      title: isLedger ? "账本" : "心签",
-      content: text,
-      plain_text: text,
-      source_type: sourceType,
-      tags
-    });
-    Taro.showToast({ title: isLedger ? "账已记下" : "心签已保存", icon: "success" });
-
-    // 后台调用 analyzeHeartSign 生成标题、标签和对应类目的回应
-    if (note?.id) {
-      runHeartAnalysis(note.id, { plain_text: text, content: text, source_type: sourceType, tags });
-    }
-  };
-
-  const saveLink = async (text) => {
-    const url = extractUrl(text);
-    await post("/notes", {
-      title: text.slice(0, 60).replace(url, "").trim() || "外部链接",
-      content: text,
-      tags: ["外部信息", "链接"]
-    });
-    Taro.showToast({ title: "链接已保存", icon: "success" });
-    loadAll();
-  };
-
   // ===== 图片识别草稿 =====
   const DRAFT_TYPES = [
     { k: "task", l: "约定" },
@@ -2291,125 +2271,20 @@ export default function Flow() {
     }
   };
 
-  function parseQuickTime(text) {
-    const now = new Date();
-    const t = String(text || "");
-
-    const minMatch = t.match(/(\d+)\s*分钟后/);
-    if (minMatch) {
-      const d = new Date(now.getTime() + parseInt(minMatch[1], 10) * 60 * 1000);
-      return { date: toChinaYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
-    }
-
-    if (/半小时后/.test(t)) {
-      const d = new Date(now.getTime() + 30 * 60 * 1000);
-      return { date: toChinaYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
-    }
-
-    const hourMatch = t.match(/(\d+)\s*小时后/);
-    if (hourMatch) {
-      const d = new Date(now.getTime() + parseInt(hourMatch[1], 10) * 60 * 60 * 1000);
-      return { date: toChinaYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
-    }
-
-    const pmMatch = t.match(/(?:今天下午|今晚)\s*(\d+)(?:点|：|:)?(?:30|半)?/);
-    if (pmMatch) {
-      const hour = parseInt(pmMatch[1], 10);
-      const minute = /半/.test(t) ? 30 : 0;
-      const d = new Date();
-      d.setHours(hour, minute, 0, 0);
-      if (d <= now) d.setDate(d.getDate() + 1);
-      return { date: toChinaYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
-    }
-
-    const tomorrowMatch = t.match(/明天(?:上午|下午|晚上)?\s*(\d+)(?:点|：|:)?(?:30|半)?/);
-    if (tomorrowMatch) {
-      const hour = parseInt(tomorrowMatch[1], 10);
-      const minute = /半/.test(t) ? 30 : 0;
-      let finalHour = hour;
-      if (t.includes("下午") && hour < 12) finalHour = hour + 12;
-      if (t.includes("晚上") && hour < 12) finalHour = hour + 12;
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      d.setHours(finalHour, minute, 0, 0);
-      return { date: toChinaYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
-    }
-
-    return null;
-  }
-
-  function extractIntentTitle(text) {
-    const t = String(text || "");
-    const reminderMatch = t.match(/提醒[我你]?(.*?)(?:，|。|\d|半小时|小时|分钟|$)/);
-    if (reminderMatch && reminderMatch[1].trim()) return reminderMatch[1].trim();
-    const doMatch = t.match(/(?:帮我|给我|记得|要)(.*?)(?:，|。|\d|半小时|小时|分钟|$)/);
-    if (doMatch && doMatch[1].trim()) return doMatch[1].trim();
-    return t.slice(0, 60);
-  }
-
-  async function createTaskFromIntent(text, timeInfo, intent) {
-    const title = intent || extractIntentTitle(text) || text.slice(0, 60);
-    await post("/tasks", {
-      title,
-      description: text,
-      priority: "medium",
-      category: "other",
-      end_time: timeInfo.date && timeInfo.time ? chinaIso(timeInfo.date, timeInfo.time) : undefined
-    });
-  }
-
-  const analyzeRoute = async (text) => {
-    setAnalyzing(true);
-    const quickTime = parseQuickTime(text);
-    try {
-      const data = await post("/functions/analyzeIntent", { input: text, date: toChinaYmd(new Date()) }, { silent: true });
-      const timeline = Array.isArray(data?.timeline) ? data.timeline : [];
-      if (timeline.length > 0) {
-        const first = timeline.find((t) => t.date && t.time) || timeline[0];
-        await createTaskFromIntent(text, first, data?.parsed?.intents?.[0]);
-        Taro.showToast({ title: "约定已创建", icon: "success" });
-      } else if (quickTime) {
-        await createTaskFromIntent(text, quickTime);
-        Taro.showToast({ title: "约定已创建", icon: "success" });
-      } else {
-        await post("/notes", { title: "记录", content: text });
-        Taro.showToast({ title: "已记录", icon: "success" });
-      }
-      loadAll();
-    } catch (_err) {
-      if (quickTime) {
-        await createTaskFromIntent(text, quickTime);
-        Taro.showToast({ title: "约定已创建", icon: "success" });
-      } else {
-        await post("/notes", { title: "记录", content: text });
-        Taro.showToast({ title: "已记录", icon: "success" });
-      }
-      loadAll();
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-
-  const handleSend = async (explicitText) => {
+  // 输入框发送不再直接落库：进入 AI 对话，由 AI 提取约定/心签/链接，用户确认后生成
+  const openChat = (text) => {
     if (isGuest) {
       Taro.navigateTo({ url: "/pages/login/index" });
       return;
     }
-    const text = String(explicitText || "").trim();
-    if (!text || analyzing) return;
-    setInputPlaceholder("已收下，晚些时候一起看看");
-    setTimeout(() => setInputPlaceholder("此刻想记下什么？直接输入或长按语音"), 2500);
-    if (extractUrl(text)) {
-      await saveLink(text);
-    } else if (
-      text.length <= 120 &&
-      /[情绪心累烦焦虑难过开心感谢慢放弃迷茫无助沮丧失望生气愤怒温暖幸福满足被爱孤独压力希望害怕担心纠结]/.test(text)
-    ) {
-      await saveHeart(text);
-    } else {
-      await analyzeRoute(text);
-    }
+    const t = String(text || "").trim();
+    if (!t) return;
+    setChatSeed(t);
+    setChatVisible(true);
+  };
+
+  const handleSend = (explicitText) => {
+    openChat(explicitText);
   };
 
   // 上传文件到服务端，返回 file_url
@@ -4290,8 +4165,8 @@ export default function Flow() {
   const renderBottomBar = () => (
     <>
       <FlowComposer
-        placeholder={inputPlaceholder}
-        busy={analyzing}
+        placeholder="此刻想记下什么？直接输入或长按语音"
+        busy={false}
         callbacksRef={composerCallbacksRef}
       />
 
@@ -4776,6 +4651,13 @@ export default function Flow() {
         </View>
       </ScrollView>
       {renderBottomBar()}
+
+      <FlowChatSheet
+        visible={chatVisible}
+        seedText={chatSeed}
+        onClose={() => setChatVisible(false)}
+        onCreated={loadAll}
+      />
 
       {splitSheet ? (
         <View

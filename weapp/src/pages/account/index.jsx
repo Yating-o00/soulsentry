@@ -380,6 +380,9 @@ export default function Account() {
 
   useDidShow(() => {
     console.log("[account] did show, period=", period);
+    // tab 页实例常驻：登录/切换账户返回后要重新拉用户信息，否则一直停留在游客视图
+    refresh();
+    loadData();
     loadMoodRiver(period);
   });
 

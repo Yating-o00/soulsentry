@@ -900,20 +900,7 @@ export default function TaskCreate() {
       const task = await post("/tasks", payload);
       setCreatedTask(task);
 
-      // 语音/直达创建同样带上 AI 拆解的子约定
-      if (Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0) {
-        for (const st of parsed.subtasks) {
-          const t = String(st || "").trim();
-          if (!t) continue;
-          await post("/tasks", {
-            title: t.slice(0, 120),
-            parent_task_id: task.id,
-            priority: payload.priority,
-            category: payload.category,
-            status: "pending"
-          }).catch(() => {});
-        }
-      }
+      // 直达创建不自动生成 AI 拆解的子约定（子约定只在确认页经用户确认后才创建）
 
       try {
         const share = await post(`/public/share/generate/task/${task.id}`);

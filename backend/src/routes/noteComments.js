@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { rejectIfRisky } from "../services/contentSecurity.js";
 
 export const noteCommentsRouter = Router();
 
@@ -51,6 +52,9 @@ noteCommentsRouter.post("/", async (req, res) => {
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
+
+  // 内容安全：心签评论内容需通过 msgSecCheck
+  if (await rejectIfRisky(res, payload.data.content, req.user.id)) return;
 
   const comment = await prisma.noteComment.create({
     data: {

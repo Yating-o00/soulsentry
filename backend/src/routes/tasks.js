@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { maybeAutoExecute } from "../services/autoAutomation.js";
+import { rejectIfRisky } from "../services/contentSecurity.js";
 import { suggestTaskSplit } from "../services/splitTask.js";
 
 export const tasksRouter = Router();
@@ -304,6 +305,9 @@ tasksRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
 
+  // 内容安全：约定/子约定的标题与描述需通过 msgSecCheck
+  if (await rejectIfRisky(res, `${payload.data.title || ""}\n${payload.data.description || ""}`, req.user.id)) return;
+
   const task = await prisma.task.create({
     data: buildTaskCreateData(req.user.id, payload.data)
   });
@@ -325,6 +329,11 @@ tasksRouter.post("/batch", async (req, res) => {
   const payload = taskBatchInputSchema.safeParse(req.body);
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  // 内容安全：批量创建前逐条检测标题与描述
+  for (const item of payload.data) {
+    if (await rejectIfRisky(res, `${item.title || ""}\n${item.description || ""}`, req.user.id)) return;
   }
 
   const tasks = await prisma.$transaction(async (tx) => {

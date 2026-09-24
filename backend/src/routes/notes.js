@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { rejectIfRisky } from "../services/contentSecurity.js";
 
 export const notesRouter = Router();
 
@@ -107,6 +108,9 @@ notesRouter.post("/", async (req, res) => {
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
+
+  // 内容安全：心签标题与正文需通过 msgSecCheck
+  if (await rejectIfRisky(res, `${payload.data.title || ""}\n${payload.data.plain_text || payload.data.content || ""}`, req.user.id)) return;
 
   const note = await prisma.note.create({
     data: {

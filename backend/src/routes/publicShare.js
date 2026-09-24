@@ -3,6 +3,7 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { rejectIfRisky } from "../services/contentSecurity.js";
 
 export const publicShareRouter = Router();
 
@@ -347,6 +348,9 @@ publicShareRouter.post("/:token/comments", async (req, res) => {
 
   const { type, item } = result;
   if (isShareExpired(item)) return res.status(410).json({ error: "SHARE_EXPIRED" });
+
+  // 内容安全：匿名评论内容需通过 msgSecCheck
+  if (await rejectIfRisky(res, parsed.data.content, null)) return;
 
   const visitorToken = ensureVisitorToken(req);
   const visitorName = (parsed.data.visitor_name || "访客").slice(0, 50);

@@ -51,7 +51,7 @@ export default function Login() {
       }
       Taro.redirectTo({ url });
     } else {
-      Taro.switchTab({ url: "/pages/tasks/index" });
+      Taro.switchTab({ url: "/pages/flow/index" });
     }
   };
 

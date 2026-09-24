@@ -253,7 +253,6 @@ function showDemoToast() {
 
 export default function Account() {
   const { user, logout, loading, refresh } = useAuth();
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSwitchAccounts, setShowSwitchAccounts] = useState(false);
   const [accounts, setAccounts] = useState([]);
   const [demoShown, setDemoShown] = useState(false);
@@ -491,8 +490,21 @@ export default function Account() {
   const handleLogout = () => {
     clearToken();
     setDemoMode(false);
-    setShowLogoutConfirm(false);
     Taro.reLaunch({ url: "/pages/index/index" });
+  };
+
+  // 退出确认改用微信原生弹窗：页面自定义 fixed 弹层在部分环境收不到点击，原生弹窗稳定可靠
+  const confirmLogout = () => {
+    Taro.showModal({
+      title: "确认退出账户？",
+      content: "退出后需要重新登录才能访问你的心栈数据",
+      confirmText: "确认退出",
+      cancelText: "取消",
+      confirmColor: theme.primary,
+      success: (res) => {
+        if (res.confirm) handleLogout();
+      }
+    });
   };
 
   const openSwitchPanel = () => {
@@ -951,7 +963,7 @@ export default function Account() {
                 <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
               </View>
               <View
-                onClick={() => setShowLogoutConfirm(true)}
+                onClick={confirmLogout}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1012,7 +1024,10 @@ export default function Account() {
         <View
           style={{
             position: "fixed",
-            inset: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             zIndex: 100,
             background: "rgba(0,0,0,0.45)",
             display: "flex",
@@ -1082,7 +1097,10 @@ export default function Account() {
         <View
           style={{
             position: "fixed",
-            inset: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             zIndex: 100,
             background: "rgba(0,0,0,0.45)",
             display: "flex",
@@ -1171,7 +1189,10 @@ export default function Account() {
         <View
           style={{
             position: "fixed",
-            inset: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             zIndex: 100,
             background: "rgba(0,0,0,0.45)",
             display: "flex",
@@ -1269,71 +1290,7 @@ export default function Account() {
         </View>
       )}
 
-      {/* logout confirm modal */}
-      {showLogoutConfirm && (
-        <View
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 100,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "40rpx"
-          }}
-          onClick={() => setShowLogoutConfirm(false)}
-        >
-          <View
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "100%",
-              maxWidth: "560rpx",
-              background: theme.card,
-              borderRadius: "24rpx",
-              padding: "40rpx"
-            }}
-          >
-            <Text style={{ fontSize: "34rpx", fontWeight: 600, color: theme.ink, textAlign: "center", marginBottom: "16rpx" }}>
-              确认退出账户？
-            </Text>
-            <Text style={{ fontSize: "26rpx", color: theme.inkTertiary, textAlign: "center", marginBottom: "40rpx" }}>
-              退出后需要重新登录才能访问你的心栈数据
-            </Text>
-            <View style={{ display: "flex", gap: "20rpx" }}>
-              <View
-                onClick={() => setShowLogoutConfirm(false)}
-                style={{
-                  flex: 1,
-                  height: "80rpx",
-                  background: theme.paper,
-                  borderRadius: "12rpx",
-                  border: `1rpx solid ${theme.border}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center"
-                }}
-              >
-                <Text style={{ fontSize: "28rpx", color: theme.inkSecondary }}>取消</Text>
-              </View>
-              <View
-                onClick={handleLogout}
-                style={{
-                  flex: 1,
-                  height: "80rpx",
-                  background: theme.primary,
-                  borderRadius: "12rpx",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center"
-                }}
-              >
-                <Text style={{ fontSize: "28rpx", color: "#fff" }}>确认退出</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
+      {/* logout confirm 已改用微信原生弹窗（confirmLogout） */}
     </View>
   );
 }

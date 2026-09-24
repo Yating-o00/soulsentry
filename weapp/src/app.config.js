@@ -14,6 +14,14 @@ export default {
     "pages/webview/index"
   ],
   lazyCodeLoading: "requiredComponents",
+  // 微信小程序隐私保护要求：调用 wx.getLocation 前需在 app.json 声明该隐私接口，
+  // 并在 mp 后台「用户隐私保护指引」中勾选「位置信息」，否则调用被拦截（errno 112）
+  requiredPrivateInfos: ["getLocation"],
+  permission: {
+    "scope.userLocation": {
+      desc: "用于展示你所在城市的天气，以及在到达相关地点时提醒你"
+    }
+  },
   plugins: {
     WechatSI: {
       version: "0.3.5",

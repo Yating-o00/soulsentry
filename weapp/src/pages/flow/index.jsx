@@ -1504,9 +1504,11 @@ export default function Flow() {
         ? { lat: coords.latitude, lon: coords.longitude }
         : {};
       const res = await get("/weather", params, { silent: true });
+      console.log("[weather] coords=", coords ? "yes" : "no", "resp=", res?.ok ? "ok" : (res?.reason || "null"));
       if (res && res.ok) return res;
       return null;
-    } catch (_err) {
+    } catch (err) {
+      console.log("[weather] error:", err?.message || err);
       return null;
     }
   };
@@ -1573,9 +1575,15 @@ export default function Flow() {
   };
 
   const toggleTaskDone = async (task) => {
+    captureSvScroll(); // 先记录滚动位置，刷新后恢复，不跳回页眉
     try {
       await patch(`/tasks/${task.id}`, { status: isDone(task) ? "pending" : "completed" });
-      loadAll();
+      await loadAll();
+      const top = svTopRef.current;
+      if (top > 10) {
+        setSvScrollTop(top + 1); // 先错位触发 scroll-top 重新生效
+        setTimeout(() => setSvScrollTop(top), 100);
+      }
     } catch (_err) {}
   };
 

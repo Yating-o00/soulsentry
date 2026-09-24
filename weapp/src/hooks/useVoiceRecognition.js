@@ -92,6 +92,14 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
   const lockRef = useRef(false);
   const cbRef = useRef({ onResult, onError });
   cbRef.current = { onResult, onError };
+  // 组件卸载后插件回调仍会触发，mountedRef 用来拦住发往已卸载实例的结果
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const reset = useCallback(() => {
     setPhase("idle");
@@ -100,16 +108,9 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
     clearTimeout(timerRef.current);
   }, []);
 
-  useEffect(() => {
-    if (initedRef.current) return;
-    const manager = getRecognitionManager();
-    if (!manager) {
-      setHint("语音插件未配置");
-      return;
-    }
-    managerRef.current = manager;
-    initedRef.current = true;
-
+  // 管理器是微信全局单例，多个消费方（主输入栏/对话弹层）挂载时会互相覆盖回调。
+  // 因此每次 start 都重新绑定本实例的回调，保证识别结果一定回到发起录音的那一方。
+  const wireHandlers = useCallback((manager) => {
     manager.onStart = () => {
       setPhase("recording");
       setHint("正在听…");
@@ -125,7 +126,7 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
     manager.onStop = (res) => {
       const text = (res?.result || finalRef.current || interimRef.current || "").trim();
       setHint(text ? "识别完成" : "未识别到语音");
-      if (text) {
+      if (text && mountedRef.current) {
         cbRef.current.onResult?.(text);
       }
       reset();
@@ -147,11 +148,22 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
       cbRef.current.onError?.(display);
       reset();
     };
+  }, [reset]);
+
+  useEffect(() => {
+    if (initedRef.current) return;
+    const manager = getRecognitionManager();
+    if (!manager) {
+      setHint("语音插件未配置");
+      return;
+    }
+    managerRef.current = manager;
+    initedRef.current = true;
 
     return () => {
       clearTimeout(timerRef.current);
     };
-  }, [reset]);
+  }, []);
 
   const start = useCallback(async () => {
     if (lockRef.current) return;
@@ -171,6 +183,8 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
       cbRef.current.onError?.("需要录音权限");
       return;
     }
+
+    wireHandlers(manager);
 
     lockRef.current = true;
     interimRef.current = "";
@@ -200,7 +214,7 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
         lockRef.current = false;
       }, 120);
     }
-  }, [phase, reset]);
+  }, [phase, reset, wireHandlers]);
 
   const stopRef = useRef(null);
   const stop = useCallback(() => {

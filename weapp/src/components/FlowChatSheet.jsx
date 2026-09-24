@@ -250,6 +250,11 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     });
   };
 
+  const handleClose = () => {
+    if (voice.recording) voice.stop();
+    onClose?.();
+  };
+
   if (!visible) return null;
 
   const lastId = messages.length ? `m${sessionKey}-${messages.length - 1}` : undefined;
@@ -293,7 +298,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
             </Text>
           </View>
           <View
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               width: "56rpx",
               height: "56rpx",

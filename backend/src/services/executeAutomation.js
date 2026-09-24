@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { renderPptHtml, savePptHtml } from "../lib/renderPpt.js";
+import { detectReportCategory, renderReportHtml, researchSystemPrompt } from "../lib/reportRender.js";
 import { env } from "../config/env.js";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
@@ -345,8 +346,8 @@ export function detectAutomationTypeFromInput(text) {
     { type: "email_draft", regex: /写邮件|发邮件|邮件草稿|回复邮件|跟进邮件|邮件主题|邮件正文|给.*(?:发|写).*邮|致.*的.*邮|写.*邮|发.*邮/ },
     // 2. PPT / 演示
     { type: "ppt_doc", regex: /做ppt|做PPT|生成ppt|生成PPT|做.*ppt|做.*PPT|生成.*ppt|生成.*PPT|幻灯片|演示稿|演示文稿|演讲稿|路演|pitch deck/ },
-    // 3. 调研
-    { type: "web_research", regex: /调研|研究|考察|比对|对比分析|联网搜索|查.*资料|了解一下|分析报告|尽调|竞品|竟品|对比表|分类表/ },
+    // 3. 调研 / 研究报告
+    { type: "web_research", regex: /调研|研究|考察|比对|对比分析|联网搜索|查.*资料|了解一下|分析报告|尽调|竞品|竟品|对比表|分类表|研究报告|深度研究|行业报告|市场报告|竞品报告|研究一下|帮我研究|前景|赛道/ },
     // 4. 账本：明确关键词兜底
     { type: "ledger_organize", regex: /整理账本|记账|账本|收支|报销|账单|记账本|支出.*收入|统计.*钱/ },
     // 5. 文件整理
@@ -790,6 +791,9 @@ async function handleWebResearch(execution) {
   const search = await invokeKimiWebSearch({ query: execution.originalInput || "" });
   const inlineRefs = extractInlineReferences(search.answer);
 
+  // 报告类别（深度研究/调研分析/对比评测/周期汇报/学习研究）决定排版与生成指引
+  const category = detectReportCategory(`${execution.originalInput || ""}\n${execution.taskTitle || ""}`);
+
   const schema = {
     type: "object",
     properties: {
@@ -812,16 +816,7 @@ async function handleWebResearch(execution) {
   };
 
   const dataRaw = await invokeKimiText({
-    systemPrompt: [
-      "你是一名中文研究助理。请根据联网搜索结果撰写结构化调研报告。",
-      "输出必须是 JSON，且顶层字段必须是英文：topic、executive_summary、key_findings、recommendations、sections、references、markdown。",
-      "sections 每个元素包含 heading 和 body（body 为 Markdown 格式）。",
-      "references 为 URL 字符串数组。",
-      "markdown 为完整报告正文（Markdown 格式），必须包含实质性内容，不要为空。",
-      "重要：sections 与 markdown 不要重复相同内容；如果已提供 sections，markdown 中不要再重复展开每个章节，只需给出精简概述即可。",
-      "不要连续重复同样的标题或段落；每个章节 heading 必须唯一。",
-      "涉及竞品对比、多产品/多方案对比、价格或数据罗列时，必须使用 Markdown 表格呈现：首行表头（| 维度 | A | B |），次行分隔符（|---|---|），随后每行一条数据。"
-    ].join("\n"),
+    systemPrompt: researchSystemPrompt(category),
     prompt: [
       `研究主题：${execution.originalInput || ""}`,
       "联网搜索摘要：",
@@ -847,7 +842,7 @@ async function handleWebResearch(execution) {
     throw new Error("AI 未生成有效调研内容，请重试");
   }
 
-  // 优先使用去重后的 sections 重新构建 markdown，保证在线预览与下载文件内容一致且不重复
+  // 导出用 markdown：汇总摘要与全部章节，保证在线预览与下载内容一致
   let markdown = String(data.markdown || "").trim();
   if (sections.length > 0) {
     markdown = [`# ${title}`, "", "## 执行摘要", summary || sections[0]?.body?.slice(0, 200) || ""].join("\n");
@@ -860,7 +855,18 @@ async function handleWebResearch(execution) {
     markdown = [`# ${title}`, "", "## 执行摘要", summary].join("\n");
   }
 
-  const { fileName, fileUrl } = saveMarkdownAsHtml({ title, markdown, execution, type: "web_research" });
+  // 按报告类别渲染精良排版的 HTML 并落盘
+  const reportHtml = renderReportHtml(category, {
+    title,
+    summary,
+    keyFindings: Array.isArray(data.key_findings) ? data.key_findings.filter(Boolean) : [],
+    recommendations: Array.isArray(data.recommendations) ? data.recommendations.filter(Boolean) : [],
+    sections,
+    references: Array.isArray(data.references) ? data.references.filter(Boolean) : [],
+    sourceInput: execution.taskTitle || execution.originalInput,
+    generatedAt: new Date().toISOString()
+  });
+  const { fileName, fileUrl } = saveReportHtml({ title, html: reportHtml, execution });
 
   const references = Array.isArray(data.references)
     ? data.references
@@ -872,6 +878,7 @@ async function handleWebResearch(execution) {
     data: {
       title,
       topic: title,
+      report_category: category,
       executive_summary: summary,
       key_findings: Array.isArray(data.key_findings) ? data.key_findings.filter(Boolean) : [],
       recommendations: Array.isArray(data.recommendations) ? data.recommendations.filter(Boolean) : [],
@@ -883,6 +890,19 @@ async function handleWebResearch(execution) {
     },
     diff: [{ action: "create", target: fileName, detail: "已生成调研报告 HTML" }],
   };
+}
+
+// 调研报告 HTML 落盘（reportRender 已输出完整文档，无需再套 wrapHtmlDocument）
+function saveReportHtml({ title, html, execution }) {
+  const uploadRoot = path.join(process.cwd(), env.UPLOAD_DIR);
+  fs.mkdirSync(uploadRoot, { recursive: true });
+  const safeTitle = String(title || "report")
+    .replace(/[^\u4e00-\u9fa5a-zA-Z0-9_-]/g, "_")
+    .slice(0, 40);
+  const filename = `${Date.now()}_report_${safeTitle}_${execution.id.slice(-6)}.html`;
+  const filePath = path.join(uploadRoot, filename);
+  fs.writeFileSync(filePath, html, "utf8");
+  return { fileName: filename, fileUrl: `/uploads/${filename}` };
 }
 
 async function handleOfficeDoc(execution) {

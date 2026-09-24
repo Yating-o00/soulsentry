@@ -109,9 +109,11 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     try {
       let doneLabel = "";
       if (pending.type === "task") {
+        // 详情保底：AI 未返回 description 时，用首条用户输入（通常是语音原文）作为约定详情
+        const firstUserText = messages.find((m) => m.role === "user")?.content || "";
         await post("/tasks", {
           title: pending.title,
-          description: pending.description || undefined,
+          description: pending.description || firstUserText || undefined,
           category: pending.category || "personal",
           priority: pending.priority || "medium",
           due_at: pending.due_at || undefined
@@ -363,6 +365,11 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                 {pending.type === "task" && (
                   <>
                     <Text style={{ fontSize: "30rpx", fontWeight: 500, color: T.ink, wordBreak: "break-all" }}>{pending.title}</Text>
+                    {(pending.description || messages.find((m) => m.role === "user")?.content) && (
+                      <Text style={{ fontSize: "22rpx", color: T.inkTertiary, lineHeight: "34rpx", marginTop: "8rpx", wordBreak: "break-all" }}>
+                        {(pending.description || messages.find((m) => m.role === "user")?.content || "").slice(0, 50)}
+                      </Text>
+                    )}
                     <View style={{ display: "flex", flexWrap: "wrap", marginTop: "12rpx" }}>
                       {pending.due_at && (
                         <View style={{ padding: "4rpx 14rpx", borderRadius: "8rpx", background: MIST, marginRight: "10rpx", marginBottom: "8rpx" }}>

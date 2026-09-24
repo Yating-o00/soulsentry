@@ -108,6 +108,8 @@ function fallbackExtract(lastUserText, lastExtracted) {
       .replace(/提醒我?/, "")
       .replace(/(明天|今天|今晚|下午|上午|晚上|中午)?\s*\d{1,2}\s*(点|:|：)?(半|30|分)?\s*(后)?/, "")
       .replace(/[，。,.!\s]+$/, "")
+      .replace(/^(?:明天|今天|后天|今晚|明早|本周|下周)+/, "")
+      .replace(/^(?:半小时后|\d+\s*(?:个)?小时[以之]?后|\d+\s*分钟[以之]?后)/, "")
       .trim();
     const title = cleaned ? cleaned.slice(0, 60) : t.slice(0, 60);
     return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: due };
@@ -189,7 +191,7 @@ ${buildMessagesBlock(messages)}
     systemPrompt: `你是 SoulSentry「心栈」，一个温柔、克制、值得信赖的陪伴式记录助手。用户通过和你聊天的方式，把心里想记的东西告诉你。
 
 你的任务是从对话中理解用户想做什么，并在信息足够时给出待确认的结构化提案（extracted）：
-- type=task（立约定）：用户想在未来某个时间做某件事。title 是简短事项名（≤20字），due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。
+- type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。
 - type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。
 - type=link（存链接）：用户发来网址想存起来。text 保留用户原话。
 - 纯聊天或信息还不足：extracted 为 null。

@@ -1212,23 +1212,21 @@ export default function Account() {
                 <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, textAlign: "center", marginBottom: "28rpx" }}>
                   请使用微信「扫一扫」完成支付，支付成功后自动到账
                 </Text>
-                <Button
-                  size="mini"
+                <View
                   onClick={closeRecharge}
                   style={{
                     width: "100%",
                     height: "76rpx",
-                    lineHeight: "76rpx",
                     background: theme.paper,
-                    color: theme.inkSecondary,
                     borderRadius: "12rpx",
-                    fontSize: "28rpx",
-                    margin: 0,
-                    border: `1rpx solid ${theme.border}`
+                    border: `1rpx solid ${theme.border}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
                   }}
                 >
-                  取消支付
-                </Button>
+                  <Text style={{ fontSize: "28rpx", color: theme.inkSecondary }}>取消支付</Text>
+                </View>
               </View>
             ) : (
               <View>
@@ -1300,39 +1298,35 @@ export default function Account() {
               退出后需要重新登录才能访问你的心栈数据
             </Text>
             <View style={{ display: "flex", gap: "20rpx" }}>
-              <Button
-                size="mini"
+              <View
                 onClick={() => setShowLogoutConfirm(false)}
                 style={{
                   flex: 1,
                   height: "80rpx",
-                  lineHeight: "80rpx",
                   background: theme.paper,
-                  color: theme.inkSecondary,
                   borderRadius: "12rpx",
-                  fontSize: "28rpx",
-                  margin: 0,
-                  border: `1rpx solid ${theme.border}`
+                  border: `1rpx solid ${theme.border}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
                 }}
               >
-                取消
-              </Button>
-              <Button
-                size="mini"
+                <Text style={{ fontSize: "28rpx", color: theme.inkSecondary }}>取消</Text>
+              </View>
+              <View
                 onClick={handleLogout}
                 style={{
                   flex: 1,
                   height: "80rpx",
-                  lineHeight: "80rpx",
                   background: theme.primary,
-                  color: "#fff",
                   borderRadius: "12rpx",
-                  fontSize: "28rpx",
-                  margin: 0
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
                 }}
               >
-                确认退出
-              </Button>
+                <Text style={{ fontSize: "28rpx", color: "#fff" }}>确认退出</Text>
+              </View>
             </View>
           </View>
         </View>

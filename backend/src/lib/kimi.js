@@ -194,6 +194,7 @@ export async function invokeKimiText({
   responseJsonSchema,
   model,
   temperature,
+  maxTokens,
   fetchTimeout,
   withUsage = false
 }) {
@@ -208,6 +209,7 @@ export async function invokeKimiText({
     responseJsonSchema,
     model,
     temperature,
+    maxTokens,
     fetchTimeout
   });
 

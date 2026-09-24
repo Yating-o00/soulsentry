@@ -187,7 +187,7 @@ export function researchSystemPrompt(category) {
     "输出必须是 JSON，顶层字段为英文：topic、executive_summary、key_findings、recommendations、sections、references、markdown。",
     "sections 每个元素包含 heading 和 body（body 为 Markdown 格式，含小标题、列表、表格）。",
     "references 为 URL 字符串数组。",
-    "markdown 为精简版的完整报告正文（供导出），不要与 sections 逐章重复。",
+    "markdown 只给 200 字以内的全文概述（供导出用），完整论述放在 sections 里，不要逐章重复。",
     categoryOutlineHint(category),
     DEPTH_REQUIREMENTS
   ].join("\n");

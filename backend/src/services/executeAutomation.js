@@ -815,18 +815,30 @@ async function handleWebResearch(execution) {
     required: ["topic", "executive_summary", "markdown"],
   };
 
-  const dataRaw = await invokeKimiText({
-    systemPrompt: researchSystemPrompt(category),
-    prompt: [
-      `研究主题：${execution.originalInput || ""}`,
-      "联网搜索摘要：",
-      search.answer || "",
-      "参考链接：",
-      ...inlineRefs.map((r) => `- ${r.title || ""}: ${r.url || ""}`),
-    ].join("\n"),
-    responseJsonSchema: schema,
-    temperature: 0.3,
-  });
+  let dataRaw;
+  try {
+    dataRaw = await invokeKimiText({
+      systemPrompt: researchSystemPrompt(category),
+      prompt: [
+        `研究主题：${execution.originalInput || ""}`,
+        "联网搜索摘要：",
+        search.answer || "",
+        "参考链接：",
+        ...inlineRefs.map((r) => `- ${r.title || ""}: ${r.url || ""}`),
+      ].join("\n"),
+      responseJsonSchema: schema,
+      temperature: 0.3,
+      // 深度报告输出大：默认 4000 token 会把 JSON 截断（生产报错过 position 3094 截断），放宽到 8000 并延长超时
+      maxTokens: 8000,
+      fetchTimeout: 90000
+    });
+  } catch (err) {
+    // 输出被 token 上限截断时 JSON 解析会报语法错误，转成用户可理解的提示
+    if (err instanceof SyntaxError || /JSON/i.test(String(err?.message || ""))) {
+      throw new Error("报告生成不完整（内容较长被截断），请点「再试一次」重新生成");
+    }
+    throw err;
+  }
 
   const data = normalizeResearchData(dataRaw);
 

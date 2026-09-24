@@ -430,8 +430,8 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
         <View style={{ padding: "16rpx 24rpx", borderTop: `1rpx solid ${T.border}` }}>
           <View
             onLongPress={voice.start}
-            onTouchEnd={voice.recording ? voice.stop : undefined}
-            onTouchCancel={voice.recording ? voice.stop : undefined}
+            onTouchEnd={voice.stop}
+            onTouchCancel={voice.stop}
             style={{
               display: "flex",
               alignItems: "center",

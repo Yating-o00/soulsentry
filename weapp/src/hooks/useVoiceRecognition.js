@@ -125,6 +125,7 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
 
     manager.onStop = (res) => {
       const text = (res?.result || finalRef.current || interimRef.current || "").trim();
+      console.log("[useVoiceRecognition] onStop, text =", text ? `${text.slice(0, 20)}…` : "(empty)");
       setHint(text ? "识别完成" : "未识别到语音");
       if (text && mountedRef.current) {
         cbRef.current.onResult?.(text);
@@ -145,7 +146,9 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
       }
 
       setHint(display);
-      cbRef.current.onError?.(display);
+      if (mountedRef.current) {
+        cbRef.current.onError?.(display);
+      }
       reset();
     };
   }, [reset]);
@@ -167,7 +170,13 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
 
   const start = useCallback(async () => {
     if (lockRef.current) return;
-    if (phase !== "idle") return;
+    if (phase !== "idle") {
+      // 上次识别可能因插件回调异常卡在非 idle（如 -30011 后既无 onStop 也无 onError），
+      // 此时静默 return 会让用户以为"语音只能开一次"。强制复位后重新开始。
+      console.warn("[useVoiceRecognition] start while phase =", phase, ", force reset");
+      try { managerRef.current?.stop?.(); } catch (_e) { /* 插件未在录音时 stop 会抛错，忽略 */ }
+      reset();
+    }
 
     const manager = managerRef.current || getRecognitionManager();
     if (!manager) {
@@ -193,6 +202,7 @@ export function useVoiceRecognition({ onResult, onError } = {}) {
     setHint("准备中…");
 
     try {
+      console.log("[useVoiceRecognition] manager.start, phase =", phase);
       manager.start({ duration: 30000, lang: "zh_CN" });
 
       // 兜底：若插件没有触发 onStart，最多 600ms 后强制进入 recording

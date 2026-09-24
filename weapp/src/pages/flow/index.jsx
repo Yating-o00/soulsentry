@@ -1242,8 +1242,8 @@ const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRe
       <View style={{ padding: "16rpx 28rpx 12rpx" }}>
         <View
           onLongPress={voice.start}
-          onTouchEnd={voice.recording ? voice.stop : undefined}
-          onTouchCancel={voice.recording ? voice.stop : undefined}
+          onTouchEnd={voice.stop}
+          onTouchCancel={voice.stop}
           style={{
             display: "flex",
             alignItems: "center",

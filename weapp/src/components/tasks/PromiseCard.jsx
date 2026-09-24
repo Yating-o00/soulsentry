@@ -9,6 +9,7 @@ import {
   IconChevronRight,
 } from "./icons";
 import theme from "./theme";
+import { isRecurring, recurringBadgeText } from "@/utils/recurrence";
 
 const categoryMap = {
   work: "工作",
@@ -93,6 +94,10 @@ export default function PromiseCard({
   onExecRun,
 }) {
   const done = task.status === "completed" || task.status === "done" || task.status === "archived";
+  // 重复约定永不显示逾期，改显「规则 · 倒计时」徽标
+  const recurring = isRecurring(task);
+  const overdue = Boolean(analysis?.overdue) && !recurring;
+  const recurringText = recurring ? recurringBadgeText(task) : null;
   const p = priorityMark[task.priority] || priorityMark.medium;
   const categoryLabel = categoryMap[task.category] || task.category || "其他";
   const aiNote = makeAiNote(task, analysis);
@@ -151,8 +156,8 @@ export default function PromiseCard({
       style={{
         position: "relative",
         background: theme.card,
-        border: `1rpx solid ${analysis?.overdue && !done ? theme.seal : theme.border}`,
-        borderStyle: analysis?.overdue && !done ? "dashed" : "solid",
+        border: `1rpx solid ${overdue ? theme.seal : theme.border}`,
+        borderStyle: overdue ? "dashed" : "solid",
         borderRadius: "16rpx",
         marginBottom: "24rpx",
         overflow: "hidden",
@@ -208,7 +213,7 @@ export default function PromiseCard({
               {task.title}
             </Text>
 
-            {analysis?.overdue && !done && (
+            {overdue && !done && (
               <View
                 style={{
                   border: `1rpx solid ${theme.seal}`,
@@ -220,7 +225,7 @@ export default function PromiseCard({
               </View>
             )}
 
-            {analysis?.recurring && (
+            {(recurringText || analysis?.recurring) && (
               <View
                 style={{
                   border: `1rpx solid ${theme.border}`,
@@ -232,7 +237,7 @@ export default function PromiseCard({
                 }}
               >
                 <IconRepeat size={18} color={theme.inkQuaternary} />
-                <Text style={{ fontSize: "20rpx", color: theme.inkTertiary }}>{analysis.recurring}</Text>
+                <Text style={{ fontSize: "20rpx", color: theme.inkTertiary }}>{recurringText || analysis.recurring}</Text>
               </View>
             )}
           </View>
@@ -255,7 +260,7 @@ export default function PromiseCard({
           <View style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "24rpx", marginTop: "16rpx" }}>
             <View style={{ display: "flex", alignItems: "center", gap: "8rpx" }}>
               <IconClock size={22} color={theme.inkQuaternary} />
-              <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>{analysis?.timeLabel || "未安排时间"}</Text>
+              <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>{recurringText || analysis?.timeLabel || "未安排时间"}</Text>
             </View>
             <Text style={{ fontSize: "24rpx", color: theme.inkTertiary, letterSpacing: "4rpx" }}>{categoryLabel}</Text>
             {analysis?.location ? (
@@ -468,7 +473,7 @@ export default function PromiseCard({
             >
               分享
             </Text>
-            {analysis?.overdue && (
+            {overdue && (
               <Text
                 onClick={handleDemote}
                 style={{

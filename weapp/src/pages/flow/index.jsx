@@ -5,6 +5,7 @@ import { get, post, patch } from "@/utils/api";
 import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
+import { isRecurring, nextOccurrenceOf, recurringBadgeText } from "@/utils/recurrence";
 import RichText from "@/components/RichText";
 import FlowChatSheet from "@/components/FlowChatSheet";
 
@@ -77,6 +78,11 @@ function isDone(t) {
 }
 
 function taskTime(t) {
+  // 重复约定以「下一次提醒时间」参与分组/排序，保证每天/每周都出现在今日到期里
+  if (isRecurring(t)) {
+    const next = nextOccurrenceOf(t);
+    if (next) return next.toISOString();
+  }
   return t?.due_at || t?.end_time || t?.reminder_time;
 }
 
@@ -94,8 +100,18 @@ function getHour(iso) {
 }
 
 function isOverdue(t) {
+  // 重复约定永远不算逾期，显示距下次提醒倒计时
+  if (isRecurring(t)) return false;
   const tt = taskTime(t);
   return tt && !isDone(t) && new Date(tt) < new Date();
+}
+
+// 到期时间徽标：重复约定显示「规则 · 倒计时」，普通约定显示时间或已逾期
+function dueBadgeText(t) {
+  if (isRecurring(t)) {
+    return recurringBadgeText(t) || "重复提醒";
+  }
+  return isOverdue(t) ? "已逾期" : formatTime(taskTime(t));
 }
 
 function chinaIso(ymd, time) {
@@ -2813,7 +2829,7 @@ export default function Flow() {
                 }}
               >
                 <Text style={{ fontSize: "20rpx", color: isOverdue(top) ? THEME.heartDeep : THEME.primary }}>
-                  {isOverdue(top) ? "已逾期" : formatTime(taskTime(top))}
+                  {isOverdue(top) ? "已逾期" : isRecurring(top) ? recurringBadgeText(top) : formatTime(taskTime(top))}
                 </Text>
               </View>
               <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginBottom: "6rpx" }}>
@@ -2936,7 +2952,7 @@ export default function Flow() {
                     }}
                   >
                     <Text style={{ fontSize: "18rpx", color: isOverdue(t) ? THEME.heartDeep : THEME.primary }}>
-                      {isOverdue(t) ? "已逾期" : formatTime(taskTime(t))}
+                      {dueBadgeText(t)}
                     </Text>
                   </View>
                   <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginBottom: "4rpx" }}>
@@ -3182,7 +3198,7 @@ export default function Flow() {
                 }}
               >
                 <Text style={{ fontSize: "20rpx", color: isOverdue(t) ? THEME.heartDeep : THEME.primary }}>
-                  {isOverdue(t) ? "已逾期" : formatTime(taskTime(t))}
+                  {dueBadgeText(t)}
                 </Text>
               </View>
               <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{CATEGORY_LABEL[t.category] || t.category || "其他"}</Text>
@@ -4693,7 +4709,7 @@ export default function Flow() {
               <Text style={{ fontSize: "20rpx", color: THEME.primary }}>{SPLIT_PRIORITY_LABEL[splitSheet.task.priority] || "中"}</Text>
             </View>
             <Text style={{ fontSize: "20rpx", color: isOverdue(splitSheet.task) ? THEME.heartDeep : THEME.inkQuaternary }}>
-              {isOverdue(splitSheet.task) ? "已逾期" : taskTime(splitSheet.task) ? formatTime(taskTime(splitSheet.task)) : "未定时"}
+              {isOverdue(splitSheet.task) ? "已逾期" : isRecurring(splitSheet.task) ? recurringBadgeText(splitSheet.task) : taskTime(splitSheet.task) ? formatTime(taskTime(splitSheet.task)) : "未定时"}
             </Text>
           </View>
           {!!splitSheet.task.description && (

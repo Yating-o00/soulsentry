@@ -2,13 +2,20 @@ import { useState, useEffect } from "react";
 import { View, Text, Input, ScrollView } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { post } from "@/utils/api";
+import { getToken } from "@/utils/auth";
+import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
 import theme from "./tasks/theme";
 
 // 首页对话弹层：输入框发送的内容改为进入 AI 对话，
 // AI 理解用户想立约定 / 记心签 / 存链接，给出提案卡片，
 // 用户确认后才真正生成。AI 不可用时服务端有规则兜底，对话不会中断。
+// 底部输入栏与首页主输入栏同构：＋号附件（拍照/照片/文件）+ 长按语音。
 
 const T = theme;
+// tasks/theme.js 未包含的色值（与心流页 THEME 保持一致）
+const MIST = "#eef0f5";
+const HEART = "#e8a5a5";
+const HEART_BG = "#fce8ec";
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接" };
 const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗" };
@@ -76,13 +83,24 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     }
   };
 
-  const send = () => {
-    const t = String(input || "").trim();
+  const send = (raw) => {
+    const t = String(raw !== undefined ? raw : input).trim();
     if (!t || busy) return;
     const msgs = [...messages, { role: "user", content: t }];
     setMessages(msgs);
     setInput("");
     callAI(msgs, pending);
+  };
+
+  // 「不对，再聊聊」：把否定说给 AI，由 AI 温柔引导用户说出要改什么，
+  // 保持对话流畅，而不是工具化地直接收起卡片
+  const rejectPending = () => {
+    if (!pending || busy) return;
+    const last = pending;
+    setPending(null);
+    const msgs = [...messages, { role: "user", content: "这个不对，我想改一下" }];
+    setMessages(msgs);
+    callAI(msgs, last);
   };
 
   const confirmCreate = async () => {
@@ -128,6 +146,108 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     } finally {
       setCreating(false);
     }
+  };
+
+  // 语音：长按说话，松手识别后直接作为一条消息发给 AI
+  const voice = useVoiceRecognition({
+    onResult: (t) => {
+      const spoken = String(t || "").trim();
+      if (spoken) send(spoken);
+    },
+    onError: (err) => Taro.showToast({ title: err || "语音识别失败", icon: "none" })
+  });
+
+  // 附件：与首页主输入栏同一套能力
+  const uploadFileToServer = async (filePath) => {
+    const token = getToken();
+    const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+    const apiBase = rawApi.replace(/\/$/, "");
+    const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
+    const uploadRes = await Taro.uploadFile({
+      url: uploadUrl,
+      filePath,
+      name: "file",
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: 60000
+    });
+    const data = JSON.parse(uploadRes.data || "{}");
+    if (!(uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url)) {
+      throw new Error(data?.message || "上传失败");
+    }
+    return data.file_url;
+  };
+
+  // 拍照/相册图片：上传识别后，把识别文本作为用户消息发给 AI 继续对话
+  const attachImage = (sourceType) => {
+    Taro.chooseMedia({
+      count: 1,
+      mediaType: ["image"],
+      sourceType,
+      sizeType: ["compressed"],
+      success: async (res) => {
+        const file = res.tempFiles?.[0];
+        if (!file?.tempFilePath) return;
+        Taro.showLoading({ title: "上传中" });
+        try {
+          const fileUrl = await uploadFileToServer(file.tempFilePath);
+          Taro.showLoading({ title: "识别中" });
+          const draft = await post("/functions/analyzeImage", { file_url: fileUrl }, { silent: true, timeout: 120000 });
+          const text = String(draft?.extracted_text || "").trim();
+          if (!text) {
+            Taro.showToast({ title: "没识别出文字，换个方式试试", icon: "none" });
+            return;
+          }
+          send(`我发了张图片，识别出来的内容是：${text.slice(0, 400)}`);
+        } catch (err) {
+          Taro.showToast({ title: err?.message || "识别失败，请手动输入", icon: "none" });
+        } finally {
+          Taro.hideLoading();
+        }
+      },
+      fail: () => {}
+    });
+  };
+
+  // 上传文件：直接存入记录（与首页主输入栏行为一致）
+  const attachFile = () => {
+    Taro.chooseMessageFile({
+      count: 1,
+      type: "all",
+      success: async (res) => {
+        const file = res.tempFiles?.[0];
+        if (!file?.path) return;
+        Taro.showLoading({ title: "上传中" });
+        try {
+          const fileUrl = await uploadFileToServer(file.path);
+          const name = file.name || "未命名文件";
+          await post("/notes", {
+            title: `📎 ${name}`.slice(0, 60),
+            content: `📎 文件：${name}\n${fileUrl}`,
+            plain_text: `📎 ${name}`,
+            tags: ["文件"]
+          }, { silent: true });
+          Taro.showToast({ title: "文件已存入记录", icon: "success" });
+          onCreated?.();
+        } catch (err) {
+          Taro.showToast({ title: err?.message || "上传失败", icon: "none" });
+        } finally {
+          Taro.hideLoading();
+        }
+      },
+      fail: () => {}
+    });
+  };
+
+  const handleAttach = () => {
+    Taro.showActionSheet({
+      itemList: ["拍照", "上传照片", "上传文件"],
+      success: (r) => {
+        if (r.tapIndex === 0) attachImage(["camera"]);
+        else if (r.tapIndex === 1) attachImage(["album"]);
+        else attachFile();
+      },
+      fail: () => {}
+    });
   };
 
   if (!visible) return null;
@@ -240,7 +360,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                     <Text style={{ fontSize: "30rpx", fontWeight: 500, color: T.ink, wordBreak: "break-all" }}>{pending.title}</Text>
                     <View style={{ display: "flex", flexWrap: "wrap", marginTop: "12rpx" }}>
                       {pending.due_at && (
-                        <View style={{ padding: "4rpx 14rpx", borderRadius: "8rpx", background: T.primaryMist, marginRight: "10rpx", marginBottom: "8rpx" }}>
+                        <View style={{ padding: "4rpx 14rpx", borderRadius: "8rpx", background: MIST, marginRight: "10rpx", marginBottom: "8rpx" }}>
                           <Text style={{ fontSize: "20rpx", color: T.primary }}>🕐 {fmtTime(pending.due_at)}</Text>
                         </View>
                       )}
@@ -272,7 +392,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                       {creating ? "生成中…" : "确认生成"}
                     </Text>
                   </View>
-                  <View onClick={() => setPending(null)} style={{ padding: "14rpx 24rpx", marginLeft: "8rpx" }}>
+                  <View onClick={rejectPending} style={{ padding: "14rpx 24rpx", marginLeft: "8rpx" }}>
                     <Text style={{ fontSize: "24rpx", color: T.inkQuaternary }}>不对，再聊聊</Text>
                   </View>
                 </View>
@@ -281,19 +401,67 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
           </View>
         </ScrollView>
 
-        {/* 输入行 */}
+        {/* 录音提示：弹层内部渲染，不用 fixed 定位 */}
+        {voice.recording && (
+          <View style={{ padding: "0 24rpx 12rpx" }}>
+            <View
+              style={{
+                padding: "16rpx 24rpx",
+                borderRadius: "16rpx",
+                background: "rgba(28,28,30,0.86)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", color: "#fff" }}>
+                🎙️ {voice.hint || "正在聆听…松开手指即发送"}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* 输入行：与首页主输入栏同构（＋附件 / 输入 / 发送 / 长按语音） */}
         <View style={{ padding: "16rpx 24rpx", borderTop: `1rpx solid ${T.border}` }}>
-          <View style={{ display: "flex", alignItems: "center", background: T.paper, borderRadius: "40rpx", padding: "6rpx 6rpx 6rpx 24rpx" }}>
+          <View
+            onLongPress={voice.start}
+            onTouchEnd={voice.recording ? voice.stop : undefined}
+            onTouchCancel={voice.recording ? voice.stop : undefined}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              background: voice.recording ? HEART_BG : T.paper,
+              borderRadius: "40rpx",
+              padding: "6rpx 6rpx 6rpx 20rpx",
+              border: `1rpx solid ${voice.recording ? HEART : T.border}`
+            }}
+          >
+            <View
+              onClick={handleAttach}
+              style={{
+                width: "56rpx",
+                height: "56rpx",
+                borderRadius: "50%",
+                background: MIST,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                marginRight: "12rpx"
+              }}
+            >
+              <Text style={{ fontSize: "40rpx", color: T.primary, lineHeight: "48rpx" }}>＋</Text>
+            </View>
             <Input
               style={{ flex: 1, fontSize: "28rpx", color: T.ink, height: "60rpx" }}
-              placeholder="继续说…"
+              placeholder={voice.recording ? "正在聆听…松开手指即可" : "直接输入，或长按语音"}
               value={input}
               confirmType="send"
               onInput={(e) => setInput(e.detail.value)}
-              onConfirm={send}
+              onConfirm={() => send()}
             />
             <View
-              onClick={send}
+              onClick={() => send()}
               style={{
                 width: "60rpx",
                 height: "60rpx",
@@ -302,7 +470,8 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                flexShrink: 0
+                flexShrink: 0,
+                marginLeft: "12rpx"
               }}
             >
               <Text style={{ fontSize: "30rpx", color: "#fff" }}>➤</Text>

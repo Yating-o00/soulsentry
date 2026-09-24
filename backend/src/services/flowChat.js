@@ -56,11 +56,17 @@ function sanitizeExtracted(raw) {
   return null;
 }
 
-// ===== 本地兜底：Kimi 不可用时的规则理解 =====
+// 本地兜底：Kimi 不可用时的规则理解
+
+// 用户否定当前提案：收起提案，温柔引导 TA 说出要改什么
+const REJECT_RE = /不对|不是这个?|错了|再聊聊|先不要|重来|重新说/;
 
 function fallbackExtract(lastUserText, lastExtracted) {
   const t = String(lastUserText || "").trim();
   if (!t) return null;
+
+  // 否定提案：返回 null 收起卡片，由 fallbackReply 引导用户说清要改什么
+  if (REJECT_RE.test(t) && lastExtracted) return "__reject__";
 
   const urlMatch = t.match(URL_RE);
   if (urlMatch) return { type: "link", text: t };
@@ -117,6 +123,9 @@ function fallbackExtract(lastUserText, lastExtracted) {
 
 function fallbackReply(userText, extracted, lastExtracted) {
   const t = String(userText || "").trim();
+  if (extracted === "__reject__") {
+    return "好，先不急着定～你想改哪一部分？时间、内容，还是它其实不是约定，告诉我就好。";
+  }
   if (!extracted) {
     return "我在听～你可以再说一点点：比如想什么时候做这件事，或者这只是当下的一点心情，我都会替你收好。";
   }
@@ -189,9 +198,10 @@ ${buildMessagesBlock(messages)}
 1. 信息不足时不要硬猜：只问一个最关键的补充问题（通常是时间），语气像朋友，不像表单。
 2. 信息足够时：extracted 给出完整提案，reply 里用一两句话温柔复述你要记下什么，提醒用户点确认即可生成，不要催促。
 3. 用户修改提案时，更新 extracted；用户说"就这些/对了/确认"时保持 extracted 不变。
-4. 永远温柔从容：不评判、不催促、不制造焦虑；用户想闲聊就好好陪聊。
-5. reply ≤80字，自然口语，像微信聊天，不要用列表和 markdown。
-6. 严格返回 JSON，不要输出其他内容。`,
+4. 用户否定当前提案（比如说"不对""我想改一下"）时：extracted 输出 null，先温柔地问清楚 TA 想改哪一部分（时间、内容，还是这其实不是约定/心签），不要立刻重复同一个提案。
+5. 永远温柔从容：不评判、不催促、不制造焦虑；用户想闲聊就好好陪聊。
+6. reply ≤80字，自然口语，像微信聊天，不要用列表和 markdown。
+7. 严格返回 JSON，不要输出其他内容。`,
     responseJsonSchema: RESPONSE_SCHEMA,
     temperature: 0.7
   });
@@ -231,9 +241,10 @@ export async function runFlowChat({ messages, lastExtracted = null }) {
     return { ...out, source: "ai" };
   } catch (err) {
     console.warn("[flowChat] Kimi chat failed, fallback:", err?.message || err);
-    const extracted = sanitizeExtracted(fallbackExtract(lastUser?.content, lastExtracted));
+    const raw = fallbackExtract(lastUser?.content, lastExtracted);
+    const extracted = raw && raw !== "__reject__" ? sanitizeExtracted(raw) : null;
     return {
-      reply: fallbackReply(lastUser?.content, extracted, lastExtracted),
+      reply: fallbackReply(lastUser?.content, raw === "__reject__" ? "__reject__" : extracted, lastExtracted),
       extracted,
       source: "fallback"
     };

@@ -90,6 +90,38 @@ export default function Tasks() {
   const [sessionDoneIds, setSessionDoneIds] = useState(() => new Set());
   const [collapsingIds, setCollapsingIds] = useState(() => new Set()); // 正在收起动画的盖章卡片
   const collapseTimersRef = useRef({}); // task.id -> [timeout...]，取消完成时撤销收起计划
+  const [svScrollTop, setSvScrollTop] = useState(0); // 滚动守护：归档移除后恢复位置，不跳回页眉
+  const svTopRef = useRef(0);
+  const lastCompleteAtRef = useRef(0); // 最近盖章时间，AI 分析到位重渲染后也补一次恢复
+
+  // 记录约定页 ScrollView 当前滚动位置
+  const captureSvScroll = () => {
+    Taro.createSelectorQuery()
+      .select("#taskScroll")
+      .fields({ scrollOffset: true })
+      .exec((res) => {
+        svTopRef.current = res?.[0]?.scrollTop || 0;
+      });
+  };
+
+  // 恢复滚动位置：优先 enhanced 节点 scrollTo（命令式直改）；兜底受控 scroll-top 错位触发
+  const restoreSvScroll = (top) => {
+    if (!(top > 10)) return;
+    Taro.createSelectorQuery()
+      .select("#taskScroll")
+      .node()
+      .exec((res) => {
+        const node = res?.[0]?.node;
+        if (node && typeof node.scrollTo === "function") {
+          try {
+            node.scrollTo({ top, duration: 0 });
+            return;
+          } catch (_e) {}
+        }
+        setSvScrollTop(top + 1);
+        setTimeout(() => setSvScrollTop(top), 100);
+      });
+  };
 
   const toastTimerRef = useRef(null);
   const showToast = (msg) => {
@@ -167,6 +199,15 @@ export default function Tasks() {
     };
   }, [fetchData]);
 
+  // AI 分析到位会触发整页重渲染，也可能把 ScrollView 滚动位置重置回页眉；
+  // 盖章后不久（5s 内）到位时补一次恢复
+  useEffect(() => {
+    if (Date.now() - lastCompleteAtRef.current < 5000) {
+      restoreSvScroll(svTopRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisMap]);
+
   const grouped = useMemo(() => {
     return groups.map((g) => ({
       ...g,
@@ -188,6 +229,8 @@ export default function Tasks() {
     const markingDone = !isTaskDone(task);
     const prevStatus = task.status; // 网络失败回滚用
     const nextStatus = markingDone ? "completed" : "pending";
+    captureSvScroll(); // 记录当前滚动位置，归档移除后分次恢复，不跳回页眉
+    lastCompleteAtRef.current = Date.now();
     // 就地标记完成/还原（卡片保留，切换盖章样式）：不触发整页刷新、不移除节点，页面不跳动
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)));
     setSessionDoneIds((prev) => {
@@ -222,6 +265,10 @@ export default function Tasks() {
             // 期间被取消了完成或已不存在，则不移除
             if (!target || !isTaskDone(target)) return prev;
             return prev.filter((t) => t.id !== task.id);
+          });
+          // 归档移除（及随后的重渲染）可能触发微信 ScrollView 重置滚动位置，分次恢复兜底
+          [80, 400, 900].forEach((delay) => {
+            setTimeout(() => restoreSvScroll(svTopRef.current), delay);
           });
         }, 1700),
       ];
@@ -365,7 +412,7 @@ export default function Tasks() {
 
   return (
     <View className="ss-page" style={{ background: theme.paper, minHeight: "100vh", padding: "24rpx", boxSizing: "border-box" }}>
-      <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
+      <ScrollView id="taskScroll" scrollY enhanced scrollTop={svScrollTop} style={{ height: "calc(100vh - 48rpx)" }}>
         {/* header */}
         <View
           style={{

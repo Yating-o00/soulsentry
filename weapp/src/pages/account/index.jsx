@@ -487,24 +487,18 @@ export default function Account() {
   const moodScore = series.length ? (series.reduce((s, d) => s + d.score, 0) / series.length).toFixed(1) : "7.2";
   const labels = lastNDays(period).filter((_, i) => i % Math.ceil(period / 5) === 0 || i === period - 1).map((d) => d.label);
 
+  // 直接退出：该环境弹窗（自定义/原生）回调不可靠，退出账户不再二次确认
   const handleLogout = () => {
-    clearToken();
-    setDemoMode(false);
-    Taro.reLaunch({ url: "/pages/index/index" });
-  };
-
-  // 退出确认改用微信原生弹窗：页面自定义 fixed 弹层在部分环境收不到点击，原生弹窗稳定可靠
-  const confirmLogout = () => {
-    Taro.showModal({
-      title: "确认退出账户？",
-      content: "退出后需要重新登录才能访问你的心栈数据",
-      confirmText: "确认退出",
-      cancelText: "取消",
-      confirmColor: theme.primary,
-      success: (res) => {
-        if (res.confirm) handleLogout();
-      }
-    });
+    try {
+      clearToken();
+      setDemoMode(false);
+    } catch (_e) {}
+    Taro.showToast({ title: "已退出登录", icon: "success", duration: 1200 });
+    setTimeout(() => {
+      Taro.reLaunch({ url: "/pages/index/index" }).catch(() => {
+        Taro.switchTab({ url: "/pages/flow/index" });
+      });
+    }, 250);
   };
 
   const openSwitchPanel = () => {
@@ -963,7 +957,7 @@ export default function Account() {
                 <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
               </View>
               <View
-                onClick={confirmLogout}
+                onClick={handleLogout}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1290,7 +1284,7 @@ export default function Account() {
         </View>
       )}
 
-      {/* logout confirm 已改用微信原生弹窗（confirmLogout） */}
+      {/* 退出账户直接执行 handleLogout，不再弹确认（该环境弹层交互不可靠） */}
     </View>
   );
 }

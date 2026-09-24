@@ -200,3 +200,18 @@ page {
   color: var(--text-secondary);
   font-size: 24rpx;
 }
+
+.promise-card-slot {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 4000rpx;
+  opacity: 1;
+  transition: max-height 0.45s ease, opacity 0.35s ease;
+}
+
+.promise-card-slot.collapsing {
+  max-height: 0;
+  opacity: 0;
+}
+

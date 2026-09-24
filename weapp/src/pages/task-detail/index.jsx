@@ -61,10 +61,16 @@ export default function TaskDetail() {
     fetchAll();
   }, [taskId]);
 
+  // 子约定/状态变更后通知约定列表页定向刷新对应卡片，保证返回时数据同步
+  const notifySubtasksChanged = () => {
+    Taro.eventCenter.trigger("task:subtasks-changed", { taskId });
+  };
+
   const toggleTaskStatus = async (targetId, nextStatus) => {
     try {
       await patch(`/tasks/${targetId}`, { status: nextStatus });
       fetchAll();
+      notifySubtasksChanged();
     } catch (err) {
       // handled globally
     }
@@ -104,6 +110,7 @@ export default function TaskDetail() {
       setSubtaskText("");
       Taro.showToast({ title: "子约定已添加", icon: "success" });
       fetchAll();
+      notifySubtasksChanged();
     } catch (err) {
       console.error("add subtask failed", err);
       Taro.showToast({ title: "添加失败，请重试", icon: "none" });
@@ -126,6 +133,7 @@ export default function TaskDetail() {
       setExpandedIds((prev) => new Set(prev).add(parentId));
       Taro.showToast({ title: "已添加", icon: "success" });
       fetchAll();
+      notifySubtasksChanged();
     } catch (err) {
       console.error("add child subtask failed", err);
       Taro.showToast({ title: "添加失败", icon: "none" });
@@ -143,6 +151,7 @@ export default function TaskDetail() {
       await del(`/tasks/${id}`);
       Taro.showToast({ title: "已删除", icon: "success" });
       fetchAll();
+      notifySubtasksChanged();
     } catch (err) {
       console.error("delete subtask failed", err);
     }

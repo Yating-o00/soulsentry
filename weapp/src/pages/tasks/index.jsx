@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
@@ -85,9 +85,11 @@ export default function Tasks() {
   const [toast, setToast] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [showDailyReview, setShowDailyReview] = useState(false);
-  // 本会话内刚盖章完成的约定 id：卡片暂留列表显示「已盖章」样式（不移除节点，滚动位置不跳回页眉），
-  // 下次拉取服务端数据后正式归档
+  // 本会话内刚盖章完成的约定 id：卡片先暂留列表显示「已盖章」样式（不移除节点，滚动位置不跳回页眉），
+  // 短暂延迟后收起并归档出列表
   const [sessionDoneIds, setSessionDoneIds] = useState(() => new Set());
+  const [collapsingIds, setCollapsingIds] = useState(() => new Set()); // 正在收起动画的盖章卡片
+  const collapseTimersRef = useRef({}); // task.id -> [timeout...]，取消完成时撤销收起计划
 
   const toastTimerRef = useRef(null);
   const showToast = (msg) => {
@@ -99,33 +101,33 @@ export default function Tasks() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [taskData, execData] = await Promise.all([
-        get("/tasks", { parent_task_id: "", sort: "-created_date", limit: 200 }),
+      // 一次拉全量约定+子约定（parent_task_id=all），避免每条约定单独请求的 N+1 开销
+      const [allData, execData] = await Promise.all([
+        get("/tasks", { parent_task_id: "all", sort: "-created_date", limit: 300 }),
         get("/task-executions", { limit: 100 }),
       ]);
-      const topTasks = Array.isArray(taskData) ? taskData : [];
+      const all = Array.isArray(allData) ? allData : [];
       const execList = Array.isArray(execData) ? execData : [];
 
-      const subResults = await Promise.all(
-        topTasks.map((t) => get("/tasks", { parent_task_id: t.id, limit: 200 }).catch(() => []))
-      );
+      const topTasks = all.filter((t) => !t.parent_task_id);
       const subMap = {};
-      topTasks.forEach((t, i) => {
-        subMap[t.id] = Array.isArray(subResults[i]) ? subResults[i] : [];
+      all.forEach((t) => {
+        if (!t.parent_task_id) return;
+        if (!subMap[t.parent_task_id]) subMap[t.parent_task_id] = [];
+        subMap[t.parent_task_id].push(t);
       });
-
-      const analysisPayload = {
-        tasks: topTasks,
-        executions: execList,
-        subtasks: subMap,
-      };
-      const analysisResult = await post("/functions/analyzeTasks", analysisPayload).catch(() => ({}));
 
       setTasks(topTasks);
       setSessionDoneIds(new Set()); // 以服务端数据为准：本会话盖章的约定正式归档出列表
       setExecutions(execList);
       setSubtaskMap(subMap);
-      setAnalysisMap(isPlainObject(analysisResult) ? analysisResult : {});
+
+      // AI 分析（每条约定一次 Kimi 调用）不阻塞渲染：约定列表先展示，分析结果到了再更新分组/建议
+      post("/functions/analyzeTasks", { tasks: topTasks, executions: execList, subtasks: subMap })
+        .then((analysisResult) => {
+          setAnalysisMap(isPlainObject(analysisResult) ? analysisResult : {});
+        })
+        .catch(() => {});
     } catch (err) {
       setTasks([]);
       setExecutions([]);
@@ -145,6 +147,25 @@ export default function Tasks() {
       else setLoading(false);
     })();
   });
+
+  // 约定详情页改了子约定后发事件，这里定向刷新对应卡片的子约定，保证回到列表时数据同步
+  useEffect(() => {
+    const handler = ({ taskId } = {}) => {
+      if (!taskId) {
+        fetchData();
+        return;
+      }
+      get("/tasks", { parent_task_id: taskId, limit: 200 })
+        .then((subs) => {
+          setSubtaskMap((prev) => ({ ...prev, [taskId]: Array.isArray(subs) ? subs : [] }));
+        })
+        .catch(() => {});
+    };
+    Taro.eventCenter.on("task:subtasks-changed", handler);
+    return () => {
+      Taro.eventCenter.off("task:subtasks-changed", handler);
+    };
+  }, [fetchData]);
 
   const grouped = useMemo(() => {
     return groups.map((g) => ({
@@ -175,6 +196,44 @@ export default function Tasks() {
       else next.delete(task.id);
       return next;
     });
+    // 盖章后延迟收起并归档出列表：先展示约 1s 盖章样式，再收起（节点占位归 0），最后移除。
+    // 移除时列表高度已不变，滚动位置不会跳回页眉；取消完成可撤销收起计划
+    const timers = collapseTimersRef.current[task.id] || [];
+    timers.forEach(clearTimeout);
+    if (markingDone) {
+      collapseTimersRef.current[task.id] = [
+        setTimeout(() => {
+          setCollapsingIds((prev) => new Set(prev).add(task.id));
+        }, 1100),
+        setTimeout(() => {
+          collapseTimersRef.current[task.id] = [];
+          setCollapsingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(task.id);
+            return next;
+          });
+          setSessionDoneIds((prev) => {
+            const next = new Set(prev);
+            next.delete(task.id);
+            return next;
+          });
+          setTasks((prev) => {
+            const target = prev.find((t) => t.id === task.id);
+            // 期间被取消了完成或已不存在，则不移除
+            if (!target || !isTaskDone(target)) return prev;
+            return prev.filter((t) => t.id !== task.id);
+          });
+        }, 1700),
+      ];
+    } else {
+      delete collapseTimersRef.current[task.id];
+      setCollapsingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
+    }
+
     showToast(markingDone ? "已盖章 · 如约而至" : "已取消完成");
     patch(`/tasks/${task.id}`, { status: nextStatus }).catch(() => {
       // 失败回滚：还原状态与盖章标记
@@ -437,20 +496,24 @@ export default function Tasks() {
                     }}
                   />
                   {g.items.map((task, i) => (
-                    <PromiseCard
+                    <View
                       key={task.id}
-                      task={task}
-                      analysis={mergeAnalysis(task, analysisMap[task.id])}
-                      subtasks={subtaskMap[task.id] || []}
-                      index={i}
-                      onComplete={handleComplete}
-                      onSnooze={setSnoozeTask}
-                      onReview={setReviewTask}
-                      onDelegate={handleDelegate}
-                      onExecRun={handleExecRun}
-                      onSubtaskToggle={handleSubtaskToggle}
-                      onShare={handleShare}
-                    />
+                      className={`promise-card-slot${collapsingIds.has(task.id) ? " collapsing" : ""}`}
+                    >
+                      <PromiseCard
+                        task={task}
+                        analysis={mergeAnalysis(task, analysisMap[task.id])}
+                        subtasks={subtaskMap[task.id] || []}
+                        index={i}
+                        onComplete={handleComplete}
+                        onSnooze={setSnoozeTask}
+                        onReview={setReviewTask}
+                        onDelegate={handleDelegate}
+                        onExecRun={handleExecRun}
+                        onSubtaskToggle={handleSubtaskToggle}
+                        onShare={handleShare}
+                      />
+                    </View>
                   ))}
                 </View>
               )}

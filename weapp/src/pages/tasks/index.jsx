@@ -85,6 +85,9 @@ export default function Tasks() {
   const [toast, setToast] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [showDailyReview, setShowDailyReview] = useState(false);
+  // 本会话内刚盖章完成的约定 id：卡片暂留列表显示「已盖章」样式（不移除节点，滚动位置不跳回页眉），
+  // 下次拉取服务端数据后正式归档
+  const [sessionDoneIds, setSessionDoneIds] = useState(() => new Set());
 
   const toastTimerRef = useRef(null);
   const showToast = (msg) => {
@@ -119,6 +122,7 @@ export default function Tasks() {
       const analysisResult = await post("/functions/analyzeTasks", analysisPayload).catch(() => ({}));
 
       setTasks(topTasks);
+      setSessionDoneIds(new Set()); // 以服务端数据为准：本会话盖章的约定正式归档出列表
       setExecutions(execList);
       setSubtaskMap(subMap);
       setAnalysisMap(isPlainObject(analysisResult) ? analysisResult : {});
@@ -146,12 +150,13 @@ export default function Tasks() {
     return groups.map((g) => ({
       ...g,
       items: tasks.filter((t) => {
-        if (isTaskDone(t)) return false;
+        // 本会话刚盖章的暂留原位显示盖章样式；服务端已完成的（非本会话）归档不显示
+        if (isTaskDone(t) && !sessionDoneIds.has(t.id)) return false;
         const analysis = analysisMap[t.id] || {};
         return (analysis.group || "suggested") === g.key;
       }),
     }));
-  }, [tasks, analysisMap]);
+  }, [tasks, analysisMap, sessionDoneIds]);
 
   const doneItems = useMemo(() => tasks.filter((t) => isTaskDone(t)), [tasks]);
   const pendingItems = useMemo(() => tasks.filter((t) => !isTaskDone(t)), [tasks]);
@@ -160,25 +165,25 @@ export default function Tasks() {
 
   const handleComplete = (task) => {
     const markingDone = !isTaskDone(task);
-    const prevStatus = task.status;
-    const prevIndex = tasks.findIndex((t) => t.id === task.id);
-    // 立即从列表移除（或还原），不等网络、不触发整页刷新，页面不跳动
-    setTasks((prev) =>
-      markingDone
-        ? prev.filter((t) => t.id !== task.id)
-        : prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus === "completed" ? "pending" : "completed" } : t))
-    );
+    const prevStatus = task.status; // 网络失败回滚用
+    const nextStatus = markingDone ? "completed" : "pending";
+    // 就地标记完成/还原（卡片保留，切换盖章样式）：不触发整页刷新、不移除节点，页面不跳动
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)));
+    setSessionDoneIds((prev) => {
+      const next = new Set(prev);
+      if (markingDone) next.add(task.id);
+      else next.delete(task.id);
+      return next;
+    });
     showToast(markingDone ? "已盖章 · 如约而至" : "已取消完成");
-    patch(`/tasks/${task.id}`, { status: markingDone ? "completed" : "pending" }).catch(() => {
-      // 失败回滚：按原位置放回 / 还原状态
-      setTasks((prev) => {
-        if (markingDone) {
-          const next = [...prev];
-          const idx = prevIndex >= 0 ? Math.min(prevIndex, next.length) : next.length;
-          next.splice(idx, 0, task);
-          return next;
-        }
-        return prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus } : t));
+    patch(`/tasks/${task.id}`, { status: nextStatus }).catch(() => {
+      // 失败回滚：还原状态与盖章标记
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus } : t)));
+      setSessionDoneIds((prev) => {
+        const next = new Set(prev);
+        if (markingDone) next.delete(task.id);
+        else next.add(task.id);
+        return next;
       });
       showToast("网络开小差了，请再试一次");
     });

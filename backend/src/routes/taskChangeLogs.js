@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { assertTaskAccess } from "../services/taskSharing.js";
 
 export const taskChangeLogsRouter = Router();
 
@@ -26,6 +27,7 @@ function serializeChangeLog(item) {
     task_title: item.taskTitle,
     changed_fields: item.changedFields || [],
     changes_detail: item.changesDetail || [],
+    actor_name: item.user?.displayName || item.user?.email || "",
     created_date: item.createdAt,
     updated_date: item.updatedAt
   };
@@ -33,14 +35,28 @@ function serializeChangeLog(item) {
 
 taskChangeLogsRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || 100), 300);
-  const where = { userId: req.user.id };
-  if (req.query.task_id) where.taskId = String(req.query.task_id);
-  if (req.query.parent_task_id) where.parentTaskId = String(req.query.parent_task_id);
 
+  // 指定约定时：创建者/成员可查看该约定及子约定的全部变化（不限操作者）
+  if (req.query.task_id) {
+    const result = await assertTaskAccess(req, res, String(req.query.task_id));
+    if (!result) return;
+    const taskId = String(req.query.task_id);
+    const logs = await prisma.taskChangeLog.findMany({
+      where: { OR: [{ taskId }, { parentTaskId: taskId }] },
+      orderBy: parseSort(req.query.sort),
+      take: Number.isFinite(limit) ? limit : 100,
+      include: { user: true }
+    });
+    return res.json(logs.map(serializeChangeLog));
+  }
+
+  const where = { userId: req.user.id };
+  if (req.query.parent_task_id) where.parentTaskId = String(req.query.parent_task_id);
   const logs = await prisma.taskChangeLog.findMany({
     where,
     orderBy: parseSort(req.query.sort),
-    take: Number.isFinite(limit) ? limit : 100
+    take: Number.isFinite(limit) ? limit : 100,
+    include: { user: true }
   });
 
   return res.json(logs.map(serializeChangeLog));

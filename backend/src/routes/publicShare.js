@@ -647,6 +647,49 @@ publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/public/share/:token/join - 登录用户加入共有约定（双方实时共享同一约定，区别于 /import 的一次性副本）
+publicShareRouter.post("/:token/join", requireAuth, async (req, res) => {
+  const result = await findSharedItem(req.params.token);
+  if (!result) return res.status(404).json({ error: "NOT_FOUND" });
+  if (result.type !== "task") {
+    return res.status(400).json({ error: "INVALID_TYPE", message: "仅约定支持共有" });
+  }
+
+  const { item } = result;
+  if (isShareExpired(item)) return res.status(410).json({ error: "SHARE_EXPIRED" });
+  if (item.userId === req.user.id) {
+    return res.status(400).json({ error: "ALREADY_OWNER", message: "这是你自己的约定" });
+  }
+
+  const existing = await prisma.taskMember.findUnique({
+    where: { taskId_userId: { taskId: item.id, userId: req.user.id } }
+  });
+  if (existing) {
+    return res.json({ joined: true, already: true, task_id: item.id, title: item.title });
+  }
+
+  try {
+    await prisma.taskMember.create({
+      data: { taskId: item.id, userId: req.user.id, invitedBy: req.user.id }
+    });
+
+    await notifyOwner(item.userId, {
+      type: "shared_task_joined",
+      title: "有人加入了共有约定",
+      body: `${req.user.displayName || req.user.email || "某用户"} 加入了共有约定「${item.title}」，双方将实时共享这条约定的内容、提醒、评论与变化`,
+      shareToken: req.params.token,
+      targetType: "task",
+      targetId: item.id,
+      link: `/tasks?taskId=${item.id}`
+    });
+
+    return res.status(201).json({ joined: true, task_id: item.id, title: item.title });
+  } catch (error) {
+    console.error("[publicShare] join failed:", error);
+    return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
+  }
+});
+
 // GET /api/public/share/:token/logs - 获取分享的合作动态（仅分享者）
 publicShareRouter.get("/:token/logs", requireAuth, async (req, res) => {
   const result = await findSharedItem(req.params.token);

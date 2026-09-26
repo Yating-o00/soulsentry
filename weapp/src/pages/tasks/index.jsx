@@ -155,11 +155,15 @@ export default function Tasks() {
       setSubtaskMap(subMap);
 
       // AI 分析（每条约定一次 Kimi 调用）不阻塞渲染：约定列表先展示，分析结果到了再更新分组/建议
-      post("/functions/analyzeTasks", { tasks: topTasks, executions: execList, subtasks: subMap })
-        .then((analysisResult) => {
-          setAnalysisMap(isPlainObject(analysisResult) ? analysisResult : {});
-        })
-        .catch(() => {});
+      // 共有约定跳过：分析结果在共享行上天然同步，避免成员重复消耗 AI 点数
+      const analyzableTasks = topTasks.filter((t) => t.shared_role !== "member");
+      if (analyzableTasks.length > 0) {
+        post("/functions/analyzeTasks", { tasks: analyzableTasks, executions: execList, subtasks: subMap })
+          .then((analysisResult) => {
+            setAnalysisMap(isPlainObject(analysisResult) ? analysisResult : {});
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       setTasks([]);
       setExecutions([]);

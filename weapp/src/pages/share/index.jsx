@@ -18,6 +18,7 @@ export default function Share() {
   const [pendingAction, setPendingAction] = useState(null);
   const [commentText, setCommentText] = useState("");
   const [autoImport, setAutoImport] = useState(false);
+  const [joinState, setJoinState] = useState("idle"); // idle | loading | joined
 
   const nameRef = useRef("");
   const tokenRef = useRef("");
@@ -225,6 +226,29 @@ export default function Share() {
     }
   };
 
+  // 加入共有约定：双方实时共享同一条约定（区别于导入副本）
+  const handleJoin = async () => {
+    if (!isLoggedIn()) {
+      const redirect = encodeURIComponent(`/pages/share/index?token=${token}`);
+      Taro.navigateTo({ url: `/pages/login/index?redirect=${redirect}` });
+      return;
+    }
+    if (joinState === "loading") return;
+    setJoinState("loading");
+    try {
+      await post(`/public/share/${token}/join`);
+      setJoinState("joined");
+      Taro.showToast({ title: "已加入共有约定", icon: "success" });
+    } catch (err) {
+      setJoinState("idle");
+      // 错误已全局提示（如「这是你自己的约定」）
+    }
+  };
+
+  const gotoTasks = () => {
+    Taro.switchTab({ url: "/pages/tasks/index" });
+  };
+
   if (loading && !share) {
     return (
       <View className="ss-page">
@@ -304,11 +328,24 @@ export default function Share() {
 
         <View className="ss-card">
           <View className="ss-section-title">参与操作</View>
+          {isTask && isLoggedIn() && joinState !== "joined" && (
+            <Button className="ss-btn" onClick={handleJoin} loading={joinState === "loading"}>
+              加入共有约定
+            </Button>
+          )}
+          {isTask && isLoggedIn() && joinState === "joined" && (
+            <Button className="ss-btn" onClick={gotoTasks}>已加入 · 前往约定列表</Button>
+          )}
+          {isTask && isLoggedIn() && (
+            <Text className="ss-muted" style={{ display: "block", margin: "12rpx 0 20rpx" }}>
+              加入后，双方将实时共享这条约定的内容、提醒、子约定、评论与变化记录
+            </Text>
+          )}
           <View style={{ display: "flex", flexWrap: "wrap" }}>
             <Button className="ss-btn ss-btn-sm ss-btn-plain" style={{ marginRight: "16rpx", marginBottom: "16rpx" }} openType="share">微信转发</Button>
             <Button className="ss-btn ss-btn-sm ss-btn-plain" style={{ marginRight: "16rpx", marginBottom: "16rpx" }} onClick={handleSubscribe}>订阅更新</Button>
             <Button className="ss-btn ss-btn-sm ss-btn-plain" style={{ marginRight: "16rpx", marginBottom: "16rpx" }} onClick={handleCalendar}>添加到日历</Button>
-            <Button className="ss-btn ss-btn-sm" style={{ marginBottom: "16rpx" }} onClick={handleImport}>导入到我的列表</Button>
+            <Button className="ss-btn ss-btn-sm ss-btn-plain" style={{ marginBottom: "16rpx" }} onClick={handleImport}>保存副本到列表</Button>
           </View>
         </View>
 

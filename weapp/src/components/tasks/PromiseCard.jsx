@@ -240,6 +240,20 @@ export default function PromiseCard({
                 <Text style={{ fontSize: "20rpx", color: theme.inkTertiary }}>{recurringText || analysis.recurring}</Text>
               </View>
             )}
+
+            {task.shared_role === "member" && (
+              <View
+                style={{
+                  border: `1rpx solid ${theme.sage}`,
+                  padding: "4rpx 12rpx",
+                  borderRadius: "4rpx",
+                }}
+              >
+                <Text style={{ fontSize: "20rpx", color: theme.sage, letterSpacing: "2rpx" }}>
+                  共有 · {task.owner_display_name || "对方"}
+                </Text>
+              </View>
+            )}
           </View>
 
           {task.description ? (

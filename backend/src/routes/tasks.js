@@ -5,6 +5,14 @@ import { requireAuth } from "../middleware/auth.js";
 import { maybeAutoExecute } from "../services/autoAutomation.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
 import { suggestTaskSplit } from "../services/splitTask.js";
+import {
+  assertTaskAccess,
+  describeTaskChange,
+  getSharedTaskIds,
+  notifyTaskParties,
+  taskAccess,
+  withSharedInfo
+} from "../services/taskSharing.js";
 
 export const tasksRouter = Router();
 
@@ -246,15 +254,31 @@ async function createTaskChangeLog(userId, task, changeType, payload = {}, previ
 tasksRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || req.query.take || 100), 300);
   const orderBy = parseSort(req.query.sort || req.query.orderBy);
-  const where = { userId: req.user.id };
+  // 共有约定：本人所有 + 作为成员参与的约定（含其子约定）
+  const sharedIds = await getSharedTaskIds(req.user.id);
+  const where = sharedIds.length
+    ? { OR: [{ userId: req.user.id }, { id: { in: sharedIds } }, { parentTaskId: { in: sharedIds } }] }
+    : { userId: req.user.id };
+  let needSharedInclude = sharedIds.length > 0;
 
   if (req.query.id) where.id = String(req.query.id);
   if (req.query.parent_task_id !== undefined) {
     const value = String(req.query.parent_task_id).trim();
     if (value === "all") {
       // 不过滤
+    } else if (value) {
+      // 指定父约定：先校验访问权；共有约定的子约定可能分属双方，不再按 userId 过滤
+      const parent = await prisma.task.findUnique({ where: { id: value }, include: { members: true } });
+      if (!taskAccess(parent, req.user.id)) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "任务不存在" });
+      }
+      if (parent.members.length > 0 || parent.userId !== req.user.id) {
+        for (const key of Object.keys(where)) delete where[key];
+        needSharedInclude = true;
+      }
+      where.parentTaskId = value;
     } else {
-      where.parentTaskId = value ? value : null;
+      where.parentTaskId = null;
     }
   } else {
     // 默认只返回顶层约定，避免子约定出现在列表中
@@ -278,25 +302,20 @@ tasksRouter.get("/", async (req, res) => {
   const tasks = await prisma.task.findMany({
     where,
     orderBy,
-    take: Number.isFinite(limit) ? limit : 100
+    take: Number.isFinite(limit) ? limit : 100,
+    include: needSharedInclude ? { user: true, members: true } : undefined
   });
 
-  return res.json(tasks.map(serializeTask));
+  return res.json(tasks.map((task) => {
+    const role = task.userId === req.user.id ? "owner" : (taskAccess(task, req.user.id) || "member");
+    return withSharedInfo(serializeTask(task), task, role);
+  }));
 });
 
 tasksRouter.get("/:id", async (req, res) => {
-  const task = await prisma.task.findFirst({
-    where: {
-      id: req.params.id,
-      userId: req.user.id
-    }
-  });
-
-  if (!task) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "任务不存在" });
-  }
-
-  return res.json(serializeTask(task));
+  const result = await assertTaskAccess(req, res, req.params.id);
+  if (!result) return;
+  return res.json(withSharedInfo(serializeTask(result.task), result.task, result.role));
 });
 
 tasksRouter.post("/", async (req, res) => {
@@ -307,6 +326,14 @@ tasksRouter.post("/", async (req, res) => {
 
   // 内容安全：约定/子约定的标题与描述需通过 msgSecCheck
   if (await rejectIfRisky(res, `${payload.data.title || ""}\n${payload.data.description || ""}`, req.user.id)) return;
+
+  // 在他人共有约定下新建子约定：需是该约定的成员
+  if (payload.data.parent_task_id) {
+    const parent = await prisma.task.findUnique({ where: { id: payload.data.parent_task_id }, include: { members: true } });
+    if (parent && parent.userId !== req.user.id && !taskAccess(parent, req.user.id)) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "任务不存在" });
+    }
+  }
 
   const task = await prisma.task.create({
     data: buildTaskCreateData(req.user.id, payload.data)
@@ -387,15 +414,16 @@ tasksRouter.patch("/:id", async (req, res) => {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
 
-  const existing = await prisma.task.findFirst({
-    where: {
-      id: req.params.id,
-      userId: req.user.id
-    }
-  });
+  const access = await assertTaskAccess(req, res, req.params.id);
+  if (!access) return;
+  const existing = access.task;
 
-  if (!existing) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "任务不存在" });
+  // 共有成员可共同管理内容，但删除与归属变更仍属创建者
+  if (access.role === "member" && payload.data.deleted_at !== undefined) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "共有约定仅创建者可删除" });
+  }
+  if (access.role === "member" && payload.data.parent_task_id !== undefined) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "共有成员不能变更约定的归属" });
   }
 
   const extraFields = getTaskExtraFields(payload.data);
@@ -457,6 +485,12 @@ tasksRouter.patch("/:id", async (req, res) => {
     void maybeAutoExecute(task, req.user.id, prisma);
   }
 
+  // 共有约定：状态/内容等关键变更通知其他参与方（纯提醒稍后等不通知）
+  const SIGNIFICANT_CHANGE_KEYS = ["status", "title", "description", "priority", "due_at", "completed_at", "deleted_at"];
+  if (SIGNIFICANT_CHANGE_KEYS.some((key) => payload.data[key] !== undefined)) {
+    await notifyTaskParties(task, req.user, describeTaskChange(req.user, task, payload.data));
+  }
+
   // 约定直接勾掉完成时，关联的待验收/待批准/执行中的执行单一并自动验收归档，
   // 避免守护记录里残留「等你确认」的已完成约定
   if (task.status === "DONE" && existing.status !== "DONE") {
@@ -485,16 +519,18 @@ tasksRouter.patch("/:id", async (req, res) => {
 });
 
 tasksRouter.delete("/:id", async (req, res) => {
-  const existing = await prisma.task.findFirst({
-    where: {
-      id: req.params.id,
-      userId: req.user.id
-    }
-  });
-
-  if (!existing) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "任务不存在" });
+  const access = await assertTaskAccess(req, res, req.params.id);
+  if (!access) return;
+  if (access.role !== "owner") {
+    return res.status(403).json({ error: "FORBIDDEN", message: "共有约定需创建者删除，你可以选择退出共有" });
   }
+  const existing = access.task;
+
+  await notifyTaskParties(existing, req.user, {
+    type: "shared_task_deleted",
+    title: "共有约定已删除",
+    body: `${req.user.displayName || req.user.email || "对方"} 删除了共有约定「${existing.title}」`
+  });
 
   await prisma.task.delete({ where: { id: existing.id } });
   await createTaskChangeLog(
@@ -511,4 +547,83 @@ tasksRouter.delete("/:id", async (req, res) => {
     }
   );
   return res.status(204).send();
+});
+
+// GET /api/tasks/:id/members - 共有成员列表（创建者/成员可见）
+tasksRouter.get("/:id/members", async (req, res) => {
+  const access = await assertTaskAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const members = await prisma.taskMember.findMany({
+    where: { taskId: access.task.id },
+    include: { user: true },
+    orderBy: { createdAt: "asc" }
+  });
+
+  const serializeMember = (user, joinedAt, isOwner) => ({
+    user_id: user.id,
+    display_name: user.displayName || user.email || user.phone || "用户",
+    email: user.email || null,
+    is_owner: isOwner,
+    is_self: user.id === req.user.id,
+    joined_at: joinedAt || null
+  });
+
+  return res.json({
+    task_id: access.task.id,
+    my_role: access.role,
+    owner: serializeMember(access.task.user, access.task.createdAt, true),
+    members: members.map((m) => serializeMember(m.user, m.createdAt, false))
+  });
+});
+
+// DELETE /api/tasks/:id/members/:userId - 创建者移除成员；成员移除自己=退出共有
+tasksRouter.delete("/:id/members/:userId", async (req, res) => {
+  const access = await assertTaskAccess(req, res, req.params.id);
+  if (!access) return;
+
+  const targetUserId = req.params.userId;
+  if (targetUserId === access.task.userId) {
+    return res.status(400).json({ error: "INVALID_TARGET", message: "创建者不在成员列表中" });
+  }
+
+  const isSelfLeave = targetUserId === req.user.id;
+  if (!isSelfLeave && access.role !== "owner") {
+    return res.status(403).json({ error: "FORBIDDEN", message: "仅创建者可移除成员" });
+  }
+
+  const membership = await prisma.taskMember.findUnique({
+    where: { taskId_userId: { taskId: access.task.id, userId: targetUserId } }
+  });
+  if (!membership) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "成员不存在" });
+  }
+
+  await prisma.taskMember.delete({ where: { id: membership.id } });
+
+  const taskTitle = access.task.title;
+  if (isSelfLeave) {
+    await notifyTaskParties(access.task, req.user, {
+      type: "shared_task_left",
+      title: "有成员退出共有约定",
+      body: `${req.user.displayName || req.user.email || "对方"} 退出了共有约定「${taskTitle}」`
+    });
+  } else {
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: targetUserId,
+          title: "你已被移出共有约定",
+          body: `创建者将你移出了共有约定「${taskTitle}」`,
+          channel: "in_app",
+          status: "SENT",
+          payload: { type: "shared_task_removed", taskId: access.task.id }
+        }
+      });
+    } catch (error) {
+      console.error("[tasks] notify removed member failed:", error);
+    }
+  }
+
+  return res.json({ removed: true, user_id: targetUserId });
 });

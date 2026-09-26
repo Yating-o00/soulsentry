@@ -20,6 +20,8 @@ export default function TaskDetail() {
   const [subtaskText, setSubtaskText] = useState("");
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState(new Set());
+  const [changeLogs, setChangeLogs] = useState([]);
+  const [membersInfo, setMembersInfo] = useState(null);
 
   const taskId = Taro.getCurrentInstance().router.params.id;
 
@@ -46,6 +48,20 @@ export default function TaskDetail() {
 
       const cmt = await get("/comments", { task_id: taskId, sort: "-created_date", limit: 100 });
       setComments(Array.isArray(cmt) ? cmt : []);
+
+      // 变化记录与共有成员（后端对无权限/非共有场景静默降级，不影响主流程）
+      try {
+        const logs = await get("/task-change-logs", { task_id: taskId, sort: "-created_date", limit: 50 });
+        setChangeLogs(Array.isArray(logs) ? logs : []);
+      } catch (_e) {
+        setChangeLogs([]);
+      }
+      try {
+        const mi = await get(`/tasks/${taskId}/members`);
+        setMembersInfo(mi && mi.owner ? mi : null);
+      } catch (_e) {
+        setMembersInfo(null);
+      }
     } catch (err) {
       // handled globally
     } finally {
@@ -164,6 +180,53 @@ export default function TaskDetail() {
       else next.add(id);
       return next;
     });
+  };
+
+  // 创建者移除共有成员
+  const removeMember = async (member) => {
+    const res = await Taro.showModal({
+      title: "移除成员",
+      content: `将 ${member.display_name} 移出共有约定？对方将不再看到这条约定。`,
+      confirmColor: "#e53935"
+    });
+    if (!res.confirm) return;
+    try {
+      await del(`/tasks/${taskId}/members/${member.user_id}`);
+      Taro.showToast({ title: "已移除", icon: "success" });
+      fetchAll();
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  // 成员退出共有
+  const leaveShared = async () => {
+    const self = (membersInfo?.members || []).find((m) => m.is_self);
+    if (!self) return;
+    const res = await Taro.showModal({
+      title: "退出共有",
+      content: "退出后将不再看到这条约定，创建者会收到通知。",
+      confirmColor: "#e53935"
+    });
+    if (!res.confirm) return;
+    try {
+      await del(`/tasks/${taskId}/members/${self.user_id}`);
+      Taro.showToast({ title: "已退出共有约定", icon: "success" });
+      setTimeout(() => Taro.switchTab({ url: "/pages/tasks/index" }), 600);
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  const CHANGE_TYPE_LABEL = {
+    created: "新建了约定",
+    subtask_created: "新建了子约定",
+    updated: "更新了",
+    subtask_updated: "更新了子约定",
+    status_changed: "变更了状态",
+    subtask_status_changed: "变更了子约定状态",
+    deleted: "删除了",
+    subtask_deleted: "删除了子约定"
   };
 
   if (loading && !task) {
@@ -368,6 +431,65 @@ export default function TaskDetail() {
           />
           <Button className="ss-btn" onClick={submitComment}>发送</Button>
         </View>
+
+        {membersInfo && (membersInfo.members.length > 0 || membersInfo.my_role === "member") && (
+          <View className="ss-card">
+            <View className="ss-section-title">共有成员</View>
+            <View style={{ display: "flex", alignItems: "center", padding: "14rpx 0", borderBottom: "1rpx solid #e5e6eb" }}>
+              <Text style={{ flex: 1, fontSize: "30rpx", color: "#333" }}>
+                {membersInfo.owner.display_name}
+                {membersInfo.owner.is_self ? "（我）" : ""}
+              </Text>
+              <Text className="ss-tag ss-tag-primary">创建者</Text>
+            </View>
+            {membersInfo.members.map((m) => (
+              <View key={m.user_id} style={{ display: "flex", alignItems: "center", padding: "14rpx 0", borderBottom: "1rpx solid #e5e6eb" }}>
+                <Text style={{ flex: 1, fontSize: "30rpx", color: "#333" }}>
+                  {m.display_name}
+                  {m.is_self ? "（我）" : ""}
+                </Text>
+                {membersInfo.my_role === "owner" && !m.is_self && (
+                  <Text
+                    onClick={() => removeMember(m)}
+                    style={{ fontSize: "26rpx", color: "#e53935", padding: "6rpx 16rpx", border: "1rpx solid #e53935", borderRadius: "10rpx" }}
+                  >
+                    移除
+                  </Text>
+                )}
+              </View>
+            ))}
+            {membersInfo.my_role === "member" && (
+              <Button className="ss-btn ss-btn-plain" style={{ marginTop: "20rpx" }} onClick={leaveShared}>
+                退出共有
+              </Button>
+            )}
+          </View>
+        )}
+
+        {changeLogs.length > 0 && (
+          <View className="ss-card">
+            <View className="ss-section-title">变化</View>
+            {changeLogs.map((log) => (
+              <View key={log.id} style={{ padding: "14rpx 0", borderBottom: "1rpx solid #e5e6eb" }}>
+                <View style={{ display: "flex", justifyContent: "space-between", marginBottom: "6rpx" }}>
+                  <Text style={{ fontSize: "28rpx", color: "#333" }}>
+                    {log.actor_name || "我"}{CHANGE_TYPE_LABEL[log.change_type] || "更新了"}
+                    {log.parent_task_id && log.task_title ? `「${log.task_title}」` : ""}
+                  </Text>
+                  <Text className="ss-muted">{new Date(log.created_date).toLocaleString("zh-CN")}</Text>
+                </View>
+                {(log.changes_detail || [])
+                  .filter((d) => d && d.new_value !== undefined && d.old_value !== d.new_value)
+                  .slice(0, 4)
+                  .map((d, idx) => (
+                    <Text key={idx} className="ss-muted" style={{ display: "block", fontSize: "24rpx", lineHeight: "36rpx" }}>
+                      {d.field_label}：{d.old_value} → {d.new_value}
+                    </Text>
+                  ))}
+              </View>
+            ))}
+          </View>
+        )}
 
         <View style={{ height: "40rpx" }} />
       </ScrollView>

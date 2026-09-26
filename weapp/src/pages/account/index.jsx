@@ -416,10 +416,18 @@ export default function Account() {
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
 
   const markRead = async (id) => {
+    const target = notifications.find((n) => n.id === id);
     try {
       await patch(`/notifications/${id}`, { is_read: true }, { silent: true });
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     } catch {}
+    // 通知携带约定链接（如共有约定加入/更新）时，点击直接跳转到约定详情
+    const link = target?.link || "";
+    const match = link.match(/taskId=([^&]+)/);
+    if (match && match[1]) {
+      setShowNotifications(false);
+      Taro.navigateTo({ url: `/pages/task-detail/index?id=${match[1]}` });
+    }
   };
 
   const markAllRead = async () => {

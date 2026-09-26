@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
+import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js";
 
 export const commentsRouter = Router();
 
@@ -45,7 +46,12 @@ function serializeComment(comment) {
 commentsRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || 100), 300);
   const where = {};
-  if (req.query.task_id) where.taskId = String(req.query.task_id);
+  if (req.query.task_id) {
+    // 共有约定：创建者/成员可读，无权限按不存在处理
+    const result = await assertTaskAccess(req, res, String(req.query.task_id));
+    if (!result) return;
+    where.taskId = String(req.query.task_id);
+  }
   const comments = await prisma.comment.findMany({
     where,
     orderBy: parseSort(req.query.sort),
@@ -64,6 +70,10 @@ commentsRouter.post("/", async (req, res) => {
   // 内容安全：评论内容需通过 msgSecCheck
   if (await rejectIfRisky(res, payload.data.content, req.user.id)) return;
 
+  // 共有约定：创建者/成员可评论
+  const result = await assertTaskAccess(req, res, payload.data.task_id);
+  if (!result) return;
+
   const comment = await prisma.comment.create({
     data: {
       userId: req.user.id,
@@ -72,6 +82,12 @@ commentsRouter.post("/", async (req, res) => {
       mentions: payload.data.mentions || []
     },
     include: { user: true }
+  });
+
+  await notifyTaskParties(result.task, req.user, {
+    type: "shared_task_comment",
+    title: "共有约定有新评论",
+    body: `${req.user.displayName || req.user.email || "对方"} 评论了「${result.task.title}」：${payload.data.content.slice(0, 60)}`
   });
 
   return res.status(201).json(serializeComment(comment));

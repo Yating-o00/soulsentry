@@ -12,8 +12,20 @@ import { trackHabit, trackOutcome } from "@/lib/personalDataEngine";
 export function useTaskOperations() {
   const queryClient = useQueryClient();
 
+  // 约定已在别处被彻底删除时（404），从本地缓存移除即可，不再报错
+  const isNotFound = (e) => e?.status === 404 || e?.response?.status === 404 || /not found/i.test(e?.message || "");
+  const safeTaskUpdate = async (id, data) => {
+    try {
+      return await base44.entities.Task.update(id, data);
+    } catch (e) {
+      if (!isNotFound(e)) throw e;
+      queryClient.setQueryData(['tasks'], (old) => Array.isArray(old) ? old.filter(t => t.id !== id) : old);
+      return null;
+    }
+  };
+
   const updateTaskMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
+    mutationFn: ({ id, data }) => safeTaskUpdate(id, data),
     onMutate: ({ id, data }) => {
       // 乐观更新：立即把新字段写入缓存，让依赖 ['tasks'] 的 useMemo
       // (例如 pages/Tasks 的智能分组) 立刻按新时间/状态重新分类
@@ -170,7 +182,7 @@ export function useTaskOperations() {
   });
 
   const deleteTaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
+    mutationFn: (id) => safeTaskUpdate(id, { deleted_at: new Date().toISOString() }),
     onSuccess: (data, id) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       feedback.success("已移至垃圾箱");

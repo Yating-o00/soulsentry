@@ -156,6 +156,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
         }
       }
     },
+    onError: (e) => {
+      if (/not found/i.test(e?.message || "")) {
+        toast.error("该约定已被删除，列表已刷新");
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      } else {
+        toast.error("更新失败，请稍后重试");
+      }
+    },
   });
 
   const createSubtaskMutation = useMutation({
@@ -169,7 +178,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   });
 
   const deleteSubtaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.delete(id),
+    mutationFn: (id) => base44.entities.Task.delete(id).catch((e) => {
+      if (!/not found/i.test(e?.message || "")) throw e;
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });

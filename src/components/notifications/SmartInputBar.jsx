@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mic, MicOff, Loader2 } from "lucide-react";
+import { Mic, MicOff, Loader2, ArrowUp } from "lucide-react";
 import { format, parseISO, isToday, isTomorrow } from "date-fns";
 import { generateExecutionPlan, executeStep } from "./ExecutionPlanGenerator";
 import { getShanghaiNow } from "@/lib/timeCore";
@@ -59,7 +59,16 @@ export default function SmartInputBar() {
   const [previewOverride, setPreviewOverride] = useState(null);
   const aiTimerRef = useRef(null);
   const recognitionRef = useRef(null);
+  const taRef = useRef(null);
   const queryClient = useQueryClient();
+
+  // 输入框随内容自动长高（上限约 6 行），空着时保持单行的简洁状态
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 168)}px`;
+  }, [inputValue]);
 
   // —— 实时倾听:输入停顿 1s 后做一次深度语义解析,驱动「我会把它收进…」预览 ——
   const analyzeWithAI = useCallback(async (text) => {
@@ -669,8 +678,9 @@ export default function SmartInputBar() {
       {/* 心栈之门 */}
       <div className={`gate-vessel rounded-2xl ${focused ? 'is-listening' : 'is-quiet'}`}>
         <textarea
+          ref={taRef}
           value={inputValue}
-          rows={2}
+          rows={1}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={(e) => setInputValue(e.target.value)}
@@ -681,8 +691,8 @@ export default function SmartInputBar() {
               handleSubmit();
             }
           }}
-          placeholder="约定、心事、一闪而过的念头……说给我听，就是交给记忆"
-          className="w-full resize-none bg-transparent px-5 sm:px-6 pt-5 text-[15.5px] leading-relaxed text-[var(--sky-ink)] placeholder:text-[var(--sky-sub)]/70 focus:outline-none"
+          placeholder="约定、心事、一闪而过的念头……说给我听"
+          className="w-full resize-none overflow-hidden bg-transparent px-5 sm:px-6 pt-4 pb-1.5 text-[15.5px] leading-relaxed text-[var(--sky-ink)] placeholder:text-[var(--sky-sub)]/70 focus:outline-none"
         />
 
         {/* 实时倾听预览:可点击改判 约定 ↔ 心签 */}
@@ -725,12 +735,12 @@ export default function SmartInputBar() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 px-4 sm:px-5 pb-4 pt-1">
+        <div className="flex items-center gap-2 px-4 sm:px-5 pb-3.5 pt-1">
           <button
             type="button"
             onClick={handleVoiceInput}
             title={isListeningVoice ? '点击停止' : '语音输入'}
-            className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
+            className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
               isListeningVoice
                 ? 'bg-red-100 text-red-500 animate-pulse'
                 : 'text-[var(--sky-sub)] hover:text-[var(--sky-ink)] hover:bg-black/[0.04]'
@@ -738,16 +748,13 @@ export default function SmartInputBar() {
           >
             {isListeningVoice ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
-          <span className="text-[11.5px] tracking-wide text-[var(--sky-sub)]/80">
-            我替你记住，并陪你慢慢读懂它
-          </span>
           <button
             onClick={handleSubmit}
             disabled={!inputValue.trim() || submitting}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--sentinel)] px-5 py-2 text-[13px] font-medium text-white transition-all duration-300 hover:bg-[var(--sentinel-deep)] disabled:opacity-35"
+            title="发送（Enter）"
+            className="ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--sentinel)] text-white transition-all duration-300 hover:bg-[var(--sentinel-deep)] disabled:opacity-30 disabled:hover:bg-[var(--sentinel)]"
           >
-            {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            说给心栈 →
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
           </button>
         </div>
       </div>

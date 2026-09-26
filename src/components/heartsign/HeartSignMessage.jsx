@@ -501,13 +501,23 @@ export default function HeartSignMessage({
     )}
     {note.attachments?.length > 0 && (
       <div className="mt-2.5 space-y-1.5">
-        {note.attachments.map((a, i) => (
-          <a key={i} href={a.file_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-2 px-2.5 py-2 bg-slate-50 border border-slate-200/70 rounded-lg text-[12px] text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition">
-            <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-            <span className="truncate flex-1">{a.file_name || '附件'}</span>
-          </a>
-        ))}
+        {note.attachments.map((a, i) => {
+          const isImage = (a.file_type || '').startsWith('image')
+            || /\.(png|jpe?g|gif|webp|avif|bmp)(\?|#|$)/i.test(a.file_url || '');
+          return isImage ? (
+            <a key={i} href={a.file_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+              className="block w-fit max-w-full overflow-hidden rounded-xl border border-slate-200/80 hover:border-slate-300 transition bg-slate-50">
+              <img src={a.file_url} alt={a.file_name || '图片'} loading="lazy"
+                className="max-h-72 w-auto max-w-full object-contain" />
+            </a>
+          ) : (
+            <a key={i} href={a.file_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-2 px-2.5 py-2 bg-slate-50 border border-slate-200/70 rounded-lg text-[12px] text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition">
+              <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+              <span className="truncate flex-1">{a.file_name || '附件'}</span>
+            </a>
+          );
+        })}
       </div>
     )}
 

@@ -227,7 +227,7 @@ export default function HeartSignInput({ onSend, onVaultTransfer }) {
             onPaste={handlePaste}
             onKeyDown={onKey}
             placeholder="发给自己 —— 心情、链接、账目、灵感，丢进来就好"
-            className="flex-1 bg-transparent outline-none resize-none text-[15px] md:text-base text-slate-800 placeholder-slate-400 px-2 py-2 max-h-[200px] md:max-h-[380px]"
+            className="flex-1 bg-transparent outline-none resize-none text-[15px] md:text-base text-slate-800 placeholder-slate-400 px-2 py-2 max-h-[200px] md:max-h-[380px] md:min-h-[220px]"
           />
           <button
             onClick={submit}

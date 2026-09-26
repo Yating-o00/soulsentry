@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { base44 } from '@/api/base44Client';
 import { registerPWA } from '@/lib/pwaRegister';
 
@@ -99,7 +100,10 @@ export function usePushSubscription({ onChange } = {}) {
         perm = await Notification.requestPermission();
       }
       setPermission(perm);
-      if (perm !== 'granted') return false;
+      if (perm !== 'granted') {
+        toast('没有获得通知权限也没关系～之后想开启的话，可以在浏览器地址栏的站点设置里重新允许通知。');
+        return false;
+      }
 
       // 取 VAPID 公钥 —— 没有它服务器永远推不出通知，必须拿到才能订阅
       let applicationServerKey = null;
@@ -111,6 +115,7 @@ export function usePushSubscription({ onChange } = {}) {
       }
       if (!applicationServerKey) {
         console.error('[push] 缺少 VAPID 公钥，无法订阅后台推送');
+        toast.error('通知服务还没准备好，请稍后再试。');
         return false;
       }
 
@@ -134,10 +139,12 @@ export function usePushSubscription({ onChange } = {}) {
       });
 
       setSubscribed(true);
+      toast.success('已开启约定提醒，到点时心栈会轻轻提醒你。');
       onChange && onChange(true);
       return true;
     } catch (e) {
       console.warn('[push] 订阅失败', e);
+      toast.error('开启通知失败了，请稍后重试。');
       return false;
     } finally {
       setBusy(false);

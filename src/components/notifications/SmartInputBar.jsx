@@ -1,61 +1,32 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Mic, MicOff, Loader2, ArrowUp } from "lucide-react";
-import { format, parseISO, isToday, isTomorrow } from "date-fns";
-import { generateExecutionPlan, executeStep } from "./ExecutionPlanGenerator";
-import { getShanghaiNow } from "@/lib/timeCore";
 import { deepSemanticParse } from "@/components/utils/semanticParser";
 import ChatPasteRecognizer from "@/components/heartsign/ChatPasteRecognizer";
 import { looksLikeChatLog } from "@/components/utils/processPastedContent";
+import TodayChatDialog from "@/components/today/TodayChatDialog";
 
 const SAMPLES = ['明早7点飞深圳', '今晚8点给妈妈打电话', '突然想去看看海', '今天有点累，但很踏实'];
 
-// 可自动执行的差事关键词:命中则除约定卡片外,还会自动编织产物(邮件/调研/PPT/笔记/账本…)
+// 可自动执行的差事关键词:命中则预览标签提示「⚙ 自动执行」
 const AUTO_RE = /邮件|email|e-mail|调研|调查报告|报告|ppt|PPT|总结|笔记|账本|文档|周报|月报|纪要|简历|方案|数据分析|邀请函|合同|议程/;
-
-// 心签二级分类
-function noteFlavor(text, intent) {
-  if (intent === 'wish') return '愿望';
-  if (/灵感|点子|想法|感悟|意识到|学到|突然想到/.test(text)) return '灵感';
-  if (/复盘|反思|总结|记录一下/.test(text)) return '复盘';
-  return '心绪';
-}
-
-const NOTE_CATEGORY_LABELS = {
-  work: '工作', personal: '生活', health: '健康', study: '学习',
-  family: '家人', shopping: '购物', finance: '财务', other: '点滴',
-};
-
-function fmtDayTime(iso) {
-  try {
-    const d = parseISO(iso);
-    const day = isToday(d) ? '今天' : isTomorrow(d) ? '明天' : format(d, 'M月d日');
-    return `${day} ${format(d, 'HH:mm')}`;
-  } catch {
-    return '';
-  }
-}
 
 /**
  * 心栈之门 —— 今日页统一记忆入口(视觉对齐参考稿 HeroGate)
- * 用户只管说,后台判断归属:
- *  - 约定(schedule/task/reminder/meeting):建约定卡片,AI 规划详细说明 + 子约定链路
- *  - 心签(note/wish):按内容与语义自动分类收进心签
- *  - 可自动执行的差事(关键词命中):约定卡片 + 自动编织产物
+ * 用户只管说；提交后进入与心栈的对话（TodayChatDialog），
+ * 由 AI 多轮理解意图，用户确认后才生成约定 / 心签 / 链接记录。
  */
 export default function SmartInputBar() {
   const [inputValue, setInputValue] = useState("");
   const [focused, setFocused] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [echo, setEcho] = useState(null); // 记忆回响:刚才那一句去了哪里
   const [semanticAnalysis, setSemanticAnalysis] = useState(null);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [isListeningVoice, setIsListeningVoice] = useState(false);
   const [showChatRecognizer, setShowChatRecognizer] = useState(false);
-  const [converting, setConverting] = useState(false);
-  // 用户在预览里手动点的类型(约定/心签),优先于 AI 判定
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatSeed, setChatSeed] = useState("");
+  // 用户在预览里手动点的类型(约定/心签),作为对话里的倾向提示
   const [previewOverride, setPreviewOverride] = useState(null);
   const aiTimerRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -122,507 +93,43 @@ export default function SmartInputBar() {
     };
   })();
 
-  const resolveSemanticNow = async () => {
-    if (semanticAnalysis) return semanticAnalysis;
-    if (inputValue.trim().length < 3) return null;
-    setIsAiAnalyzing(true);
+  function fmtDayTime(iso) {
     try {
-      return await deepSemanticParse(inputValue, { enableSmartComplete: false });
+      const d = new Date(iso);
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      const tomorrow = new Date(now.getTime() + 86400000).toDateString() === d.toDateString();
+      const day = sameDay ? '今天' : tomorrow ? '明天' : `${d.getMonth() + 1}月${d.getDate()}日`;
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${day} ${hh}:${mm}`;
     } catch {
-      return null;
-    } finally {
-      setIsAiAnalyzing(false);
+      return '';
     }
-  };
+  }
 
-  // —— 心签路径:自动分类,收进 Note ——
-  const createHeartSign = async (text, semantic) => {
-    const now = new Date().toISOString();
-    const intent = semantic?.primary_intent;
-    const flavor = noteFlavor(text, intent);
-    const catLabel = NOTE_CATEGORY_LABELS[semantic?.category] || '生活';
-    const title = semantic?.refined_title || text.slice(0, 24);
-
-    const note = await base44.entities.Note.create({
-      title,
-      content: text,
-      plain_text: text,
-      tags: ['心签', flavor, catLabel, ...(semantic?.tags || [])].slice(0, 5),
-      color: 'blue',
-      ai_status: 'pending',
-    });
-
-    // 触发 AI 分析（与心签页同一链路）：没有这一步,从这里收进的心签永远不会有温暖回应
-    try {
-      base44.functions.invoke('analyzeHeartSign', {
-        note_id: note.id,
-        note_data: {
-          plain_text: note.plain_text ?? text,
-          content: note.content ?? text,
-          source_type: note.source_type,
-          source_url: note.source_url,
-          attachments: note.attachments,
-          tags: note.tags,
-        },
-      }).catch((e) => console.warn('analyzeHeartSign skipped:', e?.message));
-    } catch (e) {
-      console.warn('analyzeHeartSign invoke failed:', e?.message);
-    }
-
-    // 轻量执行记录:category=note 且无 automation_type,不会混入「心栈为你编织」甲板
-    try {
-      await base44.entities.TaskExecution.create({
-        task_title: title.slice(0, 60),
-        original_input: text,
-        execution_status: 'completed',
-        category: 'note',
-        completed_at: now,
-        ai_parsed_result: {
-          intent: intent || 'note',
-          summary: semantic?.intent_reasoning || '',
-        },
-        execution_steps: [{
-          step_name: '收进心签',
-          status: 'completed',
-          detail: `已分类：${flavor} · ${catLabel}`,
-          timestamp: now,
-        }],
-      });
-      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-    } catch (e) {
-      console.warn('note execution record skipped:', e?.message);
-    }
-
-    queryClient.invalidateQueries({ queryKey: ['notes'] });
-    return note;
-  };
-
-  const handleAddTask = async (taskData) => {
-    const userInput = taskData.title || "";
-    if (!userInput.trim()) return;
-
-    const now = new Date().toISOString();
-    const semanticHint = taskData._semantic || null;
-    let execution = null;
-
-    // Create initial execution record
-    try {
-      execution = await base44.entities.TaskExecution.create({
-        task_title: userInput.slice(0, 60),
-        original_input: userInput,
-        execution_status: "parsing",
-        category: semanticHint?.primary_intent === "wish" ? "note" :
-                  semanticHint?.primary_intent === "note" ? "note" : "task",
-        execution_steps: [
-          { step_name: "深度语义解析", status: "completed", detail: semanticHint ? `意图: ${semanticHint.primary_intent} (${Math.round((semanticHint.intent_confidence || 0) * 100)}%)` : "跳过", timestamp: now },
-          { step_name: "AI执行规划", status: "running", detail: "正在生成执行链路...", timestamp: now },
-        ],
-        ai_parsed_result: semanticHint ? {
-          intent: semanticHint.primary_intent,
-          summary: semanticHint.intent_reasoning || "",
-          entities: [
-            ...(semanticHint.people || []).map(p => "@" + p.name),
-            ...(semanticHint.locations || []).map(l => "📍" + l.name),
-            ...(semanticHint.tags || []),
-          ],
-          time_expression: semanticHint.time_entities?.[0]?.original_text || "",
-          priority: semanticHint.priority || "medium",
-        } : undefined,
-      });
-      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-    } catch (e) {
-      console.error("Failed to create execution record:", e);
-    }
-
-    // Generate AI execution plan with semantic hints
-    let plan = null;
-    try {
-      plan = await generateExecutionPlan(userInput, semanticHint);
-    } catch (e) {
-      console.error("AI plan generation failed:", e);
-    }
-
-    if (plan && plan.execution_steps?.length > 0) {
-      const mergedTaskData = {
-        ...taskData,
-        title: plan.task_data?.title || taskData.title,
-        description: plan.task_data?.description || taskData.description || "",
-        category: plan.task_data?.category || taskData.category || "personal",
-        priority: plan.task_data?.priority || taskData.priority || "medium",
-        reminder_time: plan.task_data?.reminder_time || taskData.reminder_time || getShanghaiNow().toISOString(),
-        end_time: plan.task_data?.end_time || null,
-        is_all_day: plan.task_data?.is_all_day || false,
-        tags: plan.task_data?.tags || taskData.tags || [],
-      };
-
-      const planSteps = plan.execution_steps.map((s, i) => ({
-        step_name: s.step_name,
-        status: i === 0 ? "running" : "pending",
-        detail: s.detail,
-        timestamp: i === 0 ? now : null,
-      }));
-
-      if (execution) {
-        await base44.entities.TaskExecution.update(execution.id, {
-          category: plan.category || "task",
-          execution_status: "executing",
-          ai_parsed_result: {
-            intent: plan.intent_summary,
-            summary: plan.intent_summary,
-            entities: mergedTaskData.tags,
-            priority: mergedTaskData.priority,
-          },
-          execution_steps: planSteps,
-        });
-        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-      }
-
-      let taskId = null;
-      let childTaskIds = [];
-      const confirmsNeeded = [];
-      const completedSteps = [];
-
-      // system_actions 才是真正要执行的产品动作（含 create_task），
-      // execution_steps 是展示给用户的现实事项链路（无 action_key，不执行创建）
-      const ACTION_LABELS = {
-        create_task: "创建约定",
-        sync_calendar: "同步日历",
-        set_reminder: "设置提醒",
-        send_email: "发送邮件",
-        create_note: "创建心签",
-        sync_google_tasks: "同步 Google Tasks",
-        create_wish: "加入愿望清单",
-      };
-      const systemActions = (plan._system_actions || plan.system_actions || [])
-        .filter((a) => a && a.action_key);
-      // create_task 必须最先执行：set_reminder / sync_calendar 等依赖 taskId
-      systemActions.sort((a, b) =>
-        (a.action_key === "create_task" ? -1 : 0) - (b.action_key === "create_task" ? -1 : 0)
-      );
-      const executableSteps = [
-        ...systemActions.map((a) => ({
-          ...a,
-          step_name: ACTION_LABELS[a.action_key] || a.action_key,
-        })),
-        ...plan.execution_steps,
-      ];
-
-      for (let i = 0; i < executableSteps.length; i++) {
-        const step = executableSteps[i];
-
-        if (step.action_type === "confirm") {
-          confirmsNeeded.push(step);
-          completedSteps.push({
-            step_name: step.step_name,
-            status: "pending",
-            detail: "⏸ 待确认: " + step.detail,
-            timestamp: null,
-          });
-          continue;
-        }
-
-        try {
-          const result = await executeStep(step, taskId, mergedTaskData, execution);
-          if (result.taskId) taskId = result.taskId;
-          completedSteps.push({
-            step_name: step.step_name,
-            status: result.success ? "completed" : "failed",
-            detail: result.detail,
-            timestamp: new Date().toISOString(),
-          });
-        } catch (err) {
-          completedSteps.push({
-            step_name: step.step_name,
-            status: "failed",
-            detail: err.message || "执行失败",
-            timestamp: new Date().toISOString(),
-          });
-        }
-
-        if (execution) {
-          await base44.entities.TaskExecution.update(execution.id, {
-            task_id: taskId || "",
-            execution_steps: completedSteps,
-          });
-          queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-        }
-      }
-
-      // 兜底：规划成功但链路里没有任何 create_task 时，直接补建约定，
-      // 避免"界面提示执行完成、约定页却找不到卡片"
-      if (!taskId && (taskData._forceTask || (plan.category !== 'note' && plan.category !== 'wish'))) {
-        try {
-          const result = await executeStep(
-            { action_key: "create_task", step_name: "创建约定" },
-            null,
-            mergedTaskData,
-            execution
-          );
-          if (result.taskId) {
-            taskId = result.taskId;
-            completedSteps.push({
-              step_name: "创建约定",
-              status: "completed",
-              detail: result.detail,
-              timestamp: new Date().toISOString(),
-            });
-          }
-        } catch (e) {
-          completedSteps.push({
-            step_name: "创建约定",
-            status: "failed",
-            detail: e.message || "创建失败",
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
-
-      // 🆕 把 AI 规划的"情境感知事项链路"作为子约定挂到父约定下
-      // 每一条子约定 = 一个 execution_step，备注情境时间(when_hint) 与「自动执行」来源
-      if (taskId && Array.isArray(plan.execution_steps) && plan.execution_steps.length > 0) {
-        try {
-          const childPayloads = plan.execution_steps
-            .filter(s => s && s.step_name && s.action_type !== "confirm")
-            .map(s => {
-              const parts = [];
-              if (s.detail) parts.push(s.detail);
-              if (s.when_hint) parts.push(`⏱ 情境时间：${s.when_hint}`);
-              parts.push("⚙️ 自动执行：由哨兵 AI 规划");
-              return {
-                title: s.step_name,
-                description: parts.join("\n"),
-                parent_task_id: taskId,
-                category: mergedTaskData.category || "personal",
-                priority: mergedTaskData.priority || "medium",
-                status: "pending",
-                tags: ["AI自动执行"],
-              };
-            });
-          if (childPayloads.length > 0) {
-            const createdChildren = await base44.entities.Task.bulkCreate(childPayloads);
-            childTaskIds = (createdChildren || []).map((c) => c.id).filter(Boolean);
-            queryClient.invalidateQueries({ queryKey: ['tasks'] });
-          }
-        } catch (e) {
-          console.error("Failed to create child tasks from execution steps:", e);
-        }
-      }
-
-      const hasFailures = completedSteps.some(s => s.status === "failed");
-      const hasConfirms = confirmsNeeded.length > 0;
-
-      let autoPlanned = false;
-      if (execution) {
-        await base44.entities.TaskExecution.update(execution.id, {
-          task_id: taskId || "",
-          execution_status: hasConfirms ? "waiting_confirm" : hasFailures ? "failed" : "completed",
-          completed_at: !hasConfirms && !hasFailures ? new Date().toISOString() : null,
-          execution_steps: completedSteps,
-        });
-        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-
-        // 🤖 自动判定是否属于"自动执行"类型（邮件草稿/调研/办公文档/文件整理/总结心签/日历事件）
-        // 是 → 写入 automation_type & automation_plan，由用户在 UI 点击触发 execute 阶段
-        try {
-          const planResp = await base44.functions.invoke('executeAutomation', {
-            execution_id: execution.id,
-            phase: "plan",
-          });
-          autoPlanned = !!planResp?.data?.success;
-          if (autoPlanned) {
-            queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-          }
-        } catch (e) {
-          console.warn("Automation plan probing failed (non-fatal):", e?.message);
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-
-      if (hasConfirms) {
-        toast(plan.intent_summary + " — " + confirmsNeeded.length + "项需要确认", { icon: "⚡" });
-      } else if (hasFailures) {
-        toast.error("部分步骤执行失败，请查看详情");
-      } else {
-        toast.success("执行完成: " + plan.intent_summary, { icon: "✅" });
-      }
-
-      if (plan.user_prompts?.length > 0) {
-        plan.user_prompts.forEach(function(p) {
-          toast.info(p, { duration: 6000 });
-        });
-      }
-
-      // 记忆回响:约定(可能附带自动执行)
-      setEcho({
-        kind: autoPlanned ? 'auto' : 'task',
-        title: mergedTaskData.title,
-        time: mergedTaskData.reminder_time ? fmtDayTime(mergedTaskData.reminder_time) : null,
-        entity: taskId ? { id: taskId, title: mergedTaskData.title, description: mergedTaskData.description, childIds: childTaskIds } : null,
-      });
-    } else {
-      // Fallback: simple task creation
-      try {
-        const newTask = await base44.entities.Task.create({
-          title: userInput,
-          description: taskData.description || "",
-          category: taskData.category || "personal",
-          priority: taskData.priority || "medium",
-          status: "pending",
-          reminder_time: taskData.reminder_time || now,
-          tags: taskData.tags || [],
-        });
-
-        if (execution) {
-          await base44.entities.TaskExecution.update(execution.id, {
-            task_id: newTask.id,
-            execution_status: "completed",
-            completed_at: new Date().toISOString(),
-            execution_steps: [
-              { step_name: "创建任务", status: "completed", detail: "已创建: " + userInput.slice(0, 40), timestamp: new Date().toISOString() },
-            ],
-          });
-        }
-
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-        toast.success("任务已创建");
-        setEcho({
-          kind: 'task',
-          title: userInput,
-          time: taskData.reminder_time ? fmtDayTime(taskData.reminder_time) : null,
-          entity: { id: newTask.id, title: userInput, description: taskData.description || '', childIds: [] },
-        });
-      } catch (error) {
-        console.error("Task creation failed:", error);
-        if (execution) {
-          await base44.entities.TaskExecution.update(execution.id, {
-            execution_status: "failed",
-            error_message: error.message || "创建失败",
-          });
-          queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-        }
-        toast.error("创建失败，请重试");
-      }
-    }
-
+  // —— 提交:不直建,进入对话由 AI 理解后再确认生成 ——
+  const handleSubmit = () => {
+    const text = inputValue.trim();
+    if (!text) return;
+    const hint = previewOverride === 'note' ? '（我想记成心签）' : previewOverride === 'task' ? '（我想立成约定）' : '';
+    setChatSeed(hint ? `${text}${hint}` : text);
+    setChatOpen(true);
     setInputValue("");
     setSemanticAnalysis(null);
   };
 
-  // —— 提交:先听懂,再决定收进哪个模块 ——
-  const handleSubmit = async () => {
-    const text = inputValue.trim();
-    if (!text || submitting) return;
-
-    setSubmitting(true);
-    try {
-      const semantic = await resolveSemanticNow();
-      // 用户在预览里点过的选择优先于 AI 判定
-      const isHeartSign = previewOverride === 'note' ||
-        (previewOverride !== 'task' && (semantic?.primary_intent === 'note' || semantic?.primary_intent === 'wish'));
-
-      if (isHeartSign) {
-        try {
-          const note = await createHeartSign(text, semantic);
-          const flavor = noteFlavor(text, semantic?.primary_intent);
-          setEcho({
-            kind: 'note',
-            title: semantic?.refined_title || text.slice(0, 24),
-            flavor,
-            entity: { id: note.id, title: semantic?.refined_title || text.slice(0, 24), content: text },
-          });
-          toast.success('已收进心签', { icon: '✦' });
-          setInputValue("");
-          setSemanticAnalysis(null);
-        } catch (e) {
-          console.error('Heart sign creation failed:', e);
-          toast.error('收进心签失败，请重试');
-        }
-        return;
-      }
-
-      // 约定路径:沿用 AI 规划链路(详细说明 + 子约定 + 自动执行判定)
-      let rawReminderTime = null;
-      let tags = semantic?.tags || [];
-      const highConfTime = semantic?.time_entities?.find(
-        (t) => t.resolved_datetime && t.time_confidence !== 'low'
-      );
-      if (highConfTime?.resolved_datetime) rawReminderTime = highConfTime.resolved_datetime;
-      (semantic?.people || []).forEach((p) => { if (p.name) tags.push('@' + p.name); });
-      (semantic?.locations || []).forEach((l) => { if (l.name) tags.push('📍' + l.name); });
-
-      await handleAddTask({
-        title: semantic?.refined_title || text,
-        description: semantic?.refined_description || '',
-        category: semantic?.category || 'personal',
-        priority: semantic?.priority || 'medium',
-        status: 'pending',
-        reminder_time: rawReminderTime,
-        tags,
-        _semantic: semantic,
-        _forceTask: previewOverride === 'task',
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // —— 手动改判:回响卡上把收错的内容互转(约定 ↔ 心签) ——
-  const convertEcho = async (target) => {
-    const src = echo?.entity;
-    if (!src?.id || converting) return;
-    setConverting(true);
-    try {
-      if (target === 'task' && echo.kind === 'note') {
-        // 心签 → 约定:建约定卡片,原签移入回收站
-        await base44.entities.Task.create({
-          title: src.title,
-          description: src.content || '',
-          category: 'personal',
-          priority: 'medium',
-          status: 'pending',
-          reminder_time: getShanghaiNow().toISOString(),
-          tags: [],
-        });
-        await base44.entities.Note.update(src.id, { deleted_at: new Date().toISOString() });
-        setEcho((prev) => prev && { ...prev, kind: 'task', entity: null, flavor: undefined });
-        toast.success('已改为约定，请到约定页查看');
-      } else if (target === 'note' && (echo.kind === 'task' || echo.kind === 'auto')) {
-        // 约定 → 心签:建心签(自动判签型),原约定及其子约定删除
-        const content = src.description ? `${src.title}\n\n${src.description}` : src.title;
-        await base44.entities.Note.create({
-          title: src.title,
-          content,
-          plain_text: content,
-          tags: ['心签', noteFlavor(content, 'note')],
-          color: 'blue',
-          ai_status: 'pending',
-        });
-        if (Array.isArray(src.childIds) && src.childIds.length > 0) {
-          await Promise.all(src.childIds.map((id) => base44.entities.Task.delete(id).catch(() => {})));
-        }
-        await base44.entities.Task.delete(src.id).catch(() => {});
-        setEcho((prev) => prev && { ...prev, kind: 'note', flavor: noteFlavor(content, 'note'), entity: null });
-        toast.success('已改为心签，请到心签页查看');
-      } else {
-        return;
-      }
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-    } catch (e) {
-      console.error('convert echo failed:', e);
-      toast.error('改判失败，请重试');
-    } finally {
-      setConverting(false);
-    }
+  // —— 对话里确认生成后的回响 ——
+  const handleChatCreated = ({ type, label } = {}) => {
+    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    queryClient.invalidateQueries({ queryKey: ['notes'] });
+    queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    setEcho({ kind: type === 'task' ? 'task' : 'note', title: label || '' });
   };
 
   const handleVoiceInput = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      toast.info('当前浏览器不支持语音输入');
       return;
     }
 
@@ -655,8 +162,7 @@ export default function SmartInputBar() {
   const echoReply = (() => {
     if (!echo) return '';
     if (echo.kind === 'note') return `「${echo.title}」—— 这句我替你收好了。心事放在这里，不会被弄丢。`;
-    if (echo.kind === 'auto') return `差事已接下：「${echo.title}」。我会把它织成可以直接用的成果。`;
-    return `「${echo.title}」已收进今日印记${echo.time ? `，${echo.time}` : ''}，到点我会轻轻唤你。`;
+    return `「${echo.title}」已收进今日印记，到点我会轻轻唤你。`;
   })();
 
   return (
@@ -695,7 +201,7 @@ export default function SmartInputBar() {
           className="w-full resize-none overflow-hidden bg-transparent px-5 sm:px-6 pt-4 pb-1.5 text-[15.5px] leading-relaxed text-[var(--sky-ink)] placeholder:text-[var(--sky-sub)]/70 focus:outline-none"
         />
 
-        {/* 实时倾听预览:可点击改判 约定 ↔ 心签 */}
+        {/* 实时倾听预览:可点击改判 约定 ↔ 心签（提交后作为对话倾向） */}
         {preview && (
           <div className="parse-preview echo-born mx-4 sm:mx-5 mb-1 rounded-xl bg-[var(--sentinel)]/[0.06] px-4 py-2.5 text-[12px] text-[var(--ink-2)]">
             <div className="flex flex-wrap items-center gap-2">
@@ -750,11 +256,11 @@ export default function SmartInputBar() {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!inputValue.trim() || submitting}
+            disabled={!inputValue.trim()}
             title="发送（Enter）"
             className="ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--sentinel)] text-white transition-all duration-300 hover:bg-[var(--sentinel-deep)] disabled:opacity-30 disabled:hover:bg-[var(--sentinel)]"
           >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
+            <ArrowUp className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -786,50 +292,26 @@ export default function SmartInputBar() {
               <div className="mt-3 flex flex-wrap gap-2 text-[11.5px]">
                 {echo.kind === 'note' ? (
                   <span className="rounded-md bg-[var(--sentinel)]/[0.09] px-2.5 py-1 font-medium text-[var(--sentinel)]">
-                    已生成心签{echo.flavor ? ` · ${echo.flavor}` : ''}
+                    已生成心签
                   </span>
                 ) : (
-                  <>
-                    <span className="rounded-md bg-[var(--signal-soft)] px-2.5 py-1 font-medium text-[var(--signal)]">
-                      已生成约定{echo.time ? ` · ${echo.time}` : ''}
-                    </span>
-                    {echo.kind === 'auto' && (
-                      <span className="rounded-md bg-[var(--jade)]/10 px-2.5 py-1 font-medium text-[var(--jade)]">
-                        已生成自动执行
-                      </span>
-                    )}
-                  </>
+                  <span className="rounded-md bg-[var(--signal-soft)] px-2.5 py-1 font-medium text-[var(--signal)]">
+                    已生成约定
+                  </span>
                 )}
               </div>
-              {echo.entity?.id && (
-                <div className="mt-3 flex items-center gap-2.5 text-[11.5px]">
-                  <span className="text-[var(--ink-3)]">分错了？</span>
-                  {echo.kind === 'note' ? (
-                    <button
-                      type="button"
-                      onClick={() => convertEcho('task')}
-                      disabled={converting}
-                      className="font-medium text-[var(--signal)] hover:underline disabled:opacity-40"
-                    >
-                      改为约定 →
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => convertEcho('note')}
-                      disabled={converting}
-                      className="font-medium text-[var(--signal)] hover:underline disabled:opacity-40"
-                    >
-                      改为心签 →
-                    </button>
-                  )}
-                  {converting && <Loader2 className="w-3 h-3 animate-spin text-[var(--ink-3)]" />}
-                </div>
-              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* 对话浮层:输入内容进入对话，AI 理解意图、确认后生成 */}
+      <TodayChatDialog
+        open={chatOpen}
+        seedText={chatSeed}
+        onClose={() => setChatOpen(false)}
+        onCreated={handleChatCreated}
+      />
     </div>
   );
 }

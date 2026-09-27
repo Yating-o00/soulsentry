@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, ArrowUp } from "lucide-react";
 import { toast } from "sonner";
@@ -161,7 +162,9 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
     }
   };
 
-  return (
+  // 今日页 section 带 content-visibility:auto（绘制包含块），position:fixed 会被困在章节内；
+  // 必须 portal 到 body，浮层才能相对视口定位
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -308,6 +311,7 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

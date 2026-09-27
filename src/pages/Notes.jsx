@@ -943,9 +943,10 @@ export default function Notes() {
             <DialogTitle className="text-base">说给另一个自己听</DialogTitle>
           </DialogHeader>
           <HeartSignInput
-            onSend={async (payload) => {
-              await handleSend(payload);
+            onSend={(payload) => {
+              // 弹窗立即关闭；创建走乐观上屏 + 后台失败回滚，不等服务器往返
               setComposerOpen(false);
+              handleSend(payload);
             }}
             onVaultTransfer={(text) => {
               setComposerOpen(false);

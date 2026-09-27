@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { maybeAutoExecute } from "../services/autoAutomation.js";
-import { rejectIfRisky } from "../services/contentSecurity.js";
+import { checkTextSecurityAsync } from "../services/contentSecurity.js";
 import { suggestTaskSplit } from "../services/splitTask.js";
 import {
   assertTaskAccess,
@@ -324,9 +324,6 @@ tasksRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
 
-  // 内容安全：约定/子约定的标题与描述需通过 msgSecCheck
-  if (await rejectIfRisky(res, `${payload.data.title || ""}\n${payload.data.description || ""}`, req.user.id)) return;
-
   // 在他人共有约定下新建子约定：需是该约定的成员
   if (payload.data.parent_task_id) {
     const parent = await prisma.task.findUnique({ where: { id: payload.data.parent_task_id }, include: { members: true } });
@@ -338,6 +335,15 @@ tasksRouter.post("/", async (req, res) => {
   const task = await prisma.task.create({
     data: buildTaskCreateData(req.user.id, payload.data)
   });
+
+  // 内容安全：异步 msgSecCheck——先返回创建结果，命中违规时自动隐藏该约定
+  checkTextSecurityAsync(
+    `${payload.data.title || ""}\n${payload.data.description || ""}`,
+    req.user.id,
+    () => {
+      prisma.task.update({ where: { id: task.id }, data: { deletedAt: new Date() } }).catch(() => {});
+    }
+  );
 
   await createTaskChangeLog(
     req.user.id,
@@ -356,11 +362,6 @@ tasksRouter.post("/batch", async (req, res) => {
   const payload = taskBatchInputSchema.safeParse(req.body);
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
-  }
-
-  // 内容安全：批量创建前逐条检测标题与描述
-  for (const item of payload.data) {
-    if (await rejectIfRisky(res, `${item.title || ""}\n${item.description || ""}`, req.user.id)) return;
   }
 
   const tasks = await prisma.$transaction(async (tx) => {
@@ -387,6 +388,18 @@ tasksRouter.post("/batch", async (req, res) => {
     }
 
     return created;
+  });
+
+  // 内容安全：异步逐条 msgSecCheck——先返回创建结果，命中违规的约定自动隐藏
+  tasks.forEach((task, idx) => {
+    const item = payload.data[idx] || {};
+    checkTextSecurityAsync(
+      `${item.title || ""}\n${item.description || ""}`,
+      req.user.id,
+      () => {
+        prisma.task.update({ where: { id: task.id }, data: { deletedAt: new Date() } }).catch(() => {});
+      }
+    );
   });
 
   return res.status(201).json(tasks.map(serializeTask));

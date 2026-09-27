@@ -78,3 +78,12 @@ export async function rejectIfRisky(res, text, userId) {
   }
   return false;
 }
+
+// 异步检测：创建链路先放行返回（个人记忆内容仅创建者本人可见），命中违规时通过 onRisky 回调处置（如软删）
+export function checkTextSecurityAsync(text, userId, onRisky) {
+  checkTextSecurity(text, userId)
+    .then((sec) => {
+      if (!sec.pass) onRisky(sec);
+    })
+    .catch((err) => console.warn("[contentSecurity] 异步检测失败，放行:", err?.message || err));
+}

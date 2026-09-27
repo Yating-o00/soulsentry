@@ -205,7 +205,8 @@ ${buildMessagesBlock(messages)}
 6. reply ≤80字，自然口语，像微信聊天，不要用列表和 markdown。
 7. 严格返回 JSON，不要输出其他内容。`,
     responseJsonSchema: RESPONSE_SCHEMA,
-    temperature: 0.7
+    temperature: 0.7,
+    maxTokens: 800
   });
 
   if (!result || typeof result !== "object" || typeof result.reply !== "string") {

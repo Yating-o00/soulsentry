@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
-import { rejectIfRisky } from "../services/contentSecurity.js";
+import { checkTextSecurityAsync } from "../services/contentSecurity.js";
 
 export const notesRouter = Router();
 
@@ -118,9 +118,6 @@ notesRouter.post("/", async (req, res) => {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
 
-  // 内容安全：心签标题与正文需通过 msgSecCheck
-  if (await rejectIfRisky(res, `${payload.data.title || ""}\n${payload.data.plain_text || payload.data.content || ""}`, req.user.id)) return;
-
   const note = await prisma.note.create({
     data: {
       userId: req.user.id,
@@ -136,6 +133,15 @@ notesRouter.post("/", async (req, res) => {
       metadata: withAttachmentsInMetadata(payload.data.metadata, payload.data.attachments)
     }
   });
+
+  // 内容安全：异步 msgSecCheck——先返回创建结果，命中违规时自动隐藏该心签
+  checkTextSecurityAsync(
+    `${payload.data.title || ""}\n${payload.data.plain_text || payload.data.content || ""}`,
+    req.user.id,
+    () => {
+      prisma.note.update({ where: { id: note.id }, data: { deletedAt: new Date() } }).catch(() => {});
+    }
+  );
 
   return res.status(201).json(serializeNote(note));
 });

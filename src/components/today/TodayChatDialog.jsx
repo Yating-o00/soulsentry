@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, ArrowUp } from "lucide-react";
+import { X, Loader2, ArrowUp, Mic } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { base44 } from "@/api/base44Client";
@@ -9,6 +9,20 @@ import { base44 } from "@/api/base44Client";
 // 今日页对话浮层：输入内容不再直建，而是进入与心栈的对话，
 // AI 理解意图后给出提案卡（约定/心签/链接），用户确认后才真正生成；
 // 信息不足时 AI 主动追问（通常问时间）。与小程序心流页 FlowChatSheet 同一后端 /api/chat。
+
+// 颜色全部内联、不依赖 .today-page 作用域的 CSS 变量：
+// 浮层通过 portal 挂到 body，在作用域外 var(--sentinel) 等会失效导致白底白字。
+const C = {
+  sentinel: "#384877",
+  sentinelDeep: "#2a3659",
+  ink: "#0f172a",
+  ink3: "#64748b",
+  ink4: "#94a3b8",
+  mist: "#f1f5f9",
+  hairline: "rgba(15,23,42,0.10)",
+  recordingBg: "#fce8ec",
+  recordingBorder: "#e8a5a5",
+};
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接" };
 const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗" };
@@ -43,7 +57,9 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
   const [pending, setPending] = useState(null); // AI 提案，待用户确认
   const [creating, setCreating] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
+  const [recording, setRecording] = useState(false);
   const scrollRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   // 每次打开都是新对话；seed 作为第一条用户消息发出
   useEffect(() => {
@@ -58,6 +74,9 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
       setMessages(first);
       callAI(first, null);
     }
+    return () => {
+      try { recognitionRef.current?.stop?.(); } catch {}
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -162,6 +181,34 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
     }
   };
 
+  // —— 长按语音：按住说话，松开识别并发送 ——
+  const startVoice = () => {
+    if (recording) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      toast.info("当前浏览器不支持语音输入");
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "zh-CN";
+    rec.continuous = false;
+    rec.interimResults = false;
+    recognitionRef.current = rec;
+    rec.onstart = () => setRecording(true);
+    rec.onend = () => setRecording(false);
+    rec.onerror = () => setRecording(false);
+    rec.onresult = (e) => {
+      const t = e.results?.[0]?.[0]?.transcript || "";
+      if (t.trim()) send(t.trim());
+    };
+    try { rec.start(); } catch {}
+  };
+
+  const stopVoice = () => {
+    try { recognitionRef.current?.stop?.(); } catch {}
+    setRecording(false);
+  };
+
   // 今日页 section 带 content-visibility:auto（绘制包含块），position:fixed 会被困在章节内；
   // 必须 portal 到 body，浮层才能相对视口定位
   return createPortal(
@@ -174,7 +221,7 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
           transition={{ duration: 0.2 }}
           onClick={onClose}
           style={{ zIndex: 80 }}
-          className="fixed inset-0 flex items-end sm:items-center justify-center bg-black/45 p-3 sm:p-6"
+          className="fixed inset-0 flex items-end sm:items-center justify-center p-3 sm:p-6"
         >
           <motion.div
             initial={{ opacity: 0, y: 32, scale: 0.98 }}
@@ -186,15 +233,16 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
             style={{ height: "min(82vh, 720px)" }}
           >
             {/* 头部 */}
-            <div className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-4">
+            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: C.hairline }}>
               <div>
-                <p className="font-[var(--font-serif)] text-[16px] text-[var(--sky-ink)]">和心栈聊聊</p>
-                <p className="mt-0.5 text-[11.5px] text-[var(--ink-3)]">想记住的事，说给我听，我会替你整理好</p>
+                <p className="text-[16px] font-medium" style={{ color: C.ink, fontFamily: "var(--font-serif)" }}>和心栈聊聊</p>
+                <p className="mt-0.5 text-[11.5px]" style={{ color: C.ink3 }}>想记住的事，说给我听，我会替你整理好</p>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--ink-3)] transition-colors hover:bg-black/[0.05]"
+                className="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-black/[0.05]"
+                style={{ color: C.ink3 }}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -207,47 +255,53 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
                   <div
                     key={`${sessionKey}-${i}`}
                     className={`mb-3 max-w-[82%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed ${
-                      m.role === "user"
-                        ? "self-end rounded-br-md bg-[var(--sentinel)] text-white"
-                        : "self-start rounded-bl-md bg-slate-100 text-[var(--ink)]"
+                      m.role === "user" ? "self-end rounded-br-md text-white" : "self-start rounded-bl-md"
                     }`}
+                    style={
+                      m.role === "user"
+                        ? { background: C.sentinel }
+                        : { background: C.mist, color: C.ink }
+                    }
                   >
                     {m.content}
                   </div>
                 ))}
 
                 {busy && (
-                  <div className="mb-3 self-start rounded-2xl rounded-bl-md bg-slate-100 px-4 py-2 text-[13px] text-[var(--ink-3)]">
+                  <div
+                    className="mb-3 self-start rounded-2xl rounded-bl-md px-4 py-2 text-[13px]"
+                    style={{ background: C.mist, color: C.ink4 }}
+                  >
                     正在输入…
                   </div>
                 )}
 
                 {/* 提案卡片：确认后才生成 */}
                 {pending && !busy && (
-                  <div className="mb-3 w-full rounded-xl border border-[var(--hairline)] bg-[var(--paper)]/[0.5] p-4">
+                  <div className="mb-3 w-full rounded-xl border p-4" style={{ borderColor: C.hairline, background: "#fbfcfc" }}>
                     <div className="flex items-center gap-2">
                       <span className="text-[15px]">{TYPE_ICON[pending.type] || "📝"}</span>
-                      <span className="text-[13px] font-medium text-[var(--sentinel)]">
+                      <span className="text-[13px] font-medium" style={{ color: C.sentinel }}>
                         将要生成{TYPE_LABEL[pending.type] || "记录"}
                       </span>
                     </div>
 
                     {pending.type === "task" && (
                       <>
-                        <p className="mt-2 break-words text-[15px] font-medium text-[var(--ink)]">{pending.title}</p>
+                        <p className="mt-2 break-words text-[15px] font-medium" style={{ color: C.ink }}>{pending.title}</p>
                         {(pending.description || messages.find((m) => m.role === "user")?.content) && (
-                          <p className="mt-1 line-clamp-2 break-words text-[12px] leading-relaxed text-[var(--ink-3)]">
+                          <p className="mt-1 line-clamp-2 break-words text-[12px] leading-relaxed" style={{ color: C.ink3 }}>
                             {(pending.description || messages.find((m) => m.role === "user")?.content || "").slice(0, 60)}
                           </p>
                         )}
                         <div className="mt-2.5 flex flex-wrap gap-1.5">
                           {pending.due_at && (
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-[var(--sentinel)]">
+                            <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.sentinel }}>
                               🕐 {fmtTime(pending.due_at)}
                             </span>
                           )}
                           {pending.category && (
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-[var(--ink-3)]">
+                            <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
                               {CATEGORY_LABEL[pending.category] || pending.category}
                             </span>
                           )}
@@ -255,10 +309,10 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
                       </>
                     )}
                     {pending.type === "heart" && (
-                      <p className="mt-2 break-words text-[14px] leading-relaxed text-[var(--ink)]">{pending.content}</p>
+                      <p className="mt-2 break-words text-[14px] leading-relaxed" style={{ color: C.ink }}>{pending.content}</p>
                     )}
                     {pending.type === "link" && (
-                      <p className="mt-2 break-words text-[13px] leading-relaxed text-[var(--ink-3)]">{pending.text}</p>
+                      <p className="mt-2 break-words text-[13px] leading-relaxed" style={{ color: C.ink3 }}>{pending.text}</p>
                     )}
 
                     <div className="mt-3.5 flex items-center gap-2">
@@ -266,14 +320,16 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
                         type="button"
                         onClick={confirmCreate}
                         disabled={creating}
-                        className="rounded-full bg-[var(--sentinel)] px-5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[var(--sentinel-deep)] disabled:opacity-50"
+                        className="rounded-full px-5 py-2 text-[13px] font-medium text-white transition-colors disabled:opacity-50"
+                        style={{ background: C.sentinel }}
                       >
                         {creating ? "生成中…" : "确认生成"}
                       </button>
                       <button
                         type="button"
                         onClick={rejectPending}
-                        className="px-3 py-2 text-[12.5px] text-[var(--ink-3)] transition-colors hover:text-[var(--ink)]"
+                        className="px-3 py-2 text-[12.5px] transition-opacity hover:opacity-70"
+                        style={{ color: C.ink3 }}
                       >
                         不对，再聊聊
                       </button>
@@ -283,9 +339,42 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
               </div>
             </div>
 
-            {/* 输入行 */}
-            <div className="border-t border-[var(--hairline)] px-4 py-3">
-              <div className="flex items-center gap-2 rounded-full border border-[var(--hairline)] bg-slate-50 pl-4 pr-1.5 py-1.5">
+            {/* 录音提示 */}
+            {recording && (
+              <div className="px-4 pb-2">
+                <div
+                  className="flex items-center justify-center rounded-xl px-4 py-2.5 text-[13px] text-white"
+                  style={{ background: "rgba(28,28,30,0.86)" }}
+                >
+                  🎙️ 正在聆听…松开手指即发送
+                </div>
+              </div>
+            )}
+
+            {/* 输入行：长按麦克风语音输入，回车/箭头发送 */}
+            <div className="border-t px-4 py-3" style={{ borderColor: C.hairline }}>
+              <div
+                className="flex items-center gap-2 rounded-full border py-1.5 pl-2 pr-1.5"
+                style={{
+                  borderColor: recording ? C.recordingBorder : C.hairline,
+                  background: recording ? C.recordingBg : C.mist,
+                }}
+              >
+                <button
+                  type="button"
+                  title="长按语音输入"
+                  onPointerDown={startVoice}
+                  onPointerUp={stopVoice}
+                  onPointerLeave={stopVoice}
+                  onPointerCancel={stopVoice}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
+                    recording ? "animate-pulse text-red-500" : ""
+                  }`}
+                  style={{ color: recording ? undefined : C.ink3 }}
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
                 <input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -295,14 +384,16 @@ export default function TodayChatDialog({ open, seedText, onClose, onCreated }) 
                       send();
                     }
                   }}
-                  placeholder="直接输入，回车发送"
-                  className="flex-1 bg-transparent text-[14px] text-[var(--ink)] placeholder:text-[var(--ink-3)]/60 focus:outline-none"
+                  placeholder={recording ? "正在聆听…松开手指即可" : "直接输入，或长按麦克风说话"}
+                  className="flex-1 bg-transparent text-[14px] focus:outline-none"
+                  style={{ color: C.ink }}
                 />
                 <button
                   type="button"
                   onClick={() => send()}
                   disabled={!input.trim() || busy}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--sentinel)] text-white transition-all hover:bg-[var(--sentinel-deep)] disabled:opacity-30"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-30"
+                  style={{ background: C.sentinel }}
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
                 </button>

@@ -132,13 +132,25 @@ export default function HeartSignInput({ onSend, onVaultTransfer }) {
                 <button onClick={() => setSourceUrl('')} className="hover:text-indigo-900"><X className="w-3 h-3" /></button>
               </div>
             )}
-            {attachments.map((a, i) => (
-              <div key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700">
-                <Paperclip className="w-3 h-3" />
-                <span className="truncate max-w-[180px]">{a.file_name}</span>
-                <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="hover:text-rose-600"><X className="w-3 h-3" /></button>
-              </div>
-            ))}
+            {attachments.map((a, i) => {
+              const isImg = (a.file_type || '').startsWith('image')
+                || /\.(png|jpe?g|gif|webp|avif|bmp)(\?|#|$)/i.test(a.file_url || '');
+              return isImg ? (
+                <div key={i} className="relative">
+                  <img src={a.file_url} alt={a.file_name || '图片'} className="h-16 w-16 object-cover rounded-lg border border-slate-200 bg-slate-50" />
+                  <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                    className="absolute -top-1.5 -right-1.5 bg-white border border-slate-200 rounded-full p-0.5 shadow-sm text-slate-500 hover:text-rose-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700">
+                  <Paperclip className="w-3 h-3" />
+                  <span className="truncate max-w-[180px]">{a.file_name}</span>
+                  <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="hover:text-rose-600"><X className="w-3 h-3" /></button>
+                </div>
+              );
+            })}
           </div>
         )}
 

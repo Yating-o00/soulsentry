@@ -16,7 +16,8 @@ const noteInputSchema = z.object({
   ai_status: z.string().optional(),
   deleted_at: z.string().datetime().optional().nullable(),
   tags: z.any().optional(),
-  metadata: z.any().optional()
+  metadata: z.any().optional(),
+  attachments: z.any().optional()
 });
 
 notesRouter.use(requireAuth);
@@ -40,6 +41,7 @@ function serializeNote(note) {
     deleted_at: note.deletedAt,
     tags: note.tags,
     metadata: note.metadata,
+    attachments: note.metadata && typeof note.metadata === "object" ? note.metadata.attachments : undefined,
     share_token: note.shareToken,
     share_enabled: note.shareEnabled,
     share_expires_at: note.shareExpiresAt,
@@ -103,6 +105,13 @@ notesRouter.get("/:id", async (req, res) => {
   return res.json(serializeNote(note));
 });
 
+// Note 模型没有独立 attachments 列，统一存 metadata.attachments；attachments 未传时原样返回 metadata
+function withAttachmentsInMetadata(metadata, attachments) {
+  if (attachments === undefined) return metadata;
+  const base = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {};
+  return { ...base, attachments };
+}
+
 notesRouter.post("/", async (req, res) => {
   const payload = noteInputSchema.safeParse(req.body);
   if (!payload.success) {
@@ -124,7 +133,7 @@ notesRouter.post("/", async (req, res) => {
       aiStatus: payload.data.ai_status,
       deletedAt: payload.data.deleted_at ? new Date(payload.data.deleted_at) : null,
       tags: payload.data.tags,
-      metadata: payload.data.metadata
+      metadata: withAttachmentsInMetadata(payload.data.metadata, payload.data.attachments)
     }
   });
 
@@ -160,7 +169,10 @@ notesRouter.patch("/:id", async (req, res) => {
       aiStatus: payload.data.ai_status,
       deletedAt: payload.data.deleted_at === undefined ? undefined : (payload.data.deleted_at ? new Date(payload.data.deleted_at) : null),
       tags: payload.data.tags,
-      metadata: payload.data.metadata
+      metadata: withAttachmentsInMetadata(
+        payload.data.metadata !== undefined ? payload.data.metadata : existing.metadata,
+        payload.data.attachments
+      )
     }
   });
 

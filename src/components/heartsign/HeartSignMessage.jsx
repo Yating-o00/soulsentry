@@ -359,6 +359,24 @@ export default function HeartSignMessage({
   const tableReplacesText = !!ai.table_md && isTableDuplicateOfText(plain, ai.table_md);
   const isOptimistic = typeof note.id === 'string' && note.id.startsWith('tmp-');
 
+  // 心签配图：metadata.image_url（小程序写入，字符串或数组）+ content 内嵌 <img>；相对路径补全为绝对地址
+  const inlineImages = (() => {
+    const urls = [];
+    const raw = note.metadata?.image_url;
+    (Array.isArray(raw) ? raw : [raw]).forEach((u) => {
+      if (typeof u === 'string' && u.trim()) urls.push(u.trim());
+    });
+    const html = note.content || '';
+    const imgRe = /<img[^>]+src=["']([^"']+)["']/gi;
+    let m;
+    while ((m = imgRe.exec(html)) !== null) {
+      if (m[1]) urls.push(m[1]);
+    }
+    return [...new Set(urls)].slice(0, 9).map((u) =>
+      /^(https?:|data:|blob:)/i.test(u) ? u : `${window.location.origin}${u.startsWith('/') ? '' : '/'}${u}`
+    );
+  })();
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(plain);
@@ -518,6 +536,19 @@ export default function HeartSignMessage({
             </a>
           );
         })}
+      </div>
+    )}
+
+    {/* 心签配图（小程序 metadata.image_url / 内容内嵌图片） */}
+    {inlineImages.length > 0 && (
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {inlineImages.map((src, i) => (
+          <a key={i} href={src} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+            className="block w-fit max-w-full overflow-hidden rounded-xl border border-slate-200/80 hover:border-slate-300 transition bg-slate-50">
+            <img src={src} alt="心签配图" loading="lazy"
+              className="max-h-72 w-auto max-w-full object-contain" />
+          </a>
+        ))}
       </div>
     )}
 

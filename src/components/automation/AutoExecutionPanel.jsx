@@ -588,6 +588,16 @@ function ExecutionCard({ exec, onClick }) {
     pending: { label: "排队中", color: "text-slate-500 bg-slate-50" },
   }[status] || { label: status, color: "text-slate-500 bg-slate-50" };
 
+  // 浏览器 Agent 活体状态：执行中可能停在"等你回应/手动操作"（细节存在 automation_result）
+  const agentLive = exec.automation_type === 'browser_task' && status === 'executing'
+    ? exec.automation_result?.data?.agent?.status
+    : null;
+  const liveInfo = agentLive === 'waiting_input'
+    ? { label: "等你回应", color: "text-amber-700 bg-amber-50", pulse: true }
+    : agentLive === 'takeover'
+      ? { label: "手动操作中", color: "text-violet-700 bg-violet-50" }
+      : null;
+
   return (
     <motion.button
       layout
@@ -603,8 +613,8 @@ function ExecutionCard({ exec, onClick }) {
           <div className="text-xs font-medium text-slate-800 truncate">{exec.task_title}</div>
           <div className="text-[10px] text-slate-400 truncate">{cfg.label}</div>
         </div>
-        <Badge variant="outline" className={`text-[10px] border-0 ${statusInfo.color} ${statusInfo.pulse ? 'animate-pulse' : ''}`}>
-          {statusInfo.label}
+        <Badge variant="outline" className={`text-[10px] border-0 ${(liveInfo || statusInfo).color} ${(liveInfo || statusInfo).pulse ? 'animate-pulse' : ''}`}>
+          {(liveInfo || statusInfo).label}
         </Badge>
       </div>
 

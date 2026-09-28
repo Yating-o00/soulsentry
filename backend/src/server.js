@@ -2,6 +2,8 @@ import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { ensureDemoUser } from "./lib/ensureDemoUser.js";
 import { startReminderCron } from "./services/reminderCron.js";
+import { sweepStaleBrowserExecutions } from "./services/browserAgent.js";
+import { prisma } from "./lib/prisma.js";
 
 process.on("uncaughtException", (error) => {
   console.error("[uncaughtException]", error);
@@ -14,6 +16,7 @@ process.on("unhandledRejection", (reason) => {
 
 await ensureDemoUser();
 startReminderCron();
+sweepStaleBrowserExecutions(prisma);
 
 app.listen(env.PORT, () => {
   console.log(`SoulSentry backend listening on http://localhost:${env.PORT}`);

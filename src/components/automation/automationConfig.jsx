@@ -25,6 +25,14 @@ export const AUTOMATION_TYPES = {
     iconBg: "bg-emerald-100 text-emerald-600",
     description: "调研主题并生成结构化摘要",
   },
+  browser_task: {
+    label: "网页办事",
+    emoji: "🕹️",
+    icon: Globe,
+    color: "bg-sky-50 text-sky-600 border-sky-200",
+    iconBg: "bg-sky-100 text-sky-600",
+    description: "Agent 操作真实网页：查询、填写、提交，人工环节会停下来问你",
+  },
   office_doc: {
     label: "办公文档",
     emoji: "📊",

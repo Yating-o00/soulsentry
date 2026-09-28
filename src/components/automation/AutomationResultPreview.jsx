@@ -8,6 +8,7 @@ import MinutesResultView from "./result/MinutesResultView";
 import CalendarResultView from "./result/CalendarResultView";
 import FileResultView from "./result/FileResultView";
 import LedgerResultView from "./result/LedgerResultView";
+import BrowserResultView from "./result/BrowserResultView";
 import MarkdownLite from "./result/MarkdownLite";
 
 const diffIcons = {
@@ -49,6 +50,9 @@ function pickView(result, automationType) {
 
   // 整理账本（必须放在 email/research 等之前，因为 d.entries 是它独有的特征）
   if (rt.includes("ledger") || at.includes("ledger") || Array.isArray(d.entries)) return "ledger";
+
+  // 浏览器 Agent（网页办事）：data.agent 是它独有的结构
+  if (rt.includes("browser") || at.includes("browser") || d.agent) return "browser";
 
   // 邮件：result.type 或 automationType 为 email_draft，或数据含邮件字段
   if (rt.includes("email") || at.includes("email") || d.to || d.subject || d.body) return "email";
@@ -98,6 +102,7 @@ export default function AutomationResultPreview({ result, automationType, onData
   if (view === "calendar") return <CalendarResultView data={result.data} preview={result.preview} />;
   if (view === "file")     return <FileResultView     result={result} />;
   if (view === "ledger")   return <LedgerResultView   data={result.data} preview={result.preview} />;
+  if (view === "browser")  return <BrowserResultView  data={result.data} preview={result.preview} executionId={executionId} />;
 
   // ---- 通用兜底视图：不再把 preview 当原始代码显示，而是按 Markdown 渲染 + 产物卡片 ----
   const previewUrlMatch = result.preview && result.preview.match(/https?:\/\/[^\s)）"】>]+/);

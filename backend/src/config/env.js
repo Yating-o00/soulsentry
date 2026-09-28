@@ -51,6 +51,10 @@ const envSchema = z.object({
   WEATHER_DEFAULT_LAT: z.coerce.number().optional(),
   WEATHER_DEFAULT_LON: z.coerce.number().optional(),
 
+  // 浏览器 Agent（可选）：服务器无法下载 Playwright Chromium 时，可指向系统浏览器
+  BROWSER_EXECUTABLE_PATH: z.string().optional(),
+  BROWSER_CHANNEL: z.string().optional(),
+
   // 阿里云短信（可选，未配置时短信登录/注册走 mock）
   // 兼容多种命名：生产 env 中使用的 SMS_* / ALIYUN_SMS_* / ALIYUN_*
   SMS_PROVIDER: z.string().optional(),

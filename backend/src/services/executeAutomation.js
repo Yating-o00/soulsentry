@@ -3,6 +3,7 @@ import path from "node:path";
 import { invokeKimiText, invokeKimiWebSearch } from "../lib/kimi.js";
 import { renderPptHtml, savePptHtml } from "../lib/renderPpt.js";
 import { detectReportCategory, renderReportHtml, researchSystemPrompt } from "../lib/reportRender.js";
+import { runBrowserAgent } from "./browserAgent.js";
 import { env } from "../config/env.js";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
@@ -15,6 +16,7 @@ export const AUTOMATION_EXECUTE_COSTS = {
   calendar_event: 20,
   file_organize: 20,
   ledger_organize: 20,
+  browser_task: 60,
   office_doc: 50,
   web_research: 60,
   ppt_doc: 80,
@@ -30,6 +32,7 @@ const SUPPORTED_TYPES = [
   "ledger_organize",
   "file_organize",
   "ppt_doc",
+  "browser_task",
 ];
 
 const MAX_ATTACHMENT_CHARS = 8000;
@@ -348,6 +351,9 @@ export function detectAutomationTypeFromInput(text) {
     { type: "ppt_doc", regex: /做ppt|做PPT|生成ppt|生成PPT|做.*ppt|做.*PPT|生成.*ppt|生成.*PPT|幻灯片|演示稿|演示文稿|演讲稿|路演|pitch deck/ },
     // 3. 调研 / 研究报告
     { type: "web_research", regex: /调研|研究|考察|比对|对比分析|联网搜索|查.*资料|了解一下|分析报告|尽调|竞品|竟品|对比表|分类表|研究报告|深度研究|行业报告|市场报告|竞品报告|研究一下|帮我研究|前景|赛道/ },
+    // 3.5 网页办事：操作真实网页（打开网址 / 在网页上查询、填写、预约、提交）
+    { type: "browser_task", regex: /https?:\/\/\S+/ },
+    { type: "browser_task", regex: /打开网页|打开网站|打开.*官网|网页上|网站上|网页版|在线填写|在线预约|在线提交|网上报名|网上申请|网上查询|网上查|网上订|帮我预约|帮我报名|帮我订|查一下.*(?:高铁|火车票|机票|船票|门票|酒店|余票)|填表|提交申请|网页.*(?:查|填|订|预约|提交)|(?:查|填|订|预约).{0,6}(?:网页|网站)/ },
     // 4. 账本：明确关键词兜底
     { type: "ledger_organize", regex: /整理账本|记账|账本|收支|报销|账单|记账本|支出.*收入|统计.*钱/ },
     // 5. 文件整理
@@ -395,6 +401,17 @@ function buildDefaultPlan(automationType, execution) {
       ],
       risk_warning: "报告内容基于公开网络信息，关键数据请再次核实。",
       estimated_duration: "约 1-2 分钟"
+    },
+    browser_task: {
+      title: taskTitle || "网页办事方案",
+      description: `用浏览器 Agent 打开网页并完成操作：${input || ""}`,
+      steps: [
+        { name: "打开目标网页", detail: "启动无头浏览器访问目标网址" },
+        { name: "按目标操作", detail: "识别页面元素，逐步点击、填写、提取信息" },
+        { name: "人工环节询问", detail: "遇到登录/验证码/支付等必须人工的环节，暂停并向你确认" }
+      ],
+      risk_warning: "涉及账号密码、支付、验证码等环节会暂停请你亲自操作；请勿让 Agent 处理敏感账号操作。",
+      estimated_duration: "约 2-5 分钟"
     },
     ppt_doc: {
       title: taskTitle || "演示稿方案",
@@ -585,7 +602,7 @@ async function generateAutomationPlan(execution) {
     systemPrompt: [
       "你是一名中文任务自动执行分类与规划助手。",
       "请根据用户的自然语言输入，判断最适合的自动化类型，并给出可执行方案。",
-      "支持的类型：summary_note（总结/笔记）、email_draft（邮件草稿）、web_research（联网调研）、office_doc（办公文档）、calendar_event（日历事件）、ledger_organize（整理账本）、file_organize（文件整理）、ppt_doc（演示稿）。",
+      "支持的类型：summary_note（总结/笔记）、email_draft（邮件草稿）、web_research（联网调研）、office_doc（办公文档）、calendar_event（日历事件）、ledger_organize（整理账本）、file_organize（文件整理）、ppt_doc（演示稿）、browser_task（网页办事：打开网页/查询/填写/提交）。",
       "输出必须是 JSON，且 automation_type 必须是上述英文标识之一，不要返回中文类型名。",
       "plan 的 title/description/steps/risk_warning/estimated_duration 必须为非空字符串。",
       "steps 必须针对具体自动化类型给出 3 条有实质内容的执行步骤，不要返回空泛的\"执行\"步骤。",
@@ -1266,6 +1283,11 @@ async function handlePptDoc(execution) {
   };
 }
 
+async function handleBrowserTask(execution, prisma) {
+  // 浏览器 Agent 全程自主推进：执行中 → 需要人工时挂起等待 → 完成后由 executeAutomation 落 waiting_acceptance
+  return runBrowserAgent(execution, prisma);
+}
+
 const HANDLERS = {
   summary_note: handleSummaryNote,
   email_draft: handleEmailDraft,
@@ -1275,6 +1297,7 @@ const HANDLERS = {
   ledger_organize: handleLedgerOrganize,
   file_organize: handleFileOrganize,
   ppt_doc: handlePptDoc,
+  browser_task: handleBrowserTask,
 };
 
 export async function executeAutomation({ executionId, phase, userId, prisma }) {

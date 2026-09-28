@@ -3,6 +3,13 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runAutoPhases } from "../services/autoAutomation.js";
+import {
+  getAgentState,
+  respondToAgent,
+  takeoverAgent,
+  releaseAgent,
+  commandAgent
+} from "../services/browserAgent.js";
 
 export const taskExecutionsRouter = Router();
 
@@ -269,3 +276,83 @@ taskExecutionsRouter.delete("/:id", async (req, res) => {
   return res.status(204).send();
 });
 
+
+
+// —— 浏览器 Agent 人机交互 ——（web 端守护记录详情里回应提问 / 远程接管）
+
+async function loadOwnedBrowserExecution(req, res) {
+  const execution = await prisma.taskExecution.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    }
+  });
+  if (!execution) {
+    res.status(404).json({ error: "NOT_FOUND", message: "执行记录不存在" });
+    return null;
+  }
+  if (execution.automationType !== "browser_task") {
+    res.status(400).json({ error: "NOT_BROWSER", message: "该执行记录不是网页办事类型" });
+    return null;
+  }
+  return execution;
+}
+
+taskExecutionsRouter.get("/:id/agent-state", async (req, res) => {
+  const execution = await loadOwnedBrowserExecution(req, res);
+  if (!execution) return;
+  const state = getAgentState(execution.id);
+  if (!state) {
+    return res.json({
+      active: false,
+      execution_status: execution.executionStatus,
+      automation_result: execution.automationResult
+    });
+  }
+  return res.json({ active: true, ...state });
+});
+
+taskExecutionsRouter.post("/:id/agent-respond", async (req, res) => {
+  const execution = await loadOwnedBrowserExecution(req, res);
+  if (!execution) return;
+  const { choice, text } = req.body || {};
+  const result = await respondToAgent(execution.id, {
+    choice: String(choice || "").slice(0, 200),
+    text: String(text || "").slice(0, 500)
+  });
+  if (!result.ok) {
+    return res.status(400).json({ error: "AGENT_ERROR", message: result.message });
+  }
+  return res.json({ ok: true });
+});
+
+taskExecutionsRouter.post("/:id/agent-takeover", async (req, res) => {
+  const execution = await loadOwnedBrowserExecution(req, res);
+  if (!execution) return;
+  const result = await takeoverAgent(execution.id);
+  if (!result.ok) {
+    return res.status(400).json({ error: "AGENT_ERROR", message: result.message });
+  }
+  return res.json({ ok: true, state: getAgentState(execution.id) });
+});
+
+taskExecutionsRouter.post("/:id/agent-release", async (req, res) => {
+  const execution = await loadOwnedBrowserExecution(req, res);
+  if (!execution) return;
+  const note = String(req.body?.note || "").slice(0, 200);
+  const result = await releaseAgent(execution.id, note);
+  if (!result.ok) {
+    return res.status(400).json({ error: "AGENT_ERROR", message: result.message });
+  }
+  return res.json({ ok: true });
+});
+
+taskExecutionsRouter.post("/:id/agent-command", async (req, res) => {
+  const execution = await loadOwnedBrowserExecution(req, res);
+  if (!execution) return;
+  const result = await commandAgent(execution.id, req.body?.cmd || req.body || {});
+  if (!result.ok) {
+    return res.status(400).json({ error: "AGENT_ERROR", message: result.message });
+  }
+  return res.json(result);
+});

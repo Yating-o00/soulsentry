@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { View, Text, Input, ScrollView } from "@tarojs/components";
+import { View, Text, Input, ScrollView, Image } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import { post, get } from "@/utils/api";
 import { getToken } from "@/utils/auth";
@@ -45,6 +45,15 @@ function extractUrl(text) {
   return m ? m[0] : null;
 }
 
+// /uploads/ 相对路径 → 完整图片地址（小助手截图预览用）
+function resolveUploadUrl(p) {
+  if (!p) return "";
+  if (/^https?:\/\//.test(p)) return p;
+  const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+  const host = rawApi.replace(/\/$/, "").replace(/\/api$/, "");
+  return `${host}${p}`;
+}
+
 export default function FlowChatSheet({ visible, seedText, onClose, onCreated }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -55,6 +64,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
   // —— 浏览器小助手（对话内嵌 Agent）：agentExecId 非空时轮询执行状态 ——
   const [agentExecId, setAgentExecId] = useState(null);
   const [agentStatus, setAgentStatus] = useState("");
+  const [agentShot, setAgentShot] = useState("");
   const agentPollRef = useRef(null);
   const lastAskedRef = useRef("");
 
@@ -86,7 +96,10 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
 
   // 关闭/卸载时停掉轮询（Agent 本身继续在服务端执行，守护记录里可看）
   useEffect(() => {
-    if (!visible) stopAgentPoll();
+    if (!visible) {
+      stopAgentPoll();
+      setAgentShot("");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
@@ -99,7 +112,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     stopAgentPoll();
     setAgentExecId(executionId);
     lastAskedRef.current = "";
-    pushAssistant("🕹️ 浏览器小助手出发了，我去网页上一步步帮你办，进展和结果都会回到这里；中途需要你拿主意的地方，我会停下来问你～", { agent: true });
+    setAgentShot("");
     setAgentStatus("正在打开网页…");
     agentPollRef.current = setInterval(() => pollAgent(executionId), 2500);
   };
@@ -108,6 +121,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     stopAgentPoll();
     setAgentExecId(null);
     setAgentStatus("");
+    setAgentShot("");
     if (finalMessage) pushAssistant(finalMessage, { agent: true });
   };
 
@@ -115,6 +129,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     try {
       const st = await get(`/task-executions/${executionId}/agent-state`, {}, { silent: true });
       if (!st) return;
+      if (st.latestScreenshot) setAgentShot(st.latestScreenshot);
       if (st.active) {
         if (st.status === "waiting_input" && st.waiting?.question) {
           setAgentStatus("等你回应");
@@ -430,10 +445,22 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
               </View>
             ))}
 
-            {/* 小助手执行状态条 */}
-            {agentExecId && agentStatus && (
-              <View style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", padding: "10rpx 22rpx", borderRadius: "999rpx", background: "rgba(56,72,119,0.07)", marginBottom: "18rpx" }}>
-                <Text style={{ fontSize: "22rpx", color: T.primary }}>● {agentStatus}</Text>
+            {/* 小助手执行状态条 + 实时网页画面 */}
+            {agentExecId && (
+              <View style={{ alignSelf: "flex-start", marginBottom: "18rpx" }}>
+                {agentStatus && (
+                  <View style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", padding: "10rpx 22rpx", borderRadius: "999rpx", background: "rgba(56,72,119,0.07)", marginBottom: "12rpx" }}>
+                    <Text style={{ fontSize: "22rpx", color: T.primary }}>● {agentStatus}</Text>
+                  </View>
+                )}
+                {agentShot && (
+                  <Image
+                    src={resolveUploadUrl(agentShot)}
+                    mode="widthFix"
+                    onClick={() => Taro.previewImage({ urls: [resolveUploadUrl(agentShot)] })}
+                    style={{ width: "440rpx", borderRadius: "16rpx", border: "1px solid rgba(15,23,42,0.10)" }}
+                  />
+                )}
               </View>
             )}
 

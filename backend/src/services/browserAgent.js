@@ -12,7 +12,7 @@ import { env } from "../config/env.js";
 // - 暂停通过内存 pending promise 实现：handler 一直挂起，executeAutomation 不会提前写终态
 // - 服务器重启会丢失会话：启动清扫把中断的浏览器执行单标记为失败（用户可再试一次）
 
-const MAX_STEPS = 24;           // 单次执行最多工具步数
+const MAX_STEPS = 36;           // 单次执行最多工具步数（订/查类任务链较长）
 const RUN_DEADLINE_MS = 10 * 60 * 1000; // 单次执行总时限
 const KIMI_CALL_TIMEOUT = 35000;
 const SCREENSHOT_KEEP = 40;
@@ -174,7 +174,9 @@ const AGENT_SYSTEM = `你是 SoulSentry「心栈」内置的浏览器操作 Agen
 3. 涉及登录、注册、短信验证、滑块验证码、支付、输入密码/银行卡等敏感操作时，禁止代劳，立即用 ask_user 暂停并向用户说明需要什么。
 4. 需要用户做选择（如多个班次/商品）时，先用 extract 记录选项信息，再 ask_user 给出 choices。
 5. 目标完成后用 done 汇总；页面确实无法满足时用 fail 说明原因。不要无限重试同一个失败动作，最多两次后改 ask_user 或 fail。
-6. extract 记录的是"用户要的结果信息"，逐条记录，最后 done 的 summary 里汇总。`;
+6. extract 记录的是"用户要的结果信息"，逐条记录，最后 done 的 summary 里汇总。
+7. 选平台要符合国内用户的常规习惯：订机票/火车票/酒店/门票优先用携程、飞猪、同程、美团这类综合平台（可以一次对比多家供应商的时间与价格），而不是直接扎进某一家航空公司/铁路官网；查通用信息（天气、资讯、百科）优先用百度/必应搜索；查快递用菜鸟裹裹或快递公司官网。用户给了明确网址则以用户为准。
+8. 查询对比类目标（比价、查班次、查余票）不要陷入逐条翻页：收集到 2-3 个有代表性的选项后，用 ask_user 把关键差异（时间/价格/耗时）列给用户选，用户选完再继续下一步。`;
 
 async function executeTool(session, name, args) {
   const page = session.page;

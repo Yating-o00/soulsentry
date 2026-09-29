@@ -70,6 +70,7 @@ export default function SmartInputBar() {
   // —— 浏览器小助手（对话内嵌 Agent）：agentExecId 非空时轮询执行状态 ——
   const [agentExecId, setAgentExecId] = useState(null);
   const [agentStatus, setAgentStatus] = useState("");
+  const [agentShot, setAgentShot] = useState("");
   const agentPollRef = useRef(null);
   const lastAskedRef = useRef("");
   const taRef = useRef(null);
@@ -112,7 +113,7 @@ export default function SmartInputBar() {
     stopAgentPoll();
     setAgentExecId(executionId);
     lastAskedRef.current = "";
-    pushAssistant("🕹️ 浏览器小助手出发了，我去网页上一步步帮你办，进展和结果都会回到这里；中途需要你拿主意的地方，我会停下来问你～", { agent: true });
+    setAgentShot("");
     setAgentStatus("正在打开网页…");
     agentPollRef.current = setInterval(() => pollAgent(executionId), 2500);
   };
@@ -121,6 +122,7 @@ export default function SmartInputBar() {
     stopAgentPoll();
     setAgentExecId(null);
     setAgentStatus("");
+    setAgentShot("");
     if (finalMessage) pushAssistant(finalMessage, { agent: true });
     queryClient.invalidateQueries({ queryKey: ['task-executions'] });
   };
@@ -129,6 +131,7 @@ export default function SmartInputBar() {
     try {
       const st = await httpRequest(`/api/task-executions/${executionId}/agent-state`);
       if (!st) return;
+      if (st.latestScreenshot) setAgentShot(st.latestScreenshot);
       if (st.active) {
         if (st.status === "waiting_input" && st.waiting?.question) {
           setAgentStatus("等你回应");
@@ -293,6 +296,7 @@ export default function SmartInputBar() {
     stopAgentPoll();
     setAgentExecId(null);
     setAgentStatus("");
+    setAgentShot("");
     setMessages([]);
     setPending(null);
   };
@@ -367,11 +371,25 @@ export default function SmartInputBar() {
                 </div>
               ))}
 
-              {/* 小助手执行状态条 */}
-              {agentExecId && agentStatus && (
-                <div className="mb-3 flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-[12px]" style={{ background: "rgba(56,72,119,0.07)", color: C.sentinel }}>
-                  <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: C.sentinel }} />
-                  {agentStatus}
+              {/* 小助手执行状态条 + 实时网页画面 */}
+              {agentExecId && (
+                <div className="mb-3 flex flex-col items-start gap-2 self-start">
+                  {agentStatus && (
+                    <div className="flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px]" style={{ background: "rgba(56,72,119,0.07)", color: C.sentinel }}>
+                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: C.sentinel }} />
+                      {agentStatus}
+                    </div>
+                  )}
+                  {agentShot && (
+                    <img
+                      src={agentShot}
+                      alt="小助手正在浏览的网页"
+                      onClick={() => window.open(agentShot, "_blank")}
+                      title="点击放大查看"
+                      className="w-60 cursor-zoom-in rounded-xl border transition-opacity hover:opacity-90"
+                      style={{ borderColor: C.hairline }}
+                    />
+                  )}
                 </div>
               )}
 

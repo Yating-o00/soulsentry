@@ -4,7 +4,7 @@ import { Mic, MicOff, Loader2, ArrowUp } from "lucide-react";
 import { deepSemanticParse } from "@/components/utils/semanticParser";
 import ChatPasteRecognizer from "@/components/heartsign/ChatPasteRecognizer";
 import { looksLikeChatLog } from "@/components/utils/processPastedContent";
-import TodayChatDialog from "@/components/today/TodayChatDialog";
+import TodayChatPanel from "@/components/today/TodayChatPanel";
 
 const SAMPLES = ['明早7点飞深圳', '今晚8点给妈妈打电话', '突然想去看看海', '今天有点累，但很踏实'];
 
@@ -13,7 +13,7 @@ const AUTO_RE = /邮件|email|e-mail|调研|调查报告|报告|ppt|PPT|总结|�
 
 /**
  * 心栈之门 —— 今日页统一记忆入口(视觉对齐参考稿 HeroGate)
- * 用户只管说；提交后进入与心栈的对话（TodayChatDialog），
+ * 用户只管说；提交后在本卡片下方展开连续对话（TodayChatPanel），
  * 由 AI 多轮理解意图，用户确认后才生成约定 / 心签 / 链接记录。
  */
 export default function SmartInputBar() {
@@ -24,8 +24,8 @@ export default function SmartInputBar() {
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [isListeningVoice, setIsListeningVoice] = useState(false);
   const [showChatRecognizer, setShowChatRecognizer] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [chatSeed, setChatSeed] = useState("");
+  const [chatNonce, setChatNonce] = useState(0); // 每次提交 +1，开启新一轮对话
   // 用户在预览里手动点的类型(约定/心签),作为对话里的倾向提示
   const [previewOverride, setPreviewOverride] = useState(null);
   const aiTimerRef = useRef(null);
@@ -108,13 +108,13 @@ export default function SmartInputBar() {
     }
   }
 
-  // —— 提交:不直建,进入对话由 AI 理解后再确认生成 ——
+  // —— 提交:不直建,在下方展开对话由 AI 理解后再确认生成 ——
   const handleSubmit = () => {
     const text = inputValue.trim();
     if (!text) return;
     const hint = previewOverride === 'note' ? '（我想记成心签）' : previewOverride === 'task' ? '（我想立成约定）' : '';
     setChatSeed(hint ? `${text}${hint}` : text);
-    setChatOpen(true);
+    setChatNonce((n) => n + 1);
     setInputValue("");
     setSemanticAnalysis(null);
   };
@@ -265,6 +265,16 @@ export default function SmartInputBar() {
         </div>
       </div>
 
+      {/* 内嵌连续对话：确认后才生成约定/心签/链接 */}
+      {chatSeed && (
+        <TodayChatPanel
+          seedText={chatSeed}
+          seedNonce={chatNonce}
+          onClose={() => setChatSeed("")}
+          onCreated={handleChatCreated}
+        />
+      )}
+
       {/* 示例引路 */}
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         {SAMPLES.map((s) => (
@@ -304,14 +314,6 @@ export default function SmartInputBar() {
           </div>
         </div>
       )}
-
-      {/* 对话浮层:输入内容进入对话，AI 理解意图、确认后生成 */}
-      <TodayChatDialog
-        open={chatOpen}
-        seedText={chatSeed}
-        onClose={() => setChatOpen(false)}
-        onCreated={handleChatCreated}
-      />
     </div>
   );
 }

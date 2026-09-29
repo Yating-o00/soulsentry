@@ -140,7 +140,8 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
       } else {
         return;
       }
-      setMessages((m) => [...m, { role: "assistant", content: `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？` }]);
+      const isBrowserTask = pending.type === "task" && /https?:\/\//i.test(pending.description || messages.find((m) => m.role === "user")?.content || "");
+      setMessages((m) => [...m, { role: "assistant", content: isBrowserTask ? `「${doneLabel}」已为你记下了 ✓ 浏览器小助手开始帮你办这件事，进度和结果在守护记录里随时看～` : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？` }]);
       setPending(null);
       onCreated?.();
     } catch (err) {

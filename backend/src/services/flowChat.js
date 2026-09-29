@@ -69,7 +69,19 @@ function fallbackExtract(lastUserText, lastExtracted) {
   if (REJECT_RE.test(t) && lastExtracted) return "__reject__";
 
   const urlMatch = t.match(URL_RE);
-  if (urlMatch) return { type: "link", text: t };
+  if (urlMatch) {
+    // 网址 + 办事意图 → 约定（确认后走浏览器 Agent 自动执行），只有纯收藏才是链接
+    if (/打开|帮我|查|搜|填|预约|订|报名|提交|看看|找|下载|登录/.test(t)) {
+      const title = t
+        .replace(URL_RE, "")
+        .replace(/打开|帮我|请|一下|搜索|搜|查查?|看看|找|https?:\/\//g, "")
+        .replace(/[，。,.!？?的\s]+/g, "")
+        .trim()
+        .slice(0, 24) || "网页办事";
+      return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: null };
+    }
+    return { type: "link", text: t };
+  }
 
   // 简化版时间解析：只覆盖最常见的口语时间
   const now = new Date();
@@ -132,6 +144,9 @@ function fallbackReply(userText, extracted, lastExtracted) {
     return "我在听～你可以再说一点点：比如想什么时候做这件事，或者这只是当下的一点心情，我都会替你收好。";
   }
   if (extracted.type === "task" && (!lastExtracted || lastExtracted.title !== extracted.title)) {
+    if (!extracted.due_at && /https?:\/\//.test(extracted.description || "")) {
+      return `好，我记下了「${extracted.title}」。确认后我会派浏览器小助手替你打开网页一步步办好，进度在守护记录里随时看～`;
+    }
     return `好，我记下了「${extracted.title}」。时间我也算好了，你看一眼下面的小卡片，没问题就点确认～`;
   }
   if (extracted.type === "heart") {
@@ -192,9 +207,12 @@ ${buildMessagesBlock(messages)}
 
 你的任务是从对话中理解用户想做什么，并在信息足够时给出待确认的结构化提案（extracted）：
 - type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。
+- type=task（网页办事）：用户想"打开某个网址做事"——如打开网页查询/搜索/填写/预约/订票/报名/提交，或描述里带 http 链接并让你去办。同样输出 type=task，description 必须原样保留完整网址和原话，due_at 可以为 null。回复时告诉用户：确认后心栈会派浏览器小助手替你打开网页一步步办理，遇到登录等需要你出面的环节会暂停问你，进度和结果在守护记录里随时可看。
 - type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。
-- type=link（存链接）：用户发来网址想存起来。text 保留用户原话。
+- type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
 - 纯聊天或信息还不足：extracted 为 null。
+
+重要：你所在的 SoulSentry 已经具备浏览器自动执行能力，不要再说"我没办法打开网页/搜索"，这类请求请按上面的"网页办事"处理。
 
 对话原则：
 1. 信息不足时不要硬猜：只问一个最关键的补充问题（通常是时间），语气像朋友，不像表单。

@@ -67,10 +67,22 @@ export default function SmartInputBar() {
   const [pending, setPending] = useState(null);
   const [creating, setCreating] = useState(false);
   const [recording, setRecording] = useState(false);
+  // —— 浏览器小助手（对话内嵌 Agent）：agentExecId 非空时轮询执行状态 ——
+  const [agentExecId, setAgentExecId] = useState(null);
+  const [agentStatus, setAgentStatus] = useState("");
+  const agentPollRef = useRef(null);
+  const lastAskedRef = useRef("");
   const taRef = useRef(null);
   const threadRef = useRef(null);
   const recognitionRef = useRef(null);
   const queryClient = useQueryClient();
+
+  const stopAgentPoll = () => {
+    if (agentPollRef.current) {
+      clearInterval(agentPollRef.current);
+      agentPollRef.current = null;
+    }
+  };
 
   // 输入框随内容自动长高（上限约 6 行），空着时保持单行的简洁状态
   useEffect(() => {
@@ -88,18 +100,77 @@ export default function SmartInputBar() {
 
   useEffect(() => () => {
     try { recognitionRef.current?.stop?.(); } catch {}
+    stopAgentPoll();
   }, []);
+
+  // —— 浏览器小助手：启动后轮询执行状态，提问与结果回落到对话里 ——
+  const pushAssistant = (content, extra = {}) => {
+    setMessages((m) => [...m, { role: "assistant", content, ...extra }]);
+  };
+
+  const startAgent = (executionId) => {
+    stopAgentPoll();
+    setAgentExecId(executionId);
+    lastAskedRef.current = "";
+    pushAssistant("🕹️ 浏览器小助手出发了，我去网页上一步步帮你办，进展和结果都会回到这里；中途需要你拿主意的地方，我会停下来问你～", { agent: true });
+    setAgentStatus("正在打开网页…");
+    agentPollRef.current = setInterval(() => pollAgent(executionId), 2500);
+  };
+
+  const finishAgent = (finalMessage) => {
+    stopAgentPoll();
+    setAgentExecId(null);
+    setAgentStatus("");
+    if (finalMessage) pushAssistant(finalMessage, { agent: true });
+    queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+  };
+
+  const pollAgent = async (executionId) => {
+    try {
+      const st = await httpRequest(`/api/task-executions/${executionId}/agent-state`);
+      if (!st) return;
+      if (st.active) {
+        if (st.status === "waiting_input" && st.waiting?.question) {
+          setAgentStatus("等你回应");
+          if (st.waiting.question !== lastAskedRef.current) {
+            lastAskedRef.current = st.waiting.question;
+            pushAssistant(st.waiting.question, { agent: true, choices: st.waiting.choices || [] });
+          }
+        } else if (st.status === "failed" || st.error) {
+          finishAgent(`小助手这边卡住了${st.error ? `：${st.error}` : ""}。别担心，打开守护记录可以查看全过程，也能点「再试一次」～`);
+        } else {
+          const stepCount = Array.isArray(st.steps) ? st.steps.length : 0;
+          setAgentStatus(stepCount > 0 ? `正在操作网页（已进行 ${stepCount} 步）…` : "正在打开网页…");
+        }
+      } else if (st.execution_status === "completed") {
+        const summary = st.automation_result?.data?.agent?.summary || st.automation_result?.preview || "";
+        finishAgent(summary ? `办好啦：${summary}` : "这件事办好了，详细过程在守护记录里可以看～");
+      } else if (st.execution_status === "failed") {
+        finishAgent(`小助手没能完成这件事${st.automation_result?.errorMessage ? `：${st.automation_result.errorMessage}` : ""}。打开守护记录可以「再试一次」～`);
+      }
+    } catch (_e) {
+      // 轮询失败不打断对话，下一轮继续
+    }
+  };
 
   const callAI = async (msgs, lastExtracted) => {
     setBusy(true);
     try {
       const res = await httpRequest("/api/chat", {
         method: "POST",
-        body: { messages: msgs, last_extracted: lastExtracted }
+        body: {
+          messages: msgs,
+          last_extracted: lastExtracted,
+          agent_execution_id: agentExecId || undefined
+        }
       });
       const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
       setMessages([...msgs, { role: "assistant", content: reply }]);
       setPending(res?.extracted || null);
+      // 后端派出了浏览器小助手：进入 Agent 模式轮询
+      if (res?.agent?.executionId && res.agent.executionId !== agentExecId) {
+        startAgent(res.agent.executionId);
+      }
     } catch (_err) {
       setMessages([...msgs, { role: "assistant", content: "刚才走神了一下…你再说一遍好吗？" }]);
     } finally {
@@ -132,9 +203,9 @@ export default function SmartInputBar() {
     setCreating(true);
     try {
       let doneLabel = "";
+      // 详情保底：AI 未返回 description 时，用首条用户输入作为约定详情
+      const firstUserText = messages.find((m) => m.role === "user")?.content || "";
       if (pending.type === "task") {
-        // 详情保底：AI 未返回 description 时，用首条用户输入作为约定详情
-        const firstUserText = messages.find((m) => m.role === "user")?.content || "";
         await base44.entities.Task.create({
           title: pending.title,
           description: pending.description || firstUserText || "",
@@ -176,7 +247,8 @@ export default function SmartInputBar() {
       } else {
         return;
       }
-      setMessages((m) => [...m, { role: "assistant", content: `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？` }]);
+      const isBrowserTask = pending.type === "task" && /https?:\/\//i.test(pending.description || firstUserText);
+      setMessages((m) => [...m, { role: "assistant", content: isBrowserTask ? `「${doneLabel}」已为你记下了 ✓ 浏览器小助手开始帮你办这件事，进度和结果在守护记录里随时看～` : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？` }]);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
@@ -218,6 +290,9 @@ export default function SmartInputBar() {
   };
 
   const clearChat = () => {
+    stopAgentPoll();
+    setAgentExecId(null);
+    setAgentStatus("");
     setMessages([]);
     setPending(null);
   };
@@ -273,8 +348,32 @@ export default function SmartInputBar() {
                   }
                 >
                   {m.content}
+                  {/* 小助手提问附带的可点选项：点击即以用户身份发送 */}
+                  {m.role === "assistant" && Array.isArray(m.choices) && m.choices.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {m.choices.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => send(c)}
+                          className="rounded-full border px-3 py-1 text-[12px] transition-colors hover:bg-white"
+                          style={{ borderColor: "rgba(56,72,119,0.35)", color: C.sentinel, background: "rgba(56,72,119,0.06)" }}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
+
+              {/* 小助手执行状态条 */}
+              {agentExecId && agentStatus && (
+                <div className="mb-3 flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-[12px]" style={{ background: "rgba(56,72,119,0.07)", color: C.sentinel }}>
+                  <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: C.sentinel }} />
+                  {agentStatus}
+                </div>
+              )}
 
               {busy && (
                 <div

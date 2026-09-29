@@ -6,6 +6,49 @@ import {
 
 const MIN_CONTENT_CHARS = 6;
 
+// 从对话里启动浏览器 Agent 的成本预检（与 delegateAutoExecute 一致）
+async function checkBrowserBudget(userId, prisma) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { aiCredits: true, email: true },
+  });
+  if (!user || isDemoUser(user)) return { ok: false, reason: "演示账户不支持浏览器小助手" };
+  const planCost = AUTOMATION_EXECUTE_COSTS.plan ?? 5;
+  const executeCost = AUTOMATION_EXECUTE_COSTS.browser_task ?? AUTOMATION_EXECUTE_COSTS.default;
+  if (user.aiCredits < planCost + executeCost) {
+    return { ok: false, reason: `AI 点数不足（需 ${planCost + executeCost} 点）` };
+  }
+  return { ok: true };
+}
+
+// 对话内嵌 Agent：无需先建约定，直接从聊天启动一个浏览器执行单，
+// 结果与互动回落到对话里（守护记录同步可见）。
+export async function startStandaloneBrowserExecution({ goal, userId, prisma }) {
+  if (!goal || !userId || !prisma) return { status: "skipped", reason: "参数无效" };
+  const budget = await checkBrowserBudget(userId, prisma);
+  if (!budget.ok) return { status: "skipped", reason: budget.reason };
+
+  const execution = await prisma.taskExecution.create({
+    data: {
+      userId,
+      taskId: null,
+      taskTitle: String(goal).slice(0, 120),
+      category: "task",
+      executionStatus: "pending",
+      originalInput: String(goal).slice(0, 2000),
+      automationType: "browser_task",
+    },
+  });
+
+  console.log(`[autoAutomation] chat-embedded browser agent execution=${execution.id}`);
+
+  runAutoPhases(execution.id, userId, prisma).catch((err) => {
+    console.error(`[autoAutomation] 对话内嵌浏览器 Agent 失败 execution=${execution.id}:`, err?.message || err);
+  });
+
+  return { status: "started", executionId: execution.id };
+}
+
 function isDoneStatus(status) {
   return ["completed", "done", "archived", "deleted"].includes(String(status || "").toLowerCase());
 }

@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { View, Text, Input, ScrollView } from "@tarojs/components";
 import Taro from "@tarojs/taro";
-import { post } from "@/utils/api";
+import { post, get } from "@/utils/api";
 import { getToken } from "@/utils/auth";
 import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
 import theme from "./tasks/theme";
@@ -52,10 +52,25 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
   const [pending, setPending] = useState(null); // AI 提案，待用户确认
   const [creating, setCreating] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
+  // —— 浏览器小助手（对话内嵌 Agent）：agentExecId 非空时轮询执行状态 ——
+  const [agentExecId, setAgentExecId] = useState(null);
+  const [agentStatus, setAgentStatus] = useState("");
+  const agentPollRef = useRef(null);
+  const lastAskedRef = useRef("");
+
+  const stopAgentPoll = () => {
+    if (agentPollRef.current) {
+      clearInterval(agentPollRef.current);
+      agentPollRef.current = null;
+    }
+  };
 
   // 每次打开都是新对话；seed 作为第一条用户消息发出
   useEffect(() => {
     if (!visible) return;
+    stopAgentPoll();
+    setAgentExecId(null);
+    setAgentStatus("");
     setMessages([]);
     setPending(null);
     setInput("");
@@ -69,13 +84,76 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  // 关闭/卸载时停掉轮询（Agent 本身继续在服务端执行，守护记录里可看）
+  useEffect(() => {
+    if (!visible) stopAgentPoll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  // —— 浏览器小助手：启动后轮询执行状态，提问与结果回落到对话里 ——
+  const pushAssistant = (content, extra = {}) => {
+    setMessages((m) => [...m, { role: "assistant", content, ...extra }]);
+  };
+
+  const startAgent = (executionId) => {
+    stopAgentPoll();
+    setAgentExecId(executionId);
+    lastAskedRef.current = "";
+    pushAssistant("🕹️ 浏览器小助手出发了，我去网页上一步步帮你办，进展和结果都会回到这里；中途需要你拿主意的地方，我会停下来问你～", { agent: true });
+    setAgentStatus("正在打开网页…");
+    agentPollRef.current = setInterval(() => pollAgent(executionId), 2500);
+  };
+
+  const finishAgent = (finalMessage) => {
+    stopAgentPoll();
+    setAgentExecId(null);
+    setAgentStatus("");
+    if (finalMessage) pushAssistant(finalMessage, { agent: true });
+  };
+
+  const pollAgent = async (executionId) => {
+    try {
+      const st = await get(`/task-executions/${executionId}/agent-state`, {}, { silent: true });
+      if (!st) return;
+      if (st.active) {
+        if (st.status === "waiting_input" && st.waiting?.question) {
+          setAgentStatus("等你回应");
+          if (st.waiting.question !== lastAskedRef.current) {
+            lastAskedRef.current = st.waiting.question;
+            pushAssistant(st.waiting.question, { agent: true, choices: st.waiting.choices || [] });
+          }
+        } else if (st.status === "failed" || st.error) {
+          finishAgent(`小助手这边卡住了${st.error ? `：${st.error}` : ""}。别担心，打开守护记录可以查看全过程，也能点「再试一次」～`);
+        } else {
+          const stepCount = Array.isArray(st.steps) ? st.steps.length : 0;
+          setAgentStatus(stepCount > 0 ? `正在操作网页（已进行 ${stepCount} 步）…` : "正在打开网页…");
+        }
+      } else if (st.execution_status === "completed") {
+        const summary = st.automation_result?.data?.agent?.summary || st.automation_result?.preview || "";
+        finishAgent(summary ? `办好啦：${summary}` : "这件事办好了，详细过程在守护记录里可以看～");
+      } else if (st.execution_status === "failed") {
+        finishAgent(`小助手没能完成这件事${st.automation_result?.errorMessage ? `：${st.automation_result.errorMessage}` : ""}。打开守护记录可以「再试一次」～`);
+      }
+    } catch (_e) {
+      // 轮询失败不打断对话，下一轮继续
+    }
+  };
+
   const callAI = async (msgs, lastExtracted) => {
     setBusy(true);
     try {
-      const res = await post("/chat", { messages: msgs, last_extracted: lastExtracted }, { silent: true });
+      const res = await post("/chat", {
+        messages: msgs,
+        last_extracted: lastExtracted,
+        agent_execution_id: agentExecId || undefined
+      }, { silent: true });
       const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
       setMessages([...msgs, { role: "assistant", content: reply }]);
       setPending(res?.extracted || null);
+      // 后端派出了浏览器小助手：进入 Agent 模式轮询
+      if (res?.agent?.executionId && res.agent.executionId !== agentExecId) {
+        startAgent(res.agent.executionId);
+      }
     } catch (_err) {
       setMessages([...msgs, { role: "assistant", content: "刚才走神了一下…你再说一遍好吗？" }]);
     } finally {
@@ -335,8 +413,29 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                 <Text style={{ fontSize: "28rpx", lineHeight: "42rpx", color: m.role === "user" ? "#fff" : T.ink, wordBreak: "break-all" }}>
                   {m.content}
                 </Text>
+                {/* 小助手提问附带的可点选项：点击即以用户身份发送 */}
+                {m.role === "assistant" && Array.isArray(m.choices) && m.choices.length > 0 && (
+                  <View style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", marginTop: "14rpx" }}>
+                    {m.choices.map((c) => (
+                      <View
+                        key={c}
+                        onClick={() => send(c)}
+                        style={{ padding: "8rpx 22rpx", borderRadius: "999rpx", border: "1px solid rgba(56,72,119,0.35)", background: "rgba(56,72,119,0.06)", marginRight: "12rpx", marginBottom: "10rpx" }}
+                      >
+                        <Text style={{ fontSize: "24rpx", color: T.primary }}>{c}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             ))}
+
+            {/* 小助手执行状态条 */}
+            {agentExecId && agentStatus && (
+              <View style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", padding: "10rpx 22rpx", borderRadius: "999rpx", background: "rgba(56,72,119,0.07)", marginBottom: "18rpx" }}>
+                <Text style={{ fontSize: "22rpx", color: T.primary }}>● {agentStatus}</Text>
+              </View>
+            )}
 
             {busy && (
               <View style={{ alignSelf: "flex-start", padding: "14rpx 22rpx", borderRadius: "24rpx 24rpx 24rpx 6rpx", background: T.paper, marginBottom: "18rpx" }}>

@@ -1,9 +1,13 @@
 import { invokeKimiText } from "../lib/kimi.js";
+import { startStandaloneBrowserExecution } from "./autoAutomation.js";
+import { respondToAgent } from "./browserAgent.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
-// AI 负责理解意图（立约定 / 记心签 / 存链接 / 闲聊），
+// AI 负责理解意图（立约定 / 记心签 / 存链接 / 网页办事 / 闲聊），
 // 信息足够时输出 extracted 提案，由用户确认后客户端再落库。
 // Kimi 不可用时走本地规则兜底，保证对话永远能继续。
+// 「网页办事」走内嵌浏览器 Agent：goal 交给 Agent 即时执行，
+// 过程与结果回落到对话里（执行单同时进守护记录）。
 
 const CATEGORIES = ["work", "personal", "health", "study", "family", "shopping", "finance", "other"];
 const PRIORITIES = ["high", "medium", "low"];
@@ -61,6 +65,11 @@ function sanitizeExtracted(raw) {
 // 用户否定当前提案：收起提案，温柔引导 TA 说出要改什么
 const REJECT_RE = /不对|不是这个?|错了|再聊聊|先不要|重来|重新说/;
 
+// 「现在就去网页办事」识别（排除"以后再提醒"的约定类表述）
+const LATER_REMIND_RE = /提醒我|记得|别忘了|以后再|到时(候)?再/;
+const NOW_BROWSE_RE = /(?:帮我|给我|麻烦|请问|帮).{0,12}(?:查|搜|看|找|订|预约)|(?:查|搜)一下?(?:天气|资料|信息|价格|股价|机票|火车票|高铁|余票|快递|物流|酒店|路线|成绩|排名)|订(?:机票|火车票|高铁票|酒店|门票|外卖)|点外卖|天气怎么(?:样|的)|气温/;
+const BROWSE_URL_INTENT_RE = /打开|帮我|查|搜|填|预约|订|报名|提交|看看|找|下载|登录/;
+
 function fallbackExtract(lastUserText, lastExtracted) {
   const t = String(lastUserText || "").trim();
   if (!t) return null;
@@ -69,19 +78,13 @@ function fallbackExtract(lastUserText, lastExtracted) {
   if (REJECT_RE.test(t) && lastExtracted) return "__reject__";
 
   const urlMatch = t.match(URL_RE);
-  if (urlMatch) {
-    // 网址 + 办事意图 → 约定（确认后走浏览器 Agent 自动执行），只有纯收藏才是链接
-    if (/打开|帮我|查|搜|填|预约|订|报名|提交|看看|找|下载|登录/.test(t)) {
-      const title = t
-        .replace(URL_RE, "")
-        .replace(/打开|帮我|请|一下|搜索|搜|查查?|看看|找|https?:\/\//g, "")
-        .replace(/[，。,.!？?的\s]+/g, "")
-        .trim()
-        .slice(0, 24) || "网页办事";
-      return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: null };
-    }
-    return { type: "link", text: t };
-  }
+  const notLater = !LATER_REMIND_RE.test(t);
+  // 网址 + 办事意图 → 直接派浏览器小助手（不再只立约定等确认）
+  if (urlMatch && notLater && BROWSE_URL_INTENT_RE.test(t)) return { agent_goal: t };
+  // 口语办事诉求 → 直接派浏览器小助手
+  if (notLater && t.length <= 120 && NOW_BROWSE_RE.test(t)) return { agent_goal: t };
+
+  if (urlMatch) return { type: "link", text: t };
 
   // 简化版时间解析：只覆盖最常见的口语时间
   const now = new Date();
@@ -164,6 +167,10 @@ const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     reply: { type: "string", description: "对用户说的话，1-3 句，温柔自然口语" },
+    agent_goal: {
+      type: ["string", "null"],
+      description: "用户想让 Agent 现在就去网页上办的事（查实时信息/订票/网页查询办理等），原样保留诉求；不需要时为 null"
+    },
     extracted: {
       type: ["object", "null"],
       description: "从对话中提取的待确认内容；信息不足或纯聊天时为 null",
@@ -179,7 +186,7 @@ const RESPONSE_SCHEMA = {
       }
     }
   },
-  required: ["reply", "extracted"]
+  required: ["reply", "agent_goal", "extracted"]
 };
 
 function buildMessagesBlock(messages) {
@@ -212,7 +219,9 @@ ${buildMessagesBlock(messages)}
 - type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
 - 纯聊天或信息还不足：extracted 为 null。
 
-重要：你所在的 SoulSentry 已经具备浏览器自动执行能力，不要再说"我没办法打开网页/搜索"，这类请求请按上面的"网页办事"处理。
+agent_goal（网页办事，即时执行）：用户想让你"现在就去网上办一件事"——查实时信息（天气/股价/快递/余票）、打开网页搜索查询、订机票/火车票/酒店、网页填写/预约/比价等。把用户的原始诉求原样填进 agent_goal（含完整网址），extracted 保持 null（同一件事不要两边都放）。回复时告诉用户：浏览器小助手已经出发去办了，过程和结果会直接回到对话里，遇到需要你拍板的地方会 pause 下来问你。若这件事里另有"需要用户日后参与/值得记住"的部分（如出行安排、待办），再单独用 extracted 立约定。
+
+重要：你所在的 SoulSentry 已经具备浏览器自动执行能力，不要再说"我没办法打开网页/搜索"，这类请求请填 agent_goal。
 
 对话原则：
 1. 信息不足时不要硬猜：只问一个最关键的补充问题（通常是时间），语气像朋友，不像表单。
@@ -233,17 +242,24 @@ ${buildMessagesBlock(messages)}
   if (PRESSURE_WORDS.test(result.reply)) {
     throw new Error("reply failed tone check");
   }
+  const agentGoal = trim(result.agent_goal, 200) || null;
+  // 同一件事不要重复：agent_goal 已覆盖的请求，不再出同名约定提案
+  const extracted = agentGoal && result.extracted?.type === "task"
+    ? null
+    : sanitizeExtracted(result.extracted);
   return {
     reply: trim(result.reply, 120),
-    extracted: sanitizeExtracted(result.extracted)
+    agentGoal,
+    extracted
   };
 }
 
 /**
  * 对话入口：messages 为完整对话历史（客户端持有），lastExtracted 为当前待确认提案。
- * 返回 { reply, extracted, source }；任何情况下都给出可继续的对话。
+ * agentExecutionId：对话中挂着浏览器小助手会话时，用户消息直接转发给 Agent。
+ * 返回 { reply, extracted, agentGoal?, agent?, source }；任何情况下都给出可继续的对话。
  */
-export async function runFlowChat({ messages, lastExtracted = null }) {
+export async function runFlowChat({ messages, lastExtracted = null, userId = null, prisma = null, agentExecutionId = null }) {
   const safeMessages = Array.isArray(messages)
     ? messages
         .filter((m) => m && typeof m.content === "string" && ["user", "assistant"].includes(m.role))
@@ -253,16 +269,65 @@ export async function runFlowChat({ messages, lastExtracted = null }) {
 
   const lastUser = [...safeMessages].reverse().find((m) => m.role === "user");
 
+  // —— 浏览器小助手会话进行中：用户消息直接转发给 Agent ——
+  if (agentExecutionId && lastUser) {
+    const owned = await prisma?.taskExecution?.findFirst({
+      where: { id: agentExecutionId, userId, automationType: "browser_task" },
+      select: { id: true, executionStatus: true }
+    });
+    if (!owned) {
+      return { reply: "小助手刚才的会话已经收尾了，结果在守护记录里可以看～还想办点什么吗？", extracted: null, agent: null, source: "agent" };
+    }
+    const resp = await respondToAgent(agentExecutionId, { text: lastUser.content });
+    if (!resp.ok) {
+      return { reply: "小助手还在操作网页，等它问你或者出结果哦～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
+    }
+    return { reply: "收到，我转达给小助手了，它继续帮你办～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
+  }
+
   try {
     if (!safeMessages.length || !lastUser) throw new Error("empty messages");
     const out = await Promise.race([
       chatWithKimi({ messages: safeMessages, lastExtracted }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000))
     ]);
-    return { ...out, source: "ai" };
+
+    // —— Kimi 判断需要即时网页办事：启动浏览器小助手 ——
+    let agent = null;
+    if (out.agentGoal && userId && prisma) {
+      const started = await startStandaloneBrowserExecution({ goal: out.agentGoal, userId, prisma });
+      if (started.status === "started") {
+        agent = { executionId: started.executionId, status: "running" };
+      } else {
+        out.reply = `${out.reply}（小助手暂时没能出发：${started.reason}）`;
+      }
+    }
+    return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source: "ai" };
   } catch (err) {
     console.warn("[flowChat] Kimi chat failed, fallback:", err?.message || err);
     const raw = fallbackExtract(lastUser?.content, lastExtracted);
+
+    // 兜底识别出"现在就去网页办事"：直接启动浏览器小助手
+    if (raw && raw.agent_goal && userId && prisma) {
+      const started = await startStandaloneBrowserExecution({ goal: raw.agent_goal, userId, prisma });
+      if (started.status === "started") {
+        return {
+          reply: "好，我让浏览器小助手去帮你办这件事，过程和结果马上回到这里～",
+          extracted: null,
+          agentGoal: raw.agent_goal,
+          agent: { executionId: started.executionId, status: "running" },
+          source: "fallback"
+        };
+      }
+      return {
+        reply: `好，这件事我可以派小助手去网页上办，不过${started.reason}，先帮你记在这里？`,
+        extracted: null,
+        agentGoal: raw.agent_goal,
+        agent: null,
+        source: "fallback"
+      };
+    }
+
     const extracted = raw && raw !== "__reject__" ? sanitizeExtracted(raw) : null;
     return {
       reply: fallbackReply(lastUser?.content, raw === "__reject__" ? "__reject__" : extracted, lastExtracted),

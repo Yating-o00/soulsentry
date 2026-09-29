@@ -1,36 +1,75 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mic, MicOff, Loader2, ArrowUp } from "lucide-react";
-import { deepSemanticParse } from "@/components/utils/semanticParser";
+import { Mic, Loader2, ArrowUp, X } from "lucide-react";
+import { toast } from "sonner";
+import { httpRequest } from "@/api/httpClient";
+import { base44 } from "@/api/base44Client";
 import ChatPasteRecognizer from "@/components/heartsign/ChatPasteRecognizer";
 import { looksLikeChatLog } from "@/components/utils/processPastedContent";
-import TodayChatPanel from "@/components/today/TodayChatPanel";
+
+// 对话配色全部内联，不依赖 .today-page 作用域的 CSS 变量，避免白底白字。
+const C = {
+  sentinel: "#384877",
+  ink: "#0f172a",
+  ink3: "#64748b",
+  ink4: "#94a3b8",
+  mist: "#f1f5f9",
+  hairline: "rgba(15,23,42,0.10)",
+  recordingBg: "#fce8ec",
+  recordingBorder: "#e8a5a5",
+};
+
+const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接" };
+const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗" };
+const CATEGORY_LABEL = {
+  work: "工作", personal: "个人", health: "健康", study: "学习",
+  family: "家庭", shopping: "购物", finance: "财务", other: "其他"
+};
 
 const SAMPLES = ['明早7点飞深圳', '今晚8点给妈妈打电话', '突然想去看看海', '今天有点累，但很踏实'];
 
-// 可自动执行的差事关键词:命中则预览标签提示「⚙ 自动执行」
-const AUTO_RE = /邮件|email|e-mail|调研|调查报告|报告|ppt|PPT|总结|笔记|账本|文档|周报|月报|纪要|简历|方案|数据分析|邀请函|合同|议程/;
+function fmtDayTime(iso) {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+// 与心流页 saveHeart 一致的账本签识别
+function detectLedgerLike(t) {
+  const s = String(t || "");
+  if ((s.match(/\d+(?:\.\d{1,2})?\s*(?:元|块|¥)/g) || []).length >= 1) return true;
+  const pairs = s.match(/[一-龥]{1,6}\s*[-+]?\d+(?:\.\d{1,2})?(?!\d)/g) || [];
+  return pairs.length >= 2;
+}
+
+function extractUrl(text) {
+  const m = String(text || "").match(/https?:\/\/[^\s"'，。）)]+/i);
+  return m ? m[0] : null;
+}
 
 /**
- * 心栈之门 —— 今日页统一记忆入口(视觉对齐参考稿 HeroGate)
- * 用户只管说；提交后在本卡片下方展开连续对话（TodayChatPanel），
- * 由 AI 多轮理解意图，用户确认后才生成约定 / 心签 / 链接记录。
+ * 心栈之门 —— 今日页统一记忆入口：输入框即对话入口。
+ * 用户只管说（打字回车 / 长按麦克风），AI 在同一卡片内连续多轮对话，
+ * 理解意图后给出提案卡，用户确认后才生成约定 / 心签 / 链接。
  */
 export default function SmartInputBar() {
   const [inputValue, setInputValue] = useState("");
   const [focused, setFocused] = useState(false);
   const [echo, setEcho] = useState(null); // 记忆回响:刚才那一句去了哪里
-  const [semanticAnalysis, setSemanticAnalysis] = useState(null);
-  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
-  const [isListeningVoice, setIsListeningVoice] = useState(false);
   const [showChatRecognizer, setShowChatRecognizer] = useState(false);
-  const [chatSeed, setChatSeed] = useState("");
-  const [chatNonce, setChatNonce] = useState(0); // 每次提交 +1，开启新一轮对话
-  // 用户在预览里手动点的类型(约定/心签),作为对话里的倾向提示
-  const [previewOverride, setPreviewOverride] = useState(null);
-  const aiTimerRef = useRef(null);
-  const recognitionRef = useRef(null);
+  // —— 对话状态（与后端 /api/chat 多轮，last_extracted 追踪提案）——
+  const [messages, setMessages] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [recording, setRecording] = useState(false);
   const taRef = useRef(null);
+  const threadRef = useRef(null);
+  const recognitionRef = useRef(null);
   const queryClient = useQueryClient();
 
   // 输入框随内容自动长高（上限约 6 行），空着时保持单行的简洁状态
@@ -41,117 +80,146 @@ export default function SmartInputBar() {
     ta.style.height = `${Math.min(ta.scrollHeight, 168)}px`;
   }, [inputValue]);
 
-  // —— 实时倾听:输入停顿 1s 后做一次深度语义解析,驱动「我会把它收进…」预览 ——
-  const analyzeWithAI = useCallback(async (text) => {
-    if (!text || text.trim().length < 3) {
-      setSemanticAnalysis(null);
-      return;
-    }
-    setIsAiAnalyzing(true);
-    try {
-      const result = await deepSemanticParse(text, { enableSmartComplete: false });
-      setSemanticAnalysis(result);
-    } catch (e) {
-      console.error('Semantic analysis failed:', e);
-      setSemanticAnalysis(null);
-    } finally {
-      setIsAiAnalyzing(false);
-    }
-  }, []);
-
+  // 新消息/提案出现时，对话线程滚到底部
   useEffect(() => {
-    if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
-    setPreviewOverride(null); // 内容一变,手动改判失效,重新听 AI 的
-    if (!inputValue || inputValue.trim().length < 3) {
-      setSemanticAnalysis(null);
-      return;
-    }
-    aiTimerRef.current = setTimeout(() => analyzeWithAI(inputValue), 1000);
-    return () => { if (aiTimerRef.current) clearTimeout(aiTimerRef.current); };
-  }, [inputValue, analyzeWithAI]);
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, busy, pending]);
 
   useEffect(() => () => {
     try { recognitionRef.current?.stop?.(); } catch {}
   }, []);
 
-  // —— 预览分类:用户手动选择 > AI 意图;关键词补充「自动执行」判定 ——
-  const preview = (() => {
-    const text = inputValue.trim();
-    if (text.length < 4) return null;
-    const intent = semanticAnalysis?.primary_intent;
-    const aiIsNote = intent === 'note' || intent === 'wish';
-    const isHeartSign = previewOverride ? previewOverride === 'note' : aiIsNote;
-    const auto = !isHeartSign && AUTO_RE.test(text);
-    const timeEntity = semanticAnalysis?.time_entities?.find(
-      (t) => t.resolved_datetime && t.time_confidence !== 'low'
-    );
-    return {
-      isHeartSign,
-      auto,
-      time: timeEntity?.resolved_datetime ? fmtDayTime(timeEntity.resolved_datetime) : null,
-      analyzing: isAiAnalyzing && !semanticAnalysis,
-    };
-  })();
-
-  function fmtDayTime(iso) {
+  const callAI = async (msgs, lastExtracted) => {
+    setBusy(true);
     try {
-      const d = new Date(iso);
-      const now = new Date();
-      const sameDay = d.toDateString() === now.toDateString();
-      const tomorrow = new Date(now.getTime() + 86400000).toDateString() === d.toDateString();
-      const day = sameDay ? '今天' : tomorrow ? '明天' : `${d.getMonth() + 1}月${d.getDate()}日`;
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      return `${day} ${hh}:${mm}`;
-    } catch {
-      return '';
+      const res = await httpRequest("/api/chat", {
+        method: "POST",
+        body: { messages: msgs, last_extracted: lastExtracted }
+      });
+      const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
+      setMessages([...msgs, { role: "assistant", content: reply }]);
+      setPending(res?.extracted || null);
+    } catch (_err) {
+      setMessages([...msgs, { role: "assistant", content: "刚才走神了一下…你再说一遍好吗？" }]);
+    } finally {
+      setBusy(false);
     }
-  }
+  };
 
-  // —— 提交:不直建,在下方展开对话由 AI 理解后再确认生成 ——
-  const handleSubmit = () => {
-    const text = inputValue.trim();
-    if (!text) return;
-    const hint = previewOverride === 'note' ? '（我想记成心签）' : previewOverride === 'task' ? '（我想立成约定）' : '';
-    setChatSeed(hint ? `${text}${hint}` : text);
-    setChatNonce((n) => n + 1);
+  // —— 唯一入口：文字/语音都汇聚到这里发给 AI ——
+  const send = (raw) => {
+    const t = String(raw !== undefined ? raw : inputValue).trim();
+    if (!t || busy) return;
+    const msgs = [...messages, { role: "user", content: t.slice(0, 500) }];
+    setMessages(msgs);
     setInputValue("");
-    setSemanticAnalysis(null);
+    callAI(msgs, pending);
   };
 
-  // —— 对话里确认生成后的回响 ——
-  const handleChatCreated = ({ type, label } = {}) => {
-    queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    queryClient.invalidateQueries({ queryKey: ['notes'] });
-    queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-    setEcho({ kind: type === 'task' ? 'task' : 'note', title: label || '' });
+  // 「不对，再聊聊」：把否定说给 AI，由 AI 温柔引导用户说出要改什么
+  const rejectPending = () => {
+    if (!pending || busy) return;
+    const last = pending;
+    setPending(null);
+    const msgs = [...messages, { role: "user", content: "这个不对，我想改一下" }];
+    setMessages(msgs);
+    callAI(msgs, last);
   };
 
-  const handleVoiceInput = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+  const confirmCreate = async () => {
+    if (!pending || creating) return;
+    setCreating(true);
+    try {
+      let doneLabel = "";
+      if (pending.type === "task") {
+        // 详情保底：AI 未返回 description 时，用首条用户输入作为约定详情
+        const firstUserText = messages.find((m) => m.role === "user")?.content || "";
+        await base44.entities.Task.create({
+          title: pending.title,
+          description: pending.description || firstUserText || "",
+          category: pending.category || "personal",
+          priority: pending.priority || "medium",
+          status: "pending",
+          due_at: pending.due_at || null,
+          reminder_time: pending.due_at || null,
+        });
+        doneLabel = pending.title;
+      } else if (pending.type === "heart") {
+        const isLedger = detectLedgerLike(pending.content);
+        const note = await base44.entities.Note.create({
+          title: isLedger ? "账本" : "心签",
+          content: pending.content,
+          plain_text: pending.content,
+          source_type: isLedger ? "ledger" : "emotion",
+          tags: isLedger ? ["账本", "心签"] : ["情绪", "心签"],
+        });
+        doneLabel = isLedger ? "账本" : "心签";
+        // 触发 AI 温暖回应（与心签页同一链路）
+        try {
+          base44.functions.invoke("analyzeHeartSign", {
+            note_id: note.id,
+            note_data: { plain_text: note.plain_text ?? pending.content, content: note.content ?? pending.content, tags: note.tags },
+          }).catch((e) => console.warn("analyzeHeartSign skipped:", e?.message));
+        } catch (e) {
+          console.warn("analyzeHeartSign invoke failed:", e?.message);
+        }
+      } else if (pending.type === "link") {
+        const url = extractUrl(pending.text) || "";
+        await base44.entities.Note.create({
+          title: pending.text.slice(0, 60).replace(url, "").trim() || "外部链接",
+          content: pending.text,
+          plain_text: pending.text,
+          tags: ["外部信息", "链接"],
+        });
+        doneLabel = "链接";
+      } else {
+        return;
+      }
+      setMessages((m) => [...m, { role: "assistant", content: `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？` }]);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      setEcho({ kind: pending.type === 'task' ? 'task' : 'note', title: doneLabel });
+      setPending(null);
+    } catch (err) {
+      toast.error(err?.message || "生成失败，请再试一次");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // —— 长按麦克风：按住说话，松开识别并直接作为消息发送 ——
+  const startVoice = () => {
+    if (recording) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      toast.info("当前浏览器不支持语音输入");
       return;
     }
-
-    if (isListeningVoice) {
-      recognitionRef.current?.stop();
-      setIsListeningVoice(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'zh-CN';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognitionRef.current = recognition;
-
-    recognition.onstart = () => setIsListeningVoice(true);
-    recognition.onend = () => setIsListeningVoice(false);
-    recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
-      setInputValue((v) => (v ? v + transcript : transcript));
+    const rec = new SR();
+    rec.lang = "zh-CN";
+    rec.continuous = false;
+    rec.interimResults = false;
+    recognitionRef.current = rec;
+    rec.onstart = () => setRecording(true);
+    rec.onend = () => setRecording(false);
+    rec.onerror = () => setRecording(false);
+    rec.onresult = (e) => {
+      const t = e.results?.[0]?.[0]?.transcript || "";
+      if (t.trim()) send(t.trim());
     };
-    recognition.start();
+    try { rec.start(); } catch {}
+  };
+
+  const stopVoice = () => {
+    try { recognitionRef.current?.stop?.(); } catch {}
+    setRecording(false);
+  };
+
+  const clearChat = () => {
+    setMessages([]);
+    setPending(null);
   };
 
   const handlePaste = (e) => {
@@ -164,6 +232,8 @@ export default function SmartInputBar() {
     if (echo.kind === 'note') return `「${echo.title}」—— 这句我替你收好了。心事放在这里，不会被弄丢。`;
     return `「${echo.title}」已收进今日印记，到点我会轻轻唤你。`;
   })();
+
+  const firstUserText = messages.find((m) => m.role === "user")?.content || "";
 
   return (
     <div className="mt-7 w-full">
@@ -181,8 +251,106 @@ export default function SmartInputBar() {
         告诉我，<span className="text-[var(--signal)]">任何事情</span>
       </p>
 
-      {/* 心栈之门 */}
-      <div className={`gate-vessel rounded-2xl ${focused ? 'is-listening' : 'is-quiet'}`}>
+      {/* 心栈之门：对话与输入共用一个卡片 */}
+      <div
+        className={`gate-vessel rounded-2xl ${focused ? 'is-listening' : 'is-quiet'}`}
+        style={recording ? { borderColor: C.recordingBorder, background: C.recordingBg } : undefined}
+      >
+        {/* 对话线程：确认后才会生成 */}
+        {messages.length > 0 && (
+          <div ref={threadRef} className="max-h-[42vh] overflow-y-auto px-4 sm:px-5 pt-4">
+            <div className="flex flex-col">
+              {messages.map((m, i) => (
+                <div
+                  key={i}
+                  className={`mb-3 max-w-[82%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed ${
+                    m.role === "user" ? "self-end rounded-br-md text-white" : "self-start rounded-bl-md"
+                  }`}
+                  style={
+                    m.role === "user"
+                      ? { background: C.sentinel }
+                      : { background: C.mist, color: C.ink }
+                  }
+                >
+                  {m.content}
+                </div>
+              ))}
+
+              {busy && (
+                <div
+                  className="mb-3 self-start rounded-2xl rounded-bl-md px-4 py-2 text-[13px]"
+                  style={{ background: C.mist, color: C.ink4 }}
+                >
+                  正在输入…
+                </div>
+              )}
+
+              {/* 提案卡片：确认后才生成 */}
+              {pending && !busy && (
+                <div className="mb-3 w-full rounded-xl border p-4" style={{ borderColor: C.hairline, background: "#fbfcfc" }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[15px]">{TYPE_ICON[pending.type] || "📝"}</span>
+                    <span className="text-[13px] font-medium" style={{ color: C.sentinel }}>
+                      将要生成{TYPE_LABEL[pending.type] || "记录"}
+                    </span>
+                  </div>
+
+                  {pending.type === "task" && (
+                    <>
+                      <p className="mt-2 break-words text-[15px] font-medium" style={{ color: C.ink }}>{pending.title}</p>
+                      {(pending.description || firstUserText) && (
+                        <p className="mt-1 line-clamp-2 break-words text-[12px] leading-relaxed" style={{ color: C.ink3 }}>
+                          {(pending.description || firstUserText).slice(0, 60)}
+                        </p>
+                      )}
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {pending.due_at && (
+                          <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.sentinel }}>
+                            🕐 {fmtDayTime(pending.due_at)}
+                          </span>
+                        )}
+                        {pending.category && (
+                          <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
+                            {CATEGORY_LABEL[pending.category] || pending.category}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {pending.type === "heart" && (
+                    <p className="mt-2 break-words text-[14px] leading-relaxed" style={{ color: C.ink }}>{pending.content}</p>
+                  )}
+                  {pending.type === "link" && (
+                    <p className="mt-2 break-words text-[13px] leading-relaxed" style={{ color: C.ink3 }}>{pending.text}</p>
+                  )}
+
+                  <div className="mt-3.5 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={confirmCreate}
+                      disabled={creating}
+                      className="rounded-full px-5 py-2 text-[13px] font-medium text-white transition-colors disabled:opacity-50"
+                      style={{ background: C.sentinel }}
+                    >
+                      {creating ? "生成中…" : "确认生成"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={rejectPending}
+                      className="px-3 py-2 text-[12.5px] transition-opacity hover:opacity-70"
+                      style={{ color: C.ink3 }}
+                    >
+                      不对，再聊聊
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mb-1 border-t" style={{ borderColor: C.hairline }} />
+          </div>
+        )}
+
         <textarea
           ref={taRef}
           value={inputValue}
@@ -194,86 +362,52 @@ export default function SmartInputBar() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              handleSubmit();
+              send();
             }
           }}
-          placeholder="约定、心事、一闪而过的念头……说给我听"
+          placeholder={messages.length > 0 ? "继续输入，回车发送" : "约定、心事、一闪而过的念头……说给我听"}
           className="w-full resize-none overflow-hidden bg-transparent px-5 sm:px-6 pt-4 pb-1.5 text-[15.5px] leading-relaxed text-[var(--sky-ink)] placeholder:text-[var(--sky-sub)]/70 focus:outline-none"
         />
-
-        {/* 实时倾听预览:可点击改判 约定 ↔ 心签（提交后作为对话倾向） */}
-        {preview && (
-          <div className="parse-preview echo-born mx-4 sm:mx-5 mb-1 rounded-xl bg-[var(--sentinel)]/[0.06] px-4 py-2.5 text-[12px] text-[var(--ink-2)]">
-            <div className="flex flex-wrap items-center gap-2">
-              {preview.analyzing ? (
-                <span className="flex items-center gap-1.5 text-[var(--ink-3)]">
-                  <Loader2 className="w-3 h-3 animate-spin" /> 正在倾听…
-                </span>
-              ) : (
-                <>
-                  <span className="text-[var(--signal)]">◈</span>
-                  <span className="text-[var(--ink-3)]">将为你生成</span>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewOverride(preview.isHeartSign ? 'task' : 'note')}
-                    title="点我切换：约定 ↔ 心签"
-                    className={`rounded-full px-2.5 py-0.5 font-medium transition-opacity hover:opacity-75 ${
-                      preview.isHeartSign
-                        ? 'bg-[var(--sentinel)]/[0.09] text-[var(--sentinel)]'
-                        : 'bg-[var(--signal-soft)] text-[var(--signal)]'
-                    }`}
-                  >
-                    {preview.isHeartSign ? '✦ 心签' : '♪ 约定'}
-                  </button>
-                  {preview.auto && (
-                    <span className="rounded-full bg-[var(--jade)]/10 px-2.5 py-0.5 font-medium text-[var(--jade)]">
-                      ⚙ 自动执行
-                    </span>
-                  )}
-                </>
-              )}
-              {preview.time && (
-                <span className="num rounded-full bg-white/70 px-2.5 py-0.5">
-                  {preview.time}，我记得
-                </span>
-              )}
-            </div>
-          </div>
-        )}
 
         <div className="flex items-center gap-2 px-4 sm:px-5 pb-3.5 pt-1">
           <button
             type="button"
-            onClick={handleVoiceInput}
-            title={isListeningVoice ? '点击停止' : '语音输入'}
+            title="长按语音输入"
+            onPointerDown={startVoice}
+            onPointerUp={stopVoice}
+            onPointerLeave={stopVoice}
+            onPointerCancel={stopVoice}
+            onContextMenu={(e) => e.preventDefault()}
             className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
-              isListeningVoice
-                ? 'bg-red-100 text-red-500 animate-pulse'
-                : 'text-[var(--sky-sub)] hover:text-[var(--sky-ink)] hover:bg-black/[0.04]'
+              recording ? 'animate-pulse text-red-500 bg-red-100' : 'text-[var(--sky-sub)] hover:text-[var(--sky-ink)] hover:bg-black/[0.04]'
             }`}
           >
-            {isListeningVoice ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            <Mic className="w-4 h-4" />
           </button>
+          {recording && (
+            <span className="text-[12px]" style={{ color: C.ink3 }}>正在聆听…松开发送</span>
+          )}
+          {messages.length > 0 && !recording && (
+            <button
+              type="button"
+              onClick={clearChat}
+              title="收起对话"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--sky-sub)] transition-all duration-200 hover:text-[var(--sky-ink)] hover:bg-black/[0.04]"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
           <button
-            onClick={handleSubmit}
-            disabled={!inputValue.trim()}
+            onClick={() => send()}
+            disabled={!inputValue.trim() || busy}
             title="发送（Enter）"
-            className="ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--sentinel)] text-white transition-all duration-300 hover:bg-[var(--sentinel-deep)] disabled:opacity-30 disabled:hover:bg-[var(--sentinel)]"
+            className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-white transition-all duration-300 disabled:opacity-30"
+            style={{ background: C.sentinel }}
           >
-            <ArrowUp className="w-4 h-4" />
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
           </button>
         </div>
       </div>
-
-      {/* 内嵌连续对话：确认后才生成约定/心签/链接 */}
-      {chatSeed && (
-        <TodayChatPanel
-          seedText={chatSeed}
-          seedNonce={chatNonce}
-          onClose={() => setChatSeed("")}
-          onCreated={handleChatCreated}
-        />
-      )}
 
       {/* 示例引路 */}
       <div className="mt-4 flex flex-wrap justify-center gap-2">

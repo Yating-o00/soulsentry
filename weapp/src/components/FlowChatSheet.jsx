@@ -54,6 +54,14 @@ function resolveUploadUrl(p) {
   return `${host}${p}`;
 }
 
+// 请求超时保护：任何情况下都不能让「正在输入」永远转下去
+function withTimeout(promise, ms = 30000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("REQUEST_TIMEOUT")), ms))
+  ]);
+}
+
 export default function FlowChatSheet({ visible, seedText, onClose, onCreated }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -157,11 +165,11 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
   const callAI = async (msgs, lastExtracted) => {
     setBusy(true);
     try {
-      const res = await post("/chat", {
+      const res = await withTimeout(post("/chat", {
         messages: msgs,
         last_extracted: lastExtracted,
         agent_execution_id: agentExecId || undefined
-      }, { silent: true });
+      }, { silent: true }));
       const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
       setMessages([...msgs, { role: "assistant", content: reply }]);
       setPending(res?.extracted || null);

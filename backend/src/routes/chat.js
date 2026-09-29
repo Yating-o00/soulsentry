@@ -31,12 +31,27 @@ chatRouter.post("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: "INVALID_INPUT", message: "对话内容不合法" });
   }
-  const result = await runFlowChat({
-    messages: parsed.data.messages,
-    lastExtracted: parsed.data.last_extracted || null,
-    userId: req.user.id,
-    prisma,
-    agentExecutionId: parsed.data.agent_execution_id || null
-  });
-  res.json(result);
+  try {
+    // 25s 硬上限：任何下游（AI/数据库/Agent）异常都不能把对话挂死
+    const result = await Promise.race([
+      runFlowChat({
+        messages: parsed.data.messages,
+        lastExtracted: parsed.data.last_extracted || null,
+        userId: req.user.id,
+        prisma,
+        agentExecutionId: parsed.data.agent_execution_id || null
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("CHAT_HANDLER_TIMEOUT")), 25000))
+    ]);
+    res.json(result);
+  } catch (err) {
+    console.error("[chat] 对话处理失败:", err?.message || err);
+    // 兜底也要能继续聊：客户端会把它当作普通回复展示
+    res.status(200).json({
+      reply: "刚才走神了一下…你再说一遍好吗？",
+      extracted: null,
+      agent: null,
+      source: "error"
+    });
+  }
 });

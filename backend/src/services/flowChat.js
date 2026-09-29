@@ -273,18 +273,23 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
 
   // —— 浏览器小助手会话进行中：用户消息直接转发给 Agent ——
   if (agentExecutionId && lastUser) {
-    const owned = await prisma?.taskExecution?.findFirst({
-      where: { id: agentExecutionId, userId, automationType: "browser_task" },
-      select: { id: true, executionStatus: true }
-    });
-    if (!owned) {
-      return { reply: "小助手刚才的会话已经收尾了，结果在守护记录里可以看～还想办点什么吗？", extracted: null, agent: null, source: "agent" };
+    try {
+      const owned = await prisma?.taskExecution?.findFirst({
+        where: { id: agentExecutionId, userId, automationType: "browser_task" },
+        select: { id: true, executionStatus: true }
+      });
+      if (!owned) {
+        return { reply: "小助手刚才的会话已经收尾了，结果在守护记录里可以看～还想办点什么吗？", extracted: null, agent: null, source: "agent" };
+      }
+      const resp = await respondToAgent(agentExecutionId, { text: lastUser.content });
+      if (!resp.ok) {
+        return { reply: "小助手还在操作网页，等它问你或者出结果哦～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
+      }
+      return { reply: "收到，我转达给小助手了，它继续帮你办～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
+    } catch (err) {
+      console.warn("[flowChat] 转发小助手失败:", err?.message || err);
+      return { reply: "小助手那边好像断线了，结果可以在守护记录里看，也可以稍后再让我帮你办～", extracted: null, agent: null, source: "agent" };
     }
-    const resp = await respondToAgent(agentExecutionId, { text: lastUser.content });
-    if (!resp.ok) {
-      return { reply: "小助手还在操作网页，等它问你或者出结果哦～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
-    }
-    return { reply: "收到，我转达给小助手了，它继续帮你办～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
   }
 
   try {
@@ -297,11 +302,16 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     // —— Kimi 判断需要即时网页办事：启动浏览器小助手 ——
     let agent = null;
     if (out.agentGoal && userId && prisma) {
-      const started = await startStandaloneBrowserExecution({ goal: out.agentGoal, userId, prisma });
-      if (started.status === "started") {
-        agent = { executionId: started.executionId, status: "running" };
-      } else {
-        out.reply = `${out.reply}（小助手暂时没能出发：${started.reason}）`;
+      try {
+        const started = await startStandaloneBrowserExecution({ goal: out.agentGoal, userId, prisma });
+        if (started.status === "started") {
+          agent = { executionId: started.executionId, status: "running" };
+        } else {
+          out.reply = `${out.reply}（小助手暂时没能出发：${started.reason}）`;
+        }
+      } catch (startErr) {
+        console.warn("[flowChat] 启动小助手失败:", startErr?.message || startErr);
+        out.reply = `${out.reply}（小助手暂时没能出发，稍后再试试？）`;
       }
     }
     return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source: "ai" };
@@ -311,23 +321,33 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
 
     // 兜底识别出"现在就去网页办事"：直接启动浏览器小助手
     if (raw && raw.agent_goal && userId && prisma) {
-      const started = await startStandaloneBrowserExecution({ goal: raw.agent_goal, userId, prisma });
-      if (started.status === "started") {
+      try {
+        const started = await startStandaloneBrowserExecution({ goal: raw.agent_goal, userId, prisma });
+        if (started.status === "started") {
+          return {
+            reply: "好，我让浏览器小助手去帮你办这件事，过程和结果马上回到这里～",
+            extracted: null,
+            agentGoal: raw.agent_goal,
+            agent: { executionId: started.executionId, status: "running" },
+            source: "fallback"
+          };
+        }
         return {
-          reply: "好，我让浏览器小助手去帮你办这件事，过程和结果马上回到这里～",
+          reply: `好，这件事我可以派小助手去网页上办，不过${started.reason}，先帮你记在这里？`,
           extracted: null,
           agentGoal: raw.agent_goal,
-          agent: { executionId: started.executionId, status: "running" },
+          agent: null,
+          source: "fallback"
+        };
+      } catch (startErr) {
+        console.warn("[flowChat] 兜底启动小助手失败:", startErr?.message || startErr);
+        return {
+          reply: "好，这件事我可以派小助手去网页上办，不过它刚才没出发成功，稍后再跟我说一次好吗？",
+          extracted: null,
+          agent: null,
           source: "fallback"
         };
       }
-      return {
-        reply: `好，这件事我可以派小助手去网页上办，不过${started.reason}，先帮你记在这里？`,
-        extracted: null,
-        agentGoal: raw.agent_goal,
-        agent: null,
-        source: "fallback"
-      };
     }
 
     const extracted = raw && raw !== "__reject__" ? sanitizeExtracted(raw) : null;

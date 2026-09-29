@@ -51,6 +51,14 @@ function extractUrl(text) {
   return m ? m[0] : null;
 }
 
+// 请求超时保护：任何情况下都不能让「正在输入」永远转下去
+function withTimeout(promise, ms = 30000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("REQUEST_TIMEOUT")), ms))
+  ]);
+}
+
 /**
  * 心栈之门 —— 今日页统一记忆入口：输入框即对话入口。
  * 用户只管说（打字回车 / 长按麦克风），AI 在同一卡片内连续多轮对话，
@@ -159,14 +167,14 @@ export default function SmartInputBar() {
   const callAI = async (msgs, lastExtracted) => {
     setBusy(true);
     try {
-      const res = await httpRequest("/api/chat", {
+      const res = await withTimeout(httpRequest("/api/chat", {
         method: "POST",
         body: {
           messages: msgs,
           last_extracted: lastExtracted,
           agent_execution_id: agentExecId || undefined
         }
-      });
+      }));
       const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
       setMessages([...msgs, { role: "assistant", content: reply }]);
       setPending(res?.extracted || null);

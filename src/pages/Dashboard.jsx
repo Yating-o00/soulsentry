@@ -50,6 +50,7 @@ import UnifiedCaptureBar, { CAPTURE_EVENT } from "../components/dashboard/Unifie
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
 import ModuleDrawer from "../components/dashboard/ModuleDrawer";
 import SectionGroup from "../components/dashboard/SectionGroup";
+import TodayHero from "../components/dashboard/TodayHero";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -269,19 +270,7 @@ export default function Dashboard() {
     <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto min-h-screen">
       <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <p className="text-[11px] md:text-xs font-semibold tracking-[0.18em] uppercase text-slate-400 mb-1.5">
-              {format(new Date(), "M月d日 EEEE", { locale: zhCN })}
-            </p>
-            <h1 className="text-[22px] md:text-[28px] font-semibold tracking-tight text-slate-900">
-              {greeting}，{user?.full_name || (user?.email && typeof user.email === 'string' && user.email.includes('@') ? ((user.email.split('@')[0]) || '朋友') : "朋友")}
-            </h1>
-          </motion.div>
-
+        <div className="flex justify-end">
           <div className="flex items-center gap-2 w-full md:w-auto">
           <TabsList className="bg-white border border-slate-200/70 shadow-sm rounded-xl p-1 h-auto flex-1 md:flex-none">
             <TabsTrigger value="overview" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white text-sm">
@@ -297,8 +286,23 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <TabsContent value="overview" className="space-y-6 md:space-y-8">
-          {/* Stats Cards */}
+        <TabsContent value="overview" className="space-y-8 md:space-y-10">
+      <TodayHero
+        greeting={greeting}
+        name={user?.full_name || (typeof user?.email === 'string' && user.email.split('@')[0]) || "朋友"}
+        focusTask={todayTasks.find(t => t.status === 'pending')?.title}
+        todayCount={todayTasks.length}
+        activeCount={pendingTasks.length}
+        noteCount={allNotes.filter(n => !n.deleted_at).length}
+      >
+        {/* 统一输入口：一个入口，AI 自动路由到任务编织 / 日程规划 / 设备协同 */}
+        <UnifiedCaptureBar onTaskClick={(taskId) => {
+          const t = queryClient.getQueryData(['tasks'])?.find((x) => x.id === taskId) || allTasks.find((x) => x.id === taskId);
+          if (t) setSelectedTask(t);
+        }} />
+      </TodayHero>
+
+      <SectionGroup index="01" label="今日印记" hint="经过的每一刻，都值得被记住">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -381,36 +385,35 @@ export default function Dashboard() {
         </button>
       </motion.div>
 
-      {/* 统一输入口：一个入口，AI 自动路由到任务编织 / 日程规划 / 设备协同 */}
-      <UnifiedCaptureBar onTaskClick={(taskId) => {
-        const t = queryClient.getQueryData(['tasks'])?.find((x) => x.id === taskId) || allTasks.find((x) => x.id === taskId);
-        if (t) setSelectedTask(t);
-      }} />
-
       {/* 场景任务包：到达关键地点后 AI 重组当前场景最顺手的行动 */}
       <SceneTaskPack onTaskClick={(taskId) => {
         const t = allTasks.find((x) => x.id === taskId);
         if (t) setSelectedTask(t);
       }} />
 
-      <SectionGroup label="今日" hint="此刻最该被看到的事">
-        <DailyBriefing />
       </SectionGroup>
 
-      <SectionGroup label="代我执行" hint="约定交给助手来做">
+      <SectionGroup index="02" label="守护动态" hint="记忆会在对的时候，回来找你">
+        <div data-tour="geo-guard">
+          <SpatioTemporalGuardModule />
+        </div>
+      </SectionGroup>
+
+      <SectionGroup index="03" label="心栈为你编织" hint="把零散的记录，织成理解">
         <div data-tour="auto-exec">
           <AutoExecutionPanel />
         </div>
       </SectionGroup>
 
-      <SectionGroup label="守护与协同" hint="时空感知 · 全设备接力">
-        <div data-tour="geo-guard">
-          <SpatioTemporalGuardModule />
-        </div>
+      <SectionGroup index="04" label="全设备协同" hint="你在哪里，记忆就在哪里">
         <DeviceCollaborationModule />
       </SectionGroup>
 
-      <SectionGroup label="规划" hint="把一整天铺开来看">
+      <SectionGroup index="05" label="回望与远见" hint="数据是你的年轮，简报是我的心意">
+        <DailyBriefing />
+      </SectionGroup>
+
+      <SectionGroup index="06" label="日程规划" hint="把一整天铺开来看">
         <div data-tour="daily-planner">
           <SmartDailyPlanner />
         </div>

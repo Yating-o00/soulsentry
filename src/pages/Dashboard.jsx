@@ -51,6 +51,8 @@ import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGua
 import ModuleDrawer from "../components/dashboard/ModuleDrawer";
 import SectionGroup from "../components/dashboard/SectionGroup";
 import TodayHero from "../components/dashboard/TodayHero";
+import MoodInsightSection from "../components/dashboard/MoodInsightSection";
+import WeekReviewCard from "../components/dashboard/WeekReviewCard";
 
 export default function Dashboard() {
   const [greeting, setGreeting] = useState("你好");
@@ -393,27 +395,32 @@ export default function Dashboard() {
 
       </SectionGroup>
 
-      <SectionGroup index="02" label="守护动态" hint="记忆会在对的时候，回来找你">
+      <SectionGroup index="02" label="心境" hint="心栈眼中的你">
+        <MoodInsightSection notes={allNotes.filter(n => !n.deleted_at)} tasks={rootTasks} />
+      </SectionGroup>
+
+      <SectionGroup index="03" label="守护动态" hint="记忆会在对的时候，回来找你">
         <div data-tour="geo-guard">
           <SpatioTemporalGuardModule />
         </div>
       </SectionGroup>
 
-      <SectionGroup index="03" label="心栈为你编织" hint="把零散的记录，织成理解">
+      <SectionGroup index="04" label="心栈为你编织" hint="把零散的记录，织成理解">
         <div data-tour="auto-exec">
           <AutoExecutionPanel />
         </div>
       </SectionGroup>
 
-      <SectionGroup index="04" label="全设备协同" hint="你在哪里，记忆就在哪里">
+      <SectionGroup index="05" label="全设备协同" hint="你在哪里，记忆就在哪里">
         <DeviceCollaborationModule />
       </SectionGroup>
 
-      <SectionGroup index="05" label="回望与远见" hint="数据是你的年轮，简报是我的心意">
+      <SectionGroup index="06" label="回望与远见" hint="数据是你的年轮，简报是我的心意">
         <DailyBriefing />
+        <WeekReviewCard tasks={activeTasks} notes={allNotes.filter(n => !n.deleted_at)} />
       </SectionGroup>
 
-      <SectionGroup index="06" label="日程规划" hint="把一整天铺开来看">
+      <SectionGroup index="07" label="日程规划" hint="把一整天铺开来看">
         <div data-tour="daily-planner">
           <SmartDailyPlanner />
         </div>

@@ -59,33 +59,94 @@ function assertPublicUrl(raw) {
   return u.toString();
 }
 
+// 元素收集函数源码：注入页面后暴露两个全局——
+// window.__ssCollect() 返回真实 DOM 节点数组（点击/填写用），
+// window.__ssDescribeAll() 返回编号元数据（快照喂给 Kimi 用），
+// 两者同一份遍历顺序，保证编号一致。
+// 分组顺序：链接 → 按钮 → 语义链接/选项/可点击 → 输入框 → 多行文本 → 下拉 → 内容卡片
+const COLLECT_FN_SRC = `() => {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 1 && r.height > 1 && s.visibility !== "hidden" && s.display !== "none";
+  };
+  const groups = [
+    { tag: "a", selector: "a[href]", cap: 40 },
+    { tag: "button", selector: "button, [role='button'], input[type='submit']", cap: 30 },
+    { tag: "link", selector: "[role='link'], [role='tab'], [role='option'], [onclick]", cap: 30 },
+    { tag: "input", selector: "input:not([type='submit']):not([type='hidden'])", cap: 20 },
+    { tag: "textarea", selector: "textarea", cap: 5 },
+    { tag: "select", selector: "select", cap: 5 },
+    { tag: "card", selector: "[role='listitem'], li, [class*='flight'], [class*='train'], [class*='ticket'], [class*='result'], [class*='card'], [class*='item']", cap: 24 }
+  ];
+  const seen = new Set();
+  const nodes = [];
+  for (const g of groups) {
+    let n = 0;
+    document.querySelectorAll(g.selector).forEach((el) => {
+      if (n >= g.cap || seen.has(el) || !visible(el)) return;
+      const text = (el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim();
+      if (g.tag === "card" && (text.length < 12 || text.length > 420)) return;
+      seen.add(el);
+      n += 1;
+      el.__ssTag = g.tag;
+      nodes.push(el);
+    });
+  }
+  return nodes;
+}`;
+
+const DESCRIBE_FN_SRC = `() => window.__ssCollect().map((node, i) => {
+  const tag = node.__ssTag || "link";
+  const pickText = (el) => (el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim();
+  const text = pickText(node);
+  const extra = {};
+  if (tag === "a") extra.href = (node.getAttribute("href") || "").slice(0, 120);
+  if (tag === "input") {
+    extra.placeholder = (node.getAttribute("placeholder") || node.getAttribute("aria-label") || node.getAttribute("name") || node.type || "").slice(0, 60);
+    extra.inputType = node.type || "text";
+    const v = node.value || node.getAttribute("value") || "";
+    if (v) extra.value = String(v).slice(0, 40);
+    const lab = node.labels && node.labels[0] ? pickText(node.labels[0]) : "";
+    if (lab) extra.label = lab.slice(0, 30);
+  }
+  if (tag === "textarea") extra.placeholder = (node.getAttribute("placeholder") || node.getAttribute("aria-label") || "").slice(0, 60);
+  if (tag === "select") extra.options = Array.from(node.options || []).map((o) => (o.textContent || "").trim()).filter(Boolean).slice(0, 8);
+  return { ref: i + 1, tag, text: text.slice(0, tag === "card" ? 150 : 80), ...extra };
+})`;
+
+// 把收集/描述函数注入页面全局（字符串只做赋值，不带参数调用，与快照 IIFE 同一求值模式）
+async function ensureCollect(page) {
+  await page.evaluate(`(() => {
+    window.__ssCollect = (${COLLECT_FN_SRC});
+    window.__ssDescribeAll = (${DESCRIBE_FN_SRC});
+    return true;
+  })()`).catch(() => {});
+}
+
 async function snapshotPage(page) {
   const data = await page.evaluate(() => {
-    const pickText = (el) => (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
-    const elements = [];
-    let ref = 0;
-    const push = (el, tag, extra) => {
-      ref += 1;
-      elements.push({ ref, tag, text: pickText(el), ...extra });
-    };
-    document.querySelectorAll("a[href]").forEach((el) => push(el, "a", { href: (el.getAttribute("href") || "").slice(0, 120) }));
-    document.querySelectorAll("button, [role='button'], input[type='submit']").forEach((el) => push(el, "button", {}));
-    document.querySelectorAll("input:not([type='submit']):not([type='hidden'])").forEach((el) =>
-      push(el, "input", {
-        placeholder: (el.getAttribute("placeholder") || el.getAttribute("name") || el.type || "").slice(0, 60),
-        inputType: el.type || "text"
-      })
-    );
-    document.querySelectorAll("textarea").forEach((el) => push(el, "textarea", { placeholder: (el.getAttribute("placeholder") || "").slice(0, 60) }));
-    document.querySelectorAll("select").forEach((el) => push(el, "select", { options: Array.from(el.options || []).map((o) => (o.textContent || "").trim()).filter(Boolean).slice(0, 8) }));
-    const bodyText = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+    const elements = typeof window.__ssDescribeAll === "function" ? window.__ssDescribeAll() : [];
+    const clone = document.body ? document.body.cloneNode(true) : null;
+    if (clone) clone.querySelectorAll("script, style, noscript").forEach((el) => el.remove());
+    const bodyText = (clone?.innerText || "").replace(/\s+/g, " ").trim();
     return {
       url: location.href,
       title: document.title,
-      elements: elements.slice(0, 80),
-      textExcerpt: bodyText.slice(0, 1400)
+      elements,
+      textExcerpt: bodyText.slice(0, 2400)
     };
   }).catch(() => null);
+  if (!data) return null;
+  // 卡片去重：内容相同的只留第一条（列表嵌套会产生父子重复）
+  const seenText = new Set();
+  data.elements = data.elements.filter((e) => {
+    if (e.tag !== "card") return true;
+    const key = e.text.slice(0, 30);
+    if (seenText.has(key)) return false;
+    seenText.add(key);
+    return true;
+  }).slice(0, 130);
   return data;
 }
 
@@ -95,7 +156,7 @@ function formatObservation(snapshot, goal, extracted) {
     `目标：${goal}`,
     `当前页面：${snapshot.title}（${snapshot.url}）`,
     extracted ? `已记录的信息：${extracted}` : "",
-    "可交互元素（用编号引用）：",
+    "可交互元素（用编号引用；tag=card 是页面信息块，如一趟航班/一个班次，tag=link 是 SPA 里的可点击元素）：",
     ...snapshot.elements.map((e) => {
       const label = e.text || e.placeholder || e.href || "";
       const opts = e.options ? ` 选项[${e.options.join("/")}]` : "";
@@ -176,12 +237,14 @@ const AGENT_SYSTEM = `你是 SoulSentry「心栈」内置的浏览器操作 Agen
 5. 目标完成后用 done 汇总；页面确实无法满足时用 fail 说明原因。不要无限重试同一个失败动作，最多两次后改 ask_user 或 fail。
 6. extract 记录的是"用户要的结果信息"，逐条记录，最后 done 的 summary 里汇总。
 7. 选平台要符合国内用户的常规习惯：订机票/火车票/酒店/门票优先用携程、飞猪、同程、美团这类综合平台（可以一次对比多家供应商的时间与价格），而不是直接扎进某一家航空公司/铁路官网；查通用信息（天气、资讯、百科）优先用百度/必应搜索；查快递用菜鸟裹裹或快递公司官网。用户给了明确网址则以用户为准。
-8. 查询对比类目标（比价、查班次、查余票）不要陷入逐条翻页：收集到 2-3 个有代表性的选项后，用 ask_user 把关键差异（时间/价格/耗时）列给用户选，用户选完再继续下一步。`;
+8. 查询对比类目标（比价、查班次、查余票）不要陷入逐条翻页：收集到 2-3 个有代表性的选项后，用 ask_user 把关键差异（时间/价格/耗时）列给用户选，用户选完再继续下一步。
+9. 快照里 tag=card 的条目是页面上的信息块（一趟航班、一个班次、一条商品、一条搜索结果），text 已含它的关键信息，click 卡片等于选中它；tag=link 是 SPA 里的可点击元素，同样可以 click。
+10. 选定一个平台就坚持办完：先填搜索表单，再看卡片列表，用 extract 记录候选，最后 ask_user 让用户选。同一平台连续两次失败才换下一个，不要到处开网站。
+11. 日期/日历控件：优先直接在日期输入框填入日期（YYYY-MM-DD 或 MM月DD日），填完按 Enter；若是弹出的日历面板，就 click 面板里的具体日期数字。
+12. 页面打开后内容没加载出来（快照里几乎没东西）时，先等一拍再重新看快照，必要时 scroll 一下触发懒加载。`;
 
 async function executeTool(session, name, args) {
   const page = session.page;
-  const snapshot = session.lastSnapshot || {};
-  const el = (list, ref) => (list || []).find((e) => e.ref === ref);
 
   switch (name) {
     case "goto": {
@@ -191,48 +254,57 @@ async function executeTool(session, name, args) {
       return `已打开 ${page.url()}`;
     }
     case "click": {
-      const target = el(snapshot.elements, Number(args.ref));
-      if (!target) return "元素不存在或编号失效，请重新看最新快照";
-      await page.evaluate((refIndex) => {
-        const all = [
-          ...document.querySelectorAll("a[href]"),
-          ...document.querySelectorAll("button, [role='button'], input[type='submit']"),
-          ...document.querySelectorAll("input:not([type='submit']):not([type='hidden'])"),
-          ...document.querySelectorAll("textarea"),
-          ...document.querySelectorAll("select")
-        ];
-        // 与 snapshotPage 的收集顺序保持一致
-        const seen = new Set();
-        const ordered = [];
-        document.querySelectorAll("a[href]").forEach((e) => { ordered.push(e); seen.add(e); });
-        ["button", "[role='button']", "input[type='submit']"].forEach((sel) => document.querySelectorAll(sel).forEach((e) => { if (!seen.has(e)) { ordered.push(e); seen.add(e); } }));
-        document.querySelectorAll("input:not([type='submit']):not([type='hidden'])").forEach((e) => { if (!seen.has(e)) { ordered.push(e); seen.add(e); } });
-        document.querySelectorAll("textarea").forEach((e) => { if (!seen.has(e)) { ordered.push(e); seen.add(e); } });
-        document.querySelectorAll("select").forEach((e) => { if (!seen.has(e)) { ordered.push(e); seen.add(e); } });
-        const targetEl = ordered[refIndex - 1];
-        if (targetEl) targetEl.scrollIntoView({ block: "center" });
+      const clicked = await page.evaluate((refIndex) => {
+        const elements = window.__ssCollect();
+        const node = elements[refIndex - 1];
+        if (!node) return false;
+        node.scrollIntoView({ block: "center" });
+        ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].forEach((type) => {
+          node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+        });
+        return true;
       }, Number(args.ref));
-      await page.waitForTimeout(300);
-      const handle = await resolveHandle(page, Number(args.ref));
-      if (!handle) return "元素已失效（页面可能已变化），请重新看最新快照";
-      await handle.click({ timeout: 8000 });
       await page.waitForTimeout(700);
       await dismissPopups(session);
-      return "已点击";
+      return clicked ? "已点击" : "元素不存在或编号失效，请重新看最新快照";
     }
     case "fill": {
-      const handle = await resolveHandle(page, Number(args.ref));
-      if (!handle) return "输入框不存在或编号失效，请重新看最新快照";
-      await handle.scrollIntoViewIfNeeded();
-      await handle.fill(String(args.text ?? ""), { timeout: 8000 });
+      const filled = await page.evaluate(({ refIndex, text }) => {
+        const elements = window.__ssCollect();
+        const meta = elements[refIndex - 1];
+        if (!meta) return "missing";
+        const node = meta;
+        node.scrollIntoView({ block: "center" });
+        node.focus();
+        const proto = node.tagName === "TEXTAREA" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+        if (setter) setter.call(node, text); else node.value = text;
+        node.dispatchEvent(new Event("input", { bubbles: true }));
+        node.dispatchEvent(new Event("change", { bubbles: true }));
+        return "ok";
+      }, { refIndex: Number(args.ref), text: String(args.text ?? "") });
+      if (filled !== "ok") return "输入框不存在或编号失效，请重新看最新快照";
+      await page.waitForTimeout(300);
       return "已填写";
     }
     case "select": {
-      const handle = await resolveHandle(page, Number(args.ref));
-      if (!handle) return "下拉框不存在或编号失效，请重新看最新快照";
-      await handle.selectOption({ label: String(args.option) }).catch(async () => {
-        await handle.selectOption({ value: String(args.option) });
-      });
+      const selected = await page.evaluate(({ refIndex, option }) => {
+        const elements = window.__ssCollect();
+        const meta = elements[refIndex - 1];
+        if (!meta) return "missing";
+        const node = meta;
+        const opts = Array.from(node.options || []);
+        const hit = opts.find((o) => (o.textContent || "").trim() === option)
+          || opts.find((o) => o.value === option)
+          || opts.find((o) => (o.textContent || "").includes(option));
+        if (!hit) return "nooption";
+        node.value = hit.value;
+        node.dispatchEvent(new Event("change", { bubbles: true }));
+        return "ok";
+      }, { refIndex: Number(args.ref), option: String(args.option || "") });
+      if (selected === "missing") return "下拉框不存在或编号失效，请重新看最新快照";
+      if (selected === "nooption") return "没有匹配的选项，请从快照的选项列表里挑一个";
+      await page.waitForTimeout(300);
       return "已选择";
     }
     case "press": {
@@ -253,30 +325,6 @@ async function executeTool(session, name, args) {
     }
     default:
       return "未知工具";
-  }
-}
-
-// 与 snapshotPage 完全一致的元素收集顺序，把 ref 映射回真实 DOM 元素
-async function resolveHandle(page, ref) {
-  const index = ref - 1;
-  if (index < 0) return null;
-  const counts = await page.evaluate(() => ({
-    a: document.querySelectorAll("a[href]").length,
-    btn: document.querySelectorAll("button, [role='button'], input[type='submit']").length,
-    input: document.querySelectorAll("input:not([type='submit']):not([type='hidden'])").length,
-    ta: document.querySelectorAll("textarea").length
-  }));
-  let locator = null;
-  if (index < counts.a) locator = page.locator("a[href]").nth(index);
-  else if (index < counts.a + counts.btn) locator = page.locator("button, [role='button'], input[type='submit']").nth(index - counts.a);
-  else if (index < counts.a + counts.btn + counts.input) locator = page.locator("input:not([type='submit']):not([type='hidden'])").nth(index - counts.a - counts.btn);
-  else if (index < counts.a + counts.btn + counts.input + counts.ta) locator = page.locator("textarea").nth(index - counts.a - counts.btn - counts.input);
-  else locator = page.locator("select").nth(index - counts.a - counts.btn - counts.input - counts.ta);
-  try {
-    if (!(await locator.count())) return null;
-    return locator.first();
-  } catch {
-    return null;
   }
 }
 
@@ -322,6 +370,7 @@ async function runLoop(session) {
     }
     if (session.status === "takeover") session.status = "running";
 
+    await ensureCollect(session.page);
     const snapshot = await snapshotPage(session.page);
     session.lastSnapshot = snapshot;
     if (snapshot?.url) session.currentUrl = snapshot.url;
@@ -426,8 +475,7 @@ export async function runBrowserAgent(execution, prisma) {
     prisma,
     browser,
     context,
-    page,
-    history: [],
+    page,    history: [],
     steps: [],
     files: [],
     status: "running",
@@ -443,6 +491,14 @@ export async function runBrowserAgent(execution, prisma) {
     error: null
   };
   sessions.set(execution.id, session);
+
+  // target=_blank 打开的新标签页（如搜索结果新开页）自动接管为当前页，
+  // 避免 Agent 盯着旧页面看。点击后的 dismissPopups 会清掉其余标签页。
+  context.on("page", (p) => {
+    p.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {}).then(() => {
+      if (session.page !== p) session.page = p;
+    });
+  });
 
   try {
     const outcome = await runLoop(session);

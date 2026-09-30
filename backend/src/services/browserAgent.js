@@ -12,7 +12,7 @@ import { env } from "../config/env.js";
 // - 暂停通过内存 pending promise 实现：handler 一直挂起，executeAutomation 不会提前写终态
 // - 服务器重启会丢失会话：启动清扫把中断的浏览器执行单标记为失败（用户可再试一次）
 
-const MAX_STEPS = 36;           // 单次执行最多工具步数（订/查类任务链较长）
+const MAX_STEPS = 60;           // 单次执行最多工具步数（步数不卡太死，总时限兜底）
 const RUN_DEADLINE_MS = 10 * 60 * 1000; // 单次执行总时限
 const KIMI_CALL_TIMEOUT = 35000;
 const SCREENSHOT_KEEP = 40;
@@ -243,7 +243,20 @@ const AGENT_SYSTEM = `你是 SoulSentry「心栈」内置的浏览器操作 Agen
 10. 选定一个平台就坚持办完：先填搜索表单，再看卡片列表，用 extract 记录候选，最后 ask_user 让用户选。同一平台连续两次失败才换下一个，不要到处开网站。
 11. 日期/日历控件：优先直接在日期输入框填入日期（YYYY-MM-DD 或 MM月DD日），填完按 Enter；若是弹出的日历面板，就 click 面板里的具体日期数字。
 12. 页面打开后内容没加载出来（快照里几乎没东西）时，先等一拍再重新看快照，必要时 scroll 一下触发懒加载。
-13. 以结果为导向：订/买/约类任务，每个阶段的目标都是"把可对比的选项交给用户"。查到的候选用 extract 记录关键差异（时间/价格/时长/评分），凑够 2-3 个就 ask_user 让用户选，用户选定后再继续执行。登录、验证码、付款一律 ask_user 把主动权交回用户。网页被安全验证拦截时不要反复重试，直接向用户说明并给选择；页面信息不全或被拦时，用 search_web 联网搜索补齐时刻、价格等关键信息。`;
+13. 以结果为导向：订/买/约类任务，每个阶段的目标都是"把可对比的选项交给用户"。查到的候选用 extract 记录关键差异（时间/价格/时长/评分），凑够 2-3 个就 ask_user 让用户选，用户选定后再继续执行。登录、验证码、付款一律 ask_user 把主动权交回用户。网页被安全验证拦截时不要反复重试，直接向用户说明并给选择；页面信息不全或被拦时，用 search_web 联网搜索补齐时刻、价格等关键信息。
+14. 按任务类型走流程（本质都是：先弄清需求 → 收集候选 → 对比 → 交用户选 → 执行 → 敏感动作交回用户 → 汇总结果）：
+- 订机票/火车票/酒店：出发地、目的地、日期、人数、舱位/席别缺失时先问用户；查 2-3 个候选（时间/价格/耗时），用户选定后进入预订；填乘机人信息前逐项与用户确认；付款必须用户自己来。
+- 订外卖/买东西：地址、口味/规格、预算缺失先问；列出 2-3 个合适选项（店名/价格/评分/预计送达），用户选定后下单；支付交回用户。
+- 订餐厅/预约服务：时间、人数、偏好先问；找到合适档位后把可约时段交给用户选；提交预约前向用户确认。
+- 查资料/比价：直接用 search_web 或搜索引擎；把结论用 extract 汇总，done 时给出清晰答案和出处。
+- 借用用户账号在社交平台上互动：先向用户确认要做什么、发布什么内容；任何发布、点赞、评论、关注等对外可见的动作，执行前必须把具体内容给用户过目确认；用户说"可以/发吧"才执行。
+15. 涉及真实下单、提交订单、发布内容等"不可逆动作"前，必须先把将要做的事（买了什么/发布了什么）用 ask_user 向用户确认，得到肯定答复再执行。`;
+
+// 中国时区当前日期时间（注入 system，避免模型用训练数据里的旧日期）
+function chinaNowText() {
+  const cn = new Date(Date.now() + 8 * 3600 * 1000);
+  return cn.toISOString().slice(0, 16).replace("T", " ");
+}
 
 async function executeTool(session, name, args) {
   const page = session.page;
@@ -418,7 +431,10 @@ async function runLoop(session) {
 
     const observation = formatObservation(snapshot, session.goal, session.extracted);
     const messages = [
-      { role: "system", content: AGENT_SYSTEM },
+      {
+        role: "system",
+        content: `${AGENT_SYSTEM}\n\n当前日期时间（中国时区，真实世界）：${chinaNowText()}。计算"明天""下周""X月X日"等相对时间一律以这个真实日期为准；页面日历上显示的"今天"若与它对不上，以真实日期为准并提醒用户。`
+      },
       ...session.history,
       { role: "user", content: observation }
     ];

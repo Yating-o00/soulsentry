@@ -452,9 +452,13 @@ export default function SmartInputBar() {
                         <button type="button" onClick={sendTakeoverText} className="shrink-0 rounded-lg px-2 py-1 text-[11px] text-white" style={{ background: C.sentinel }}>输入</button>
                         <button type="button" onClick={() => agentCommand({ type: "key", key: "Enter" })} className="shrink-0 rounded-lg border px-2 py-1 text-[11px]" style={{ borderColor: C.hairline, color: C.ink3 }}>回车</button>
                       </div>
-                      <button type="button" onClick={releaseAgent} className="rounded-lg px-2 py-1 text-[11px] font-medium" style={{ background: "rgba(56,72,119,0.08)", color: C.sentinel }}>
-                        操作好了，交还小助手 →
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button type="button" onClick={() => agentCommand({ type: "scroll", direction: "up" })} className="flex-1 rounded-lg border px-2 py-1 text-[11px]" style={{ borderColor: C.hairline, color: C.ink3 }}>上滑</button>
+                        <button type="button" onClick={() => agentCommand({ type: "scroll", direction: "down" })} className="flex-1 rounded-lg border px-2 py-1 text-[11px]" style={{ borderColor: C.hairline, color: C.ink3 }}>下滑</button>
+                        <button type="button" onClick={releaseAgent} className="flex-[2] rounded-lg px-2 py-1 text-[11px] font-medium" style={{ background: "rgba(56,72,119,0.08)", color: C.sentinel }}>
+                          交还小助手 →
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -528,8 +528,16 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                         <Text style={{ fontSize: "22rpx", color: T.inkTertiary }}>回车</Text>
                       </View>
                     </View>
-                    <View onClick={releaseAgent} style={{ padding: "10rpx", borderRadius: "10rpx", background: "rgba(56,72,119,0.08)", alignItems: "center" }}>
-                      <Text style={{ fontSize: "22rpx", color: T.primary }}>操作好了，交还小助手 →</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <View onClick={() => agentCommand({ type: "scroll", direction: "up" })} style={{ flex: 1, padding: "8rpx", borderRadius: "10rpx", border: "1px solid rgba(15,23,42,0.15)", alignItems: "center", marginRight: "10rpx" }}>
+                        <Text style={{ fontSize: "22rpx", color: T.inkTertiary }}>上滑</Text>
+                      </View>
+                      <View onClick={() => agentCommand({ type: "scroll", direction: "down" })} style={{ flex: 1, padding: "8rpx", borderRadius: "10rpx", border: "1px solid rgba(15,23,42,0.15)", alignItems: "center", marginRight: "10rpx" }}>
+                        <Text style={{ fontSize: "22rpx", color: T.inkTertiary }}>下滑</Text>
+                      </View>
+                      <View onClick={releaseAgent} style={{ flex: 2, padding: "8rpx", borderRadius: "10rpx", background: "rgba(56,72,119,0.08)", alignItems: "center" }}>
+                        <Text style={{ fontSize: "22rpx", color: T.primary }}>交还小助手 →</Text>
+                      </View>
                     </View>
                   </View>
                 )}

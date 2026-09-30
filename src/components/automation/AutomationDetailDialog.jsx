@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle2, AlertTriangle, Sparkles, Send, RefreshCw, MessageSquarePlus, Mail, X, ArrowRight, Clock, Maximize2, Minimize2, Paperclip, ChevronDown } from "lucide-react";
+import { Loader2, Check, CheckCircle2, AlertTriangle, Sparkles, Send, RefreshCw, MessageSquarePlus, Mail, X, ArrowRight, Clock, Maximize2, Minimize2, Paperclip, ChevronDown } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -69,6 +69,15 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
       reloadExecution();
     }
   }, [open, executionProp?.id]);
+
+  // 执行未结束时每 5 秒自动刷新，让用户在弹窗内实时看到执行进展变化
+  useEffect(() => {
+    if (!open) return;
+    const st = localExecution?.execution_status;
+    if (st !== "parsing" && st !== "executing") return;
+    const timer = setInterval(() => { reloadExecution(); }, 5000);
+    return () => clearInterval(timer);
+  }, [open, localExecution?.execution_status, localExecution?.id]);
 
   // 当切换到不同 execution 时（id 变化）重置本地草稿与邮件状态。
   // 注意：依赖项只用 execution?.id —— 否则父组件 4 秒一次的列表重拉会让 automation_result.data
@@ -579,6 +588,95 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* 执行进展：状态管道（规划→执行→验收→完成）+ 浏览器类实时步骤 */}
+          {(() => {
+            const stages = ["规划", "执行", "验收", "完成"];
+            const flow = {
+              parsing: { done: 0, active: 0, note: "AI 正在分析并规划执行方案" },
+              waiting_confirm: { done: 1, active: 1, note: "方案已生成，待你确认后开始执行" },
+              pending: { done: 1, active: 1, note: "排队等待执行" },
+              executing: { done: 1, active: 1, note: "AI 正在执行…" },
+              waiting_acceptance: { done: 2, active: 2, note: "执行完成，请验收成果" },
+              completed: { done: 4, note: execution.completed_at ? `完成于 ${new Date(execution.completed_at).toLocaleString('zh-CN')}` : "已完成" },
+              failed: { done: 1, active: 1, failed: true, note: "执行失败，可重试或转人工" },
+              cancelled: { done: 1, active: 1, cancelled: true, note: "已取消" },
+            };
+            const f = flow[status] || { done: 0, active: 0, note: "" };
+            const agent = execution?.automation_result?.data?.agent;
+            const agentSteps = Array.isArray(agent?.steps) ? agent.steps.slice(-6) : [];
+            const fmtTime = (ts) => {
+              if (!ts) return "";
+              const d = new Date(ts);
+              return isNaN(d) ? "" : d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            };
+            return (
+              <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                <div className="flex items-center gap-1.5 mb-3">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-xs font-semibold text-slate-600">执行进展</span>
+                  {execution.created_date && (
+                    <span className="text-[10px] text-slate-400 ml-auto">
+                      发起于 {new Date(execution.created_date).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-start">
+                  {stages.map((label, i) => {
+                    const isDone = i < f.done;
+                    const isActive = i === f.active && !isDone;
+                    const dotCls = isDone
+                      ? "bg-emerald-500 text-white"
+                      : isActive
+                        ? (f.failed ? "bg-red-500 text-white" : f.cancelled ? "bg-slate-400 text-white" : "bg-indigo-500 text-white animate-pulse")
+                        : "bg-slate-200 text-slate-400";
+                    return (
+                      <React.Fragment key={label}>
+                        {i > 0 && (
+                          <div className={`flex-1 h-0.5 mt-2.5 mx-1 rounded ${i <= f.done ? "bg-emerald-400" : "bg-slate-200"}`} />
+                        )}
+                        <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${dotCls}`}>
+                            {isDone ? <Check className="w-3 h-3" /> : isActive ? (f.failed ? <X className="w-3 h-3" /> : <Loader2 className="w-3 h-3 animate-spin" />) : i + 1}
+                          </span>
+                          <span className={`text-[10px] ${isDone || isActive ? "text-slate-700 font-medium" : "text-slate-400"}`}>{label}</span>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+                {f.note && <p className="mt-2 text-[11px] text-slate-500">{f.note}</p>}
+                {/* 浏览器类任务：展示 agent 已执行的实时步骤 */}
+                {execution.automation_type === "browser_task" && agentSteps.length > 0 && (
+                  <div className="mt-2.5 pt-2.5 border-t border-slate-200/70">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      {status === "executing" ? <Loader2 className="w-3 h-3 text-indigo-500 animate-spin" /> : <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
+                      <span className="text-[11px] font-medium text-slate-600">
+                        {agent?.waiting ? "等你回应后继续" : status === "executing" ? "浏览器实时操作" : "已执行步骤"}
+                      </span>
+                      {agent?.currentUrl && (
+                        <a href={agent.currentUrl} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-500 truncate ml-auto max-w-[40%]">
+                          {(() => { try { return new URL(agent.currentUrl).host; } catch { return agent.currentUrl; } })()}
+                        </a>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {agentSteps.map((s, i) => {
+                        const resultText = typeof s.result === "string" ? s.result : (s.result?.text || s.result?.title || s.result?.content || "");
+                        return (
+                          <div key={i} className="flex items-baseline gap-2 text-[11px]">
+                            <span className="text-slate-400 flex-shrink-0">{fmtTime(s.ts)}</span>
+                            <span className="text-slate-600 font-medium flex-shrink-0">{s.tool || s.action || "操作"}</span>
+                            {resultText && <span className="text-slate-400 truncate">{String(resultText).slice(0, 80)}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* 规划中状态 */}
           {status === "parsing" && (
             <div className="py-8 text-center">

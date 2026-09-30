@@ -201,7 +201,7 @@ export function SnoozeSheet({ task, onClose, onConfirm }) {
   );
 }
 
-export function ExecPreview({ task, analysis, onClose, onApprove, onFeedback }) {
+export function ExecPreview({ task, analysis, onClose, onApprove, onFeedback, onExecRun }) {
   const ax = analysis?.autoExec;
   const [sent, setSent] = useState(false);
 
@@ -216,6 +216,11 @@ export function ExecPreview({ task, analysis, onClose, onApprove, onFeedback }) 
 
   const handleFeedback = () => {
     onFeedback(task);
+  };
+
+  // 待批准 / 转人工：直接跑 execute 阶段
+  const handleExecRun = () => {
+    onExecRun?.(task, ax);
   };
 
   return (
@@ -238,6 +243,50 @@ export function ExecPreview({ task, analysis, onClose, onApprove, onFeedback }) 
         />
 
         <View style={{ padding: "28rpx" }}>
+          {/* 执行进展：规划 → 执行 → 验收 → 完成 */}
+          {(() => {
+            const stages = ["规划", "执行", "验收", "完成"];
+            const flow = {
+              confirm: { done: 1, active: 1, note: "方案已生成，批准后开始执行" },
+              running: { done: 1, active: 1, note: "心栈正在执行，完成后可验收" },
+              ready: { done: 2, active: 2, note: "已执行完毕，请验收成果" },
+              done: { done: 4, note: "已完成" },
+              manual: { done: 1, active: 1, failed: true, note: "信任度不足，已转人工，可重试或接管" },
+            };
+            const f = flow[ax.state] || { done: 0, active: 0, note: "" };
+            return (
+              <View style={{ marginBottom: "24rpx" }}>
+                <View style={{ display: "flex", alignItems: "flex-start" }}>
+                  {stages.map((label, i) => {
+                    const isDone = i < f.done;
+                    const isActive = i === f.active && !isDone;
+                    const dotBg = isDone ? theme.sage : isActive ? (f.failed ? theme.seal : theme.primary) : "rgba(91,130,160,0.18)";
+                    return (
+                      <View key={label} style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                        {i > 0 && (
+                          <View style={{ flex: 1, height: "2rpx", background: isDone ? theme.sage : "rgba(91,130,160,0.18)", marginTop: "13rpx" }} />
+                        )}
+                        <View style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6rpx", flexShrink: 0 }}>
+                          <View style={{ width: "28rpx", height: "28rpx", borderRadius: "14rpx", background: dotBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {isDone ? (
+                              <IconCheck size={16} color="#ffffff" />
+                            ) : (
+                              <Text style={{ fontSize: "18rpx", color: isActive ? "#ffffff" : theme.inkQuaternary, fontWeight: 600 }}>{i + 1}</Text>
+                            )}
+                          </View>
+                          <Text style={{ fontSize: "20rpx", color: isDone || isActive ? theme.inkSecondary : theme.inkQuaternary }}>{label}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+                {f.note ? (
+                  <Text style={{ fontSize: "22rpx", color: f.failed ? theme.seal : theme.inkTertiary, marginTop: "12rpx" }}>{f.note}</Text>
+                ) : null}
+              </View>
+            );
+          })()}
+
           <View
             style={{
               border: `1rpx dashed ${theme.water}`,
@@ -280,45 +329,72 @@ export function ExecPreview({ task, analysis, onClose, onApprove, onFeedback }) 
               <IconCheck size={24} color={theme.seal} />
               <Text style={{ fontSize: "28rpx", color: theme.seal }}>已验收，约定已完成</Text>
             </View>
+          ) : ax.state === "running" ? (
+            <View style={{ marginTop: "28rpx", alignItems: "center", padding: "12rpx 0" }}>
+              <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>心栈正在执行，完成后会提醒你验收</Text>
+            </View>
           ) : (
             <View style={{ marginTop: "28rpx", display: "flex", gap: "16rpx" }}>
-              <Button
-                onClick={handleApprove}
-                style={{
-                  flex: 1,
-                  height: "80rpx",
-                  lineHeight: "80rpx",
-                  background: theme.primary,
-                  color: theme.paper,
-                  fontSize: "26rpx",
-                  borderRadius: "8rpx",
-                  margin: 0,
-                }}
-              >
-                <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
-                  <IconSend size={22} color={theme.paper} />
-                  <Text style={{ color: theme.paper, fontSize: "26rpx" }}>验收，没问题</Text>
-                </View>
-              </Button>
-              <Button
-                onClick={handleFeedback}
-                style={{
-                  flex: 1,
-                  height: "80rpx",
-                  lineHeight: "80rpx",
-                  background: theme.paper,
-                  color: theme.inkSecondary,
-                  fontSize: "26rpx",
-                  border: `1rpx solid ${theme.border}`,
-                  borderRadius: "8rpx",
-                  margin: 0,
-                }}
-              >
-                <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
-                  <IconPencil size={22} color={theme.inkSecondary} />
-                  <Text style={{ color: theme.inkSecondary, fontSize: "26rpx" }}>有问题</Text>
-                </View>
-              </Button>
+              {ax.state === "confirm" || ax.state === "manual" ? (
+                <Button
+                  onClick={handleExecRun}
+                  style={{
+                    flex: 1,
+                    height: "80rpx",
+                    lineHeight: "80rpx",
+                    background: theme.primary,
+                    color: theme.paper,
+                    fontSize: "26rpx",
+                    borderRadius: "8rpx",
+                    margin: 0,
+                  }}
+                >
+                  <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
+                    <IconSend size={22} color={theme.paper} />
+                    <Text style={{ color: theme.paper, fontSize: "26rpx" }}>{ax.state === "confirm" ? "批准执行" : "重试"}</Text>
+                  </View>
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleApprove}
+                  style={{
+                    flex: 1,
+                    height: "80rpx",
+                    lineHeight: "80rpx",
+                    background: theme.primary,
+                    color: theme.paper,
+                    fontSize: "26rpx",
+                    borderRadius: "8rpx",
+                    margin: 0,
+                  }}
+                >
+                  <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
+                    <IconSend size={22} color={theme.paper} />
+                    <Text style={{ color: theme.paper, fontSize: "26rpx" }}>验收，没问题</Text>
+                  </View>
+                </Button>
+              )}
+              {ax.state !== "manual" && (
+                <Button
+                  onClick={handleFeedback}
+                  style={{
+                    flex: 1,
+                    height: "80rpx",
+                    lineHeight: "80rpx",
+                    background: theme.paper,
+                    color: theme.inkSecondary,
+                    fontSize: "26rpx",
+                    border: `1rpx solid ${theme.border}`,
+                    borderRadius: "8rpx",
+                    margin: 0,
+                  }}
+                >
+                  <View style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8rpx" }}>
+                    <IconPencil size={22} color={theme.inkSecondary} />
+                    <Text style={{ color: theme.inkSecondary, fontSize: "26rpx" }}>有问题</Text>
+                  </View>
+                </Button>
+              )}
               <Button
                 onClick={onClose}
                 style={{

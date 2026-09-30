@@ -30,6 +30,7 @@ import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
 import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
 import PriorityQuickMenu from "@/components/tasks/PriorityQuickMenu";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
+import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
 
 export default function LifeTaskCard({ 
   task, 
@@ -56,6 +57,7 @@ export default function LifeTaskCard({
   const [execStateOverride, setExecStateOverride] = useState(null);
   const [execIgnored, setExecIgnored] = useState(false);
   const [execBusy, setExecBusy] = useState(false);
+  const [showExecDetail, setShowExecDetail] = useState(false);
   const queryClient = useQueryClient();
   const execState = execStateOverride || autoExec?.state;
 
@@ -880,11 +882,12 @@ export default function LifeTaskCard({
                 </div>
             )}
 
-            {/* 4. Auto Execution Block（已预执行待验收 / 待批准 / 执行中 / 转人工） */}
+            {/* 4. Auto Execution Block（已预执行待验收 / 待批准 / 执行中 / 转人工）：点击可查看执行进展与内容 */}
             {autoExec && !completed && !execIgnored && execState && execState !== 'done' && (
                 <div
-                    className="mt-3 rounded-2xl px-3.5 py-2.5 border border-dashed border-[#c7d2fe] bg-[#eef2ff]/40"
-                    onClick={(e) => e.stopPropagation()}
+                    className="mt-3 rounded-2xl px-3.5 py-2.5 border border-dashed border-[#c7d2fe] bg-[#eef2ff]/40 hover:bg-[#eef2ff]/90 cursor-pointer transition-colors"
+                    onClick={(e) => { e.stopPropagation(); setShowExecDetail(true); }}
+                    title="点击查看执行进展与内容"
                 >
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 min-w-0">
@@ -919,6 +922,7 @@ export default function LifeTaskCard({
                             })()}
                         </p>
                     )}
+                    <p className="mt-1 text-right text-[11px] text-[#384877]/60">点击查看执行进展与内容 ›</p>
 
                     <div className="mt-2 flex items-center justify-end gap-3">
                         {execState === 'ready' && (
@@ -926,14 +930,14 @@ export default function LifeTaskCard({
                                 <button
                                     type="button"
                                     className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
-                                    onClick={() => onEdit && onEdit()}
+                                    onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}
                                 >
                                     调整
                                 </button>
                                 <button
                                     type="button"
                                     className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
-                                    onClick={() => setExecIgnored(true)}
+                                    onClick={(e) => { e.stopPropagation(); setExecIgnored(true); }}
                                 >
                                     我来接管
                                 </button>
@@ -972,7 +976,7 @@ export default function LifeTaskCard({
                                 <button
                                     type="button"
                                     className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
-                                    onClick={() => setExecIgnored(true)}
+                                    onClick={(e) => { e.stopPropagation(); setExecIgnored(true); }}
                                 >
                                     我来接管
                                 </button>
@@ -1084,6 +1088,15 @@ export default function LifeTaskCard({
             onClose={() => setShowAttachDialog(false)}
           />
         </div>
+
+        {/* 自动执行详情：点击「智能执行」区块打开，查看执行进展与执行内容 */}
+        {autoExec?.executionId && (
+          <AutomationDetailDialog
+            execution={{ id: autoExec.executionId }}
+            open={showExecDetail}
+            onOpenChange={setShowExecDetail}
+          />
+        )}
     </div>
   );
 }

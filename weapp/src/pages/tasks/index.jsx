@@ -661,6 +661,7 @@ export default function Tasks() {
           onClose={() => setReviewTask(null)}
           onApprove={handleApprove}
           onFeedback={handleFeedback}
+          onExecRun={handleExecRun}
         />
       )}
 

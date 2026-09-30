@@ -400,9 +400,10 @@ export default function PromiseCard({
             </View>
           )}
 
-          {/* auto execution */}
+          {/* auto execution：点击区块可查看执行进展与内容 */}
           {analysis?.autoExec && !done && (
             <View
+              onClick={handleReview}
               style={{
                 marginTop: "24rpx",
                 border: `1rpx dashed ${theme.water}`,
@@ -463,6 +464,9 @@ export default function PromiseCard({
                   </View>
                 </View>
               </View>
+              <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "12rpx" }}>
+                点击查看执行进展与内容
+              </Text>
             </View>
           )}
         </View>

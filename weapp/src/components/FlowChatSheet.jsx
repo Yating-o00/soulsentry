@@ -54,6 +54,13 @@ function resolveUploadUrl(p) {
   return `${host}${p}`;
 }
 
+// ws(s) 地址推导：与 API 同源，路径 /ws/agent-stream
+function resolveWsUrl(executionId, token) {
+  const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+  const host = rawApi.replace(/\/$/, "").replace(/\/api$/, "").replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+  return `${host}/ws/agent-stream?token=${encodeURIComponent(token || "")}&executionId=${encodeURIComponent(executionId)}`;
+}
+
 // 请求超时保护：任何情况下都不能让「正在输入」永远转下去
 function withTimeout(promise, ms = 30000) {
   return Promise.race([
@@ -75,6 +82,13 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
   const [agentShot, setAgentShot] = useState("");
   const [agentTakeover, setAgentTakeover] = useState(false);
   const [takeoverText, setTakeoverText] = useState("");
+  const [liveOpen, setLiveOpen] = useState(false);
+  const [liveFrame, setLiveFrame] = useState("");
+  const [liveNotice, setLiveNotice] = useState("正在连接…");
+  const [liveText, setLiveText] = useState("");
+  const liveSocketRef = useRef(null);
+  const liveRectRef = useRef(null);
+  const lastMoveRef = useRef(0);
   const agentPollRef = useRef(null);
   const lastAskedRef = useRef("");
 
@@ -104,12 +118,15 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // 关闭/卸载时停掉轮询（Agent 本身继续在服务端执行，守护记录里可看）
+  // 关闭/卸载时停掉轮询与实时窗口（Agent 本身继续在服务端执行，守护记录里可看）
   useEffect(() => {
     if (!visible) {
       stopAgentPoll();
       setAgentShot("");
       setAgentTakeover(false);
+      try { liveSocketRef.current?.close({}); } catch {}
+      liveSocketRef.current = null;
+      setLiveOpen(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -169,6 +186,61 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
       await post(`/task-executions/${agentExecId}/agent-release`, { note: "我自己操作好了" }, { silent: true });
     } catch (_e) { /* 轮询会同步最终状态 */ }
   };
+
+  // —— 实时窗口（Muse 式接管）：视频流帧 + 触摸/输入实时转发 ——
+  const openLive = () => {
+    if (!agentExecId || liveSocketRef.current) return;
+    const socket = Taro.connectSocket({ url: resolveWsUrl(agentExecId, getToken()) });
+    liveSocketRef.current = socket;
+    setLiveNotice("正在连接…");
+    socket.onOpen(() => setLiveNotice("已接管：小助手原地待命，你的操作实时生效"));
+    socket.onMessage((res) => {
+      try {
+        const msg = JSON.parse(res.data);
+        if (msg.type === "frame") setLiveFrame(msg.data);
+        else if (msg.type === "ready") setLiveNotice("已接管：小助手原地待命，你的操作实时生效");
+        else if (msg.type === "ended") setLiveNotice("小助手已结束本次任务");
+        else if (msg.type === "error") setLiveNotice(msg.message || "连接异常");
+      } catch {}
+    });
+    socket.onClose(() => { liveSocketRef.current = null; setLiveOpen(false); setLiveFrame(""); });
+    socket.onError(() => { setLiveNotice("连接异常，请关闭重试"); });
+    setLiveOpen(true);
+    setTimeout(() => {
+      Taro.createSelectorQuery().select("#live-stage").boundingClientRect((rect) => {
+        if (rect) liveRectRef.current = rect;
+      }).exec();
+    }, 300);
+  };
+
+  const closeLive = () => {
+    try { liveSocketRef.current?.close({}); } catch {}
+    liveSocketRef.current = null;
+    setLiveOpen(false);
+    setLiveFrame("");
+  };
+
+  const liveSend = (obj) => {
+    const s = liveSocketRef.current;
+    if (s) s.send({ data: JSON.stringify(obj) });
+  };
+
+  const toViewport = (e) => {
+    const rect = liveRectRef.current;
+    const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
+    if (!rect || !t) return null;
+    return { x: Math.round((t.clientX - rect.left) * 1280 / rect.width), y: Math.round((t.clientY - rect.top) * 800 / rect.height) };
+  };
+
+  const liveTouchStart = (e) => { const p = toViewport(e); if (p) liveSend({ type: "mousedown", ...p }); };
+  const liveTouchMove = (e) => {
+    const now = Date.now();
+    if (now - lastMoveRef.current < 40) return;
+    lastMoveRef.current = now;
+    const p = toViewport(e);
+    if (p) liveSend({ type: "mousemove", ...p });
+  };
+  const liveTouchEnd = (e) => { const p = toViewport(e); if (p) liveSend({ type: "mouseup", ...p }); };
 
   const pollAgent = async (executionId) => {
     try {
@@ -512,6 +584,11 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                     style={{ width: "440rpx", borderRadius: "16rpx", border: "1px solid rgba(15,23,42,0.10)" }}
                   />
                 )}
+                {!liveOpen && (
+                  <View onClick={openLive} style={{ alignSelf: "flex-start", padding: "10rpx 24rpx", borderRadius: "999rpx", background: T.primary, marginTop: "4rpx" }}>
+                    <Text style={{ fontSize: "22rpx", color: "#fff" }}>🖥️ 打开实时窗口，亲自操作网页</Text>
+                  </View>
+                )}
                 {agentTakeover && (
                   <View style={{ width: "440rpx", marginTop: "12rpx", padding: "16rpx", borderRadius: "16rpx", border: "1px solid rgba(15,23,42,0.10)", background: "#fbfcfc" }}>
                     <View style={{ flexDirection: "row", alignItems: "center", marginBottom: "12rpx" }}>
@@ -697,6 +774,56 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
             </View>
           </View>
         </View>
+
+        {/* 实时浏览器窗口：视频流帧 + 触摸操作实时转发，关闭即交还小助手 */}
+        {liveOpen && (
+          <View style={{ position: "fixed", left: 0, top: 0, right: 0, bottom: 0, background: "rgba(2,6,23,0.96)", zIndex: 999, display: "flex", flexDirection: "column", padding: "24rpx" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: "16rpx" }}>
+              <Text style={{ flex: 1, fontSize: "24rpx", color: "#e2e8f0" }} numberOfLines={1}>{liveNotice}</Text>
+              <View onClick={closeLive} style={{ padding: "10rpx 28rpx", borderRadius: "999rpx", background: "#10b981" }}>
+                <Text style={{ fontSize: "24rpx", color: "#fff" }}>交还小助手</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: "16rpx" }}>
+              <Input
+                value={liveText}
+                onInput={(e) => setLiveText(e.detail.value)}
+                placeholder="打字从这里送入网页…"
+                style={{ flex: 1, fontSize: "24rpx", color: "#e2e8f0", background: "rgba(255,255,255,0.06)", borderRadius: "999rpx", padding: "10rpx 24rpx" }}
+              />
+              <View onClick={() => { const t = liveText.trim(); if (t) { setLiveText(""); liveSend({ type: "type", text: t }); } }} style={{ padding: "10rpx 24rpx", borderRadius: "999rpx", background: "#e2e8f0", marginLeft: "12rpx" }}>
+                <Text style={{ fontSize: "22rpx", color: "#0f172a" }}>发送文字</Text>
+              </View>
+              <View onClick={() => liveSend({ type: "keydown", key: "Enter" })} style={{ padding: "10rpx 24rpx", borderRadius: "999rpx", border: "1px solid rgba(255,255,255,0.2)", marginLeft: "12rpx" }}>
+                <Text style={{ fontSize: "22rpx", color: "#e2e8f0" }}>回车</Text>
+              </View>
+            </View>
+
+            <View style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {liveFrame ? (
+                <Image
+                  id="live-stage"
+                  src={liveFrame}
+                  mode="widthFix"
+                  style={{ width: "100%", borderRadius: "16rpx" }}
+                  onTouchStart={liveTouchStart}
+                  onTouchMove={liveTouchMove}
+                  onTouchEnd={liveTouchEnd}
+                  onTouchCancel={liveTouchEnd}
+                />
+              ) : (
+                <View style={{ padding: "60rpx 0" }}>
+                  <Text style={{ fontSize: "24rpx", color: "#64748b" }}>等待画面…（小助手执行中也会实时显示）</Text>
+                </View>
+              )}
+            </View>
+
+            <Text style={{ fontSize: "20rpx", color: "#64748b", textAlign: "center", marginTop: "12rpx" }}>
+              点击/滑动画面即操作真实网页 · 登录、滑块、付款都可以亲手完成
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );

@@ -31,7 +31,7 @@ async function getBrowser() {
   if (!browserPromise) {
     const launchOptions = {
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"]
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled", "--headless=new"]
     };
     // 允许通过环境变量覆盖浏览器来源（服务器装不上 Chromium 时指向系统浏览器）
     if (env.BROWSER_EXECUTABLE_PATH) launchOptions.executablePath = env.BROWSER_EXECUTABLE_PATH;
@@ -465,6 +465,12 @@ async function runLoop(session) {
 
     session.history.push({ role: "user", content: observation }, message);
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    // 防御：模型若返回空调用且空文本，也计一步，保证循环必然终止
+    if (toolCalls.length === 0) {
+      session.stepCount += 1;
+      persist(session);
+      continue;
+    }
 
     for (const tc of toolCalls.slice(0, 3)) {
       let args = {};
@@ -561,6 +567,7 @@ export async function runBrowserAgent(execution, prisma) {
     stepCount: 0,
     pendingResolve: null,
     blockAsked: false,
+    live: { cdp: null, cdpPage: null, casting: false, subscribers: new Set() },
     error: null
   };
   sessions.set(execution.id, session);
@@ -599,6 +606,10 @@ export async function runBrowserAgent(execution, prisma) {
     throw err;
   } finally {
     sessions.delete(execution.id);
+    if (session.live.keepAlive) { clearInterval(session.live.keepAlive); session.live.keepAlive = null; }
+    for (const cb of session.live.subscribers) { try { cb(null); } catch {} }
+    session.live.subscribers.clear();
+    await stopScreencast(session).catch(() => {});
     await context.close().catch(() => {});
     // 保留最后一张截图供结果页展示，其余清理
     session.files.slice(0, -1).forEach((f) => { try { fs.unlinkSync(path.join(agentShotDir(), f)); } catch {} });
@@ -648,6 +659,12 @@ export async function releaseAgent(executionId, note) {
   const s = sessions.get(executionId);
   if (!s) return { ok: false, message: "会话不存在或已结束" };
   s.takeover = false;
+  // 若 Agent 正停在提问处，先解开挂起再交还，避免永久等待
+  if (s.pendingResolve) {
+    s.pendingResolve({ choice: "", text: note ? `（用户已操作完成：${String(note).slice(0, 100)}）` : "（用户已操作完成，请继续）" });
+    s.pendingResolve = null;
+    s.waiting = null;
+  }
   s.status = "running";
   if (note) s.history.push({ role: "user", content: `（用户刚刚亲自操作了网页，并留言：${String(note).slice(0, 200)}）` });
   persist(s);
@@ -679,6 +696,116 @@ export async function commandAgent(executionId, cmd) {
     await saveScreenshot(s);
     persist(s);
     return { ok: true, screenshot: s.latestScreenshot, url: s.currentUrl };
+  } catch (err) {
+    return { ok: false, message: String(err?.message || err).slice(0, 200) };
+  }
+}
+
+// —— 实时视频流接管（Muse 式实时窗口）：CDP screencast 推帧 + 输入事件转发 ——
+
+async function stopScreencast(session) {
+  if (!session.live.cdp) return;
+  try { await session.live.cdp.send("Page.stopScreencast"); } catch {}
+  try { await session.live.cdp.detach(); } catch {}
+  session.live.cdp = null;
+  session.live.cdpPage = null;
+  session.live.casting = false;
+}
+
+async function ensureScreencast(session) {
+  const page = session.page;
+  if (session.live.casting && session.live.cdpPage === page) return;
+  await stopScreencast(session);
+  const cdp = await session.context.newCDPSession(page);
+  session.live.cdp = cdp;
+  session.live.cdpPage = page;
+  cdp.on("Page.screencastFrame", (ev) => {
+    // 页面已切换：停掉旧流，下一轮重新对新页面开播
+    if (session.live.cdp !== cdp) return;
+    cdp.send("Page.screencastFrameAck", { sessionId: ev.sessionId }).catch(() => {});
+    session.live.lastFrameAt = Date.now();
+    const frame = `data:image/jpeg;base64,${ev.data}`;
+    for (const cb of session.live.subscribers) {
+      try { cb(frame); } catch {}
+    }
+  });
+  await cdp.send("Page.enable");
+  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 55, maxWidth: VIEWPORT.width, maxHeight: VIEWPORT.height, everyNthFrame: 2 });
+  session.live.casting = true;
+}
+
+// 订阅实时画面：进入接管模式（Agent 挂起），返回退订函数
+export async function subscribeAgentLive(executionId, onFrame) {
+  const s = sessions.get(executionId);
+  if (!s) return { ok: false, message: "会话不存在或已结束" };
+  if (s.live.subscribers.size >= 1) return { ok: false, message: "已有其他窗口在接管，请稍后再试" };
+  s.live.subscribers.add(onFrame);
+  s.takeover = true;
+  s.status = "takeover";
+  logStep(s, "live_takeover", {}, "用户打开实时窗口接管");
+  persist(s);
+  await ensureScreencast(s).catch(() => {});
+  // 保活：老 headless 的 screencast 只在页面变化时推帧，超过 1.2s 无帧则主动截图补一帧
+  if (!s.live.keepAlive) {
+    s.live.keepAlive = setInterval(async () => {
+      if (s.live.subscribers.size === 0) return;
+      if (Date.now() - (s.live.lastFrameAt || 0) < 1200) return;
+      await saveScreenshot(s).catch(() => {});
+      if (!s.latestScreenshot) return;
+      try {
+        const buf = fs.readFileSync(path.join(agentShotDir(), path.basename(s.latestScreenshot)));
+        const dataUrl = `data:image/jpeg;base64,${buf.toString("base64")}`;
+        for (const cb of s.live.subscribers) { try { cb(dataUrl); } catch {} }
+      } catch {}
+    }, 1000);
+  }
+  return {
+    ok: true,
+    unsubscribe: async () => {
+      s.live.subscribers.delete(onFrame);
+      if (s.live.subscribers.size === 0) {
+        await stopScreencast(s).catch(() => {});
+        if (s.live.keepAlive) { clearInterval(s.live.keepAlive); s.live.keepAlive = null; }
+        // 无人接管时自动交还 AI；若 Agent 正停在提问处，先解开它的挂起
+        if (s.takeover) {
+          s.takeover = false;
+          if (s.pendingResolve) {
+            s.pendingResolve({ choice: "", text: "（用户关闭了实时窗口，把网页交还给小助手继续）" });
+            s.pendingResolve = null;
+            s.waiting = null;
+          }
+          s.status = "running";
+          s.history.push({ role: "user", content: "（用户关闭了实时窗口，把网页交还给小助手继续）" });
+          logStep(s, "live_release", {}, "用户关闭实时窗口，交还 AI");
+          persist(s);
+        }
+      }
+    }
+  };
+}
+
+// 把用户在实时窗口的鼠标/键盘事件转发进真实浏览器
+export async function handleLiveInput(executionId, msg) {
+  const s = sessions.get(executionId);
+  if (!s) return { ok: false, message: "会话不存在或已结束" };
+  const page = s.page;
+  try {
+    const x = Number(msg.x) || 0;
+    const y = Number(msg.y) || 0;
+    const button = ["left", "right", "middle"].includes(msg.button) ? msg.button : "left";
+    switch (msg.type) {
+      case "mousemove": await page.mouse.move(x, y); break;
+      case "mousedown": await page.mouse.down({ button }); break;
+      case "mouseup": await page.mouse.up({ button }); break;
+      case "click": await page.mouse.click(x, y, { button }); break;
+      case "wheel": await page.mouse.wheel(Number(msg.deltaX) || 0, Number(msg.deltaY) || 0); break;
+      case "keydown": if (msg.key) await page.keyboard.down(String(msg.key)); break;
+      case "keyup": if (msg.key) await page.keyboard.up(String(msg.key)); break;
+      case "type": if (msg.text) await page.keyboard.insertText(String(msg.text).slice(0, 500)); break;
+      case "refresh": await ensureScreencast(s); break;
+      default: return { ok: false, message: "不支持的事件" };
+    }
+    return { ok: true };
   } catch (err) {
     return { ok: false, message: String(err?.message || err).slice(0, 200) };
   }

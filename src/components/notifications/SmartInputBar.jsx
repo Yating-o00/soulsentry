@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { base44 } from "@/api/base44Client";
 import ChatPasteRecognizer from "@/components/heartsign/ChatPasteRecognizer";
+import AgentLiveWindow from "@/components/automation/AgentLiveWindow";
 import { looksLikeChatLog } from "@/components/utils/processPastedContent";
 
 // 对话配色全部内联，不依赖 .today-page 作用域的 CSS 变量，避免白底白字。
@@ -81,6 +82,7 @@ export default function SmartInputBar() {
   const [agentShot, setAgentShot] = useState("");
   const [agentTakeover, setAgentTakeover] = useState(false);
   const [takeoverText, setTakeoverText] = useState("");
+  const [liveOpen, setLiveOpen] = useState(false);
   const agentPollRef = useRef(null);
   const lastAskedRef = useRef("");
   const taRef = useRef(null);
@@ -135,6 +137,7 @@ export default function SmartInputBar() {
     setAgentStatus("");
     setAgentShot("");
     setAgentTakeover(false);
+    setLiveOpen(false);
     if (finalMessage) pushAssistant(finalMessage, { agent: true });
     queryClient.invalidateQueries({ queryKey: ['task-executions'] });
   };
@@ -345,6 +348,7 @@ export default function SmartInputBar() {
     setAgentStatus("");
     setAgentShot("");
     setAgentTakeover(false);
+    setLiveOpen(false);
     setMessages([]);
     setPending(null);
   };
@@ -437,6 +441,16 @@ export default function SmartInputBar() {
                       className={`w-60 rounded-xl border ${agentTakeover ? "cursor-crosshair" : "cursor-zoom-in"} transition-opacity hover:opacity-90`}
                       style={{ borderColor: C.hairline }}
                     />
+                  )}
+                  {!liveOpen && (
+                    <button
+                      type="button"
+                      onClick={() => setLiveOpen(true)}
+                      className="rounded-full px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:opacity-90"
+                      style={{ background: C.sentinel }}
+                    >
+                      🖥️ 打开实时窗口，亲自操作网页
+                    </button>
                   )}
                   {agentTakeover && (
                     <div className="flex w-60 flex-col gap-1.5 rounded-xl border p-2" style={{ borderColor: C.hairline, background: "#fbfcfc" }}>
@@ -635,6 +649,11 @@ export default function SmartInputBar() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 实时浏览器窗口：接管即打开，关闭即交还小助手 */}
+      {liveOpen && agentExecId && (
+        <AgentLiveWindow executionId={agentExecId} onClose={() => setLiveOpen(false)} />
       )}
     </div>
   );

@@ -79,6 +79,8 @@ export default function SmartInputBar() {
   const [agentExecId, setAgentExecId] = useState(null);
   const [agentStatus, setAgentStatus] = useState("");
   const [agentShot, setAgentShot] = useState("");
+  const [agentTakeover, setAgentTakeover] = useState(false);
+  const [takeoverText, setTakeoverText] = useState("");
   const agentPollRef = useRef(null);
   const lastAskedRef = useRef("");
   const taRef = useRef(null);
@@ -122,6 +124,7 @@ export default function SmartInputBar() {
     setAgentExecId(executionId);
     lastAskedRef.current = "";
     setAgentShot("");
+    setAgentTakeover(false);
     setAgentStatus("正在打开网页…");
     agentPollRef.current = setInterval(() => pollAgent(executionId), 2500);
   };
@@ -131,8 +134,38 @@ export default function SmartInputBar() {
     setAgentExecId(null);
     setAgentStatus("");
     setAgentShot("");
+    setAgentTakeover(false);
     if (finalMessage) pushAssistant(finalMessage, { agent: true });
     queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+  };
+
+  // —— 接管模式：把用户的点按/输入转发到真实浏览器 ——
+  const agentCommand = async (cmd) => {
+    if (!agentExecId) return;
+    try {
+      await httpRequest(`/api/task-executions/${agentExecId}/agent-command`, { method: "POST", body: { cmd } });
+    } catch (_e) { /* 指令失败由下一轮轮询兜底 */ }
+  };
+
+  const onShotTap = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.round((e.clientX - rect.left) * 1280 / rect.width);
+    const y = Math.round((e.clientY - rect.top) * 800 / rect.height);
+    agentCommand({ type: "click", x, y });
+  };
+
+  const sendTakeoverText = () => {
+    const t = takeoverText.trim();
+    if (!t) return;
+    setTakeoverText("");
+    agentCommand({ type: "type", text: t });
+  };
+
+  const releaseAgent = async () => {
+    if (!agentExecId) return;
+    try {
+      await httpRequest(`/api/task-executions/${agentExecId}/agent-release`, { method: "POST", body: { note: "我自己操作好了" } });
+    } catch (_e) { /* 轮询会同步最终状态 */ }
   };
 
   const pollAgent = async (executionId) => {
@@ -141,6 +174,12 @@ export default function SmartInputBar() {
       if (!st) return;
       if (st.latestScreenshot) setAgentShot(st.latestScreenshot);
       if (st.active) {
+        if (st.status === "takeover") {
+          setAgentTakeover(true);
+          setAgentStatus("正在由你亲自操作网页");
+        } else if (agentTakeover) {
+          setAgentTakeover(false);
+        }
         if (st.status === "waiting_input" && st.waiting?.question) {
           setAgentStatus("等你回应");
           if (st.waiting.question !== lastAskedRef.current) {
@@ -305,6 +344,7 @@ export default function SmartInputBar() {
     setAgentExecId(null);
     setAgentStatus("");
     setAgentShot("");
+    setAgentTakeover(false);
     setMessages([]);
     setPending(null);
   };
@@ -379,12 +419,12 @@ export default function SmartInputBar() {
                 </div>
               ))}
 
-              {/* 小助手执行状态条 + 实时网页画面 */}
+              {/* 小助手执行状态条 + 实时网页画面 / 接管操作台 */}
               {agentExecId && (
                 <div className="mb-3 flex flex-col items-start gap-2 self-start">
                   {agentStatus && (
                     <div className="flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px]" style={{ background: "rgba(56,72,119,0.07)", color: C.sentinel }}>
-                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: C.sentinel }} />
+                      <span className={`inline-block h-1.5 w-1.5 rounded-full ${agentTakeover ? "" : "animate-pulse"}`} style={{ background: C.sentinel }} />
                       {agentStatus}
                     </div>
                   )}
@@ -392,11 +432,30 @@ export default function SmartInputBar() {
                     <img
                       src={agentShot}
                       alt="小助手正在浏览的网页"
-                      onClick={() => window.open(agentShot, "_blank")}
-                      title="点击放大查看"
-                      className="w-60 cursor-zoom-in rounded-xl border transition-opacity hover:opacity-90"
+                      onClick={agentTakeover ? onShotTap : () => window.open(agentShot, "_blank")}
+                      title={agentTakeover ? "点按网页画面即可操作" : "点击放大查看"}
+                      className={`w-60 rounded-xl border ${agentTakeover ? "cursor-crosshair" : "cursor-zoom-in"} transition-opacity hover:opacity-90`}
                       style={{ borderColor: C.hairline }}
                     />
+                  )}
+                  {agentTakeover && (
+                    <div className="flex w-60 flex-col gap-1.5 rounded-xl border p-2" style={{ borderColor: C.hairline, background: "#fbfcfc" }}>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          value={takeoverText}
+                          onChange={(e) => setTakeoverText(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") sendTakeoverText(); }}
+                          placeholder="输入文字…"
+                          className="min-w-0 flex-1 rounded-lg border px-2 py-1 text-[12px] focus:outline-none"
+                          style={{ borderColor: C.hairline }}
+                        />
+                        <button type="button" onClick={sendTakeoverText} className="shrink-0 rounded-lg px-2 py-1 text-[11px] text-white" style={{ background: C.sentinel }}>输入</button>
+                        <button type="button" onClick={() => agentCommand({ type: "key", key: "Enter" })} className="shrink-0 rounded-lg border px-2 py-1 text-[11px]" style={{ borderColor: C.hairline, color: C.ink3 }}>回车</button>
+                      </div>
+                      <button type="button" onClick={releaseAgent} className="rounded-lg px-2 py-1 text-[11px] font-medium" style={{ background: "rgba(56,72,119,0.08)", color: C.sentinel }}>
+                        操作好了，交还小助手 →
+                      </button>
+                    </div>
                   )}
                 </div>
               )}

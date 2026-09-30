@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { callKimiChat } from "../lib/kimi.js";
+import { callKimiChat, invokeKimiWebSearch } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 
 // 浏览器 AI Agent：为自动执行提供"浏览网页、点击、填写、提取信息"的能力。
@@ -31,7 +31,7 @@ async function getBrowser() {
   if (!browserPromise) {
     const launchOptions = {
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"]
     };
     // 允许通过环境变量覆盖浏览器来源（服务器装不上 Chromium 时指向系统浏览器）
     if (env.BROWSER_EXECUTABLE_PATH) launchOptions.executablePath = env.BROWSER_EXECUTABLE_PATH;
@@ -222,6 +222,7 @@ const AGENT_TOOLS = [
   { type: "function", function: { name: "press", description: "按键，如 Enter、Escape、Tab、ArrowDown", parameters: { type: "object", properties: { key: { type: "string" } }, required: ["key"] } } },
   { type: "function", function: { name: "scroll", description: "滚动页面", parameters: { type: "object", properties: { direction: { type: "string", enum: ["down", "up"] } }, required: ["direction"] } } },
   { type: "function", function: { name: "extract", description: "把当前页面中用户需要的信息记录下来（可多次调用逐步补充）", parameters: { type: "object", properties: { info: { type: "string" } }, required: ["info"] } } },
+  { type: "function", function: { name: "search_web", description: "联网搜索实时信息（航班时刻/价格/余票/店铺菜单等）。网页打不开、被安全验证拦截、或页面信息不全时用这个补充", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } } },
   { type: "function", function: { name: "ask_user", description: "遇到必须人工处理（登录、验证码、支付、弹手机验证）或需要用户决定时，向用户提问并暂停", parameters: { type: "object", properties: { question: { type: "string" }, choices: { type: "array", items: { type: "string" } } }, required: ["question"] } } },
   { type: "function", function: { name: "done", description: "任务目标已完成，汇总结果", parameters: { type: "object", properties: { summary: { type: "string" } }, required: ["summary"] } } },
   { type: "function", function: { name: "fail", description: "页面无法满足目标或无法继续，说明原因", parameters: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] } } }
@@ -241,7 +242,8 @@ const AGENT_SYSTEM = `你是 SoulSentry「心栈」内置的浏览器操作 Agen
 9. 快照里 tag=card 的条目是页面上的信息块（一趟航班、一个班次、一条商品、一条搜索结果），text 已含它的关键信息，click 卡片等于选中它；tag=link 是 SPA 里的可点击元素，同样可以 click。
 10. 选定一个平台就坚持办完：先填搜索表单，再看卡片列表，用 extract 记录候选，最后 ask_user 让用户选。同一平台连续两次失败才换下一个，不要到处开网站。
 11. 日期/日历控件：优先直接在日期输入框填入日期（YYYY-MM-DD 或 MM月DD日），填完按 Enter；若是弹出的日历面板，就 click 面板里的具体日期数字。
-12. 页面打开后内容没加载出来（快照里几乎没东西）时，先等一拍再重新看快照，必要时 scroll 一下触发懒加载。`;
+12. 页面打开后内容没加载出来（快照里几乎没东西）时，先等一拍再重新看快照，必要时 scroll 一下触发懒加载。
+13. 以结果为导向：订/买/约类任务，每个阶段的目标都是"把可对比的选项交给用户"。查到的候选用 extract 记录关键差异（时间/价格/时长/评分），凑够 2-3 个就 ask_user 让用户选，用户选定后再继续执行。登录、验证码、付款一律 ask_user 把主动权交回用户。网页被安全验证拦截时不要反复重试，直接向用户说明并给选择；页面信息不全或被拦时，用 search_web 联网搜索补齐时刻、价格等关键信息。`;
 
 async function executeTool(session, name, args) {
   const page = session.page;
@@ -323,6 +325,13 @@ async function executeTool(session, name, args) {
         : String(args.info || "").slice(0, 800);
       return "已记录";
     }
+    case "search_web": {
+      const query = String(args.query || "").slice(0, 200);
+      if (!query) return "请输入搜索内容";
+      const r = await invokeKimiWebSearch({ query });
+      const answer = String(r?.answer || "").trim();
+      return answer ? answer.slice(0, 2000) : "没有搜到有效结果";
+    }
     default:
       return "未知工具";
   }
@@ -353,6 +362,7 @@ function summarizeArgs(tool, args) {
   if (tool === "click" || tool === "select") return `#${a.ref}${a.option ? ` → ${a.option}` : ""}`;
   if (tool === "press") return a.key;
   if (tool === "extract") return String(a.info || "").slice(0, 60);
+  if (tool === "search_web") return String(a.query || "").slice(0, 60);
   if (tool === "ask_user") return String(a.question || "").slice(0, 60);
   if (tool === "done") return String(a.summary || "").slice(0, 80);
   if (tool === "fail") return String(a.reason || "").slice(0, 80);
@@ -375,6 +385,36 @@ async function runLoop(session) {
     session.lastSnapshot = snapshot;
     if (snapshot?.url) session.currentUrl = snapshot.url;
     await saveScreenshot(session);
+
+    // 反爬拦截识别：页面出现安全验证特征时不浪费步数，直接向用户给出选择
+    if (!session.blockAsked && snapshot && /whale|captcha|滑块|滑动验证|安全验证|访问验证|人机验证|请完成验证|异常流量|访问过于频繁/i.test(`${snapshot.title} ${snapshot.textExcerpt}`)) {
+      session.blockAsked = true;
+      const question = "这个网站触发了安全验证（反爬拦截），小助手过不去。你可以亲自操作网页完成验证，也可以换一种方式继续。";
+      logStep(session, "ask_user", {}, "页面被安全验证拦截");
+      session.status = "waiting_input";
+      session.waiting = { question, choices: ["我自己来操作网页", "换个网站试试", "先到这里"] };
+      persist(session);
+      const answer = await new Promise((resolve) => { session.pendingResolve = resolve; });
+      session.pendingResolve = null;
+      session.waiting = null;
+      const choice = String(answer?.choice || "");
+      if (answer?.takeover || choice.includes("我自己来操作")) {
+        session.takeover = true;
+        logStep(session, "takeover", {}, "用户选择亲自操作网页");
+      } else if (choice.includes("先到这里")) {
+        session.status = "done";
+        session.finalSummary = "网站的安全验证拦住了小助手，已按你的意思先停在这里；想继续时可以在守护记录里再试一次，或选择亲自操作网页。";
+        logStep(session, "done", {}, session.finalSummary);
+        persist(session);
+        return { summary: session.finalSummary, extracted: session.extracted, url: session.currentUrl, screenshot: session.latestScreenshot };
+      } else {
+        session.status = "running";
+        session.history.push({ role: "user", content: "（用户表示：换个网站试试）" });
+        logStep(session, "user_answer", {}, "用户选择换个网站");
+      }
+      persist(session);
+      continue;
+    }
 
     const observation = formatObservation(snapshot, session.goal, session.extracted);
     const messages = [
@@ -435,8 +475,10 @@ async function runLoop(session) {
         const answer = await new Promise((resolve) => { session.pendingResolve = resolve; });
         session.pendingResolve = null;
         session.waiting = null;
-        if (answer?.takeover) {
+        if (answer?.takeover || (answer?.choice && answer.choice.includes("我自己来操作"))) {
+          // 用户选择亲自操作网页：进入接管模式（截图流 + 点按转发）
           session.takeover = true;
+          logStep(session, "takeover", {}, "用户选择亲自操作网页");
         } else {
           session.status = "running";
           const answerText = answer?.choice ? `（用户选择了「${answer.choice}」）` : "";
@@ -466,7 +508,21 @@ async function runLoop(session) {
 export async function runBrowserAgent(execution, prisma) {
   const goal = String(execution.originalInput || execution.taskTitle || "").slice(0, 300);
   const browser = await getBrowser();
-  const context = await browser.newContext({ viewport: VIEWPORT, locale: "zh-CN" });
+  const context = await browser.newContext({
+    viewport: VIEWPORT,
+    locale: "zh-CN",
+    timezoneId: "Asia/Shanghai",
+    // 桌面 Chrome UA，避免 HeadlessChrome 特征被反爬一眼识破
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    extraHTTPHeaders: { "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8" }
+  });
+  // 基础隐身：抹掉自动化指纹（挡不住硬验证，但能通过大多数基础检测）
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+    Object.defineProperty(navigator, "languages", { get: () => ["zh-CN", "zh", "en"] });
+    Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
+    window.chrome = window.chrome || { runtime: {} };
+  });
   const page = await context.newPage();
 
   const session = {
@@ -488,6 +544,7 @@ export async function runBrowserAgent(execution, prisma) {
     lastSnapshot: null,
     stepCount: 0,
     pendingResolve: null,
+    blockAsked: false,
     error: null
   };
   sessions.set(execution.id, session);

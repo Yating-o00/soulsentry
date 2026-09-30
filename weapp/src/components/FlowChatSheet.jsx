@@ -73,6 +73,8 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
   const [agentExecId, setAgentExecId] = useState(null);
   const [agentStatus, setAgentStatus] = useState("");
   const [agentShot, setAgentShot] = useState("");
+  const [agentTakeover, setAgentTakeover] = useState(false);
+  const [takeoverText, setTakeoverText] = useState("");
   const agentPollRef = useRef(null);
   const lastAskedRef = useRef("");
 
@@ -107,6 +109,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     if (!visible) {
       stopAgentPoll();
       setAgentShot("");
+      setAgentTakeover(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -121,6 +124,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     setAgentExecId(executionId);
     lastAskedRef.current = "";
     setAgentShot("");
+    setAgentTakeover(false);
     setAgentStatus("正在打开网页…");
     agentPollRef.current = setInterval(() => pollAgent(executionId), 2500);
   };
@@ -130,7 +134,40 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     setAgentExecId(null);
     setAgentStatus("");
     setAgentShot("");
+    setAgentTakeover(false);
     if (finalMessage) pushAssistant(finalMessage, { agent: true });
+  };
+
+  // —— 接管模式：把用户的点按/输入转发到真实浏览器 ——
+  const agentCommand = async (cmd) => {
+    if (!agentExecId) return;
+    try {
+      await post(`/task-executions/${agentExecId}/agent-command`, { cmd }, { silent: true });
+    } catch (_e) { /* 指令失败由下一轮轮询兜底 */ }
+  };
+
+  // 小程序 tap 事件的 detail.x/y 相对被点元素（px）；图片宽度 440rpx，等比缩放
+  const onShotTap = (e) => {
+    const { x, y } = e.detail || {};
+    if (x === undefined || y === undefined) return;
+    const win = Taro.getSystemInfoSync().windowWidth || 375;
+    const widthPx = 440 * win / 750;
+    const scale = 1280 / widthPx;
+    agentCommand({ type: "click", x: Math.round(x * scale), y: Math.round(y * scale) });
+  };
+
+  const sendTakeoverText = () => {
+    const t = takeoverText.trim();
+    if (!t) return;
+    setTakeoverText("");
+    agentCommand({ type: "type", text: t });
+  };
+
+  const releaseAgent = async () => {
+    if (!agentExecId) return;
+    try {
+      await post(`/task-executions/${agentExecId}/agent-release`, { note: "我自己操作好了" }, { silent: true });
+    } catch (_e) { /* 轮询会同步最终状态 */ }
   };
 
   const pollAgent = async (executionId) => {
@@ -139,6 +176,12 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
       if (!st) return;
       if (st.latestScreenshot) setAgentShot(st.latestScreenshot);
       if (st.active) {
+        if (st.status === "takeover") {
+          setAgentTakeover(true);
+          setAgentStatus("正在由你亲自操作网页");
+        } else if (agentTakeover) {
+          setAgentTakeover(false);
+        }
         if (st.status === "waiting_input" && st.waiting?.question) {
           setAgentStatus("等你回应");
           if (st.waiting.question !== lastAskedRef.current) {
@@ -453,7 +496,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
               </View>
             ))}
 
-            {/* 小助手执行状态条 + 实时网页画面 */}
+            {/* 小助手执行状态条 + 实时网页画面 / 接管操作台 */}
             {agentExecId && (
               <View style={{ alignSelf: "flex-start", marginBottom: "18rpx" }}>
                 {agentStatus && (
@@ -465,9 +508,30 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                   <Image
                     src={resolveUploadUrl(agentShot)}
                     mode="widthFix"
-                    onClick={() => Taro.previewImage({ urls: [resolveUploadUrl(agentShot)] })}
+                    onClick={agentTakeover ? onShotTap : () => Taro.previewImage({ urls: [resolveUploadUrl(agentShot)] })}
                     style={{ width: "440rpx", borderRadius: "16rpx", border: "1px solid rgba(15,23,42,0.10)" }}
                   />
+                )}
+                {agentTakeover && (
+                  <View style={{ width: "440rpx", marginTop: "12rpx", padding: "16rpx", borderRadius: "16rpx", border: "1px solid rgba(15,23,42,0.10)", background: "#fbfcfc" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", marginBottom: "12rpx" }}>
+                      <Input
+                        value={takeoverText}
+                        onInput={(e) => setTakeoverText(e.detail.value)}
+                        placeholder="输入文字…"
+                        style={{ flex: 1, fontSize: "24rpx", padding: "8rpx 16rpx", borderRadius: "10rpx", border: "1px solid rgba(15,23,42,0.10)", marginRight: "10rpx" }}
+                      />
+                      <View onClick={sendTakeoverText} style={{ padding: "8rpx 18rpx", borderRadius: "10rpx", background: T.primary, marginRight: "10rpx" }}>
+                        <Text style={{ fontSize: "22rpx", color: "#fff" }}>输入</Text>
+                      </View>
+                      <View onClick={() => agentCommand({ type: "key", key: "Enter" })} style={{ padding: "8rpx 18rpx", borderRadius: "10rpx", border: "1px solid rgba(15,23,42,0.15)" }}>
+                        <Text style={{ fontSize: "22rpx", color: T.inkTertiary }}>回车</Text>
+                      </View>
+                    </View>
+                    <View onClick={releaseAgent} style={{ padding: "10rpx", borderRadius: "10rpx", background: "rgba(56,72,119,0.08)", alignItems: "center" }}>
+                      <Text style={{ fontSize: "22rpx", color: T.primary }}>操作好了，交还小助手 →</Text>
+                    </View>
+                  </View>
                 )}
               </View>
             )}

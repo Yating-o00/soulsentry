@@ -8,6 +8,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MapPin, Navigation, Target, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { base44 } from "@/api/base44Client";
+
+// 用户主动启用约定地点提醒 → 同步打开全局位置提醒偏好（服务端推送闸：显式关闭才不推）
+async function enableGlobalLocationReminders() {
+  try {
+    const list = await base44.entities.UserPreference.list('-updated_date', 1);
+    if (list?.[0]?.location_reminders === false) {
+      await base44.entities.UserPreference.update(list[0].id, { location_reminders: true });
+    } else if (!list?.length) {
+      await base44.entities.UserPreference.create({ location_reminders: true });
+    }
+  } catch {
+    // 偏好同步失败不阻塞主流程，下次保存时会重试
+  }
+}
 
 export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
   const [locationEnabled, setLocationEnabled] = useState(taskDefaults?.location_reminder?.enabled || false);
@@ -68,23 +83,25 @@ export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
     );
   };
 
+  // web/浏览器定位是 WGS-84 坐标，标记来源供服务端纠偏统一
+  const buildReminder = (enabled, s) => ({
+    enabled,
+    ...s,
+    coord_type: "wgs84"
+  });
+
   const handleUpdate = (newSettings) => {
     onUpdate?.({
-      location_reminder: {
-        enabled: locationEnabled,
-        ...newSettings
-      }
+      location_reminder: buildReminder(locationEnabled, newSettings)
     });
   };
 
   const handleToggle = (enabled) => {
     setLocationEnabled(enabled);
     onUpdate?.({
-      location_reminder: {
-        enabled,
-        ...settings
-      }
+      location_reminder: buildReminder(enabled, settings)
     });
+    if (enabled) enableGlobalLocationReminders();
   };
 
   return (

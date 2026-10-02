@@ -168,6 +168,7 @@ export default function TaskCreate() {
   const [parsedHint, setParsedHint] = useState("");
   const [parsedMetadata, setParsedMetadata] = useState(null);
   const [parsedLocation, setParsedLocation] = useState(""); // AI 识别出的地点，确认页可改
+  const [geoReminder, setGeoReminder] = useState(null); // 用户主动选择的地点提醒 {name, latitude, longitude}
   const [parsedRepeat, setParsedRepeat] = useState(null);
   const [parsedSubtasks, setParsedSubtasks] = useState([]);
   const [newParsedSubtaskText, setNewParsedSubtaskText] = useState("");
@@ -197,6 +198,38 @@ export default function TaskCreate() {
   const wechatTmplIds = ["o0Xzec1QIL9CF9C2E4wspUEmfWX04vpBVwXkThQRWHc", "Sq9pF3iv5eiiVL99-odo8oG62XixtDojRMDCWKwchhY"];
 
   const isFormValid = title.trim().length > 0;
+
+  // 用户主动选点（微信内置选点器，GCJ-02 坐标）：为约定标记"路过提醒"地点
+  const chooseGeoReminder = () => {
+    Taro.chooseLocation({
+      success: (res) => {
+        setGeoReminder({
+          name: res.name || res.address || "所选地点",
+          latitude: res.latitude,
+          longitude: res.longitude
+        });
+      },
+      fail: () => {}
+    });
+  };
+
+  const renderGeoReminderPicker = () => (
+    <View style={{ marginTop: "20rpx" }}>
+      <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>路过提醒（可选）</Text>
+      {geoReminder ? (
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", border: "1rpx solid rgba(91,130,160,0.35)", background: "rgba(91,130,160,0.08)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
+          <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, flex: 1 }} numberOfLines={1}>
+            📍 {geoReminder.name} · 路过时提醒
+          </Text>
+          <Text onClick={() => setGeoReminder(null)} style={{ fontSize: "24rpx", color: "#e53935", marginLeft: "16rpx" }}>清除</Text>
+        </View>
+      ) : (
+        <View onClick={chooseGeoReminder} style={{ border: "1rpx dashed rgba(91,130,160,0.45)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
+          <Text style={{ fontSize: "26rpx", color: theme.water }}>＋ 选择地点（超市/快递点等），路过时提醒你</Text>
+        </View>
+      )}
+    </View>
+  );
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router.params || {};
@@ -264,6 +297,12 @@ export default function TaskCreate() {
       const allSubs = await loadSubtasksRecursive(id);
       setSubtaskList(allSubs);
       setExpandedIds(new Set());
+
+      // 回填已设置的地点提醒（任务详情里 _extraFields 展开到顶层）
+      const lr = task.location_reminder;
+      if (lr?.enabled && typeof lr.latitude === "number" && typeof lr.longitude === "number") {
+        setGeoReminder({ name: lr.location_name || "已选地点", latitude: lr.latitude, longitude: lr.longitude });
+      }
     } catch (err) {
       // handled globally
     } finally {
@@ -549,6 +588,28 @@ export default function TaskCreate() {
           spatiotemporal: { ...spatiotemporal, location: parsedLocation.trim() || null }
         }
       };
+    }
+    if (geoReminder) {
+      // 用户主动选择的地点提醒：微信选点器返回 GCJ-02 坐标，标记来源供服务端统一纠偏
+      const baseMeta = payload.metadata || parsedMetadata || {};
+      const extra = baseMeta._extraFields || {};
+      payload.metadata = {
+        ...baseMeta,
+        _extraFields: {
+          ...extra,
+          location_reminder: {
+            enabled: true,
+            latitude: geoReminder.latitude,
+            longitude: geoReminder.longitude,
+            radius: 300,
+            location_name: geoReminder.name,
+            trigger_on: "enter",
+            coord_type: "gcj02"
+          }
+        }
+      };
+      // 用户主动选择地点提醒 → 打开全局位置提醒开关（服务端推送闸：显式关闭才不推）
+      patch("/user-preferences", { location_reminders: true }).catch(() => {});
     }
     if (parsedRepeat) {
       payload.repeat_rule = parsedRepeat.repeat_rule;
@@ -1166,6 +1227,7 @@ export default function TaskCreate() {
           />
         </View>
         )}
+        {isEdit && renderGeoReminderPicker()}
       </SectionCard>
 
       {isEdit && renderSubtaskEditor()}
@@ -1311,6 +1373,7 @@ export default function TaskCreate() {
             onInput={(e) => setParsedLocation(e.detail.value)}
           />
         </View>
+        {renderGeoReminderPicker()}
       </SectionCard>
 
       <SectionCard title="子约定">

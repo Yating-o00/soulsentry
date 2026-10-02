@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { trySendPush } from "./reminderSender.js";
+import { normalizeToGcj02, haversineMeters } from "../lib/geo.js";
 
 // 地点类型 → 相关约定分类（与 getSentinelGuard 保持一致）
 const CATEGORY_MAP = {
@@ -14,13 +15,22 @@ const CATEGORY_MAP = {
 
 const PRIORITY_SCORE = { urgent: 40, high: 30, medium: 18, low: 8 };
 
-// POI 触发规则：POI 命中关键词 → 匹配约定关键词（取快递场景等）
+// 同一约定标记地点的顺路提醒冷却：30 分钟内不重复推送
+const TASK_GEO_COOLDOWN_MS = 30 * 60 * 1000;
+
+// POI 触发规则：POI 命中关键词 → 匹配约定关键词（取快递、超市购物等顺路场景）
 const POI_RULES = [
   {
     key: "parcel_locker",
     poi_keywords: ["快递柜", "快递", "驿站", "自提点", "丰巢", "菜鸟"],
     task_keywords: ["快递", "取件", "包裹", "自提"],
     poi_label: "快递柜"
+  },
+  {
+    key: "grocery_store",
+    poi_keywords: ["超市", "便利", "菜市", "菜场", "生鲜", "水果店", "商场", "购物中心", "商店", "杂货"],
+    task_keywords: ["超市", "买东西", "买菜", "购物", "水果", "牛奶", "零食", "日用品", "蔬菜", "肉", "鸡蛋", "纸巾", "牙膏"],
+    poi_label: "超市/商店"
   }
 ];
 
@@ -102,7 +112,9 @@ export async function rankTopTasksForLocation(userId, location, n = 3) {
   const alive = await filterAliveParents(active);
 
   const relatedCategories = CATEGORY_MAP[location.locationType] || [];
-  const locationCoords = { latitude: location.latitude, longitude: location.longitude };
+  // SavedLocation 坐标同样可能来自 web（wgs84）或小程序（gcj02），归一化后再比对
+  const locationCoords = normalizeToGcj02(location.latitude, location.longitude, location.coordType)
+    || { latitude: location.latitude, longitude: location.longitude };
 
   const scored = alive
     .map((task) => {
@@ -110,8 +122,9 @@ export async function rankTopTasksForLocation(userId, location, n = 3) {
       let linked = false;
       if (reminder?.enabled) {
         if (reminder.location_name && reminder.location_name === location.name) linked = true;
-        if (typeof reminder.latitude === "number" && typeof reminder.longitude === "number") {
-          const d = haversineMeters(locationCoords, { latitude: reminder.latitude, longitude: reminder.longitude });
+        const rCoords = normalizeToGcj02(reminder.latitude, reminder.longitude, reminder.coord_type);
+        if (rCoords) {
+          const d = haversineMeters(locationCoords, rCoords);
           if (d <= Math.max(Number(reminder.radius || 200), location.radius)) linked = true;
         }
       }
@@ -123,17 +136,6 @@ export async function rankTopTasksForLocation(userId, location, n = 3) {
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, n).map((s) => s.task);
-}
-
-function haversineMeters(a, b) {
-  const R = 6371000;
-  const toRad = (v) => (v * Math.PI) / 180;
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLon = toRad(b.longitude - a.longitude);
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.sin(dLon / 2) ** 2 * Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude));
-  return 2 * R * Math.asin(Math.sqrt(x));
 }
 
 /**
@@ -260,4 +262,59 @@ export async function maybeSendPoiReminder(user, { poiName, poiType }) {
   }
 
   return { pushed: false };
+}
+
+/**
+ * 任务级「顺路/附近」提醒：用户移动进入约定标记地点（超市/快递点等）可提醒范围时推送。
+ * 每个约定 30 分钟冷却（记录在 userPreference.metadata._extraFields.task_geo_cooldowns），
+ * 避免在地点附近停留/徘徊时反复打扰。
+ */
+export async function maybeSendOnTheWayReminder(user, task, reminder, { distanceM, onTheWay } = {}) {
+  const now = new Date();
+  const prefs = user.preferences;
+  const extra = getPreferenceExtraFields(prefs);
+  const cooldowns = extra.task_geo_cooldowns || {};
+  const lastAt = cooldowns[task.id] ? new Date(cooldowns[task.id]) : null;
+  if (lastAt && !isNaN(lastAt.getTime()) && now.getTime() - lastAt.getTime() < TASK_GEO_COOLDOWN_MS) {
+    return { pushed: false, skippedReason: "cooldown" };
+  }
+
+  const placeName = reminder.location_name || "目标地点";
+  const wayText = onTheWay ? "正路过" : "在";
+  const payload = {
+    title: `你${wayText}「${placeName}」附近`,
+    body: `约定「${task.title}」可以顺手处理`,
+    url: "/tasks",
+    tag: `ontheway-${task.id}`,
+    requireInteraction: false,
+    vibrate: [200, 100, 200],
+    data: { type: "ontheway_reminder", task_id: task.id, distance_m: Math.round(distanceM || 0) }
+  };
+
+  const result = await trySendPush({
+    userId: user.id,
+    preferences: prefs,
+    payload,
+    task,
+    logPrefix: `ontheway-reminder task=${task.id}`
+  });
+
+  // 只要投递出去（Web Push / 微信订阅消息 / 应用内兜底）就记冷却，避免在附近停留时反复打扰
+  if (result.ok || result.inAppFallback) {
+    try {
+      const metadata = {
+        ...(prefs?.metadata && typeof prefs.metadata === "object" ? prefs.metadata : {}),
+        _extraFields: { ...extra, task_geo_cooldowns: { ...cooldowns, [task.id]: now.toISOString() } }
+      };
+      await prisma.userPreference.upsert({
+        where: { userId: user.id },
+        update: { metadata },
+        create: { userId: user.id, locale: "zh-CN", timezone: "Asia/Shanghai", metadata }
+      });
+    } catch (e) {
+      console.warn("[contextReminder] failed to save task geo cooldown:", e?.message || e);
+    }
+  }
+
+  return { pushed: result.ok, skippedReason: result.ok ? null : "send_failed" };
 }

@@ -62,7 +62,16 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
 
           inflightRef.current = true;
           try {
-            const res = await base44.functions.invoke('sentinelGeofenceTrigger', coords);
+            const prev = lastSentRef.current;
+            const res = await base44.functions.invoke('sentinelGeofenceTrigger', {
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+              accuracy: coords.accuracy,
+              // web/Leaflet 使用 WGS-84 坐标，携带上次位置供服务端做顺路方向判定
+              coord_type: 'wgs84',
+              prev_latitude: prev?.latitude,
+              prev_longitude: prev?.longitude
+            });
             lastSentRef.current = coords;
             const results = res?.data?.results || [];
             results.forEach((r) => {
@@ -70,11 +79,12 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
               if (!style) return; // silent
               const Icon = style.icon;
               const eventLabel = r.event === 'enter' ? '到达' : '离开';
+              const wayLabel = r.on_the_way ? '顺路' : (r.on_the_way === false ? '' : '附近');
               // 到达提醒带 Top3 约定列表时，展开展示
               const tops = Array.isArray(r.top_tasks) && r.top_tasks.length
                 ? r.top_tasks.map((t, i) => `${i + 1}. ${t.title}`).join('\n')
                 : null;
-              toast(`📍 ${eventLabel}「${r.location_name}」附近`, {
+              toast(`📍 ${wayLabel ? `${wayLabel} · ` : ''}${eventLabel}「${r.location_name}」`, {
                 description: tops || r.context_summary || r.task_title,
                 icon: <Icon className={`w-4 h-4 ${style.className}`} />,
                 duration: style.duration,

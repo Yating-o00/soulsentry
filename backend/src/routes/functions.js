@@ -16,6 +16,7 @@ import { getCreditPack } from "../config/creditPacks.js";
 import { createWechatNativeOrder, generateOutTradeNo, getWechatMerchantConfig, queryWechatOrder as wechatQueryOrder } from "../lib/wechatPay.js";
 import { markWechatOrderPaid } from "../services/wechatOrders.js";
 import { savePptHtml } from "../lib/renderPpt.js";
+import { normalizeToGcj02, judgeOnTheWay } from "../lib/geo.js";
 import QRCode from "qrcode";
 
 // 把微信支付 Native 下单返回的 code_url 转成 PNG data URL，
@@ -1692,6 +1693,8 @@ functionsRouter.post("/:name", async (req, res) => {
     }
 
     if (name === "geofenceTrigger") {
+      const curCoords = normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type);
+      if (!curCoords) return res.json({ reminders: [] });
       const tasks = await prisma.task.findMany({
         where: {
           userId: req.user.id,
@@ -1703,12 +1706,10 @@ functionsRouter.post("/:name", async (req, res) => {
         .map((task) => {
           const locationReminder = getTaskLocationReminder(task);
           if (!locationReminder?.enabled) return null;
-          if (typeof locationReminder.latitude !== "number" || typeof locationReminder.longitude !== "number") return null;
+          const rCoords = normalizeToGcj02(locationReminder.latitude, locationReminder.longitude, locationReminder.coord_type);
+          if (!rCoords) return null;
 
-          const distance = haversineMeters(
-            { latitude: payload.latitude, longitude: payload.longitude },
-            { latitude: locationReminder.latitude, longitude: locationReminder.longitude }
-          );
+          const distance = haversineMeters(curCoords, rCoords);
 
           const radius = Number(locationReminder.radius || 200);
           if (distance > radius) return null;
@@ -1727,6 +1728,8 @@ functionsRouter.post("/:name", async (req, res) => {
     }
 
     if (name === "nearbyTaskMatcher") {
+      const curCoords = normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type);
+      if (!curCoords) return res.json({ matched: false, matches: [], card: null });
       const tasks = await prisma.task.findMany({
         where: {
           userId: req.user.id,
@@ -1738,12 +1741,10 @@ functionsRouter.post("/:name", async (req, res) => {
         .map((task) => {
           const locationReminder = getTaskLocationReminder(task);
           if (!locationReminder?.enabled) return null;
-          if (typeof locationReminder.latitude !== "number" || typeof locationReminder.longitude !== "number") return null;
+          const rCoords = normalizeToGcj02(locationReminder.latitude, locationReminder.longitude, locationReminder.coord_type);
+          if (!rCoords) return null;
 
-          const distance = haversineMeters(
-            { latitude: payload.latitude, longitude: payload.longitude },
-            { latitude: locationReminder.latitude, longitude: locationReminder.longitude }
-          );
+          const distance = haversineMeters(curCoords, rCoords);
 
           const radius = Number(locationReminder.radius || 200);
           if (distance > Math.max(radius, 400)) return null;
@@ -1768,6 +1769,11 @@ functionsRouter.post("/:name", async (req, res) => {
     }
 
     if (name === "sentinelGeofenceTrigger") {
+      // 坐标归一化：web（wgs84）与小程序（gcj02）上报统一转成 GCJ-02 后判定，消除坐标系偏差
+      const coords = normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type);
+      const prevCoords = normalizeToGcj02(payload.prev_latitude, payload.prev_longitude, payload.coord_type);
+      if (!coords) return res.json({ results: [] });
+
       const locations = await prisma.savedLocation.findMany({
         where: {
           userId: req.user.id,
@@ -1782,6 +1788,10 @@ functionsRouter.post("/:name", async (req, res) => {
         }
       });
 
+      // 偏好开关：显式关闭位置提醒（locationReminders === false）时只返回判定结果、不推送
+      const prefsRow = await prisma.userPreference.findUnique({ where: { userId: req.user.id } });
+      const remindersEnabled = prefsRow?.locationReminders !== false;
+
       const results = [];
 
       // 命中的地点（不论是否有绑定约定的地点），最近的一个用于到达 Top3 提醒
@@ -1789,12 +1799,13 @@ functionsRouter.post("/:name", async (req, res) => {
       let hitDistance = Infinity;
 
       for (const location of locations) {
-        const distance = haversineMeters(
-          { latitude: payload.latitude, longitude: payload.longitude },
-          { latitude: location.latitude, longitude: location.longitude }
-        );
+        const locCoords = normalizeToGcj02(location.latitude, location.longitude, location.coordType)
+          || { latitude: location.latitude, longitude: location.longitude };
+        const distance = haversineMeters(coords, locCoords);
 
         if (distance > location.radius) continue;
+        // 顺路方向感知：有上次位置时，地点应位于行进方向前方，减少"住在附近/背向而过"的误报
+        const way = judgeOnTheWay(prevCoords, coords, locCoords);
         if (distance < hitDistance) {
           hitLocation = location;
           hitDistance = distance;
@@ -1802,7 +1813,10 @@ functionsRouter.post("/:name", async (req, res) => {
 
         const linkedTask = tasks.find((task) => {
           const locationReminder = getTaskLocationReminder(task);
-          return locationReminder?.enabled && locationReminder.location_name === location.name;
+          if (!locationReminder?.enabled) return false;
+          if (locationReminder.location_name && locationReminder.location_name === location.name) return true;
+          const rCoords = normalizeToGcj02(locationReminder.latitude, locationReminder.longitude, locationReminder.coord_type);
+          return !!rCoords && haversineMeters(locCoords, rCoords) <= Math.max(Number(locationReminder.radius || 200), location.radius);
         });
 
         if (linkedTask) {
@@ -1813,47 +1827,93 @@ functionsRouter.post("/:name", async (req, res) => {
             task_id: linkedTask.id,
             task_title: linkedTask.title,
             context_summary: `${linkedTask.title} 已进入 ${location.name} 附近可提醒范围`,
-            distance: Math.round(distance)
+            distance: Math.round(distance),
+            on_the_way: way.onTheWay !== false
           });
         }
       }
 
-      // 到达提醒：对最近命中的地点，取相关未完成约定 Top3 推送（安静期内不重复）
-      if (hitLocation) {
-        try {
-          const { maybeSendArrivalReminder, rankTopTasksForLocation, maybeSendPoiReminder } = await import("../services/contextReminder.js");
-          const userWithPrefs = await prisma.user.findUnique({
-            where: { id: req.user.id },
-            include: { preferences: true }
-          });
-          if (userWithPrefs) {
-            const topTasks = await rankTopTasksForLocation(req.user.id, hitLocation, 3);
-            const arrival = await maybeSendArrivalReminder(userWithPrefs, hitLocation, topTasks);
-            if (arrival.topTasks?.length) {
-              const hitResult = results.find((r) => r.location_name === hitLocation.name) || results[0];
-              if (hitResult) {
-                hitResult.top_tasks = arrival.topTasks.map((t) => ({ task_id: t.id, title: t.title, priority: t.priority }));
-              } else {
-                results.push({
-                  event: "enter",
-                  level: "standard",
-                  location_name: hitLocation.name,
-                  task_id: topTasks[0].id,
-                  task_title: topTasks[0].title,
-                  context_summary: `到了${hitLocation.name}，有 ${topTasks.length} 件事最值得现在处理`,
-                  distance: Math.round(hitDistance),
-                  top_tasks: arrival.topTasks.map((t) => ({ task_id: t.id, title: t.title, priority: t.priority }))
-                });
-              }
+      try {
+        const { maybeSendOnTheWayReminder, maybeSendArrivalReminder, rankTopTasksForLocation, maybeSendPoiReminder } = await import("../services/contextReminder.js");
+        const userWithPrefs = await prisma.user.findUnique({
+          where: { id: req.user.id },
+          include: { preferences: true }
+        });
+
+        // 任务级地点围栏：不依赖 SavedLocation，直接按约定上标记的坐标判定（顺路方向感知 + 每约定冷却推送）
+        for (const task of tasks) {
+          if (task.status === "DONE" || task.status === "ARCHIVED") continue;
+          const reminder = getTaskLocationReminder(task);
+          if (!reminder?.enabled) continue;
+          if (typeof reminder.latitude !== "number" || typeof reminder.longitude !== "number") continue;
+          const rCoords = normalizeToGcj02(reminder.latitude, reminder.longitude, reminder.coord_type);
+          if (!rCoords) continue;
+
+          const distance = haversineMeters(coords, rCoords);
+          const radius = Number(reminder.radius || 300);
+          if (distance > radius) continue;
+
+          const way = judgeOnTheWay(prevCoords, coords, rCoords);
+          // 有明确方向信息且不在行进方向上 → 非顺路，不打扰
+          if (way.onTheWay === false) continue;
+
+          if (!results.some((r) => r.task_id === task.id)) {
+            results.push({
+              event: "enter",
+              level: "standard",
+              location_name: reminder.location_name || "目标地点",
+              task_id: task.id,
+              task_title: task.title,
+              context_summary: `你${way.onTheWay ? "正路过" : "在"}「${reminder.location_name || "目标地点"}」附近，可顺手处理「${task.title}」`,
+              distance: Math.round(distance),
+              on_the_way: way.onTheWay !== false
+            });
+          }
+
+          if (remindersEnabled && userWithPrefs) {
+            const sent = await maybeSendOnTheWayReminder(userWithPrefs, task, reminder, {
+              distanceM: distance,
+              onTheWay: way.onTheWay === true
+            });
+            const hit = results.find((r) => r.task_id === task.id);
+            if (hit) hit.push_status = sent.pushed ? "pushed" : (sent.skippedReason || "skipped");
+          }
+        }
+
+        // 到达提醒：对最近命中的 SavedLocation，取相关未完成约定 Top3 推送（安静期内不重复）
+        if (hitLocation && remindersEnabled && userWithPrefs) {
+          const topTasks = await rankTopTasksForLocation(req.user.id, hitLocation, 3);
+          const arrival = await maybeSendArrivalReminder(userWithPrefs, hitLocation, topTasks);
+          if (arrival.topTasks?.length) {
+            const hitWay = judgeOnTheWay(prevCoords, coords,
+              normalizeToGcj02(hitLocation.latitude, hitLocation.longitude, hitLocation.coordType) || hitLocation);
+            const hitResult = results.find((r) => r.location_name === hitLocation.name) || results[0];
+            if (hitResult) {
+              hitResult.top_tasks = arrival.topTasks.map((t) => ({ task_id: t.id, title: t.title, priority: t.priority }));
+              hitResult.on_the_way = hitWay.onTheWay !== false;
+            } else {
+              results.push({
+                event: "enter",
+                level: "standard",
+                location_name: hitLocation.name,
+                task_id: topTasks[0].id,
+                task_title: topTasks[0].title,
+                context_summary: `到了${hitLocation.name}，有 ${topTasks.length} 件事最值得现在处理`,
+                distance: Math.round(hitDistance),
+                on_the_way: hitWay.onTheWay !== false,
+                top_tasks: arrival.topTasks.map((t) => ({ task_id: t.id, title: t.title, priority: t.priority }))
+              });
             }
-            // 到家时近似“家附近快递柜”场景：顺带检查取快递类约定
+            // 命中点名称作为 POI 文本泛化检查：地点叫"超市/快递柜"等时触发对应顺路场景提醒
+            void maybeSendPoiReminder(userWithPrefs, { poiName: hitLocation.name, poiType: hitLocation.locationType || "" }).catch(() => {});
+            // 到家时近似"家附近快递柜"场景：顺带检查取快递类约定
             if (arrival.pushed && hitLocation.locationType === "home") {
               void maybeSendPoiReminder(userWithPrefs, { poiName: "快递柜", poiType: "parcel_locker" }).catch(() => {});
             }
           }
-        } catch (err) {
-          console.warn("[sentinelGeofenceTrigger] arrival reminder failed:", err?.message || err);
         }
+      } catch (err) {
+        console.warn("[sentinelGeofenceTrigger] failed:", err?.message || err);
       }
 
       return res.json({ results });
@@ -1875,7 +1935,7 @@ functionsRouter.post("/:name", async (req, res) => {
 
     if (name === "getSentinelGuard") {
       const coords = (typeof payload.latitude === "number" && typeof payload.longitude === "number")
-        ? { latitude: payload.latitude, longitude: payload.longitude }
+        ? (normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type) || { latitude: payload.latitude, longitude: payload.longitude })
         : null;
 
       // ========== 1) 地理感知 ==========
@@ -1894,7 +1954,9 @@ functionsRouter.post("/:name", async (req, res) => {
 
       if (coords && locations.length > 0) {
         for (const loc of locations) {
-          const dist = haversineMeters(coords, { latitude: loc.latitude, longitude: loc.longitude });
+          const locCoords = normalizeToGcj02(loc.latitude, loc.longitude, loc.coordType)
+            || { latitude: loc.latitude, longitude: loc.longitude };
+          const dist = haversineMeters(coords, locCoords);
           if (dist <= (loc.radius || 200) + 100) {
             if (!hitLocation || dist < hitDistance) {
               hitLocation = loc;

@@ -190,7 +190,7 @@ function getLocationSafe() {
   return new Promise((resolve) => {
     Taro.getLocation({
       type: "gcj02",
-      success: (res) => resolve({ latitude: res.latitude, longitude: res.longitude }),
+      success: (res) => resolve({ latitude: res.latitude, longitude: res.longitude, coord_type: "gcj02" }),
       fail: () => resolve(null)
     });
   });
@@ -1572,9 +1572,22 @@ export default function Flow() {
   const loadSentinel = async () => {
     try {
       const coords = await getLocationSafe();
-      // 顺带触发一次地理围栏到达检查：服务端命中地点时直接推送 Top3 约定提醒
+      // 顺带触发一次地理围栏到达检查：服务端命中地点/约定标记地点时推送顺路提醒
       if (coords && typeof coords.latitude === "number") {
-        post("/functions/sentinelGeofenceTrigger", coords, { silent: true }).catch(() => {});
+        const prevKey = "ss_last_geo_report";
+        let prev = null;
+        try { prev = Taro.getStorageSync(prevKey) || null; } catch (_e) { prev = null; }
+        post("/functions/sentinelGeofenceTrigger", {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          coord_type: "gcj02",
+          prev_latitude: prev?.latitude,
+          prev_longitude: prev?.longitude
+        }, { silent: true }).then(() => {
+          try {
+            Taro.setStorageSync(prevKey, { latitude: coords.latitude, longitude: coords.longitude, ts: Date.now() });
+          } catch (_e) {}
+        }).catch(() => {});
       }
       return await post("/functions/getSentinelGuard", coords || {}, { silent: true });
     } catch (_err) {

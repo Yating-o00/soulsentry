@@ -31,7 +31,8 @@ import {
   Bell,
   Sparkles,
   Loader2,
-  Languages
+  Languages,
+  MapPin
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -64,6 +65,7 @@ function CommentCount({ taskId }) {
 }
 import { Link as LinkIcon, BrainCircuit } from "lucide-react";
 import ReminderStrategyEditor from "./ReminderStrategyEditor";
+import LocationReminderSettings from "@/components/notifications/LocationReminderSettings";
 import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
@@ -876,6 +878,21 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                                   </Popover>
                               </div>
                           </div>
+                      </div>
+
+                      {/* Location Reminder：用户主动为约定标记地点（超市/快递点等），路过时顺路提醒 */}
+                      <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100 md:col-span-2">
+                          <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                              <MapPin className="w-4 h-4 text-slate-500" />
+                              地点提醒
+                          </h4>
+                          <LocationReminderSettings
+                              taskDefaults={task}
+                              onUpdate={(updates) => updateTaskMutation.mutate({
+                                  id: task.id,
+                                  data: updates
+                              })}
+                          />
                       </div>
                   </div>
               </TabsContent>

@@ -429,6 +429,8 @@ model SavedLocation {
   locationType      String    @default("other")
   latitude          Float
   longitude         Float
+  // 坐标系来源："wgs84"（web/Leaflet）| "gcj02"（微信小程序）；旧数据默认按 wgs84 纠偏
+  coordType         String    @default("wgs84")
   radius            Int       @default(200)
   address           String?
   icon              String?   @default("📍")

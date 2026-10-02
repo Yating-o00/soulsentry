@@ -52,21 +52,36 @@ const LEDGER_CATEGORIES = [
   { key: "收入", words: ["工资", "奖金", "报销", "退款", "红包", "转账", "收入", "稿费", "利息", "到账", "进账"] }
 ];
 
-// 是否像记账内容：≥1 处「数字+元/块」（带金额单位的表述几乎专用于钱），
-// 或 ≥2 处「数字+元/块」之外再保险、≥3 个数字片段且含收支动词
+// 是否像记账内容：
+// 1) ≥1 处「数字+元/块」（带金额单位的表述几乎专用于钱）
+// 2) ≥2 个数字片段 + 消费/收支名词（覆盖「购物35600 吃饭 2680」这类不带单位的记账）
+// 3) ≥3 个数字片段 + 收支动词
+const LEDGER_WORD_RE = new RegExp(`(${LEDGER_CATEGORIES.flatMap((c) => c.words).join("|")})`);
 export function looksLikeLedger(text) {
   const t = String(text || "");
   const withUnit = t.match(/\d+(?:\.\d+)?\s*(?:元|块|块钱|RMB|rmb)/g) || [];
   if (withUnit.length >= 1) return true;
   const numbers = t.match(/\d+(?:\.\d+)?/g) || [];
+  if (numbers.length >= 2 && LEDGER_WORD_RE.test(t)) return true;
   if (numbers.length >= 3 && /(花|买|支|付|收|账|工资|报销|收入|消费)/.test(t)) return true;
   return false;
 }
 
 // 从自由文本解析收支明细：[{name, category, amount, type}]
+// 明细按 逗号/空格/换行 等分隔；「名称 金额」被空格拆开时（如「吃饭 2680」）自动配对
 export function parseLedgerEntries(text) {
   const t = String(text || "");
-  const segments = t.split(/[\n,，;；、。]/).map(s => s.trim()).filter(Boolean);
+  const rawSegs = t.split(/[\s\n,，;；、。]+/).map(s => s.trim()).filter(Boolean);
+  const segments = [];
+  for (let i = 0; i < rawSegs.length; i++) {
+    const seg = rawSegs[i];
+    if (!/\d/.test(seg) && i + 1 < rawSegs.length && /^\d/.test(rawSegs[i + 1])) {
+      segments.push(`${seg} ${rawSegs[i + 1]}`);
+      i += 1;
+    } else {
+      segments.push(seg);
+    }
+  }
   const items = [];
   for (const seg of segments) {
     const m = seg.match(MONEY_RE);

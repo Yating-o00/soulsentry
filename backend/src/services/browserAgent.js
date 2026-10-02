@@ -258,31 +258,60 @@ function chinaNowText() {
   return cn.toISOString().slice(0, 16).replace("T", " ");
 }
 
-// 调用 Kimi 前校验消息历史：assistant 带 tool_calls 的，每条都必须有对应的 tool 响应，
-// 缺失的补占位响应（正常分支都应已补齐，此函数兜住接管/交还等边缘路径的遗漏，
-// 否则 Kimi 会报 400：an assistant message with 'tool_calls' must be followed by tool messages）
+// 调用 Kimi 前校验消息历史（双向修复，保证序列对 Kimi 永远合法）：
+// 1) 每条 tool 消息必须有对应的前置 tool_call：孤儿（id 未声明）或重复（同 id 多条响应）一律丢弃；
+// 2) assistant 声明的每个 tool_call 必须有且仅有一条响应：缺失的补占位响应。
+// 丢弃/补位都会打日志，便于追溯是哪里产生了畸形历史。
 function sanitizeToolCallHistory(history) {
-  const responded = new Set();
-  const fixed = [];
-  for (const msg of history) {
-    if (msg?.role === "tool" && msg.tool_call_id) responded.add(msg.tool_call_id);
-    fixed.push(msg);
-    if (msg?.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
+  const items = history.map((msg) => ({ msg, keep: true }));
+  const declared = new Map(); // id -> { name, responded }
+
+  // 第一遍：收集声明 + 过滤 tool 消息
+  for (let i = 0; i < items.length; i++) {
+    const msg = items[i].msg;
+    if (msg?.role === "assistant" && Array.isArray(msg.tool_calls)) {
       for (const tc of msg.tool_calls) {
         const id = tc?.id;
-        if (id && !responded.has(id)) {
-          responded.add(id);
-          fixed.push({
-            role: "tool",
-            tool_call_id: id,
-            name: tc.function?.name || "tool",
-            content: "（此步骤无执行结果：用户中途接管了网页，或未产生结果）"
-          });
+        if (id && !declared.has(id)) declared.set(id, { name: tc.function?.name || "tool", responded: false });
+      }
+    }
+  }
+  for (let i = 0; i < items.length; i++) {
+    const msg = items[i].msg;
+    if (msg?.role === "tool" && msg.tool_call_id) {
+      const d = declared.get(msg.tool_call_id);
+      if (!d) {
+        console.warn(`[browserAgent] sanitize: 丢弃孤儿 tool 消息（前面没有对应 tool_call）id=${msg.tool_call_id}`);
+        items[i].keep = false;
+        continue;
+      }
+      if (d.responded) {
+        console.warn(`[browserAgent] sanitize: 丢弃重复 tool 响应 id=${msg.tool_call_id}`);
+        items[i].keep = false;
+        continue;
+      }
+      d.responded = true;
+    }
+  }
+
+  // 第二遍：组装，assistant 后补缺失响应
+  const out = [];
+  for (let i = 0; i < items.length; i++) {
+    const { msg, keep } = items[i];
+    if (!keep) continue;
+    out.push(msg);
+    if (msg?.role === "assistant" && Array.isArray(msg.tool_calls)) {
+      for (const tc of msg.tool_calls) {
+        const d = tc?.id ? declared.get(tc.id) : null;
+        if (d && !d.filled && !d.responded) {
+          d.filled = true;
+          console.warn(`[browserAgent] sanitize: 补占位响应 id=${tc.id} (${d.name})`);
+          out.push({ role: "tool", tool_call_id: tc.id, name: d.name, content: "（此步骤无执行结果：用户中途接管了网页，或未产生结果）" });
         }
       }
     }
   }
-  return fixed;
+  return out;
 }
 
 async function executeTool(session, name, args) {

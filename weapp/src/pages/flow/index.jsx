@@ -2560,7 +2560,7 @@ export default function Flow() {
             {sub}
           </Text>
 
-          {(weather?.task_advice?.length > 0 || weather?.notice) && (
+          {weather?.task_advice?.length > 0 && (
             <View
               style={{
                 marginTop: "14rpx",
@@ -2583,19 +2583,6 @@ export default function Flow() {
                   {ta.advice}
                 </Text>
               ))}
-              {weather?.notice && (
-                <Text
-                  style={{
-                    fontSize: "22rpx",
-                    color: "rgba(255,255,255,0.6)",
-                    lineHeight: "36rpx",
-                    wordBreak: "break-all",
-                    display: "block"
-                  }}
-                >
-                  {weather.notice}
-                </Text>
-              )}
             </View>
           )}
 

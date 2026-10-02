@@ -250,7 +250,7 @@ const AGENT_SYSTEM = `你是 SoulSentry「心栈」内置的浏览器操作 Agen
 - 订餐厅/预约服务：时间、人数、偏好先问；找到合适档位后把可约时段交给用户选；提交预约前向用户确认。
 - 查资料/比价：直接用 search_web 或搜索引擎；把结论用 extract 汇总，done 时给出清晰答案和出处。
 - 借用用户账号在社交平台上互动：先向用户确认要做什么、发布什么内容；任何发布、点赞、评论、关注等对外可见的动作，执行前必须把具体内容给用户过目确认；用户说"可以/发吧"才执行。
-15. 涉及真实下单、提交订单、发布内容等"不可逆动作"前，必须先把将要做的事（买了什么/发布了什么）用 ask_user 向用户确认，得到肯定答复再执行。`;
+15. 涉及真实下单、提交订单、发布内容等"不可逆动作"前，必须先把将要做的事（买了什么/发布了什么）用 ask_user 向用户确认，得到肯定答复再执行。ask_user 里附文案、内容、订单信息时，必须贴完整内容供用户过目，禁止只放摘要或"见上文"。`;
 
 // 中国时区当前日期时间（注入 system，避免模型用训练数据里的旧日期）
 function chinaNowText() {
@@ -479,7 +479,8 @@ async function runLoop(session) {
       session.stepCount += 1;
 
       if (name === "done") {
-        session.finalSummary = String(args.summary || "任务完成").slice(0, 500);
+        // 最终交付物（文案/报告结论/查询结果）可能较长，上限放宽到 2000 字
+        session.finalSummary = String(args.summary || "任务完成").slice(0, 2000);
         logStep(session, "done", args, session.finalSummary);
         persist(session);
         return { summary: session.finalSummary, extracted: session.extracted, url: session.currentUrl, screenshot: session.latestScreenshot };
@@ -488,7 +489,8 @@ async function runLoop(session) {
         throw new Error(`浏览器 Agent 放弃：${String(args.reason || "未知原因").slice(0, 200)}`);
       }
       if (name === "ask_user") {
-        const question = String(args.question || "需要你确认一下").slice(0, 300);
+        // 提问可能承载完整交付物（如发布前的文案全文），上限放宽到 2000 字
+        const question = String(args.question || "需要你确认一下").slice(0, 2000);
         const choices = (Array.isArray(args.choices) ? args.choices : []).map((c) => String(c).slice(0, 60)).filter(Boolean).slice(0, 4);
         logStep(session, "ask_user", args, "等待用户回应");
         session.status = "waiting_input";
@@ -500,6 +502,9 @@ async function runLoop(session) {
         if (answer?.takeover || (answer?.choice && answer.choice.includes("我自己来操作"))) {
           // 用户选择亲自操作网页：进入接管模式（截图流 + 点按转发）
           session.takeover = true;
+          // 必须补 tool 响应：assistant 的 tool_calls 要求每条都有对应 tool 消息，
+          // 否则下一轮 Kimi 校验报 400（an assistant message with 'tool_calls' must be followed by tool messages）
+          session.history.push({ role: "tool", tool_call_id: tc.id, name: "ask_user", content: "（用户选择亲自操作网页）" });
           logStep(session, "takeover", {}, "用户选择亲自操作网页");
         } else {
           session.status = "running";

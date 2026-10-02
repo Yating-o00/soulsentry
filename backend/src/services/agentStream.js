@@ -40,7 +40,7 @@ export async function attachAgentStream(ws, req) {
       return;
     }
 
-    ws.send(JSON.stringify({ type: "ready", viewport: { width: 1280, height: 800 } }));
+    ws.send(JSON.stringify({ type: "ready", viewport: { width: 1280, height: 800 }, postmortem: !!sub.postmortem }));
 
     ws.on("message", async (raw) => {
       try {

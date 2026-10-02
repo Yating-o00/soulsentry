@@ -605,15 +605,49 @@ export async function runBrowserAgent(execution, prisma) {
     persist(session);
     throw err;
   } finally {
-    sessions.delete(execution.id);
-    if (session.live.keepAlive) { clearInterval(session.live.keepAlive); session.live.keepAlive = null; }
-    for (const cb of session.live.subscribers) { try { cb(null); } catch {} }
-    session.live.subscribers.clear();
-    await stopScreencast(session).catch(() => {});
-    await context.close().catch(() => {});
-    // 保留最后一张截图供结果页展示，其余清理
-    session.files.slice(0, -1).forEach((f) => { try { fs.unlinkSync(path.join(agentShotDir(), f)); } catch {} });
+    if (session.status === "failed") {
+      // 执行失败：保留浏览器现场，让用户可以打开实时窗口亲手操作/查看，到期自动回收
+      session.postmortem = true;
+      logStep(session, "postmortem", {}, "小助手执行失败，浏览器现场保留 30 分钟，可打开实时窗口亲自操作");
+      persist(session);
+      scheduleDispose(session, POSTMORTEM_TTL);
+    } else {
+      await disposeSession(session);
+    }
   }
+}
+
+const POSTMORTEM_TTL = 30 * 60 * 1000;        // 执行失败后现场保留时长
+const POSTMORTEM_EXTENSION = 10 * 60 * 1000;  // 接管中到期后的延长
+
+// 回收浏览器会话：通知订阅者结束、关停截屏流并关闭浏览器
+async function disposeSession(session) {
+  if (session.disposed) return;
+  session.disposed = true;
+  if (session.disposeTimer) { clearTimeout(session.disposeTimer); session.disposeTimer = null; }
+  sessions.delete(session.executionId);
+  if (session.live.keepAlive) { clearInterval(session.live.keepAlive); session.live.keepAlive = null; }
+  for (const cb of session.live.subscribers) { try { cb(null); } catch {} }
+  session.live.subscribers.clear();
+  await stopScreencast(session).catch(() => {});
+  await session.context.close().catch(() => {});
+  // 保留最后一张截图供结果页展示，其余清理
+  session.files.slice(0, -1).forEach((f) => { try { fs.unlinkSync(path.join(agentShotDir(), f)); } catch {} });
+}
+
+// 安排延迟回收（执行失败后的现场保留）；接管中到期会自动延长
+function scheduleDispose(session, delay) {
+  if (session.disposeTimer) clearTimeout(session.disposeTimer);
+  const timer = setTimeout(async () => {
+    session.disposeTimer = null;
+    if (session.live.subscribers.size > 0) {
+      scheduleDispose(session, POSTMORTEM_EXTENSION);
+      return;
+    }
+    await disposeSession(session).catch(() => {});
+  }, delay);
+  timer.unref?.();
+  session.disposeTimer = timer;
 }
 
 // —— 人机交互 API ——
@@ -741,8 +775,9 @@ export async function subscribeAgentLive(executionId, onFrame) {
   if (s.live.subscribers.size >= 1) return { ok: false, message: "已有其他窗口在接管，请稍后再试" };
   s.live.subscribers.add(onFrame);
   s.takeover = true;
+  const wasPostmortem = !!s.postmortem;
   s.status = "takeover";
-  logStep(s, "live_takeover", {}, "用户打开实时窗口接管");
+  logStep(s, "live_takeover", {}, wasPostmortem ? "用户打开实时窗口接管失败现场" : "用户打开实时窗口接管");
   persist(s);
   await ensureScreencast(s).catch(() => {});
   // 保活：老 headless 的 screencast 只在页面变化时推帧，超过 1.2s 无帧则主动截图补一帧
@@ -761,6 +796,7 @@ export async function subscribeAgentLive(executionId, onFrame) {
   }
   return {
     ok: true,
+    postmortem: wasPostmortem,
     unsubscribe: async () => {
       s.live.subscribers.delete(onFrame);
       if (s.live.subscribers.size === 0) {
@@ -773,11 +809,17 @@ export async function subscribeAgentLive(executionId, onFrame) {
             s.pendingResolve({ choice: "", text: "（用户关闭了实时窗口，把网页交还给小助手继续）" });
             s.pendingResolve = null;
             s.waiting = null;
+            s.status = "running";
+            s.history.push({ role: "user", content: "（用户关闭了实时窗口，把网页交还给小助手继续）" });
+            logStep(s, "live_release", {}, "用户关闭实时窗口，交还 AI");
+            persist(s);
+          } else if (s.postmortem) {
+            // 小助手已退出（失败现场）：恢复 failed 标记，重新倒计时回收
+            s.status = "failed";
+            logStep(s, "live_release", {}, "用户关闭实时窗口，小助手已退出，现场继续保留");
+            persist(s);
+            scheduleDispose(s, POSTMORTEM_TTL);
           }
-          s.status = "running";
-          s.history.push({ role: "user", content: "（用户关闭了实时窗口，把网页交还给小助手继续）" });
-          logStep(s, "live_release", {}, "用户关闭实时窗口，交还 AI");
-          persist(s);
         }
       }
     }

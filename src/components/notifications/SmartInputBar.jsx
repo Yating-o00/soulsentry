@@ -131,9 +131,10 @@ export default function SmartInputBar() {
     agentPollRef.current = setInterval(() => pollAgent(executionId), 2500);
   };
 
-  const finishAgent = (finalMessage) => {
+  const finishAgent = (finalMessage, keepLiveEntry = false) => {
     stopAgentPoll();
-    setAgentExecId(null);
+    // 失败时保留实时窗口入口：后端会保留浏览器现场约 30 分钟，用户可打开亲自操作
+    if (!keepLiveEntry) setAgentExecId(null);
     setAgentStatus("");
     setAgentShot("");
     setAgentTakeover(false);
@@ -190,7 +191,7 @@ export default function SmartInputBar() {
             pushAssistant(st.waiting.question, { agent: true, choices: st.waiting.choices || [] });
           }
         } else if (st.status === "failed" || st.error) {
-          finishAgent(`小助手这边卡住了${st.error ? `：${st.error}` : ""}。别担心，打开守护记录可以查看全过程，也能点「再试一次」～`);
+          finishAgent(`小助手这边卡住了${st.error ? `：${st.error}` : ""}。别担心，打开守护记录可以查看全过程，也能点「再试一次」～`, true);
         } else {
           const stepCount = Array.isArray(st.steps) ? st.steps.length : 0;
           setAgentStatus(stepCount > 0 ? `正在操作网页（已进行 ${stepCount} 步）…` : "正在打开网页…");
@@ -199,7 +200,7 @@ export default function SmartInputBar() {
         const summary = st.automation_result?.data?.agent?.summary || st.automation_result?.preview || "";
         finishAgent(summary ? `办好啦：${summary}` : "这件事办好了，详细过程在守护记录里可以看～");
       } else if (st.execution_status === "failed") {
-        finishAgent(`小助手没能完成这件事${st.automation_result?.errorMessage ? `：${st.automation_result.errorMessage}` : ""}。打开守护记录可以「再试一次」～`);
+        finishAgent(`小助手没能完成这件事${st.automation_result?.errorMessage ? `：${st.automation_result.errorMessage}` : ""}。打开守护记录可以「再试一次」～`, true);
       }
     } catch (_e) {
       // 轮询失败不打断对话，下一轮继续

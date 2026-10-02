@@ -26,11 +26,13 @@ export default function AgentLiveWindow({ executionId, onClose }) {
   const [frame, setFrame] = useState("");
   const [connected, setConnected] = useState(false);
   const [notice, setNotice] = useState("正在连接…");
+  const [postmortem, setPostmortem] = useState(false); // 小助手已退出，用户接管失败现场
   const [typeText, setTypeText] = useState("");
   const wsRef = useRef(null);
   const stageRef = useRef(null);
   const lastMoveRef = useRef(0);
   const closedRef = useRef(false);
+  const finalMsgRef = useRef(false); // 服务端已发来终态消息（error/ended），断线时保留原文案
 
   useEffect(() => {
     let ws;
@@ -44,22 +46,27 @@ export default function AgentLiveWindow({ executionId, onClose }) {
 
     ws.onopen = () => {
       setConnected(true);
-      setNotice("已接管：小助手原地待命，你的操作实时生效");
+      // 具体文案等 ready 消息（区分小助手待命 / 失败现场接管）
     };
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === "frame") setFrame(msg.data);
-        else if (msg.type === "ready") setNotice("已接管：小助手原地待命，你的操作实时生效");
-        else if (msg.type === "ended") { setNotice("小助手已结束本次任务"); }
-        else if (msg.type === "error") setNotice(msg.message || "连接异常");
+        else if (msg.type === "ready") {
+          setPostmortem(!!msg.postmortem);
+          setNotice(msg.postmortem
+            ? "小助手停在这里了：现在由你亲手操作这个网页，关闭窗口后现场再保留约 30 分钟"
+            : "已接管：小助手原地待命，你的操作实时生效");
+        }
+        else if (msg.type === "ended") { finalMsgRef.current = true; setNotice("小助手已结束本次任务"); }
+        else if (msg.type === "error") { finalMsgRef.current = true; setNotice(msg.message || "连接异常"); }
       } catch {
         // 忽略单条消息解析失败
       }
     };
     ws.onclose = () => {
       setConnected(false);
-      if (!closedRef.current) setNotice("连接已断开");
+      if (!closedRef.current && !finalMsgRef.current) setNotice("连接已断开");
     };
     ws.onerror = () => setNotice("连接异常，请关闭重试");
 
@@ -164,7 +171,7 @@ export default function AgentLiveWindow({ executionId, onClose }) {
           title="交还小助手并关闭"
           className="flex h-8 items-center gap-1 rounded-full bg-emerald-500/90 px-3 text-[12px] font-medium text-white transition-colors hover:bg-emerald-500"
         >
-          <X className="w-3.5 h-3.5" /> 交还小助手
+          <X className="w-3.5 h-3.5" /> {postmortem ? "关闭窗口" : "交还小助手"}
         </button>
       </div>
 

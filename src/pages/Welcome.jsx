@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, Image as ImagePlus, X, Brain, MapPin, Zap, Check, Users, Clock, Paperclip, FileText } from "lucide-react";
+import { Calendar, StickyNote, Loader2, ArrowRight, Mic, MicOff, Image as ImagePlus, X, Brain, MapPin, Zap, Check, Users, Clock, Paperclip, FileText } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -400,8 +400,8 @@ ${textToAnalyze}
               transition={{ delay: 0.1 }}
               className="mb-12">
 
-                <div className="inline-flex items-center justify-center w-20 h-20 mb-6 rounded-3xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] shadow-2xl shadow-[#384877]/30">
-                  <Sparkles className="w-10 h-10 text-white" />
+                <div className="inline-flex items-center justify-center w-20 h-20 mb-6 rounded-3xl overflow-hidden shadow-2xl shadow-[#384877]/30">
+                  <img src="/icon-512.png" alt="心栈" className="w-full h-full object-cover" />
                 </div>
                 <h1 className="text-5xl font-bold bg-gradient-to-r from-[#384877] via-[#3b5aa2] to-purple-600 bg-clip-text text-transparent mb-4">
                   灵魂哨兵

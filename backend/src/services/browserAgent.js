@@ -258,6 +258,33 @@ function chinaNowText() {
   return cn.toISOString().slice(0, 16).replace("T", " ");
 }
 
+// 调用 Kimi 前校验消息历史：assistant 带 tool_calls 的，每条都必须有对应的 tool 响应，
+// 缺失的补占位响应（正常分支都应已补齐，此函数兜住接管/交还等边缘路径的遗漏，
+// 否则 Kimi 会报 400：an assistant message with 'tool_calls' must be followed by tool messages）
+function sanitizeToolCallHistory(history) {
+  const responded = new Set();
+  const fixed = [];
+  for (const msg of history) {
+    if (msg?.role === "tool" && msg.tool_call_id) responded.add(msg.tool_call_id);
+    fixed.push(msg);
+    if (msg?.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
+      for (const tc of msg.tool_calls) {
+        const id = tc?.id;
+        if (id && !responded.has(id)) {
+          responded.add(id);
+          fixed.push({
+            role: "tool",
+            tool_call_id: id,
+            name: tc.function?.name || "tool",
+            content: "（此步骤无执行结果：用户中途接管了网页，或未产生结果）"
+          });
+        }
+      }
+    }
+  }
+  return fixed;
+}
+
 async function executeTool(session, name, args) {
   const page = session.page;
 
@@ -383,8 +410,7 @@ function summarizeArgs(tool, args) {
 }
 
 async function runLoop(session) {
-  const deadline = Date.now() + RUN_DEADLINE_MS;
-  while (session.stepCount < MAX_STEPS && Date.now() < deadline) {
+  const deadline = Date.now() + RUN_DEADLINE_MS;  while (session.stepCount < MAX_STEPS && Date.now() < deadline) {
     // 接管检查点：用户远程操作期间 Agent 挂起
     while (session.takeover) {
       session.status = "takeover";
@@ -435,7 +461,7 @@ async function runLoop(session) {
         role: "system",
         content: `${AGENT_SYSTEM}\n\n当前日期时间（中国时区，真实世界）：${chinaNowText()}。计算"明天""下周""X月X日"等相对时间一律以这个真实日期为准；页面日历上显示的"今天"若与它对不上，以真实日期为准并提醒用户。`
       },
-      ...session.history,
+      ...sanitizeToolCallHistory(session.history),
       { role: "user", content: observation }
     ];
 
@@ -674,7 +700,10 @@ export async function respondToAgent(executionId, { choice, text } = {}) {
   const s = sessions.get(executionId);
   if (!s) return { ok: false, message: "会话不存在或已结束" };
   if (s.status !== "waiting_input" || !s.pendingResolve) return { ok: false, message: "当前不在等待回应的状态" };
-  s.pendingResolve({ choice: choice || "", text: text || "" });
+  const resolve = s.pendingResolve;
+  s.pendingResolve = null;
+  s.waiting = null;
+  resolve({ choice: choice || "", text: text || "" });
   return { ok: true };
 }
 

@@ -52,11 +52,12 @@ const LEDGER_CATEGORIES = [
   { key: "收入", words: ["工资", "奖金", "报销", "退款", "红包", "转账", "收入", "稿费", "利息", "到账", "进账"] }
 ];
 
-// 是否像记账内容：≥2 处「数字+元/块」，或 ≥3 个数字片段且含收支动词
+// 是否像记账内容：≥1 处「数字+元/块」（带金额单位的表述几乎专用于钱），
+// 或 ≥2 处「数字+元/块」之外再保险、≥3 个数字片段且含收支动词
 export function looksLikeLedger(text) {
   const t = String(text || "");
-  const withUnit = t.match(/\d+(?:\.\d+)?\s*(?:元|块|RMB|rmb)/g) || [];
-  if (withUnit.length >= 2) return true;
+  const withUnit = t.match(/\d+(?:\.\d+)?\s*(?:元|块|块钱|RMB|rmb)/g) || [];
+  if (withUnit.length >= 1) return true;
   const numbers = t.match(/\d+(?:\.\d+)?/g) || [];
   if (numbers.length >= 3 && /(花|买|支|付|收|账|工资|报销|收入|消费)/.test(t)) return true;
   return false;

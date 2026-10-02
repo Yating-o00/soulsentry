@@ -26,11 +26,11 @@ export const CATEGORY_LABEL_TO_TYPE = {
 export function classifyNoteText(text) {
   const t = String(text || "").trim();
   if (!t) return "emotion";
-  // 账本：≥2 处「数字+元/块/RMB」或 ≥3 个数字片段 + 收支动词
+  // 账本：≥1 处「数字+元/块/RMB」（带金额单位几乎专用于钱）或 ≥3 个数字片段 + 收支动词
   const moneyHits = (t.match(/\d+(?:\.\d+)?\s*(?:元|块|块钱|rmb|RMB)/g) || []).length;
   const numSegments = (t.match(/\d+(?:\.\d+)?/g) || []).length;
   const ledgerVerbs = /(花|买|买了|吃|打车|付|付|支付|工资|报销|转账|收入|支出|花了|一共|预算|记账|退款)/.test(t);
-  if (moneyHits >= 2 || (numSegments >= 3 && ledgerVerbs)) return "ledger";
+  if (moneyHits >= 1 || (numSegments >= 3 && ledgerVerbs)) return "ledger";
   if (/(https?:\/\/|www\.|刷到|读到|文章|视频|播客|收藏|教程|知乎|公众号|B站|bilibili)/i.test(t)) return "material";
   if (/(分享|发给|朋友圈|给大家|晒一?下|想让.*看到)/.test(t)) return "share";
   if (/(记得|别忘了|号码|尾号|电话|地址|取件码|提醒我)/.test(t)) return "memo";

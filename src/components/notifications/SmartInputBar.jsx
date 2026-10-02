@@ -134,11 +134,13 @@ export default function SmartInputBar() {
   const finishAgent = (finalMessage, keepLiveEntry = false) => {
     stopAgentPoll();
     // 失败时保留实时窗口入口：后端会保留浏览器现场约 30 分钟，用户可打开亲自操作
-    if (!keepLiveEntry) setAgentExecId(null);
+    if (!keepLiveEntry) {
+      setAgentExecId(null);
+      setLiveOpen(false);
+    }
     setAgentStatus("");
     setAgentShot("");
     setAgentTakeover(false);
-    setLiveOpen(false);
     if (finalMessage) pushAssistant(finalMessage, { agent: true });
     queryClient.invalidateQueries({ queryKey: ['task-executions'] });
   };

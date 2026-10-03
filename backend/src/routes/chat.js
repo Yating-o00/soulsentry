@@ -10,7 +10,8 @@ chatRouter.use(requireAuth);
 
 const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string().min(1).max(500)
+  // 小助手的提问/结果可承载完整文案（ask_user/done 上限 2000 字），此处留足余量
+  content: z.string().min(1).max(3000)
 });
 
 const chatBodySchema = z.object({

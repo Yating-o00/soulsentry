@@ -270,6 +270,10 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     : [];
 
   const lastUser = [...safeMessages].reverse().find((m) => m.role === "user");
+  // Agent 转发用未截断的原始用户消息（长文案/详细补充说明不被 500 字截断）
+  const lastUserRaw = Array.isArray(messages)
+    ? [...messages].reverse().find((m) => m && m.role === "user" && typeof m.content === "string")
+    : null;
 
   // —— 浏览器小助手会话进行中：用户消息直接转发给 Agent ——
   if (agentExecutionId && lastUser) {
@@ -281,7 +285,10 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       if (!owned) {
         return { reply: "小助手刚才的会话已经收尾了，结果在守护记录里可以看～还想办点什么吗？", extracted: null, agent: null, source: "agent" };
       }
-      const resp = await respondToAgent(agentExecutionId, { text: lastUser.content });
+      if (owned.executionStatus === "failed" || owned.executionStatus === "completed") {
+        return { reply: "小助手的会话已经收尾了，过程和结果在守护记录里可以看～想继续的话点「再试一次」，或者跟我说新的需求哦", extracted: null, agent: null, source: "agent" };
+      }
+      const resp = await respondToAgent(agentExecutionId, { text: String(lastUserRaw?.content || lastUser?.content || "").slice(0, 1500) });
       if (!resp.ok) {
         return { reply: "小助手还在操作网页，等它问你或者出结果哦～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
       }

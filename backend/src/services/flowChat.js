@@ -1,6 +1,7 @@
 import { invokeKimiText } from "../lib/kimi.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
+import { analyzeImage } from "./analyzeImage.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
 // AI 负责理解意图（立约定 / 记心签 / 存链接 / 网页办事 / 闲聊），
@@ -196,7 +197,7 @@ function buildMessagesBlock(messages) {
     .join("\n");
 }
 
-async function chatWithKimi({ messages, lastExtracted }) {
+async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "" }) {
   const now = chinaNow();
   const extractedCtx = lastExtracted
     ? `（你上一轮提出的待确认提案如下，用户可能正在对它做修改：${JSON.stringify(lastExtracted)}）`
@@ -204,7 +205,7 @@ async function chatWithKimi({ messages, lastExtracted }) {
 
   const prompt = `现在是中国时间 ${now.date} ${now.dateTime.slice(11)}。以下是用户与 SoulSentry 的对话${extractedCtx}：
 
-${buildMessagesBlock(messages)}
+${buildMessagesBlock(messages)}${attachmentCtx}
 
 请按系统要求返回 JSON。`;
 
@@ -261,7 +262,29 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
  * agentExecutionId：对话中挂着浏览器小助手会话时，用户消息直接转发给 Agent。
  * 返回 { reply, extracted, agentGoal?, agent?, source }；任何情况下都给出可继续的对话。
  */
-export async function runFlowChat({ messages, lastExtracted = null, userId = null, prisma = null, agentExecutionId = null }) {
+export async function runFlowChat({ messages, lastExtracted = null, userId = null, prisma = null, agentExecutionId = null, attachments = [] }) {
+  // 附件上下文：图片走视觉识别（本地读文件转 base64，无需公网 URL），文件列名称类型
+  let attachmentCtx = "";
+  if (Array.isArray(attachments) && attachments.length) {
+    const parts = [];
+    for (const a of attachments.slice(0, 3)) {
+      const name = String(a?.name || "附件").slice(0, 80);
+      const type = String(a?.type || "");
+      if (type.startsWith("image/") && a?.url) {
+        try {
+          const r = await analyzeImage({ fileUrl: a.url });
+          const desc = [r?.extracted_text, r?.suggestion].filter(Boolean).join("；").slice(0, 600);
+          parts.push(`图片「${name}」的内容：${desc || "（未能识别内容）"}`);
+        } catch {
+          parts.push(`图片「${name}」（内容未能识别）`);
+        }
+      } else {
+        parts.push(`文件「${name}」（${type || "未知类型"}）`);
+      }
+    }
+    if (parts.length) attachmentCtx = `\n\n用户随本条消息附上了：\n- ${parts.join("\n- ")}`;
+  }
+
   const safeMessages = Array.isArray(messages)
     ? messages
         .filter((m) => m && typeof m.content === "string" && ["user", "assistant"].includes(m.role))
@@ -288,7 +311,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       if (owned.executionStatus === "failed" || owned.executionStatus === "completed") {
         return { reply: "小助手的会话已经收尾了，过程和结果在守护记录里可以看～想继续的话点「再试一次」，或者跟我说新的需求哦", extracted: null, agent: null, source: "agent" };
       }
-      const resp = await respondToAgent(agentExecutionId, { text: String(lastUserRaw?.content || lastUser?.content || "").slice(0, 1500) });
+      const resp = await respondToAgent(agentExecutionId, { text: (String(lastUserRaw?.content || lastUser?.content || "").slice(0, 1500) + attachmentCtx).slice(0, 2000) });
       if (!resp.ok) {
         return { reply: "小助手还在操作网页，等它问你或者出结果哦～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
       }
@@ -302,7 +325,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
   try {
     if (!safeMessages.length || !lastUser) throw new Error("empty messages");
     const out = await Promise.race([
-      chatWithKimi({ messages: safeMessages, lastExtracted }),
+      chatWithKimi({ messages: safeMessages, lastExtracted, attachmentCtx }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000))
     ]);
 

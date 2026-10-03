@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mic, Loader2, ArrowUp, X } from "lucide-react";
+import { Mic, Loader2, ArrowUp, X, Plus, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { httpRequest } from "@/api/httpClient";
+import { httpRequest, getAccessToken } from "@/api/httpClient";
 import { base44 } from "@/api/base44Client";
 import ChatPasteRecognizer from "@/components/heartsign/ChatPasteRecognizer";
 import AgentLiveWindow from "@/components/automation/AgentLiveWindow";
@@ -83,6 +83,10 @@ export default function SmartInputBar() {
   const [agentTakeover, setAgentTakeover] = useState(false);
   const [takeoverText, setTakeoverText] = useState("");
   const [liveOpen, setLiveOpen] = useState(false);
+  // —— 附件：+ 号上传图片/文件，随消息一起发给 AI（图片走视觉识别）——
+  const [attachments, setAttachments] = useState([]); // {url,name,size,type,isImage}
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
   const agentPollRef = useRef(null);
   const lastAskedRef = useRef("");
   const taRef = useRef(null);
@@ -209,7 +213,7 @@ export default function SmartInputBar() {
     }
   };
 
-  const callAI = async (msgs, lastExtracted) => {
+  const callAI = async (msgs, lastExtracted, atts = []) => {
     setBusy(true);
     try {
       const res = await withTimeout(httpRequest("/api/chat", {
@@ -217,7 +221,8 @@ export default function SmartInputBar() {
         body: {
           messages: msgs,
           last_extracted: lastExtracted,
-          agent_execution_id: agentExecId || undefined
+          agent_execution_id: agentExecId || undefined,
+          attachments: atts.length ? atts.map((a) => ({ url: a.url, name: a.name, type: a.type, size: a.size })) : undefined
         }
       }));
       const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
@@ -237,11 +242,46 @@ export default function SmartInputBar() {
   // —— 唯一入口：文字/语音都汇聚到这里发给 AI ——
   const send = (raw) => {
     const t = String(raw !== undefined ? raw : inputValue).trim();
-    if (!t || busy) return;
-    const msgs = [...messages, { role: "user", content: t.slice(0, 500) }];
+    if ((!t && !attachments.length) || busy) return;
+    const content = t || "（见图）";
+    const msgs = [...messages, { role: "user", content: content.slice(0, 500) }];
     setMessages(msgs);
     setInputValue("");
-    callAI(msgs, pending);
+    const atts = attachments;
+    setAttachments([]);
+    callAI(msgs, pending, atts);
+  };
+
+  // + 号上传图片/文件（≤10MB），上传完成进入待发附件列表
+  const uploadAttachment = async (file) => {
+    if (!file || uploading) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("文件不能超过 10MB");
+      return;
+    }
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/uploads", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAccessToken() || ""}` },
+        body: form
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.file_url) throw new Error(data.message || "上传失败");
+      setAttachments((list) => [...list, {
+        url: data.file_url,
+        name: data.file_name || file.name || "附件",
+        size: data.file_size || file.size || 0,
+        type: data.file_type || file.type || "",
+        isImage: String(data.file_type || file.type || "").startsWith("image/")
+      }]);
+    } catch (err) {
+      toast.error(`上传失败：${err?.message || "请重试"}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   // 「不对，再聊聊」：把否定说给 AI，由 AI 温柔引导用户说出要改什么
@@ -574,7 +614,58 @@ export default function SmartInputBar() {
           className="w-full resize-none overflow-hidden bg-transparent px-5 sm:px-6 pt-4 pb-1.5 text-[15.5px] leading-relaxed text-[var(--sky-ink)] placeholder:text-[var(--sky-sub)]/70 focus:outline-none"
         />
 
+        {/* 附件预览：图片缩略图 / 文件卡片，可移除 */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-5 pt-3 sm:px-6">
+            {attachments.map((a, i) => (
+              <div key={a.url + i} className="group relative" >
+                {a.isImage ? (
+                  <img src={a.url} alt={a.name} className="h-16 w-16 rounded-xl border object-cover" style={{ borderColor: C.hairline }} />
+                ) : (
+                  <div className="flex h-16 max-w-44 items-center gap-1.5 rounded-xl border px-2.5" style={{ borderColor: C.hairline, background: "#fbfcfc" }}>
+                    <FileText className="h-4 w-4 shrink-0" style={{ color: C.ink3 }} />
+                    <span className="min-w-0 truncate text-[11.5px]" style={{ color: C.ink }}>{a.name}</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setAttachments((list) => list.filter((_, j) => j !== i))}
+                  className="absolute -right-1.5 -top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-slate-700 text-white opacity-90 transition-opacity hover:opacity-100"
+                  style={{ width: 18, height: 18 }}
+                  title="移除附件"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            {uploading && (
+              <div className="flex h-16 w-16 items-center justify-center rounded-xl border" style={{ borderColor: C.hairline }}>
+                <Loader2 className="h-4 w-4 animate-spin" style={{ color: C.ink3 }} />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-2 px-4 sm:px-5 pb-3.5 pt-1">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*,.pdf,.txt,.md,.doc,.docx,.xls,.xlsx"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadAttachment(f);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            title="上传图片或文件"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--sky-sub)] transition-all duration-200 hover:text-[var(--sky-ink)] hover:bg-black/[0.04]"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
           <button
             type="button"
             title="长按语音输入"
@@ -604,7 +695,7 @@ export default function SmartInputBar() {
           )}
           <button
             onClick={() => send()}
-            disabled={!inputValue.trim() || busy}
+            disabled={(!inputValue.trim() && !attachments.length) || busy || uploading}
             title="发送（Enter）"
             className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-white transition-all duration-300 disabled:opacity-30"
             style={{ background: C.sentinel }}

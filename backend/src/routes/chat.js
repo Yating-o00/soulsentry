@@ -18,7 +18,14 @@ const chatBodySchema = z.object({
   messages: z.array(chatMessageSchema).min(1).max(30),
   last_extracted: z.any().optional().nullable(),
   // 对话中挂着浏览器小助手会话时携带：用户消息将直接转发给 Agent
-  agent_execution_id: z.string().max(64).optional().nullable()
+  agent_execution_id: z.string().max(64).optional().nullable(),
+  // + 号上传的附件（图片/文件），图片由服务端视觉识别后注入上下文
+  attachments: z.array(z.object({
+    url: z.string().max(300),
+    name: z.string().max(200),
+    type: z.string().max(100).optional().nullable(),
+    size: z.number().optional().nullable()
+  })).max(3).optional().nullable()
 });
 
 /**
@@ -40,7 +47,8 @@ chatRouter.post("/", async (req, res) => {
         lastExtracted: parsed.data.last_extracted || null,
         userId: req.user.id,
         prisma,
-        agentExecutionId: parsed.data.agent_execution_id || null
+        agentExecutionId: parsed.data.agent_execution_id || null,
+        attachments: parsed.data.attachments || []
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("CHAT_HANDLER_TIMEOUT")), 25000))
     ]);

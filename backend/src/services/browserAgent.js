@@ -12,8 +12,8 @@ import { env } from "../config/env.js";
 // - 暂停通过内存 pending promise 实现：handler 一直挂起，executeAutomation 不会提前写终态
 // - 服务器重启会丢失会话：启动清扫把中断的浏览器执行单标记为失败（用户可再试一次）
 
-const MAX_STEPS = 60;           // 单次执行最多工具步数（步数不卡太死，总时限兜底）
-const RUN_DEADLINE_MS = 10 * 60 * 1000; // 单次执行总时限
+const MAX_STEPS = 120;           // 单次执行最多工具步数（步数不卡太死，总时限兜底）
+const RUN_DEADLINE_MS = 30 * 60 * 1000; // 单次执行活跃时限：等待用户/接管操作的时间顺延不计入
 const KIMI_CALL_TIMEOUT = 35000;
 const SCREENSHOT_KEEP = 40;
 const VIEWPORT = { width: 1280, height: 800 };
@@ -450,13 +450,14 @@ function summarizeArgs(tool, args) {
 }
 
 async function runLoop(session) {
-  const deadline = Date.now() + RUN_DEADLINE_MS;
+  let deadline = Date.now() + RUN_DEADLINE_MS;
   while (session.stepCount < MAX_STEPS && Date.now() < deadline) {
-    // 接管检查点：用户远程操作期间 Agent 挂起
+    // 接管检查点：用户远程操作期间 Agent 挂起（等待时间顺延，不计入活跃时限）
     while (session.takeover) {
       session.status = "takeover";
       persist(session);
       await sleep(600);
+      deadline += 600;
     }
     if (session.status === "takeover") session.status = "running";
 
@@ -483,7 +484,9 @@ async function runLoop(session) {
       session.status = "waiting_input";
       session.waiting = { question, choices: ["我自己来操作网页", "换个网站试试", "先到这里"] };
       persist(session);
+      const blockWaitStart = Date.now();
       const answer = await new Promise((resolve) => { session.pendingResolve = resolve; });
+      deadline += Date.now() - blockWaitStart; // 等待用户的时间顺延，不计入活跃时限
       session.pendingResolve = null;
       session.waiting = null;
       const choice = String(answer?.choice || "");
@@ -582,7 +585,9 @@ async function runLoop(session) {
         session.status = "waiting_input";
         session.waiting = { question, choices };
         persist(session);
+        const askWaitStart = Date.now();
         const answer = await new Promise((resolve) => { session.pendingResolve = resolve; });
+        deadline += Date.now() - askWaitStart; // 等待用户回应/接管操作的时间顺延，不计入活跃时限
         session.pendingResolve = null;
         session.waiting = null;
         if (answer?.takeover || (answer?.choice && answer.choice.includes("我自己来操作"))) {

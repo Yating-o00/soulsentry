@@ -66,9 +66,12 @@ export default function Tasks() {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
 
+  // parent_task_id=all：一次拉齐顶层约定与子约定，卡片才能展示/勾选子约定；
+  // 顶层列表由各派生逻辑用 !t.parent_task_id 自行过滤。
+  // 独立 queryKey（['tasks'] 前缀仍命中所有失效刷新），避免与日历等页面的顶层列表缓存互相覆盖
   const { data: allTasks = [], isLoading } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list('-reminder_time'),
+    queryKey: ['tasks', 'with-subs'],
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, '-reminder_time', 300),
     initialData: []
   });
 
@@ -270,21 +273,23 @@ export default function Tasks() {
       }
     });
 
-    // Stats Calculations
+    // Stats Calculations（口径=顶层约定：子约定已可在卡片上勾选，不计入顶部统计，避免双重计数）
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const now = new Date();
 
-    const todayPendingCount = active.length;
+    const activeRoots = active.filter((t) => !t.parent_task_id);
+    const todayPendingCount = activeRoots.length;
 
     // 统一逾期语义：红色逾期只认明确截止（end_time/due_at）已过；仅提醒时间过的不计入
-    const overdueCount = active.filter((t) => {
+    const overdueCount = activeRoots.filter((t) => {
       const deadline = t.end_time || t.due_at;
       if (!deadline) return false;
       return new Date(deadline).getTime() < now.getTime();
     }).length;
 
     const completedTodayCount = completed.filter((t) => {
+      if (t.parent_task_id) return false;
       if (!t.completed_at) return false;
       const cDate = new Date(t.completed_at);
       cDate.setHours(0, 0, 0, 0);
@@ -841,7 +846,7 @@ export default function Tasks() {
                   <ArchiveIcon className="w-5 h-5 text-white" />
                 </div>
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-slate-800">已完成约定 ({completedTasks.length})</p>
+                  <p className="text-sm font-semibold text-slate-800">已完成约定 ({completedTasks.filter(t => !t.parent_task_id).length})</p>
                   <p className="text-xs text-slate-500 mt-0.5">点击查看完成约定的记录或恢复</p>
                 </div>
               </div>

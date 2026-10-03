@@ -10,7 +10,7 @@ const toLocalInput = (date) => {
 };
 
 const PRESETS = [
-  { label: "10 分钟后", minutes: 10 },
+  { label: "5 分钟后", minutes: 5 },
   { label: "30 分钟后", minutes: 30 },
   { label: "1 小时后", minutes: 60 },
   { label: "今晚 20:00", custom: "tonight" },

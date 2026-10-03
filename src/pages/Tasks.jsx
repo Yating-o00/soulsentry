@@ -277,9 +277,11 @@ export default function Tasks() {
 
     const todayPendingCount = active.length;
 
+    // 统一逾期语义：红色逾期只认明确截止（end_time/due_at）已过；仅提醒时间过的不计入
     const overdueCount = active.filter((t) => {
-      if (!t.reminder_time) return false;
-      return new Date(t.reminder_time) < now;
+      const deadline = t.end_time || t.due_at;
+      if (!deadline) return false;
+      return new Date(deadline).getTime() < now.getTime();
     }).length;
 
     const completedTodayCount = completed.filter((t) => {

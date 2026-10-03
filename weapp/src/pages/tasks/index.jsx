@@ -317,8 +317,10 @@ export default function Tasks() {
   const handleSnoozeConfirm = async (_task, payload) => {
     try {
       await patch(`/tasks/${_task.id}`, {
-        end_time: payload.end_time,
         reminder_time: payload.reminder_time,
+        snooze_until: payload.snooze_until,
+        snooze_reason: payload.reason,
+        status: "snoozed"
       });
       setSnoozeTask(null);
       showToast(`已顺延到${payload.when} · 「${payload.reason}」记入记忆`);

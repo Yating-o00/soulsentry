@@ -17,6 +17,7 @@ import { createWechatNativeOrder, generateOutTradeNo, getWechatMerchantConfig, q
 import { markWechatOrderPaid } from "../services/wechatOrders.js";
 import { savePptHtml } from "../lib/renderPpt.js";
 import { normalizeToGcj02, judgeOnTheWay } from "../lib/geo.js";
+import { getHardOverdue } from "../lib/timeSemantics.js";
 import QRCode from "qrcode";
 
 // 把微信支付 Native 下单返回的 code_url 转成 PNG data URL，
@@ -601,8 +602,10 @@ async function analyzeTask(task, executions, subtasks, trustScores) {
     done: s.status === "completed" || s.status === "done"
   }));
 
+  // 统一逾期语义：待安排/心愿/纯收集不因时间流逝变红（消除虚假逾期）；仅提醒时间过算 soft 待处理
+  const hard = getHardOverdue(task, now);
+  const overdue = hard.overdue;
   const end = task.end_time || task.due_at;
-  const overdue = end && new Date(end).getTime() < now.getTime() && !["completed", "done", "archived"].includes(task.status);
   const within24h = end && !overdue && new Date(end).getTime() - now.getTime() <= 24 * 60 * 60 * 1000;
 
   let group = "suggested";

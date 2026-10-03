@@ -4,6 +4,20 @@ import { sendWechatSubscribeMessage } from "../lib/wechatSubscribeMessage.js";
 import { computeNextReminderTime } from "../lib/recurrence.js";
 import { buildReminderCopy } from "./reminderCopy.js";
 import { getWeatherForCoords, weatherContextForReminder } from "./weatherService.js";
+import {
+  DAILY_REMINDER_BUDGET,
+  getDailyReminderUsage,
+  nextDailyReminderUsage,
+  nextShortSnoozeMinutes,
+  isQuietHours,
+  overdueDecayStage,
+  getHardOverdue
+} from "../lib/timeSemantics.js";
+
+// 北京时区的日期串（提醒预算按自然日计数）
+function chinaDateStr(d = new Date()) {
+  return new Date(d.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
 
 // 提醒场景的天气上下文：用用户最近上报的位置（看板请求 /api/weather 时持久化），
 // 天气数据有 30 分钟进程内缓存，cron 每分钟跑也不会重复打外部接口
@@ -75,16 +89,24 @@ function getOpenid(preferences) {
   return extra.openid || null;
 }
 
-export async function trySendPush({ userId, preferences, payload, task, logPrefix }) {
+export async function trySendPush({ userId, preferences, payload, task, logPrefix, budgetAware = true }) {
   const subscription = getPushSubscription(preferences);
   const pushEnabled = shouldSendPush(preferences);
   const openid = getOpenid(preferences);
+
+  // 每日主动提醒预算：超限后不再走推送渠道（仅留应用内通知），避免制造心理压力
+  const todayStr = chinaDateStr();
+  let budgetBlocked = false;
+  if (budgetAware && getDailyReminderUsage(preferences, todayStr) >= DAILY_REMINDER_BUDGET) {
+    budgetBlocked = true;
+    console.log(`[reminderSender] ${logPrefix} user=${userId} daily budget exhausted (${DAILY_REMINDER_BUDGET}), hold push`);
+  }
 
   let webPushOk = false;
   let wechatOk = false;
 
   // 1. 尝试 Web Push（浏览器 / PWA 场景）
-  if (subscription && pushEnabled) {
+  if (!budgetBlocked && subscription && pushEnabled) {
     try {
       await sendPushNotification(subscription, payload);
       console.log(`[reminderSender] ${logPrefix} user=${userId} push sent to ${subscription.endpoint?.slice(0, 60)}...`);
@@ -109,7 +131,7 @@ export async function trySendPush({ userId, preferences, payload, task, logPrefi
   }
 
   // 2. 同时尝试微信小程序订阅消息（与 Web Push 独立，不互相阻塞）
-  if (openid && task) {
+  if (!budgetBlocked && openid && task) {
     const type = payload.data?.type === "follow_up" ? "follow_up" : "reminder";
     const wechatResult = await sendWechatSubscribeMessage(openid, task, type, payload.body);
     if (wechatResult.ok) {
@@ -122,8 +144,26 @@ export async function trySendPush({ userId, preferences, payload, task, logPrefi
     }
   }
 
-  // 任一渠道成功即视为推送成功
+  // 任一渠道成功即视为推送成功，并计入当日预算
   if (webPushOk || wechatOk) {
+    if (budgetAware) {
+      try {
+        await prisma.userPreference.update({
+          where: { userId },
+          data: {
+            metadata: {
+              ...(preferences?.metadata || {}),
+              _extraFields: {
+                ...getUserExtraFields(preferences),
+                daily_reminder_usage: nextDailyReminderUsage(preferences, todayStr),
+              },
+            },
+          },
+        });
+      } catch (e) {
+        console.warn("[reminderSender] failed to record daily budget usage:", e?.message || e);
+      }
+    }
     return {
       ok: true,
       channel: wechatOk ? "wechat_subscribe" : "web_push",
@@ -133,11 +173,13 @@ export async function trySendPush({ userId, preferences, payload, task, logPrefi
   }
 
   // 3. 兜底：应用内通知
-  const reason = !subscription && !openid
-    ? "no_push_subscription_or_openid"
-    : !pushEnabled
-      ? "push_disabled_by_user"
-      : "all_channels_failed";
+  const reason = budgetBlocked
+    ? "daily_budget_exceeded"
+    : !subscription && !openid
+      ? "no_push_subscription_or_openid"
+      : !pushEnabled
+        ? "push_disabled_by_user"
+        : "all_channels_failed";
   console.log(`[reminderSender] ${logPrefix} user=${userId} fallback to in-app: ${reason}`);
   await createInAppNotification(
     userId,
@@ -395,6 +437,194 @@ export async function sendForgetReminders() {
   if (candidates.length > 0) {
     console.log("[reminderSender] forget reminders:", result);
   }
+  return result;
+}
+
+/**
+ * 短延后序列再提醒：用户点"5分钟后"，到点后用"现在方便处理吗"轻声唤回。
+ * 最多两次短延后（5→15分钟），当天不再处理后转入晚间回顾（21:00 一次），深夜静默。
+ * 数据约定（tasks.js PATCH 归一化写入）：
+ *   snooze_until 延后到点时刻；short_snooze_count 当日短延次数；
+ *   snooze_evening_review=true 表示进入晚间回顾；comeback_sent_at 上次处理到的 snooze 时刻（去重）。
+ */
+export async function sendSnoozeComebacks() {
+  const now = new Date();
+  if (isQuietHours(now)) return { sent: 0, total: 0, quiet: true };
+
+  // 候选：近期有提醒时间且未完成的约定（snooze 字段在 metadata Json 里，只能内存过滤）
+  const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 3600 * 1000);
+  const candidates = await prisma.task.findMany({
+    where: {
+      deletedAt: null,
+      status: { notIn: ["DONE", "ARCHIVED"] },
+      reminderTime: { not: null, gte: twoDaysAgo, lte: new Date(now.getTime() + 60 * 1000) }
+    },
+    include: { user: { include: { preferences: true } } },
+    take: 300
+  });
+
+  let sent = 0;
+  let inAppFallback = 0;
+
+  for (const task of candidates) {
+    const extra = getTaskExtraFields(task);
+    const snoozeUntil = extra.snooze_until ? new Date(extra.snooze_until) : null;
+    if (!snoozeUntil || isNaN(snoozeUntil.getTime())) continue;
+    if (snoozeUntil.getTime() > now.getTime()) continue;
+    // 本次 snooze 已处理过（comeback 已发或已转晚间）则跳过
+    const comebackAt = extra.comeback_sent_at ? new Date(extra.comeback_sent_at) : null;
+    if (comebackAt && !isNaN(comebackAt.getTime()) && comebackAt.getTime() >= snoozeUntil.getTime()) continue;
+
+    const evening = extra.snooze_evening_review === true;
+    const shortCount = Number(extra.short_snooze_count || 0);
+    // 短延后超过两次（本不应再短延）：直接转晚间回顾，不打扰
+    if (!evening && nextShortSnoozeMinutes(shortCount) === null) {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          metadata: buildTaskMetadataWithExtra(task, {
+            comeback_sent_at: now.toISOString(),
+            snooze_evening_review: true
+          })
+        }
+      }).catch(() => {});
+      continue;
+    }
+
+    const copy = evening
+      ? {
+          title: `晚间回顾 · ${task.title}`,
+          body: "今天先放到这里。今晚有空的话，可以花 5 分钟开个头，或把它改到更合适的时间。"
+        }
+      : {
+          title: `现在方便处理「${task.title}」吗？`,
+          body: "刚刚你说稍后。如果这 5-20 分钟有空，顺手处理掉它；没空的话再点一次「稍后」或「今天没空」。"
+        };
+
+    const payload = {
+      title: copy.title,
+      body: copy.body,
+      url: `/tasks?id=${task.id}`,
+      tag: `comeback-${task.id}`,
+      requireInteraction: false,
+      vibrate: [120, 80, 120],
+      data: { taskId: task.id, type: "snooze_comeback" }
+    };
+
+    const result = await trySendPush({
+      userId: task.userId,
+      preferences: task.user.preferences,
+      payload,
+      task,
+      logPrefix: `snooze-comeback task=${task.id}${evening ? " evening" : ""}`
+    });
+    if (result.ok) sent += 1;
+    else if (result.inAppFallback) inAppFallback += 1;
+
+    // 标记本次 snooze 已处理；晚间回顾处理后清除序列，第二天重新计数
+    const patch = { comeback_sent_at: now.toISOString() };
+    if (evening) {
+      patch.snooze_evening_review = false;
+      patch.short_snooze_count = 0;
+      patch.snooze_until = null;
+    }
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { metadata: buildTaskMetadataWithExtra(task, patch) }
+    }).catch((e) => console.warn(`[reminderSender] task=${task.id} comeback mark failed:`, e?.message || e));
+  }
+
+  const result = { sent, inAppFallback, total: candidates.length };
+  if (sent > 0 || inAppFallback > 0) console.log("[reminderSender] snooze comebacks:", result);
+  return result;
+}
+
+/**
+ * 逾期衰减治理：逾期不是需要不断加红的状态，而是需要分级处理：
+ * - 1-2 天：提醒一次（温柔）
+ * - 3-7 天：问一次"拆小/改期/调整目标"
+ * - 8-14 天：静默（不主动推）
+ * - 15-30 天：每周回顾一次（移出红色压力区）
+ * - >30 天：一次"继续/改项目/归档/删除"决策询问（消除心理债务）
+ * 去重：decay_sent_stage 记录已处理等级；weekly_review 额外要求间隔 ≥7 天。
+ */
+export async function sendOverdueDecayReminders() {
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+  const candidates = await prisma.task.findMany({
+    where: {
+      deletedAt: null,
+      status: { notIn: ["DONE", "ARCHIVED"] },
+      OR: [
+        { endTime: { not: null, lte: now } },
+        { dueAt: { not: null, lte: now } }
+      ],
+      updatedAt: { gte: thirtyDaysAgo }
+    },
+    include: { user: { include: { preferences: true } } },
+    take: 300
+  });
+
+  let sent = 0;
+  let inAppFallback = 0;
+
+  for (const task of candidates) {
+    const overdue = getHardOverdue(task, now);
+    if (!overdue.overdue) continue;
+    const stage = overdueDecayStage(overdue.overdueDays);
+
+    const extra = getTaskExtraFields(task);
+    const lastStage = extra.decay_sent_stage || null;
+    const lastAt = extra.decay_sent_at ? new Date(extra.decay_sent_at) : null;
+    if (lastStage === stage && stage !== "weekly_review") continue;
+    if (stage === "weekly_review" && lastAt && now.getTime() - lastAt.getTime() < 7 * 24 * 3600 * 1000) continue;
+    // low_freq 不主动推（待复盘，只在周回顾出现）
+    if (stage === "low_freq") {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { metadata: buildTaskMetadataWithExtra(task, { decay_sent_stage: stage, decay_sent_at: now.toISOString() }) }
+      }).catch(() => {});
+      continue;
+    }
+
+    const n = overdue.overdueDays;
+    const copy =
+      stage === "recent"
+        ? { title: `「${task.title}」过期 ${n} 天了`, body: "还需要它吗？需要的话挑个 5-15 分钟的小步骤开始；不需要可以改期或归档。" }
+        : stage === "reconfirm"
+          ? { title: `「${task.title}」已逾期 ${n} 天`, body: "继续硬扛容易一直拖着。要不要：拆成一个 10 分钟小步骤 / 改到本周晚些时候 / 调整目标？" }
+          : stage === "weekly_review"
+            ? { title: `本周回顾 · ${task.title}`, body: `这件约定已放 ${n} 天。本周回顾时顺便决定：继续做、改成长期项目，还是先归档。` }
+            : { title: `「${task.title}」已经 ${n} 天没有推进`, body: "它可能不再是紧急任务。你想：继续并拆小 / 改成每周收集箱 / 下周再回顾 / 暂时归档 / 删除？" };
+
+    const payload = {
+      title: copy.title,
+      body: copy.body,
+      url: `/tasks?id=${task.id}`,
+      tag: `decay-${task.id}`,
+      requireInteraction: false,
+      vibrate: [150, 100, 150],
+      data: { taskId: task.id, type: "overdue_decay", stage, overdue_days: n }
+    };
+
+    const result = await trySendPush({
+      userId: task.userId,
+      preferences: task.user.preferences,
+      payload,
+      task,
+      logPrefix: `overdue-decay task=${task.id} stage=${stage}`
+    });
+    if (result.ok) sent += 1;
+    else if (result.inAppFallback) inAppFallback += 1;
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { metadata: buildTaskMetadataWithExtra(task, { decay_sent_stage: stage, decay_sent_at: now.toISOString() }) }
+    }).catch((e) => console.warn(`[reminderSender] task=${task.id} decay mark failed:`, e?.message || e));
+  }
+
+  const result = { sent, inAppFallback, total: candidates.length };
+  if (sent > 0 || inAppFallback > 0) console.log("[reminderSender] overdue decay:", result);
   return result;
 }
 

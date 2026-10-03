@@ -1,6 +1,7 @@
 import { invokeKimiText } from "../lib/kimi.js";
 import { resolveSpatiotemporalContext } from "./extractContext.js";
 import { parseRecurrenceFromText, parseTimeOfDay, alignFirstOccurrence } from "../lib/recurrence.js";
+import { classifyTimeSemantics, buildTimePlan } from "../lib/timeSemantics.js";
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -394,8 +395,13 @@ export async function parseTaskInput({ input, date, savedLocations = [], current
     properties: {
       title: { type: "string", description: "约定标题，简洁概括" },
       description: { type: "string", description: "约定描述，可为空" },
-      reminder_time: { type: "string", description: "提醒时间 ISO 8601（含时区），如果用户没有明确说提醒时间则和 end_time 相同" },
-      end_time: { type: "string", description: "截止时间 ISO 8601（含时区），如果用户没有明确说则比 reminder_time 晚 5 分钟" },
+      reminder_time: { type: "string", description: "提醒时间 ISO 8601（含时区）。只有用户明确说出时间时才给；没有时间表达时填空字符串" },
+      end_time: { type: "string", description: "截止时间 ISO 8601（含时区）。只有明确截止时间才给；没有则空字符串" },
+      time_semantics: {
+        type: "string",
+        enum: ["explicit", "range", "collection", "wish", "none"],
+        description: "时间语义：explicit=明确时间(明天上午10点)；range=时间范围(这周/最近/下班后找时间)；collection=持续收集(收集产品反馈/随时记录)；wish=意愿愿望(想学心理学/想去看海)；none=无任何时间表达"
+      },
       location: { type: "string", description: "地点，如'公司'、'医院'、'家里'" },
       location_type: { type: "string", description: "地点类型：office/home/hospital/school/gym/shopping/restaurant/transit/other" },
       event_type: { type: "string", description: "事件类型：会议/用餐/就医/出行/生活/工作/学习/运动/社交/其他" },
@@ -419,7 +425,7 @@ export async function parseTaskInput({ input, date, savedLocations = [], current
         }
       }
     },
-    required: ["title", "reminder_time", "end_time", "priority", "category"]
+    required: ["title", "priority", "category"]
   };
 
   const candidateLocation = spatiotemporal.location;
@@ -451,12 +457,12 @@ ${habitText}
 
 请解析约定信息。注意：
 1. 所有相对时间（"X分钟之后"、"明天下午3点"、"三天后"、"下周五晚上8点"）一律以上面给出的当前日期/时间为基准计算，不要自己假设其他基准。
-2. 如果用户只说了提醒时间但没说明截止时间，end_time 默认比 reminder_time 晚 5 分钟。
-3. 如果用户没有指明任何具体时间（例如"提醒我吃药"、"整理一下文件"），reminder_time 直接使用上面的当前时间作为创建时间，end_time = reminder_time + 5 分钟，禁止编造时间。
+2. 只有用户明确说出时间（"几点、明天、周五前、下班后6点"）才给 reminder_time/end_time；如果用户没有指明任何具体时间（如"调研一款产品"、"整理一下文件"），reminder_time 和 end_time 必须填空字符串，禁止编造或默认时间——这类约定会进入"待安排"状态，不产生逾期。
+3. 用 time_semantics 标记时间语义：明确时间 explicit；时间范围（这周/最近/有空）range；持续收集（收集反馈/随时记录）collection；意愿愿望（想学/想去看海）wish；完全没时间表达 none。
 4. 时间必须使用 ISO 8601 格式并包含 +08:00 时区，例如 "2026-08-26T14:35:00+08:00"。
 5. 从输入中提取地点（location）、地点类型（location_type）和事件类型（event_type）。
 6. 如果用户没有明确说地点，请使用上面给出的"地点候选"；如果候选也没有，返回空字符串。
-7. 如果输入包含重复语义（"每天/每日/每晚"、"每周三/每周三五/工作日/周末"、"每月15号"、"每隔3天"），repeat_rule 填 daily/weekly/monthly/custom，reminder_time 用今天或明天该时刻（今天的已过则取明天），custom_recurrence 填具体星期几/几号/间隔；没有重复语义则 repeat_rule 填 none。
+7. 如果输入包含重复语义（"每天/每日/每晚"、"每周三/每周三五/工作日/周末"、"每月15号"、"每隔3天"），repeat_rule 填 daily/weekly/monthly/custom，reminder_time 用今天或明天该时刻（今天的已过则取明天），custom_recurrence 填具体星期几/几号/间隔；没有重复语义则 repeat_rule 填 none。重复约定必须给出 reminder_time（即使时间语义是 collection）。
 8. 如果输入包含多个步骤/子约定（"先…然后…最后…"、"1. … 2. …"、顿号/分号列举的动作），提取到 subtasks，每项≤30字、最多8个；只有一个整体约定则返回空数组。另外，若输入是交付类任务（如"给某人发某报告/表格"、"完成某方案"），即使未显式列举步骤，也按"收集信息→整理制作→交付确认"拆出 2-4 个可执行步骤。
 9. 直接返回 JSON 对象，不要输出 markdown、代码块或解释。`,
         systemPrompt: "你是 SoulSentry 的约定解析器。把中文自然语言输入转成可创建的约定字段。严格返回 JSON。",
@@ -504,7 +510,11 @@ ${habitText}
   // 常识规则：仅用于事件类型/分类/优先级推断，不再作为时间兜底（无明确时间以创建时间为基准）
   const commonSense = applyCommonSenseTime(text);
 
-  // 最终选择时间：显式（Kimi 校验后）> 本地显式 > 创建时间+5分钟
+  // 时间语义分类：Kimi 判断优先，本地正则兜底——无时词输入绝不再编造时间（避免虚假逾期）
+  const SEMANTICS = ["collection", "explicit", "range", "wish", "none"];
+  const semantics = SEMANTICS.includes(kimiResult?.time_semantics) ? kimiResult.time_semantics : classifyTimeSemantics(text);
+
+  // 最终选择时间：显式（Kimi 校验后）> 本地显式
   let chosen = explicitTime || localExplicit || null;
 
   // 重复语义：本地正则为准（可靠），AI 结果兜底
@@ -526,14 +536,20 @@ ${habitText}
       chosen = { date: toYmd(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, source: "recurring" };
     }
   }
-  if (!chosen) chosen = applyDefaultTime();
+  // 兜底时间只用于：明确时间型 / 重复约定（cron 需要锚点）。范围/意愿/收集/待安排不造时间
+  if (!chosen && (semantics === "explicit" || recurrence)) chosen = applyDefaultTime();
 
   // 每周/每月重复：把首次提醒对齐到周期内正确的星期/日期
-  if (recurrence) {
+  if (recurrence && chosen) {
     chosen = { ...alignFirstOccurrence(chosen.date, chosen.time, recurrence.repeat_rule, recurrence.custom_recurrence, now), source: chosen.source };
   }
 
-  const reminderISO = toISODateTime(chosen.date, chosen.time);
+  const hasTime = !!chosen;
+  const reminderISO = hasTime ? toISODateTime(chosen.date, chosen.time) : null;
+
+  // 行动窗口：range/collection/wish 生成低压力窗口与复盘点，而不是硬截止时间
+  const timePlan = buildTimePlan(semantics, now);
+  if (hasTime) timePlan.arranged = true;
 
   // 地点与事件：Kimi > 本地提取 > 常识/兜底
   const location = kimiResult?.location || spatiotemporal.location.name || "";
@@ -543,9 +559,9 @@ ${habitText}
     || commonSense?.eventType
     || "其他";
 
-  const endISO = kimiResult?.end_time
-    ? String(kimiResult.end_time)
-    : computeEndDateTime(reminderISO, eventType);
+  const endISO = hasTime
+    ? (kimiResult?.end_time ? String(kimiResult.end_time) : computeEndDateTime(reminderISO, eventType))
+    : null;
 
   const category = normalizeCategory(kimiResult?.category || commonSense?.category || mapEventTypeToCategory(eventType));
   const priority = normalizePriority(kimiResult?.priority || commonSense?.priority || mapEventTypeToPriority(eventType));
@@ -553,8 +569,10 @@ ${habitText}
   return {
     title,
     description,
-    reminder_time: reminderISO,
-    end_time: endISO,
+    // 无明确时间 → 不输出时间字段（落库后即"待安排"，永不虚假逾期）
+    ...(hasTime ? { reminder_time: reminderISO, end_time: endISO } : {}),
+    time_semantics: semantics,
+    time_plan: timePlan,
     location,
     location_type: locationType,
     event_type: eventType,
@@ -564,10 +582,10 @@ ${habitText}
       ? { repeat_rule: recurrence.repeat_rule, custom_recurrence: recurrence.custom_recurrence }
       : {}),
     subtasks: parseSubtasksLocal(text).length ? parseSubtasksLocal(text) : (Array.isArray(kimiResult?.subtasks) ? kimiResult.subtasks.map(String).map((s) => s.slice(0, 30)).filter(Boolean).slice(0, 8) : []),
-    time_source: chosen.source,
+    time_source: chosen?.source || "unscheduled",
     spatiotemporal: {
       ...spatiotemporal.context_at_creation,
-      time_source: chosen.source
+      time_source: chosen?.source || "unscheduled"
     }
   };
 }

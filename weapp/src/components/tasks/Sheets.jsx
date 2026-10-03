@@ -5,7 +5,7 @@ import { IconX, IconSend, IconPencil, IconUserCheck, IconCheck } from "./icons";
 import theme from "./theme";
 
 const snoozeReasons = ["精力不足", "时间被占用", "设备/条件未就绪", "外部阻塞", "忘记了", "范围变更"];
-const times = ["今晚", "明天上午", "明天下午", "下周一", "自定义…"];
+const times = ["5分钟后", "30分钟后", "今晚", "明天上午", "明天下午", "下周一", "自定义…"];
 
 function toChinaIso(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -30,6 +30,9 @@ function previewLineText(item) {
 
 function computeSnoozeTime(when) {
   const now = new Date();
+  // 短延后：以当前时刻为基准（5分钟/30分钟后再提醒，捕捉"马上有空"的窗口）
+  if (when === "5分钟后") return toChinaIso(new Date(now.getTime() + 5 * 60 * 1000));
+  if (when === "30分钟后") return toChinaIso(new Date(now.getTime() + 30 * 60 * 1000));
   const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   switch (when) {
     case "今晚":
@@ -125,12 +128,13 @@ function Pill({ label, active, onClick, activeColor = theme.primary }) {
 
 export function SnoozeSheet({ task, onClose, onConfirm }) {
   const [reason, setReason] = useState(null);
-  const [when, setWhen] = useState("明天上午");
+  const [when, setWhen] = useState("30分钟后");
 
   const handleConfirm = () => {
     if (!reason) return;
     const iso = computeSnoozeTime(when);
-    onConfirm(task, { end_time: iso, reminder_time: iso, reason, when });
+    // 顺延只推迟提醒，不抹掉原截止时间；snooze_until/原因进元数据供短延后序列与策略学习
+    onConfirm(task, { reminder_time: iso, snooze_until: iso, reason, when });
   };
 
   return (

@@ -315,11 +315,14 @@ export default function LifeTaskCard({
     if (completed) return { text: '已完成', color: 'text-stone-400 font-medium' };
 
     // 推迟优先：如果任务被推迟（snoozed），用 snooze_until / reminder_time 作为新参考时间
-    // 否则按 end_time（截止）→ reminder_time 顺序判断
+    // 硬逾期只认 end_time/due_at；仅提醒时间过期的约定不标红（统一逾期语义，避免虚假逾期压力）
     const isSnoozed = task.status === 'snoozed' || !!task.snooze_until;
+    const hasHardDeadline = !!(task.end_time || task.due_at);
     const targetDateStr = isSnoozed
       ? (task.snooze_until || task.reminder_time || task.end_time)
-      : (task.end_time || task.reminder_time);
+      : hasHardDeadline
+        ? (task.end_time || task.due_at)
+        : task.reminder_time;
     if (!targetDateStr) return { text: '', color: 'text-stone-300' };
 
     const targetDate = parseAsShanghai(targetDateStr);
@@ -353,6 +356,10 @@ export default function LifeTaskCard({
       if (diffMinutes < 60) over = `${diffMinutes}分钟`;
       else if (diffHours < 24) over = `${diffHours}小时`;
       else over = `${Math.abs(diffDays)}天`;
+      // 仅提醒时间已过（无明确截止）：soft 待处理，不标红施压
+      if (!isSnoozed && !hasHardDeadline) {
+        return { text: `提醒已过·${over}`, color: 'text-amber-600 font-medium' };
+      }
       return { text: `已过期·${over}`, color: 'text-red-500 font-bold' };
     }
 

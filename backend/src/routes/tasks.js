@@ -440,9 +440,76 @@ tasksRouter.patch("/:id", async (req, res) => {
   }
 
   const extraFields = getTaskExtraFields(payload.data);
-  const nextMetadata = payload.data.metadata === undefined && Object.keys(extraFields).length === 0
+  let nextMetadata = payload.data.metadata === undefined && Object.keys(extraFields).length === 0
     ? undefined
     : mergeTaskMetadata(existing.metadata, payload.data.metadata, extraFields);
+
+  // ── 短延后序列归一化：统一三端顺延行为 ──
+  // 短延后（≤30分钟）按 5→15 分钟推进；当天第 3 次短延后不再打扰，转入 21:00 晚间回顾；
+  // 长顺延（>30分钟）重置序列。snooze_until/snooze_reason 等随 passthrough 进 extraFields，这里补序列字段。
+  const prevExtra = isPlainObject(existing.metadata?._extraFields) ? existing.metadata._extraFields : {};
+  const chinaToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const snoozeNormalize = {};
+  let cappedReminderTime = null;
+  const snoozeTarget = payload.data.reminder_time || payload.data.snooze_until;
+  const isSnoozeIntent = payload.data.snooze_until !== undefined || payload.data.status === "snoozed";
+
+  if (isSnoozeIntent && snoozeTarget) {
+    const targetMs = new Date(snoozeTarget).getTime();
+    const intervalMin = (targetMs - Date.now()) / 60000;
+    const prevCount = prevExtra.snooze_day === chinaToday ? Number(prevExtra.short_snooze_count || 0) : 0;
+    const reason = payload.data.snooze_reason !== undefined
+      ? payload.data.snooze_reason
+      : (prevExtra.snooze_reason || null);
+
+    if (intervalMin > 0 && intervalMin <= 30) {
+      const n = prevCount + 1;
+      if (n >= 3) {
+        // 连续短延后已达两次：当天静默，晚间 21:00 一次回顾
+        const evening = new Date();
+        evening.setHours(21, 0, 0, 0);
+        if (evening.getTime() <= Date.now()) evening.setDate(evening.getDate() + 1);
+        Object.assign(snoozeNormalize, {
+          short_snooze_count: n,
+          snooze_evening_review: true,
+          snooze_until: evening.toISOString(),
+          snooze_day: chinaToday,
+          snooze_reason: reason
+        });
+        cappedReminderTime = evening.toISOString();
+      } else {
+        Object.assign(snoozeNormalize, {
+          short_snooze_count: n,
+          snooze_evening_review: false,
+          snooze_until: new Date(targetMs).toISOString(),
+          snooze_day: chinaToday,
+          snooze_reason: reason
+        });
+      }
+    } else if (intervalMin > 30) {
+      Object.assign(snoozeNormalize, {
+        short_snooze_count: 0,
+        snooze_evening_review: false,
+        snooze_until: new Date(targetMs).toISOString(),
+        snooze_day: chinaToday,
+        snooze_reason: reason
+      });
+    }
+  }
+
+  // 「待安排」约定上补设了时间 → 标记已排期，进入正常的提醒/逾期语义
+  const arrangingTime = !!(payload.data.reminder_time || payload.data.end_time || payload.data.due_at);
+  if (arrangingTime && isPlainObject(prevExtra.time_plan) && prevExtra.time_plan.arranged === false) {
+    snoozeNormalize.time_plan = { ...prevExtra.time_plan, arranged: true };
+  }
+
+  if (Object.keys(snoozeNormalize).length > 0) {
+    const base = nextMetadata === undefined
+      ? (isPlainObject(existing.metadata) ? { ...existing.metadata } : {})
+      : nextMetadata;
+    const prevFields = isPlainObject(base._extraFields) ? base._extraFields : {};
+    nextMetadata = { ...base, _extraFields: { ...prevFields, ...snoozeNormalize } };
+  }
 
   const task = await prisma.task.update({
     where: { id: existing.id },
@@ -453,7 +520,9 @@ tasksRouter.patch("/:id", async (req, res) => {
       priority: payload.data.priority,
       category: payload.data.category,
       dueAt: payload.data.due_at === undefined ? undefined : (payload.data.due_at ? new Date(payload.data.due_at) : null),
-      reminderTime: payload.data.reminder_time === undefined ? undefined : (payload.data.reminder_time ? new Date(payload.data.reminder_time) : null),
+      reminderTime: cappedReminderTime
+        ? new Date(cappedReminderTime)
+        : payload.data.reminder_time === undefined ? undefined : (payload.data.reminder_time ? new Date(payload.data.reminder_time) : null),
       endTime: payload.data.end_time === undefined ? undefined : (payload.data.end_time ? new Date(payload.data.end_time) : null),
       isAllDay: payload.data.is_all_day,
       parentTaskId: payload.data.parent_task_id === undefined ? undefined : (payload.data.parent_task_id || null),

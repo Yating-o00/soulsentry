@@ -581,10 +581,15 @@ export default function TaskCreate() {
         event_type: null,
         time_source: "unknown"
       };
+      // 用户在确认页补设了时间 → time_plan 标记已排期；没设时间则保留"待安排"语义（不造虚假逾期）
+      const timePlan = (reminderISO || endISO)
+        ? { ...(extra.time_plan || { semantics: "explicit" }), arranged: true }
+        : (extra.time_plan || null);
       payload.metadata = {
         ...parsedMetadata,
         _extraFields: {
           ...extra,
+          time_plan: timePlan,
           spatiotemporal: { ...spatiotemporal, location: parsedLocation.trim() || null }
         }
       };
@@ -952,9 +957,14 @@ export default function TaskCreate() {
         payload.repeat_rule = parsedRepeat.repeat_rule;
         if (parsedRepeat.custom_recurrence) payload.custom_recurrence = parsedRepeat.custom_recurrence;
       }
-      if (parsed.spatiotemporal) {
+      if (parsed.spatiotemporal || parsed.time_plan) {
         payload.metadata = {
-          _extraFields: { spatiotemporal: parsed.spatiotemporal }
+          _extraFields: {
+            ...(parsed.spatiotemporal ? { spatiotemporal: parsed.spatiotemporal } : {}),
+            ...(parsed.time_plan
+              ? { time_plan: parsed.reminder_time ? { ...parsed.time_plan, arranged: true } : parsed.time_plan }
+              : {})
+          }
         };
       }
 
@@ -1027,6 +1037,7 @@ export default function TaskCreate() {
       setParsedLocation(parsed.location || "");
       setParsedMetadata({
         _extraFields: {
+          time_plan: parsed.time_plan || null,
           spatiotemporal: parsed.spatiotemporal || {
             created_at: new Date().toISOString(),
             input: (parsed.title || "").slice(0, 500),

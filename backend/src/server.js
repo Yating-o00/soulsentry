@@ -18,7 +18,8 @@ process.on("unhandledRejection", (reason) => {
 });
 
 await ensureDemoUser();
-startReminderCron();
+// 冒烟/测试环境可用 DISABLE_REMINDER_CRON=1 关闭定时提醒，避免与手动验证互相干扰
+if (process.env.DISABLE_REMINDER_CRON !== "1") startReminderCron();
 sweepStaleBrowserExecutions(prisma);
 
 const server = http.createServer(app);

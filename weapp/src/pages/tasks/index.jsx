@@ -337,7 +337,10 @@ export default function Tasks() {
         status: "snoozed"
       });
       setSnoozeTask(null);
-      showToast(`已顺延到${payload.when} · 「${payload.reason}」记入记忆`);
+      const recurringSnooze = _task?.repeat_rule && _task.repeat_rule !== "none";
+      showToast(recurringSnooze
+        ? `已顺延这一次到${payload.when} · 下一次提醒照常`
+        : `已顺延到${payload.when} · 「${payload.reason}」记入记忆`);
       fetchData();
     } catch (err) {
       // handled globally

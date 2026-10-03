@@ -544,6 +544,12 @@ tasksRouter.patch("/:id", async (req, res) => {
     }
   }
 
+  // 重复约定的顺延/唤回一律不改写系列排期锚点：当次延后只记在 snooze_until 上，
+  // 由唤回 cron 到点轻声提醒；明天及以后的提醒仍按原锚点到来（顺延 5 分钟不会把系列带成 18:05）
+  if (recurringRule && isSnoozeIntent) {
+    nextReminderTimeForUpdate = undefined;
+  }
+
   if (Object.keys(snoozeNormalize).length > 0) {
     const base = nextMetadata === undefined
       ? (isPlainObject(existing.metadata) ? { ...existing.metadata } : {})

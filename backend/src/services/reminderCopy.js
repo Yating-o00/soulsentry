@@ -3,7 +3,7 @@ import { invokeKimiText } from "../lib/kimi.js";
 // 提醒文案统一走这里：先尝试用 AI 理解约定内容生成温柔的自然语言提醒，
 // 失败则退回暖色兜底文案。文案原则：帮助想起、给一点动力，不催促、不制造焦虑。
 
-const KIND_LABEL = { reminder: "开始提醒", follow_up: "到时跟进", forget: "遗忘唤醒" };
+const KIND_LABEL = { reminder: "开始提醒", follow_up: "到时跟进", forget: "遗忘唤醒", snooze_comeback: "稍后唤回", evening_review: "晚间回顾" };
 
 const CATEGORY_LABEL = {
   work: "工作", personal: "个人", health: "健康", study: "学习",
@@ -46,6 +46,21 @@ function warmFallback(task, kind, context) {
   const title = String(task?.title || "这件事").trim();
   const short = title.length > 12 ? `${title.slice(0, 12)}…` : title;
   const weather = weatherSentence(context?.weather);
+
+  // 重复约定的唤回：理解用户在忙，给台阶、不给压力，并轻轻预告下一次提醒
+  if (kind === "snooze_comeback") {
+    const nextAt = context?.nextOccurrenceText ? `，明天 ${context.nextOccurrenceText} 还会提醒你` : "";
+    if (context?.evening) {
+      return {
+        title: `「${short}」今晚先放这儿`,
+        body: `今天到这里就好，不用挂心。${context?.nextOccurrenceText ? `${context.nextOccurrenceText} 它会照常来提醒你。` : "它明天会照常来提醒你。"}${weather}`
+      };
+    }
+    return {
+      title: `现在方便「${short}」吗？`,
+      body: `刚才你在忙，不急。方便的话现在顺手做一下就好；实在没空也没关系${nextAt}。${weather}`
+    };
+  }
   if (kind === "follow_up") {
     return {
       title: `「${short}」的预计时间到了`,
@@ -60,6 +75,13 @@ function warmFallback(task, kind, context) {
     };
   }
   const desc = task?.description ? String(task.description).trim().slice(0, 36) : "";
+  // 重复约定（每天吃药这类日常小约定）：提醒是陪伴不是任务
+  if (kind === "reminder" && context?.isRecurring) {
+    return {
+      title: `到点啦：${short}`,
+      body: `这是你们每天的小约定。方便的时候做一下就好，做完记得打个卡；忙的话点「稍后」，它不会打扰你太久。${weather}`
+    };
+  }
   return {
     title: `「${short}」的时间到了`,
     body: `${desc ? `你之前记下的${title}：${desc}。` : `${title}。`}不急，喝口水，按你自己的节奏来，我在这里陪你。${weather}`
@@ -75,6 +97,10 @@ export async function buildReminderCopy({ task, kind, context = {} }) {
   try {
     const contextLines = [
       context.days ? `这条约定已经被搁置约 ${context.days} 天。` : "",
+      context.isRecurring ? "这是一条周期性重复的约定（如每天吃药、每周锻炼），这是其中一次的提醒。请写得像一个老朋友在固定时刻的轻轻招呼：理解用户可能会忙、可能会忘，提醒TA这是你们之间的小约定，方便时做一下、做完打个卡就好，忙也可以点「稍后」；不要让它听起来像必须完成的任务。" : "",
+      context.evening ? "这是当天最后一次跟进（晚间回顾）：告诉用户今天到这里就好，不用挂心，下一次提醒会照常来。" : "",
+      context.snoozedMinutes ? `用户大约 ${context.snoozedMinutes} 分钟前说"稍后提醒"，现在到了TA自己选的时间。请写得体贴：理解TA刚才在忙，现在如果方便就轻轻唤TA一下；不方便也完全没关系，并自然带一句下一次提醒还会照常来（不要催促）。` : "",
+      context.nextOccurrenceText ? `这条约定的下一次提醒时间：${context.nextOccurrenceText}。` : "",
       context.location ? `相关地点：${context.location}` : "",
       context.timeText ? `提醒触发时间：${context.timeText}` : "",
       context.weather

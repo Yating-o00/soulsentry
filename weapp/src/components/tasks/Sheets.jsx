@@ -127,13 +127,17 @@ function Pill({ label, active, onClick, activeColor = theme.primary }) {
 }
 
 export function SnoozeSheet({ task, onClose, onConfirm }) {
+  const recurring = task?.repeat_rule && task.repeat_rule !== "none";
+  // 重复约定只给当次短延选项：顺延的是"这一次提醒"，不是整个系列
+  const options = recurring ? ["5分钟后", "30分钟后", "今晚"] : times;
   const [reason, setReason] = useState(null);
   const [when, setWhen] = useState("30分钟后");
 
   const handleConfirm = () => {
     if (!reason) return;
     const iso = computeSnoozeTime(when);
-    // 顺延只推迟提醒，不抹掉原截止时间；snooze_until/原因进元数据供短延后序列与策略学习
+    // 顺延只推迟提醒，不抹掉原截止时间；snooze_until/原因进元数据供短延后序列与策略学习。
+    // 重复约定的 reminder_time 后端会忽略（保护系列锚点），这里照传不影响。
     onConfirm(task, { reminder_time: iso, snooze_until: iso, reason, when });
   };
 
@@ -155,10 +159,15 @@ export function SnoozeSheet({ task, onClose, onConfirm }) {
         <View style={{ padding: "28rpx" }}>
           <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>顺延到</Text>
           <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
-            {times.map((t) => (
+            {options.map((t) => (
               <Pill key={t} label={t} active={when === t} onClick={() => setWhen(t)} />
             ))}
           </View>
+          {recurring && (
+            <Text style={{ marginTop: "12rpx", fontSize: "22rpx", color: theme.inkQuaternary }}>
+              只推迟这一次，下一次提醒会照常来
+            </Text>
+          )}
 
           <Text style={{ marginTop: "12rpx", fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>
             发生了什么？（会记入记忆，帮心栈下次排得更准）

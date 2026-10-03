@@ -216,16 +216,25 @@ export async function sendDueReminders() {
   let sent = 0;
   let skipped = 0;
   let inAppFallback = 0;
-  const beijingToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
   for (const task of dueTasks) {
     const extraFields = getTaskExtraFields(task);
-    // 重复约定今天已打卡：不再发送本次提醒，但照常推进排期到下一周期
-    const recurrenceDoneToday = ["daily", "weekly", "monthly", "custom"].includes(extraFields.repeat_rule)
-      && extraFields.recurrence_last_done === beijingToday;
+    const recurringRule = ["daily", "weekly", "monthly", "custom"].includes(extraFields.repeat_rule) ? extraFields.repeat_rule : null;
+    // 重复约定的当次提醒锚点：同一期只处理一次（发出或按用户意愿略过），防止顺延/打卡后整点又响
+    const anchorISO = task.reminderTime ? new Date(task.reminderTime).toISOString() : null;
+    if (recurringRule && anchorISO && extraFields.recurrence_fired_for === anchorISO) {
+      skipped += 1;
+      continue;
+    }
+    // 今天已打卡：不再发送本次提醒，但照常推进排期到下一周期
+    const beijingToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const recurrenceDoneToday = recurringRule && extraFields.recurrence_last_done === beijingToday;
+    // 用户点了"稍后"且还没到点：本次提醒按用户意愿略过（到点由唤回接手），系列照常推进
+    const snoozePending = extraFields.snooze_until && new Date(extraFields.snooze_until).getTime() > Date.now();
+    const suppressSend = recurrenceDoneToday || (recurringRule && snoozePending);
     const st = extraFields.spatiotemporal;
     const weather = await getWeatherContextForUser(task.user?.preferences, task);
-    const copy = recurrenceDoneToday
+    const copy = suppressSend
       ? null
       : await buildReminderCopy({
           task,
@@ -233,12 +242,13 @@ export async function sendDueReminders() {
           context: {
             location: st?.current_place_name || null,
             timeText: task.reminderTime ? new Date(task.reminderTime).toLocaleString("zh-CN", { hour12: false }) : null,
-            weather
+            weather,
+            isRecurring: !!recurringRule
           }
         });
 
-    let result = { ok: false, inAppFallback: false, skipped: recurrenceDoneToday };
-    if (!recurrenceDoneToday) {
+    let result = { ok: false, inAppFallback: false, skipped: suppressSend };
+    if (!suppressSend) {
       const payload = {
         title: copy.title,
         body: copy.body,
@@ -263,12 +273,12 @@ export async function sendDueReminders() {
     else skipped += 1;
 
     // 无论发送成功与否，都更新 metadata 里的 reminder_sent_at，避免同一分钟重复尝试
-    // 重复约定（每天/每周/每月）：同时把 reminderTime/endTime 推进到下一周期
-    const nextReminder = ["daily", "weekly", "monthly", "custom"].includes(extraFields.repeat_rule)
-      ? computeNextReminderTime(task.reminderTime, extraFields.repeat_rule, extraFields.custom_recurrence, now)
+    // 重复约定（每天/每周/每月）：记录本期已处理（recurrence_fired_for）并把 reminderTime/endTime 推进到下一周期
+    const nextReminder = recurringRule
+      ? computeNextReminderTime(task.reminderTime, recurringRule, extraFields.custom_recurrence, now)
       : null;
     try {
-      const data = { metadata: buildTaskMetadataWithExtra(task, { reminder_sent_at: now.toISOString() }) };
+      const data = { metadata: buildTaskMetadataWithExtra(task, { reminder_sent_at: now.toISOString(), ...(anchorISO && recurringRule ? { recurrence_fired_for: anchorISO } : {}) }) };
       if (nextReminder) {
         data.reminderTime = nextReminder;
         if (task.endTime) {
@@ -476,13 +486,15 @@ export async function sendSnoozeComebacks() {
   const now = new Date();
   if (isQuietHours(now)) return { sent: 0, total: 0, quiet: true };
 
-  // 候选：近期有提醒时间且未完成的约定（snooze 字段在 metadata Json 里，只能内存过滤）
+  // 候选：近期有提醒时间且未完成的约定（snooze 字段在 metadata Json 里，只能内存过滤）。
+  // 重复约定顺延不改写 reminderTime（可能已是明天的排期），所以不按 reminderTime 上限过滤，
+  // 依靠内存里的 snooze_until / comeback_sent_at 去重保证正确性。
   const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 3600 * 1000);
   const candidates = await prisma.task.findMany({
     where: {
       deletedAt: null,
       status: { notIn: ["DONE", "ARCHIVED"] },
-      reminderTime: { not: null, gte: twoDaysAgo, lte: new Date(now.getTime() + 60 * 1000) }
+      reminderTime: { not: null, gte: twoDaysAgo }
     },
     include: { user: { include: { preferences: true } } },
     take: 300
@@ -516,15 +528,24 @@ export async function sendSnoozeComebacks() {
       continue;
     }
 
-    const copy = evening
-      ? {
-          title: `晚间回顾 · ${task.title}`,
-          body: "今天先放到这里。今晚有空的话，可以花 5 分钟开个头，或把它改到更合适的时间。"
-        }
-      : {
-          title: `现在方便处理「${task.title}」吗？`,
-          body: "刚刚你说稍后。如果这 5-20 分钟有空，顺手处理掉它；没空的话再点一次「稍后」或「今天没空」。"
-        };
+    // 重复约定：预告下一次提醒时间，让用户知道"这次没空也没关系，它还会来"
+    const recurringRule = ["daily", "weekly", "monthly", "custom"].includes(extra.repeat_rule) ? extra.repeat_rule : null;
+    let nextOccurrenceText = null;
+    if (recurringRule && task.reminderTime) {
+      const next = computeNextReminderTime(task.reminderTime, recurringRule, extra.custom_recurrence, now);
+      if (next) nextOccurrenceText = `${String(next.getHours()).padStart(2, "0")}:${String(next.getMinutes()).padStart(2, "0")}`;
+    }
+    const weather = await getWeatherContextForUser(task.user?.preferences, task);
+    const copy = await buildReminderCopy({
+      task,
+      kind: "snooze_comeback",
+      context: {
+        evening,
+        isRecurring: !!recurringRule,
+        nextOccurrenceText,
+        weather
+      }
+    });
 
     const payload = {
       title: copy.title,

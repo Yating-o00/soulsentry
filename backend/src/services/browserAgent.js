@@ -450,7 +450,8 @@ function summarizeArgs(tool, args) {
 }
 
 async function runLoop(session) {
-  const deadline = Date.now() + RUN_DEADLINE_MS;  while (session.stepCount < MAX_STEPS && Date.now() < deadline) {
+  const deadline = Date.now() + RUN_DEADLINE_MS;
+  while (session.stepCount < MAX_STEPS && Date.now() < deadline) {
     // 接管检查点：用户远程操作期间 Agent 挂起
     while (session.takeover) {
       session.status = "takeover";
@@ -458,6 +459,15 @@ async function runLoop(session) {
       await sleep(600);
     }
     if (session.status === "takeover") session.status = "running";
+
+    // 页面存活检查：用户接管期间可能关掉标签页或页面崩溃，自动开新页继续，
+    // 否则后续动作会一直报 Target page, context or browser has been closed
+    if (!session.page || session.page.isClosed()) {
+      session.page = await session.context.newPage();
+      session.live.cdpPage = null; // 让 screencast 重新绑定新页面
+      logStep(session, "page_reopen", {}, "页面已关闭，自动打开新标签页继续");
+      persist(session);
+    }
 
     await ensureCollect(session.page);
     const snapshot = await snapshotPage(session.page);

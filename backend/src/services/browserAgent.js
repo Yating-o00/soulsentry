@@ -504,6 +504,16 @@ async function runLoop(session) {
       });
       message = result.message;
     } catch (err) {
+      // 失败时把喂给 Kimi 的消息序列结构打进日志：定位 tool_calls 悬空/孤儿等校验 400
+      const seq = messages.map((m) => {
+        if (m.role === "assistant") {
+          const ids = Array.isArray(m.tool_calls) ? m.tool_calls.map((t) => t?.id).filter(Boolean) : [];
+          return `assistant${ids.length ? `[${ids.join(",")}]` : ""}`;
+        }
+        if (m.role === "tool") return `tool(${m.tool_call_id})`;
+        return m.role;
+      }).join(" ");
+      console.error(`[browserAgent] Kimi 调用失败: ${err?.message}\n[browserAgent] messages 序列: ${seq}`);
       logStep(session, "error", {}, err?.message || "Kimi 调用失败");
       persist(session);
       throw new Error("浏览器 Agent 思考失败：" + (err?.message || "AI 服务异常"));

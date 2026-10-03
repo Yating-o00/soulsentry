@@ -876,7 +876,6 @@ export default function LifeTaskCard({
                     <div className="flex items-center gap-2 min-w-0">
                         <Bot className="w-4 h-4 text-[#384877] flex-shrink-0" />
                         <span className="text-xs font-semibold text-slate-800">智能执行</span>
-                        <span className="text-[11px] text-slate-400 truncate">让心栈把能做的先做了</span>
                     </div>
                     <button
                         type="button"

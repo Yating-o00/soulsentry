@@ -244,7 +244,7 @@ const AGENT_SYSTEM = `你是 SoulSentry「心栈」内置的浏览器操作 Agen
 规则：
 1. 每轮根据最新快照决定 1 个动作；动作之间用观察结果驱动，不要臆测页面内容。
 2. 只在编号列表内引用元素；填写前先确认输入框用途（placeholder/相邻文字）。
-3. 涉及登录、注册、短信验证、滑块验证码、支付、输入密码/银行卡等敏感操作时，禁止代劳，立即用 ask_user 暂停并向用户说明需要什么。
+3. 遇到登录、注册、短信验证、滑块验证码、支付、输入密码/银行卡等页面时，禁止代劳，也禁止绕开（比如改用搜索给信息糊弄过去）；立即用 ask_user 暂停，choices 里必须包含「我自己来操作网页」，让用户亲手完成，用户交还后再继续办事。需要登录账号才能办成的事（订外卖、订票、借用账号发布等）：若页面要求登录，第一步就是 ask_user 请用户接管登录，登录完成交还后继续，不得跳过登录环节。
 4. 需要用户做选择（如多个班次/商品）时，先用 extract 记录选项信息，再 ask_user 给出 choices。
 5. 目标完成后用 done 汇总；页面确实无法满足时用 fail 说明原因。不要无限重试同一个失败动作，最多两次后改 ask_user 或 fail。
 6. extract 记录的是"用户要的结果信息"，逐条记录，最后 done 的 summary 里汇总。
@@ -254,7 +254,7 @@ const AGENT_SYSTEM = `你是 SoulSentry「心栈」内置的浏览器操作 Agen
 10. 选定一个平台就坚持办完：先填搜索表单，再看卡片列表，用 extract 记录候选，最后 ask_user 让用户选。同一平台连续两次失败才换下一个，不要到处开网站。
 11. 日期/日历控件：优先直接在日期输入框填入日期（YYYY-MM-DD 或 MM月DD日），填完按 Enter；若是弹出的日历面板，就 click 面板里的具体日期数字。
 12. 页面打开后内容没加载出来（快照里几乎没东西）时，先等一拍再重新看快照，必要时 scroll 一下触发懒加载。
-13. 以结果为导向：订/买/约类任务，每个阶段的目标都是"把可对比的选项交给用户"。查到的候选用 extract 记录关键差异（时间/价格/时长/评分），凑够 2-3 个就 ask_user 让用户选，用户选定后再继续执行。登录、验证码、付款一律 ask_user 把主动权交回用户。网页被安全验证拦截时不要反复重试，直接向用户说明并给选择；页面信息不全或被拦时，用 search_web 联网搜索补齐时刻、价格等关键信息。
+13. 以结果为导向：订/买/约类任务，每个阶段的目标都是"把可对比的选项交给用户"。查到的候选用 extract 记录关键差异（时间/价格/时长/评分），凑够 2-3 个就 ask_user 让用户选，用户选定后再继续执行。登录、验证码、付款一律 ask_user 把主动权交回用户。网页被安全验证拦截时不要反复重试，直接向用户说明并给选择；页面信息不全或被拦时可用 search_web 联网搜索补齐时刻、价格等关键信息——但 search_web 只能用来补齐信息，不能用它代替用户要的办事结果：订/买/约/发布类目标必须真正在网页上完成，卡住时就 ask_user 说明卡点让用户接管。
 14. 按任务类型走流程（本质都是：先弄清需求 → 收集候选 → 对比 → 交用户选 → 执行 → 敏感动作交回用户 → 汇总结果）：
 - 订机票/火车票/酒店：出发地、目的地、日期、人数、舱位/席别缺失时先问用户；查 2-3 个候选（时间/价格/耗时），用户选定后进入预订；填乘机人信息前逐项与用户确认；付款必须用户自己来。
 - 订外卖/买东西：地址、口味/规格、预算缺失先问；列出 2-3 个合适选项（店名/价格/评分/预计送达），用户选定后下单；支付交回用户。
@@ -449,6 +449,16 @@ function summarizeArgs(tool, args) {
   return "";
 }
 
+// 检测页面是否处于登录/注册墙：URL 或快照文本出现登录特征
+function looksLikeLoginWall(session) {
+  const snap = session?.lastSnapshot;
+  if (!snap) return false;
+  const url = String(snap.url || "").toLowerCase();
+  if (/login|log-in|signin|sign-in|passport|\/auth|register|oauth/.test(url)) return true;
+  const text = `${snap.title || ""} ${snap.textExcerpt || ""}`;
+  return /扫码登录|密码登录|短信登录|验证码登录|账号登录|手机登录|登录\/注册|登录或注册|新用户注册/.test(text);
+}
+
 async function runLoop(session) {
   let deadline = Date.now() + RUN_DEADLINE_MS;
   while (session.stepCount < MAX_STEPS && Date.now() < deadline) {
@@ -581,6 +591,11 @@ async function runLoop(session) {
         // 提问可能承载完整交付物（如发布前的文案全文），上限放宽到 2000 字
         const question = String(args.question || "需要你确认一下").slice(0, 2000);
         const choices = (Array.isArray(args.choices) ? args.choices : []).map((c) => String(c).slice(0, 60)).filter(Boolean).slice(0, 4);
+        // 登录墙兜底：无论模型给了什么选项，都必须给用户「我自己来操作网页」的接管入口
+        if (looksLikeLoginWall(session) && !choices.some((c) => c.includes("我自己来操作"))) {
+          choices.unshift("我自己来操作网页");
+          if (choices.length > 4) choices.pop();
+        }
         logStep(session, "ask_user", args, "等待用户回应");
         session.status = "waiting_input";
         session.waiting = { question, choices };

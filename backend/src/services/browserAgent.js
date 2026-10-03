@@ -765,10 +765,14 @@ export async function respondToAgent(executionId, { choice, text } = {}) {
   const s = sessions.get(executionId);
   if (!s) return { ok: false, message: "会话不存在或已结束" };
   if (s.status !== "waiting_input" || !s.pendingResolve) return { ok: false, message: "当前不在等待回应的状态" };
+  // 用户消息命中等待中的选项时按选项回应（反馈语义更准确：「用户选择了…」）
+  const matched = !choice && text && Array.isArray(s.waiting?.choices)
+    ? s.waiting.choices.find((c) => String(text).includes(c))
+    : "";
   const resolve = s.pendingResolve;
   s.pendingResolve = null;
   s.waiting = null;
-  resolve({ choice: choice || "", text: text || "" });
+  resolve({ choice: choice || matched || "", text: text || "" });
   return { ok: true };
 }
 

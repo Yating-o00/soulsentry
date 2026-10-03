@@ -89,6 +89,8 @@ export default function SmartInputBar() {
   const fileInputRef = useRef(null);
   const agentPollRef = useRef(null);
   const lastAskedRef = useRef("");
+  const askedEpochRef = useRef(0);   // 用户插话计数：插话后相同提问会重新推送
+  const askedPushedRef = useRef(0);  // 上次推送提问时的插话计数
   const taRef = useRef(null);
   const threadRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -191,9 +193,12 @@ export default function SmartInputBar() {
           setAgentTakeover(false);
         }
         if (st.status === "waiting_input" && st.waiting?.question) {
-          setAgentStatus("等你回应");
-          if (st.waiting.question !== lastAskedRef.current) {
+          setAgentStatus(`等你回应：${String(st.waiting.question).slice(0, 24)}`);
+          // 相同问题在用户插话后重新推送，避免 Agent 重复提问时用户看不到新提问
+          const epoch = askedEpochRef.current;
+          if (st.waiting.question !== lastAskedRef.current || askedPushedRef.current !== epoch) {
             lastAskedRef.current = st.waiting.question;
+            askedPushedRef.current = epoch;
             pushAssistant(st.waiting.question, { agent: true, choices: st.waiting.choices || [] });
           }
         } else if (st.status === "failed" || st.error) {
@@ -247,6 +252,7 @@ export default function SmartInputBar() {
     const msgs = [...messages, { role: "user", content: content.slice(0, 500) }];
     setMessages(msgs);
     setInputValue("");
+    askedEpochRef.current += 1; // 用户插话：Agent 再提相同问题时重新推送展示
     const atts = attachments;
     setAttachments([]);
     callAI(msgs, pending, atts);

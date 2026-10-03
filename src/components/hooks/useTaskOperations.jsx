@@ -123,9 +123,15 @@ export function useTaskOperations() {
     const optimisticStatus = isRecurring && newStatus === 'completed' ? 'pending' : newStatus;
     queryClient.setQueryData(['tasks'], (oldData) => {
       if (!Array.isArray(oldData)) return oldData;
-      return oldData.map(t => 
-        t.id === task.id 
-          ? { ...t, status: optimisticStatus, completed_at: completedAt }
+      return oldData.map(t =>
+        t.id === task.id
+          ? {
+              ...t,
+              status: optimisticStatus,
+              completed_at: isRecurring ? t.completed_at : completedAt,
+              // 重复约定：今天已打卡状态（后端按北京日期维护，系列保持活跃）
+              ...(isRecurring ? { done_today: newStatus === 'completed' } : {})
+            }
           : t
       );
     });
@@ -181,12 +187,15 @@ export function useTaskOperations() {
     }
 
     // 后台异步更新服务器
+    // 重复约定：发送真实完成/取消状态，由后端记录"今天已打卡"并推进排期，系列保持活跃
     updateTaskMutation.mutate({
       id: task.id,
-      data: { 
-        status: optimisticStatus,
-        completed_at: completedAt
-      }
+      data: isRecurring
+        ? { status: newStatus }
+        : {
+            status: newStatus,
+            completed_at: completedAt
+          }
     });
 
     if (newStatus === "completed") {

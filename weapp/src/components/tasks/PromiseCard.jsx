@@ -9,7 +9,7 @@ import {
   IconChevronRight,
 } from "./icons";
 import theme from "./theme";
-import { isRecurring, recurringBadgeText } from "@/utils/recurrence";
+import { isRecurring, recurringBadgeText, nextOccurrenceOf } from "@/utils/recurrence";
 
 const categoryMap = {
   work: "工作",
@@ -97,7 +97,18 @@ export default function PromiseCard({
   // 重复约定永不显示逾期，改显「规则 · 倒计时」徽标
   const recurring = isRecurring(task);
   const overdue = Boolean(analysis?.overdue) && !recurring;
-  const recurringText = recurring ? recurringBadgeText(task) : null;
+  // 重复约定今天已打卡（后端按北京日期给出）：勾选/盖章样式，但卡片保留、系列继续
+  const doneToday = recurring && Boolean(task.done_today);
+  const showChecked = done || doneToday;
+  const recurringText = recurring
+    ? (doneToday
+      ? (() => {
+          const next = nextOccurrenceOf(task);
+          const hm = next ? `${String(next.getHours()).padStart(2, "0")}:${String(next.getMinutes()).padStart(2, "0")}` : null;
+          return hm ? `今天已打卡 · ${hm} 再提醒` : "今天已打卡";
+        })()
+      : recurringBadgeText(task))
+    : null;
   const p = priorityMark[task.priority] || priorityMark.medium;
   const categoryLabel = categoryMap[task.category] || task.category || "其他";
   const aiNote = makeAiNote(task, analysis);
@@ -165,7 +176,7 @@ export default function PromiseCard({
       }}
       onClick={goDetail}
     >
-      {done && <Seal />}
+      {showChecked && <Seal />}
 
       <View style={{ display: "flex", flexDirection: "row", padding: "28rpx" }}>
         {/* check circle */}
@@ -175,8 +186,8 @@ export default function PromiseCard({
             width: "40rpx",
             height: "40rpx",
             borderRadius: "50%",
-            border: `2rpx solid ${done ? theme.seal : theme.inkSecondary}`,
-            background: done ? theme.seal : "transparent",
+            border: `2rpx solid ${showChecked ? theme.seal : theme.inkSecondary}`,
+            background: showChecked ? theme.seal : "transparent",
             marginTop: "6rpx",
             marginRight: "24rpx",
             display: "flex",
@@ -185,7 +196,7 @@ export default function PromiseCard({
             flexShrink: 0,
           }}
         >
-          {done && (
+          {showChecked && (
             <Text style={{ color: theme.paper, fontSize: "24rpx" }}>✓</Text>
           )}
         </View>

@@ -230,6 +230,20 @@ export default function Tasks() {
   const evo = useMemo(() => computeEvolution(tasks, executions), [tasks, executions]);
 
   const handleComplete = (task) => {
+    // 重复约定：打卡/取消打卡只切换"今天已完成"，卡片保留在列表，系列继续
+    const recurring = task.repeat_rule && task.repeat_rule !== "none";
+    if (recurring) {
+      const marking = !task.done_today;
+      const prevDone = Boolean(task.done_today);
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done_today: marking } : t)));
+      showToast(marking ? "已盖章 · 今天已完成" : "已取消完成");
+      patch(`/tasks/${task.id}`, { status: marking ? "completed" : "pending" }).catch(() => {
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done_today: prevDone } : t)));
+        showToast("网络开小差了，请再试一次");
+      });
+      return;
+    }
+
     const markingDone = !isTaskDone(task);
     const prevStatus = task.status; // 网络失败回滚用
     const nextStatus = markingDone ? "completed" : "pending";

@@ -149,6 +149,23 @@ function adjustHour(hour, period, fullText) {
 }
 
 /**
+ * 从时间段输入提取窗口结束时刻：
+ *   晚6-7点 → { hour: 19, minute: 0 }   晚上8点半到9点 → { hour: 21, minute: 0 }   18:00-19:30 → { hour: 19, minute: 30 }
+ * 返回 { hour, minute } 或 null（无时间段时）
+ */
+export function parseTimeWindowEnd(text) {
+  const t = String(text || "").replace(/\s+/g, "");
+  if (!t) return null;
+  const periodRe = "(凌晨|早上|早晨|清晨|上午|中午|下午|晚上|晚间|晚|早|今晚|今夜)";
+  const minuteRe = "(\\d{1,2}|半|一刻|三刻)";
+  const endRe = new RegExp(`${periodRe}?(?:\\d{1,2})[点:：]?${minuteRe}?(?:到|-|—|至)${periodRe}?(\\d{1,2})[点:：]${minuteRe}?`);
+  const m = t.match(endRe);
+  if (!m) return null;
+  const hour = adjustHour(parseInt(m[4], 10), m[5] || m[1], t);
+  return { hour, minute: parseMinute(m[6]) };
+}
+
+/**
  * 计算下一次提醒时间（严格晚于 from，通常 from = 本次发送时刻）
  * reminderTime 提供时刻（时:分）与默认星期/日期锚点
  * 超过 custom_recurrence.end_date 时返回 null（停止重复）

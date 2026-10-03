@@ -216,38 +216,47 @@ export async function sendDueReminders() {
   let sent = 0;
   let skipped = 0;
   let inAppFallback = 0;
+  const beijingToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
   for (const task of dueTasks) {
     const extraFields = getTaskExtraFields(task);
+    // 重复约定今天已打卡：不再发送本次提醒，但照常推进排期到下一周期
+    const recurrenceDoneToday = ["daily", "weekly", "monthly", "custom"].includes(extraFields.repeat_rule)
+      && extraFields.recurrence_last_done === beijingToday;
     const st = extraFields.spatiotemporal;
     const weather = await getWeatherContextForUser(task.user?.preferences, task);
-    const copy = await buildReminderCopy({
-      task,
-      kind: "reminder",
-      context: {
-        location: st?.current_place_name || null,
-        timeText: task.reminderTime ? new Date(task.reminderTime).toLocaleString("zh-CN", { hour12: false }) : null,
-        weather
-      }
-    });
+    const copy = recurrenceDoneToday
+      ? null
+      : await buildReminderCopy({
+          task,
+          kind: "reminder",
+          context: {
+            location: st?.current_place_name || null,
+            timeText: task.reminderTime ? new Date(task.reminderTime).toLocaleString("zh-CN", { hour12: false }) : null,
+            weather
+          }
+        });
 
-    const payload = {
-      title: copy.title,
-      body: copy.body,
-      url: `/tasks?id=${task.id}`,
-      tag: `reminder-${task.id}`,
-      requireInteraction: false,
-      vibrate: [200, 100, 200],
-      data: { taskId: task.id, type: "reminder" },
-    };
+    let result = { ok: false, inAppFallback: false, skipped: recurrenceDoneToday };
+    if (!recurrenceDoneToday) {
+      const payload = {
+        title: copy.title,
+        body: copy.body,
+        url: `/tasks?id=${task.id}`,
+        tag: `reminder-${task.id}`,
+        requireInteraction: false,
+        vibrate: [200, 100, 200],
+        data: { taskId: task.id, type: "reminder" },
+      };
 
-    const result = await trySendPush({
-      userId: task.userId,
-      preferences: task.user.preferences,
-      payload,
-      task,
-      logPrefix: `start-reminder task=${task.id}`,
-    });
+      result = await trySendPush({
+        userId: task.userId,
+        preferences: task.user.preferences,
+        payload,
+        task,
+        logPrefix: `start-reminder task=${task.id}`,
+      });
+    }
 
     if (result.ok) sent += 1;
     else if (result.inAppFallback) inAppFallback += 1;
@@ -308,6 +317,22 @@ export async function sendEndTimeFollowUps() {
     const lastSentAt = extra.end_reminder_sent_at ? new Date(extra.end_reminder_sent_at) : null;
     // 只对“当前 end_time 比上次跟进时间更新”的任务触发，避免重复
     if (lastSentAt && task.endTime <= lastSentAt) {
+      continue;
+    }
+
+    // 重复约定今天已打卡：窗口结束的温和跟进不再打扰，只记已处理（否则 endTime 未推进会每轮重复挑选）
+    const beijingToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    if (["daily", "weekly", "monthly", "custom"].includes(extra.repeat_rule)
+      && extra.recurrence_last_done === beijingToday) {
+      try {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: { metadata: buildTaskMetadataWithExtra(task, { end_reminder_sent_at: new Date().toISOString() }) }
+        });
+      } catch (err) {
+        console.warn(`[reminderSender] task=${task.id} failed to mark end follow-up handled:`, err);
+      }
+      skipped += 1;
       continue;
     }
 

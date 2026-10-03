@@ -1,6 +1,6 @@
 import { invokeKimiText } from "../lib/kimi.js";
 import { resolveSpatiotemporalContext } from "./extractContext.js";
-import { parseRecurrenceFromText, parseTimeOfDay, alignFirstOccurrence } from "../lib/recurrence.js";
+import { parseRecurrenceFromText, parseTimeOfDay, parseTimeWindowEnd, alignFirstOccurrence } from "../lib/recurrence.js";
 import { classifyTimeSemantics, buildTimePlan } from "../lib/timeSemantics.js";
 
 function pad(n) {
@@ -560,7 +560,15 @@ ${habitText}
     || "其他";
 
   const endISO = hasTime
-    ? (kimiResult?.end_time ? String(kimiResult.end_time) : computeEndDateTime(reminderISO, eventType))
+    ? (kimiResult?.end_time
+      ? String(kimiResult.end_time)
+      : (recurrence && (() => {
+          // 重复约定的时间段（"每天晚上6-7点"）→ end_time 取窗口结束，作为当次温和跟进的时点
+          const winEnd = parseTimeWindowEnd(text);
+          if (winEnd) return toISODateTime(chosen.date, `${pad(winEnd.hour)}:${pad(winEnd.minute)}`);
+          return null;
+        })())
+      || computeEndDateTime(reminderISO, eventType))
     : null;
 
   const category = normalizeCategory(kimiResult?.category || commonSense?.category || mapEventTypeToCategory(eventType));

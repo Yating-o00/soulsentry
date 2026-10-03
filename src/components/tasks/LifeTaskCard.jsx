@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
@@ -49,7 +49,13 @@ export default function LifeTaskCard({
   onReparent,
   autoExec
 }) {
-  const [completed, setCompleted] = useState(task.status === 'completed');
+  const isRecurringTask = task.repeat_rule && task.repeat_rule !== 'none';
+  // 重复约定：完成 = 今天已打卡（done_today），约定状态保持活跃、系列继续
+  const serverDone = isRecurringTask ? !!task.done_today : task.status === 'completed';
+  const [completed, setCompleted] = useState(serverDone);
+  useEffect(() => {
+    setCompleted(isRecurringTask ? !!task.done_today : task.status === 'completed');
+  }, [task.done_today, task.status, isRecurringTask]);
   const [expanded, setExpanded] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -213,8 +219,8 @@ export default function LifeTaskCard({
         badges.push({ label, icon, className });
     }
 
-    // Urgency/Deadline Badge（按北京时间判断）
-    if (task.end_time) {
+    // Urgency/Deadline Badge（按北京时间判断；重复约定不显示——窗口结束不是超时，避免每天制造压力）
+    if (!isRecurringTask && task.end_time) {
         const end = parseAsShanghai(task.end_time);
         const now = getShanghaiNow();
         const diffHours = end && now ? (end.getTime() - now.getTime()) / (1000 * 60 * 60) : 0;
@@ -585,9 +591,17 @@ export default function LifeTaskCard({
                             {task.repeat_rule !== 'none' && (
                                 <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-xs border border-blue-100">
                                     <Repeat className="w-3 h-3" />
-                                    {task.repeat_rule === 'daily' ? '每天' : 
-                                     task.repeat_rule === 'weekly' ? '每周' : 
+                                    {task.repeat_rule === 'daily' ? '每天' :
+                                     task.repeat_rule === 'weekly' ? '每周' :
                                      task.repeat_rule === 'monthly' ? '每月' : '循环'}
+                                </span>
+                            )}
+
+                            {/* 重复约定今日已打卡 */}
+                            {isRecurringTask && completed && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 text-emerald-600 text-xs border border-emerald-100">
+                                    <Check className="w-3 h-3" />
+                                    今日已打卡
                                 </span>
                             )}
 

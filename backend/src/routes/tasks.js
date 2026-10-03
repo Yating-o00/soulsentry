@@ -13,6 +13,7 @@ import {
   taskAccess,
   withSharedInfo
 } from "../services/taskSharing.js";
+import { computeNextReminderTime } from "../lib/recurrence.js";
 
 export const tasksRouter = Router();
 
@@ -60,7 +61,8 @@ const KNOWN_TASK_FIELDS = new Set([
   "deleted_at",
   "tags",
   "reminder_strategy",
-  "metadata"
+  "metadata",
+  "done_today"
 ]);
 
 tasksRouter.use(requireAuth);
@@ -154,6 +156,8 @@ function serializeTask(task) {
     reminder_sent: !!extraFields.reminder_sent_at,
     reminder_sent_at: extraFields.reminder_sent_at || null,
     end_reminder_sent: !!(extraFields.end_reminder_sent_at && task.endTime && new Date(extraFields.end_reminder_sent_at).getTime() >= new Date(task.endTime).getTime()),
+    // 重复约定：今天是否已打卡（按北京日期比对）
+    done_today: extraFields.recurrence_last_done === new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10),
     ...extraFields,
     metadata: task.metadata,
     created_date: task.createdAt,
@@ -503,6 +507,43 @@ tasksRouter.patch("/:id", async (req, res) => {
     snoozeNormalize.time_plan = { ...prevExtra.time_plan, arranged: true };
   }
 
+  // ── 重复约定完成语义：打卡不杀系列 ──
+  // 勾选完成 = 记录"今天已打卡"（按北京日期），约定保持活跃并把当次排期推进到下一周期；
+  // 取消完成 = 清掉今天的打卡记录。系列永不因单次打卡结束，也不产生逾期压力。
+  let nextStatusForUpdate = payload.data.status ? toPrismaTaskStatus(payload.data.status) : undefined;
+  let nextCompletedAtForUpdate = payload.data.completed_at === undefined ? undefined : (payload.data.completed_at ? new Date(payload.data.completed_at) : null);
+  let nextReminderTimeForUpdate = cappedReminderTime
+    ? new Date(cappedReminderTime)
+    : payload.data.reminder_time === undefined ? undefined : (payload.data.reminder_time ? new Date(payload.data.reminder_time) : null);
+  let nextEndTimeForUpdate = payload.data.end_time === undefined ? undefined : (payload.data.end_time ? new Date(payload.data.end_time) : null);
+
+  const recurringRule = ["daily", "weekly", "monthly", "custom"].includes(prevExtra.repeat_rule) ? prevExtra.repeat_rule : null;
+  if (recurringRule && payload.data.status !== undefined) {
+    const requestedStatus = toPrismaTaskStatus(payload.data.status);
+    const recurrenceDoneToday = prevExtra.recurrence_last_done === chinaToday;
+
+    if (requestedStatus === "DONE" && existing.status !== "DONE") {
+      snoozeNormalize.recurrence_last_done = chinaToday;
+      snoozeNormalize.recurrence_done_count = Number(prevExtra.recurrence_done_count || 0) + 1;
+      nextCompletedAtForUpdate = new Date();
+      nextStatusForUpdate = existing.status; // 系列保持活跃，不置 DONE
+      // 当次提醒尚未发出时提前打卡：直接把排期推进到下一期，今天不再打扰
+      if (existing.reminderTime && existing.reminderTime.getTime() <= Date.now()) {
+        const nextR = computeNextReminderTime(existing.reminderTime, recurringRule, prevExtra.custom_recurrence, new Date());
+        if (nextR) {
+          nextReminderTimeForUpdate = nextR;
+          if (existing.endTime) {
+            nextEndTimeForUpdate = new Date(existing.endTime.getTime() + (nextR.getTime() - existing.reminderTime.getTime()));
+          }
+        }
+      }
+    } else if (requestedStatus === "TODO" && recurrenceDoneToday) {
+      snoozeNormalize.recurrence_last_done = null;
+      nextCompletedAtForUpdate = null;
+      nextStatusForUpdate = existing.status;
+    }
+  }
+
   if (Object.keys(snoozeNormalize).length > 0) {
     const base = nextMetadata === undefined
       ? (isPlainObject(existing.metadata) ? { ...existing.metadata } : {})
@@ -516,14 +557,12 @@ tasksRouter.patch("/:id", async (req, res) => {
     data: {
       title: payload.data.title,
       description: payload.data.description,
-      status: payload.data.status ? toPrismaTaskStatus(payload.data.status) : undefined,
+      status: nextStatusForUpdate,
       priority: payload.data.priority,
       category: payload.data.category,
       dueAt: payload.data.due_at === undefined ? undefined : (payload.data.due_at ? new Date(payload.data.due_at) : null),
-      reminderTime: cappedReminderTime
-        ? new Date(cappedReminderTime)
-        : payload.data.reminder_time === undefined ? undefined : (payload.data.reminder_time ? new Date(payload.data.reminder_time) : null),
-      endTime: payload.data.end_time === undefined ? undefined : (payload.data.end_time ? new Date(payload.data.end_time) : null),
+      reminderTime: nextReminderTimeForUpdate,
+      endTime: nextEndTimeForUpdate,
       isAllDay: payload.data.is_all_day,
       parentTaskId: payload.data.parent_task_id === undefined ? undefined : (payload.data.parent_task_id || null),
       gcalSyncEnabled: payload.data.gcal_sync_enabled,

@@ -766,14 +766,17 @@ export async function releaseAgent(executionId, note) {
   const s = sessions.get(executionId);
   if (!s) return { ok: false, message: "会话不存在或已结束" };
   s.takeover = false;
-  // 若 Agent 正停在提问处，先解开挂起再交还，避免永久等待
+  // 若 Agent 正停在提问处，先解开挂起再交还，避免永久等待；
+  // 此时交还说明随 answer.text 进入 tool 响应，不再推 user 消息（防 user 插在 tool 前触发 Kimi 400）
+  const hadPending = !!s.pendingResolve;
   if (s.pendingResolve) {
     s.pendingResolve({ choice: "", text: note ? `（用户已操作完成：${String(note).slice(0, 100)}）` : "（用户已操作完成，请继续）" });
     s.pendingResolve = null;
     s.waiting = null;
   }
   s.status = "running";
-  if (note) s.history.push({ role: "user", content: `（用户刚刚亲自操作了网页，并留言：${String(note).slice(0, 200)}）` });
+  // Agent 不在提问处（takeover 空转中）时，推 user 留言让 Agent 知道用户操作过——此时序列合法
+  if (note && !hadPending) s.history.push({ role: "user", content: `（用户刚刚亲自操作了网页，并留言：${String(note).slice(0, 200)}）` });
   persist(s);
   return { ok: true };
 }
@@ -883,7 +886,10 @@ export async function subscribeAgentLive(executionId, onFrame) {
             s.pendingResolve = null;
             s.waiting = null;
             s.status = "running";
-            s.history.push({ role: "user", content: "（用户关闭了实时窗口，把网页交还给小助手继续）" });
+            // 注意：这里不能再推 user 消息——resolve 后 runLoop 在微任务里恢复，
+            // 会先把 ask_user 的 tool 响应推入历史；若此处推 user，user 会插在
+            // assistant(tool_calls) 与 tool 响应之间，触发 Kimi 400。
+            // 交还说明已由 answer.text 带入 tool 响应的 feedback。
             logStep(s, "live_release", {}, "用户关闭实时窗口，交还 AI");
             persist(s);
           } else if (s.postmortem) {

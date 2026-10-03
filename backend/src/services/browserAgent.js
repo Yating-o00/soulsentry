@@ -28,19 +28,30 @@ function agentShotDir() {
 }
 
 async function getBrowser() {
-  if (!browserPromise) {
-    const launchOptions = {
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled", "--headless=new"]
-    };
-    // 允许通过环境变量覆盖浏览器来源（服务器装不上 Chromium 时指向系统浏览器）
-    if (env.BROWSER_EXECUTABLE_PATH) launchOptions.executablePath = env.BROWSER_EXECUTABLE_PATH;
-    if (env.BROWSER_CHANNEL) launchOptions.channel = env.BROWSER_CHANNEL;
-    browserPromise = chromium.launch(launchOptions).catch((err) => {
-      browserPromise = null;
-      throw new Error("浏览器环境未就绪（缺少 Chromium），请联系管理员执行 npx playwright install chromium，或通过 BROWSER_EXECUTABLE_PATH 指定系统浏览器");
-    });
+  // 已有实例且连接正常：直接复用；已断开（进程崩溃/被 OOM 杀掉）则清理缓存并重启，
+  // 否则浏览器一旦死亡，所有会话的后续动作都会反复报 "Target page, context or browser has been closed"
+  if (browserPromise) {
+    const existing = await browserPromise.catch(() => null);
+    if (existing && existing.isConnected()) return existing;
+    browserPromise = null;
   }
+  const launchOptions = {
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled", "--headless=new"]
+  };
+  // 允许通过环境变量覆盖浏览器来源（服务器装不上 Chromium 时指向系统浏览器）
+  if (env.BROWSER_EXECUTABLE_PATH) launchOptions.executablePath = env.BROWSER_EXECUTABLE_PATH;
+  if (env.BROWSER_CHANNEL) launchOptions.channel = env.BROWSER_CHANNEL;
+  browserPromise = chromium.launch(launchOptions).catch((err) => {
+    browserPromise = null;
+    throw new Error("浏览器环境未就绪（缺少 Chromium），请联系管理员执行 npx playwright install chromium，或通过 BROWSER_EXECUTABLE_PATH 指定系统浏览器");
+  });
+  // 进程意外退出（OOM/崩溃）时清空缓存，下次调用自动重新启动
+  browserPromise.then((b) => {
+    b.on("disconnected", () => {
+      Promise.resolve(browserPromise).then((cur) => { if (cur === b) browserPromise = null; }).catch(() => {});
+    });
+  }).catch(() => {});
   return browserPromise;
 }
 

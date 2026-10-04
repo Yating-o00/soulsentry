@@ -55,7 +55,7 @@ export default function CalendarView() {
 
   const { data: tasksRaw } = useQuery({
     queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list('-reminder_time'),
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, '-reminder_time', 300),
     initialData: [],
   });
   const allTasks = Array.isArray(tasksRaw) ? tasksRaw : [];

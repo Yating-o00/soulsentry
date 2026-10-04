@@ -17,7 +17,7 @@ function timeOf(iso) {
  * 今日印记：当日约定的时间线 + 往日追溯
  * 视觉移植自参考稿 sections/Timeline.tsx，数据接真实 Task / Note
  */
-export default function TodayTimeline({ tasks, notes, nowLabel, onToggle }) {
+export default function TodayTimeline({ tasks, notes, nowLabel, onToggle, getSubtasks }) {
   const [offset, setOffset] = React.useState(0); // 0 = 今天
 
   const allTasks = React.useMemo(() => (Array.isArray(tasks) ? tasks : []), [tasks]);
@@ -231,6 +231,21 @@ export default function TodayTimeline({ tasks, notes, nowLabel, onToggle }) {
                           ? `心栈记得 · ${timeLabel}，我会在`
                           : '我记得 · 到点会轻轻唤你'}
                     </p>
+                    {getSubtasks && (() => {
+                      const subs = getSubtasks(a.id) || [];
+                      if (subs.length === 0) return null;
+                      const done = subs.filter((s) => s.status === 'completed').length;
+                      const preview = subs
+                        .slice(0, 3)
+                        .map((s) => (s.status === 'completed' ? `✓${s.title}` : s.title))
+                        .join(' · ');
+                      return (
+                        <p className="mt-1 text-[11.5px] text-[var(--ink-3)]">
+                          子约定 {done}/{subs.length}　{preview}
+                          {subs.length > 3 ? ` …等 ${subs.length} 项` : ''}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
               );

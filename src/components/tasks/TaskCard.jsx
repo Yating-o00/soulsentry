@@ -17,10 +17,11 @@ import {
 import { Button } from "@/components/ui/button";
 import AITaskAssistant from "./AITaskAssistant";
 
-export default function TaskCard({ task, onComplete, onEdit }) {
+export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSubtaskList = false, onComplete, onEdit }) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const handleComplete = (e) => {
     e.stopPropagation();
@@ -267,6 +268,53 @@ export default function TaskCard({ task, onComplete, onEdit }) {
           </span>
         </div>
       </div>
+
+      {/* 子约定预览：默认展示前 3 条，可勾选；更多可展开（Kanban 等紧凑视图可隐藏） */}
+      {!hideSubtaskList && subtasks.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-slate-100 space-y-1.5">
+          {(expanded ? subtasks : subtasks.slice(0, 3)).map((sub) => (
+            <div
+              key={sub.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSubtaskToggle && onSubtaskToggle(sub);
+              }}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <span className={cn(
+                "w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 border",
+                sub.status === 'completed'
+                  ? "bg-green-500 border-green-500 text-white"
+                  : "border-slate-300 bg-white"
+              )}>
+                {sub.status === 'completed' && <Check className="w-2.5 h-2.5" />}
+              </span>
+              <span className={cn(
+                "text-xs truncate",
+                sub.status === 'completed' ? "text-slate-400 line-through" : "text-slate-600"
+              )}>
+                {sub.title}
+              </span>
+            </div>
+          ))}
+          {subtasks.length > 3 ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+              className="w-full flex items-center justify-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 py-1"
+            >
+              {expanded ? "收起" : `展开全部 ${subtasks.length} 个子约定`}
+              <span className="text-slate-300">
+                ({subtasks.filter(s => s.status === 'completed').length}/{subtasks.length})
+              </span>
+              <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
+            </button>
+          ) : (
+            <div className="text-[11px] text-slate-300 px-2">
+              子约定 {subtasks.filter(s => s.status === 'completed').length}/{subtasks.length}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Smart Suggestions / AI Footer */}
       {hasSmartTrigger && (

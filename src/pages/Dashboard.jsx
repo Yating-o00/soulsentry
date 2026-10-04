@@ -82,9 +82,11 @@ export default function Dashboard() {
   });
 
   // Get all tasks
+  // parent_task_id=all 一次拉齐顶层+子约定，子约定在卡片上直接可见可勾选；
+  // 与约定页共用 ['tasks','with-subs'] 缓存，顶层列表由各派生逻辑用 !parent_task_id 过滤
   const { data: tasksRaw = [], isLoading } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list('-reminder_time'),
+    queryKey: ['tasks', 'with-subs'],
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, '-reminder_time', 300),
     initialData: [],
   });
   const allTasks = Array.isArray(tasksRaw) ? tasksRaw : [];
@@ -439,6 +441,7 @@ export default function Dashboard() {
                 notes={notesList}
                 nowLabel={nowLabel}
                 onToggle={(t) => handleComplete(t, allTasks)}
+                getSubtasks={(id) => allTasks.filter((t) => t.parent_task_id === id && !t.deleted_at)}
               />
             </TodaySection>
 

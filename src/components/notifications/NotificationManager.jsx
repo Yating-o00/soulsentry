@@ -632,32 +632,6 @@ export default function NotificationManager() {
     return null;
   }
 
-  if (permission === "denied") {
-    return (
-      <div className="fixed bottom-4 right-4 bg-red-50 border-2 border-red-200 rounded-xl p-4 shadow-xl max-w-sm">
-        <div className="flex items-start gap-3">
-          <Bell className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <h4 className="font-semibold text-red-800 mb-1">通知已禁用</h4>
-            <p className="text-sm text-red-600 mb-2">
-              之前浏览器的权限申请被拒绝了，网页无法再次弹出申请，需要手动打开：
-            </p>
-            <ol className="text-[13px] text-red-700 space-y-1 list-decimal list-inside mb-3">
-              <li>点击地址栏左侧的锁形（或设置）图标</li>
-              <li>找到「通知」，改为「允许」</li>
-              <li>回到这里，点下方「重新检测」</li>
-            </ol>
-            <button
-              onClick={() => setPermission(typeof Notification !== "undefined" ? Notification.permission : "denied")}
-              className="text-sm font-medium text-red-800 bg-white border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-100 transition"
-            >
-              重新检测
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // 权限被拒绝时不弹红色引导卡片（避免在约定页常驻碍眼）；通知调度的 effects 仍照常工作
   return null;
 }

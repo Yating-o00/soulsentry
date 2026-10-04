@@ -168,6 +168,36 @@ export function buildImageContentPart(fileUrl) {
   }
 }
 
+// 若文本由同一段内容连续重复多遍（视觉模型常见抖动：整体输出 2-3 遍），只保留一遍。
+// 先试整串精确重复（"xxx。xxx。xxx。"），再试行序列周期重复（A,B,C,A,B,C,...）。
+function collapseRepeats(text) {
+  const t = String(text || "").trim();
+  if (!t) return t;
+  // 整串重复：t === u.repeat(k)
+  for (const k of [3, 2]) {
+    if (t.length % k === 0) {
+      const unit = t.slice(0, t.length / k);
+      if (unit.trim() && unit.repeat(k) === t) return unit.trim();
+    }
+  }
+  // 行序列周期重复
+  const lines = t.split("\n").map((l) => l.trim());
+  for (let c = 1; c <= Math.floor(lines.length / 2); c++) {
+    const head = lines.slice(0, c);
+    if (head.every((l) => !l)) continue;
+    let repeats = 1;
+    while (repeats * c < lines.length) {
+      const seg = lines.slice(repeats * c, (repeats + 1) * c);
+      if (seg.length < c || seg.some((l, i) => l !== head[i])) break;
+      repeats++;
+    }
+    if (repeats >= 2 && repeats * c === lines.length) {
+      return head.join("\n").trim();
+    }
+  }
+  return t;
+}
+
 function normalizeDraft(result) {
   const type = ["task", "note", "heart", "ledger", "table", "link", "other"].includes(result?.content_type)
     ? result.content_type
@@ -185,6 +215,11 @@ function normalizeDraft(result) {
       return true;
     });
   }
+  // 长文本字段折叠连续重复：extracted_text / summary / content 整体抖动重复时只留一遍
+  if (suggestion.summary) suggestion.summary = collapseRepeats(suggestion.summary);
+  if (suggestion.content) suggestion.content = collapseRepeats(suggestion.content);
+  if (suggestion.title) suggestion.title = collapseRepeats(suggestion.title);
+
   // 类型升级：≥2 条有效收支明细却判成 笔记/心签/表格 的，统一按账本处理
   // （记账截图常被误判成"多列表格"，导致前端不生成账目）
   const validEntries = (suggestion.entries || []).filter(
@@ -196,7 +231,7 @@ function normalizeDraft(result) {
   }
 
   return {
-    extracted_text: String(result?.extracted_text || ""),
+    extracted_text: collapseRepeats(result?.extracted_text),
     content_type: finalType,
     confidence: typeof result?.confidence === "number" ? result.confidence : null,
     suggestion

@@ -186,6 +186,31 @@ function isHeartNote(n) {
   return tags.includes("情绪") || tags.includes("心签") || (text.length < 120 && !extractUrl(text));
 }
 
+// 文本若由同一段内容连续重复多遍（识别模型抖动），只保留一遍
+function collapseRepeats(text) {
+  const t = String(text || "").trim();
+  if (!t) return t;
+  for (const k of [3, 2]) {
+    if (t.length % k === 0) {
+      const unit = t.slice(0, t.length / k);
+      if (unit.trim() && unit.repeat(k) === t) return unit.trim();
+    }
+  }
+  const lines = t.split("\n").map((l) => l.trim());
+  for (let c = 1; c <= Math.floor(lines.length / 2); c++) {
+    const head = lines.slice(0, c);
+    if (head.every((l) => !l)) continue;
+    let repeats = 1;
+    while (repeats * c < lines.length) {
+      const seg = lines.slice(repeats * c, (repeats + 1) * c);
+      if (seg.length < c || seg.some((l, i) => l !== head[i])) break;
+      repeats++;
+    }
+    if (repeats >= 2 && repeats * c === lines.length) return head.join("\n").trim();
+  }
+  return t;
+}
+
 function getLocationSafe() {
   return new Promise((resolve) => {
     Taro.getLocation({
@@ -2175,7 +2200,7 @@ export default function Flow() {
     try {
       const { contentType, extractedText, imageUrl, suggestion } = imageDraft;
       const s = suggestion || {};
-      const text = (extractedText || "").trim() || String(s.content || "").trim();
+      const text = collapseRepeats((extractedText || "").trim() || String(s.content || "").trim());
       if (contentType === "task") {
         const category = s.category === "learning" ? "study" : s.category;
         const priority = ["low", "medium", "high", "urgent"].includes(s.priority) ? s.priority : "medium";
@@ -2216,7 +2241,7 @@ export default function Flow() {
           return parts.join(" ");
         });
         const total = entries.reduce((sum, en) => sum + (Number(en.amount) || 0), 0);
-        const content = [String(s.summary || "").trim(), ...lines, `合计 ¥${total.toFixed(2)}`].filter(Boolean).join("\n");
+        const content = [collapseRepeats(String(s.summary || "").trim()), ...lines, `合计 ¥${total.toFixed(2)}`].filter(Boolean).join("\n");
         // 同步生成账本结构（卡片账目区直接可读）， income/expense 标注优先沿用识别结果
         const ledgerItems = entries.map((en) => ({
           name: String(en.item || "一笔账").slice(0, 12),

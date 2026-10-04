@@ -2201,7 +2201,14 @@ export default function Flow() {
         }
         Taro.showToast({ title: "约定已创建", icon: "success" });
       } else if (contentType === "ledger") {
-        const entries = (Array.isArray(s.entries) ? s.entries : []).filter((en) => en && (String(en.item || "").trim() || Number(en.amount)));
+        // 明细去重：识别草稿里同一 品名+金额 只保留一条（防御模型重复输出）
+        const seenKeys = new Set();
+        const entries = (Array.isArray(s.entries) ? s.entries : []).filter((en) => en && (String(en.item || "").trim() || Number(en.amount))).filter((en) => {
+          const key = `${String(en.item || "").trim()}|${Number(en.amount) || 0}`;
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key);
+          return true;
+        });
         const lines = entries.map((en) => {
           const parts = [String(en.item || "未命名").trim(), `¥${Number(en.amount) || 0}`];
           if (en.category) parts.push(`（${en.category}）`);
@@ -2210,13 +2217,38 @@ export default function Flow() {
         });
         const total = entries.reduce((sum, en) => sum + (Number(en.amount) || 0), 0);
         const content = [String(s.summary || "").trim(), ...lines, `合计 ¥${total.toFixed(2)}`].filter(Boolean).join("\n");
+        // 同步生成账本结构（卡片账目区直接可读）， income/expense 标注优先沿用识别结果
+        const ledgerItems = entries.map((en) => ({
+          name: String(en.item || "一笔账").slice(0, 12),
+          category: String(en.category || "其他"),
+          amount: Math.abs(Number(en.amount) || 0),
+          type: /(income|收入)/.test(String(en.type || "")) ? "income" : "expense"
+        })).filter((i) => i.amount > 0);
+        const totalExpense = Math.round(ledgerItems.filter((i) => i.type === "expense").reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+        const totalIncome = Math.round(ledgerItems.filter((i) => i.type === "income").reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
         await post("/notes", {
           title: String(s.summary || "").trim() || "账本",
           content,
           plain_text: content,
           source_type: "ledger",
           tags: ["账本"],
-          metadata: { image_url: imageUrl, ledger_entries: entries }
+          metadata: {
+            image_url: imageUrl,
+            ledger_entries: entries,
+            ai_analysis: {
+              category: "账本",
+              response_tag: "理性补充",
+              analyzed_at: new Date().toISOString(),
+              source: "image_upload",
+              ledger: ledgerItems.length ? {
+                items: ledgerItems,
+                total_expense: totalExpense,
+                total_income: totalIncome,
+                balance: Math.round((totalIncome - totalExpense) * 100) / 100,
+                advice: ""
+              } : null
+            }
+          }
         });
         Taro.showToast({ title: "账已记下", icon: "success" });
       } else if (contentType === "table") {

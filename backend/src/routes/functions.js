@@ -2940,17 +2940,23 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
 
         // 账本签：AI 未给出明细时用本地解析兜底，并规整金额/收支字段
         if (isLedger) {
-          const rawItems = Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length
-            ? parsed.ledger.items
-            : parseLedgerEntries(materialText);
+          // 图片上传生成的账本签已带结构化 ledger_entries，直接采用（避免把正文里的「合计」行重复解析成一笔账）
+          const structuredEntries = Array.isArray(note.metadata?.ledger_entries)
+            ? note.metadata.ledger_entries
+            : (Array.isArray(note.metadata?.ledger?.entries) ? note.metadata.ledger.entries : null);
+          const rawItems = structuredEntries && structuredEntries.length
+            ? structuredEntries
+            : (Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length
+              ? parsed.ledger.items
+              : parseLedgerEntries(materialText));
           const normItems = rawItems
             .map((i) => ({
-              name: String(i?.name || "一笔账").slice(0, 12),
+              name: String(i?.name || i?.item || "一笔账").slice(0, 12),
               category: String(i?.category || "其他"),
               amount: Math.abs(Number(i?.amount) || 0),
               type: /(income|收入)/.test(String(i?.type || "")) ? "income" : "expense"
             }))
-            .filter((i) => i.amount > 0)
+            .filter((i) => i.amount > 0 && !/^(合计|总计|总额|合计¥|total)/i.test(i.name))
             .slice(0, 20);
           if (normItems.length) {
             const totalExpense = Math.round(normItems.filter((i) => i.type === "expense").reduce((s, i) => s + i.amount, 0) * 100) / 100;

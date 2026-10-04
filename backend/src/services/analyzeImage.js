@@ -173,9 +173,31 @@ function normalizeDraft(result) {
     ? result.content_type
     : "note";
   const suggestion = result?.suggestion && typeof result.suggestion === "object" ? result.suggestion : {};
+
+  // 账本条目去重：个别视觉模型会把同一批明细重复输出几遍，按 品名+金额 只保留一条
+  if (Array.isArray(suggestion.entries)) {
+    const seen = new Set();
+    suggestion.entries = suggestion.entries.filter((en) => {
+      if (!en || typeof en !== "object") return false;
+      const key = `${String(en.item || "").trim()}|${Number(en.amount) || 0}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+  // 类型升级：≥2 条有效收支明细却判成 笔记/心签/表格 的，统一按账本处理
+  // （记账截图常被误判成"多列表格"，导致前端不生成账目）
+  const validEntries = (suggestion.entries || []).filter(
+    (en) => en && String(en.item || "").trim() && Number(en.amount) > 0
+  );
+  let finalType = type;
+  if (validEntries.length >= 2 && ["note", "heart", "table", "other"].includes(type)) {
+    finalType = "ledger";
+  }
+
   return {
     extracted_text: String(result?.extracted_text || ""),
-    content_type: type,
+    content_type: finalType,
     confidence: typeof result?.confidence === "number" ? result.confidence : null,
     suggestion
   };

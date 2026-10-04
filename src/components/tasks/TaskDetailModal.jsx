@@ -160,12 +160,13 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     },
   });
 
+  // 子约定删除=软删除（进回收站，可恢复），不走硬删除
   const deleteSubtaskMutation = useMutation({
-    mutationFn: (id) => base44.entities.Task.delete(id),
+    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subtasks', task?.id] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success("子约定已删除");
+      toast.success("子约定已删除，可在回收站恢复");
     },
     onError: () => {
       toast.error("删除子约定失败");

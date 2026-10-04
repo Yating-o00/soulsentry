@@ -15,14 +15,19 @@ export default function Trash() {
   const [selectedTask, setSelectedTask] = useState(null);
   const queryClient = useQueryClient();
 
+  // 只拉已删除的约定（含子约定）：后端 deleted_at=not_null 过滤，parent_task_id=all 不过滤层级
   const { data: allTasks = [], isLoading } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => base44.entities.Task.list('-reminder_time'),
+    queryKey: ['tasks', 'trash'],
+    queryFn: () => base44.entities.Task.filter({ deleted_at: "not_null", parent_task_id: "all" }, '-reminder_time', 300),
     initialData: [],
   });
 
-  // 只显示已删除的约定
-  const trashTasks = allTasks.filter(task => !task.parent_task_id && task.deleted_at);
+  // 已删除的顶层约定与子约定都进回收站；子约定标注所属父约定
+  const taskById = new Map(allTasks.map(t => [t.id, t]));
+  const trashTasks = allTasks.map(task => ({
+    ...task,
+    _parentTitle: task.parent_task_id ? (taskById.get(task.parent_task_id)?.title || null) : null
+  }));
 
   const filteredTasks = trashTasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -92,8 +97,8 @@ export default function Trash() {
           {filteredTasks.map((task) => (
             <TaskCard
               key={task.id}
-              task={task}
-              subtasks={allTasks.filter(t => t.parent_task_id === task.id)}
+              task={task._parentTitle ? { ...task, title: `${task.title} · 子约定（${task._parentTitle}）` } : task}
+              subtasks={allTasks.filter(t => t.parent_task_id === task.id && t.deleted_at)}
               isTrash={true}
               onRestore={() => restoreTaskMutation.mutate(task.id)}
               onDeleteForever={() => {

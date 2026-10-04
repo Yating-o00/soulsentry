@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import AITaskAssistant from "./AITaskAssistant";
 
-export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSubtaskList = false, onComplete, onEdit }) {
+export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSubtaskList = false, isTrash = false, onRestore, onDeleteForever, onComplete, onEdit }) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
@@ -25,6 +25,7 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
 
   const handleComplete = (e) => {
     e.stopPropagation();
+    if (isTrash) return; // 回收站里勾选无意义，只做恢复/永久删除
     setIsCompleted(true);
     // Delay actual completion to show animation
     setTimeout(() => {
@@ -313,6 +314,24 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
               子约定 {subtasks.filter(s => s.status === 'completed').length}/{subtasks.length}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 回收站操作：恢复 / 永久删除 */}
+      {isTrash && (
+        <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); onRestore && onRestore(); }}
+            className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 hover:bg-emerald-100 transition-colors"
+          >
+            恢复
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDeleteForever && onDeleteForever(); }}
+            className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-100 transition-colors"
+          >
+            永久删除
+          </button>
         </div>
       )}
 

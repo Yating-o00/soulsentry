@@ -2095,6 +2095,13 @@ export default function Flow() {
     setSplitSheet((prev) => (prev ? { ...prev, steps: [...prev.steps, { title: t.slice(0, 60), minutes: null }] } : prev));
     setSplitNewStepText("");
   };
+  // 在指定一步的下方插入空白子约定，方便就地在该步之后继续补充
+  const insertSplitStep = (i) =>
+    setSplitSheet((prev) =>
+      prev
+        ? { ...prev, steps: [...prev.steps.slice(0, i + 1), { title: "", minutes: null }, ...prev.steps.slice(i + 1)] }
+        : prev
+    );
   // 非空步数：确认按钮的 N 与禁用判断都以它为准
   const validSplitCount = splitSheet
     ? splitSheet.steps.filter((s) => (s.title || "").trim()).length
@@ -4833,6 +4840,8 @@ export default function Flow() {
                   </View>
                   <Input
                     style={{ flex: 1, fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx", minWidth: 0 }}
+                    placeholder="要做什么"
+                    placeholderStyle={{ color: THEME.inkQuaternary }}
                     value={s.title}
                     onInput={(e) => updateSplitStep(i, e.detail.value)}
                   />
@@ -4849,6 +4858,20 @@ export default function Flow() {
                       <Text style={{ fontSize: "20rpx", color: THEME.gold }}>约{s.minutes}分钟</Text>
                     </View>
                   )}
+                  <View
+                    onClick={() => insertSplitStep(i)}
+                    style={{
+                      width: "44rpx",
+                      height: "44rpx",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginLeft: "8rpx",
+                      flexShrink: 0
+                    }}
+                  >
+                    <Text style={{ color: THEME.primary, fontSize: "30rpx", lineHeight: "30rpx" }}>＋</Text>
+                  </View>
                   <View
                     onClick={() => removeSplitStep(i)}
                     style={{
@@ -4901,7 +4924,7 @@ export default function Flow() {
 
           {!splitSheet.busy && !!splitSheet.confirmed && (
             <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "10rpx" }}>
-              可修改或增删每一步，确认后将按你确认的版本作为子约定创建
+              可修改或增删每一步，点 ＋ 可在该步下面补充一件小事，确认后将按你确认的版本作为子约定创建
             </Text>
           )}
 

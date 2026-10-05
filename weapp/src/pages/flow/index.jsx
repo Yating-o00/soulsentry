@@ -2228,7 +2228,8 @@ export default function Flow() {
       } else if (contentType === "ledger") {
         // 明细去重：识别草稿里同一 品名+金额 只保留一条（防御模型重复输出）
         const seenKeys = new Set();
-        const entries = (Array.isArray(s.entries) ? s.entries : []).filter((en) => en && (String(en.item || "").trim() || Number(en.amount))).filter((en) => {
+        // 只保留「有名称且有正金额」的条目，避免 "1500×50%" 这类无金额算式混进明细
+        const entries = (Array.isArray(s.entries) ? s.entries : []).filter((en) => en && String(en.item || "").trim() && Number(en.amount) > 0).filter((en) => {
           const key = `${String(en.item || "").trim()}|${Number(en.amount) || 0}`;
           if (seenKeys.has(key)) return false;
           seenKeys.add(key);
@@ -2252,7 +2253,7 @@ export default function Flow() {
         const totalExpense = Math.round(ledgerItems.filter((i) => i.type === "expense").reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
         const totalIncome = Math.round(ledgerItems.filter((i) => i.type === "income").reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
         await post("/notes", {
-          title: String(s.summary || "").trim() || "账本",
+          title: "账本",
           content,
           plain_text: content,
           source_type: "ledger",
@@ -3797,7 +3798,11 @@ export default function Flow() {
                   marginRight: "12rpx"
                 }}
               >
-                {item.type === "heart" ? `♡ ${item.title || "心签"}` : item.type === "image" ? "🖼 图片" : "🔗 链接"}
+                {item.type === "heart"
+                  ? item.source_type === "ledger" || item.metadata?.ai_analysis?.ledger
+                    ? "🧾 账本"
+                    : `♡ ${item.title || "心签"}`
+                  : item.type === "image" ? "🖼 图片" : "🔗 链接"}
               </Text>
               <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{formatTime(item.created_date)}</Text>
             </View>

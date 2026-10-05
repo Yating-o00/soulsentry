@@ -279,11 +279,15 @@ function parseLedgerPatch(existingLedger, text) {
   const totalExpense = round2(items.filter((i) => i.type === "expense").reduce((s, i) => s + (Number(i.amount) || 0), 0));
   const totalIncome = round2(items.filter((i) => i.type === "income").reduce((s, i) => s + (Number(i.amount) || 0), 0));
   return {
-    items,
-    total_expense: totalExpense,
-    total_income: totalIncome,
-    balance: round2(totalIncome - totalExpense),
-    advice: existingLedger.advice || ""
+    ledger: {
+      items,
+      total_expense: totalExpense,
+      total_income: totalIncome,
+      balance: round2(totalIncome - totalExpense),
+      advice: existingLedger.advice || ""
+    },
+    // 本轮实际解析出的条目（区别于 is_new 累积的历史新增，用于回复文案与正文追加，避免跨轮重复）
+    added: normItems
   };
 }
 
@@ -3097,9 +3101,11 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
 
       // 账本签内补录：继续对话输入的收支明细并入本条签（不新建签），重算合计
       const existingLedger = followNote.metadata?.ai_analysis?.ledger;
-      const ledgerPatch = noteType === "ledger"
+      const ledgerResult = noteType === "ledger"
         ? parseLedgerPatch(existingLedger, text)
         : null;
+      const ledgerPatch = ledgerResult?.ledger || null;
+      const ledgerAdded = ledgerResult?.added || [];
 
       let replyText = "";
       let closing = false;
@@ -3161,9 +3167,8 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           replyText = "已收好。";
           tag = "收录";
         } else if (ledgerPatch) {
-          // 签内补录：报出刚记上的明细，签里同步更新
-          const added = ledgerPatch.items.filter((i) => i.is_new);
-          const names = added.map((i) => `${i.name} ${i.type === "income" ? "+" : "-"}${i.amount}`).join("、");
+          // 签内补录：报出本轮刚记上的明细，签里同步更新
+          const names = ledgerAdded.map((i) => `${i.name} ${i.type === "income" ? "+" : "-"}${i.amount}`).join("、");
           replyText = `记上了：${names}。这笔账我帮你拢在这条签里。`;
           tag = "理性补充";
         } else {
@@ -3190,12 +3195,34 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
         };
       }
 
+      // 每一轮补录都写进账单正文：去掉旧的合计行，追加本轮明细行和刷新后的合计，
+      // 保证心流页卡片正文、详情页看到的账单文本与结构化明细一致
+      let updatedPlain = null;
+      if (ledgerAdded.length) {
+        const oldText = String(followNote.plainText || followNote.content || "");
+        const keptLines = oldText.split("\n").filter((l) => l.trim() && !/^合计\s*¥?[\d.]+/.test(l.trim()));
+        const newLines = ledgerAdded.map((i) => `${i.name} ¥${i.amount}${i.category && i.category !== "其他" ? `（${i.category}）` : ""}`);
+        const grand = Math.round(ledgerPatch.items.reduce((s, i) => s + (Number(i.amount) || 0), 0) * 100) / 100;
+        updatedPlain = [...keptLines, ...newLines, `合计 ¥${grand.toFixed(2)}`].join("\n");
+      }
+
       await prisma.note.update({
         where: { id: followNoteId },
-        data: { metadata: nextMeta }
+        data: {
+          metadata: nextMeta,
+          ...(updatedPlain ? { content: updatedPlain, plainText: updatedPlain } : {})
+        }
       });
 
-      return res.json({ ok: true, text: replyText, tag, closing, conversation: nextConversation, ledger: ledgerPatch || undefined });
+      return res.json({
+        ok: true,
+        text: replyText,
+        tag,
+        closing,
+        conversation: nextConversation,
+        ledger: ledgerPatch || undefined,
+        plain_text: updatedPlain || undefined
+      });
     }
 
     if (name === "analyzeTasks") {

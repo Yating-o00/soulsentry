@@ -481,6 +481,10 @@ export default function Notes() {
         metaPatch.ai_analysis = { ...(note.metadata?.ai_analysis || {}), ledger: res.ledger };
       }
       await updateNoteMeta(note, metaPatch);
+      // 账单正文同步：本轮明细+新合计已由后端写库，本地同步刷新卡片文本
+      if (res.plain_text) {
+        setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, plain_text: res.plain_text, content: res.plain_text } : n)));
+      }
       setContinueMap((prev) => ({ ...prev, [note.id]: "" }));
     } catch {
       Taro.showToast({ title: "发送失败", icon: "none" });

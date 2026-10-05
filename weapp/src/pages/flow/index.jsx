@@ -1588,6 +1588,17 @@ export default function Flow() {
       setAssoc(assocData);
       setBriefing(briefingData);
       setWeather(weatherData);
+      // 账本签新并入的明细：本次展示保留「新」标识，后台静默清除，下次加载不再高亮
+      noteList.forEach((n) => {
+        const ledger = n.metadata?.ai_analysis?.ledger;
+        if (!ledger?.items?.some((it) => it.is_new)) return;
+        const items = ledger.items.map((it) => {
+          const { is_new, added_at, ...rest } = it;
+          return rest;
+        });
+        const metadata = { ...n.metadata, ai_analysis: { ...n.metadata.ai_analysis, ledger: { ...ledger, items } } };
+        patch(`/notes/${n.id}`, { metadata }).catch(() => {});
+      });
     } catch (_err) {
       // ignore
     } finally {
@@ -3869,10 +3880,27 @@ export default function Flow() {
                         )}
                       </View>
                     </View>
-                    {ledgerItems.slice(0, 5).map((it, idx) => (
-                      <View key={idx} style={{ display: "flex", justifyContent: "space-between", marginBottom: "4rpx" }}>
-                        <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary }}>{it.item || it.name || "支出"}</Text>
-                        <Text style={{ fontSize: "22rpx", color: it.type === "income" ? "#4f8a7a" : "#b07d4f" }}>
+                    {ledgerItems.slice(0, 20).map((it, idx) => (
+                      <View key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4rpx" }}>
+                        <View style={{ display: "flex", alignItems: "center", flex: 1, marginRight: "12rpx" }}>
+                          <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary }} numberOfLines={1}>{it.item || it.name || "支出"}</Text>
+                          {!!it.is_new && (
+                            <Text
+                              style={{
+                                fontSize: "16rpx",
+                                color: "#a08452",
+                                background: "#f7efe4",
+                                borderRadius: "6rpx",
+                                padding: "0 8rpx",
+                                marginLeft: "10rpx",
+                                flexShrink: 0
+                              }}
+                            >
+                              新
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={{ fontSize: "22rpx", color: it.type === "income" ? "#4f8a7a" : "#b07d4f", flexShrink: 0 }}>
                           {it.type === "income" ? "+" : "-"}¥{it.amount}
                         </Text>
                       </View>

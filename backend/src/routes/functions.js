@@ -270,8 +270,10 @@ function parseLedgerPatch(existingLedger, text) {
 
   const round2 = (n) => Math.round(n * 100) / 100;
   const addedAt = new Date().toISOString();
+  // 保留既有条目的 is_new：本次会话里陆续补录的条目（3条以内或更多）持续带「新」标识，
+  // 下次进入心签页时由前端统一静默清除
   const items = [
-    ...existingLedger.items.map((i) => ({ ...i, is_new: false })),
+    ...existingLedger.items,
     ...normItems.map((i) => ({ ...i, is_new: true, added_at: addedAt }))
   ].slice(0, 50);
   const totalExpense = round2(items.filter((i) => i.type === "expense").reduce((s, i) => s + (Number(i.amount) || 0), 0));

@@ -249,14 +249,17 @@ function getTaskLocation(task) {
 function parseLedgerPatch(existingLedger, text) {
   if (!existingLedger || !Array.isArray(existingLedger.items)) return null;
   const t = String(text || "");
-  // 金额语境门槛：带 元/块 单位、含收支动词、或出现 2 个以上数字（如"奶茶15不是18"），
-  // 避免"明天3点开会"这类单数字文本误入账本
+  // 金额语境门槛：带 元/块 单位、含收支动词、出现 2 个以上数字（如"奶茶15不是18"），
+  // 或含 ≥10 的裸数字（如"礼品 860"、"打车15"）——账本签里的对话上下文本身就是记账语境，
+  // 门槛只拦时间类单小数字（如"明天3点开会"，3<10 且无单位无动词）
+  const digitHits = t.match(/\d+(?:\.\d+)?/g) || [];
   const moneyLike = /(\d+(?:\.\d+)?\s*(?:元|块|块钱|rmb|RMB))|([花买吃付]|买了|打车|支付|工资|报销|转账|收入|支出|花了|退款|记账|多少钱|预算)/.test(t)
-    || (t.match(/\d+(?:\.\d+)?/g) || []).length >= 2;
+    || digitHits.length >= 2
+    || digitHits.some((d) => parseFloat(d) >= 10);
   if (!moneyLike) return null;
   const normItems = parseLedgerEntries(t)
     .map((i) => ({
-      name: String(i?.name || "一笔账").slice(0, 12),
+      name: String(i?.name || "一笔账").replace(/^[【\[（(「『]+|[】\]）)」』．.、:：]+$/g, "").slice(0, 12) || "一笔账",
       category: String(i?.category || "其他"),
       amount: Math.abs(Number(i?.amount) || 0),
       type: /(income|收入)/.test(String(i?.type || "")) ? "income" : "expense"

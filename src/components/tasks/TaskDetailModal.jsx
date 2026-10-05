@@ -75,6 +75,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [newSubtask, setNewSubtask] = useState("");
   const [newNote, setNewNote] = useState("");
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [insertAfterId, setInsertAfterId] = useState(null); // 子约定行内「＋」：在该子约定卡片内就地补充
+  const [insertText, setInsertText] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
   const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
@@ -389,6 +391,35 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
         priority: task.priority,
         status: "pending",
       });
+    } finally {
+      setIsAddingSubtask(false);
+    }
+  };
+
+  // 子约定行内「＋」：在指定子约定卡片内展开输入，确认后立即创建（同父约定）
+  const startInsertSubtask = (id) => {
+    setInsertAfterId(id);
+    setInsertText("");
+  };
+  const cancelInsertSubtask = () => {
+    setInsertAfterId(null);
+    setInsertText("");
+  };
+  const handleInsertSubtask = async () => {
+    const title = insertText.trim();
+    if (!title || isAddingSubtask) return;
+    setIsAddingSubtask(true);
+    try {
+      await createSubtaskMutation.mutateAsync({
+        title,
+        parent_task_id: task.id,
+        reminder_time: task.reminder_time,
+        end_time: task.end_time,
+        category: task.category,
+        priority: task.priority,
+        status: "pending",
+      });
+      cancelInsertSubtask();
     } finally {
       setIsAddingSubtask(false);
     }
@@ -1008,52 +1039,88 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -100 }}
-                      className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all hover:shadow-sm ${
+                      className={`flex flex-col p-3.5 rounded-xl border transition-all hover:shadow-sm ${
                         subtask.status === "completed"
                           ? "bg-slate-50 border-slate-200"
                           : "bg-white border-[#d6dcf0] hover:border-[#384877]/40"
                       }`}
                     >
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={subtask.status === "completed"}
-                          onCheckedChange={() => handleToggleSubtask(subtask)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-5 w-5"
-                        />
-                      </div>
-                      <span
-                        className={`flex-1 text-[15px] ${
-                          subtask.status === "completed"
-                            ? "line-through text-slate-400"
-                            : "text-slate-900"
-                        }`}
-                      >
-                        {subtask.title}
-                      </span>
-                      {subtask.revisions?.length > 0 && (
-                        <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5">
-                          <GitBranch className="w-3 h-3" />
-                          v{subtask.revisions.length + 1}
+                      <div className="flex items-center gap-3">
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={subtask.status === "completed"}
+                            onCheckedChange={() => handleToggleSubtask(subtask)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-5 w-5"
+                          />
+                        </div>
+                        <span
+                          className={`flex-1 text-[15px] ${
+                            subtask.status === "completed"
+                              ? "line-through text-slate-400"
+                              : "text-slate-900"
+                          }`}
+                        >
+                          {subtask.title}
                         </span>
+                        {subtask.revisions?.length > 0 && (
+                          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5">
+                            <GitBranch className="w-3 h-3" />
+                            v{subtask.revisions.length + 1}
+                          </span>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => startInsertSubtask(subtask.id)}
+                          title="在这一步下面添加子约定"
+                          className="h-8 w-8 hover:bg-[#384877]/10 hover:text-[#384877]"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setRevisingSubtask(subtask)}
+                          title="新一轮更新"
+                          className="h-8 w-8 hover:bg-amber-100 hover:text-amber-600"
+                        >
+                          <GitBranch className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteSubtaskMutation.mutate(subtask.id)}
+                          className="h-8 w-8 hover:bg-red-100 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {insertAfterId === subtask.id && (
+                        <div className="flex items-center gap-2 mt-2.5 pl-8">
+                          <Input
+                            autoFocus
+                            value={insertText}
+                            onChange={(e) => setInsertText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleInsertSubtask();
+                              if (e.key === "Escape") cancelInsertSubtask();
+                            }}
+                            onBlur={cancelInsertSubtask}
+                            placeholder="在这一步下面补充一件小事"
+                            className="flex-1 h-9 text-sm bg-white"
+                          />
+                          <Button
+                            size="sm"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={handleInsertSubtask}
+                            disabled={!insertText.trim() || isAddingSubtask}
+                            className="bg-[#384877] hover:bg-[#2d3a5f] text-white px-4 h-9"
+                          >
+                            {isAddingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : "添加"}
+                          </Button>
+                        </div>
                       )}
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setRevisingSubtask(subtask)}
-                        title="新一轮更新"
-                        className="h-8 w-8 hover:bg-amber-100 hover:text-amber-600"
-                      >
-                        <GitBranch className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => deleteSubtaskMutation.mutate(subtask.id)}
-                        className="h-8 w-8 hover:bg-red-100 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
                     </motion.div>
                   ))}
                 </AnimatePresence>

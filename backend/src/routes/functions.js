@@ -3190,7 +3190,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
         data: { metadata: nextMeta }
       });
 
-      return res.json({ ok: true, text: replyText, tag, closing, conversation: nextConversation });
+      return res.json({ ok: true, text: replyText, tag, closing, conversation: nextConversation, ledger: ledgerPatch || undefined });
     }
 
     if (name === "analyzeTasks") {

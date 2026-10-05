@@ -475,6 +475,11 @@ export default function Notes() {
       });
       const metaPatch = { conversation: res.conversation || [] };
       if (res.closing) metaPatch.conversation_closed = true;
+      // 账本补录：后端已把新明细并入 ai_analysis.ledger，这里必须一并合入，
+      // 否则下一步 PATCH 会用本地旧 metadata 整体覆盖，把刚补录的账目抹掉
+      if (res.ledger) {
+        metaPatch.ai_analysis = { ...(note.metadata?.ai_analysis || {}), ledger: res.ledger };
+      }
       await updateNoteMeta(note, metaPatch);
       setContinueMap((prev) => ({ ...prev, [note.id]: "" }));
     } catch {

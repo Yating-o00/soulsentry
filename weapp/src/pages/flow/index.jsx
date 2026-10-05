@@ -186,6 +186,13 @@ function isHeartNote(n) {
   return tags.includes("情绪") || tags.includes("心签") || (text.length < 120 && !extractUrl(text));
 }
 
+// 账本签：正文通常超过 120 字，isHeartNote 识别不到，需要单独判定以触发 AI 分析（明细核对+损友式吐槽）
+function isLedgerNote(n) {
+  return n.source_type === "ledger"
+    || Array.isArray(n.metadata?.ledger_entries)
+    || !!(n.metadata?.ai_analysis && n.metadata.ai_analysis.ledger);
+}
+
 // 文本若由同一段内容连续重复多遍（识别模型抖动），只保留一遍
 function collapseRepeats(text) {
   const t = String(text || "").trim();
@@ -1484,9 +1491,9 @@ export default function Flow() {
   }, []);
 
   useEffect(() => {
-    // 为每条尚未生成 AI 回应的心签请求 analyzeHeartSign，每次最多 5 条，避免并发过多
+    // 为每条尚未生成 AI 回应的心签/账本签请求 analyzeHeartSign，每次最多 5 条，避免并发过多
     const hearts = notes
-      .filter(isHeartNote)
+      .filter((n) => isHeartNote(n) || isLedgerNote(n))
       .filter((n) => {
         const ai = n.metadata?.ai_analysis;
         return !ai?.emotional_response && n.ai_status !== "processing" && !analyzingHeartIdsRef.current.has(n.id) && !analyzedHeartIdsRef.current.has(n.id);

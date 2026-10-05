@@ -1,6 +1,6 @@
 import React, { useState, useEffect as ReactUseEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -75,7 +75,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [newSubtask, setNewSubtask] = useState("");
   const [newNote, setNewNote] = useState("");
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
-  const [insertAfterId, setInsertAfterId] = useState(null); // 子约定行内「＋」：在该子约定卡片内就地补充
+  const [insertParentId, setInsertParentId] = useState(null); // 子约定行内「＋」：新从属小约定挂载到的子约定 id
   const [insertText, setInsertText] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
@@ -114,6 +114,22 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     enabled: !!task?.id,
     initialData: [],
   });
+
+  // 二级从属小约定：每个子约定各自的下一层；queryKey 与详情页子约定 tab 一致，缓存/失效都能复用
+  const childQueries = useQueries({
+    queries: subtasks.map((s) => ({
+      queryKey: ['subtasks', s.id],
+      queryFn: () => base44.entities.Task.filter({ parent_task_id: s.id }),
+      enabled: !!s?.id,
+    })),
+  });
+  const childMap = React.useMemo(() => {
+    const map = {};
+    subtasks.forEach((s, i) => {
+      map[s.id] = (childQueries[i]?.data || []).filter((c) => !c.deleted_at);
+    });
+    return map;
+  }, [subtasks, childQueries]);
 
   // Calculate target language for button label
   const targetLangLabel = React.useMemo(() => {
@@ -166,7 +182,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const deleteSubtaskMutation = useMutation({
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['subtasks', task?.id] });
+      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success("子约定已删除，可在回收站恢复");
     },
@@ -396,13 +412,13 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     }
   };
 
-  // 子约定行内「＋」：在指定子约定卡片内展开输入，确认后立即创建（同父约定）
+  // 子约定行内「＋」：在指定子约定卡片内展开输入，确认后立即创建为它的从属小约定（真挂载到该子约定下）
   const startInsertSubtask = (id) => {
-    setInsertAfterId(id);
+    setInsertParentId(id);
     setInsertText("");
   };
   const cancelInsertSubtask = () => {
-    setInsertAfterId(null);
+    setInsertParentId(null);
     setInsertText("");
   };
   const handleInsertSubtask = async () => {
@@ -412,7 +428,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     try {
       await createSubtaskMutation.mutateAsync({
         title,
-        parent_task_id: task.id,
+        parent_task_id: insertParentId || task.id,
         reminder_time: task.reminder_time,
         end_time: task.end_time,
         category: task.category,
@@ -1073,7 +1089,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                           size="icon"
                           variant="ghost"
                           onClick={() => startInsertSubtask(subtask.id)}
-                          title="在这一步下面添加子约定"
+                          title="为这一步添加从属子约定"
                           className="h-8 w-8 hover:bg-[#384877]/10 hover:text-[#384877]"
                         >
                           <Plus className="h-4 w-4" />
@@ -1096,7 +1112,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
-                      {insertAfterId === subtask.id && (
+                      {insertParentId === subtask.id && (
                         <div className="flex items-center gap-2 mt-2.5 pl-8">
                           <Input
                             autoFocus
@@ -1107,7 +1123,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                               if (e.key === "Escape") cancelInsertSubtask();
                             }}
                             onBlur={cancelInsertSubtask}
-                            placeholder="在这一步下面补充一件小事"
+                            placeholder="给这一步补充一件从属小事"
                             className="flex-1 h-9 text-sm bg-white"
                           />
                           <Button
@@ -1119,6 +1135,44 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                           >
                             {isAddingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : "添加"}
                           </Button>
+                        </div>
+                      )}
+                      {childMap[subtask.id]?.length > 0 && (
+                        <div className="mt-2 ml-8 space-y-1.5">
+                          {childMap[subtask.id].map((child) => (
+                            <div
+                              key={child.id}
+                              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${
+                                child.status === "completed"
+                                  ? "bg-slate-50 border-slate-100"
+                                  : "bg-[#f7f8fd] border-[#e3e8f5]"
+                              }`}
+                            >
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <Checkbox
+                                  checked={child.status === "completed"}
+                                  onCheckedChange={() => handleToggleSubtask(child)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-4 w-4"
+                                />
+                              </div>
+                              <span
+                                className={`flex-1 text-[13px] ${
+                                  child.status === "completed" ? "line-through text-slate-400" : "text-slate-700"
+                                }`}
+                              >
+                                {child.title}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => deleteSubtaskMutation.mutate(child.id)}
+                                className="h-7 w-7 hover:bg-red-100 hover:text-red-600"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </motion.div>

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -152,6 +152,22 @@ export default function TaskShareCard({ task, open, onClose }) {
     enabled: !!task?.id,
     initialData: [],
   });
+
+  // 二级从属小约定：子约定下挂载的下一层；queryKey 与任务详情一致，缓存/失效复用
+  const childQueries = useQueries({
+    queries: subtasks.map((s) => ({
+      queryKey: ['subtasks', s.id],
+      queryFn: () => base44.entities.Task.filter({ parent_task_id: s.id }),
+      enabled: !!s?.id,
+    })),
+  });
+  const childMap = useMemo(() => {
+    const map = {};
+    subtasks.forEach((s, i) => {
+      map[s.id] = (childQueries[i]?.data || []).filter((c) => !c.deleted_at);
+    });
+    return map;
+  }, [subtasks, childQueries]);
 
   const { data: dependencyTasks = [] } = useQuery({
     queryKey: ['dependencies', task?.id],
@@ -409,7 +425,11 @@ ${subtasks.length > 0 ? `\n📌 子约定清单 (${completedSubtasks}/${subtasks
   const title = s.title || '';
   const titleMatch = title.match(/^(\d+)\.\s*/);
   const cleanTitle = titleMatch ? title.replace(/^\d+\.\s*/, '') : title;
-  return `${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`;
+  const childLines = (childMap[s.id] || []).map((c) => {
+    const childTitle = (c.title || '').replace(/^\d+\.\s*/, '');
+    return `   └ ${childTitle} ${c.status === "completed" ? "✅" : "⭕"}`;
+  });
+  return [`${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`, ...childLines].join('\n');
 }).join('\n')}` : ''}
 
 🔗 查看详情：
@@ -785,23 +805,43 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                             const cleanTitle = title.replace(/^\d+\.\s*/, '');
                             const lastLog = getSubtaskLastLog(subtask.id);
                             return (
-                              <div key={subtask.id} className="flex items-start gap-3">
-                                 <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>
-                                   {isCompleted && <Check className="w-3 h-3" />}
-                                 </div>
-                                 <div className="flex-1 min-w-0">
-                                   <span className={`text-sm ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                                     {cleanTitle}
-                                   </span>
-                                   {lastLog && (
-                                     <div className="text-[10px] text-slate-400 mt-0.5">
-                                       {lastLog.visitor_name || "访客"}
-                                       <span className="ml-1 font-mono">#{String(lastLog.visitor_token || "").slice(0, 6)}</span>
-                                       <span className="ml-1">· {format(new Date(lastLog.created_date), "M月d日 HH:mm", { locale: zhCN })}</span>
-                                     </div>
-                                   )}
-                                 </div>
-                              </div>
+                              <React.Fragment key={subtask.id}>
+                                <div className="flex items-start gap-3">
+                                   <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>
+                                     {isCompleted && <Check className="w-3 h-3" />}
+                                   </div>
+                                   <div className="flex-1 min-w-0">
+                                     <span className={`text-sm ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                       {cleanTitle}
+                                     </span>
+                                     {lastLog && (
+                                       <div className="text-[10px] text-slate-400 mt-0.5">
+                                         {lastLog.visitor_name || "访客"}
+                                         <span className="ml-1 font-mono">#{String(lastLog.visitor_token || "").slice(0, 6)}</span>
+                                         <span className="ml-1">· {format(new Date(lastLog.created_date), "M月d日 HH:mm", { locale: zhCN })}</span>
+                                       </div>
+                                     )}
+                                   </div>
+                                </div>
+                                {childMap[subtask.id]?.length > 0 && (
+                                  <div className="ml-7 mt-1 space-y-1.5 border-l border-slate-200 pl-3">
+                                    {childMap[subtask.id].map((child) => {
+                                      const childCompleted = child.status === "completed";
+                                      const childTitle = (child.title || '').replace(/^\d+\.\s*/, '');
+                                      return (
+                                        <div key={child.id} className="flex items-start gap-2">
+                                          <div className={`mt-0.5 w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${childCompleted ? 'bg-slate-400 border-slate-400 text-white' : 'border-slate-300'}`}>
+                                            {childCompleted && <Check className="w-2.5 h-2.5" />}
+                                          </div>
+                                          <span className={`text-xs ${childCompleted ? 'text-slate-400 line-through' : 'text-slate-500'}`}>
+                                            {childTitle}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </React.Fragment>
                             );
                          })}
                           {hasMoreSubtasks && (

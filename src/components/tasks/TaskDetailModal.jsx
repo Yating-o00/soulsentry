@@ -77,6 +77,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [insertParentId, setInsertParentId] = useState(null); // 子约定行内「＋」：新从属小约定挂载到的子约定 id
   const [insertText, setInsertText] = useState("");
+  const [editingChild, setEditingChild] = useState(null); // 从属小约定行内改名：{ id, title }
+  const [editingChildText, setEditingChildText] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
   const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
@@ -439,6 +441,28 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     } finally {
       setIsAddingSubtask(false);
     }
+  };
+
+  // 从属小约定行内改名：点标题进入编辑，回车/失焦保存，Esc 取消
+  const startEditChild = (child) => {
+    setEditingChild({ id: child.id, title: child.title || "" });
+    setEditingChildText(child.title || "");
+  };
+  const cancelEditChild = () => {
+    setEditingChild(null);
+    setEditingChildText("");
+  };
+  const saveEditChild = async () => {
+    if (!editingChild) return;
+    const title = editingChildText.trim();
+    if (!title || title === editingChild.title) {
+      cancelEditChild();
+      return;
+    }
+    try {
+      await updateTaskMutation.mutateAsync({ id: editingChild.id, data: { title } });
+      cancelEditChild();
+    } catch (_e) {}
   };
 
   const handleToggleSubtask = async (subtask) => {
@@ -1156,13 +1180,29 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                                   className="h-4 w-4"
                                 />
                               </div>
-                              <span
-                                className={`flex-1 text-[13px] ${
-                                  child.status === "completed" ? "line-through text-slate-400" : "text-slate-700"
-                                }`}
-                              >
-                                {child.title}
-                              </span>
+                              {editingChild?.id === child.id ? (
+                                <Input
+                                  autoFocus
+                                  value={editingChildText}
+                                  onChange={(e) => setEditingChildText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") saveEditChild();
+                                    if (e.key === "Escape") cancelEditChild();
+                                  }}
+                                  onBlur={saveEditChild}
+                                  className="flex-1 h-7 text-[13px] px-1"
+                                />
+                              ) : (
+                                <span
+                                  onClick={() => startEditChild(child)}
+                                  title="点击修改"
+                                  className={`flex-1 text-[13px] cursor-text ${
+                                    child.status === "completed" ? "line-through text-slate-400" : "text-slate-700"
+                                  }`}
+                                >
+                                  {child.title}
+                                </span>
+                              )}
                               <Button
                                 size="icon"
                                 variant="ghost"

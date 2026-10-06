@@ -19,6 +19,7 @@ import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
 import QRCodeImage from "@/components/ui/QRCode";
 import { httpRequest } from "@/api/httpClient";
+import { invokeAI } from "@/components/utils/aiHelper";
 
 const THEME_PRIMARY = "#384877";
 const THEME_SECONDARY = "#3b5aa2";
@@ -61,6 +62,7 @@ export default function TaskShareCard({ task, open, onClose }) {
   const [expandedView, setExpandedView] = useState(false);
   const [headerImage, setHeaderImage] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [titleIcon, setTitleIcon] = useState(null); // 右上角图标：按约定内容自动生成（emoji+底色），localStorage 按约定缓存
   const [publicShareEnabled, setPublicShareEnabled] = useState(task?.share_enabled || false);
   const [publicShareUrl, setPublicShareUrl] = useState(
     task?.share_token && typeof window !== "undefined"
@@ -113,6 +115,45 @@ export default function TaskShareCard({ task, open, onClose }) {
     })();
     return () => { cancelled = true; };
   }, [open, task?.id, publicShareUrl]);
+
+  // 右上角图标按约定内容自动生成：AI 选一个贴切的 emoji + 柔和底色；
+  // 结果按约定 id 缓存在 localStorage（标题变了会重新生成），失败则保持产品图标
+  React.useEffect(() => {
+    if (!open || !task?.id) return;
+    let cancelled = false;
+    const cacheKey = `ss_share_icon_${task.id}`;
+    try {
+      const cached = JSON.parse(window.localStorage.getItem(cacheKey) || "null");
+      if (cached && cached.title === task.title && cached.emoji) {
+        setTitleIcon(cached);
+        return;
+      }
+    } catch (e) {}
+    (async () => {
+      try {
+        const result = await invokeAI({
+          prompt: `约定标题：${task.title || "未命名"}\n约定描述：${(task.description || "").slice(0, 200) || "无"}\n类别：${task.category || "其他"}`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              emoji: { type: "string", description: "最能代表这条约定内容的一个 emoji 字符" },
+              color: { type: "string", description: "与 emoji 搭配的柔和浅色背景色，hex 格式，如 #EEF2FF" }
+            },
+            required: ["emoji", "color"]
+          }
+        }, "share_card_icon");
+        if (cancelled || !result?.emoji) return;
+        const emoji = Array.from(String(result.emoji).trim()).slice(0, 4).join("");
+        const color = /^#[0-9a-fA-F]{6}$/.test(result.color || "") ? result.color : "#EEF2FF";
+        const icon = { title: task.title, emoji, color };
+        setTitleIcon(icon);
+        try { window.localStorage.setItem(cacheKey, JSON.stringify(icon)); } catch (e) {}
+      } catch (e) {
+        // 生成失败：不打扰用户，右上角保持产品图标
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, task?.id, task?.title]);
 
   const getSubtaskLastLog = (subtaskId) => {
     if (!collabLogs?.recent_logs) return null;
@@ -612,12 +653,21 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         className="w-12 h-12 rounded-xl flex items-center justify-center bg-white shadow-lg"
                         style={{ color: categoryColor.accent }}
                       >
-                         <img 
+                        {titleIcon ? (
+                          <div
+                            className="w-10 h-10 rounded-lg flex items-center justify-center"
+                            style={{ background: titleIcon.color }}
+                          >
+                            <span className="text-xl leading-none">{titleIcon.emoji}</span>
+                          </div>
+                        ) : (
+                          <img
                             src="/icon-192.png"
                             alt="Logo"
                             crossOrigin="anonymous"
                             className="w-10 h-10 object-contain"
-                         />
+                          />
+                        )}
                       </div>
                     </div>
                   </div>

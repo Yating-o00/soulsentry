@@ -81,6 +81,28 @@ function generateToken() {
   return crypto.randomBytes(16).toString("hex");
 }
 
+// 逐层收集 rootId 的全部后代约定（子约定下挂载的从属小约定也包含在内）。
+// 防环：已访问集合 + 深度上限，恶意/异常数据不会导致死循环。
+async function collectDescendants(rootId, maxDepth = 10) {
+  const seen = new Set([rootId]);
+  let frontier = [rootId];
+  const result = [];
+  for (let depth = 0; depth < maxDepth && frontier.length > 0; depth++) {
+    const batch = await prisma.task.findMany({
+      where: { parentTaskId: { in: frontier }, deletedAt: null }
+    });
+    const next = [];
+    for (const t of batch) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      result.push(t);
+      next.push(t.id);
+    }
+    frontier = next;
+  }
+  return result;
+}
+
 function escapeICS(text) {
   if (!text) return "";
   return String(text)
@@ -269,9 +291,19 @@ publicShareRouter.get("/:token", async (req, res) => {
 
   try {
     if (type === "task") {
-      const subtasks = await prisma.task.findMany({
-        where: { parentTaskId: item.id, deletedAt: null }
+      // 子约定树：子约定下挂载的从属小约定一并收集，children 逐层嵌套返回
+      const descendants = await collectDescendants(item.id);
+      const childrenOf = new Map();
+      descendants.forEach((t) => {
+        if (!childrenOf.has(t.parentTaskId)) childrenOf.set(t.parentTaskId, []);
+        childrenOf.get(t.parentTaskId).push(t);
       });
+      const buildTree = (parentId) =>
+        (childrenOf.get(parentId) || []).map((t) => ({
+          ...serializeTask(t),
+          children: buildTree(t.id)
+        }));
+      const subtasks = buildTree(item.id);
       const comments = await prisma.comment.findMany({
         where: { taskId: item.id },
         orderBy: { createdAt: "desc" },
@@ -282,7 +314,7 @@ publicShareRouter.get("/:token", async (req, res) => {
         type: "task",
         item: serializeTask(item),
         owner_name: item.user?.displayName || "",
-        subtasks: subtasks.map(serializeTask),
+        subtasks,
         comments: comments.map(serializeComment)
       });
     }
@@ -449,8 +481,13 @@ publicShareRouter.post("/:token/toggle", async (req, res) => {
     let payload = { checked, status: nextStatus };
 
     if (subtaskId) {
+      // 支持任意层级的后代（含子约定下的从属小约定），只要属于分享的这棵约定树
+      const descendantIds = new Set((await collectDescendants(item.id)).map((t) => t.id));
+      if (!descendantIds.has(subtaskId)) {
+        return res.status(400).json({ error: "INVALID_SUBTASK", message: "子约定不存在" });
+      }
       const subtask = await prisma.task.findFirst({
-        where: { id: subtaskId, parentTaskId: item.id, deletedAt: null }
+        where: { id: subtaskId, deletedAt: null }
       });
       if (!subtask) {
         return res.status(400).json({ error: "INVALID_SUBTASK", message: "子约定不存在" });

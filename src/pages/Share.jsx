@@ -55,6 +55,42 @@ const PRIORITY_COLORS = {
   low: "bg-slate-100 text-slate-700 border-slate-200"
 };
 
+// 勾选/取消后把后端返回的最新状态写回子约定树（任意层级）
+function updateSubtaskTree(list, id, updated) {
+  return (list || []).map((s) =>
+    s.id === id ? { ...s, ...updated } : { ...s, children: updateSubtaskTree(s.children, id, updated) }
+  );
+}
+
+// 分享卡片里的子约定行：children 逐层缩进渲染（子约定下的从属小约定也完整呈现）
+function SharedSubtaskItem({ sub, onToggle, submitting }) {
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        <Checkbox
+          id={`subtask-${sub.id}`}
+          checked={sub.status === "completed"}
+          onCheckedChange={(checked) => onToggle(!!checked, sub.id)}
+          disabled={submitting}
+        />
+        <label
+          htmlFor={`subtask-${sub.id}`}
+          className={`text-sm ${sub.status === "completed" ? "text-slate-400 line-through" : "text-slate-700"}`}
+        >
+          {sub.title}
+        </label>
+      </div>
+      {sub.children?.length > 0 && (
+        <div className="ml-5 mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+          {sub.children.map((child) => (
+            <SharedSubtaskItem key={child.id} sub={child} onToggle={onToggle} submitting={submitting} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getVisitorToken(token) {
   const key = `ss_visitor_${token}`;
   try {
@@ -235,9 +271,7 @@ export default function Share() {
       if (subtaskId) {
         setData((prev) => ({
           ...prev,
-          subtasks: prev.subtasks.map((s) =>
-            s.id === subtaskId ? result.task : s
-          )
+          subtasks: updateSubtaskTree(prev.subtasks, subtaskId, result.task)
         }));
       } else {
         setData((prev) => ({ ...prev, item: result.task }));
@@ -492,20 +526,12 @@ export default function Share() {
                   <div className="bg-slate-50 rounded-xl p-4 space-y-3">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">子约定</p>
                     {subtasks.map((sub) => (
-                      <div key={sub.id} className="flex items-center gap-3">
-                        <Checkbox
-                          id={`subtask-${sub.id}`}
-                          checked={sub.status === "completed"}
-                          onCheckedChange={(checked) => ensureNameThen(() => handleToggleTask(!!checked, sub.id))}
-                          disabled={submitting}
-                        />
-                        <label
-                          htmlFor={`subtask-${sub.id}`}
-                          className={`text-sm ${sub.status === "completed" ? "text-slate-400 line-through" : "text-slate-700"}`}
-                        >
-                          {sub.title}
-                        </label>
-                      </div>
+                      <SharedSubtaskItem
+                        key={sub.id}
+                        sub={sub}
+                        onToggle={(checked, id) => ensureNameThen(() => handleToggleTask(checked, id))}
+                        submitting={submitting}
+                      />
                     ))}
                   </div>
                 )}

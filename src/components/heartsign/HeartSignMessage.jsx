@@ -450,6 +450,9 @@ export default function HeartSignMessage({
 
   // 理性内容（资料/知识类）：用「知识补充」卡替代温暖回应卡
   const isRational = ai.emotional_response && (ai.is_emotional === false || ai.response_tag === '理性补充');
+  // 账本明细只出现在账本签上：分类（source_type/ai_analysis.category）是权威，
+  // AI 分错的签即使带着 ledger 数据也不渲染明细
+  const ledgerVisible = typeKey === 'ledger' && (ai.ledger?.items?.length > 0);
 
   return (
    <div data-hs-id={note.id} data-hs-type={typeKey} className={`hs-card ${flash ? 'hs-flash' : ''}`}>
@@ -576,10 +579,10 @@ export default function HeartSignMessage({
         ? <KnowledgeCard ai={ai} plain={plain} />
         : <WarmResponseCard ai={ai} />
     )}
-    {note.ai_status === 'completed' && ai.table_md && !tableReplacesText && !(ai.ledger?.items?.length > 0) && (
+    {note.ai_status === 'completed' && ai.table_md && !tableReplacesText && !ledgerVisible && (
       <RichText text={ai.table_md} className="mt-2 text-[13px] leading-[1.7] text-slate-600" />
     )}
-    {note.ai_status === 'completed' && ai.ledger?.items?.length > 0 && <LedgerCard ledger={ai.ledger} />}
+    {note.ai_status === 'completed' && ledgerVisible && <LedgerCard ledger={ai.ledger} />}
 
     {/* 卡内对话线程（followupHeartSign → metadata.conversation） */}
     <ConversationThread conv={conv} typing={followSending} />

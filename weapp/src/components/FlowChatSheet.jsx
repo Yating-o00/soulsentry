@@ -32,12 +32,16 @@ function fmtTime(iso) {
   return `${cn.getUTCMonth() + 1}月${cn.getUTCDate()}日 ${pad(cn.getUTCHours())}:${pad(cn.getUTCMinutes())}`;
 }
 
-// 与首页 saveHeart 一致的账本签识别
+// 与首页 saveHeart 一致的账本签识别（单处金额+消费语境才算，避免「预算200元」这类被误判）
 function detectLedgerLike(t) {
   const s = String(t || "");
-  if ((s.match(/\d+(?:\.\d{1,2})?\s*(?:元|块|¥)/g) || []).length >= 1) return true;
+  const moneyHits = (s.match(/\d+(?:\.\d{1,2})?\s*(?:元|块|¥|RMB|rmb)/g) || []).length;
+  const consumeWords = /(饭|餐|咖啡|奶茶|外卖|火锅|烧烤|寿司|水果|零食|超市|买菜|打车|出租|地铁|公交|高铁|火车|机票|加油|停车|骑行|滴滴|车费|房租|水电|物业|燃气|宽带|话费|租金|电影|游戏|会员|充值|门票|演出|旅行|酒店|民宿|工资|奖金|报销|退款|红包|转账|到账|进账|购物|淘宝|京东|拼多多|口红|衣服|鞋|包|化妆品|数码|手机|耳机)/.test(s);
+  if (moneyHits >= 2) return true;
+  if (moneyHits >= 1 && consumeWords) return true;
   const pairs = s.match(/[一-龥]{1,6}\s*[-+]?\d+(?:\.\d{1,2})?(?!\d)/g) || [];
-  return pairs.length >= 2;
+  if (pairs.length >= 2 && (consumeWords || /(花|买|付|支|收|账|工资|报销|收入|支出|记账)/.test(s))) return true;
+  return false;
 }
 
 function extractUrl(text) {

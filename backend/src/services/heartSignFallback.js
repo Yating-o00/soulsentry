@@ -53,15 +53,26 @@ const LEDGER_CATEGORIES = [
 ];
 
 // 是否像记账内容：
-// 1) ≥1 处「数字+元/块」（带金额单位的表述几乎专用于钱）
-// 2) ≥2 个数字片段 + 消费/收支名词（覆盖「购物35600 吃饭 2680」这类不带单位的记账）
-// 3) ≥3 个数字片段 + 收支动词
+// 1) ≥2 处「数字+元/块」——多处金额几乎必是记账
+// 2) ≥1 处金额 + 消费/收支名词（「午饭25元」「打车18块」）
+// 3) ≥2 个数字片段 + 消费/收支名词（覆盖「购物35600 吃饭 2680」这类不带单位的记账）
+// 4) ≥3 个数字片段 + 收支动词
+// 单处金额且无消费语境（如「预算200元」「罚款50元」）或明确是提醒/任务语境的不算账本，
+// 交给 AI 分类兜底，避免非账本签被强行挂上账本明细
 const LEDGER_WORD_RE = new RegExp(`(${LEDGER_CATEGORIES.flatMap((c) => c.words).join("|")})`);
+const LEDGER_VERB_RE = /(花|买|支|付|收|账|工资|报销|收入|消费|吃)/;
+const NON_LEDGER_INTENT_RE = /(提醒我|记得|别忘了|开会|会议|截止|deadline|预约|面试|考试|交作业|报告|体检|抢票|打卡|布置|方案|汇报|提醒)/;
 export function looksLikeLedger(text) {
   const t = String(text || "");
   const withUnit = t.match(/\d+(?:\.\d+)?\s*(?:元|块|块钱|RMB|rmb)/g) || [];
-  if (withUnit.length >= 1) return true;
   const numbers = t.match(/\d+(?:\.\d+)?/g) || [];
+  if (withUnit.length >= 2) return true;
+  if (withUnit.length >= 1) {
+    if (LEDGER_WORD_RE.test(t)) return true;
+    if (numbers.length >= 2 && LEDGER_VERB_RE.test(t)) return true;
+    if (NON_LEDGER_INTENT_RE.test(t)) return false;
+    return false;
+  }
   if (numbers.length >= 2 && LEDGER_WORD_RE.test(t)) return true;
   if (numbers.length >= 3 && /(花|买|支|付|收|账|工资|报销|收入|消费)/.test(t)) return true;
   return false;

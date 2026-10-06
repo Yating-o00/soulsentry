@@ -193,6 +193,15 @@ function isLedgerNote(n) {
     || !!(n.metadata?.ai_analysis && n.metadata.ai_analysis.ledger);
 }
 
+// 账本卡以「分类」为准：只有账本签才允许渲染账本明细。
+// AI 分错（非账本签带着账本数据）时，卡片按普通心签呈现，账本明细不出现。
+function isLedgerCard(n) {
+  return n.source_type === "ledger" || n.metadata?.ai_analysis?.category === "账本";
+}
+function ledgerCardOf(n) {
+  return isLedgerCard(n) ? (n.metadata?.ai_analysis?.ledger || null) : null;
+}
+
 // 文本若由同一段内容连续重复多遍（识别模型抖动），只保留一遍
 function collapseRepeats(text) {
   const t = String(text || "").trim();
@@ -3824,7 +3833,7 @@ export default function Flow() {
                 }}
               >
                 {item.type === "heart"
-                  ? item.source_type === "ledger" || item.metadata?.ai_analysis?.ledger
+                  ? isLedgerCard(item)
                     ? "🧾 账本"
                     : `♡ ${item.title || "心签"}`
                   : item.type === "image" ? "🖼 图片" : "🔗 链接"}
@@ -3857,12 +3866,12 @@ export default function Flow() {
             )}
 
             {item.type === "heart" && (() => {
-              const ledger = item.metadata?.ai_analysis?.ledger;
+              const ledger = ledgerCardOf(item);
               const ledgerItems = Array.isArray(ledger?.items) ? ledger.items : [];
               if (!ledger && heartLoadingIds.has(item.id)) {
                 return (
                   <View style={{ marginTop: "16rpx", padding: "16rpx 18rpx", borderRadius: "14rpx", background: THEME.heartBg, display: "flex" }}>
-                    <Text style={{ fontSize: "24rpx", color: "#c97b8a" }}>🧾 AI 正在整理账本…</Text>
+                    <Text style={{ fontSize: "24rpx", color: "#c97b8a" }}>✨ 心栈正在整理…</Text>
                   </View>
                 );
               }

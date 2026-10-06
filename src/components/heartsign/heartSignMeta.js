@@ -26,12 +26,12 @@ export const CATEGORY_LABEL_TO_TYPE = {
 export function classifyNoteText(text) {
   const t = String(text || "").trim();
   if (!t) return "emotion";
-  // 账本：≥1 处「数字+元/块」；或 ≥2 个数字+消费名词（无单位记账如「购物35600 吃饭 2680」）；或 ≥3 个数字片段 + 收支动词
+  // 账本：单处金额需配消费语境（「预算200元」「罚款50元」不算），多处金额或数字+消费词才算
   const moneyHits = (t.match(/\d+(?:\.\d+)?\s*(?:元|块|块钱|rmb|RMB)/g) || []).length;
   const numSegments = (t.match(/\d+(?:\.\d+)?/g) || []).length;
-  const ledgerVerbs = /(花|买|买了|吃|打车|付|付|支付|工资|报销|转账|收入|支出|花了|一共|预算|记账|退款)/.test(t);
+  const ledgerVerbs = /(花|买|买了|吃|打车|付|支付|工资|报销|转账|收入|支出|花了|一共|记账|退款)/.test(t);
   const consumeWords = /(饭|餐|咖啡|奶茶|外卖|火锅|烧烤|寿司|水果|零食|超市|买菜|打车|出租|地铁|公交|高铁|火车|机票|加油|停车|骑行|滴滴|车费|房租|水电|物业|燃气|宽带|话费|租金|电影|游戏|会员|充值|门票|演出|旅行|酒店|民宿|工资|奖金|报销|退款|红包|转账|到账|进账|购物|淘宝|京东|拼多多|口红|衣服|鞋|包|化妆品|数码|手机|耳机)/.test(t);
-  if (moneyHits >= 1 || (numSegments >= 2 && consumeWords) || (numSegments >= 3 && ledgerVerbs)) return "ledger";
+  if (moneyHits >= 2 || (moneyHits >= 1 && consumeWords) || (numSegments >= 2 && consumeWords) || (numSegments >= 3 && ledgerVerbs)) return "ledger";
   if (/(https?:\/\/|www\.|刷到|读到|文章|视频|播客|收藏|教程|知乎|公众号|B站|bilibili)/i.test(t)) return "material";
   if (/(分享|发给|朋友圈|给大家|晒一?下|想让.*看到)/.test(t)) return "share";
   if (/(记得|别忘了|号码|尾号|电话|地址|取件码|提醒我)/.test(t)) return "memo";

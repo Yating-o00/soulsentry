@@ -2947,8 +2947,17 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           parsed.category = strongCorrection.toType;
         }
 
-        // 账本签：AI 未给出明细时用本地解析兜底，并规整金额/收支字段
-        if (isLedger) {
+        // 账本签一致性：「分类」是唯一权威。启发式（looksLikeLedger）只决定要不要把账本选项
+        // 交给 AI；最终是否账本签以 AI 判定为准——AI 明确判为非账本时尊重 AI（分错就纠正），
+        // 非账本签绝不挂账本数据；AI 判为账本时归一化明细（优先保留聊天补录），不凭空造账。
+        const aiSaysLedger = parsed.category === "账本"
+          || (Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length > 0);
+
+        if (isLedger && !aiSaysLedger) {
+          // 启发式命中但 AI 明确判为其他分类（如「预算200元，明天开会前提醒我」是备忘）：
+          // 剥掉账本数据，按 AI 的分类走，卡片上不会出现账本明细
+          parsed.ledger = null;
+        } else if (aiSaysLedger) {
           // 明细优先级：现有 ai_analysis.ledger.items（含聊天补录，是用户维护的最新真相）>
           // 结构化 ledger_entries > AI 解析 > 文本解析。
           // 不能用 structuredEntries 优先：聊天补录从不写回该字段，重分析会把补录的条目整体冲掉
@@ -2990,7 +2999,15 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
               parsed.emotional_response = "账已记好，明细见上方。";
               parsed.response_tag = "理性补充";
             }
+          } else {
+            parsed.ledger = null;
           }
+        }
+
+        // 最终一致性兜底：分类不是账本 → 账本数据一律剥掉，
+        // 保证「非账本签的卡片永远没有账本明细」（含 AI 幻觉字段、纠错改分类等一切路径）
+        if (parsed.category !== "账本") {
+          parsed.ledger = null;
         }
 
         const ai_analysis = {

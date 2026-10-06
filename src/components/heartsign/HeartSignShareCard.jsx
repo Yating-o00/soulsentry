@@ -165,13 +165,15 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
       ctx.font = `400 ${fontSize}px ${SERIF}`;
-      const MAX_CONTENT_LINES = 48;
+      // 折叠仅发生在聊天展示层；分享签卡需完整呈现全文，不设低行数上限。
+      // 画布随内容自动加高，120 行（约 3000 字）以内保持在各浏览器 canvas 高度上限内
+      const MAX_CONTENT_LINES = 120;
       const lines = wrapLines(ctx, content || "（空内容）", 760, MAX_CONTENT_LINES);
       const textTop = 470;
       const metaY = textTop + lines.length * lineHeight + 30;
 
       ctx.font = `italic 400 26px ${SERIF}`;
-      const rl = replyText ? wrapLines(ctx, replyText, 680, 5) : [];
+      const rl = replyText ? wrapLines(ctx, replyText, 680, 10) : [];
       const replyTop = metaY + 90;
       const contentBottom = rl.length ? replyTop + (rl.length - 1) * 48 + 30 : metaY;
       const canvasH = Math.max(H, contentBottom + 260);

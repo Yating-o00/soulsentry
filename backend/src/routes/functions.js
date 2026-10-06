@@ -2949,15 +2949,21 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
 
         // 账本签：AI 未给出明细时用本地解析兜底，并规整金额/收支字段
         if (isLedger) {
-          // 图片上传生成的账本签已带结构化 ledger_entries，直接采用（避免把正文里的「合计」行重复解析成一笔账）
+          // 明细优先级：现有 ai_analysis.ledger.items（含聊天补录，是用户维护的最新真相）>
+          // 结构化 ledger_entries > AI 解析 > 文本解析。
+          // 不能用 structuredEntries 优先：聊天补录从不写回该字段，重分析会把补录的条目整体冲掉
+          const existingItems = Array.isArray(note.metadata?.ai_analysis?.ledger?.items) && note.metadata.ai_analysis.ledger.items.length
+            ? note.metadata.ai_analysis.ledger.items
+            : null;
           const structuredEntries = Array.isArray(note.metadata?.ledger_entries)
             ? note.metadata.ledger_entries
             : (Array.isArray(note.metadata?.ledger?.entries) ? note.metadata.ledger.entries : null);
-          const rawItems = structuredEntries && structuredEntries.length
-            ? structuredEntries
-            : (Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length
-              ? parsed.ledger.items
-              : parseLedgerEntries(materialText));
+          const rawItems = existingItems
+            || (structuredEntries && structuredEntries.length
+              ? structuredEntries
+              : (Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length
+                ? parsed.ledger.items
+                : parseLedgerEntries(materialText)));
           const normItems = rawItems
             .map((i) => ({
               name: String(i?.name || i?.item || "一笔账").slice(0, 12),
@@ -2966,7 +2972,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
               type: /(income|收入)/.test(String(i?.type || "")) ? "income" : "expense"
             }))
             .filter((i) => i.amount > 0 && !/^(合计|总计|总额|合计¥|total)/i.test(i.name))
-            .slice(0, 20);
+            .slice(0, 50);
           if (normItems.length) {
             const totalExpense = Math.round(normItems.filter((i) => i.type === "expense").reduce((s, i) => s + i.amount, 0) * 100) / 100;
             const totalIncome = Math.round(normItems.filter((i) => i.type === "income").reduce((s, i) => s + i.amount, 0) * 100) / 100;
@@ -2975,9 +2981,15 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
               total_expense: totalExpense,
               total_income: totalIncome,
               balance: Math.round((totalIncome - totalExpense) * 100) / 100,
-              advice: String(parsed.ledger?.advice || "").slice(0, 120)
+              // 账本吐槽：AI 本次给了用本次的，否则沿用旧的（聊天补录不清空吐槽）
+              advice: String(parsed.ledger?.advice || note.metadata?.ai_analysis?.ledger?.advice || "").slice(0, 120)
             };
             parsed.category = "账本";
+            // 本地兜底话术按签类型区分：账本签不用情绪签的安慰文案
+            if (usedFallback) {
+              parsed.emotional_response = "账已记好，明细见上方。";
+              parsed.response_tag = "理性补充";
+            }
           }
         }
 
@@ -3193,6 +3205,13 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           ...(isPlainObject(currentMeta.ai_analysis) ? currentMeta.ai_analysis : {}),
           ledger: ledgerPatch
         };
+        // 同步结构化 entries：任何从 ledger_entries 重建明细的路径（如 analyzeHeartSign 重跑）也包含补录
+        nextMeta.ledger_entries = ledgerPatch.items.map((i) => ({
+          item: i.name,
+          amount: i.amount,
+          category: i.category,
+          type: i.type
+        }));
       }
 
       // 每一轮补录都写进账单正文：去掉旧的合计行，追加本轮明细行和刷新后的合计，

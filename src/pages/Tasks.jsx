@@ -9,6 +9,7 @@ import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanba
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
+import { toast } from "sonner";
 import AdvancedTaskFilters from "../components/tasks/AdvancedTaskFilters";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import NotificationManager from "../components/notifications/NotificationManager";
@@ -61,6 +62,33 @@ export default function Tasks() {
     handleComplete,
     handleSubtaskToggle
   } = useTaskOperations();
+
+  // 约定允许不执行：内容沉淀进知识库，约定标记为完成（不算失约，正常收入已完成）
+  const handleSettleKnowledge = async (task) => {
+    const ok = window.confirm(`「${task.title}」将不执行，内容沉淀进知识库并标记为完成。确定吗？`);
+    if (!ok) return;
+    try {
+      const kb = await base44.entities.KnowledgeBase.create({
+        title: task.title,
+        content: task.description || task.title,
+        source_type: "task",
+        source_id: task.id,
+        tags: ["约定沉淀", ...(Array.isArray(task.tags) ? task.tags : [])],
+        category: "约定沉淀",
+        metadata: { settled_from: "task" }
+      });
+      await updateTaskAsync({
+        id: task.id,
+        data: {
+          status: "completed",
+          metadata: { ...(task.metadata || {}), settled_as_knowledge: true, knowledge_base_id: kb?.id || null }
+        }
+      });
+      toast.success("已沉淀到知识库，约定标记为完成");
+    } catch (e) {
+      toast.error("沉淀失败：" + (e?.message || "请稍后再试"));
+    }
+  };
 
   React.useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
@@ -693,6 +721,7 @@ export default function Tasks() {
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                onSettleKnowledge={handleSettleKnowledge}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -715,6 +744,7 @@ export default function Tasks() {
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                onSettleKnowledge={handleSettleKnowledge}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -737,6 +767,7 @@ export default function Tasks() {
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                onSettleKnowledge={handleSettleKnowledge}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -759,6 +790,7 @@ export default function Tasks() {
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                onSettleKnowledge={handleSettleKnowledge}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
             </div>
@@ -827,6 +859,7 @@ export default function Tasks() {
                     onShare={() => setSharingTask(task)}
                     onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                     onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                    onSettleKnowledge={handleSettleKnowledge}
                     onReparent={handleReparent}
                     autoExec={autoExecMap[task.id]?.autoExec}
                   />

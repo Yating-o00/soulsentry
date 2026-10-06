@@ -92,6 +92,38 @@ export default function TaskDetail() {
     }
   };
 
+  // 约定允许不执行：内容沉淀进知识库，约定标记为完成（不算失约，正常收入已完成）
+  const settleAsKnowledge = async () => {
+    if (!task) return;
+    const res = await Taro.showModal({
+      title: "沉淀为知识",
+      content: `「${task.title}」将不执行，内容沉淀进知识库并标记为完成。`,
+      confirmText: "沉淀",
+      cancelText: "取消"
+    });
+    if (!res.confirm) return;
+    try {
+      const kb = await post("/knowledge-bases", {
+        title: task.title,
+        content: task.description || task.title,
+        source_type: "task",
+        source_id: task.id,
+        tags: ["约定沉淀", ...(Array.isArray(task.tags) ? task.tags : [])],
+        category: "约定沉淀",
+        metadata: { settled_from: "task" }
+      });
+      await patch(`/tasks/${taskId}`, {
+        status: "completed",
+        metadata: { ...(task.metadata || {}), settled_as_knowledge: true, knowledge_base_id: kb?.id || null }
+      });
+      Taro.showToast({ title: "已沉淀到知识库", icon: "success" });
+      fetchAll();
+      notifySubtasksChanged();
+    } catch (err) {
+      Taro.showToast({ title: "沉淀失败", icon: "none" });
+    }
+  };
+
   const submitComment = async () => {
     if (!commentText.trim()) {
       Taro.showToast({ title: "请输入评论内容", icon: "none" });
@@ -273,6 +305,11 @@ export default function TaskDetail() {
           >
             {isCompleted ? "标记为未完成" : "标记为已完成"}
           </Button>
+          {!isCompleted && (
+            <Button className="ss-btn ss-btn-plain" style={{ marginTop: "16rpx" }} onClick={settleAsKnowledge}>
+              沉淀为知识（不执行）
+            </Button>
+          )}
         </View>
 
         <View className="ss-card">

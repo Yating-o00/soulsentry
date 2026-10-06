@@ -412,6 +412,7 @@ export default function Notes() {
     try {
       await post("/knowledge-bases", {
         title: getTitle(note) || (note.plain_text || note.content || "").slice(0, 60) || "心签沉淀",
+        content: note.plain_text || (note.content || "").replace(/<[^>]+>/g, "").trim() || "心签沉淀",
         source_type: "note",
         source_id: note.id,
         tags: Array.isArray(note.tags) ? note.tags : [],

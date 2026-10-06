@@ -64,6 +64,8 @@ function parseSort(sort = "-created_date") {
 }
 
 function buildKnowledgeBaseData(userId, payload) {
+  // 注意：Prisma 的 KnowledgeBase 模型没有 metadata/embeddings 列，
+  // 这两字段接收后不入库（传入即 500），调用方无需传
   return {
     userId,
     title: payload.title,
@@ -74,12 +76,10 @@ function buildKnowledgeBaseData(userId, payload) {
     category: payload.category || "其他",
     summary: payload.summary || null,
     keyPoints: payload.key_points ?? [],
-    embeddings: payload.embeddings,
     accessCount: payload.access_count ?? 0,
     lastAccessed: payload.last_accessed ? new Date(payload.last_accessed) : null,
     importance: payload.importance ?? 3,
-    embeddingSummary: payload.embedding_summary || null,
-    metadata: payload.metadata
+    embeddingSummary: payload.embedding_summary || null
   };
 }
 
@@ -168,12 +168,10 @@ knowledgeBasesRouter.patch("/:id", async (req, res) => {
       category: payload.data.category,
       summary: payload.data.summary,
       keyPoints: payload.data.key_points,
-      embeddings: payload.data.embeddings,
       accessCount: payload.data.access_count,
       lastAccessed: payload.data.last_accessed === undefined ? undefined : (payload.data.last_accessed ? new Date(payload.data.last_accessed) : null),
       importance: payload.data.importance,
-      embeddingSummary: payload.data.embedding_summary,
-      metadata: payload.data.metadata
+      embeddingSummary: payload.data.embedding_summary
     },
     include: { user: true }
   });

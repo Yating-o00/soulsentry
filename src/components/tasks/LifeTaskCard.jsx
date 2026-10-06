@@ -10,7 +10,7 @@ import {
   Car, Store, Home, AlertCircle, Timer,
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
-  Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw
+  Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen
 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -47,6 +47,7 @@ export default function LifeTaskCard({
   onToggleSelection,
   onViewTab,
   onReparent,
+  onSettleKnowledge,
   autoExec
 }) {
   const isRecurringTask = task.repeat_rule && task.repeat_rule !== 'none';
@@ -520,6 +521,9 @@ export default function LifeTaskCard({
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>
                             <Edit className="w-4 h-4 mr-2" /> 编辑
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSettleKnowledge && onSettleKnowledge(task); }}>
+                            <BookOpen className="w-4 h-4 mr-2" /> 沉淀为知识
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShowAttachDialog(true); }}>
                             <CornerDownRight className="w-4 h-4 mr-2" /> 挂到其他约定下

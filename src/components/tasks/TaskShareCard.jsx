@@ -613,7 +613,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         style={{ color: categoryColor.accent }}
                       >
                          <img 
-                            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/6909eb4cffc0d0cc8e4c8442/e19e5553e_image.png"
+                            src="/icon-192.png"
                             alt="Logo"
                             crossOrigin="anonymous"
                             className="w-10 h-10 object-contain"
@@ -871,7 +871,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                     <div className="flex items-center gap-2.5">
                        <div className="w-8 h-8 rounded-lg overflow-hidden bg-transparent flex items-center justify-center">
                          <img 
-                           src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/6909eb4cffc0d0cc8e4c8442/e19e5553e_image.png"
+                           src="/icon-192.png"
                            alt="Logo"
                            crossOrigin="anonymous"
                            className="w-full h-full object-contain"

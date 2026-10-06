@@ -21,8 +21,6 @@ import {
   AlertCircle,
   Loader2,
   ChevronLeft,
-  StickyNote,
-  ListTodo,
   ExternalLink,
   Copy
 } from "lucide-react";
@@ -427,7 +425,7 @@ export default function Share() {
             首页
           </button>
           <div className="flex items-center gap-2 text-sm text-slate-500">
-            {isTask ? <ListTodo className="w-4 h-4" /> : <StickyNote className="w-4 h-4" />}
+            <img src="/icon-192.png" alt="心栈" className="h-5 w-5 rounded-md" />
             <span>{isTask ? "公开约定" : "公开心签"}</span>
           </div>
         </div>

@@ -493,11 +493,15 @@ export default function DeviceCollaborationModule() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const queryClient = useQueryClient();
 
-  // 统一策略:仅在数据真正变化时刷新(订阅推送 / 手动 invalidate),
+  // 统一策略：仅在数据真正变化时刷新(订阅推送 / 手动 invalidate)，
   // 不再因为重新进入页面、窗口聚焦或定时器而盲目重拉。
+  // 注意：不能给查询配 initialData: []——initialData 会写入缓存并被 staleTime:Infinity
+  // 视为"新鲜"，叠加 refetchOnMount:false 后 queryFn 永远不会执行；
+  // 而独立后端下 subscribe 是未实现桩（云端平台才有实时推送），任务/心签将永远是空数组，
+  // 导致各设备策略分配全空。首挂载时缓存为空会正常拉取，无需 initialData 兜底。
   const sharedOpts = {
     staleTime: Infinity,             // 缓存永不过期(变化由订阅驱动)
-    refetchOnMount: false,           // 重新挂载不刷
+    refetchOnMount: false,           // 重新挂载不刷(仅当缓存里已有数据时)
     refetchOnWindowFocus: false,     // 切回标签页不刷
     refetchOnReconnect: false,       // 网络恢复不刷(避免抖动)
   };
@@ -511,21 +515,18 @@ export default function DeviceCollaborationModule() {
   const { data: allTasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-reminder_time'),
-    initialData: [],
     ...sharedOpts,
   });
 
   const { data: allNotes = [] } = useQuery({
     queryKey: ['notes'],
     queryFn: () => base44.entities.Note.list('-created_date', 100),
-    initialData: [],
     ...sharedOpts,
   });
 
   const { data: realDevices = [] } = useQuery({
     queryKey: ['my-devices'],
     queryFn: () => listMyDevices(),
-    initialData: [],
     ...sharedOpts,
   });
 

@@ -18,7 +18,51 @@ import { markWechatOrderPaid } from "../services/wechatOrders.js";
 import { savePptHtml } from "../lib/renderPpt.js";
 import { normalizeToGcj02, judgeOnTheWay } from "../lib/geo.js";
 import { getHardOverdue } from "../lib/timeSemantics.js";
+import { chargeAICredits, assertAICredits, usageCost } from "../services/aiCredits.js";
 import QRCode from "qrcode";
+
+// 各 AI 功能的固定扣费点数（与前端 creditConfig 的参考表一致；对话/通用调用按 token 用量动态结算）
+const AI_CALL_COSTS = {
+  kimi_web_browse: 2,
+  analyze_intent: 1,
+  analyze_image: 3,
+  task_parse: 2,
+  task_split: 2,
+  memory_insight: 1,
+  daily_briefing: 2,
+  mood_river: 1,
+  week_plan: 3,
+  month_plan: 4,
+  analyze_task: 1
+};
+
+// 预检点数：不足时直接回 402 并返回 false（调用方中断 AI 调用）
+async function guardCredits(req, res, cost, feature) {
+  try {
+    await assertAICredits(req.user.id, cost, feature);
+    return true;
+  } catch (e) {
+    if (e?.code === "INSUFFICIENT_CREDITS") {
+      res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: e.message, balance: e.balance, required: e.required });
+      return false;
+    }
+    throw e;
+  }
+}
+
+// AI 调用成功后的结算：余额竞态（AI 已调用但扣费时不够）只记警告不阻断
+async function settleCredits(req, cost, feature, description) {
+  try {
+    return await chargeAICredits({ userId: req.user.id, cost, feature, description });
+  } catch (e) {
+    if (e?.code === "INSUFFICIENT_CREDITS") {
+      console.warn(`[credits] ${feature} 结算时余额不足（余额 ${e.balance}，需 ${e.required}），本次放行`);
+    } else {
+      console.error(`[credits] ${feature} 结算失败:`, e?.message || e);
+    }
+    return null;
+  }
+}
 
 // 把微信支付 Native 下单返回的 code_url 转成 PNG data URL，
 // 小程序端 Image 组件可直接渲染 base64 data URL（小程序无 qrcode 库）
@@ -67,39 +111,6 @@ functionsRouter.use((req, res, next) => {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-// 统一 AI 点数扣费：预检余额，事务内扣减并记账
-// 余额不足时抛出 402 INSUFFICIENT_CREDITS（带 balance/required），由调用方决定阻断还是降级
-async function chargeAICredits({ userId, cost, feature, description }) {
-  const amount = Math.max(1, Math.ceil(Number(cost) || 0));
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  const balance = user?.aiCredits ?? 0;
-  if (balance < amount) {
-    const error = new Error("AI 点数不足");
-    error.status = 402;
-    error.code = "INSUFFICIENT_CREDITS";
-    error.required = amount;
-    error.balance = balance;
-    throw error;
-  }
-  const [updatedUser] = await prisma.$transaction([
-    prisma.user.update({
-      where: { id: userId },
-      data: { aiCredits: { decrement: amount } }
-    }),
-    prisma.aICreditTransaction.create({
-      data: {
-        userId,
-        type: "CONSUME",
-        amount: -amount,
-        balanceAfter: balance - amount,
-        feature: feature || "ai_call",
-        description: description || "AI 调用"
-      }
-    })
-  ]);
-  return { charged: amount, balance: updatedUser.aiCredits };
 }
 
 // 心签分类：英文 key ↔ 中文标签
@@ -1404,34 +1415,45 @@ functionsRouter.post("/:name", async (req, res) => {
           message: "独立后端当前仅支持纯文本 Kimi 调用，文件上传与附件抽取尚未迁移"
         });
       }
+      if (!(await guardCredits(req, res, 1, "invoke_kimi"))) return;
 
-      const data = await invokeKimiText({
+      const { data, usage } = await invokeKimiText({
         prompt: payload.prompt,
         systemPrompt: payload.system_prompt,
         responseJsonSchema: payload.response_json_schema,
         model: payload.model,
-        temperature: payload.temperature
+        temperature: payload.temperature,
+        withUsage: true
       });
+
+      // 按实际 token 用量结算：1 点 / 1000 token（缓存命中的输入不计费），最少 1 点
+      const { cost, billableTokens } = usageCost(usage);
+      await settleCredits(req, cost, "invoke_kimi", `AI 调用（${Math.round(billableTokens)} tokens）`);
 
       return res.json(data);
     }
 
     if (name === "kimiWebBrowse") {
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.kimi_web_browse, "kimi_web_browse"))) return;
       const data = await invokeKimiWebSearch({
         query: payload.query,
         language: payload.language
       });
+
+      await settleCredits(req, AI_CALL_COSTS.kimi_web_browse, "kimi_web_browse", "联网搜索");
 
       return res.json(data);
     }
 
     if (name === "analyzeIntent") {
       try {
+        if (!(await guardCredits(req, res, AI_CALL_COSTS.analyze_intent, "analyze_intent"))) return;
         const data = await analyzeIntentWithKimi({
           input: payload.input,
           date: payload.date,
           existingPlan: payload.existingPlan
         });
+        await settleCredits(req, AI_CALL_COSTS.analyze_intent, "analyze_intent", "意图分析");
         return res.json(data);
       } catch (error) {
         const message = error?.message || String(error);
@@ -1465,7 +1487,9 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       try {
+        if (!(await guardCredits(req, res, AI_CALL_COSTS.analyze_image, "analyze_image"))) return;
         const data = await analyzeImage({ fileUrl });
+        await settleCredits(req, AI_CALL_COSTS.analyze_image, "analyze_image", "图片识别");
         return res.json(data);
       } catch (error) {
         const status = error?.status || 502;
@@ -1484,6 +1508,7 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       try {
+        if (!(await guardCredits(req, res, AI_CALL_COSTS.task_parse, "task_parse"))) return;
         const currentCoords = (typeof payload.latitude === "number" && typeof payload.longitude === "number")
           ? { latitude: payload.latitude, longitude: payload.longitude }
           : null;
@@ -1498,6 +1523,7 @@ functionsRouter.post("/:name", async (req, res) => {
           currentCoords,
           habitProfileText
         });
+        await settleCredits(req, AI_CALL_COSTS.task_parse, "task_parse", "约定智能解析");
         return res.json(data);
       } catch (error) {
         const message = error?.message || String(error);
@@ -1602,6 +1628,7 @@ functionsRouter.post("/:name", async (req, res) => {
         required: ["insight"]
       };
 
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.memory_insight, "memory_insight"))) return;
       const data = await invokeKimiText({
         prompt: payload.prompt,
         systemPrompt: "你是一个中文记忆洞察助手。请基于用户提供的约定内容和行为数据，生成一条自然、有针对性的简短洞察。必须直接返回 JSON 对象，不要输出 markdown、代码块或任何解释文字。",
@@ -1609,6 +1636,7 @@ functionsRouter.post("/:name", async (req, res) => {
         temperature: 0.5
       });
 
+      await settleCredits(req, AI_CALL_COSTS.memory_insight, "memory_insight", "记忆洞察");
       return res.json(data);
     }
 
@@ -1627,12 +1655,17 @@ functionsRouter.post("/:name", async (req, res) => {
     }
 
     if (name === "generateDailyBriefing") {
-      return res.json(await generateDailyBriefingForUser(req.user));
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.daily_briefing, "daily_briefing"))) return;
+      const data = await generateDailyBriefingForUser(req.user);
+      await settleCredits(req, AI_CALL_COSTS.daily_briefing, "daily_briefing", "每日智能简报");
+      return res.json(data);
     }
 
     if (name === "moodRiver") {
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.mood_river, "mood_river"))) return;
       const period = Number(payload.period) === 30 ? 30 : 14;
       const result = await generateMoodRiverWithAI(req.user.id, period);
+      await settleCredits(req, AI_CALL_COSTS.mood_river, "mood_river", "心流情绪洞察");
       return res.json(result);
     }
 
@@ -1640,16 +1673,20 @@ functionsRouter.post("/:name", async (req, res) => {
       if (!payload.input || !String(payload.input).trim()) {
         return res.status(400).json({ error: "INVALID_INPUT", message: "缺少周计划输入内容" });
       }
-
-      return res.json(await generateWeekPlan(payload));
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.week_plan, "week_plan"))) return;
+      const data = await generateWeekPlan(payload);
+      await settleCredits(req, AI_CALL_COSTS.week_plan, "week_plan", "周计划生成");
+      return res.json(data);
     }
 
     if (name === "generateMonthPlan") {
       if (!payload.input || !String(payload.input).trim()) {
         return res.status(400).json({ error: "INVALID_INPUT", message: "缺少月计划输入内容" });
       }
-
-      return res.json(await generateMonthPlan(payload));
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.month_plan, "month_plan"))) return;
+      const data = await generateMonthPlan(payload);
+      await settleCredits(req, AI_CALL_COSTS.month_plan, "month_plan", "月计划生成");
+      return res.json(data);
     }
 
     if (name === "savePushSubscription") {
@@ -3350,12 +3387,17 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
     }
 
     if (name === "analyzeTasks") {
-      const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+      const tasks = Array.isArray(payload.tasks) ? payload.tasks.filter((t) => t?.id) : [];
       const executions = Array.isArray(payload.executions) ? payload.executions : [];
       const subtaskMap = isPlainObject(payload.subtasks) ? payload.subtasks : {};
       console.log(`[analyzeTasks] received tasks=${tasks.length} executions=${executions.length}`);
       const result = {};
       const trustScores = computeTrustScores(executions);
+
+      // 约定智能分析：每条约定 1 点，调用前预检总额
+      if (tasks.length) {
+        if (!(await guardCredits(req, res, tasks.length * AI_CALL_COSTS.analyze_task, "analyze_task"))) return;
+      }
 
       // 限制并发，避免大量任务同时调用 Kimi 导致超时/限流
       const poolLimit = 2;
@@ -3365,7 +3407,11 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
       for (const task of tasks) {
         if (!task?.id) continue;
         const promise = analyzeTask(task, executions, subtaskMap[task.id] || [], trustScores).then(
-          (analysis) => { result[task.id] = analysis; },
+          (analysis) => {
+            result[task.id] = analysis;
+            // 每条分析成功扣 1 点（fire-and-forget，不阻塞批量分析）
+            settleCredits(req, AI_CALL_COSTS.analyze_task, "analyze_task", `约定智能分析：${String(task.title || "").slice(0, 20)}`);
+          },
           (err) => {
             console.error(`[analyzeTasks] analyzeTask failed for task ${task.id}:`, err?.message || err);
             result[task.id] = {};

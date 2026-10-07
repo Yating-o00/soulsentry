@@ -1,4 +1,5 @@
 import { invokeKimiText } from "../lib/kimi.js";
+import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
@@ -209,7 +210,7 @@ ${buildMessagesBlock(messages)}${attachmentCtx}
 
 请按系统要求返回 JSON。`;
 
-  const result = await invokeKimiText({
+  const resultAndUsage = await invokeKimiText({
     prompt,
     systemPrompt: `你是 SoulSentry「心栈」，一个温柔、克制、值得信赖的陪伴式记录助手。用户通过和你聊天的方式，把心里想记的东西告诉你。
 
@@ -236,9 +237,11 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
 7. 严格返回 JSON，不要输出其他内容。`,
     responseJsonSchema: RESPONSE_SCHEMA,
     temperature: 0.7,
-    maxTokens: 800
+    maxTokens: 800,
+    withUsage: true
   });
 
+  const { data: result, usage } = resultAndUsage;
   if (!result || typeof result !== "object" || typeof result.reply !== "string") {
     throw new Error("invalid chat response");
   }
@@ -253,7 +256,8 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   return {
     reply: trim(result.reply, 120),
     agentGoal,
-    extracted
+    extracted,
+    usage
   };
 }
 
@@ -322,12 +326,46 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     }
   }
 
+  // —— AI 点数预检：对话是用户主动触发的 AI 调用，余额不足时不消耗 AI、直接温柔提示充值 ——
+  if (userId && prisma) {
+    const creditUser = await prisma.user.findUnique({ where: { id: userId }, select: { aiCredits: true } });
+    const balance = creditUser?.aiCredits ?? 0;
+    if (balance < 1) {
+      return {
+        reply: "AI 点数用完啦。去「我的 → AI 点数」充一点，随时回来继续聊～",
+        extracted: null,
+        insufficientCredits: true,
+        balance,
+        source: "credits"
+      };
+    }
+  }
+
   try {
     if (!safeMessages.length || !lastUser) throw new Error("empty messages");
     const out = await Promise.race([
       chatWithKimi({ messages: safeMessages, lastExtracted, attachmentCtx }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000))
     ]);
+
+    // AI 调用成功：按真实 token 用量结算（1 点/1000 token，最少 1 点）；余额竞态只记警告不阻断
+    if (userId && prisma && out.usage) {
+      try {
+        const { cost, billableTokens } = usageCost(out.usage);
+        await chargeAICredits({
+          userId,
+          cost,
+          feature: "flow_chat",
+          description: `心流对话（${Math.round(billableTokens)} tokens）`
+        });
+      } catch (chargeErr) {
+        if (chargeErr?.code === "INSUFFICIENT_CREDITS") {
+          console.warn(`[flowChat] 结算时余额不足（余额 ${chargeErr.balance}），本次放行`);
+        } else {
+          console.error("[flowChat] 扣点失败:", chargeErr?.message || chargeErr);
+        }
+      }
+    }
 
     // —— Kimi 判断需要即时网页办事：启动浏览器小助手 ——
     let agent = null;

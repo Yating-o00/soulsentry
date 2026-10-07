@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { maybeAutoExecute } from "../services/autoAutomation.js";
 import { checkTextSecurityAsync } from "../services/contentSecurity.js";
 import { suggestTaskSplit } from "../services/splitTask.js";
+import { assertAICredits, chargeAICredits } from "../services/aiCredits.js";
 import {
   assertTaskAccess,
   describeTaskChange,
@@ -16,6 +17,9 @@ import {
 import { computeNextReminderTime, parseRecurrenceFromText } from "../lib/recurrence.js";
 
 export const tasksRouter = Router();
+
+// 子约定智能建议的 AI 调用扣费（与 functions.js AI_CALL_COSTS.task_parse 同档）
+const TASK_SPLIT_COST = 2;
 
 const isoDateTime = z.string().refine(
   (v) => !Number.isNaN(Date.parse(v)),
@@ -430,7 +434,28 @@ tasksRouter.post("/:id/split", async (req, res) => {
     return res.status(404).json({ error: "NOT_FOUND", message: "任务不存在" });
   }
 
+  // 子约定智能建议是 AI 调用：预检余额（不足 402），成功后扣 2 点
+  try {
+    await assertAICredits(req.user.id, TASK_SPLIT_COST, "task_split");
+  } catch (e) {
+    if (e?.code === "INSUFFICIENT_CREDITS") {
+      return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: e.message, balance: e.balance, required: e.required });
+    }
+    throw e;
+  }
+
   const result = await suggestTaskSplit(task);
+
+  try {
+    await chargeAICredits({ userId: req.user.id, cost: TASK_SPLIT_COST, feature: "task_split", description: "子约定智能建议" });
+  } catch (e) {
+    if (e?.code === "INSUFFICIENT_CREDITS") {
+      console.warn(`[tasks/split] 结算时余额不足（余额 ${e.balance}），本次放行`);
+    } else {
+      console.error("[tasks/split] 扣点失败:", e?.message || e);
+    }
+  }
+
   return res.json(result);
 });
 

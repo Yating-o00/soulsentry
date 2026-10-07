@@ -2183,6 +2183,106 @@ functionsRouter.post("/:name", async (req, res) => {
 
       const completed = completedTasks.filter((t) => t.completedAt);
 
+      // ========== 0) 情境上下文：当前地点（两个推荐分支共用） ==========
+      const now = new Date();
+      let nearLocation = null;
+      let nearDist = null;
+      if (coords) {
+        const locations = await prisma.savedLocation.findMany({
+          where: { userId: req.user.id, isActive: true }
+        });
+        for (const loc of locations) {
+          if (typeof loc.latitude !== "number" || typeof loc.longitude !== "number") continue;
+          const d = haversineMeters(coords, { latitude: loc.latitude, longitude: loc.longitude });
+          const threshold = (loc.radius || 200) + 200;
+          if (d <= threshold && (!nearLocation || d < nearDist)) {
+            nearLocation = loc;
+            nearDist = d;
+          }
+        }
+      }
+
+      // 情境打分：时间窗口匹配 × 地点关联 × 固有优先级。
+      // 典型场景：「每天18-19点吃药」这类时间固定约定，在其他时段不被优先推荐；
+      // 处于办公/学习场所时工作类约定加权，取快递、买东西等地点弱相关约定降权。
+      const LOW_LOCATION_BIND_CATEGORIES = new Set(["shopping"]);
+      const WORK_LOCATION_TYPES = new Set(["office", "school"]);
+      function contextScore(task) {
+        let score = 0;
+        const reasons = [];
+        const extra =
+          task.metadata && typeof task.metadata === "object" && task.metadata._extraFields
+            ? task.metadata._extraFields
+            : {};
+        const rule = ["daily", "weekly", "monthly", "custom"].includes(extra.repeat_rule) ? extra.repeat_rule : null;
+
+        // 时间适配：固定时间窗的重复约定只在窗口附近加分，远离窗口明显降权
+        if (rule && task.reminderTime) {
+          const start = new Date(task.reminderTime).getTime();
+          const end = task.endTime ? new Date(task.endTime).getTime() : start + 60 * 60 * 1000;
+          const t = now.getTime();
+          if (t >= start - 30 * 60 * 1000 && t <= end) {
+            score += 30;
+            reasons.push("此刻在约定时间窗内");
+          } else if (t < start && start - t <= 2 * 60 * 60 * 1000) {
+            score += 10;
+            reasons.push("临近约定时间");
+          } else {
+            score -= 25;
+            reasons.push("不在约定时间窗");
+          }
+        } else if (task.reminderTime) {
+          const diffH = (new Date(task.reminderTime).getTime() - now.getTime()) / 3600000;
+          if (diffH >= -1 && diffH <= 3) {
+            score += 15;
+            reasons.push("未来3小时内到点");
+          } else if (diffH > 3 && diffH <= 24) {
+            score += 5;
+          } else if (diffH < -1) {
+            score -= 5;
+          } else {
+            score -= 10;
+            reasons.push("时间尚早");
+          }
+        }
+
+        // 地点适配
+        if (nearLocation) {
+          const locType = nearLocation.locationType;
+          const lr = getTaskLocationReminder(task);
+          const looselyBound = LOW_LOCATION_BIND_CATEGORIES.has(task.category) && !(lr && lr.enabled);
+          if (WORK_LOCATION_TYPES.has(locType)) {
+            if (task.category === "work") {
+              score += 20;
+              reasons.push("在办公场所，工作约定优先");
+            }
+            if (looselyBound) {
+              score -= 20;
+              reasons.push("与当前地点关联不大");
+            }
+          }
+          if (lr && lr.enabled && typeof lr.latitude === "number" && coords) {
+            const d = haversineMeters(coords, { latitude: lr.latitude, longitude: lr.longitude });
+            if (d <= (lr.radius || 300) + 200) {
+              score += 15;
+              reasons.push("就在附近可顺手做");
+            }
+          }
+        }
+
+        // 固有优先级
+        score += { urgent: 20, high: 12, medium: 6, low: 2 }[String(task.priority || "").toLowerCase()] ?? 6;
+        return { score, reasons };
+      }
+      // 候选按情境分排序（分高者 = 此刻最值得先做）
+      const ctxRank = (list) =>
+        list
+          .map((t) => {
+            const { score, reasons } = contextScore(t);
+            return { t, score, reasons };
+          })
+          .sort((a, b) => b.score - a.score);
+
       // ========== 1) 序贯规则挖掘 ==========
       const asc = [...completed].sort(
         (a, b) => new Date(a.completedAt) - new Date(b.completedAt)
@@ -2245,10 +2345,15 @@ functionsRouter.post("/:name", async (req, res) => {
           });
 
           const suggestions = candidateRules.map((rule) => {
-            const matches = pending
-              .filter((t) => t.category === rule.to)
+            const matches = ctxRank(pending.filter((t) => t.category === rule.to))
               .slice(0, 2)
-              .map((t) => ({ id: t.id, title: t.title, priority: t.priority }));
+              .map(({ t, score, reasons }) => ({
+                id: t.id,
+                title: t.title,
+                priority: t.priority,
+                context_score: score,
+                context_reasons: reasons
+              }));
             return {
               from_label: rule.from_label,
               to_label: rule.to_label,
@@ -2272,27 +2377,10 @@ functionsRouter.post("/:name", async (req, res) => {
         }
       }
 
-      // ========== 2) 地点情境推荐 ==========
+      // ========== 2) 地点情境推荐（nearLocation 已在情境上下文中算好） ==========
       let locationPattern = null;
 
-      if (coords) {
-        const locations = await prisma.savedLocation.findMany({
-          where: { userId: req.user.id, isActive: true }
-        });
-
-        let nearLocation = null;
-        let nearDist = null;
-        for (const loc of locations) {
-          if (typeof loc.latitude !== "number" || typeof loc.longitude !== "number") continue;
-          const d = haversineMeters(coords, { latitude: loc.latitude, longitude: loc.longitude });
-          const threshold = (loc.radius || 200) + 200;
-          if (d <= threshold && (!nearLocation || d < nearDist)) {
-            nearLocation = loc;
-            nearDist = d;
-          }
-        }
-
-        if (nearLocation) {
+      if (nearLocation) {
           const histTasks = completed.filter((t) => {
             const lr = getTaskLocationReminder(t);
             if (!lr?.enabled) return false;
@@ -2345,14 +2433,15 @@ functionsRouter.post("/:name", async (req, res) => {
             });
 
             const topCatSet = new Set(topCategories.map((c) => c.category));
-            const suggestedTasks = pending
-              .filter((t) => topCatSet.has(t.category))
+            const suggestedTasks = ctxRank(pending.filter((t) => topCatSet.has(t.category)))
               .slice(0, 3)
-              .map((t) => ({
+              .map(({ t, score, reasons }) => ({
                 id: t.id,
                 title: t.title,
                 category_label: CATEGORY_LABEL[t.category] || t.category,
-                priority: t.priority
+                priority: t.priority,
+                context_score: score,
+                context_reasons: reasons
               }));
 
             locationPattern = {
@@ -2366,7 +2455,6 @@ functionsRouter.post("/:name", async (req, res) => {
               suggested_tasks: suggestedTasks
             };
           }
-        }
       }
 
       return res.json({

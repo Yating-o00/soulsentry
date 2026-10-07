@@ -13,7 +13,7 @@ import {
   taskAccess,
   withSharedInfo
 } from "../services/taskSharing.js";
-import { computeNextReminderTime } from "../lib/recurrence.js";
+import { computeNextReminderTime, parseRecurrenceFromText } from "../lib/recurrence.js";
 
 export const tasksRouter = Router();
 
@@ -167,6 +167,15 @@ function serializeTask(task) {
 
 function buildTaskCreateData(userId, payload) {
   const extraFields = getTaskExtraFields(payload);
+  // 兜底：原文含重复语义而前端未显式传 repeat_rule 时自动识别——
+  // 否则 cron 首次提醒后不推进排期，重复约定退化为一次性提醒（如"每天晚上6-7点吃药"只响一天）
+  if (!extraFields.repeat_rule) {
+    const rec = parseRecurrenceFromText(payload.description) || parseRecurrenceFromText(payload.title);
+    if (rec) {
+      extraFields.repeat_rule = rec.repeat_rule;
+      extraFields.custom_recurrence = rec.custom_recurrence;
+    }
+  }
   const title = String(payload.title || "").trim();
 
   return {
@@ -444,6 +453,17 @@ tasksRouter.patch("/:id", async (req, res) => {
   }
 
   const extraFields = getTaskExtraFields(payload.data);
+  const prevExtra = isPlainObject(existing.metadata?._extraFields) ? existing.metadata._extraFields : {};
+  // 兜底：文本含重复语义但未设 repeat_rule 时自动识别（前端智能创建链路不总是显式传），
+  // 存量的一次性任务被编辑保存后也能激活为重复约定
+  if (extraFields.repeat_rule === undefined && !prevExtra.repeat_rule) {
+    const rec = parseRecurrenceFromText(payload.data.description ?? existing.description)
+      || parseRecurrenceFromText(payload.data.title ?? existing.title);
+    if (rec) {
+      extraFields.repeat_rule = rec.repeat_rule;
+      extraFields.custom_recurrence = rec.custom_recurrence;
+    }
+  }
   let nextMetadata = payload.data.metadata === undefined && Object.keys(extraFields).length === 0
     ? undefined
     : mergeTaskMetadata(existing.metadata, payload.data.metadata, extraFields);
@@ -451,7 +471,6 @@ tasksRouter.patch("/:id", async (req, res) => {
   // ── 短延后序列归一化：统一三端顺延行为 ──
   // 短延后（≤30分钟）按 5→15 分钟推进；当天第 3 次短延后不再打扰，转入 21:00 晚间回顾；
   // 长顺延（>30分钟）重置序列。snooze_until/snooze_reason 等随 passthrough 进 extraFields，这里补序列字段。
-  const prevExtra = isPlainObject(existing.metadata?._extraFields) ? existing.metadata._extraFields : {};
   const chinaToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   const snoozeNormalize = {};
   let cappedReminderTime = null;

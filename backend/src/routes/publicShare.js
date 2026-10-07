@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import crypto from "node:crypto";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
 
 export const publicShareRouter = Router();
@@ -66,9 +66,10 @@ function serializeComment(comment) {
     id: comment.id,
     task_id: comment.taskId,
     note_id: comment.noteId,
+    parent_id: comment.parentId,
     content: comment.content,
     mentions: comment.mentions || [],
-    created_by: comment.user?.email || visitorName || "访客",
+    created_by: comment.user?.displayName || comment.user?.email || visitorName || "访客",
     created_by_id: comment.user?.id || null,
     visitor_token: comment.visitorToken,
     visitor_name: comment.visitorName,
@@ -277,7 +278,7 @@ publicShareRouter.post("/generate/:type/:id", requireAuth, async (req, res) => {
 });
 
 // GET /api/public/share/:token - 匿名获取分享内容
-publicShareRouter.get("/:token", async (req, res) => {
+publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
   const token = req.params.token;
   const result = await findSharedItem(token);
   if (!result) {
@@ -314,6 +315,7 @@ publicShareRouter.get("/:token", async (req, res) => {
         type: "task",
         item: serializeTask(item),
         owner_name: item.user?.displayName || "",
+        is_owner: req.user?.id === item.userId,
         subtasks,
         comments: comments.map(serializeComment)
       });
@@ -329,6 +331,7 @@ publicShareRouter.get("/:token", async (req, res) => {
       type: "note",
       item: serializeNote(item),
       owner_name: item.user?.displayName || "",
+      is_owner: req.user?.id === item.userId,
       comments: comments.map(serializeComment)
     });
   } catch (error) {
@@ -362,12 +365,13 @@ publicShareRouter.get("/:token/ics", async (req, res) => {
   }
 });
 
-// POST /api/public/share/:token/comments - 匿名评论
-publicShareRouter.post("/:token/comments", async (req, res) => {
+// POST /api/public/share/:token/comments - 评论/回复（匿名访客或登录用户）
+publicShareRouter.post("/:token/comments", optionalAuth, async (req, res) => {
   const schema = z.object({
     content: z.string().min(1).max(5000),
     visitor_token: z.string().min(8).optional(),
-    visitor_name: z.string().max(50).optional().nullable()
+    visitor_name: z.string().max(50).optional().nullable(),
+    parent_id: z.string().optional().nullable()
   });
 
   const parsed = schema.safeParse(req.body);
@@ -381,35 +385,50 @@ publicShareRouter.post("/:token/comments", async (req, res) => {
   const { type, item } = result;
   if (isShareExpired(item)) return res.status(410).json({ error: "SHARE_EXPIRED" });
 
-  // 内容安全：匿名评论内容需通过 msgSecCheck
-  if (await rejectIfRisky(res, parsed.data.content, null)) return;
+  // 内容安全：评论内容需通过 msgSecCheck
+  if (await rejectIfRisky(res, parsed.data.content, req.user?.id || null)) return;
 
-  const visitorToken = ensureVisitorToken(req);
-  const visitorName = (parsed.data.visitor_name || "访客").slice(0, 50);
+  const loggedInUser = req.user || null;
+  const isOwner = loggedInUser?.id === item.userId;
+  // 登录用户以本人身份留言（userId）；匿名访客走 visitorToken
+  const visitorToken = loggedInUser ? null : ensureVisitorToken(req);
+  const visitorName = loggedInUser ? null : (parsed.data.visitor_name || "访客").slice(0, 50);
+  const displayName = loggedInUser ? (loggedInUser.displayName || loggedInUser.email) : visitorName;
   const content = parsed.data.content;
+  const parentId = parsed.data.parent_id || null;
 
   try {
+    // 回复校验：父评论必须属于同一分享对象，且只支持一层回复
+    if (parentId) {
+      const parentWhere = type === "task" ? { id: parentId, taskId: item.id } : { id: parentId, noteId: item.id };
+      const parent = type === "task"
+        ? await prisma.comment.findFirst({ where: parentWhere })
+        : await prisma.noteComment.findFirst({ where: parentWhere });
+      if (!parent) {
+        return res.status(400).json({ error: "INVALID_PARENT", message: "要回复的评论不存在" });
+      }
+      if (parent.parentId) {
+        return res.status(400).json({ error: "INVALID_PARENT", message: "不支持回复的回复" });
+      }
+    }
+
+    const baseData = {
+      content,
+      mentions: [],
+      parentId,
+      userId: loggedInUser?.id || null,
+      visitorToken,
+      visitorName
+    };
     let comment;
     if (type === "task") {
       comment = await prisma.comment.create({
-        data: {
-          taskId: item.id,
-          content,
-          visitorToken,
-          visitorName,
-          mentions: []
-        },
+        data: { ...baseData, taskId: item.id },
         include: { user: true }
       });
     } else {
       comment = await prisma.noteComment.create({
-        data: {
-          noteId: item.id,
-          content,
-          visitorToken,
-          visitorName,
-          mentions: []
-        },
+        data: { ...baseData, noteId: item.id },
         include: { user: true }
       });
     }
@@ -419,24 +438,47 @@ publicShareRouter.post("/:token/comments", async (req, res) => {
         shareToken: req.params.token,
         targetType: type,
         targetId: item.id,
-        visitorToken,
-        visitorName,
-        actionType: "comment",
-        payload: { commentId: comment.id, preview: content.slice(0, 100) }
+        // 字段必填但登录用户无 visitorToken：以 userId 占位，合作动态按此去重访客
+        visitorToken: visitorToken || loggedInUser?.id || "unknown",
+        visitorName: displayName,
+        actionType: parentId ? "reply" : "comment",
+        payload: { commentId: comment.id, parentId, preview: content.slice(0, 100) }
       }
     });
 
-    await notifyOwner(item.userId, {
-      type: "public_share_comment",
-      title: type === "task" ? "你的约定收到新评论" : "你的心签收到新评论",
-      body: `${visitorName}：${content.slice(0, 80)}`,
-      shareToken: req.params.token,
-      targetType: type,
-      targetId: item.id,
-      visitorToken,
-      visitorName,
-      link: type === "task" ? `/tasks?taskId=${item.id}` : `/notes?noteId=${item.id}`
-    });
+    // 拥有者本人评论/回复时不通知自己；其余情况通知拥有者
+    if (!isOwner) {
+      await notifyOwner(item.userId, {
+        type: "public_share_comment",
+        title: parentId
+          ? (type === "task" ? "你的约定收到新回复" : "你的心签收到新回复")
+          : (type === "task" ? "你的约定收到新评论" : "你的心签收到新评论"),
+        body: `${displayName}：${content.slice(0, 80)}`,
+        shareToken: req.params.token,
+        targetType: type,
+        targetId: item.id,
+        visitorToken: visitorToken || undefined,
+        visitorName: displayName,
+        link: type === "task" ? `/tasks?taskId=${item.id}` : `/notes?noteId=${item.id}`
+      });
+    }
+
+    // 回复对象是登录用户（非本人）时，给对方发站内通知
+    if (parentId) {
+      const parentModel = type === "task" ? prisma.comment : prisma.noteComment;
+      const parent = await parentModel.findUnique({ where: { id: parentId } });
+      if (parent?.userId && parent.userId !== loggedInUser?.id) {
+        await notifyOwner(parent.userId, {
+          type: "public_share_reply",
+          title: "你的评论收到回复",
+          body: `${displayName} 回复了你：${content.slice(0, 80)}`,
+          shareToken: req.params.token,
+          targetType: type,
+          targetId: item.id,
+          link: `/share/${req.params.token}`
+        });
+      }
+    }
 
     return res.status(201).json({
       comment: serializeComment(comment),
@@ -444,6 +486,58 @@ publicShareRouter.post("/:token/comments", async (req, res) => {
     });
   } catch (error) {
     console.error("[publicShare] comment failed:", error);
+    return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
+  }
+});
+
+// DELETE /api/public/share/comments/:commentId - 拥有者删除评论（连同其回复一并删除）
+publicShareRouter.delete("/comments/:commentId", requireAuth, async (req, res) => {
+  const commentId = req.params.commentId;
+
+  // Comment 模型未定义 task 关系，归属分两步查：先按 id 找评论，再按其 taskId/noteId 找拥有者
+  const taskComment = await prisma.comment.findUnique({ where: { id: commentId } });
+  const noteComment = taskComment ? null : await prisma.noteComment.findUnique({ where: { id: commentId } });
+
+  const found = taskComment || noteComment;
+  if (!found) return res.status(404).json({ error: "NOT_FOUND", message: "评论不存在" });
+
+  const itemRefId = taskComment
+    ? (taskComment.taskId || taskComment.noteId)
+    : noteComment.noteId;
+  const refTask = taskComment?.taskId
+    ? await prisma.task.findUnique({ where: { id: taskComment.taskId }, select: { userId: true, shareToken: true } })
+    : null;
+  const refNote = !refTask
+    ? await prisma.note.findUnique({ where: { id: itemRefId }, select: { userId: true, shareToken: true } })
+    : null;
+
+  const ownerId = refTask?.userId || refNote?.userId;
+  if (!ownerId || ownerId !== req.user.id) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "仅分享拥有者可以删除评论" });
+  }
+
+  try {
+    if (taskComment) {
+      await prisma.comment.delete({ where: { id: commentId } });
+    } else {
+      await prisma.noteComment.delete({ where: { id: commentId } });
+    }
+
+    await prisma.sharedActionLog.create({
+      data: {
+        shareToken: refTask?.shareToken || refNote?.shareToken || "manual",
+        targetType: refTask ? "task" : "note",
+        targetId: itemRefId,
+        visitorToken: req.user.id,
+        visitorName: req.user.displayName || req.user.email,
+        actionType: "delete_comment",
+        payload: { commentId, preview: found.content?.slice(0, 100) }
+      }
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("[publicShare] delete comment failed:", error);
     return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
   }
 });
@@ -751,7 +845,7 @@ publicShareRouter.get("/:token/logs", requireAuth, async (req, res) => {
 
     for (const log of logs) {
       uniqueVisitors.add(log.visitorToken);
-      if (log.actionType === "comment") comments.push(log);
+      if (log.actionType === "comment" || log.actionType === "reply") comments.push(log);
       else if (log.actionType === "toggle") toggles.push(log);
       else if (log.actionType === "import") imports.push(log);
     }

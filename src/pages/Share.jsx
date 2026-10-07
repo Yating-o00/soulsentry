@@ -176,6 +176,8 @@ export default function Share() {
   const [error, setError] = useState(null);
   const [visitorName, setVisitorNameState] = useState(getVisitorName());
   const [commentText, setCommentText] = useState("");
+  const [replyToId, setReplyToId] = useState(null);   // 正在回复的评论 id（仅拥有者）
+  const [replyText, setReplyText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
   const [currentUser, setCurrentUser] = useState(undefined);
@@ -308,6 +310,51 @@ export default function Share() {
     }
   };
 
+  // 拥有者回复某条评论（以本人身份，parent_id 挂到该评论下）
+  const handleReply = async (parentId) => {
+    if (!replyText.trim()) return;
+    setSubmitting(true);
+    try {
+      const result = await api(`/api/public/share/${token}/comments`, {
+        method: "POST",
+        body: {
+          content: replyText.trim(),
+          parent_id: parentId,
+          visitor_token: visitorToken,
+          visitor_name: visitorName || undefined
+        }
+      });
+      setData((prev) => ({
+        ...prev,
+        comments: [result.comment, ...(prev.comments || [])]
+      }));
+      setReplyText("");
+      setReplyToId(null);
+      toast.success("回复已发布");
+    } catch (err) {
+      toast.error(err?.message || "回复失败");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 拥有者删除评论：连同其下的回复一并删除
+  const handleDeleteComment = async (commentId) => {
+    if (!window.confirm("确定删除这条评论吗？其下的回复也会一并删除。")) return;
+    try {
+      await api(`/api/public/share/comments/${commentId}`, { method: "DELETE" });
+      setData((prev) => ({
+        ...prev,
+        comments: (prev.comments || []).filter(
+          (c) => c.id !== commentId && c.parent_id !== commentId
+        )
+      }));
+      toast.success("评论已删除");
+    } catch (err) {
+      toast.error(err?.message || "删除失败");
+    }
+  };
+
   const handleSubscribe = async () => {
     try {
       await api(`/api/public/share/${token}/subscribe`, {
@@ -407,11 +454,91 @@ export default function Share() {
   const isTask = data?.type === "task";
   const item = data?.item;
   const comments = data?.comments || [];
+  // 拥有者本人（登录后访问自己的分享链接）：可删除/回复任何评论
+  const isOwnerView = data?.is_owner === true;
+  const topComments = comments.filter((c) => !c.parent_id);
+  const repliesOf = (id) =>
+    comments
+      .filter((c) => c.parent_id === id)
+      .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
   const subtasks = data?.subtasks || [];
   const icsUrl = typeof window !== "undefined" ? `${window.location.origin}/api/public/share/${token}/ics` : "";
   const googleUrl = item ? getGoogleCalendarUrl(item) : "";
   const outlookUrl = item ? getOutlookCalendarUrl(item) : "";
   const inWechat = isWechatBrowser();
+
+  // 单条评论（顶级与回复共用）；拥有者视角附回复/删除操作
+  const renderComment = (comment) => (
+    <div className="flex gap-3">
+      <Avatar className="w-8 h-8 bg-slate-200">
+        <AvatarFallback className="text-xs text-slate-600">
+          {(comment.visitor_name || comment.created_by || "访").slice(0, 1)}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-slate-800 flex items-center gap-1.5 min-w-0">
+            <span className="truncate">{comment.visitor_name || comment.created_by || "访客"}</span>
+            {isOwnerView && comment.created_by_id && currentUser && comment.created_by_id === currentUser.id && (
+              <Badge className="text-[10px] px-1.5 py-0 bg-[#384877]/10 text-[#384877] hover:bg-[#384877]/10 border-0 shrink-0">
+                拥有者
+              </Badge>
+            )}
+          </span>
+          <span className="text-xs text-slate-400 shrink-0">
+            {format(new Date(comment.created_date), "M月d日 HH:mm", { locale: zhCN })}
+          </span>
+        </div>
+        <p className="text-sm text-slate-600 whitespace-pre-line mt-1">{comment.content}</p>
+        {isOwnerView && (
+          <div className="flex items-center gap-3 mt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setReplyToId(replyToId === comment.id ? null : comment.id);
+                setReplyText("");
+              }}
+              className="text-xs text-slate-400 hover:text-[#384877] transition-colors"
+            >
+              回复
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteComment(comment.id)}
+              className="text-xs text-slate-400 hover:text-rose-600 transition-colors"
+            >
+              删除
+            </button>
+          </div>
+        )}
+        {isOwnerView && replyToId === comment.id && (
+          <div className="mt-2 space-y-2">
+            <Textarea
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder={`回复 ${comment.visitor_name || comment.created_by || "访客"}...`}
+              className="min-h-[60px] resize-none"
+              maxLength={5000}
+            />
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => setReplyToId(null)}>
+                取消
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleReply(comment.id)}
+                disabled={!replyText.trim() || submitting}
+                className="bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
+                发送回复
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
@@ -566,7 +693,9 @@ export default function Share() {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!commentText.trim()) return;
-                ensureNameThen(handleComment);
+                // 拥有者已登录，直接以本人身份发布；访客先补称呼
+                if (isOwnerView) handleComment();
+                else ensureNameThen(handleComment);
               }}
               className="space-y-3"
             >
@@ -593,27 +722,22 @@ export default function Share() {
             {comments.length === 0 ? (
               <p className="text-sm text-slate-400 text-center py-6">暂无评论，来说两句吧</p>
             ) : (
-              <div className="space-y-4">
-                {comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3">
-                    <Avatar className="w-8 h-8 bg-slate-200">
-                      <AvatarFallback className="text-xs text-slate-600">
-                        {(comment.visitor_name || comment.created_by || "访").slice(0, 1)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-slate-800">
-                          {comment.visitor_name || comment.created_by || "访客"}
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {format(new Date(comment.created_date), "M月d日 HH:mm", { locale: zhCN })}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-600 whitespace-pre-line mt-1">{comment.content}</p>
+              <div className="space-y-5">
+                {topComments.map((comment) => {
+                  const replies = repliesOf(comment.id);
+                  return (
+                    <div key={comment.id}>
+                      {renderComment(comment)}
+                      {replies.length > 0 && (
+                        <div className="ml-11 mt-2 space-y-3 border-l-2 border-slate-100 pl-3">
+                          {replies.map((reply) => (
+                            <div key={reply.id}>{renderComment(reply)}</div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

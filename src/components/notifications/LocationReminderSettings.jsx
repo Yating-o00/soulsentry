@@ -33,7 +33,8 @@ export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
     longitude: taskDefaults?.location_reminder?.longitude || null,
     radius: taskDefaults?.location_reminder?.radius || 500,
     location_name: taskDefaults?.location_reminder?.location_name || "",
-    trigger_on: taskDefaults?.location_reminder?.trigger_on || "enter"
+    trigger_on: taskDefaults?.location_reminder?.trigger_on || "enter",
+    time_gate: taskDefaults?.location_reminder?.time_gate || null
   });
 
   useEffect(() => {
@@ -228,7 +229,7 @@ export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
               </div>
 
               <div>
-                <Label className="text-sm font-medium mb-2 block">触发条件</Label>
+                <Label className="text-sm font-medium mb-2 block">触发时机</Label>
                 <Select
                   value={settings.trigger_on}
                   onValueChange={(value) => {
@@ -244,23 +245,103 @@ export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
                     <SelectItem value="enter">
                       <div className="flex items-center gap-2">
                         <Target className="w-4 h-4 text-green-600" />
-                        <span>进入区域时</span>
+                        <span>到达目的地（确认停留后）</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="passby">
+                      <div className="flex items-center gap-2">
+                        <Navigation className="w-4 h-4 text-sky-600" />
+                        <span>路过时（提前一个路口）</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="exit">
                       <div className="flex items-center gap-2">
                         <Target className="w-4 h-4 text-orange-600" />
-                        <span>离开区域时</span>
+                        <span>离开时（出门那一刻）</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="both">
                       <div className="flex items-center gap-2">
                         <Target className="w-4 h-4 text-blue-600" />
-                        <span>进入和离开时</span>
+                        <span>到达或离开时</span>
                       </div>
                     </SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-slate-500 mt-1">
+                  到达型会等你确认停留（约 90 秒）再开口，路过不打扰
+                </p>
+              </div>
+
+              {/* 复合条件：仅在特定时段触发（如"周五 17:30 后离开公司"） */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">时段条件（可选）</Label>
+                  <Switch
+                    checked={!!settings.time_gate}
+                    onCheckedChange={(on) => {
+                      const newSettings = {
+                        ...settings,
+                        time_gate: on ? { start_hm: "17:30", end_hm: "23:59", days: [] } : null
+                      };
+                      setSettings(newSettings);
+                      handleUpdate(newSettings);
+                    }}
+                  />
+                </div>
+                {settings.time_gate && (
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="time"
+                        value={settings.time_gate.start_hm || "17:30"}
+                        onChange={(e) => {
+                          const newSettings = { ...settings, time_gate: { ...settings.time_gate, start_hm: e.target.value } };
+                          setSettings(newSettings);
+                          handleUpdate(newSettings);
+                        }}
+                        className="bg-slate-50 border-slate-200"
+                      />
+                      <span className="text-xs text-slate-500">至</span>
+                      <Input
+                        type="time"
+                        value={settings.time_gate.end_hm || "23:59"}
+                        onChange={(e) => {
+                          const newSettings = { ...settings, time_gate: { ...settings.time_gate, end_hm: e.target.value } };
+                          setSettings(newSettings);
+                          handleUpdate(newSettings);
+                        }}
+                        className="bg-slate-50 border-slate-200"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["日", "一", "二", "三", "四", "五", "六"].map((label, day) => {
+                        const days = settings.time_gate.days || [];
+                        const active = days.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => {
+                              const next = active ? days.filter((d) => d !== day) : [...days, day];
+                              const newSettings = { ...settings, time_gate: { ...settings.time_gate, days: next } };
+                              setSettings(newSettings);
+                              handleUpdate(newSettings);
+                            }}
+                            className={`h-7 w-7 rounded-full text-xs border transition-colors ${
+                              active
+                                ? "bg-[#384877] text-white border-[#384877]"
+                                : "bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                      <span className="text-[11px] text-slate-400 self-center ml-1">不选=每天</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {currentLocation && (

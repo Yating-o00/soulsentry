@@ -188,6 +188,29 @@ function getTaskSpatiotemporal(task) {
   return isPlainObject(st) ? st : null;
 }
 
+// ===== 地理守护触发核心（三重确认 / 三种时机 / 复合条件） =====
+
+// 复合条件 time_gate：{ start_hm, end_hm, days:[0-6] }（可选），按北京时间校验
+function timeGateAllows(gate) {
+  if (!gate || typeof gate !== "object") return true;
+  const bj = new Date(Date.now() + 8 * 3600 * 1000);
+  const hm = `${String(bj.getUTCHours()).padStart(2, "0")}:${String(bj.getUTCMinutes()).padStart(2, "0")}`;
+  const day = bj.getUTCDay();
+  if (Array.isArray(gate.days) && gate.days.length > 0 && !gate.days.map(Number).includes(day)) return false;
+  if (gate.start_hm && hm < String(gate.start_hm)) return false;
+  if (gate.end_hm && String(gate.end_hm) !== "23:59" && hm > String(gate.end_hm)) return false;
+  return true;
+}
+
+// 停留确认（dwell）：速度 <5km/h 且持续 ≥90s；或跨采样推断（上次也在圈内 + 间隔内位移 <50m + 间隔 ≥90s）。
+// 客户端高频确认（dwell_confirmed）直接通过。数据不足返回 false——宁漏不错，等下一次上报。
+function judgeDwell({ speedKmh, dwellConfirmed, insidePrev, displacementM, elapsedS }) {
+  if (dwellConfirmed === true) return true;
+  if (typeof speedKmh === "number" && speedKmh < 5 && typeof elapsedS === "number" && elapsedS >= 90) return true;
+  if (insidePrev === true && typeof displacementM === "number" && displacementM < 50 && typeof elapsedS === "number" && elapsedS >= 90) return true;
+  return false;
+}
+
 // ===== 约定列表智能分析辅助函数 =====
 function sameLocalDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -1840,26 +1863,52 @@ functionsRouter.post("/:name", async (req, res) => {
       // 偏好开关：显式关闭位置提醒（locationReminders === false）时只返回判定结果、不推送
       const prefsRow = await prisma.userPreference.findUnique({ where: { userId: req.user.id } });
       const remindersEnabled = prefsRow?.locationReminders !== false;
+      const geoExtra = (prefsRow?.metadata && typeof prefsRow.metadata === "object" && prefsRow.metadata._extraFields) || {};
+      const geoInside = { ...(geoExtra.geo_inside || {}) };
+      const nowMs = Date.now();
+
+      // 本次上报的运动学数据：客户端算好的速度 + 与服务端上次上报点的跨采样推断
+      const speedKmh = typeof payload.speed_kmh === "number" ? payload.speed_kmh : null;
+      const dwellConfirmed = payload.dwell_confirmed === true;
+      const lastReport = geoExtra.geo_last_report;
+      let elapsedS = null;
+      let displacementM = null;
+      if (lastReport && typeof lastReport.lat === "number" && typeof lastReport.lon === "number" && lastReport.at) {
+        const lastAt = new Date(lastReport.at).getTime();
+        if (!isNaN(lastAt)) {
+          elapsedS = (nowMs - lastAt) / 1000;
+          displacementM = haversineMeters(coords, { latitude: lastReport.lat, longitude: lastReport.lon });
+        }
+      }
 
       const results = [];
 
-      // 命中的地点（不论是否有绑定约定的地点），最近的一个用于到达 Top3 提醒
+      // dwell 确认后用于到达 Top3 提醒的地点（记录最近一个）
       let hitLocation = null;
       let hitDistance = Infinity;
+      let hitDwellOk = false;
 
+      // ========== 1) SavedLocation 维度：进出状态机 + 停留确认 ==========
       for (const location of locations) {
         const locCoords = normalizeToGcj02(location.latitude, location.longitude, location.coordType)
           || { latitude: location.latitude, longitude: location.longitude };
         const distance = haversineMeters(coords, locCoords);
+        const insideNow = distance <= location.radius;
+        const prevInside = geoInside[location.id] === "1";
+        if (insideNow) geoInside[location.id] = "1";
+        else if (prevInside) geoInside[location.id] = "0";
 
-        if (distance > location.radius) continue;
-        // 顺路方向感知：有上次位置时，地点应位于行进方向前方，减少"住在附近/背向而过"的误报
-        const way = judgeOnTheWay(prevCoords, coords, locCoords);
-        if (distance < hitDistance) {
-          hitLocation = location;
-          hitDistance = distance;
+        if (!insideNow) {
+          if (prevInside) {
+            // exit 事件：补上此前从不写入的离开时间（供守护面板「离开」展示）
+            await prisma.savedLocation.update({ where: { id: location.id }, data: { lastExitedAt: new Date() } }).catch(() => {});
+          }
+          continue;
         }
 
+        // 三重确认之停留确认：dwell 未确认时该地点只作候选提示，不推送
+        const dwellOk = judgeDwell({ speedKmh, dwellConfirmed, insidePrev: prevInside, displacementM, elapsedS });
+        const way = judgeOnTheWay(prevCoords, coords, locCoords);
         const linkedTask = tasks.find((task) => {
           const locationReminder = getTaskLocationReminder(task);
           if (!locationReminder?.enabled) return false;
@@ -1870,26 +1919,35 @@ functionsRouter.post("/:name", async (req, res) => {
 
         if (linkedTask) {
           results.push({
-            event: "enter",
+            event: dwellOk ? "enter" : "enter_candidate",
             level: "standard",
             location_name: location.name,
             task_id: linkedTask.id,
             task_title: linkedTask.title,
-            context_summary: `${linkedTask.title} 已进入 ${location.name} 附近可提醒范围`,
+            context_summary: dwellOk
+              ? `${linkedTask.title} 已进入 ${location.name} 附近可提醒范围`
+              : `正在确认你是否停留在 ${location.name}（路过不打扰）`,
             distance: Math.round(distance),
-            on_the_way: way.onTheWay !== false
+            on_the_way: way.onTheWay !== false,
+            dwell_confirmed: dwellOk
           });
+        }
+
+        if (distance < hitDistance) {
+          hitLocation = location;
+          hitDistance = distance;
+          hitDwellOk = dwellOk;
         }
       }
 
       try {
-        const { maybeSendOnTheWayReminder, maybeSendArrivalReminder, rankTopTasksForLocation, maybeSendPoiReminder } = await import("../services/contextReminder.js");
+        const { maybeSendOnTheWayReminder, maybeSendArrivalReminder, maybeSendExitReminder, rankTopTasksForLocation, maybeSendPoiReminder, geoGuardCheck, patchGeoPreference } = await import("../services/contextReminder.js");
         const userWithPrefs = await prisma.user.findUnique({
           where: { id: req.user.id },
           include: { preferences: true }
         });
 
-        // 任务级地点围栏：不依赖 SavedLocation，直接按约定上标记的坐标判定（顺路方向感知 + 每约定冷却推送）
+        // ========== 2) 任务级地点围栏：三种时机（目的地/路过/离开）+ 复合条件 + 防骚扰 ==========
         for (const task of tasks) {
           if (task.status === "DONE" || task.status === "ARCHIVED") continue;
           const reminder = getTaskLocationReminder(task);
@@ -1900,37 +1958,93 @@ functionsRouter.post("/:name", async (req, res) => {
 
           const distance = haversineMeters(coords, rCoords);
           const radius = Number(reminder.radius || 300);
-          if (distance > radius) continue;
-
+          const triggerOn = reminder.trigger_on || "enter";
+          const locKey = `task:${task.id}`;
+          const insideKey = `t:${task.id}`;
+          const prevInside = geoInside[insideKey] === "1";
+          const insideNow = distance <= radius;
+          if (insideNow !== prevInside) geoInside[insideKey] = insideNow ? "1" : "0";
           const way = judgeOnTheWay(prevCoords, coords, rCoords);
-          // 有明确方向信息且不在行进方向上 → 非顺路，不打扰
-          if (way.onTheWay === false) continue;
 
-          if (!results.some((r) => r.task_id === task.id)) {
-            results.push({
-              event: "enter",
-              level: "standard",
-              location_name: reminder.location_name || "目标地点",
-              task_id: task.id,
-              task_title: task.title,
-              context_summary: `你${way.onTheWay ? "正路过" : "在"}「${reminder.location_name || "目标地点"}」附近，可顺手处理「${task.title}」`,
-              distance: Math.round(distance),
-              on_the_way: way.onTheWay !== false
-            });
+          // 触发时机决策
+          let action = null;
+          if (triggerOn === "exit") {
+            // 离开型：出圈 + 行进方向背离（朝它走却出圈 = 边缘抖动，不算离开）
+            if (!insideNow && prevInside && way.onTheWay !== true) action = "exit";
+          } else if (triggerOn === "passby") {
+            // 路过型：判定圈外扩 150m（约一个路口）+ 方向朝向，不要求停留
+            if (distance <= radius + 150 && way.onTheWay !== false) action = "passby";
+          } else {
+            // 目的地型（enter）：停留确认后才开口，宁漏不错
+            if (insideNow && judgeDwell({ speedKmh, dwellConfirmed, insidePrev: prevInside, displacementM, elapsedS })) {
+              action = "arrival";
+            }
+            // both：enter 之外叠加 exit 语义
+            if (!action && triggerOn === "both" && !insideNow && prevInside && way.onTheWay !== true) action = "exit";
+          }
+          if (!action) {
+            // 目的地型未确认停留：回传候选信号，驱动客户端切高频采样做 dwell 确认（宁漏不错，先不打扰）
+            if (insideNow && (triggerOn === "enter" || triggerOn === "both")) {
+              results.push({
+                event: "enter_candidate",
+                level: "ambient",
+                location_name: reminder.location_name || "目标地点",
+                task_id: task.id,
+                task_title: task.title,
+                context_summary: `正在确认你是否停留在 ${reminder.location_name || "目标地点"}（路过不打扰）`,
+                distance: Math.round(distance),
+                dwell_confirmed: false
+              });
+            }
+            continue;
           }
 
-          if (remindersEnabled && userWithPrefs) {
-            const sent = await maybeSendOnTheWayReminder(userWithPrefs, task, reminder, {
+          // 防骚扰（地点级 4h 冷却 + 7 天静默）与复合条件（time_gate）
+          const blocked = geoGuardCheck(geoExtra, locKey);
+          const gateOk = timeGateAllows(reminder.time_gate);
+
+          results.push({
+            event: action,
+            level: "standard",
+            location_name: reminder.location_name || "目标地点",
+            task_id: task.id,
+            task_title: task.title,
+            context_summary: action === "exit"
+              ? `你正离开「${reminder.location_name || "目标地点"}」附近，路上可处理「${task.title}」`
+              : action === "passby"
+                ? `等下会路过「${reminder.location_name || "目标地点"}」，可顺路处理「${task.title}」`
+                : `你${way.onTheWay ? "正路过" : "在"}「${reminder.location_name || "目标地点"}」附近，可顺手处理「${task.title}」`,
+            distance: Math.round(distance),
+            on_the_way: way.onTheWay !== false,
+            push_status: !gateOk ? "time_gate_blocked" : (blocked || undefined)
+          });
+
+          if (!remindersEnabled || !userWithPrefs || blocked || !gateOk) continue;
+
+          let sent = { pushed: false, skippedReason: "not_attempted" };
+          if (action === "exit") {
+            sent = await maybeSendExitReminder(userWithPrefs, task, reminder);
+          } else {
+            sent = await maybeSendOnTheWayReminder(userWithPrefs, task, reminder, {
               distanceM: distance,
-              onTheWay: way.onTheWay === true
+              onTheWay: way.onTheWay === true,
+              ahead: action === "passby",
+              arrived: action === "arrival"
             });
-            const hit = results.find((r) => r.task_id === task.id);
-            if (hit) hit.push_status = sent.pushed ? "pushed" : (sent.skippedReason || "skipped");
+          }
+          const hit = results.find((r) => r.task_id === task.id && r.event === action);
+          if (hit) hit.push_status = sent.pushed ? "pushed" : (sent.skippedReason || "skipped");
+
+          // 推送成功（含应用内兜底）：记地点级 4 小时冷却，同类地点不重复轰炸
+          if (sent.pushed || sent.inAppFallback) {
+            await patchGeoPreference(req.user.id, {
+              geo_cooldowns: { ...(geoExtra.geo_cooldowns || {}), [locKey]: new Date(nowMs + 4 * 3600 * 1000).toISOString() }
+            });
           }
         }
 
-        // 到达提醒：对最近命中的 SavedLocation，取相关未完成约定 Top3 推送（安静期内不重复）
-        if (hitLocation && remindersEnabled && userWithPrefs) {
+        // ========== 3) SavedLocation 到达 Top3：dwell 确认后才开口（防路过误触） ==========
+        if (hitLocation && hitDwellOk && remindersEnabled && userWithPrefs) {
           const topTasks = await rankTopTasksForLocation(req.user.id, hitLocation, 3);
           const arrival = await maybeSendArrivalReminder(userWithPrefs, hitLocation, topTasks);
           if (arrival.topTasks?.length) {
@@ -1961,11 +2075,40 @@ functionsRouter.post("/:name", async (req, res) => {
             }
           }
         }
+
+        // 持久化：进出状态机 + 本次上报点（GCJ-02，供跨采样 dwell 推断）
+        await patchGeoPreference(req.user.id, {
+          geo_inside: geoInside,
+          geo_last_report: { lat: coords.latitude, lon: coords.longitude, at: new Date(nowMs).toISOString() }
+        });
       } catch (err) {
         console.warn("[sentinelGeofenceTrigger] failed:", err?.message || err);
       }
 
       return res.json({ results });
+    }
+
+    // 地理守护操作回写：「不了」= 该地点 7 天静默；「此地此事项不匹配」额外记录降权凭据
+    if (name === "sentinelGeoAction") {
+      const { patchGeoPreference } = await import("../services/contextReminder.js");
+      const action = String(payload.action || "");
+      const locKey = String(payload.loc_key || "").slice(0, 120);
+      if (!locKey || !["silence", "mismatch"].includes(action)) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 silence/mismatch 且提供 loc_key" });
+      }
+      const prefsRow = await prisma.userPreference.findUnique({ where: { userId: req.user.id } });
+      const extra = (prefsRow?.metadata && typeof prefsRow.metadata === "object" && prefsRow.metadata._extraFields) || {};
+      const silences = { ...(extra.geo_silences || {}), [locKey]: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString() };
+      const patch = { geo_silences: silences };
+      if (action === "mismatch" && payload.task_id) {
+        const mismatches = { ...(extra.geo_mismatches || {}) };
+        const list = Array.isArray(mismatches[locKey]) ? [...mismatches[locKey]] : [];
+        if (!list.includes(String(payload.task_id))) list.push(String(payload.task_id));
+        mismatches[locKey] = list;
+        patch.geo_mismatches = mismatches;
+      }
+      await patchGeoPreference(req.user.id, patch);
+      return res.json({ ok: true, action, loc_key: locKey });
     }
 
     // POI 情境触发：客户端识别到附近 POI（如快递柜）时上报，匹配相关约定并提醒

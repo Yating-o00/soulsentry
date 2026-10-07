@@ -58,6 +58,17 @@ const LOCATION_TYPE_LABEL = {
   other: "相关"
 };
 
+// haversine 距离（米）：上报速度/停留推断用
+function geoDistanceM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (v) => v * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const x = Math.sin(dLat / 2) ** 2
+    + Math.sin(dLon / 2) ** 2 * Math.cos(toRad(lat1)) * Math.cos(toRad(lat2));
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
 function pad(n) {
   return String(n).padStart(2, "0");
 }
@@ -1624,17 +1635,27 @@ export default function Flow() {
   const loadSentinel = async () => {
     try {
       const coords = await getLocationSafe();
-      // 顺带触发一次地理围栏到达检查：服务端命中地点/约定标记地点时推送顺路提醒
+      // 顺带触发一次地理围栏到达检查：服务端命中地点/约定标记地点时推送顺路提醒。
+      // 附带速度/停留推断数据（dwell 三重确认输入），跨采样推断由服务端合并判定
       if (coords && typeof coords.latitude === "number") {
         const prevKey = "ss_last_geo_report";
         let prev = null;
         try { prev = Taro.getStorageSync(prevKey) || null; } catch (_e) { prev = null; }
+        let speedKmh = null;
+        let elapsedS = null;
+        if (prev && typeof prev.latitude === "number" && typeof prev.ts === "number") {
+          elapsedS = (Date.now() - prev.ts) / 1000;
+          const movedM = geoDistanceM(prev.latitude, prev.longitude, coords.latitude, coords.longitude);
+          if (elapsedS > 0) speedKmh = (movedM / 1000) / (elapsedS / 3600);
+        }
         post("/functions/sentinelGeofenceTrigger", {
           latitude: coords.latitude,
           longitude: coords.longitude,
           coord_type: "gcj02",
           prev_latitude: prev?.latitude,
-          prev_longitude: prev?.longitude
+          prev_longitude: prev?.longitude,
+          speed_kmh: speedKmh,
+          elapsed_s: elapsedS
         }, { silent: true }).then(() => {
           try {
             Taro.setStorageSync(prevKey, { latitude: coords.latitude, longitude: coords.longitude, ts: Date.now() });

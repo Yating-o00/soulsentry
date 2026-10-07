@@ -168,7 +168,7 @@ export async function maybeSendArrivalReminder(user, location, topTasks) {
     tag: `arrival-${location.id}`,
     requireInteraction: false,
     vibrate: [200, 100, 200],
-    data: { type: "arrival_reminder", location_id: location.id }
+    data: { type: "arrival_reminder", location_id: location.id, geo_action: "arrival", loc_key: location.id }
   };
 
   const result = await trySendPush({
@@ -265,11 +265,94 @@ export async function maybeSendPoiReminder(user, { poiName, poiType }) {
 }
 
 /**
+ * 写地理守护偏好补丁（geo_inside 进出状态 / geo_cooldowns 冷却 / geo_silences 静默），
+ * 按 _extraFields 浅合并，避免多个写入方互相覆盖
+ */
+export async function patchGeoPreference(userId, patch) {
+  try {
+    const prefs = await prisma.userPreference.findUnique({ where: { userId } });
+    const meta = prefs?.metadata && typeof prefs.metadata === "object" ? prefs.metadata : {};
+    const extra = meta._extraFields && typeof meta._extraFields === "object" ? meta._extraFields : {};
+    const metadata = { ...meta, _extraFields: { ...extra, ...patch } };
+    await prisma.userPreference.upsert({
+      where: { userId },
+      update: { metadata },
+      create: { userId, locale: "zh-CN", timezone: "Asia/Shanghai", metadata }
+    });
+    return true;
+  } catch (e) {
+    console.warn("[contextReminder] patchGeoPreference failed:", e?.message || e);
+    return false;
+  }
+}
+
+/**
+ * 防骚扰检查：地点级 4 小时冷却 + 用户「不了」触发的 7 天静默期。
+ * locKey = SavedLocation.id（地点维度）或 `task:{taskId}`（任务维度）。
+ * 返回拦截原因（"cooldown" | "silenced"）或 null（可触发）。
+ */
+export function geoGuardCheck(extra, locKey) {
+  if (!locKey) return null;
+  const nowMs = Date.now();
+  const cd = extra?.geo_cooldowns?.[locKey];
+  if (cd && !isNaN(new Date(cd).getTime()) && new Date(cd).getTime() > nowMs) return "cooldown";
+  const sil = extra?.geo_silences?.[locKey];
+  if (sil && !isNaN(new Date(sil).getTime()) && new Date(sil).getTime() > nowMs) return "silenced";
+  return null;
+}
+
+/**
+ * 离开型触发：人离开约定绑定地点（出围栏且行进方向背离）时提醒。
+ * 「还来得及 / 此刻正合适」类事项的关键时机在离开而非到达
+ * （离开家提醒带伞、离开公司提醒给妈妈打电话）。每约定 30 分钟冷却。
+ */
+export async function maybeSendExitReminder(user, task, reminder, { locationName } = {}) {
+  const now = new Date();
+  const prefs = user.preferences;
+  const extra = getPreferenceExtraFields(prefs);
+  const cooldowns = extra.task_geo_cooldowns || {};
+  const lastAt = cooldowns[task.id] ? new Date(cooldowns[task.id]) : null;
+  if (lastAt && !isNaN(lastAt.getTime()) && now.getTime() - lastAt.getTime() < TASK_GEO_COOLDOWN_MS) {
+    return { pushed: false, skippedReason: "cooldown" };
+  }
+
+  const placeName = locationName || reminder.location_name || "刚才的地方";
+  const payload = {
+    title: `离开「${placeName}」了`,
+    body: `路上正合适：「${task.title}」现在处理吗？`,
+    url: "/tasks",
+    tag: `exit-${task.id}`,
+    requireInteraction: false,
+    vibrate: [150, 100, 200],
+    data: { type: "exit_reminder", task_id: task.id, geo_action: "exit", loc_key: `task:${task.id}` }
+  };
+
+  const result = await trySendPush({
+    userId: user.id,
+    preferences: prefs,
+    payload,
+    task,
+    logPrefix: `exit-reminder task=${task.id}`
+  });
+
+  if (result.ok || result.inAppFallback) {
+    await patchGeoPreference(user.id, {
+      task_geo_cooldowns: { ...cooldowns, [task.id]: now.toISOString() }
+    });
+  }
+
+  return { pushed: result.ok, inAppFallback: result.inAppFallback, skippedReason: result.ok ? null : "send_failed" };
+}
+
+/**
  * 任务级「顺路/附近」提醒：用户移动进入约定标记地点（超市/快递点等）可提醒范围时推送。
  * 每个约定 30 分钟冷却（记录在 userPreference.metadata._extraFields.task_geo_cooldowns），
  * 避免在地点附近停留/徘徊时反复打扰。
+ *
+ * ahead=true：路过型提前量——行进方向前方、尚未到店，"提前一个路口"开口；
+ * arrived=true：目的地型——dwell 停留确认后，"你到了"才开口（防路过误触）。
  */
-export async function maybeSendOnTheWayReminder(user, task, reminder, { distanceM, onTheWay } = {}) {
+export async function maybeSendOnTheWayReminder(user, task, reminder, { distanceM, onTheWay, ahead = false, arrived = false } = {}) {
   const now = new Date();
   const prefs = user.preferences;
   const extra = getPreferenceExtraFields(prefs);
@@ -280,15 +363,30 @@ export async function maybeSendOnTheWayReminder(user, task, reminder, { distance
   }
 
   const placeName = reminder.location_name || "目标地点";
-  const wayText = onTheWay ? "正路过" : "在";
+  const title = arrived
+    ? `你到了「${placeName}」`
+    : ahead
+      ? `等下会路过「${placeName}」`
+      : `你${onTheWay ? "正路过" : "在"}「${placeName}」附近`;
+  const body = arrived
+    ? `「${task.title}」现在方便处理吗？`
+    : ahead
+      ? `提前一个路口提醒你：「${task.title}」可以顺路处理`
+      : `约定「${task.title}」可以顺手处理`;
   const payload = {
-    title: `你${wayText}「${placeName}」附近`,
-    body: `约定「${task.title}」可以顺手处理`,
+    title,
+    body,
     url: "/tasks",
     tag: `ontheway-${task.id}`,
     requireInteraction: false,
     vibrate: [200, 100, 200],
-    data: { type: "ontheway_reminder", task_id: task.id, distance_m: Math.round(distanceM || 0) }
+    data: {
+      type: "ontheway_reminder",
+      task_id: task.id,
+      distance_m: Math.round(distanceM || 0),
+      geo_action: arrived ? "arrival" : (ahead ? "passby" : "nearby"),
+      loc_key: `task:${task.id}`
+    }
   };
 
   const result = await trySendPush({
@@ -316,5 +414,5 @@ export async function maybeSendOnTheWayReminder(user, task, reminder, { distance
     }
   }
 
-  return { pushed: result.ok, skippedReason: result.ok ? null : "send_failed" };
+  return { pushed: result.ok, inAppFallback: result.inAppFallback, skippedReason: result.ok ? null : "send_failed" };
 }

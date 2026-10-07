@@ -130,9 +130,10 @@ export default function LocationEditDialog({ open, onOpenChange, location }) {
             >
               <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="enter">进入时</SelectItem>
+                <SelectItem value="enter">到达时（确认停留后）</SelectItem>
+                <SelectItem value="passby">路过时（提前提醒）</SelectItem>
                 <SelectItem value="exit">离开时</SelectItem>
-                <SelectItem value="both">进入与离开都触发</SelectItem>
+                <SelectItem value="both">到达或离开都触发</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -199,33 +199,63 @@ export default function TaskCreate() {
 
   const isFormValid = title.trim().length > 0;
 
-  // 用户主动选点（微信内置选点器，GCJ-02 坐标）：为约定标记"路过提醒"地点
+  // 用户主动选点（微信内置选点器，GCJ-02 坐标）：为约定标记地点提醒，默认路过型
   const chooseGeoReminder = () => {
     Taro.chooseLocation({
       success: (res) => {
         setGeoReminder({
           name: res.name || res.address || "所选地点",
           latitude: res.latitude,
-          longitude: res.longitude
+          longitude: res.longitude,
+          trigger_on: "passby"
         });
       },
       fail: () => {}
     });
   };
 
+  const GEO_TRIGGER_OPTIONS = [
+    { key: "passby", label: "路过时" },
+    { key: "enter", label: "到达时" },
+    { key: "exit", label: "离开时" }
+  ];
+
   const renderGeoReminderPicker = () => (
     <View style={{ marginTop: "20rpx" }}>
-      <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>路过提醒（可选）</Text>
+      <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>地点提醒（可选）</Text>
       {geoReminder ? (
-        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", border: "1rpx solid rgba(91,130,160,0.35)", background: "rgba(91,130,160,0.08)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
-          <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, flex: 1 }} numberOfLines={1}>
-            📍 {geoReminder.name} · 路过时提醒
-          </Text>
-          <Text onClick={() => setGeoReminder(null)} style={{ fontSize: "24rpx", color: "#e53935", marginLeft: "16rpx" }}>清除</Text>
+        <View>
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", border: "1rpx solid rgba(91,130,160,0.35)", background: "rgba(91,130,160,0.08)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
+            <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, flex: 1 }} numberOfLines={1}>
+              📍 {geoReminder.name}
+            </Text>
+            <Text onClick={() => setGeoReminder(null)} style={{ fontSize: "24rpx", color: "#e53935", marginLeft: "16rpx" }}>清除</Text>
+          </View>
+          <View style={{ display: "flex", gap: "12rpx", marginTop: "10rpx" }}>
+            {GEO_TRIGGER_OPTIONS.map((opt) => {
+              const active = (geoReminder.trigger_on || "passby") === opt.key;
+              return (
+                <Text
+                  key={opt.key}
+                  onClick={() => setGeoReminder({ ...geoReminder, trigger_on: opt.key })}
+                  style={{
+                    fontSize: "22rpx",
+                    padding: "8rpx 20rpx",
+                    borderRadius: "999rpx",
+                    border: `1rpx solid ${active ? theme.water : "rgba(91,130,160,0.35)"}`,
+                    background: active ? "rgba(91,130,160,0.18)" : "transparent",
+                    color: active ? theme.water : "#9ca0a8"
+                  }}
+                >
+                  {opt.label}
+                </Text>
+              );
+            })}
+          </View>
         </View>
       ) : (
         <View onClick={chooseGeoReminder} style={{ border: "1rpx dashed rgba(91,130,160,0.45)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
-          <Text style={{ fontSize: "26rpx", color: theme.water }}>＋ 选择地点（超市/快递点等），路过时提醒你</Text>
+          <Text style={{ fontSize: "26rpx", color: theme.water }}>＋ 选择地点（超市/快递点/健身房等），按时机提醒你</Text>
         </View>
       )}
     </View>
@@ -608,7 +638,7 @@ export default function TaskCreate() {
             longitude: geoReminder.longitude,
             radius: 300,
             location_name: geoReminder.name,
-            trigger_on: "enter",
+            trigger_on: geoReminder.trigger_on || "passby",
             coord_type: "gcj02"
           }
         }

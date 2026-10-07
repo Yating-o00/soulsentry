@@ -27,7 +27,16 @@ const CATEGORY_LABEL = {
   family: "家庭", shopping: "购物", finance: "财务", other: "其他"
 };
 
-const SAMPLES = ['明早7点飞深圳', '今晚8点给妈妈打电话', '突然想去看看海', '今天有点累，但很踏实'];
+// 示例引路：exec=可实际交办的事（浏览器小助手直接出发去办），其余为约定/心签类
+const SAMPLES = [
+  { text: '帮我订明天北京飞旧金山的机票', exec: true },
+  { text: '明天晚上帮我给闺蜜订个蛋糕', exec: true },
+  { text: '帮我回复明天给王总的邮件', exec: true },
+  { text: '明早7点飞深圳' },
+  { text: '今晚8点给妈妈打电话' },
+  { text: '突然想去看看海' },
+  { text: '今天有点累，但很踏实' }
+];
 
 function fmtDayTime(iso) {
   try {
@@ -715,15 +724,17 @@ export default function SmartInputBar() {
         </div>
       </div>
 
-      {/* 示例引路 */}
+      {/* 示例引路：⚡ 可直接交办，小助手出发去办；其余记为约定/心签 */}
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         {SAMPLES.map((s) => (
           <button
-            key={s}
-            onClick={() => setInputValue(s)}
-            className="sky-chip rounded-full border border-[var(--hairline)] bg-slate-50/80 px-3.5 py-1.5 text-[12.5px] text-[var(--ink-2)] transition-all duration-300 hover:border-[var(--sentinel)]/50 hover:text-[var(--sentinel)]"
+            key={s.text}
+            onClick={() => { setInputValue(s.text); taRef.current?.focus(); }}
+            className={s.exec
+              ? "sky-chip rounded-full border border-[var(--sentinel)]/35 bg-[var(--sentinel)]/[0.06] px-3.5 py-1.5 text-[12.5px] text-[var(--sentinel)] transition-all duration-300 hover:bg-[var(--sentinel)]/[0.12] hover:border-[var(--sentinel)]/60"
+              : "sky-chip rounded-full border border-[var(--hairline)] bg-slate-50/80 px-3.5 py-1.5 text-[12.5px] text-[var(--ink-2)] transition-all duration-300 hover:border-[var(--sentinel)]/50 hover:text-[var(--sentinel)]"}
           >
-            {s}
+            {s.exec ? `⚡ ${s.text}` : s.text}
           </button>
         ))}
       </div>

@@ -1,7 +1,7 @@
 // SoulSentry Service Worker
 // 负责：1) Web Push 接收 + 通知弹窗  2) 通知点击导航  3) 后台同步
 // 版本号变更会强制 SW 更新
-const SW_VERSION = 'v3-2026-08-22-time-unify';
+const SW_VERSION = 'v4-2026-10-08-geo-sync-fix';
 
 self.addEventListener('install', (event) => {
   // 立即激活新 SW，避免旧版本继续接管
@@ -130,36 +130,80 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 });
 
 // ============================================================
-// 后台同步 —— 保留原有的地理位置同步能力
+// 后台同步 —— 标签必须与 pwaRegister.js 注册的完全一致
+//   one-shot: reg.sync.register('geo-sync-once')
+//   周期:     reg.periodicSync.register('geo-sync')
 // ============================================================
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'geofence-sync') {
+  if (event.tag === 'geo-sync-once') {
     event.waitUntil(syncGeofences());
   }
 });
 
 self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'geofence-periodic') {
+  if (event.tag === 'geo-sync') {
     event.waitUntil(syncGeofences());
   }
 });
+
+// SW 侧缓存（由页面 postMessage 写入；SW 随时可能被浏览器回收，属尽力而为）
+let cachedLastGeo = null;   // {latitude, longitude, accuracy, at}
+let cachedAuthToken = null; // 后端只认 Authorization: Bearer，SW 读不到 localStorage，只能由页面同步
+
+// 缓存坐标超过 30 分钟不再直报：陈旧位置会误导服务端进出状态机
+const GEO_REPORT_MAX_AGE_MS = 30 * 60 * 1000;
 
 async function syncGeofences() {
   try {
     const clients = await self.clients.matchAll({ includeUncontrolled: true });
     if (clients.length > 0) {
-      clients[0].postMessage({ type: 'REQUEST_LOCATION_SYNC' });
+      // 页面还开着：请页面取一次坐标（页面拿到后会直报服务端并回写缓存）
+      clients.forEach((c) => c.postMessage({ type: 'sw-request-geo' }));
+      return;
     }
+    // 页面全关：SW 用最近一次缓存坐标直报（需坐标新鲜 + 已有 token）
+    await reportCachedGeoDirectly();
   } catch (e) {
     console.warn('[SW] geofence sync failed', e);
   }
 }
 
+async function reportCachedGeoDirectly() {
+  if (!cachedLastGeo || !cachedAuthToken) return;
+  if (Date.now() - cachedLastGeo.at > GEO_REPORT_MAX_AGE_MS) return;
+  try {
+    await fetch('/api/functions/sentinelGeofenceTrigger', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cachedAuthToken}`
+      },
+      body: JSON.stringify({
+        latitude: cachedLastGeo.latitude,
+        longitude: cachedLastGeo.longitude,
+        accuracy: cachedLastGeo.accuracy,
+        coord_type: 'wgs84'
+      })
+    });
+  } catch (e) {
+    console.warn('[SW] direct geo report failed', e);
+  }
+}
+
 // ============================================================
-// 主线程消息 —— 处理立即更新 SW
+// 主线程消息 —— 处理立即更新 SW + 地理缓存写入
 // ============================================================
 self.addEventListener('message', (event) => {
-  if (event.data?.type === 'SKIP_WAITING') {
+  const data = event.data || {};
+  if (data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+    return;
+  }
+  if (data.type === 'cache-last-geo' && data.payload) {
+    cachedLastGeo = data.payload;
+    return;
+  }
+  if (data.type === 'cache-geo-auth' && typeof data.payload?.token === 'string') {
+    cachedAuthToken = data.payload.token;
   }
 });

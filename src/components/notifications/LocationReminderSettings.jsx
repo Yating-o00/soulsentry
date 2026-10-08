@@ -28,13 +28,17 @@ export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
   const [locationEnabled, setLocationEnabled] = useState(taskDefaults?.location_reminder?.enabled || false);
   const [locationPermission, setLocationPermission] = useState("prompt");
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [semanticText, setSemanticText] = useState("");
+  const [semanticBusy, setSemanticBusy] = useState(false);
+  const [semanticCandidates, setSemanticCandidates] = useState(null); // 多个候选地点时供点选
   const [settings, setSettings] = useState({
     latitude: taskDefaults?.location_reminder?.latitude || null,
     longitude: taskDefaults?.location_reminder?.longitude || null,
     radius: taskDefaults?.location_reminder?.radius || 500,
     location_name: taskDefaults?.location_reminder?.location_name || "",
     trigger_on: taskDefaults?.location_reminder?.trigger_on || "enter",
-    time_gate: taskDefaults?.location_reminder?.time_gate || null
+    time_gate: taskDefaults?.location_reminder?.time_gate || null,
+    semantic: taskDefaults?.location_reminder?.semantic || null
   });
 
   useEffect(() => {
@@ -90,6 +94,68 @@ export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
     ...s,
     coord_type: "wgs84"
   });
+
+  // 语义地点：解析成功直接落点；多个候选点选；落不了点登记观察（到场后问用户确认）
+  const applyPlace = (place) => {
+    const newSettings = { ...settings };
+    delete newSettings.semantic;
+    newSettings.latitude = place.latitude;
+    newSettings.longitude = place.longitude;
+    newSettings.location_name = place.name;
+    if (place.radius) newSettings.radius = place.radius;
+    setSettings(newSettings);
+    handleUpdate(newSettings);
+    setSemanticText("");
+    setSemanticCandidates(null);
+  };
+
+  const clearSemantic = () => {
+    const newSettings = { ...settings };
+    delete newSettings.semantic;
+    setSettings(newSettings);
+    handleUpdate(newSettings);
+  };
+
+  const resolveSemantic = async () => {
+    const text = semanticText.trim();
+    if (!text || semanticBusy) return;
+    setSemanticBusy(true);
+    setSemanticCandidates(null);
+    try {
+      // 尽力提供当前位置：无锚点表达（如「超市」）可围绕当前位置找候选；拿不到就用地点库+锚点
+      let coords = {};
+      if ("geolocation" in navigator) {
+        coords = await new Promise((resolve) => {
+          const t = setTimeout(() => resolve({}), 1500);
+          navigator.geolocation.getCurrentPosition(
+            (pos) => { clearTimeout(t); resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, coord_type: "wgs84" }); },
+            () => { clearTimeout(t); resolve({}); },
+            { enableHighAccuracy: false, timeout: 1500, maximumAge: 300000 }
+          );
+        });
+      }
+      const res = await base44.functions.invoke("sentinelSemanticPlace", { text, ...coords });
+      const data = res?.data;
+      if (data?.status === "resolved" && data.place) {
+        applyPlace(data.place);
+        toast.success(`已定位到「${data.place.name}」`);
+      } else if (data?.status === "candidates" && data.candidates?.length) {
+        setSemanticCandidates(data.candidates);
+        toast(`找到 ${data.candidates.length} 个候选，点选确认`);
+      } else if (data?.status === "watch" && data.watch) {
+        const newSettings = { ...settings, semantic: { raw: text, watch_id: data.watch.id } };
+        setSettings(newSettings);
+        handleUpdate(newSettings);
+        toast.success(data.message || "已记住，到场停留后我会问你确认");
+      } else {
+        toast.error(data?.message || "没听懂这个地点，可以在地图上选点");
+      }
+    } catch {
+      toast.error("解析失败，请稍后再试");
+    } finally {
+      setSemanticBusy(false);
+    }
+  };
 
   const handleUpdate = (newSettings) => {
     onUpdate?.({
@@ -204,6 +270,59 @@ export default function LocationReminderSettings({ taskDefaults, onUpdate }) {
                 <Navigation className="w-4 h-4 mr-2" />
                 使用当前位置
               </Button>
+
+              {/* 语义地点：用一句话描述（如：家附近的超市），解析落点或登记到场学习 */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">或描述地点（如：家附近的超市）</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={semanticText}
+                    onChange={(e) => setSemanticText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); resolveSemantic(); } }}
+                    placeholder="用一句话说出地点"
+                    className="bg-slate-50 border-slate-200"
+                  />
+                  <Button
+                    onClick={resolveSemantic}
+                    disabled={semanticBusy || !semanticText.trim()}
+                    variant="outline"
+                    className="shrink-0 border-[#384877] text-[#384877] hover:bg-[#384877]/5"
+                  >
+                    {semanticBusy ? "解析中…" : "解析"}
+                  </Button>
+                </div>
+                {semanticCandidates && (
+                  <div className="mt-2 space-y-1.5">
+                    {semanticCandidates.map((c) => (
+                      <button
+                        key={c.location_id}
+                        type="button"
+                        onClick={() => applyPlace(c)}
+                        className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-left transition-colors hover:bg-slate-50"
+                      >
+                        <span className="shrink-0 text-sm text-slate-700">{c.name}</span>
+                        {c.address && (
+                          <span className="min-w-0 flex-1 truncate text-right text-[11px] text-slate-400">{c.address}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {settings.semantic && (
+                  <div className="mt-2 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="min-w-0 flex-1 text-xs leading-relaxed text-amber-700">
+                      已记住「{settings.semantic.raw}」：到场停留后我会问你确认具体地点
+                    </p>
+                    <button
+                      type="button"
+                      onClick={clearSemantic}
+                      className="ml-2 shrink-0 text-xs text-amber-500 hover:underline"
+                    >
+                      清除
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div>
                 <Label className="text-sm font-medium mb-2 block">触发半径 (米)</Label>

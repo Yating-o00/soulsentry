@@ -52,7 +52,8 @@ const EVENT_LABELS = {
   enter: '到达',
   arrival: '到达',
   passby: '路过',
-  exit: '离开'
+  exit: '离开',
+  semantic_confirm: '确认地点'
 };
 
 // 守护动态卡片：此刻情境 + 三个出口（现在做 / 稍后提醒 / 不了）
@@ -91,6 +92,53 @@ function GeoToastCard({ r, onClose }) {
       await base44.functions.invoke('sentinelGeoAction', { action: 'silence', loc_key: locKey });
     }
   }, '该地点 7 天内不再提醒');
+
+  // 语义地点学习卡：到场停留后问「这是你要守护的地点吗」——确认即学习，不是则记一次忽略
+  if (r.event === 'semantic_confirm') {
+    const doConfirm = () => run(async () => {
+      if (r.location_id) {
+        await base44.functions.invoke('sentinelSemanticAction', {
+          action: 'confirm', watch_id: r.watch_id, location_id: r.location_id
+        });
+      } else if (r.new_place) {
+        await base44.functions.invoke('sentinelSemanticAction', {
+          action: 'new_place',
+          watch_id: r.watch_id,
+          name: r.location_name,
+          latitude: r.new_place.latitude,
+          longitude: r.new_place.longitude,
+          coord_type: r.new_place.coord_type || 'gcj02'
+        });
+      }
+    }, r.location_id ? '已设为守护地点，之后路过会提醒你' : '已记下这个地点');
+    const doIgnore = () => run(
+      () => base44.functions.invoke('sentinelSemanticAction', { action: 'ignore', watch_id: r.watch_id }),
+      '好，不再问这个地点'
+    );
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="text-[13px] leading-relaxed text-slate-600">{r.context_summary}</div>
+        <div className="flex flex-wrap gap-1.5 mt-0.5">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={doConfirm}
+            className="inline-flex items-center gap-1 rounded-full bg-[#384877] px-2.5 py-1 text-[11px] text-white disabled:opacity-50"
+          >
+            <Check className="w-3 h-3" /> {r.location_id ? '设为守护地点' : '把这里记下来'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={doIgnore}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-500 disabled:opacity-50"
+          >
+            <X className="w-3 h-3" /> 不是这里
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2">

@@ -169,6 +169,9 @@ export default function TaskCreate() {
   const [parsedMetadata, setParsedMetadata] = useState(null);
   const [parsedLocation, setParsedLocation] = useState(""); // AI 识别出的地点，确认页可改
   const [geoReminder, setGeoReminder] = useState(null); // 用户主动选择的地点提醒 {name, latitude, longitude}
+  const [semanticText, setSemanticText] = useState(""); // 语义地点输入（如：家附近的超市）
+  const [semanticBusy, setSemanticBusy] = useState(false);
+  const [semanticWatch, setSemanticWatch] = useState(null); // 解析未落点时的观察 {raw, watch_id}
   const [parsedRepeat, setParsedRepeat] = useState(null);
   const [parsedSubtasks, setParsedSubtasks] = useState([]);
   const [newParsedSubtaskText, setNewParsedSubtaskText] = useState("");
@@ -203,6 +206,7 @@ export default function TaskCreate() {
   const chooseGeoReminder = () => {
     Taro.chooseLocation({
       success: (res) => {
+        setSemanticWatch(null);
         setGeoReminder({
           name: res.name || res.address || "所选地点",
           latitude: res.latitude,
@@ -212,6 +216,39 @@ export default function TaskCreate() {
       },
       fail: () => {}
     });
+  };
+
+  // 语义地点：说人话选址（如：家附近的超市）。落点成功=直接选点；落不了点=登记观察，到场后问用户确认
+  const resolveSemanticText = () => {
+    const text = semanticText.trim();
+    if (!text || semanticBusy) return;
+    setSemanticBusy(true);
+    Taro.showLoading({ title: "解析中", mask: true });
+    post("/functions/sentinelSemanticPlace", { text })
+      .then((data) => {
+        if (data?.status === "resolved" && data.place) {
+          setSemanticWatch(null);
+          setGeoReminder({ name: data.place.name, latitude: data.place.latitude, longitude: data.place.longitude, trigger_on: "passby" });
+          Taro.showToast({ title: `已定位到「${data.place.name}」`, icon: "none" });
+        } else if (data?.status === "candidates" && data.candidates?.length) {
+          // 小程序端简化：取历史光顾最高的候选，提示用户可改
+          const top = data.candidates[0];
+          setSemanticWatch(null);
+          setGeoReminder({ name: top.name, latitude: top.latitude, longitude: top.longitude, trigger_on: "passby" });
+          Taro.showToast({ title: `已定位「${top.name}」等${data.candidates.length}个候选，取最常去的`, icon: "none", duration: 2500 });
+        } else if (data?.status === "watch" && data.watch) {
+          setGeoReminder(null);
+          setSemanticWatch({ raw: text, watch_id: data.watch.id });
+          Taro.showToast({ title: "已记住，到场后问你确认", icon: "none" });
+        } else {
+          Taro.showToast({ title: data?.message || "没听懂这个地点", icon: "none" });
+        }
+      })
+      .catch(() => Taro.showToast({ title: "解析失败，请稍后再试", icon: "none" }))
+      .finally(() => {
+        setSemanticBusy(false);
+        Taro.hideLoading();
+      });
   };
 
   const GEO_TRIGGER_OPTIONS = [
@@ -254,8 +291,35 @@ export default function TaskCreate() {
           </View>
         </View>
       ) : (
-        <View onClick={chooseGeoReminder} style={{ border: "1rpx dashed rgba(91,130,160,0.45)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
-          <Text style={{ fontSize: "26rpx", color: theme.water }}>＋ 选择地点（超市/快递点/健身房等），按时机提醒你</Text>
+        <View>
+          <View onClick={chooseGeoReminder} style={{ border: "1rpx dashed rgba(91,130,160,0.45)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
+            <Text style={{ fontSize: "26rpx", color: theme.water }}>＋ 选择地点（超市/快递点/健身房等），按时机提醒你</Text>
+          </View>
+          {semanticWatch ? (
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12rpx", border: "1rpx solid rgba(217,119,6,0.35)", background: "rgba(217,119,6,0.08)", padding: "16rpx 20rpx", borderRadius: "10rpx" }}>
+              <Text style={{ fontSize: "24rpx", color: "#b45309", flex: 1 }} numberOfLines={2}>
+                已记住「{semanticWatch.raw}」：到场停留后问你确认
+              </Text>
+              <Text onClick={() => setSemanticWatch(null)} style={{ fontSize: "24rpx", color: "#e53935", marginLeft: "16rpx" }}>清除</Text>
+            </View>
+          ) : (
+            <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginTop: "12rpx" }}>
+              <Input
+                value={semanticText}
+                onInput={(e) => setSemanticText(e.detail.value)}
+                onConfirm={resolveSemanticText}
+                placeholder="或描述：家附近的超市"
+                placeholderStyle={{ color: "#b8bcc4", fontSize: "24rpx" }}
+                style={{ flex: 1, border: "1rpx solid rgba(91,130,160,0.35)", background: "rgba(91,130,160,0.06)", padding: "14rpx 20rpx", borderRadius: "10rpx", fontSize: "26rpx", color: theme.ink }}
+              />
+              <Text
+                onClick={resolveSemanticText}
+                style={{ fontSize: "24rpx", color: semanticBusy || !semanticText.trim() ? "#9ca0a8" : theme.water, padding: "14rpx 24rpx", borderRadius: "10rpx", border: "1rpx solid rgba(91,130,160,0.35)" }}
+              >
+                解析
+              </Text>
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -644,6 +708,23 @@ export default function TaskCreate() {
         }
       };
       // 用户主动选择地点提醒 → 打开全局位置提醒开关（服务端推送闸：显式关闭才不推）
+      patch("/user-preferences", { location_reminders: true }).catch(() => {});
+    }
+    if (!geoReminder && semanticWatch) {
+      // 语义观察未落点：先记下观察（无坐标，围栏链路自动跳过）；到场确认后服务端补写具体坐标
+      const baseMeta = payload.metadata || parsedMetadata || {};
+      const extra = baseMeta._extraFields || {};
+      payload.metadata = {
+        ...baseMeta,
+        _extraFields: {
+          ...extra,
+          location_reminder: {
+            enabled: true,
+            semantic: { raw: semanticWatch.raw, watch_id: semanticWatch.watch_id, status: "watching" },
+            trigger_on: "passby"
+          }
+        }
+      };
       patch("/user-preferences", { location_reminders: true }).catch(() => {});
     }
     if (parsedRepeat) {

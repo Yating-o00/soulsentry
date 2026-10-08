@@ -2076,6 +2076,36 @@ functionsRouter.post("/:name", async (req, res) => {
           }
         }
 
+        // ========== 4) 语义地点学习：到场停留确认后问一次「这是你要守护的地点吗」 ==========
+        try {
+          const { evaluateSemanticWatches } = await import("../services/semanticPlace.js");
+          // 全局停留判定：与 SavedLocation 维度同规则（速度/跨采样/客户端确认三选一）
+          const dwellingNow = dwellConfirmed
+            || (speedKmh !== null && speedKmh < 5 && (elapsedS ?? 0) >= 90)
+            || ((displacementM ?? Infinity) < 50 && (elapsedS ?? 0) >= 90);
+          const fires = await evaluateSemanticWatches({
+            userId: req.user.id,
+            coords,
+            locations,
+            prefsExtra: geoExtra,
+            dwellingNow
+          });
+          for (const f of fires) {
+            results.push({
+              event: "semantic_confirm",
+              level: "standard",
+              location_name: f.location_name,
+              watch_id: f.watch.id,
+              location_id: f.location_id,
+              new_place: f.new_place,
+              task_id: f.watch.task_ids?.[0] || null,
+              context_summary: f.message
+            });
+          }
+        } catch (e) {
+          console.warn("[sentinelGeofenceTrigger] semantic watches failed:", e?.message || e);
+        }
+
         // 持久化：进出状态机 + 本次上报点（GCJ-02，供跨采样 dwell 推断）
         await patchGeoPreference(req.user.id, {
           geo_inside: geoInside,
@@ -2109,6 +2139,70 @@ functionsRouter.post("/:name", async (req, res) => {
       }
       await patchGeoPreference(req.user.id, patch);
       return res.json({ ok: true, action, loc_key: locKey });
+    }
+
+    // 语义地点解析：「家附近的超市」「到阿哲家附近」→ 已存地点落点 / 候选清单 / 登记观察
+    if (name === "sentinelSemanticPlace") {
+      const { parseSemanticText, resolveSemanticPlace, upsertSemanticWatch } = await import("../services/semanticPlace.js");
+      const text = String(payload.text || "").trim().slice(0, 80);
+      if (!text) return res.status(400).json({ error: "INVALID_INPUT", message: "text 不能为空" });
+      const locations = await prisma.savedLocation.findMany({ where: { userId: req.user.id, isActive: true } });
+      const current = normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type);
+      const parsed = parseSemanticText(text);
+      const resolution = resolveSemanticPlace({ parsed, locations, currentCoords: current });
+      // 落不了点 → 登记「语义观察」：到场停留后问用户确认（首次触发即确认学习）
+      let watch = null;
+      if (resolution.status === "watch") {
+        watch = await upsertSemanticWatch(req.user.id, { raw: text, task_id: payload.task_id ? String(payload.task_id) : null, parsed });
+      }
+      return res.json({ ...resolution, semantic: parsed, watch });
+    }
+
+    // 语义地点动作：confirm=兑现到已存地点 / new_place=当场新记地点 / ignore=不是（忽略两次降权）/ remove=移除观察
+    if (name === "sentinelSemanticAction") {
+      const semantic = await import("../services/semanticPlace.js");
+      const action = String(payload.action || "");
+      const watchId = String(payload.watch_id || "");
+      if (!watchId) return res.status(400).json({ error: "INVALID_INPUT", message: "watch_id 不能为空" });
+      const watch = await semantic.getWatch(req.user.id, watchId);
+      if (!watch) return res.status(404).json({ error: "NOT_FOUND", message: "观察不存在或已清理" });
+
+      if (action === "confirm") {
+        const location = await prisma.savedLocation.findFirst({ where: { id: String(payload.location_id || ""), userId: req.user.id } });
+        if (!location) return res.status(404).json({ error: "NOT_FOUND", message: "地点不存在" });
+        const result = await semantic.confirmWatch({ userId: req.user.id, watch, place: { ...location, location_id: location.id } });
+        return res.json({ ok: true, ...result });
+      }
+      if (action === "new_place") {
+        const lat = Number(payload.latitude);
+        const lon = Number(payload.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return res.status(400).json({ error: "INVALID_INPUT", message: "坐标无效" });
+        const created = await prisma.savedLocation.create({
+          data: {
+            userId: req.user.id,
+            name: String(payload.name || watch.poi_text || watch.raw).slice(0, 30),
+            locationType: watch.category && watch.category !== "other" ? watch.category : "other",
+            latitude: lat,
+            longitude: lon,
+            coordType: payload.coord_type === "gcj02" ? "gcj02" : "wgs84",
+            radius: 200,
+            icon: "📍",
+            isActive: true,
+            address: watch.anchor_text ? `${watch.anchor_text}附近` : null
+          }
+        });
+        const result = await semantic.confirmWatch({ userId: req.user.id, watch, place: { ...created, location_id: created.id } });
+        return res.json({ ok: true, location_id: created.id, ...result });
+      }
+      if (action === "ignore") {
+        const result = await semantic.ignoreWatch(req.user.id, watch);
+        return res.json({ ok: true, ...result });
+      }
+      if (action === "remove") {
+        await semantic.removeWatch(req.user.id, watch);
+        return res.json({ ok: true });
+      }
+      return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 confirm/new_place/ignore/remove" });
     }
 
     // POI 情境触发：客户端识别到附近 POI（如快递柜）时上报，匹配相关约定并提醒

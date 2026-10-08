@@ -2297,10 +2297,14 @@ functionsRouter.post("/:name", async (req, res) => {
       if (action === "history") {
         return res.json({ sessions: await learn.listDwellHistory(req.user.id, payload.limit) });
       }
+      if (action === "delete_session") {
+        if (!payload.session_id) return res.status(400).json({ error: "INVALID_INPUT", message: "session_id 不能为空" });
+        return res.json(await learn.deleteDwellSession(req.user.id, payload.session_id));
+      }
       if (action === "clear_history") {
         return res.json(await learn.clearDwellHistory(req.user.id));
       }
-      return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 status/confirm/ignore/history/clear_history" });
+      return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 status/confirm/ignore/history/delete_session/clear_history" });
     }
 
     // POI 情境触发：客户端识别到附近 POI（如快递柜）时上报，匹配相关约定并提醒

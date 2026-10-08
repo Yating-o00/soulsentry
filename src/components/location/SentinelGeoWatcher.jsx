@@ -23,6 +23,10 @@ const DWELL_MAX_SPEED_KMH = 5;
 const DWELL_TIMEOUT_MS = 5 * 60 * 1000;       // 5 分钟未确认回常态
 const STARTUP_DELAY_MS = 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000; // 命中 429 后暂停 30 分钟
+// 功耗分级（设计·四）：远离所有常驻点 2km → 休眠；休眠期 30 分钟一次粗定位直至回归
+const SLEEP_RADIUS_M = 2000;
+const SLEEP_INTERVAL_MS = 30 * 60 * 1000;
+const SLEEP_FAR_TICKS = 2;                    // 连续 2 个常态采样都远离才休眠（防抖动）
 
 function distance(a, b) {
   if (!a || !b) return Infinity;
@@ -195,21 +199,35 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
   const modeRef = useRef('normal');   // normal | dwelling
   const dwellLowRef = useRef(0);      // 连续低速采样计数
   const dwellSinceRef = useRef(0);
+  const sleepingRef = useRef(false);  // 远离常驻点休眠中
+  const farTicksRef = useRef(0);      // 连续"远离常驻点"采样计数
+  const locationsRef = useRef({ at: 0, list: [] }); // 常驻点缓存（10 分钟刷新）
 
   useEffect(() => {
     if (!navigator?.geolocation) return;
+
+    // 统一计时器入口：dwell/休眠/常态共用一个 interval，周期随功耗分级切换
+    // （原先 dwell 另起 interval 不复用原句柄，导致双 interval 并存泄漏）
+    const resetTimer = (ms) => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(tick, ms);
+    };
 
     const exitDwell = () => {
       modeRef.current = 'normal';
       dwellLowRef.current = 0;
       dwellSinceRef.current = 0;
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      resetTimer(sleepingRef.current ? SLEEP_INTERVAL_MS : intervalMs);
     };
 
     const tick = () => {
       // 命中过 429？暂停到冷却结束
       if (Date.now() < cooldownUntilRef.current) return;
       if (inflightRef.current) return;
+      // 定位精度分级：常态/休眠用粗定位（基站/Wi-Fi 级，几乎零耗电）；停留确认用 GPS 细定位
+      const geoOptions = modeRef.current === 'dwelling'
+        ? { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
+        : { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 };
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const coords = {
@@ -222,6 +240,26 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
           const moved = distance(prev, coords);
           const spd = speedKmh(moved, prev ? now - prev.at : null);
           const dwelling = modeRef.current === 'dwelling';
+
+          // 功耗分级：常态采样远离所有常驻点 2km → 休眠降频；回归自动唤醒（dwell 候选期不休眠）
+          if (!dwelling) {
+            const nearestM = await nearestSavedDistanceM(coords);
+            if (nearestM !== null) {
+              if (nearestM > SLEEP_RADIUS_M) {
+                farTicksRef.current += 1;
+                if (farTicksRef.current >= SLEEP_FAR_TICKS && !sleepingRef.current) {
+                  sleepingRef.current = true;
+                  resetTimer(SLEEP_INTERVAL_MS);
+                }
+              } else {
+                farTicksRef.current = 0;
+                if (sleepingRef.current) {
+                  sleepingRef.current = false;
+                  resetTimer(intervalMs);
+                }
+              }
+            }
+          }
 
           // 常态：移动不足阈值不上报；dwell 高频模式：静止也上报（停留确认需要）
           if (!dwelling && prev && moved < MIN_MOVE_M) return;
@@ -261,11 +299,13 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
               const stillCandidate = results.some((r) => r.event === 'enter_candidate' || r.dwell_confirmed);
               if (!stillCandidate || now - dwellSinceRef.current > DWELL_TIMEOUT_MS) exitDwell();
             } else if (results.some((r) => r.event === 'enter_candidate')) {
-              // 进入候选圈：切高频采样做停留确认
+              // 进入候选圈：切高频细定位做停留确认（同时视为从休眠中唤醒）
               modeRef.current = 'dwelling';
+              sleepingRef.current = false;
+              farTicksRef.current = 0;
               dwellLowRef.current = 0;
               dwellSinceRef.current = now;
-              timerRef.current = setInterval(tick, DWELL_INTERVAL_MS);
+              resetTimer(DWELL_INTERVAL_MS);
             }
 
             // 守护动态（enter_candidate 不打扰——正在确认你是否停留）
@@ -304,13 +344,33 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
         (err) => {
           console.warn('[SentinelGeoWatcher] geolocation error:', err?.message);
         },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+        geoOptions
       );
+    };
+
+    // 常驻点缓存（10 分钟刷新一次）：用于"远离所有常驻点 → 休眠"判定
+    const nearestSavedDistanceM = async (coords) => {
+      try {
+        if (Date.now() - locationsRef.current.at > 10 * 60 * 1000) {
+          const list = await base44.entities.SavedLocation.list('-updated_date', 100);
+          locationsRef.current = {
+            at: Date.now(),
+            list: (Array.isArray(list) ? list : []).filter(
+              (l) => l?.is_active !== false && typeof l?.latitude === 'number' && typeof l?.longitude === 'number'
+            )
+          };
+        }
+        const { list } = locationsRef.current;
+        if (!list.length) return null; // 还没有常驻点：不休眠（学习期需要数据）
+        return Math.min(...list.map((l) => distance(coords, l)));
+      } catch {
+        return null;
+      }
     };
 
     // 启动后先延迟一段时间再跑首次，避免与页面初始加载的并发请求堆叠
     const startup = setTimeout(tick, STARTUP_DELAY_MS);
-    timerRef.current = setInterval(tick, intervalMs);
+    resetTimer(intervalMs);
 
     // 关键：页面/PWA 从后台切回前台时立刻补跑一次
     // —— 这是浏览器允许的"用户回来那一刻补一次位置匹配"的最佳时机

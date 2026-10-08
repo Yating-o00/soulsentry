@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import LocationReminderSettings from "./LocationReminderSettings";
+import LocationPrivacyPanel from "./LocationPrivacyPanel";
 import EmailReminderSettings from "./EmailReminderSettings";
 
 const SOUND_OPTIONS = [
@@ -327,6 +328,8 @@ export default function NotificationSettings({ taskDefaults, onUpdate }) {
         <LocationReminderSettings
           taskDefaults={taskDefaults}
           onUpdate={onUpdate} />
+
+        <LocationPrivacyPanel />
 
       </TabsContent>
 

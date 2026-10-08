@@ -281,3 +281,11 @@ export async function clearDwellHistory(userId) {
   await patchGeoPreference(userId, { dwell_open: null });
   return { deleted: result.count };
 }
+
+// 单条删除（隐私：可逐条清除位置痕迹）
+export async function deleteDwellSession(userId, sessionId) {
+  const result = await prisma.dwellStay.deleteMany({
+    where: { id: String(sessionId || ""), userId }
+  });
+  return { deleted: result.count };
+}

@@ -25,6 +25,7 @@ model User {
   corrections       UserCorrection[]
   dailyPlans        DailyPlan[]
   devices           Device[]
+  dwellStays        DwellStay[]
   externalFeeds     ExternalFeed[]
   feedbacks         Feedback[]
   knowledgeItems    KnowledgeBase[]
@@ -452,6 +453,22 @@ model SavedLocation {
   @@index([userId, isActive])
   @@index([userId, locationType])
   @@index([userId, updatedAt])
+}
+
+model DwellStay {
+  id          String    @id @default(cuid())
+  userId      String
+  latitude    Float
+  longitude   Float
+  coordType   String    @default("gcj02")
+  startedAt   DateTime
+  endedAt     DateTime?
+  durationMin Int       @default(0)
+  source      String    @default("sentinel")
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
 }
 
 model TaskDeferralLog {

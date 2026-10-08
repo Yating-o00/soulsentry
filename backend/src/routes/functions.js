@@ -1881,6 +1881,11 @@ functionsRouter.post("/:name", async (req, res) => {
         }
       }
 
+      // 全局停留判定：速度/跨采样/客户端确认三选一；语义观察与常驻点学习共用
+      const dwellingNow = dwellConfirmed
+        || (speedKmh !== null && speedKmh < 5 && (elapsedS ?? 0) >= 90)
+        || ((displacementM ?? Infinity) < 50 && (elapsedS ?? 0) >= 90);
+
       const results = [];
 
       // dwell 确认后用于到达 Top3 提醒的地点（记录最近一个）
@@ -2079,10 +2084,6 @@ functionsRouter.post("/:name", async (req, res) => {
         // ========== 4) 语义地点学习：到场停留确认后问一次「这是你要守护的地点吗」 ==========
         try {
           const { evaluateSemanticWatches } = await import("../services/semanticPlace.js");
-          // 全局停留判定：与 SavedLocation 维度同规则（速度/跨采样/客户端确认三选一）
-          const dwellingNow = dwellConfirmed
-            || (speedKmh !== null && speedKmh < 5 && (elapsedS ?? 0) >= 90)
-            || ((displacementM ?? Infinity) < 50 && (elapsedS ?? 0) >= 90);
           const fires = await evaluateSemanticWatches({
             userId: req.user.id,
             coords,
@@ -2104,6 +2105,14 @@ functionsRouter.post("/:name", async (req, res) => {
           }
         } catch (e) {
           console.warn("[sentinelGeofenceTrigger] semantic watches failed:", e?.message || e);
+        }
+
+        // ========== 5) 常驻点学习：停留会话记录（开放会话维护，失败不影响主链路） ==========
+        try {
+          const { recordDwellReport } = await import("../services/homeLearn.js");
+          await recordDwellReport(req.user.id, coords, { dwellingNow, prefsExtra: geoExtra });
+        } catch (e) {
+          console.warn("[sentinelGeofenceTrigger] dwell record failed:", e?.message || e);
         }
 
         // 持久化：进出状态机 + 本次上报点（GCJ-02，供跨采样 dwell 推断）
@@ -2203,6 +2212,41 @@ functionsRouter.post("/:name", async (req, res) => {
         return res.json({ ok: true });
       }
       return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 confirm/new_place/ignore/remove" });
+    }
+
+    // 常驻点学习：status=候选列表 / confirm=确认入库(设家·公司·常去) / ignore=忽略不再问 / history=停留记录 / clear_history=清空
+    if (name === "sentinelDwellLearn") {
+      const learn = await import("../services/homeLearn.js");
+      const action = String(payload.action || "status");
+      const prefsRow = await prisma.userPreference.findUnique({ where: { userId: req.user.id } });
+      const extra = (prefsRow?.metadata && typeof prefsRow.metadata === "object" && prefsRow.metadata._extraFields) || {};
+
+      if (action === "status") {
+        return res.json(await learn.analyzeDwellPatterns(req.user.id, extra));
+      }
+      if (action === "confirm" || action === "ignore") {
+        const candidate = payload.candidate;
+        if (!candidate || typeof candidate.latitude !== "number" || typeof candidate.longitude !== "number" || !candidate.key) {
+          return res.status(400).json({ error: "INVALID_INPUT", message: "candidate 无效" });
+        }
+        // 服务端重新计算候选并按键匹配：客户端只回传选择，坐标以服务端分析为准
+        const fresh = await learn.analyzeDwellPatterns(req.user.id, extra);
+        const match = fresh.candidates.find((c) => c.key === String(candidate.key));
+        if (!match) {
+          return res.status(404).json({ error: "NOT_FOUND", message: "候选已失效（可能已确认过或数据不足）" });
+        }
+        const result = action === "confirm"
+          ? await learn.confirmCandidate(req.user.id, { ...match, custom_name: payload.custom_name })
+          : await learn.ignoreCandidate(req.user.id, match);
+        return res.json({ ok: true, ...result });
+      }
+      if (action === "history") {
+        return res.json({ sessions: await learn.listDwellHistory(req.user.id, payload.limit) });
+      }
+      if (action === "clear_history") {
+        return res.json(await learn.clearDwellHistory(req.user.id));
+      }
+      return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 status/confirm/ignore/history/clear_history" });
     }
 
     // POI 情境触发：客户端识别到附近 POI（如快递柜）时上报，匹配相关约定并提醒

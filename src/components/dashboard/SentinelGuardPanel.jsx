@@ -2,14 +2,14 @@ import React, { useEffect, useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Shield, RefreshCw, Bell, Compass, MapPin, HeartHandshake, Sparkles, AlarmClock, X } from "lucide-react";
+import { Shield, RefreshCw, Bell, Compass, MapPin, HeartHandshake, Sparkles, AlarmClock, X, Home, Building2 } from "lucide-react";
 
 /**
  * 时空感知守护面板 - 聚合地理感知 + 遗忘拯救两类真实数据卡片
  */
 // 模块级缓存：会话内常驻，不再按时间过期。
 // 刷新由 Task / Note / SavedLocation 的实时订阅事件驱动，或用户手动点击"重新分析"。
-const GUARD_CACHE = { ts: 0, data: null, assoc: null, dirty: false };
+const GUARD_CACHE = { ts: 0, data: null, assoc: null, dwell: null, dirty: false };
 const GUARD_TTL_MS = Infinity;
 // 单次请求最长 12 秒：超时则静默回退，不再让用户长时间盯着 loading
 const REQUEST_TIMEOUT_MS = 12000;
@@ -17,16 +17,42 @@ const REQUEST_TIMEOUT_MS = 12000;
 export default function SentinelGuardPanel() {
   const [data, setData] = useState(GUARD_CACHE.data);
   const [assoc, setAssoc] = useState(GUARD_CACHE.assoc);
+  const [dwell, setDwell] = useState(GUARD_CACHE.dwell);
   const [loading, setLoading] = useState(!GUARD_CACHE.data);
   const [errored, setErrored] = useState(false);
   const [dismissed, setDismissed] = useState({ geo: false, forget: false });
   const fetchedRef = useRef(false);
+
+  // 常驻点学习动作：确认（设家/公司/常去）或忽略（不再问），只刷新轻量学习状态，不重拉两个高消耗后端
+  const refreshDwell = async () => {
+    try {
+      const res = await base44.functions.invoke('sentinelDwellLearn');
+      GUARD_CACHE.dwell = res?.data || null;
+      setDwell(GUARD_CACHE.dwell);
+    } catch { /* 静默：学习是锦上添花 */ }
+  };
+  const confirmDwell = async (c) => {
+    try {
+      await base44.functions.invoke('sentinelDwellLearn', { action: 'confirm', candidate: c });
+      toast.success('已记下，之后会用这个地点守护你');
+      await refreshDwell();
+    } catch {
+      toast.error('操作失败，请稍后再试');
+    }
+  };
+  const ignoreDwell = async (c) => {
+    try {
+      await base44.functions.invoke('sentinelDwellLearn', { action: 'ignore', candidate: c });
+      await refreshDwell();
+    } catch { /* 静默 */ }
+  };
 
   const fetchGuard = async (force = false) => {
     // 命中模块缓存就直接复用：除非数据被订阅事件标记为 dirty，或调用方明确 force
     if (!force && !GUARD_CACHE.dirty && GUARD_CACHE.data) {
       setData(GUARD_CACHE.data);
       setAssoc(GUARD_CACHE.assoc);
+      setDwell(GUARD_CACHE.dwell);
       setLoading(false);
       return;
     }
@@ -61,12 +87,15 @@ export default function SentinelGuardPanel() {
 
     try {
       // 用 allSettled 而不是 all：一个失败不应该让另一个的结果也丢失
-      const [guardRes, assocRes] = await Promise.allSettled([
+      // 第三个调用（常驻点学习）是轻量本地统计，失败静默——绝不拖累面板主体
+      const [guardRes, assocRes, dwellRes] = await Promise.allSettled([
         withTimeout(base44.functions.invoke('getSentinelGuard', coords)),
-        withTimeout(base44.functions.invoke('getAssociationRecommendations', coords))
+        withTimeout(base44.functions.invoke('getAssociationRecommendations', coords)),
+        base44.functions.invoke('sentinelDwellLearn')
       ]);
       const g = guardRes.status === 'fulfilled' ? (guardRes.value?.data || null) : null;
       const a = assocRes.status === 'fulfilled' ? (assocRes.value?.data || null) : null;
+      const d = dwellRes.status === 'fulfilled' ? (dwellRes.value?.data || null) : null;
 
       // 只有两个都失败、且都不是限流时才显示错误；任一成功即写入缓存并正常展示
       const guardFailed = guardRes.status === 'rejected';
@@ -96,11 +125,13 @@ export default function SentinelGuardPanel() {
         GUARD_CACHE.ts = Date.now();
         GUARD_CACHE.data = g;
         GUARD_CACHE.assoc = a;
+        GUARD_CACHE.dwell = d;
         if (guardFailed && !isMissingCapability(guardRes.reason)) console.warn('[sentinel-guard] guard 失败但 assoc 成功', guardRes.reason);
         if (assocFailed && !isMissingCapability(assocRes.reason)) console.warn('[sentinel-guard] assoc 失败但 guard 成功', assocRes.reason);
       }
       setData(g);
       setAssoc(a);
+      setDwell(d);
     } finally {
       setLoading(false);
     }
@@ -159,6 +190,7 @@ export default function SentinelGuardPanel() {
   const hasGeo = data?.geo_context && !dismissed.geo;
   const hasForget = data?.forgetting_rescue?.primary && !dismissed.forget;
   const hasAssoc = !!(assoc?.sequential_recommendation || assoc?.location_pattern);
+  const hasDwellCandidate = (dwell?.candidates || []).length > 0;
 
   if (loading) {
     return (
@@ -177,7 +209,7 @@ export default function SentinelGuardPanel() {
     );
   }
 
-  if (errored || (!hasGeo && !hasForget && !hasAssoc)) {
+  if (errored || (!hasGeo && !hasForget && !hasAssoc && !hasDwellCandidate)) {
     return (
       <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
         <Shield className="w-8 h-8 mx-auto mb-2 text-slate-300" />
@@ -202,6 +234,28 @@ export default function SentinelGuardPanel() {
   };
 
   const cards = [];
+
+  // 常驻点学习卡：放在最前——理解"你在哪里"是其他守护的地基；一次只展示一个候选，处理完下一个自动浮现
+  if (hasDwellCandidate) {
+    const DWELL_META = {
+      home: { label: '疑似家', Icon: Home },
+      office: { label: '疑似公司', Icon: Building2 },
+      frequent: { label: '常去地点', Icon: Compass },
+    };
+    const c = dwell.candidates[0];
+    const meta = DWELL_META[c.type] || DWELL_META.frequent;
+    cards.push({
+      key: `dwell-${c.key}`,
+      level: 'call',
+      Icon: meta.Icon,
+      title: `${meta.label} · 我对这里的判断`,
+      detail: c.explanation,
+      basis: `近 ${Math.min(dwell.sessions || 0, 60)} 天的停留会话 × 自动学习（可检查、可否决）`,
+      action: { label: c.type === 'frequent' ? '记下来' : '是的，就是它', onClick: () => confirmDwell(c) },
+      snooze: () => ignoreDwell(c),
+      snoozeLabel: '不对',
+    });
+  }
 
   if (hasGeo) {
     const g = data.geo_context;
@@ -330,7 +384,7 @@ export default function SentinelGuardPanel() {
                         onClick={c.snooze}
                         className="rounded-full border border-[var(--hairline)] px-3.5 py-1.5 text-[12px] text-[var(--ink-3)] transition-colors hover:border-[var(--hairline-strong)] hover:text-[var(--ink-2)]"
                       >
-                        稍后
+                        {c.snoozeLabel || '稍后'}
                       </button>
                     )}
                   </div>

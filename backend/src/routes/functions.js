@@ -1893,6 +1893,9 @@ functionsRouter.post("/:name", async (req, res) => {
       let hitDistance = Infinity;
       let hitDwellOk = false;
 
+      // 通勤触发队列：exit 事件处判定，待 userWithPrefs 就绪后统一走推送/冷却
+      const commuteQueue = [];
+
       // ========== 1) SavedLocation 维度：进出状态机 + 停留确认 ==========
       for (const location of locations) {
         const locCoords = normalizeToGcj02(location.latitude, location.longitude, location.coordType)
@@ -1907,6 +1910,22 @@ functionsRouter.post("/:name", async (req, res) => {
           if (prevInside) {
             // exit 事件：补上此前从不写入的离开时间（供守护面板「离开」展示）
             await prisma.savedLocation.update({ where: { id: location.id }, data: { lastExitedAt: new Date() } }).catch(() => {});
+            // 通勤观察触发判定：退出锚点 + 朝向另一端 + 通勤时段（结果先入队，推送走主链路冷却）
+            try {
+              const { evaluateCommuteWatches } = await import("../services/semanticPlace.js");
+              for (const fire of evaluateCommuteWatches({
+                prefsExtra: geoExtra,
+                exitedLocation: location,
+                prevCoords,
+                coords,
+                locations,
+                nowMs
+              })) {
+                commuteQueue.push({ ...fire, location_id: location.id, location_name: location.name });
+              }
+            } catch (e) {
+              console.warn("[sentinelGeofenceTrigger] commute evaluate failed:", e?.message || e);
+            }
           }
           continue;
         }
@@ -1951,6 +1970,41 @@ functionsRouter.post("/:name", async (req, res) => {
           where: { id: req.user.id },
           include: { preferences: true }
         });
+
+        // ========== 1.5) 通勤观察兑现：结果卡片 + 推送（4h 冷却 + 7 天静默沿用主链路） ==========
+        for (const fire of commuteQueue) {
+          const hit = {
+            event: "commute",
+            level: "standard",
+            location_name: fire.location_name,
+            watch_id: fire.watch.id,
+            task_id: fire.task_id,
+            task_title: null,
+            context_summary: fire.message,
+            on_the_way: true
+          };
+          results.push(hit);
+
+          if (!remindersEnabled || !userWithPrefs) continue;
+          const locKey = `commute:${fire.location_id}`;
+          if (geoGuardCheck(geoExtra, locKey)) { hit.push_status = "cooldown"; continue; }
+          let sent = { pushed: false, skippedReason: "no_task" };
+          if (fire.task_id) {
+            const task = tasks.find((t) => t.id === fire.task_id);
+            if (task) {
+              sent = await maybeSendOnTheWayReminder(userWithPrefs, task, {
+                location_name: fire.counterpart_name || fire.location_name,
+                trigger_on: "passby"
+              }, { onTheWay: true, ahead: true });
+            }
+          }
+          hit.push_status = sent.pushed ? "pushed" : (sent.skippedReason || "skipped");
+          if (sent.pushed || sent.inAppFallback) {
+            await patchGeoPreference(req.user.id, {
+              geo_cooldowns: { ...(geoExtra.geo_cooldowns || {}), [locKey]: new Date(nowMs + 4 * 3600 * 1000).toISOString() }
+            });
+          }
+        }
 
         // ========== 2) 任务级地点围栏：三种时机（目的地/路过/离开）+ 复合条件 + 防骚扰 ==========
         for (const task of tasks) {

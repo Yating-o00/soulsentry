@@ -12,7 +12,7 @@
  * 明确不做（留给后续轮次）：通勤路径学习（「下班路上」只解析登记，不做触发）、联系人图谱、AI 兜底解析。
  */
 import { prisma } from "../lib/prisma.js";
-import { normalizeToGcj02 } from "../lib/geo.js";
+import { normalizeToGcj02, judgeOnTheWay } from "../lib/geo.js";
 import { patchGeoPreference } from "./contextReminder.js";
 
 // 距离判定一律在 GCJ-02 坐标系下进行：上报点已归一化，存库坐标按各自 coordType 纠偏，
@@ -78,14 +78,16 @@ export function parseSemanticText(input) {
   if (ON_THE_WAY_RE.test(text)) parsed.relation = "on_the_way";
   else if (NEAR_RE.test(text)) parsed.relation = "near";
 
-  // 锚点：亲属/人名「X家」优先于裸「家」，裸「家」优先于公司
+  // 锚点：亲属/人名「X家」优先（但动词开头的假名要排除，如「回家」的「回」），
+  // 其次裸「家」/「公司」——顺序不能反，否则「爸妈家附近」会被「家附近」抢答成裸家
   const named = text.match(NAMED_HOME_RE);
   if (named && named[1]) {
-    const name = named[1];
-    if (KIN_ANCHORS.some((k) => name.includes(k))) {
+    // 去掉前缀动词/代词：「去阿哲」→「阿哲」；「回」→ 空（无效，落回裸家/公司）
+    const name = named[1].replace(/^[回去来到在上来这那我你他她咱]+/, "").slice(0, 8);
+    if (name && KIN_ANCHORS.some((k) => name.includes(k))) {
       parsed.anchor_type = "named";
       parsed.anchor_text = KIN_ANCHORS.find((k) => name.includes(k));
-    } else if (!/这|那|我|你|他|她|咱/.test(name)) {
+    } else if (name && !/这|那|我|你|他|她|咱/.test(name)) {
       parsed.anchor_type = "named";
       parsed.anchor_text = name; // 如「阿哲」
     }
@@ -321,6 +323,8 @@ export async function evaluateSemanticWatches({ userId, coords, locations, prefs
   for (const watch of watches) {
     if (watch.last_asked_at && Date.now() - new Date(watch.last_asked_at).getTime() < REASK_INTERVAL_MS) continue;
     if ((watch.ignored_count || 0) >= 2) continue;
+    // 通勤型（「下班路上」）有独立的触发路径：退出锚点+方向+时段；不参与到场确认
+    if (watch.relation === "on_the_way") continue;
 
     const parsed = {
       anchor_type: watch.anchor_type,
@@ -376,6 +380,57 @@ export async function evaluateSemanticWatches({ userId, coords, locations, prefs
     );
   }
   return fired;
+}
+
+// ===== 通勤触发（「下班路上」的 v1 轴向模型） =====
+//
+// 设计强调复合条件：时间 × 地点 × 方向三者交集才是真实意图。v1 不存轨迹、不学路径折线，
+// 用「退出锚点 + 位移方向朝向另一端锚点 + 通勤时段窗」判定——这已经覆盖设计例句
+// 「周五 17:30 之后离开公司 → 提醒买花」的绝大多数实际场景；路径级动态围栏留待后续。
+
+const BJ_MIN_OFFSET_MS = 8 * 3600 * 1000;
+function bjMinutesOfDay(ts) {
+  const d = new Date(ts + BJ_MIN_OFFSET_MS);
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
+}
+
+// 时段窗（北京时间）：出公司 16:00-22:00 = 下班；出家门 06:30-10:30 = 上班
+const COMMUTE_WINDOWS = {
+  office: { start: 16 * 60, end: 22 * 60, counterpart: "home", label: "下班" },
+  home: { start: 6 * 60 + 30, end: 10 * 60 + 30, counterpart: "office", label: "上班" }
+};
+
+/**
+ * 在 SavedLocation 的 exit 事件处调用：该地点是某条通勤观察的锚点 → 判时段 + 判方向。
+ * 返回可触发的观察列表（不含推送，推送由调用方按主链路冷却/静默规则处理）。
+ */
+export function evaluateCommuteWatches({ prefsExtra, exitedLocation, prevCoords, coords, locations, nowMs = Date.now() }) {
+  const watches = listWatches(prefsExtra).filter(
+    (w) => w.status === "watching" && w.relation === "on_the_way" && (w.ignored_count || 0) < 2
+  );
+  if (!watches.length || !exitedLocation) return [];
+
+  const anchorType = exitedLocation.locationType === "office" ? "office" : exitedLocation.locationType === "home" ? "home" : null;
+  if (!anchorType) return [];
+  const win = COMMUTE_WINDOWS[anchorType];
+  const bjMin = bjMinutesOfDay(nowMs);
+  if (bjMin < win.start || bjMin >= win.end) return [];
+
+  // 方向：位移向量必须朝向另一端锚点（无 prev 数据时退化为不表态 → 宁漏不错）
+  const counterpart = mostRecent((locations || []).filter((l) => l.locationType === win.counterpart));
+  if (!counterpart) return [];
+  const way = judgeOnTheWay(prevCoords, coords, gcjOf(counterpart));
+  if (way.onTheWay !== true) return [];
+
+  return watches
+    .filter((w) => w.anchor_type === anchorType)
+    .map((watch) => ({
+      watch,
+      task_id: watch.task_ids?.[0] || null,
+      label: win.label,
+      counterpart_name: counterpart.name,
+      message: `${win.label}路上——「${watch.raw}」正当时。`
+    }));
 }
 
 // ===== 用户动作：确认 / 忽略 / 移除 =====

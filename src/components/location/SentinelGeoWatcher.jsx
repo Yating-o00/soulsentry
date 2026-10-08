@@ -53,6 +53,7 @@ const EVENT_LABELS = {
   arrival: '到达',
   passby: '路过',
   exit: '离开',
+  commute: '路上',
   semantic_confirm: '确认地点'
 };
 
@@ -88,10 +89,15 @@ function GeoToastCard({ r, onClose }) {
   }, '好，10 分钟后再提醒你');
 
   const doSilence = () => run(async () => {
+    // 通勤卡：「不了」= 忽略这条路上观察（两次自动降权）；其余卡：地点 7 天静默
+    if (r.event === 'commute' && r.watch_id) {
+      await base44.functions.invoke('sentinelSemanticAction', { action: 'ignore', watch_id: r.watch_id });
+      return;
+    }
     if (locKey) {
       await base44.functions.invoke('sentinelGeoAction', { action: 'silence', loc_key: locKey });
     }
-  }, '该地点 7 天内不再提醒');
+  }, r.event === 'commute' ? '好，这条路上先不提醒' : '该地点 7 天内不再提醒');
 
   // 语义地点学习卡：到场停留后问「这是你要守护的地点吗」——确认即学习，不是则记一次忽略
   if (r.event === 'semantic_confirm') {

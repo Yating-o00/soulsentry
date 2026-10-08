@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Shield, RefreshCw, Bell, Compass, MapPin, HeartHandshake, Sparkles, AlarmClock } from "lucide-react";
+import { Shield, RefreshCw, Bell, Compass, MapPin, HeartHandshake, Sparkles, AlarmClock, X } from "lucide-react";
 
 /**
  * 时空感知守护面板 - 聚合地理感知 + 遗忘拯救两类真实数据卡片
@@ -133,6 +133,29 @@ export default function SentinelGuardPanel() {
   const navigate = useNavigate();
   const goTask = (id) => { if (id) navigate(`/Tasks?taskId=${id}`); };
 
+  // 查看约定：多个时先弹清单（点具体约定再跳转），单个时直接跳到约定本身
+  const [taskList, setTaskList] = useState(null); // { title, tasks: [{id,title,time,priority,overdue}] }
+  const openTasks = (title, tasks) => {
+    const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t?.id);
+    if (list.length === 0) return;
+    if (list.length === 1) { goTask(list[0].id); return; }
+    setTaskList({ title, tasks: list });
+  };
+  const pickTask = (id) => { setTaskList(null); goTask(id); };
+
+  const PRIORITY_META = {
+    urgent: { label: '紧要', color: '#b45309' },
+    high: { label: '高', color: '#b45309' },
+    medium: { label: '中', color: '#64748b' },
+    low: { label: '低', color: '#94a3b8' },
+  };
+  const fmtTaskTime = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
   const hasGeo = data?.geo_context && !dismissed.geo;
   const hasForget = data?.forgetting_rescue?.primary && !dismissed.forget;
   const hasAssoc = !!(assoc?.sequential_recommendation || assoc?.location_pattern);
@@ -191,7 +214,7 @@ export default function SentinelGuardPanel() {
       title: `${g.event === 'exit' ? '离开' : '进入'} · ${g.location_name || '附近'}`,
       detail: g.contextual_reason || '这里有与你相关的约定，可以顺手处理。',
       basis: `时空情境 × ${(g.tasks || []).length} 个相关约定${g.distance != null ? ` · 约 ${g.distance}m` : ''}`,
-      action: { label: '查看约定', onClick: () => goTask(g.tasks?.[0]?.id) },
+      action: { label: '查看约定', onClick: () => openTasks(`${g.event === 'exit' ? '离开' : '进入'} · ${g.location_name || '附近'}`, g.tasks) },
       snooze: () => handleSnooze('geo'),
     });
   }
@@ -228,9 +251,14 @@ export default function SentinelGuardPanel() {
       title: s.trigger_task?.title ? `「${s.trigger_task.title}」之后，你通常会——` : '你的约定里藏着一条线索',
       detail: rules ? `完成前者后，你接着做后者的概率很高：${rules}` : '有些约定总是前后脚出现。',
       basis: '近 180 次兑现的约定 × 序贯规律',
-      action: s.suggestions?.[0]?.tasks?.[0]?.id
-        ? { label: '查看约定', onClick: () => goTask(s.suggestions[0].tasks[0].id) }
-        : null,
+      action: (() => {
+        // 汇总所有序贯建议里的约定（去重）：1 个直接跳，多个先弹清单
+        const seen = new Set();
+        const tasks = (s.suggestions || []).flatMap((r) => r.tasks || []).filter((t) => t?.id && !seen.has(t.id) && seen.add(t.id));
+        return tasks.length
+          ? { label: '查看约定', onClick: () => openTasks('前后脚出现的约定', tasks) }
+          : null;
+      })(),
     });
   }
 
@@ -247,8 +275,8 @@ export default function SentinelGuardPanel() {
         (l.top_titles || []).length > 0 && `出现过：${l.top_titles.map((t) => t.title).slice(0, 3).join('、')}`,
       ].filter(Boolean).join('；'),
       basis: `${l.history_sample_size ?? 0} 条此地记忆 × 地点规律`,
-      action: (l.suggested_tasks || [])[0]?.id
-        ? { label: '查看约定', onClick: () => goTask(l.suggested_tasks[0].id) }
+      action: (l.suggested_tasks || []).length
+        ? { label: '查看约定', onClick: () => openTasks(`在${l.location_name || '这里'}可顺手处理的约定`, l.suggested_tasks) }
         : null,
     });
   }
@@ -312,6 +340,67 @@ export default function SentinelGuardPanel() {
           </div>
         );
       })}
+
+      {/* 约定清单弹层：从守护卡片「查看约定」进入，点具体约定跳到约定本身 */}
+      {taskList && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-[2px]"
+          onClick={() => setTaskList(null)}
+        >
+          <div
+            className="w-full sm:w-[420px] max-h-[72vh] overflow-hidden rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h4 className="min-w-0 flex-1 truncate text-[14.5px] font-medium text-slate-800">{taskList.title}</h4>
+              <button
+                onClick={() => setTaskList(null)}
+                className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                title="关闭"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-[58vh] overflow-y-auto px-3 py-2">
+              {taskList.tasks.map((t) => {
+                const pm = PRIORITY_META[t.priority] || PRIORITY_META.medium;
+                const timeText = fmtTaskTime(t.time);
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => pickTask(t.id)}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50"
+                  >
+                    <span
+                      className="h-8 w-1 shrink-0 rounded-full"
+                      style={{ background: t.overdue ? '#dc2626' : 'var(--sentinel, #384877)' }}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate text-[13.5px] ${t.overdue ? 'text-red-600' : 'text-slate-800'}`}>
+                        {t.title}
+                      </span>
+                      {timeText && (
+                        <span className="mt-0.5 block text-[11.5px] text-slate-400">
+                          {t.overdue ? '已到期 · ' : ''}{timeText}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className="shrink-0 rounded-full border px-2 py-0.5 text-[10.5px]"
+                      style={{ color: pm.color, borderColor: `${pm.color}55`, background: `${pm.color}0f` }}
+                    >
+                      {pm.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="border-t border-slate-100 px-5 py-3 text-center text-[11px] text-slate-400">
+              点选一条约定，直接跳转到它
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

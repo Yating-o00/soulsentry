@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Zap, Loader2, Link2, PlusCircle, ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { routeCaptureIntent, CAPTURE_KINDS } from "@/lib/captureRouter";
+import { isAgentCommand, AGENT_EXAMPLES } from "@/lib/agentRunner";
+import AgentRunPanel from "@/components/agent/AgentRunPanel";
 
 export const CAPTURE_EVENT = "unified-capture";
 export const CAPTURE_FOCUS_EVENT = "unified-capture-focus";
@@ -15,6 +17,7 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
   const [weaveResult, setWeaveResult] = useState(null);
   const [routedTo, setRoutedTo] = useState(null);
   const [lastInput, setLastInput] = useState("");
+  const [agentCmd, setAgentCmd] = useState(null);
   const queryClient = useQueryClient();
   const inputRef = React.useRef(null);
 
@@ -56,6 +59,7 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
   const handleSubmit = async () => {
     const input = text.trim();
     if (!input || phase) return;
+    if (isAgentCommand(input)) { setAgentCmd(input); setText(""); setWeaveResult(null); setRoutedTo(null); return; }
     setPhase("routing");
     setWeaveResult(null);
     setLastInput(input);
@@ -80,7 +84,7 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
             const composing = e.nativeEvent && e.nativeEvent.isComposing;
             if (!composing && e.key === "Enter") handleSubmit();
           }}
-          placeholder="说一件事 — 念头、日程安排、出行意图，AI 自动分发…"
+          placeholder="告诉我，任何事情 — 说「帮我…」小助手直接去办"
           className="flex-1 bg-transparent outline-none text-sm text-slate-700 placeholder:text-slate-400 min-w-0"
           disabled={!!phase}
         />
@@ -92,6 +96,19 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
           {phase ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "发送"}
         </button>
       </div>
+
+      {!agentCmd && !phase && !text && (
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {AGENT_EXAMPLES.map((ex) => (
+            <button key={ex} onClick={() => setAgentCmd(ex)}
+              className="no-min-size px-2.5 py-1 rounded-lg text-[11px] bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors">
+              ⚡ {ex}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {agentCmd && <AgentRunPanel key={agentCmd} command={agentCmd} onClose={() => setAgentCmd(null)} />}
 
       {phase && (
         <div className="mt-2.5 flex items-center gap-2 px-3 py-2 rounded-xl bg-[#384877]/5 border border-[#384877]/10">

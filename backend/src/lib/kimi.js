@@ -143,13 +143,26 @@ export async function callKimiChat({
 
         if (response.ok) {
           const data = await response.json();
+          const content = data.choices?.[0]?.message?.content || "";
+          // JSON 模式下内容不合法（个别模型会无视 response_format 输出自由文本或被截断）：
+          // 视为本次失败，换下一个候选模型/端点重试，而不是直接把坏内容抛给调用方
+          if (responseJsonSchema && content) {
+            try {
+              parseModelJson(content);
+            } catch {
+              lastStatus = 200;
+              lastErrorText = "RESPONSE_NOT_JSON";
+              console.log(`[callKimiChat] invalid json: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, head=${content.slice(0, 80)}`);
+              continue;
+            }
+          }
           console.log(`[callKimiChat] success: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms`);
           return {
             endpoint: endpoint.label,
             baseUrl: endpoint.baseUrl,
             model: candidateModel,
             raw: data,
-            content: data.choices?.[0]?.message?.content || "",
+            content,
             message: data.choices?.[0]?.message || null,
             finishReason: data.choices?.[0]?.finish_reason || null
           };
@@ -183,7 +196,11 @@ export async function callKimiChat({
     throw lastError;
   }
 
-  const error = new Error(`Kimi API error ${lastStatus}: ${lastErrorText}`);
+  const error = new Error(
+    lastErrorText === "RESPONSE_NOT_JSON"
+      ? "Kimi 返回内容不是合法 JSON"
+      : `Kimi API error ${lastStatus}: ${lastErrorText}`
+  );
   error.status = 502;
   throw error;
 }

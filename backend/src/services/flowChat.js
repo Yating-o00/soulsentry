@@ -237,6 +237,40 @@ function fallbackExtract(lastUserText, lastExtracted, recentUserTexts = []) {
     return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: due0 };
   }
 
+  // —— 连续对话分次补信息：「在下午3点的时候提醒我」把时间补进上轮的约定提案 ——
+  const REMIND_VERB_RE = /提醒我?|叫我|唤我|喊我/;
+  const BARE_TIME_RE = /(?:在|于|到)?\s*(上午|中午|下午|晚上|早上|清晨|凌晨)?\s*(\d{1,2})\s*[点:：]\s*(\d{1,2})?\s*(?:的时候|左右|前后|过后)?/;
+  const bareTimeMatch = REMIND_VERB_RE.test(t) ? t.match(BARE_TIME_RE) : null;
+  if (bareTimeMatch) {
+    let h = parseInt(bareTimeMatch[2], 10);
+    const period = bareTimeMatch[1] || "";
+    if ((period === "下午" || period === "晚上") && h < 12) h += 12;
+    // 裸数字时刻 1-6 点按生活惯例指下午（"3点提醒我"很少指凌晨）
+    if (!period && h >= 1 && h <= 6) h += 12;
+    if (h >= 0 && h <= 23) {
+      const mi = bareTimeMatch[3] ? parseInt(bareTimeMatch[3], 10) : 0;
+      const d = new Date();
+      d.setHours(h, mi >= 0 && mi <= 59 ? mi : 0, 0, 0);
+      if (d <= new Date()) d.setDate(d.getDate() + 1);
+      const rest = t.replace(bareTimeMatch[0], "").replace(REMIND_VERB_RE, "").replace(/[，。,.；;！!？?\s]+/g, " ").trim();
+      // 这句只剩时刻（用户在给上一条提案补时间）：合并进上轮提案
+      if (!rest && lastExtracted?.type === "task") {
+        return { ...lastExtracted, due_at: toIso(d) };
+      }
+      const cleaned = rest.replace(/^在/, "").replace(/(?:的时候|左右|前后|过后)$/, "").slice(0, 60)
+        || t.replace(REMIND_VERB_RE, "").replace(/^在/, "").replace(/(?:的时候|左右|前后|过后)$/, "").slice(0, 60)
+        || "新约定";
+      return { type: "task", title: cleaned, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: toIso(d) };
+    }
+  }
+
+  // —— 条件从句：「在我深度工作的时候提醒我」先收下约定，等用户补时间 ——
+  const clauseMatch = t.match(/(?:当|在|等)?我?([^，。,.]{2,20}?)(?:的时候|之时|时|之后|以后|后)\s*提醒我/);
+  if (clauseMatch && !BARE_TIME_RE.test(t)) {
+    const title = clauseMatch[1].replace(/^(?:我|你|咱)/, "").trim().slice(0, 60) || t.slice(0, 60);
+    return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: null };
+  }
+
   // 情绪/感悟 → 心签；其余也先收进记录，避免对话走进死胡同
   const isHeart = t.length <= 200
     && /[情绪心累烦焦虑难过开心感谢温暖幸福孤独迷茫害怕担心感动感慨突然觉]/.test(t);
@@ -259,7 +293,11 @@ function fallbackReply(userText, extracted, lastExtracted) {
     }
     return extracted.due_at
       ? `好，我记下了「${extracted.title}」。时间我也算好了，你看一眼下面的小卡片，没问题就点确认～`
-      : `好，我记下了「${extracted.title}」。你看看下面的小卡片，没问题就点确认～`;
+      : `好，我记下了「${extracted.title}」。大概想定在什么时候？告诉我，我把它排进去～`;
+  }
+  // 同一提案把时间补上了（用户分轮给信息：先立约定，后补时刻）
+  if (extracted.type === "task" && lastExtracted?.type === "task" && !lastExtracted.due_at && extracted.due_at) {
+    return "好，我把时间补上了，你看一眼下面的小卡片，没问题就点确认～";
   }
   if (extracted.type === "heart") {
     return "这句话我替你收进心签里了。点下面的确认就存好，以后随时可以翻出来看看～";

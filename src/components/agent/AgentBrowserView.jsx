@@ -8,6 +8,8 @@ export default function AgentBrowserView({ plan, taken, onTakeover }) {
   const url = isEmail ? "mail.google.com/mail/u/0/#compose" : (plan.handoff_url || "").replace(/^https?:\/\//, "") || "搜索中…";
   const agentSteps = plan.steps.filter((s) => s.actor === "agent");
   const [cur, setCur] = useState(0);
+  const [shot, setShot] = useState(0);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   useEffect(() => {
     if (taken) return;
@@ -42,7 +44,21 @@ export default function AgentBrowserView({ plan, taken, onTakeover }) {
             <div className="whitespace-pre-wrap leading-relaxed">{plan.email.body}</div>
           </div>
         ) : (
-          <div className="prose prose-sm max-w-none text-slate-700"><ReactMarkdown>{plan.findings}</ReactMarkdown></div>
+          <>
+            {plan.handoff_url && (
+              <div className="mb-3 rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
+                {!imgLoaded && <div className="h-40 flex items-center justify-center text-[11px] text-slate-400">正在加载真实网页画面…</div>}
+                <img key={shot} src={`https://image.thum.io/get/width/1200/noanimate/${plan.handoff_url}?t=${shot}`} alt="网页实时画面"
+                  onLoad={() => setImgLoaded(true)} onClick={onTakeover}
+                  className={`w-full cursor-pointer ${imgLoaded ? "" : "hidden"}`} />
+                <div className="flex items-center justify-between px-2.5 py-1.5 text-[11px] text-slate-500 border-t border-slate-200 bg-white">
+                  <span>真实网页快照 · 点击画面即可接管操作</span>
+                  <button onClick={() => { setImgLoaded(false); setShot(Date.now()); }} className="no-min-size text-[#384877] hover:underline">刷新画面</button>
+                </div>
+              </div>
+            )}
+            <div className="prose prose-sm max-w-none text-slate-700"><ReactMarkdown>{plan.findings}</ReactMarkdown></div>
+          </>
         )}
       </div>
     </div>

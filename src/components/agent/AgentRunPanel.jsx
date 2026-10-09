@@ -79,7 +79,7 @@ export default function AgentRunPanel({ command, onClose }) {
               );
             })}
           </ol>
-          <AgentBrowserView plan={plan} taken={taken || !!done} onTakeover={() => { setTaken(true); if (plan.kind !== "email" && plan.handoff_url) window.open(plan.handoff_url, "_blank"); }} />
+          <AgentBrowserView plan={plan} taken={taken || !!done} onTakeover={() => { setTaken(true); if (plan.kind !== "email" && plan.handoff_url) window.open(plan.handoff_url, "agent-takeover", "popup,width=1100,height=800"); }} />
           {plan.kind === "email" && <div className="text-xs text-slate-500 px-1">{plan.findings}</div>}
           {done ? (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex gap-2 text-sm text-emerald-900">

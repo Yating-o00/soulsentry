@@ -67,12 +67,33 @@ function sanitizeExtracted(raw) {
 // 用户否定当前提案：收起提案，温柔引导 TA 说出要改什么
 const REJECT_RE = /不对|不是这个?|错了|再聊聊|先不要|重来|重新说/;
 
+// 显式「立约定」指令：设为约定 / 立个约定 / 转成约定 等
+const TASK_DIRECTIVE_RE = /(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/;
+// 周期性提醒时刻：每天下午3点 / 每晚11点半 / 每天8:30
+const DAILY_TIME_RE = /(?:每天|每日|每晚|每夜|天天)\s*(?:(上午|中午|下午|晚上|早上|清晨|凌晨)\s*)?(\d{1,2})(?:\s*[点:：]\s*(\d{1,2})?|\s*半)?/;
+// 每周X（可选时刻，未给时刻时按惯例取 9:00）
+const WEEKLY_DAY_RE = /每(?:个|一)?(?:周|星期|礼拜)([一二三四五六日天])(?![一二三四五六日天])/;
+// 期限：一周内 / 3天内 / 两周内完成
+const WITHIN_RE = /([一二两三四五六七八九十\d]+)\s*(?:个)?\s*(周|星期|礼拜|天|日|月)\s*(?:之?内|以?前|前)/;
+
+const CN_NUM = { 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+function parseCnAmount(raw) {
+  const s = String(raw || "");
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  if (s === "十") return 10;
+  let m = s.match(/^十([一二三四五六七八九])$/);
+  if (m) return 10 + CN_NUM[m[1]];
+  m = s.match(/^([一二两三四五六九])十([一二三四五六七八九])?$/);
+  if (m) return CN_NUM[m[1]] * 10 + (m[2] ? CN_NUM[m[2]] : 0);
+  return CN_NUM[s] ?? null;
+}
+
 // 「现在就去网页办事」识别（排除"以后再提醒"的约定类表述）
 const LATER_REMIND_RE = /提醒我|记得|别忘了|以后再|到时(候)?再/;
 const NOW_BROWSE_RE = /(?:帮我|给我|麻烦|请问|帮).{0,12}(?:查|搜|看|找|订|预约)|(?:查|搜)一下?(?:天气|资料|信息|价格|股价|机票|火车票|高铁|余票|快递|物流|酒店|路线|成绩|排名)|订(?:机票|火车票|高铁票|酒店|门票|外卖)|点外卖|天气怎么(?:样|的)|气温/;
 const BROWSE_URL_INTENT_RE = /打开|帮我|查|搜|填|预约|订|报名|提交|看看|找|下载|登录/;
 
-function fallbackExtract(lastUserText, lastExtracted) {
+function fallbackExtract(lastUserText, lastExtracted, recentUserTexts = []) {
   const t = String(lastUserText || "").trim();
   if (!t) return null;
 
@@ -132,6 +153,90 @@ function fallbackExtract(lastUserText, lastExtracted) {
     return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: due };
   }
 
+  // —— 显式立约定 / 周期提醒 / 期限完成（如"设为约定，一周内完成，每天下午3点提醒"）——
+  const hasTaskDirective = TASK_DIRECTIVE_RE.test(t);
+  const dailyMatch = t.match(DAILY_TIME_RE);
+  const weeklyDayMatch = t.match(WEEKLY_DAY_RE);
+  const withinMatch = t.match(WITHIN_RE);
+  if (hasTaskDirective || dailyMatch || withinMatch || (weeklyDayMatch && /提醒|叫我|唤/.test(t))) {
+    const now0 = new Date();
+    let remindAt = null;
+    let endAt = null;
+
+    if (dailyMatch) {
+      let h = parseInt(dailyMatch[2], 10);
+      const period = dailyMatch[1] || "";
+      if ((period === "下午" || period === "晚上") && h < 12) h += 12;
+      let mi = dailyMatch[3] ? parseInt(dailyMatch[3], 10) : 0;
+      if (/半\s*$/.test(dailyMatch[0])) mi = 30;
+      if (h >= 0 && h <= 23) {
+        const d = new Date();
+        d.setHours(h, mi >= 0 && mi <= 59 ? mi : 0, 0, 0);
+        if (d <= now0) d.setDate(d.getDate() + 1);
+        remindAt = d;
+      }
+    } else if (weeklyDayMatch && /提醒|叫我|唤/.test(t)) {
+      const target = { 日: 0, 天: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 }[weeklyDayMatch[1]];
+      if (target !== undefined) {
+        const d = new Date();
+        d.setHours(9, 0, 0, 0);
+        let delta = (target - d.getDay() + 7) % 7;
+        if (delta === 0 && d <= now0) delta = 7;
+        d.setDate(d.getDate() + delta);
+        remindAt = d;
+      }
+    }
+
+    if (withinMatch) {
+      const n = parseCnAmount(withinMatch[1]);
+      if (n) {
+        const d = new Date();
+        const unit = withinMatch[2];
+        if (unit === "月") d.setMonth(d.getMonth() + n);
+        else if (unit === "周" || unit === "星期" || unit === "礼拜") d.setDate(d.getDate() + n * 7);
+        else d.setDate(d.getDate() + n);
+        d.setHours(18, 0, 0, 0);
+        endAt = d;
+      }
+    }
+
+    // reminder_time 语义优先（客户端把 due_at 当提醒时间落库；
+    // "每天/每周"的重复语义会由创建接口从原话里自动识别成 repeat_rule）
+    const pick = remindAt && endAt ? (remindAt <= endAt ? remindAt : endAt) : (remindAt || endAt);
+    const due0 = pick ? toIso(pick) : null;
+
+    // title：剥掉指令词/时间描述后的剩余；纯指令句（内容只剩时间描述）取对话里上一条用户消息
+    const stripped = t
+      .replace(/(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/g, "")
+      .replace(/提醒我?/g, "")
+      .replace(/每天[^，。,.]{0,12}?(?:提醒|叫我|唤)/g, "")
+      .replace(/每周[^，。,.]{0,12}?(?:提醒|叫我|唤)/g, "")
+      .replace(/[一二两三四五六七八九十\d]+\s*(?:个)?\s*(?:周|星期|礼拜|天|日|月)\s*(?:之?内|以?前|前)[^，。,.]{0,8}/g, "")
+      .replace(/[，。,.；;！!？?\s]+/g, " ")
+      .trim();
+    const isDirectiveOnly = hasTaskDirective && !t
+      .replace(/(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/g, "")
+      .replace(/提醒我?/g, "")
+      .replace(/每天[^，。,.]{0,6}?\d{1,2}\s*[点:：]?\s*(?:\d{1,2}|半)?/g, "")
+      .replace(/每周[^，。,.]{0,8}?\d{0,2}\s*[点:：]?\s*(?:\d{1,2}|半)?/g, "")
+      .replace(/[一二两三四五六七八九十\d]+\s*(?:个)?\s*(?:周|星期|礼拜|天|日|月)\s*(?:之?内|以?前|前)[^，。,.]{0,8}/g, "")
+      .replace(/[，。,.；;！!？?\s]+/g, "")
+      .trim();
+    let title = "";
+    if (isDirectiveOnly) {
+      for (const prev of recentUserTexts) {
+        const cand = String(prev || "").trim();
+        if (!cand || cand === t) continue;
+        if (TASK_DIRECTIVE_RE.test(cand)) continue;
+        title = cand.slice(0, 60);
+        break;
+      }
+    }
+    if (!title) title = stripped.slice(0, 60);
+    if (!title) title = t.replace(/^(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定[，,]?\s*/, "").slice(0, 60) || "新约定";
+    return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: due0 };
+  }
+
   // 情绪/感悟 → 心签；其余也先收进记录，避免对话走进死胡同
   const isHeart = t.length <= 200
     && /[情绪心累烦焦虑难过开心感谢温暖幸福孤独迷茫害怕担心感动感慨突然觉]/.test(t);
@@ -152,7 +257,9 @@ function fallbackReply(userText, extracted, lastExtracted) {
     if (!extracted.due_at && /https?:\/\//.test(extracted.description || "")) {
       return `好，我记下了「${extracted.title}」。确认后我会派浏览器小助手替你打开网页一步步办好，进度在守护记录里随时看～`;
     }
-    return `好，我记下了「${extracted.title}」。时间我也算好了，你看一眼下面的小卡片，没问题就点确认～`;
+    return extracted.due_at
+      ? `好，我记下了「${extracted.title}」。时间我也算好了，你看一眼下面的小卡片，没问题就点确认～`
+      : `好，我记下了「${extracted.title}」。你看看下面的小卡片，没问题就点确认～`;
   }
   if (extracted.type === "heart") {
     return "这句话我替你收进心签里了。点下面的确认就存好，以后随时可以翻出来看看～";
@@ -385,7 +492,12 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source: "ai" };
   } catch (err) {
     console.warn("[flowChat] Kimi chat failed, fallback:", err?.message || err);
-    const raw = fallbackExtract(lastUser?.content, lastExtracted);
+    // "设为约定"这类指令常指代上文：把最近的用户消息倒序传给兜底，供标题提取
+    const recentUserTexts = safeMessages
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .reverse();
+    const raw = fallbackExtract(lastUser?.content, lastExtracted, recentUserTexts);
 
     // 兜底识别出"现在就去网页办事"：直接启动浏览器小助手
     if (raw && raw.agent_goal && userId && prisma) {

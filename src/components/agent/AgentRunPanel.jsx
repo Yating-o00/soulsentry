@@ -3,14 +3,33 @@ import ReactMarkdown from "react-markdown";
 import { Bot, Check, User, Loader2, X, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
-import { planAgentRun, finishAgentRun } from "@/lib/agentRunner";
+import { planAgentRun, finishAgentRun, reviseAgentRun } from "@/lib/agentRunner";
 import AgentHandoffBox from "./AgentHandoffBox";
+import AgentChatBox from "./AgentChatBox";
 
 /** 小助手执行面板：自动做能做的 → 卡点人工接手 → 交还收尾 */
 export default function AgentRunPanel({ command, onClose }) {
   const [plan, setPlan] = useState(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [revising, setRevising] = useState(false);
+  const [rev, setRev] = useState(0);
+
+  const handleChat = async (message) => {
+    setHistory((h) => [...h, { role: "user", text: message }]);
+    setRevising(true);
+    try {
+      const { reply, ...next } = await reviseAgentRun(command, plan, history, message);
+      setPlan(next);
+      setRev((r) => r + 1);
+      setHistory((h) => [...h, { role: "agent", text: reply }]);
+    } catch (e) {
+      toast.error("小助手没能完成修改", { description: e?.message });
+    } finally {
+      setRevising(false);
+    }
+  };
 
   useEffect(() => {
     planAgentRun(command).then(setPlan).catch((e) => { toast.error("小助手执行失败", { description: e?.message }); onClose(); });
@@ -66,7 +85,10 @@ export default function AgentRunPanel({ command, onClose }) {
               <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" /><div><b>完成 · </b>{done}</div>
             </div>
           ) : (
-            <AgentHandoffBox plan={plan} busy={busy} onReturn={handleReturn} />
+            <>
+              <AgentChatBox history={history} busy={revising} onSend={handleChat} />
+              <AgentHandoffBox key={rev} plan={plan} busy={busy || revising} onReturn={handleReturn} />
+            </>
           )}
         </div>
       )}

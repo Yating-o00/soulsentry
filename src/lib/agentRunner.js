@@ -54,6 +54,25 @@ email 类填写 email 字段（收件人未知时 to 留空），handoff_url 留
   });
 }
 
+// 多轮对话：基于当前方案与历史，按用户新要求修订并落实
+export async function reviseAgentRun(command, plan, history, message) {
+  const convo = history.map((m) => `${m.role === "user" ? "用户" : "小助手"}：${m.text}`).join("\n");
+  return base44.integrations.Core.InvokeLLM({
+    model: "gemini_3_flash",
+    add_context_from_internet: true,
+    response_json_schema: {
+      ...PLAN_SCHEMA,
+      properties: { ...PLAN_SCHEMA.properties, reply: { type: "string", description: "对用户这句话的简短中文回应，说明你改了什么" } },
+      required: [...PLAN_SCHEMA.required, "reply"],
+    },
+    prompt: `你是心栈的执行小助手，正在帮用户办「${command}」。
+当前方案（JSON）：${JSON.stringify(plan)}
+此前对话：\n${convo || "（无）"}
+用户新的要求：「${message}」
+请据此把内容落实得更具体（需要时联网查询真实信息），返回完整的更新后方案：保留未被要求修改的部分，修改 findings/steps/email/handoff 等，并在 reply 里说明改动。全部用中文。`,
+  });
+}
+
 export async function finishAgentRun(command, plan, userNote) {
   return base44.integrations.Core.InvokeLLM({
     prompt: `用户交办「${command}」。小助手已完成：${plan.findings}\n卡点：${plan.handoff_reason}\n用户接手后反馈：「${userNote || "已处理完成"}」。

@@ -6,6 +6,7 @@ import { base44 } from "@/api/base44Client";
 import { planAgentRun, finishAgentRun, reviseAgentRun } from "@/lib/agentRunner";
 import AgentHandoffBox from "./AgentHandoffBox";
 import AgentChatBox from "./AgentChatBox";
+import AgentBrowserView from "./AgentBrowserView";
 
 /** 小助手执行面板：自动做能做的 → 卡点人工接手 → 交还收尾 */
 export default function AgentRunPanel({ command, onClose }) {
@@ -15,6 +16,7 @@ export default function AgentRunPanel({ command, onClose }) {
   const [history, setHistory] = useState([]);
   const [revising, setRevising] = useState(false);
   const [rev, setRev] = useState(0);
+  const [taken, setTaken] = useState(false);
 
   const handleChat = async (message) => {
     setHistory((h) => [...h, { role: "user", text: message }]);
@@ -77,9 +79,8 @@ export default function AgentRunPanel({ command, onClose }) {
               );
             })}
           </ol>
-          <div className="prose prose-sm max-w-none text-slate-700 bg-white rounded-xl border border-slate-200 p-3 max-h-72 overflow-auto">
-            <ReactMarkdown>{plan.findings}</ReactMarkdown>
-          </div>
+          <AgentBrowserView plan={plan} taken={taken || !!done} onTakeover={() => { setTaken(true); if (plan.kind !== "email" && plan.handoff_url) window.open(plan.handoff_url, "_blank"); }} />
+          {plan.kind === "email" && <div className="text-xs text-slate-500 px-1">{plan.findings}</div>}
           {done ? (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex gap-2 text-sm text-emerald-900">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" /><div><b>完成 · </b>{done}</div>
@@ -87,7 +88,7 @@ export default function AgentRunPanel({ command, onClose }) {
           ) : (
             <>
               <AgentChatBox history={history} busy={revising} onSend={handleChat} />
-              <AgentHandoffBox key={rev} plan={plan} busy={busy || revising} onReturn={handleReturn} />
+              <AgentHandoffBox key={`${rev}-${taken}`} plan={plan} forceTaken={taken} onTake={() => setTaken(true)} busy={busy || revising} onReturn={handleReturn} />
             </>
           )}
         </div>

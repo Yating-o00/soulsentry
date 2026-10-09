@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { Hand, ExternalLink, Undo2, Loader2 } from "lucide-react";
 
 /** 人工接手区：用户打开界面亲自操作 / 修改邮件，完成后交还小助手 */
-export default function AgentHandoffBox({ plan, busy, onReturn }) {
-  const [taken, setTaken] = useState(false);
+export default function AgentHandoffBox({ plan, busy, onReturn, forceTaken, onTake }) {
+  const [taken, setLocalTaken] = useState(!!forceTaken);
+  const setTaken = (v) => { setLocalTaken(v); onTake?.(); };
   const [note, setNote] = useState("");
   const [email, setEmail] = useState(() => {
     const e = plan.email || { subject: "", body: "" };

@@ -19,6 +19,7 @@ const knowledgeBaseInputSchema = z.object({
   last_accessed: z.string().datetime().optional().nullable(),
   importance: z.number().int().min(1).max(5).optional(),
   embedding_summary: z.string().max(5000).optional().nullable(),
+  snapshot: z.any().optional(),
   metadata: z.any().optional()
 });
 
@@ -40,6 +41,7 @@ function serializeKnowledgeBase(item) {
     last_accessed: item.lastAccessed,
     importance: item.importance,
     embedding_summary: item.embeddingSummary,
+    snapshot: item.snapshot,
     metadata: item.metadata,
     created_by_id: item.userId,
     created_by: item.user?.email || null,
@@ -79,7 +81,8 @@ function buildKnowledgeBaseData(userId, payload) {
     accessCount: payload.access_count ?? 0,
     lastAccessed: payload.last_accessed ? new Date(payload.last_accessed) : null,
     importance: payload.importance ?? 3,
-    embeddingSummary: payload.embedding_summary || null
+    embeddingSummary: payload.embedding_summary || null,
+    snapshot: payload.snapshot ?? undefined
   };
 }
 
@@ -171,7 +174,8 @@ knowledgeBasesRouter.patch("/:id", async (req, res) => {
       accessCount: payload.data.access_count,
       lastAccessed: payload.data.last_accessed === undefined ? undefined : (payload.data.last_accessed ? new Date(payload.data.last_accessed) : null),
       importance: payload.data.importance,
-      embeddingSummary: payload.data.embedding_summary
+      embeddingSummary: payload.data.embedding_summary,
+      snapshot: payload.data.snapshot
     },
     include: { user: true }
   });
@@ -179,7 +183,9 @@ knowledgeBasesRouter.patch("/:id", async (req, res) => {
   return res.json(serializeKnowledgeBase(item));
 });
 
-// 沉淀返还：把知识条目还原到来源处（约定回到进行中、心签去掉已沉淀标记），知识副本随之移除
+// 沉淀返还：把知识条目还原到来源处（约定回到进行中、心签去掉已沉淀标记），知识副本随之移除。
+// 约定沉淀：原约定还在——直接还原，各级子约定从未被删除、随约定一并回归；
+//           原约定已删——按沉淀快照完整重建约定 + 全部子约定。
 knowledgeBasesRouter.post("/:id/restore", async (req, res) => {
   const item = await prisma.knowledgeBase.findFirst({
     where: {
@@ -193,25 +199,90 @@ knowledgeBasesRouter.post("/:id/restore", async (req, res) => {
   }
 
   const { sourceType, sourceId } = item;
+  const snap = item.snapshot && typeof item.snapshot === "object" ? item.snapshot : null;
 
   if (sourceType === "task" && sourceId) {
     const task = await prisma.task.findFirst({
       where: { id: sourceId, userId: req.user.id }
     });
-    if (!task || task.deletedAt) {
-      return res.status(409).json({ error: "SOURCE_GONE", message: "原约定已被删除，无法返还" });
+
+    if (task && !task.deletedAt) {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          status: "TODO",
+          completedAt: null,
+          metadata: { ...(task.metadata || {}), settled_as_knowledge: false, knowledge_base_id: null }
+        }
+      });
+      await prisma.knowledgeBase.delete({ where: { id: item.id } });
+      return res.json({ restored: true, source_type: "task", source_id: task.id, title: task.title });
     }
 
-    await prisma.task.update({
-      where: { id: task.id },
-      data: {
-        status: "TODO",
-        completedAt: null,
-        metadata: { ...(task.metadata || {}), settled_as_knowledge: false, knowledge_base_id: null }
+    // 原约定已删除：有快照则完整重建
+    if (snap?.task) {
+      const toPrismaStatus = (s) => {
+        const v = String(s || "").toLowerCase();
+        if (v === "completed" || v === "done") return "DONE";
+        if (v === "in_progress") return "IN_PROGRESS";
+        return "TODO";
+      };
+
+      let parentId = snap.task.parent_task_id || null;
+      if (parentId) {
+        const parent = await prisma.task.findFirst({
+          where: { id: parentId, userId: req.user.id, deletedAt: null }
+        });
+        if (!parent) parentId = null;
       }
-    });
-    await prisma.knowledgeBase.delete({ where: { id: item.id } });
-    return res.json({ restored: true, source_type: "task", source_id: task.id, title: task.title });
+
+      const created = await prisma.task.create({
+        data: {
+          userId: req.user.id,
+          title: snap.task.title || item.title,
+          description: snap.task.description || item.content,
+          status: "TODO",
+          priority: snap.task.priority || "medium",
+          category: snap.task.category || null,
+          dueAt: snap.task.due_at ? new Date(snap.task.due_at) : null,
+          reminderTime: snap.task.reminder_time ? new Date(snap.task.reminder_time) : null,
+          endTime: snap.task.end_time ? new Date(snap.task.end_time) : null,
+          isAllDay: Boolean(snap.task.is_all_day),
+          parentTaskId: parentId,
+          tags: Array.isArray(snap.task.tags) ? snap.task.tags : []
+        }
+      });
+
+      const createSubs = async (nodes, parentTaskId) => {
+        for (const n of nodes || []) {
+          const status = toPrismaStatus(n.status);
+          const child = await prisma.task.create({
+            data: {
+              userId: req.user.id,
+              title: n.title,
+              description: n.description || null,
+              status,
+              priority: n.priority || "medium",
+              parentTaskId,
+              completedAt: status === "DONE" ? new Date() : null
+            }
+          });
+          await createSubs(n.children, child.id);
+        }
+      };
+      await createSubs(snap.subtasks, created.id);
+
+      await prisma.knowledgeBase.delete({ where: { id: item.id } });
+      return res.json({
+        restored: true,
+        recreated: true,
+        source_type: "task",
+        source_id: created.id,
+        title: created.title
+      });
+    }
+
+    return res.status(409).json({ error: "SOURCE_GONE", message: "原约定已被删除，无法返还" });
   }
 
   if (sourceType === "note" && sourceId) {

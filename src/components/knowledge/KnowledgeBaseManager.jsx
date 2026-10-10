@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { canRestoreKnowledge, restoreHint, restoreKnowledgeItem } from "./knowledgeRestore";
+import TaskKnowledgeSnapshot from "./TaskKnowledgeSnapshot";
 
 export default function KnowledgeBaseManager() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -255,6 +256,8 @@ export default function KnowledgeBaseManager() {
                           <p className="text-xs font-medium text-slate-500 mb-1">完整内容</p>
                           <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{item.content}</p>
                         </div>
+
+                        {item.source_type === 'task' && <TaskKnowledgeSnapshot item={item} />}
 
                         {item.key_points && item.key_points.length > 0 && (
                           <div>

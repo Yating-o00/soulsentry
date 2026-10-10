@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { canRestoreKnowledge, restoreHint, restoreKnowledgeItem } from "@/components/knowledge/knowledgeRestore";
+import TaskKnowledgeSnapshot from "@/components/knowledge/TaskKnowledgeSnapshot";
 
 const CATEGORIES = ["技术", "工作", "生活", "学习", "健康", "财务", "其他"];
 
@@ -379,6 +380,7 @@ ${context}
                               {format(new Date(item.updated_date), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                             </p>
                             <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{item.content}</p>
+                            {item.source_type === 'task' && <TaskKnowledgeSnapshot item={item} />}
                             {item.key_points && item.key_points.length > 0 && (
                               <ul className="space-y-1">
                                 {item.key_points.map((point, idx) => (

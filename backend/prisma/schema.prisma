@@ -386,6 +386,8 @@ model KnowledgeBase {
   sourceType       String?
   sourceId         String?
   embeddingSummary String?
+  // 约定沉淀时的完整快照（含子约定树），供知识库展开展示与删除后重建
+  snapshot         Json?
   accessCount      Int       @default(0)
   lastAccessed     DateTime?
   createdAt        DateTime  @default(now())

@@ -422,6 +422,84 @@ tasksRouter.post("/batch", async (req, res) => {
   return res.status(201).json(tasks.map(serializeTask));
 });
 
+tasksRouter.post("/:id/settle-knowledge", async (req, res) => {
+  const access = await assertTaskAccess(req, res, req.params.id);
+  if (!access) return;
+  const task = access.task;
+
+  // 拉全量约定（含各级子约定）构建沉淀快照：返还时据此完整重建
+  const allTasks = await prisma.task.findMany({
+    where: { userId: req.user.id, deletedAt: null },
+    select: {
+      id: true, title: true, description: true, status: true, priority: true,
+      completedAt: true, parentTaskId: true,
+      reminderTime: true, endTime: true, dueAt: true, isAllDay: true,
+      category: true, tags: true, metadata: true
+    }
+  });
+  const childrenOf = new Map();
+  const byId = new Map();
+  for (const t of allTasks) {
+    byId.set(t.id, t);
+    if (t.parentTaskId) {
+      if (!childrenOf.has(t.parentTaskId)) childrenOf.set(t.parentTaskId, []);
+      childrenOf.get(t.parentTaskId).push(t);
+    }
+  }
+  const buildNode = (t) => ({
+    title: t.title,
+    description: t.description,
+    status: t.status === "DONE" ? "completed" : t.status === "TODO" ? "pending" : t.status.toLowerCase(),
+    priority: t.priority,
+    completed_at: t.completedAt,
+    children: (childrenOf.get(t.id) || []).map(buildNode)
+  });
+  const parentTask = task.parentTaskId ? byId.get(task.parentTaskId) : null;
+
+  const snapshot = {
+    source: "task",
+    settled_at: new Date().toISOString(),
+    task: {
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      category: task.category,
+      tags: Array.isArray(task.tags) ? task.tags : [],
+      reminder_time: task.reminderTime,
+      end_time: task.endTime,
+      due_at: task.dueAt,
+      is_all_day: task.isAllDay,
+      parent_task_id: task.parentTaskId,
+      parent_title: parentTask?.title || null
+    },
+    subtasks: (childrenOf.get(task.id) || []).map(buildNode)
+  };
+
+  const kb = await prisma.knowledgeBase.create({
+    data: {
+      userId: req.user.id,
+      title: task.title,
+      content: task.description || task.title,
+      sourceType: "task",
+      sourceId: task.id,
+      tags: ["约定沉淀", ...(Array.isArray(task.tags) ? task.tags : [])],
+      category: "约定沉淀",
+      snapshot
+    }
+  });
+
+  const updated = await prisma.task.update({
+    where: { id: task.id },
+    data: {
+      status: "DONE",
+      completedAt: new Date(),
+      metadata: { ...(task.metadata || {}), settled_as_knowledge: true, knowledge_base_id: kb.id }
+    }
+  });
+
+  return res.status(201).json({ knowledge_base_id: kb.id, task: serializeTask(updated) });
+});
+
 tasksRouter.post("/:id/split", async (req, res) => {
   const task = await prisma.task.findFirst({
     where: {

@@ -92,30 +92,18 @@ export default function TaskDetail() {
     }
   };
 
-  // 约定允许不执行：内容沉淀进知识库，约定标记为完成（不算失约，正常收入已完成）
+  // 约定允许不执行：内容沉淀进知识库（服务端留存含子约定树的完整快照），约定标记为完成
   const settleAsKnowledge = async () => {
     if (!task) return;
     const res = await Taro.showModal({
       title: "沉淀为知识",
-      content: `「${task.title}」将不执行，内容沉淀进知识库并标记为完成。`,
+      content: `「${task.title}」将不执行，内容（含子约定）沉淀进知识库并标记为完成。`,
       confirmText: "沉淀",
       cancelText: "取消"
     });
     if (!res.confirm) return;
     try {
-      const kb = await post("/knowledge-bases", {
-        title: task.title,
-        content: task.description || task.title,
-        source_type: "task",
-        source_id: task.id,
-        tags: ["约定沉淀", ...(Array.isArray(task.tags) ? task.tags : [])],
-        category: "约定沉淀",
-        metadata: { settled_from: "task" }
-      });
-      await patch(`/tasks/${taskId}`, {
-        status: "completed",
-        metadata: { ...(task.metadata || {}), settled_as_knowledge: true, knowledge_base_id: kb?.id || null }
-      });
+      await post(`/tasks/${taskId}/settle-knowledge`, {});
       Taro.showToast({ title: "已沉淀到知识库", icon: "success" });
       fetchAll();
       notifySubtasksChanged();

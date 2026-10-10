@@ -16,6 +16,7 @@ import Collaborate from '@/pages/Collaborate';
 import ShareNote from '@/pages/ShareNote';
 import About from '@/pages/About';
 import Contact from '@/pages/Contact';
+import Connections from '@/pages/Connections';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
@@ -65,6 +66,7 @@ const AuthenticatedApp = () => {
           path="/"
           element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>}
         />
+        <Route path="/connections" element={<LayoutWrapper currentPageName="Connections"><Connections /></LayoutWrapper>} />
         {Object.entries(Pages).map(([path, Page]) => (
           <Route
             key={path}

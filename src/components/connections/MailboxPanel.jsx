@@ -15,7 +15,9 @@ export default function MailboxPanel({ onStatus }) {
   const [composing, setComposing] = useState(false);
 
   const load = async () => {
-    const res = await base44.functions.invoke("userMailbox", { action: "list" }).catch(() => ({ data: { connected: false } }));
+    const res = await base44.functions.invoke("userMailbox", { action: "list" }).catch((e) => ({
+      data: { connected: false, error: /insufficient|403/i.test(e?.response?.data?.error || "") ? "已授权，但缺少读取/发送邮件的权限。请重新连接，并在 Google 授权页勾选所有 Gmail 权限。" : "邮箱暂时无法读取，请稍后重试。" },
+    }));
     setState(res.data);
     onStatus?.(!!res.data.connected);
   };
@@ -47,7 +49,8 @@ export default function MailboxPanel({ onStatus }) {
       <Mail className="w-10 h-10 text-[#384877] mx-auto" />
       <p className="font-semibold text-slate-800">授权心栈连接你的邮箱</p>
       <p className="text-sm text-slate-500 max-w-md mx-auto">心栈会读取邮件以了解你的沟通习惯，帮你分析来信、给出建议，并按你的风格起草邮件；每封邮件都需你确认后才会发出。</p>
-      <Button onClick={connect} className="bg-[#384877] hover:bg-[#2d3a60]">连接 Gmail</Button>
+      {state.error && <p className="text-sm text-amber-700 bg-amber-50 rounded-xl px-4 py-2 max-w-md mx-auto">{state.error}</p>}
+      <Button onClick={connect} className="bg-[#384877] hover:bg-[#2d3a60]">{state.error ? "重新连接 Gmail" : "连接 Gmail"}</Button>
     </div>
   );
 

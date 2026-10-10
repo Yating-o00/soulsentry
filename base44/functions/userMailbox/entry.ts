@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     const auth = { Authorization: `Bearer ${accessToken}` };
     const gget = async (path) => {
       const r = await fetch(`${G}${path}`, { headers: auth, signal: AbortSignal.timeout(15000) });
-      if (!r.ok) throw new Error(`Gmail ${r.status}`);
+      if (!r.ok) throw new Error(`Gmail ${r.status}: ${(await r.text()).slice(0, 300)}`);
       return r.json();
     };
     const getMsg = async (id) => {

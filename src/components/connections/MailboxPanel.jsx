@@ -5,7 +5,7 @@ import { Loader2, Mail, UserRound, PenSquare, LogOut } from "lucide-react";
 import MailInsight from "./MailInsight";
 import MailComposer from "./MailComposer";
 
-const CONNECTOR_ID = "6aca0e54cb060b4b9a95727d";
+const CONNECTOR_ID = "6aca1ec554d6e4702c734ca7";
 
 export default function MailboxPanel({ onStatus }) {
   const [state, setState] = useState(null);

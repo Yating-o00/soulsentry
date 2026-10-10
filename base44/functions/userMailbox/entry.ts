@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 
-const CONNECTOR_ID = '6aca0e54cb060b4b9a95727d';
+const CONNECTOR_ID = '6aca1ec554d6e4702c734ca7';
 const G = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
 function encodeRFC2047(s) {

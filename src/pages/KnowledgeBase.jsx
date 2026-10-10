@@ -10,13 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Brain, Search, Plus, MessageSquare, Sparkles, BookOpen, 
   Tag, Calendar, TrendingUp, Loader2, Send, Database, Filter,
-  Star, Clock, X
+  Star, Clock, X, RotateCcw, ChevronDown
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { canRestoreKnowledge, restoreHint, restoreKnowledgeItem } from "@/components/knowledge/knowledgeRestore";
 
 const CATEGORIES = ["技术", "工作", "生活", "学习", "健康", "财务", "其他"];
 
@@ -35,6 +36,7 @@ export default function KnowledgeBase() {
     tags: []
   });
   const [tagInput, setTagInput] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
   const chatEndRef = useRef(null);
   const queryClient = useQueryClient();
 
@@ -63,6 +65,28 @@ export default function KnowledgeBase() {
       queryClient.invalidateQueries({ queryKey: ['knowledge-base'] });
     }
   });
+
+  // 沉淀返还：约定回到进行中、心签去掉已沉淀标记，知识副本移除
+  const restoreMutation = useMutation({
+    mutationFn: (id) => restoreKnowledgeItem(id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['knowledge-base'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      toast.success(data?.source_type === "task" ? "已返还到约定列表" : "已返还到心签列表");
+    },
+    onError: (err) => {
+      toast.error(err?.message || "返还失败");
+    }
+  });
+
+  const handleRestore = (item, e) => {
+    e?.stopPropagation?.();
+    if (restoreMutation.isPending) return;
+    if (window.confirm(restoreHint(item))) {
+      restoreMutation.mutate(item.id);
+    }
+  };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -312,7 +336,9 @@ ${context}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-slate-800 truncate">{item.title}</h3>
-                        <p className="text-xs text-slate-600 line-clamp-2 mt-1">{item.content}</p>
+                        {expandedId !== item.id && (
+                          <p className="text-xs text-slate-600 line-clamp-2 mt-1">{item.content}</p>
+                        )}
                         <div className="flex items-center gap-2 mt-2">
                           <Badge variant="outline" className="text-xs">{item.category}</Badge>
                           {item.importance >= 4 && (
@@ -326,7 +352,61 @@ ${context}
                           )}
                         </div>
                       </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setExpandedId(expandedId === item.id ? null : item.id); }}
+                        className="text-slate-400 hover:text-slate-600 p-1 flex-shrink-0"
+                        title={expandedId === item.id ? "收起" : "展开查看完整信息"}
+                      >
+                        <ChevronDown className={`w-4 h-4 transition-transform ${expandedId === item.id ? "rotate-180" : ""}`} />
+                      </button>
                     </div>
+
+                    {/* 展开：完整信息 */}
+                    <AnimatePresence initial={false}>
+                      {expandedId === item.id && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="overflow-hidden"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="pt-3 mt-3 border-t border-slate-200 space-y-2">
+                            <p className="text-xs text-slate-400">
+                              {item.source_type === "task" ? "来源：约定沉淀" : item.source_type === "note" ? "来源：心签沉淀" : "来源：手动添加"}
+                              {" · 更新于 "}
+                              {format(new Date(item.updated_date), "yyyy年M月d日 HH:mm", { locale: zhCN })}
+                            </p>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{item.content}</p>
+                            {item.key_points && item.key_points.length > 0 && (
+                              <ul className="space-y-1">
+                                {item.key_points.map((point, idx) => (
+                                  <li key={idx} className="text-sm text-slate-700 flex gap-2">
+                                    <span className="text-purple-500 flex-shrink-0">•</span>
+                                    <span>{point}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {canRestoreKnowledge(item) && (
+                              <div className="pt-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => handleRestore(item, e)}
+                                  disabled={restoreMutation.isPending}
+                                  className="text-purple-600 border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                                  返还{item.source_type === "task" ? "约定" : "心签"}
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 ))}
               </AnimatePresence>

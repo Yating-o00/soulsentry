@@ -5,14 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Trash2, Search, BookOpen, TrendingUp, Calendar, Tag } from "lucide-react";
+import { Trash2, Search, BookOpen, TrendingUp, Calendar, Tag, RotateCcw, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { canRestoreKnowledge, restoreHint, restoreKnowledgeItem } from "./knowledgeRestore";
 
 export default function KnowledgeBaseManager() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: knowledgeItems = [], isLoading } = useQuery({
@@ -29,6 +31,27 @@ export default function KnowledgeBaseManager() {
     }
   });
 
+  // 沉淀返还：约定回到进行中、心签去掉已沉淀标记，知识副本移除
+  const restoreMutation = useMutation({
+    mutationFn: (id) => restoreKnowledgeItem(id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['knowledge-base'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      toast.success(data?.source_type === "task" ? "已返还到约定列表" : "已返还到心签列表");
+    },
+    onError: (err) => {
+      toast.error(err?.message || "返还失败");
+    }
+  });
+
+  const handleRestore = (item) => {
+    if (restoreMutation.isPending) return;
+    if (window.confirm(restoreHint(item))) {
+      restoreMutation.mutate(item.id);
+    }
+  };
+
   const filteredItems = knowledgeItems.filter(item => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -43,11 +66,19 @@ export default function KnowledgeBaseManager() {
     switch (sourceType) {
       case 'note':
         return '📝';
+      case 'task':
+        return '🤝';
       case 'ai_analysis':
         return '🤖';
       default:
         return '✍️';
     }
+  };
+
+  const getSourceLabel = (item) => {
+    if (item.source_type === 'note') return '来源：心签沉淀';
+    if (item.source_type === 'task') return '来源：约定沉淀';
+    return '来源：手动添加';
   };
 
   return (
@@ -129,7 +160,10 @@ export default function KnowledgeBaseManager() {
               exit={{ opacity: 0, x: -100 }}
               layout
             >
-              <Card className="p-4 hover:shadow-md transition-shadow">
+              <Card
+                className="p-4 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
@@ -139,9 +173,14 @@ export default function KnowledgeBaseManager() {
                       </h3>
                     </div>
 
-                    {item.summary && (
+                    {item.summary && expandedId !== item.id && (
                       <p className="text-sm text-slate-600 mb-2 line-clamp-2">
                         {item.summary}
+                      </p>
+                    )}
+                    {!item.summary && expandedId !== item.id && (
+                      <p className="text-sm text-slate-600 mb-2 line-clamp-2">
+                        {item.content}
                       </p>
                     )}
 
@@ -159,7 +198,7 @@ export default function KnowledgeBaseManager() {
                       )}
                     </div>
 
-                    {item.tags && item.tags.length > 0 && (
+                    {item.tags && item.tags.length > 0 && expandedId !== item.id && (
                       <div className="flex flex-wrap gap-1">
                         {item.tags.map((tag) => (
                           <Badge key={tag} variant="secondary" className="text-xs">
@@ -170,15 +209,98 @@ export default function KnowledgeBaseManager() {
                     )}
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => deleteKnowledgeMutation.mutate(item.id)}
-                    className="text-slate-400 hover:text-red-500 flex-shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => { e.stopPropagation(); setExpandedId(expandedId === item.id ? null : item.id); }}
+                      className="text-slate-400 hover:text-slate-600"
+                      title={expandedId === item.id ? "收起" : "展开查看完整信息"}
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform ${expandedId === item.id ? "rotate-180" : ""}`} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => { e.stopPropagation(); deleteKnowledgeMutation.mutate(item.id); }}
+                      className="text-slate-400 hover:text-red-500"
+                      title="删除"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
+
+                {/* 展开：完整信息 */}
+                <AnimatePresence initial={false}>
+                  {expandedId === item.id && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pt-3 mt-3 border-t border-slate-100 space-y-3">
+                        <p className="text-xs text-slate-400">{getSourceLabel(item)}</p>
+
+                        {item.summary && (
+                          <div>
+                            <p className="text-xs font-medium text-slate-500 mb-1">摘要</p>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap">{item.summary}</p>
+                          </div>
+                        )}
+
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 mb-1">完整内容</p>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{item.content}</p>
+                        </div>
+
+                        {item.key_points && item.key_points.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-slate-500 mb-1">要点</p>
+                            <ul className="space-y-1">
+                              {item.key_points.map((point, idx) => (
+                                <li key={idx} className="text-sm text-slate-700 flex gap-2">
+                                  <span className="text-purple-500 flex-shrink-0">•</span>
+                                  <span>{point}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {item.tags && item.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {item.tags.map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-xs text-slate-400">
+                            更新于 {format(new Date(item.updated_date), "yyyy年M月d日 HH:mm", { locale: zhCN })}
+                          </span>
+                          {canRestoreKnowledge(item) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); handleRestore(item); }}
+                              disabled={restoreMutation.isPending}
+                              className="text-purple-600 border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                              返还{item.source_type === "task" ? "约定" : "心签"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </Card>
             </motion.div>
           ))}

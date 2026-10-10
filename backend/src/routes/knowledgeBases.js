@@ -179,6 +179,65 @@ knowledgeBasesRouter.patch("/:id", async (req, res) => {
   return res.json(serializeKnowledgeBase(item));
 });
 
+// 沉淀返还：把知识条目还原到来源处（约定回到进行中、心签去掉已沉淀标记），知识副本随之移除
+knowledgeBasesRouter.post("/:id/restore", async (req, res) => {
+  const item = await prisma.knowledgeBase.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    }
+  });
+
+  if (!item) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "知识条目不存在" });
+  }
+
+  const { sourceType, sourceId } = item;
+
+  if (sourceType === "task" && sourceId) {
+    const task = await prisma.task.findFirst({
+      where: { id: sourceId, userId: req.user.id }
+    });
+    if (!task || task.deletedAt) {
+      return res.status(409).json({ error: "SOURCE_GONE", message: "原约定已被删除，无法返还" });
+    }
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: {
+        status: "TODO",
+        completedAt: null,
+        metadata: { ...(task.metadata || {}), settled_as_knowledge: false, knowledge_base_id: null }
+      }
+    });
+    await prisma.knowledgeBase.delete({ where: { id: item.id } });
+    return res.json({ restored: true, source_type: "task", source_id: task.id, title: task.title });
+  }
+
+  if (sourceType === "note" && sourceId) {
+    const note = await prisma.note.findFirst({
+      where: { id: sourceId, userId: req.user.id }
+    });
+    if (!note || note.deletedAt) {
+      return res.status(409).json({ error: "SOURCE_GONE", message: "原心签已被删除，无法返还" });
+    }
+
+    await prisma.note.update({
+      where: { id: note.id },
+      data: {
+        metadata: { ...(note.metadata || {}), in_knowledge_base: false }
+      }
+    });
+    await prisma.knowledgeBase.delete({ where: { id: item.id } });
+    return res.json({ restored: true, source_type: "note", source_id: note.id });
+  }
+
+  return res.status(409).json({
+    error: "NO_SOURCE",
+    message: "该条目不是从约定或心签沉淀而来，无法返还"
+  });
+});
+
 knowledgeBasesRouter.delete("/:id", async (req, res) => {
   const existing = await prisma.knowledgeBase.findFirst({
     where: {

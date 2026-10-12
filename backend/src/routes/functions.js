@@ -3144,6 +3144,8 @@ functionsRouter.post("/:name", async (req, res) => {
     if (name === "analyzeHeartSign") {
       const noteId = payload.note_id;
       const noteData = payload.note_data || {};
+      // force_category：用户「分错了」纠正后强制按新分类重分析（中文类名），并绕过 completed 跳过
+      const forceCategory = payload.force_category ? String(payload.force_category) : null;
       if (!noteId) {
         return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 note_id" });
       }
@@ -3159,8 +3161,9 @@ functionsRouter.post("/:name", async (req, res) => {
       }
 
       const existingAi = note.metadata?.ai_analysis;
-      // 已分析且有回应的才跳过；早期 bug 导致部分签 analyzed 但回应为空，放行重跑自愈
-      if (note.aiStatus === "completed" && existingAi?.analyzed_at && existingAi?.emotional_response) {
+      // 已分析且有回应的才跳过；早期 bug 导致部分签 analyzed 但回应为空，放行重跑自愈。
+      // force_category（用户刚纠正分类）必须重跑，让回应按新类型重新生成
+      if (!forceCategory && note.aiStatus === "completed" && existingAi?.analyzed_at && existingAi?.emotional_response) {
         return res.json({ ok: true, skipped: true, ai_analysis: existingAi });
       }
       if (note.aiStatus === "processing") {
@@ -3220,7 +3223,7 @@ functionsRouter.post("/:name", async (req, res) => {
       const density = note.metadata?.response_density || "light";
 
       // 账本检测：金额模式 ≥2 即按账本签处理；显式 source_type=ledger 也强制走账本（AI 精解析 + 本地兜底双保险）
-      const isLedger = looksLikeLedger(materialText) || note.sourceType === "ledger" || note.source_type === "ledger";
+      const isLedger = looksLikeLedger(materialText) || note.sourceType === "ledger" || note.source_type === "ledger" || forceCategory === "账本";
 
       // 纠错学习：参考用户历史「分错了」纠正，同类内容越分越准
       const corrections = await prisma.userCorrection.findMany({
@@ -3301,7 +3304,7 @@ ${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类�
 - 输入≤50字时 title 返回空字符串。
 - 若内容适合表格化表达（多个事物的对比、清单、价格、日程排列等），把 Markdown 表格写进 table_md 字段（首行 | 表头 |、次行 |---| 分隔、每行一条数据），不适合则 table_md 返回空字符串；账本签不需要 table_md，明细一律走 ledger.items。
 - table_md 必须是「重新组织后的结构化提炼」：表格与原文表述不得重复，原文已逐条罗列的内容不要再原样搬进表格；只有当表格能比原文更清晰（对比、归类、汇总）时才生成。
-${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correctionHints.join("\n- ")}\n` : ""}严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
+${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correctionHints.join("\n- ")}\n` : ""}${forceCategory ? `用户已明确把这条签归类为「${forceCategory}」：category 必须返回「${forceCategory}」，emotional_response 必须严格按该类风格生成，禁止沿用旧分类的口吻。\n` : ""}严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
 
       try {
         // 图片心签：把 /uploads/ 图片一并送进视觉模型，回应会结合图中内容
@@ -3384,7 +3387,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           parsed = await Promise.race([kimiPromise, timeoutPromise]);
         } catch (kimiErr) {
           console.error("[analyzeHeartSign] Kimi failed or timeout, use local fallback", kimiErr?.message || kimiErr);
-          parsed = buildHeartSignFallback({ content: note.content, plainText: note.plainText, density });
+          parsed = buildHeartSignFallback({ content: note.content, plainText: note.plainText, density, forceCategory });
           usedFallback = true;
         }
 
@@ -3410,12 +3413,17 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
         if (strongCorrection && HEARTSIGN_ZH_TO_TYPE[strongCorrection.toType]) {
           parsed.category = strongCorrection.toType;
         }
+        // 用户刚在签卡上纠正分类：以用户选择为最终权威，回应按新类型重生成
+        if (forceCategory && HEARTSIGN_ZH_TO_TYPE[forceCategory]) {
+          parsed.category = forceCategory;
+        }
 
         // 账本签一致性：「分类」是唯一权威。启发式（looksLikeLedger）只决定要不要把账本选项
         // 交给 AI；最终是否账本签以 AI 判定为准——AI 明确判为非账本时尊重 AI（分错就纠正），
         // 非账本签绝不挂账本数据；AI 判为账本时归一化明细（优先保留聊天补录），不凭空造账。
         const aiSaysLedger = parsed.category === "账本"
-          || (Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length > 0);
+          || (Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length > 0)
+          || forceCategory === "账本";
 
         if (isLedger && !aiSaysLedger) {
           // 启发式命中但 AI 明确判为其他分类（如「预算200元，明天开会前提醒我」是备忘）：

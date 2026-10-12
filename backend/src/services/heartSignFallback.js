@@ -327,7 +327,7 @@ function buildResponse(type, text, density = "light") {
 }
 
 // ========== 对外主入口 ==========
-export function buildHeartSignFallback({ content, plainText, density = "light" }) {
+export function buildHeartSignFallback({ content, plainText, density = "light", forceCategory = null }) {
   const text = String(plainText || content || "").trim();
 
   // 1. 危机兜底
@@ -371,8 +371,9 @@ export function buildHeartSignFallback({ content, plainText, density = "light" }
     };
   }
 
-  // 3. 普通心签
-  const type = classify(text);
+  // 3. 普通心签：用户刚纠正过分类时以纠正为准（如「分错了」改到账本签）
+  const forceZhToType = { 账本: "ledger", 资料: "material", 分享: "share", 备忘: "memo", 灵感: "inspiration", 情绪: "emotion" };
+  const type = (forceCategory && forceZhToType[forceCategory]) || classify(text);
   const title = buildTitle(text, type);
   const summary = buildSummary(text);
   const tags = buildTags(text, type);

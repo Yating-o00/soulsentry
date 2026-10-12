@@ -52,7 +52,8 @@ function sanitizeExtracted(raw) {
   if (type === "heart") {
     const content = trim(raw.content, 500);
     if (!content) return null;
-    return { type: "heart", content };
+    const heartCategory = HEART_CATEGORIES.includes(raw.heart_category) ? raw.heart_category : null;
+    return heartCategory ? { type: "heart", content, heart_category: heartCategory } : { type: "heart", content };
   }
   if (type === "link") {
     const text = trim(raw.text, 500);
@@ -72,6 +73,24 @@ const TO_TASK_STRONG = /(?:不对|错了|不是|不算|别当|不当)[，,、\s]
 const TO_TASK_WEAK = /(?:这|那|它)?\s*是\s*(?:个|条)?\s*约定/;
 const TO_HEART_STRONG = /(?:不对|错了|不是|不算|别当|不当)[，,、\s]*(?:这|那|它)?\s*是\s*(?:个|条)?\s*(?:心签|心情|情绪|感悟)|约定[^，。,.]{0,8}(?:心签|心情|情绪|感悟)|(?:改成|变成|存成|当成|转为|换成|应该是|其实是|算是)\s*(?:心签|心情|情绪|感悟)|(?:不是|不算|别当|不当)\s*约定/;
 const TO_HEART_WEAK = /(?:这|那|它)\s*是\s*(?:个|条)?\s*(?:心签|心情|情绪|感悟)/;
+
+// 心签六类子类型（与 analyzeHeartSign 的 HEARTSIGN_TYPE_ZH 一致）
+const HEART_CATEGORIES = ["emotion", "inspiration", "material", "memo", "share", "ledger"];
+const HEART_CATEGORY_ZH = { emotion: "情绪", inspiration: "灵感", material: "资料", memo: "备忘", share: "分享", ledger: "账本" };
+// 子类型纠正：「这是账本签」「改成灵感」「记成备忘」等
+const HEART_SUB_SWITCH_RE = /(?:改成|变成|存成|当成|记成|记为|转为|换成|归为|归类为|应该是|其实是|算是|这是|那是|它是)\s*(?:一)?(账本|记账|备忘|灵感|情绪|心情|资料|知识|参考|分享)\s*签?/;
+function detectHeartSubSwitch(text) {
+  const m = String(text || "").match(HEART_SUB_SWITCH_RE);
+  if (!m) return null;
+  const w = m[1];
+  if (/账本|记账/.test(w)) return "ledger";
+  if (/备忘/.test(w)) return "memo";
+  if (/灵感/.test(w)) return "inspiration";
+  if (/情绪|心情/.test(w)) return "emotion";
+  if (/资料|知识|参考/.test(w)) return "material";
+  if (/分享/.test(w)) return "share";
+  return null;
+}
 
 // 显式「立约定」指令：设为约定 / 立个约定 / 转成约定 等
 const TASK_DIRECTIVE_RE = /(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/;
@@ -129,6 +148,19 @@ function fallbackExtract(lastUserText, lastExtracted, recentUserTexts = []) {
       if (!cand || cand === t) continue;
       if (REJECT_RE.test(cand) || TO_TASK_STRONG.test(cand) || TO_HEART_STRONG.test(cand)) continue;
       return { type: "heart", content: cand.slice(0, 500) };
+    }
+  }
+  // —— 心签子类型纠正：「这是账本签」「改成灵感」→ 换分类，回应口吻跟着换 ——
+  const subSwitch = detectHeartSubSwitch(t);
+  if (subSwitch && lastExtracted?.type === "heart") {
+    return { type: "heart", content: lastExtracted.content, heart_category: subSwitch };
+  }
+  if (subSwitch && !lastExtracted) {
+    for (const prev of recentUserTexts) {
+      const cand = String(prev || "").trim();
+      if (!cand || cand === t) continue;
+      if (REJECT_RE.test(cand) || TO_TASK_STRONG.test(cand) || TO_HEART_STRONG.test(cand)) continue;
+      return { type: "heart", content: cand.slice(0, 500), heart_category: subSwitch };
     }
   }
 
@@ -342,6 +374,18 @@ function fallbackReply(userText, extracted, lastExtracted) {
     return "好，我把时间补上了，你看一眼下面的小卡片，没问题就点确认～";
   }
   if (extracted.type === "heart") {
+    // 子类型被用户改掉了：回应口吻跟着换（账本损友式/灵感推落地/备忘极简…）
+    if (extracted.heart_category && lastExtracted?.type === "heart" && extracted.heart_category !== lastExtracted.heart_category) {
+      const SWITCH_COPY = {
+        ledger: "行，这笔交给我记账～点确认，我把账理清，再附赠一句损友式点评。",
+        inspiration: "这个念头值得留下！点确认存成灵感签，我再帮你推一把，想想它最能落在哪个瞬间。",
+        memo: "收到，存成备忘。点确认就记好，不啰嗦～",
+        material: "好，存成资料签。点确认，我再给你补点有用的上下文。",
+        share: "谢谢你愿意分享～点确认存好，这条我用心收着。",
+        emotion: "好，那这句按情绪签陪你。点下面的确认就存好～"
+      };
+      return SWITCH_COPY[extracted.heart_category] || SWITCH_COPY.emotion;
+    }
     return "这句话我替你收进心签里了。点下面的确认就存好，以后随时可以翻出来看看～";
   }
   if (extracted.type === "link") {
@@ -370,6 +414,7 @@ const RESPONSE_SCHEMA = {
         content: { type: "string" },
         text: { type: "string" },
         category: { type: "string", enum: CATEGORIES },
+        heart_category: { type: "string", enum: ["emotion", "inspiration", "material", "memo", "share", "ledger"], description: "心签子类型（情绪/灵感/资料/备忘/分享/账本）；用户纠正心签分类时更新为目标类型，平时可省略" },
         priority: { type: "string", enum: PRIORITIES },
         due_at: { type: "string", description: "ISO8601 带 +08:00 时区，如 2026-09-24T15:00:00+08:00" }
       }
@@ -404,7 +449,7 @@ ${buildMessagesBlock(messages)}${attachmentCtx}
 你的任务是从对话中理解用户想做什么，并在信息足够时给出待确认的结构化提案（extracted）：
 - type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。
 - type=task（网页办事）：用户想"打开某个网址做事"——如打开网页查询/搜索/填写/预约/订票/报名/提交，或描述里带 http 链接并让你去办。同样输出 type=task，description 必须原样保留完整网址和原话，due_at 可以为 null。回复时告诉用户：确认后心栈会派浏览器小助手替你打开网页一步步办理，遇到登录等需要你出面的环节会暂停问你，进度和结果在守护记录里随时可看。
-- type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。
+- type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。心签有六种分类（情绪/灵感/资料/备忘/分享/账本），用户纠正分类时（如"这是账本签""改成灵感"）extracted.heart_category 更新为目标类型，reply 口吻跟着换：账本签轻松吐槽、灵感签推一把落地、备忘签极简确认、资料签补上下文、情绪签温柔托举。
 - type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
 - 纯聊天或信息还不足：extracted 为 null。
 

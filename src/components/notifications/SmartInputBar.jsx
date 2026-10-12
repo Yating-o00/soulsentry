@@ -22,6 +22,7 @@ const C = {
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接" };
 const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗" };
+const HEART_TYPE_LABEL = { emotion: "情绪签", inspiration: "灵感签", material: "资料签", memo: "备忘录", share: "分享签", ledger: "账本签" };
 const CATEGORY_LABEL = {
   work: "工作", personal: "个人", health: "健康", study: "学习",
   family: "家庭", shopping: "购物", finance: "财务", other: "其他"
@@ -332,15 +333,25 @@ export default function SmartInputBar() {
         });
         doneLabel = pending.title;
       } else if (pending.type === "heart") {
-        const isLedger = detectLedgerLike(pending.content);
+        // 对话中纠正过子类型（"这是账本签"）时以纠正为准；否则本地识别账本
+        const HEART_TYPES = {
+          emotion: { source: "emotion", tags: ["情绪", "心签"], title: "情绪签", label: "情绪签" },
+          inspiration: { source: "inspiration", tags: ["灵感", "心签"], title: "灵感签", label: "灵感签" },
+          material: { source: "material", tags: ["资料", "心签"], title: "资料签", label: "资料签" },
+          memo: { source: "memo", tags: ["备忘", "心签"], title: "备忘录", label: "备忘录" },
+          share: { source: "share", tags: ["分享", "心签"], title: "分享签", label: "分享签" },
+          ledger: { source: "ledger", tags: ["账本", "心签"], title: "账本", label: "账本" },
+        };
+        const explicit = HEART_TYPES[pending.heart_category];
+        const isLedger = explicit ? explicit.source === "ledger" : detectLedgerLike(pending.content);
         const note = await base44.entities.Note.create({
-          title: isLedger ? "账本" : "心签",
+          title: explicit ? explicit.title : (isLedger ? "账本" : "心签"),
           content: pending.content,
           plain_text: pending.content,
-          source_type: isLedger ? "ledger" : "emotion",
-          tags: isLedger ? ["账本", "心签"] : ["情绪", "心签"],
+          source_type: explicit ? explicit.source : (isLedger ? "ledger" : "emotion"),
+          tags: explicit ? explicit.tags : (isLedger ? ["账本", "心签"] : ["情绪", "心签"]),
         });
-        doneLabel = isLedger ? "账本" : "心签";
+        doneLabel = explicit ? explicit.label : (isLedger ? "账本" : "心签");
         // 触发 AI 温暖回应（与心签页同一链路）
         try {
           base44.functions.invoke("analyzeHeartSign", {
@@ -555,7 +566,7 @@ export default function SmartInputBar() {
                   <div className="flex items-center gap-2">
                     <span className="text-[15px]">{TYPE_ICON[pending.type] || "📝"}</span>
                     <span className="text-[13px] font-medium" style={{ color: C.sentinel }}>
-                      将要生成{TYPE_LABEL[pending.type] || "记录"}
+                      将要生成{(pending.type === "heart" && HEART_TYPE_LABEL[pending.heart_category]) || TYPE_LABEL[pending.type] || "记录"}
                     </span>
                   </div>
 

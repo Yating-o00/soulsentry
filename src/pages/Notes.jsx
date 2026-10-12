@@ -496,6 +496,20 @@ export default function Notes() {
         to_type: newType,
         text: notePlainText(note).slice(0, 200),
       }).catch(() => {});
+      // 按新分类重生成 AI 回应（情绪签的温柔 vs 账本签的吐槽完全不同）：
+      // force_category 绕过 completed 跳过，让回应跟着新类型换口吻
+      base44.functions.invoke('analyzeHeartSign', { note_id: note.id, force_category: newLabel })
+        .then((res) => {
+          const ai = res?.ai_analysis;
+          if (!ai) return;
+          queryClient.setQueryData(['notes'], (old) =>
+            (old || []).map((n) => (n.id === note.id ? {
+              ...n,
+              ai_analysis: ai,
+              metadata: { ...(n.metadata || {}), ai_analysis: ai },
+            } : n)));
+        })
+        .catch(() => {});
     }).catch(() => {
       queryClient.setQueryData(['notes'], (old) =>
         (old || []).map(n => (n.id === note.id ? {

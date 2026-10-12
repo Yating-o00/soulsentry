@@ -1,5 +1,5 @@
 import { schedule } from "node-cron";
-import { sendDueReminders, sendEndTimeFollowUps, sendForgetReminders, sendSnoozeComebacks, sendOverdueDecayReminders } from "./reminderSender.js";
+import { sendDueReminders, sendEndTimeFollowUps, sendForgetReminders, sendSnoozeComebacks, sendRecurringCheckbacks, sendOverdueDecayReminders } from "./reminderSender.js";
 import { configureWebPush } from "../lib/webPush.js";
 
 let started = false;
@@ -55,6 +55,18 @@ export function startReminderCron() {
       }
     } catch (err) {
       console.error("[reminderCron] snooze comeback failed:", err);
+    }
+  });
+
+  // 每分钟检查重复约定的打卡核对唤回（提醒送达后 +5/+20 分钟未勾选各补一次，深夜静默）
+  schedule("* * * * *", async () => {
+    try {
+      const result = await sendRecurringCheckbacks();
+      if (result.sent > 0 || result.inAppFallback > 0) {
+        console.log("[reminderCron] recurring checkbacks:", result);
+      }
+    } catch (err) {
+      console.error("[reminderCron] recurring checkback failed:", err);
     }
   });
 

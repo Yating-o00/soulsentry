@@ -274,11 +274,18 @@ export async function sendDueReminders() {
 
     // 无论发送成功与否，都更新 metadata 里的 reminder_sent_at，避免同一分钟重复尝试
     // 重复约定（每天/每周/每月）：记录本期已处理（recurrence_fired_for）并把 reminderTime/endTime 推进到下一周期
+    const delivered = result.ok || result.inAppFallback;
     const nextReminder = recurringRule
       ? computeNextReminderTime(task.reminderTime, recurringRule, extraFields.custom_recurrence, now)
       : null;
     try {
-      const data = { metadata: buildTaskMetadataWithExtra(task, { reminder_sent_at: now.toISOString(), ...(anchorISO && recurringRule ? { recurrence_fired_for: anchorISO } : {}) }) };
+      const data = { metadata: buildTaskMetadataWithExtra(task, {
+        reminder_sent_at: now.toISOString(),
+        ...(anchorISO && recurringRule ? { recurrence_fired_for: anchorISO } : {}),
+        // 提醒已送达（推送或应用内）而用户还没打卡：挂上本期打卡核对锚点，
+        // 由 sendRecurringCheckbacks 在 +5/+20 分钟轻声补提醒，仍未勾选则等下一期
+        ...(anchorISO && recurringRule && delivered && !recurrenceDoneToday ? { recurrence_checkback_anchor: anchorISO, recurrence_checkback_count: 0 } : {})
+      }) };
       if (nextReminder) {
         data.reminderTime = nextReminder;
         if (task.endTime) {
@@ -582,6 +589,118 @@ export async function sendSnoozeComebacks() {
 
   const result = { sent, inAppFallback, total: candidates.length };
   if (sent > 0 || inAppFallback > 0) console.log("[reminderSender] snooze comebacks:", result);
+  return result;
+}
+
+/**
+ * 重复约定打卡核对唤回：本期提醒已送达但用户还没勾选完成时，+5 分钟、+20 分钟各轻声补提醒一次。
+ * 设计原则（不制造心理压力）：
+ * - 最多两次补提醒，之后本期不再打扰，安静等下一期提醒照常到来；
+ * - 用户一打卡（tasks.js 会清掉核对锚点）或点「稍后」（snooze 唤回接管）立刻停止；
+ * - 深夜静默（22:00-07:00 不补），与整体提醒预算共用每日上限。
+ * 数据约定：
+ *   recurrence_checkback_anchor 本期已送达提醒的锚点；recurrence_checkback_count 本期已补提醒次数。
+ */
+export async function sendRecurringCheckbacks() {
+  const now = new Date();
+  if (isQuietHours(now)) return { sent: 0, total: 0, quiet: true };
+
+  const candidates = await prisma.task.findMany({
+    where: {
+      deletedAt: null,
+      status: { notIn: ["DONE", "ARCHIVED"] },
+      reminderTime: { not: null }
+    },
+    include: { user: { include: { preferences: true } } },
+    take: 300
+  });
+
+  const beijingToday = chinaDateStr(now);
+  const SLOTS = [5, 20]; // 分钟：本期提醒送达后 +5、+20 各补一次
+
+  let sent = 0;
+  let inAppFallback = 0;
+
+  for (const task of candidates) {
+    const extra = getTaskExtraFields(task);
+    const recurringRule = ["daily", "weekly", "monthly", "custom"].includes(extra.repeat_rule) ? extra.repeat_rule : null;
+    if (!recurringRule) continue;
+
+    const anchorISO = extra.recurrence_checkback_anchor;
+    if (!anchorISO) continue;
+
+    // 今天已打卡：清掉核对状态，本期不再补
+    if (extra.recurrence_last_done === beijingToday) {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { metadata: buildTaskMetadataWithExtra(task, { recurrence_checkback_anchor: null, recurrence_checkback_count: 0 }) }
+      }).catch(() => {});
+      continue;
+    }
+
+    // 本期已过（排期已到下一期）：清掉旧核对状态，交由 sendDueReminders 发新一期并挂新锚点
+    if (task.reminderTime && task.reminderTime.getTime() <= now.getTime()) {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { metadata: buildTaskMetadataWithExtra(task, { recurrence_checkback_anchor: null, recurrence_checkback_count: 0 }) }
+      }).catch(() => {});
+      continue;
+    }
+
+    const anchorDate = new Date(anchorISO);
+    if (isNaN(anchorDate.getTime())) continue;
+    const elapsedMin = (now.getTime() - anchorDate.getTime()) / 60000;
+    const dueSlots = SLOTS.filter((m) => elapsedMin >= m).length;
+    let count = Number(extra.recurrence_checkback_count || 0);
+    // 补提醒已发满两次：本期收尾，安静等下一期
+    if (count >= SLOTS.length || dueSlots <= count) continue;
+
+    const nextOccurrenceText = task.reminderTime
+      ? `${String(task.reminderTime.getHours()).padStart(2, "0")}:${String(task.reminderTime.getMinutes()).padStart(2, "0")}`
+      : null;
+    const weather = await getWeatherContextForUser(task.user?.preferences, task);
+    const copy = await buildReminderCopy({
+      task,
+      kind: "recurring_checkback",
+      context: {
+        isRecurring: true,
+        nextOccurrenceText,
+        checkback: true,
+        attempt: count + 1,
+        weather
+      }
+    });
+
+    const payload = {
+      title: copy.title,
+      body: copy.body,
+      url: `/tasks?id=${task.id}`,
+      tag: `checkback-${task.id}`,
+      requireInteraction: false,
+      vibrate: [120, 80, 120],
+      data: { taskId: task.id, type: "recurring_checkback" }
+    };
+
+    const result = await trySendPush({
+      userId: task.userId,
+      preferences: task.user.preferences,
+      payload,
+      task,
+      logPrefix: `recurring-checkback task=${task.id}#${count + 1}`
+    });
+    if (result.ok) sent += 1;
+    else if (result.inAppFallback) inAppFallback += 1;
+
+    // 无论渠道结果如何，本期已补次数 +1（最多两次，防止无推送渠道时每分钟重复）
+    count += 1;
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { metadata: buildTaskMetadataWithExtra(task, { recurrence_checkback_count: count, ...(count >= SLOTS.length ? { recurrence_checkback_anchor: null } : {}) }) }
+    }).catch((e) => console.warn(`[reminderSender] task=${task.id} checkback mark failed:`, e?.message || e));
+  }
+
+  const result = { sent, inAppFallback, total: candidates.length };
+  if (sent > 0 || inAppFallback > 0) console.log("[reminderSender] recurring checkbacks:", result);
   return result;
 }
 

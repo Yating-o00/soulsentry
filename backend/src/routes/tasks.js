@@ -647,6 +647,9 @@ tasksRouter.patch("/:id", async (req, res) => {
     if (requestedStatus === "DONE" && existing.status !== "DONE") {
       snoozeNormalize.recurrence_last_done = chinaToday;
       snoozeNormalize.recurrence_done_count = Number(prevExtra.recurrence_done_count || 0) + 1;
+      // 已打卡：本期核对唤回即刻停止
+      snoozeNormalize.recurrence_checkback_anchor = null;
+      snoozeNormalize.recurrence_checkback_count = 0;
       nextCompletedAtForUpdate = new Date();
       nextStatusForUpdate = existing.status; // 系列保持活跃，不置 DONE
       // 当次提醒尚未发出时提前打卡：直接把排期推进到下一期，今天不再打扰

@@ -3,7 +3,7 @@ import { invokeKimiText } from "../lib/kimi.js";
 // 提醒文案统一走这里：先尝试用 AI 理解约定内容生成温柔的自然语言提醒，
 // 失败则退回暖色兜底文案。文案原则：帮助想起、给一点动力，不催促、不制造焦虑。
 
-const KIND_LABEL = { reminder: "开始提醒", follow_up: "到时跟进", forget: "遗忘唤醒", snooze_comeback: "稍后唤回", evening_review: "晚间回顾" };
+const KIND_LABEL = { reminder: "开始提醒", follow_up: "到时跟进", forget: "遗忘唤醒", snooze_comeback: "稍后唤回", recurring_checkback: "打卡唤回", evening_review: "晚间回顾" };
 
 const CATEGORY_LABEL = {
   work: "工作", personal: "个人", health: "健康", study: "学习",
@@ -47,6 +47,21 @@ function warmFallback(task, kind, context) {
   const short = title.length > 12 ? `${title.slice(0, 12)}…` : title;
   const weather = weatherSentence(context?.weather);
 
+  // 重复约定的打卡核对：提醒已送达但还没勾选，轻轻问一句，给台阶、不指责
+  if (kind === "recurring_checkback") {
+    const nextAt = context?.nextOccurrenceText
+      ? (context.attempt === 1 ? `，${context.nextOccurrenceText} 它还会照常提醒你` : `；${context.nextOccurrenceText} 它还会照常来`)
+      : "";
+    return context.attempt === 1
+      ? {
+          title: `「${short}」做了吗？`,
+          body: `不急，顺手勾一下就好；实在没空也没关系${nextAt}。${weather}`
+        }
+      : {
+          title: `「${short}」先放这儿`,
+          body: `这次没顾上也没关系，不用挂心${nextAt}。${weather}`
+        };
+  }
   // 重复约定的唤回：理解用户在忙，给台阶、不给压力，并轻轻预告下一次提醒
   if (kind === "snooze_comeback") {
     const nextAt = context?.nextOccurrenceText ? `，明天 ${context.nextOccurrenceText} 还会提醒你` : "";
@@ -99,6 +114,7 @@ export async function buildReminderCopy({ task, kind, context = {} }) {
       context.days ? `这条约定已经被搁置约 ${context.days} 天。` : "",
       context.isRecurring ? "这是一条周期性重复的约定（如每天吃药、每周锻炼），这是其中一次的提醒。请写得像一个老朋友在固定时刻的轻轻招呼：理解用户可能会忙、可能会忘，提醒TA这是你们之间的小约定，方便时做一下、做完打个卡就好，忙也可以点「稍后」；不要让它听起来像必须完成的任务。" : "",
       context.evening ? "这是当天最后一次跟进（晚间回顾）：告诉用户今天到这里就好，不用挂心，下一次提醒会照常来。" : "",
+      context.checkback ? "这是一次重复约定的「打卡核对」：本期提醒已送达，但用户还没有勾选完成。请写得像朋友轻轻问一句『做了吗』——不带指责、不翻旧账，明确告诉TA没做也没关系、下一次提醒会照常来，并轻轻请TA方便时顺手勾选。绝不能出现质问或催促的语气。" : "",
       context.snoozedMinutes ? `用户大约 ${context.snoozedMinutes} 分钟前说"稍后提醒"，现在到了TA自己选的时间。请写得体贴：理解TA刚才在忙，现在如果方便就轻轻唤TA一下；不方便也完全没关系，并自然带一句下一次提醒还会照常来（不要催促）。` : "",
       context.nextOccurrenceText ? `这条约定的下一次提醒时间：${context.nextOccurrenceText}。` : "",
       context.location ? `相关地点：${context.location}` : "",

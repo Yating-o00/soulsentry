@@ -67,6 +67,12 @@ function sanitizeExtracted(raw) {
 // 用户否定当前提案：收起提案，温柔引导 TA 说出要改什么
 const REJECT_RE = /不对|不是这个?|错了|再聊聊|先不要|重来|重新说/;
 
+// 类型变更（纠正分类）：心签↔约定。STRONG 信号足以独立成立，WEAK 需结合当前提案
+const TO_TASK_STRONG = /(?:不对|错了|不是|不算|别当|不当)[，,、\s]*(?:这|那|它)?\s*是\s*(?:个|条)?\s*约定|(?:心签|心情|情绪|感悟)[^，。,.]{0,8}约定|(?:改成|变成|存成|当成|转为|换成|应该是|其实是|算是)\s*约定|(?:不是|不算|别当|不当)\s*(?:心签|心情|情绪|感悟)/;
+const TO_TASK_WEAK = /(?:这|那|它)?\s*是\s*(?:个|条)?\s*约定/;
+const TO_HEART_STRONG = /(?:不对|错了|不是|不算|别当|不当)[，,、\s]*(?:这|那|它)?\s*是\s*(?:个|条)?\s*(?:心签|心情|情绪|感悟)|约定[^，。,.]{0,8}(?:心签|心情|情绪|感悟)|(?:改成|变成|存成|当成|转为|换成|应该是|其实是|算是)\s*(?:心签|心情|情绪|感悟)|(?:不是|不算|别当|不当)\s*约定/;
+const TO_HEART_WEAK = /(?:这|那|它)\s*是\s*(?:个|条)?\s*(?:心签|心情|情绪|感悟)/;
+
 // 显式「立约定」指令：设为约定 / 立个约定 / 转成约定 等
 const TASK_DIRECTIVE_RE = /(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/;
 // 周期性提醒时刻：每天下午3点 / 每晚11点半 / 每天8:30
@@ -96,6 +102,35 @@ const BROWSE_URL_INTENT_RE = /打开|帮我|查|搜|填|预约|订|报名|提交
 function fallbackExtract(lastUserText, lastExtracted, recentUserTexts = []) {
   const t = String(lastUserText || "").trim();
   if (!t) return null;
+
+  // —— 类型变更：用户纠正分类（"不对，这是约定"/"不是心签"/"改成心签"），优先于普通否定 ——
+  if (lastExtracted?.type === "heart" && (TO_TASK_STRONG.test(t) || TO_TASK_WEAK.test(t))) {
+    const content = String(lastExtracted.content || "").trim();
+    const title = content.replace(/[。！!？?~～\s]+$/, "").slice(0, 60) || "新约定";
+    return { type: "task", title, description: content || title, category: "personal", priority: "medium", due_at: null };
+  }
+  if (lastExtracted?.type === "task" && (TO_HEART_STRONG.test(t) || TO_HEART_WEAK.test(t))) {
+    const content = String(lastExtracted.description || lastExtracted.title || "").trim();
+    if (content) return { type: "heart", content: content.slice(0, 500) };
+  }
+  // 提案刚被收起（上一轮点了"不对，再聊聊"）：纠正信号仍允许从对话历史里捞回原内容改类型
+  if (!lastExtracted && (TO_TASK_STRONG.test(t) || TO_TASK_WEAK.test(t))) {
+    for (const prev of recentUserTexts) {
+      const cand = String(prev || "").trim();
+      if (!cand || cand === t) continue;
+      if (REJECT_RE.test(cand) || TO_TASK_STRONG.test(cand) || TO_HEART_STRONG.test(cand)) continue;
+      const title = cand.replace(/[。！!？?~～\s]+$/, "").slice(0, 60);
+      return { type: "task", title, description: cand.slice(0, 300), category: "personal", priority: "medium", due_at: null };
+    }
+  }
+  if (!lastExtracted && (TO_HEART_STRONG.test(t) || TO_HEART_WEAK.test(t))) {
+    for (const prev of recentUserTexts) {
+      const cand = String(prev || "").trim();
+      if (!cand || cand === t) continue;
+      if (REJECT_RE.test(cand) || TO_TASK_STRONG.test(cand) || TO_HEART_STRONG.test(cand)) continue;
+      return { type: "heart", content: cand.slice(0, 500) };
+    }
+  }
 
   // 否定提案：返回 null 收起卡片，由 fallbackReply 引导用户说清要改什么
   if (REJECT_RE.test(t) && lastExtracted) return "__reject__";
@@ -286,6 +321,13 @@ function fallbackReply(userText, extracted, lastExtracted) {
   }
   if (!extracted) {
     return "我在听～你可以再说一点点：比如想什么时候做这件事，或者这只是当下的一点心情，我都会替你收好。";
+  }
+  // 分类被用户改掉了：回复跟着换，不再沿用原类型的话术
+  if (extracted.type === "task" && lastExtracted?.type === "heart") {
+    return `好，那就不当心签，改成约定了「${extracted.title}」。你看看下面的小卡片，没问题就点确认～`;
+  }
+  if (extracted.type === "heart" && lastExtracted?.type === "task") {
+    return "好，那它不当约定催你，我把它收进心签里。点下面的确认就存好～";
   }
   if (extracted.type === "task" && (!lastExtracted || lastExtracted.title !== extracted.title)) {
     if (!extracted.due_at && /https?:\/\//.test(extracted.description || "")) {

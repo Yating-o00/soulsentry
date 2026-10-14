@@ -181,12 +181,16 @@ export async function maybeSendArrivalReminder(user, location, topTasks) {
     data: { type: "arrival_reminder", location_id: location.id, geo_action: "arrival", loc_key: location.id }
   };
 
+  // 地理到达提醒不占每日主动提醒预算：它是「人到情境」的上下文触发而非主动催促，
+  // 频率已由地点安静期（quietMinutes）+ 任务级 4h 冷却 + 7 天静默兜底；
+  // 若混进预算，几个时间类重复约定（如每日吃药）就会把当天的到达推送额度吃光
   const result = await trySendPush({
     userId: user.id,
     preferences: user.preferences,
     payload,
     task: topTasks[0],
-    logPrefix: `arrival-reminder location=${location.id}`
+    logPrefix: `arrival-reminder location=${location.id}`,
+    budgetAware: false
   });
 
   return { pushed: result.ok, topTasks, inAppFallback: result.inAppFallback, skippedReason: result.ok ? null : "send_failed" };
@@ -250,7 +254,8 @@ export async function maybeSendPoiReminder(user, { poiName, poiType }) {
       preferences,
       payload,
       task: matched[0],
-      logPrefix: `poi-reminder rule=${rule.key}`
+      logPrefix: `poi-reminder rule=${rule.key}`,
+      budgetAware: false // 地理情境触发，不占每日主动提醒预算（同 arrival）
     });
 
     // 记录冷却时间
@@ -342,7 +347,8 @@ export async function maybeSendExitReminder(user, task, reminder, { locationName
     preferences: prefs,
     payload,
     task,
-    logPrefix: `exit-reminder task=${task.id}`
+    logPrefix: `exit-reminder task=${task.id}`,
+    budgetAware: false // 地理情境触发，不占每日主动提醒预算（同 arrival）
   });
 
   if (result.ok || result.inAppFallback) {
@@ -404,7 +410,8 @@ export async function maybeSendOnTheWayReminder(user, task, reminder, { distance
     preferences: prefs,
     payload,
     task,
-    logPrefix: `ontheway-reminder task=${task.id}`
+    logPrefix: `ontheway-reminder task=${task.id}`,
+    budgetAware: false // 地理情境触发，不占每日主动提醒预算（同 arrival）
   });
 
   // 只要投递出去（Web Push / 微信订阅消息 / 应用内兜底）就记冷却，避免在附近停留时反复打扰

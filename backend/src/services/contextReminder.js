@@ -135,6 +135,16 @@ export async function rankTopTasksForLocation(userId, location, n = 3) {
     .filter(Boolean)
     .sort((a, b) => b.score - a.score);
 
+  // 兜底：该地点没命中任何相关约定时，退化为全局最值得做的 TopN——
+  // 到达已保存地点却一条都推不出，到达提醒就静默失效（用户视角即"没收到通知"）
+  if (scored.length === 0) {
+    return alive
+      .map((task) => ({ task, score: scoreTask(task, now, todayStart, todayEnd) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n)
+      .map((s) => s.task);
+  }
+
   return scored.slice(0, n).map((s) => s.task);
 }
 

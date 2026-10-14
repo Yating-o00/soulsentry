@@ -8,7 +8,9 @@ import { MapPin, AlertTriangle, Bell, Check, Clock, X } from 'lucide-react';
  * SentinelGeoWatcher
  * 基于 HTML5 Geolocation 的"任务级"地理围栏监听器（地理守护触发核心）。
  *
- * 常态：每 10 分钟定位一次，移动 ≥80m 才上报（429 防护的既有调优）。
+ * 常态：每 10 分钟定位一次，移动 ≥80m 才上报（429 防护的既有调优）；
+ * 但静止也不是失踪——距上次上报满 30 分钟会强制心跳一次，
+ * 否则"到地方坐下就不动"的人永远等不到停留确认，到达提醒永远不会来。
  * 停留确认（dwell）：后端返回 enter_candidate（进了围栏但还没确认停留）后，
  * 切换 30s 高频采样，连续 3 个采样点速度 <5km/h（≈90 秒）即确认停留并上报，
  * 5 分钟未确认自动回常态——宁漏不错，路过不打扰。
@@ -16,6 +18,7 @@ import { MapPin, AlertTriangle, Bell, Check, Clock, X } from 'lucide-react';
  * 呈现：守护动态卡片（现在做 / 稍后提醒 / 不了=7天静默），而非一次性弹窗。
  */
 const MIN_MOVE_M = 80;                       // 常态：移动 80m 以内视为静止，不上报
+const STATIC_HEARTBEAT_MS = 30 * 60 * 1000;  // 静止心跳：满 30 分钟强制上报一次（到达后坐着不动的兜底）
 const DEFAULT_INTERVAL_MS = 10 * 60 * 1000;   // 常态 10 分钟轮询
 const DWELL_INTERVAL_MS = 30 * 1000;          // dwell 确认：30 秒高频采样
 const DWELL_LOW_SPEED_SAMPLES = 3;            // 连续 3 个低速采样 ≈ 90s 停留确认
@@ -261,8 +264,9 @@ export default function SentinelGeoWatcher({ intervalMs = DEFAULT_INTERVAL_MS })
             }
           }
 
-          // 常态：移动不足阈值不上报；dwell 高频模式：静止也上报（停留确认需要）
-          if (!dwelling && prev && moved < MIN_MOVE_M) return;
+          // 常态：移动不足阈值不上报；但静止满 30 分钟强制心跳一次——
+          // 到达场景恰恰是"移动停止"，没有心跳就永远等不到停留确认
+          if (!dwelling && prev && moved < MIN_MOVE_M && now - prev.at < STATIC_HEARTBEAT_MS) return;
 
           // dwell 采样计数：连续 3 点 <5km/h ⇒ 确认停留
           let dwellConfirm = false;

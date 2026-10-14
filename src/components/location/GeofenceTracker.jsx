@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { useGeolocation } from '@/components/hooks/useGeolocation';
 import { toast } from 'sonner';
-import { MapPin } from 'lucide-react';
+import ReminderActionCard from '@/components/notifications/ReminderActionCard';
+import { formatDistance } from '@/lib/reminderActions';
 
 /**
  * Invisible component that activates geolocation tracking app-wide.
@@ -13,20 +14,32 @@ export default function GeofenceTracker() {
   // 这里只保留事件监听用于本地 toast 展示。
   const { permission, error } = useGeolocation({ enabled: false, intervalMs: 600000 });
 
-  // Listen to geofence trigger events and show toast
+  // Listen to geofence trigger events and show interactive reminder cards
   useEffect(() => {
     const handler = (e) => {
       const reminders = e.detail || [];
       reminders.forEach((r) => {
-        toast(r.title, {
-          description: r.message,
-          icon: <MapPin className="w-4 h-4 text-blue-500" />,
-          duration: 8000,
-          action: r.top_tasks?.length > 0 ? {
-            label: '查看',
-            onClick: () => { window.location.href = '/Tasks'; }
-          } : undefined
-        });
+        if (!r?.task_id) return;
+        // 地理提醒自带与目标地点的距离（米）：到点附近/路过时给用户距离感知
+        const dText = Number.isFinite(Number(r.distance))
+          ? `距「${r.location_name || '目标地点'}」${formatDistance(Number(r.distance))}`
+          : null;
+        toast.custom(
+          (t) => (
+            <ReminderActionCard
+              task={{ id: r.task_id, title: r.title }}
+              title={r.title}
+              distanceText={dText}
+              onClose={() => toast.dismiss(t)}
+              onAction={() => toast.dismiss(t)}
+            />
+          ),
+          {
+            duration: 15000,
+            unstyled: true,
+            classNames: { toast: '!bg-transparent !border-0 !shadow-none !p-0' },
+          }
+        );
       });
     };
     window.addEventListener('geofence-triggered', handler);

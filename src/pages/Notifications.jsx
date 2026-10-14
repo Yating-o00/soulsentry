@@ -16,6 +16,7 @@ import ExecutionStatusCards from "@/components/notifications/ExecutionStatusCard
 import ExecutionItem from "@/components/notifications/ExecutionItem";
 import SmartInputBar from "@/components/notifications/SmartInputBar";
 import AIExecutionAdvisor from "@/components/notifications/AIExecutionAdvisor";
+import ReminderActionCard from "@/components/notifications/ReminderActionCard";
 import ProductTimeline from "@/components/memory/ProductTimeline";
 import { toast } from "sonner";
 
@@ -395,7 +396,16 @@ export default function NotificationsPage() {
                 </div>
               ) : (
                 <AnimatePresence mode="popLayout">
-                  {notifications.map(n => (
+                  {notifications.map(n => {
+                    // 约定类提醒：能解析到约定时升级为可点击小组件（立即处理/延后/轻轻放下），并感知距离
+                    const linkedTask = n.type === 'reminder'
+                      ? allTasks.find(t => t.id && (t.id === n.task_id || t.id === n.taskId))
+                      : null;
+                    const taskActive = linkedTask && !["completed", "cancelled"].includes(linkedTask.status) && !linkedTask.deleted_at;
+                    // 历史通知的深链是 /tasks?id=，统一修正为 ?taskId=（提醒类通知的链接在 payload.url 上）
+                    const rawLink = n.link || n.url;
+                    const fixedLink = rawLink ? rawLink.replace('/tasks?id=', '/tasks?taskId=') : null;
+                    return (
                     <motion.div key={n.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }} className={`p-4 transition-colors ${!n.is_read ? "bg-blue-50/30" : ""}`}>
                       <div className="flex gap-3">
                         <div className={`mt-0.5 p-2 rounded-lg ${n.is_read ? "bg-slate-50" : "bg-white shadow-sm"}`}>{getNotifIcon(n.type)}</div>
@@ -405,16 +415,25 @@ export default function NotificationsPage() {
                             <span className="text-[11px] text-slate-400 ml-2 flex-shrink-0">{format(new Date(n.created_date), "MM-dd HH:mm", { locale: zhCN })}</span>
                           </div>
                           <p className="text-xs text-slate-500 mb-2">{n.content}</p>
+                          {taskActive ? (
+                            <ReminderActionCard
+                              compact
+                              task={linkedTask}
+                              onAction={() => markReadMutation.mutate(n.id)}
+                            />
+                          ) : (
                           <div className="flex items-center gap-2">
-                            {n.link && <Button variant="outline" size="sm" className="h-6 text-[11px]" asChild><Link to={n.link}>查看 <ExternalLink className="w-3 h-3 ml-1" /></Link></Button>}
+                            {fixedLink && <Button variant="outline" size="sm" className="h-6 text-[11px]" asChild><Link to={fixedLink}>查看 <ExternalLink className="w-3 h-3 ml-1" /></Link></Button>}
                             {!n.is_read && <Button variant="ghost" size="sm" onClick={() => markReadMutation.mutate(n.id)} className="h-6 text-[11px] text-blue-600"><Check className="w-3 h-3 mr-1" />已读</Button>}
                             <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(n.id)} className="h-6 text-[11px] text-slate-400 hover:text-red-500 ml-auto"><Trash2 className="w-3 h-3" /></Button>
                           </div>
+                          )}
                         </div>
                         {!n.is_read && <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0" />}
                       </div>
                     </motion.div>
-                  ))}
+                    );
+                  })}
                 </AnimatePresence>
               )}
             </div>

@@ -64,6 +64,14 @@ function buildTaskMetadataWithExtra(task, patch) {
   return base;
 }
 
+// 「轻轻放下」生效期间：本周期内一切主动提醒（到点/顺延唤回/打卡核对/温和跟进/遗忘/逾期衰减）一律静默。
+// 截止点由 tasks.js PATCH 归一化写入 gentle_dismiss_until（重复约定=下一期锚点，一次性=今天 23:59 北京），
+// 到点自然失效，无需清理。
+function isGentlyDismissed(extraFields, now = new Date()) {
+  const until = extraFields?.gentle_dismiss_until ? new Date(extraFields.gentle_dismiss_until) : null;
+  return !!until && !isNaN(until.getTime()) && until.getTime() > now.getTime();
+}
+
 async function createInAppNotification(userId, title, body, payload = {}) {
   try {
     await prisma.notification.create({
@@ -220,6 +228,11 @@ export async function sendDueReminders() {
   for (const task of dueTasks) {
     const extraFields = getTaskExtraFields(task);
     const recurringRule = ["daily", "weekly", "monthly", "custom"].includes(extraFields.repeat_rule) ? extraFields.repeat_rule : null;
+    // 轻轻放下生效中：本周期静默，等截止点过后提醒照常到来
+    if (isGentlyDismissed(extraFields, now)) {
+      skipped += 1;
+      continue;
+    }
     // 重复约定的当次提醒锚点：同一期只处理一次（发出或按用户意愿略过），防止顺延/打卡后整点又响
     const anchorISO = task.reminderTime ? new Date(task.reminderTime).toISOString() : null;
     if (recurringRule && anchorISO && extraFields.recurrence_fired_for === anchorISO) {
@@ -252,7 +265,7 @@ export async function sendDueReminders() {
       const payload = {
         title: copy.title,
         body: copy.body,
-        url: `/tasks?id=${task.id}`,
+        url: `/tasks?taskId=${task.id}`,
         tag: `reminder-${task.id}`,
         requireInteraction: false,
         vibrate: [200, 100, 200],
@@ -336,6 +349,11 @@ export async function sendEndTimeFollowUps() {
     if (lastSentAt && task.endTime <= lastSentAt) {
       continue;
     }
+    // 轻轻放下生效中：本周期不再跟进
+    if (isGentlyDismissed(extra, now)) {
+      skipped += 1;
+      continue;
+    }
 
     // 重复约定今天已打卡：窗口结束的温和跟进不再打扰，只记已处理（否则 endTime 未推进会每轮重复挑选）
     const beijingToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -364,7 +382,7 @@ export async function sendEndTimeFollowUps() {
     const payload = {
       title: copy.title,
       body: copy.body,
-      url: `/tasks?id=${task.id}`,
+      url: `/tasks?taskId=${task.id}`,
       tag: `followup-${task.id}`,
       requireInteraction: false,
       vibrate: [150, 80, 150],
@@ -433,6 +451,8 @@ export async function sendForgetReminders() {
     const extra = getTaskExtraFields(task);
     // 每个约定只提醒一次，避免反复打扰
     if (extra.forget_reminder_sent_at) continue;
+    // 轻轻放下生效中：本周期静默
+    if (isGentlyDismissed(extra, now)) continue;
 
     const overdueByDue = task.dueAt && task.dueAt <= oneWeekAgo;
     const days = overdueByDue
@@ -444,7 +464,7 @@ export async function sendForgetReminders() {
     const payload = {
       title: copy.title,
       body: copy.body,
-      url: `/tasks?id=${task.id}`,
+      url: `/tasks?taskId=${task.id}`,
       tag: `forget-${task.id}`,
       requireInteraction: false,
       vibrate: [200, 100, 200],
@@ -515,6 +535,8 @@ export async function sendSnoozeComebacks() {
     const snoozeUntil = extra.snooze_until ? new Date(extra.snooze_until) : null;
     if (!snoozeUntil || isNaN(snoozeUntil.getTime())) continue;
     if (snoozeUntil.getTime() > now.getTime()) continue;
+    // 轻轻放下生效中：顺延唤回一并静默
+    if (isGentlyDismissed(extra, now)) continue;
     // 本次 snooze 已处理过（comeback 已发或已转晚间）则跳过
     const comebackAt = extra.comeback_sent_at ? new Date(extra.comeback_sent_at) : null;
     if (comebackAt && !isNaN(comebackAt.getTime()) && comebackAt.getTime() >= snoozeUntil.getTime()) continue;
@@ -557,7 +579,7 @@ export async function sendSnoozeComebacks() {
     const payload = {
       title: copy.title,
       body: copy.body,
-      url: `/tasks?id=${task.id}`,
+      url: `/tasks?taskId=${task.id}`,
       tag: `comeback-${task.id}`,
       requireInteraction: false,
       vibrate: [120, 80, 120],
@@ -629,6 +651,9 @@ export async function sendRecurringCheckbacks() {
     const anchorISO = extra.recurrence_checkback_anchor;
     if (!anchorISO) continue;
 
+    // 轻轻放下生效中：打卡核对补提醒一并静默（锚点保留，截止点过后自然恢复）
+    if (isGentlyDismissed(extra, now)) continue;
+
     // 今天已打卡：清掉核对状态，本期不再补
     if (extra.recurrence_last_done === beijingToday) {
       await prisma.task.update({
@@ -674,7 +699,7 @@ export async function sendRecurringCheckbacks() {
     const payload = {
       title: copy.title,
       body: copy.body,
-      url: `/tasks?id=${task.id}`,
+      url: `/tasks?taskId=${task.id}`,
       tag: `checkback-${task.id}`,
       requireInteraction: false,
       vibrate: [120, 80, 120],
@@ -743,6 +768,8 @@ export async function sendOverdueDecayReminders() {
     const lastAt = extra.decay_sent_at ? new Date(extra.decay_sent_at) : null;
     if (lastStage === stage && stage !== "weekly_review") continue;
     if (stage === "weekly_review" && lastAt && now.getTime() - lastAt.getTime() < 7 * 24 * 3600 * 1000) continue;
+    // 轻轻放下生效中：逾期衰减提醒也保持静默
+    if (isGentlyDismissed(extra, now)) continue;
     // low_freq 不主动推（待复盘，只在周回顾出现）
     if (stage === "low_freq") {
       await prisma.task.update({
@@ -765,7 +792,7 @@ export async function sendOverdueDecayReminders() {
     const payload = {
       title: copy.title,
       body: copy.body,
-      url: `/tasks?id=${task.id}`,
+      url: `/tasks?taskId=${task.id}`,
       tag: `decay-${task.id}`,
       requireInteraction: false,
       vibrate: [150, 100, 150],

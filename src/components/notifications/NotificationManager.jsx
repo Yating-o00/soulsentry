@@ -3,8 +3,8 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { differenceInMinutes, isPast, parseISO, isSameDay, isWithinInterval, startOfDay, endOfDay, set, getHours, getMinutes, format, isBefore } from "date-fns";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Bell, Clock, X } from "lucide-react";
+import ReminderActionCard from "@/components/notifications/ReminderActionCard";
+import { isTaskGentlyDismissed } from "@/lib/reminderActions";
 
 // 跨页面/跨 mount 持久化的"已通知"状态（避免移动端切换路由时重复弹窗）
 // key 形如 notified-<taskId>-<type>-<YYYY-MM-DD>，过期自动清理
@@ -36,7 +36,7 @@ const markNotified = (key) => {
     const map = loadNotifiedMap();
     map[key] = Date.now();
     localStorage.setItem(NOTIFIED_STORAGE_KEY, JSON.stringify(map));
-  } catch {}
+  } catch { /* 存储不可用时静默 */ }
 };
 
 const NOTIFICATION_SOUNDS = {
@@ -249,49 +249,48 @@ export default function NotificationManager() {
       console.log("Notification creation failed:", e);
     }
 
-    // 显示toast通知
+    // 显示可交互的提醒小组件：立即处理（打卡履约）/ 延后（15·30·60 分钟）/ 轻轻放下（本周期静默）
     toast.custom((t) => (
-      <div className="bg-white rounded-xl shadow-2xl border-2 border-purple-200 p-4 min-w-[300px]">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-            <Bell className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1">
-            <h4 className="font-semibold text-slate-800 mb-1">{task.title}</h4>
-            <p className="text-sm text-slate-600 mb-3">{body}</p>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => {
-                  handleSnooze(task, 15);
-                  toast.dismiss(t);
-                }}
-                variant="outline"
-                className="text-xs"
-              >
-                <Clock className="w-3 h-3 mr-1" />
-                稍后15分钟
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  handleComplete(task);
-                  toast.dismiss(t);
-                }}
-                className="text-xs bg-gradient-to-r from-green-500 to-emerald-600"
-              >
-                标记完成
-              </Button>
-            </div>
-          </div>
-          <button
-            onClick={() => toast.dismiss(t)}
-            className="text-slate-400 hover:text-slate-600"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      <ReminderActionCard
+        task={task}
+        body={body}
+        onClose={() => toast.dismiss(t)}
+        onAction={(type, minutes) => {
+          if (type === "snoozed") {
+            logBehaviorMutation.mutate({
+              event_type: "task_snoozed",
+              task_id: task.id,
+              hour_of_day: new Date().getHours(),
+              day_of_week: new Date().getDay(),
+              category: task.category,
+              metadata: { snooze_minutes: minutes }
+            });
+            checkedTasks.current.delete(task.id);
+          } else if (type === "completed") {
+            logBehaviorMutation.mutate({
+              event_type: "task_completed",
+              task_id: task.id,
+              hour_of_day: new Date().getHours(),
+              day_of_week: new Date().getDay(),
+              category: task.category,
+            });
+            if (persistentIntervals.current[task.id]) {
+              clearInterval(persistentIntervals.current[task.id]);
+              delete persistentIntervals.current[task.id];
+            }
+          } else if (type === "dismissed") {
+            logBehaviorMutation.mutate({
+              event_type: "task_gently_dismissed",
+              task_id: task.id,
+              hour_of_day: new Date().getHours(),
+              day_of_week: new Date().getDay(),
+              category: task.category,
+            });
+            checkedTasks.current.delete(task.id);
+          }
+          toast.dismiss(t);
+        }}
+      />
     ), {
       duration: task.persistent_reminder ? Infinity : 10000,
       unstyled: true,
@@ -305,54 +304,6 @@ export default function NotificationManager() {
         id: task.id,
         data: { reminder_sent: true }
       });
-    }
-  };
-
-  const handleSnooze = (task, minutes) => {
-    const snoozeUntil = new Date();
-    snoozeUntil.setMinutes(snoozeUntil.getMinutes() + minutes);
-
-    updateTaskMutation.mutate({
-      id: task.id,
-      data: {
-        status: "snoozed",
-        snooze_until: snoozeUntil.toISOString(),
-        snooze_count: (task.snooze_count || 0) + 1,
-      }
-    });
-
-    logBehaviorMutation.mutate({
-      event_type: "task_snoozed",
-      task_id: task.id,
-      hour_of_day: new Date().getHours(),
-      day_of_week: new Date().getDay(),
-      category: task.category,
-      metadata: { snooze_minutes: minutes }
-    });
-
-    checkedTasks.current.delete(task.id);
-  };
-
-  const handleComplete = (task) => {
-    updateTaskMutation.mutate({
-      id: task.id,
-      data: {
-        status: "completed",
-        completed_at: new Date().toISOString()
-      }
-    });
-
-    logBehaviorMutation.mutate({
-      event_type: "task_completed",
-      task_id: task.id,
-      hour_of_day: new Date().getHours(),
-      day_of_week: new Date().getDay(),
-      category: task.category,
-    });
-
-    if (persistentIntervals.current[task.id]) {
-      clearInterval(persistentIntervals.current[task.id]);
-      delete persistentIntervals.current[task.id];
     }
   };
 
@@ -386,6 +337,15 @@ export default function NotificationManager() {
 
     sortedTasks.forEach(task => {
       if (task.status === "completed" || task.status === "cancelled") {
+        if (persistentIntervals.current[task.id]) {
+          clearInterval(persistentIntervals.current[task.id]);
+          delete persistentIntervals.current[task.id];
+        }
+        return;
+      }
+
+      // 轻轻放下生效中：本周期不再弹出任何到点/跟进提醒（后端 cron 同步静默）
+      if (isTaskGentlyDismissed(task)) {
         if (persistentIntervals.current[task.id]) {
           clearInterval(persistentIntervals.current[task.id]);
           delete persistentIntervals.current[task.id];

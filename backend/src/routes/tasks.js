@@ -675,6 +675,34 @@ tasksRouter.patch("/:id", async (req, res) => {
     nextReminderTimeForUpdate = undefined;
   }
 
+  // ── 轻轻放下：本周期内不再提醒 ──
+  // 截止点：重复约定 = 下一期提醒锚点（本期自然结束）；一次性约定 = 今天 23:59（北京），封顶 7 天。
+  // 写入 gentle_dismiss_until 后，到点提醒/顺延唤回/打卡核对/温和跟进/遗忘/逾期衰减全链路静默，
+  // 打卡、重新延后等任何新交互都会自然覆盖该状态。
+  if (payload.data.gentle_dismiss === true) {
+    let untilMs = null;
+    if (recurringRule) {
+      const base = existing.reminderTime && existing.reminderTime.getTime() > Date.now()
+        ? existing.reminderTime
+        : computeNextReminderTime(existing.reminderTime || new Date(), recurringRule, prevExtra.custom_recurrence, new Date());
+      untilMs = base ? base.getTime() : null;
+    }
+    if (!untilMs) {
+      const endOfToday = new Date(Date.now() + 8 * 3600 * 1000);
+      endOfToday.setUTCHours(15, 59, 59, 999); // 北京 23:59:59.999
+      untilMs = endOfToday.getTime();
+    }
+    const capMs = Date.now() + 7 * 24 * 3600 * 1000;
+    if (untilMs > capMs) untilMs = capMs;
+    Object.assign(snoozeNormalize, {
+      gentle_dismiss_until: new Date(untilMs).toISOString(),
+      recurrence_checkback_anchor: null,
+      recurrence_checkback_count: 0,
+      snooze_until: null,
+      snooze_evening_review: false
+    });
+  }
+
   if (Object.keys(snoozeNormalize).length > 0) {
     const base = nextMetadata === undefined
       ? (isPlainObject(existing.metadata) ? { ...existing.metadata } : {})

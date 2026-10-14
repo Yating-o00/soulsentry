@@ -1,5 +1,6 @@
 import Taro from "@tarojs/taro";
 import { View, Text } from "@tarojs/components";
+import ShareButton from "@/components/ShareButton";
 import {
   IconClock,
   IconMapPin,
@@ -502,6 +503,11 @@ export default function PromiseCard({
             >
               分享
             </Text>
+            <ShareButton
+              theme={theme}
+              data-task-id={task.id}
+              style={{ padding: "4rpx 14rpx", fontSize: "20rpx" }}
+            />
             {overdue && (
               <Text
                 onClick={handleDemote}

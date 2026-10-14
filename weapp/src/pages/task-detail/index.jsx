@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
+import { useShare } from "@/hooks/useShare";
 
 const statusLabel = {
   pending: "待办",
@@ -13,6 +14,13 @@ const statusLabel = {
 };
 
 export default function TaskDetail() {
+  useShare({
+    title: "心栈约定 · 和自己的一个约定",
+    path: "pages/tasks/index",
+    buildShare: () => (task
+      ? { title: `约定 · ${String(task.title || "和自己的一个约定").slice(0, 18)}`, path: `pages/task-detail/index?id=${task.id}` }
+      : {})
+  });
   const [task, setTask] = useState(null);
   const [subtasks, setSubtasks] = useState([]);
   const [comments, setComments] = useState([]);

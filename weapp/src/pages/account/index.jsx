@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Button, ScrollView, Image } from "@tarojs/components";
 import useAuth from "@/hooks/useAuth";
+import { useShare } from "@/hooks/useShare";
 import { getToken, clearToken, setToken, getAccounts, isDemoMode } from "@/utils/auth";
 import { get, post, patch } from "@/utils/api";
 import theme from "@/components/tasks/theme";
@@ -252,6 +253,7 @@ function showDemoToast() {
 }
 
 export default function Account() {
+  useShare({ title: "心栈 SoulSentry · 从容地记住每一声心动", path: "pages/flow/index" });
   const { user, logout, loading, refresh } = useAuth();
   const [showSwitchAccounts, setShowSwitchAccounts] = useState(false);
   const [accounts, setAccounts] = useState([]);

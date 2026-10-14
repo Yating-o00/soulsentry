@@ -1,10 +1,12 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Button, Image } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import SharePoster from "@/components/SharePoster";
+import ShareButton from "@/components/ShareButton";
+import { useShare } from "@/hooks/useShare";
 import VaultSheet from "@/components/VaultSheet";
 import ReviewDrawer from "@/components/ReviewDrawer";
 import RichText from "@/components/RichText";
@@ -225,6 +227,36 @@ export default function Notes() {
   const [density, setDensity] = useState(() => Taro.getStorageSync(DENSITY_KEY) || "light");
   const [isGuest, setIsGuest] = useState(false);
   const scrollRef = useRef(null);
+  // 一键转发：预取心签的公开分享 token（生成接口幂等），转发时朋友无需登录即可查看
+  const shareTokensRef = useRef({});
+  const sharePendingRef = useRef(new Set());
+
+  useShare({
+    title: "心栈心签 · 此刻的一点心情",
+    path: "pages/notes/index",
+    buildShare: (options) => {
+      if (options.from !== "button") return {};
+      const noteId = options.target?.dataset?.noteId;
+      if (!noteId) return {};
+      const note = notes.find((n) => n.id === noteId);
+      const raw = note ? (getTitle(note) || note.plain_text || note.content || "此刻的一点心情") : "此刻的一点心情";
+      const title = `心签 · ${String(raw).trim().slice(0, 18)}`;
+      const token = shareTokensRef.current[noteId];
+      return { title, path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${noteId}` };
+    }
+  });
+
+  useEffect(() => {
+    if (isGuest) return;
+    filteredNotes.slice(0, 30).forEach((n) => {
+      if (shareTokensRef.current[n.id] !== undefined || sharePendingRef.current.has(n.id)) return;
+      sharePendingRef.current.add(n.id);
+      post(`/public/share/generate/note/${n.id}`)
+        .then((s) => { shareTokensRef.current[n.id] = (s && s.token) || ""; })
+        .catch(() => { shareTokensRef.current[n.id] = ""; })
+        .finally(() => sharePendingRef.current.delete(n.id));
+    });
+  }, [filteredNotes, isGuest]);
 
   const setDensityAndSave = (val) => {
     setDensity(val);
@@ -830,6 +862,7 @@ export default function Notes() {
           {!converted && <ActionBtn onClick={(e) => convertTask(note, e)} text="转约定" loading={actionLoading[`task-${note.id}`]} />}
           {!inKb && <ActionBtn onClick={(e) => addToKnowledge(note, e)} text="沉淀" loading={actionLoading[`kb-${note.id}`]} />}
           <ActionBtn onClick={(e) => shareNote(note, e)} text="签卡" loading={actionLoading[`share-${note.id}`]} />
+          <ShareButton theme={theme} data-note-id={note.id} />
           <ActionBtn onClick={(e) => deleteNote(note, e)} text="删除" danger />
         </View>
       </View>

@@ -5,6 +5,8 @@ import { get, post, patch } from "@/utils/api";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import SharePoster from "@/components/SharePoster";
+import ShareButton from "@/components/ShareButton";
+import { useShare } from "@/hooks/useShare";
 import Composer from "@/components/tasks/Composer";
 import PromiseCard from "@/components/tasks/PromiseCard";
 import { SnoozeSheet, ExecPreview } from "@/components/tasks/Sheets";
@@ -124,6 +126,36 @@ export default function Tasks() {
   };
 
   const toastTimerRef = useRef(null);
+  // 一键转发：预取约定的公开分享 token（生成接口幂等），转发给朋友无需登录即可查看
+  const shareTokensRef = useRef({});
+  const sharePendingRef = useRef(new Set());
+
+  useShare({
+    title: "心栈约定 · 和自己的一个约定",
+    path: "pages/tasks/index",
+    buildShare: (options) => {
+      if (options.from !== "button") return {};
+      const taskId = options.target?.dataset?.taskId;
+      if (!taskId) return {};
+      const task = tasks.find((t) => t.id === taskId);
+      const title = `约定 · ${String(task?.title || "和自己的一个约定").trim().slice(0, 18)}`;
+      const token = shareTokensRef.current[taskId];
+      return { title, path: token ? `pages/share/index?token=${token}` : `pages/task-detail/index?id=${taskId}` };
+    }
+  });
+
+  useEffect(() => {
+    if (isGuest) return;
+    tasks.slice(0, 30).forEach((t) => {
+      if (shareTokensRef.current[t.id] !== undefined || sharePendingRef.current.has(t.id)) return;
+      sharePendingRef.current.add(t.id);
+      post(`/public/share/generate/task/${t.id}`)
+        .then((s) => { shareTokensRef.current[t.id] = (s && s.token) || ""; })
+        .catch(() => { shareTokensRef.current[t.id] = ""; })
+        .finally(() => sharePendingRef.current.delete(t.id));
+    });
+  }, [tasks, isGuest]);
+
   const showToast = (msg) => {
     setToast(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);

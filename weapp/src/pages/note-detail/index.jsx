@@ -2,9 +2,19 @@ import { useState, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Input, Textarea, Button, ScrollView } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
+import { useShare } from "@/hooks/useShare";
 import RichText from "@/components/RichText";
 
 export default function NoteDetail() {
+  useShare({
+    title: "心栈心签 · 此刻的一点心情",
+    path: "pages/notes/index",
+    buildShare: () => {
+      if (!note) return {};
+      const raw = note.title || note.plain_text || note.content || "此刻的一点心情";
+      return { title: `心签 · ${String(raw).trim().slice(0, 18)}`, path: `pages/note-detail/index?id=${note.id}` };
+    }
+  });
   const [note, setNote] = useState(null);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState("");

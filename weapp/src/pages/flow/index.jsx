@@ -3,6 +3,7 @@ import Taro, { useDidShow, useDidHide } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Textarea, Image, Canvas } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
 import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
+import { useShare } from "@/hooks/useShare";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import { isRecurring, nextOccurrenceOf, recurringBadgeText } from "@/utils/recurrence";
@@ -1363,6 +1364,7 @@ const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRe
 });
 
 export default function Flow() {
+  useShare({ title: "心栈 SoulSentry · 从容地记住每一声心动", path: "pages/flow/index" });
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
   const [executions, setExecutions] = useState([]);

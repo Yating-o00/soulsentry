@@ -149,15 +149,35 @@ export async function rankTopTasksForLocation(userId, location, n = 3) {
 }
 
 /**
- * 到达地点：安静期（quietMinutes 内不重复）内跳过；否则推送 Top3 并更新 lastEnteredAt。
- * 返回 { pushed: boolean, topTasks, skippedReason? }
+ * 到达地点：同一次停留只提醒一次。
+ * 跳过条件（满足其一即不推）：
+ * 1. 安静期（quietMinutes 内不重复）；
+ * 2. 已进入且之后未记录离开（lastEnteredAt 晚于 lastExitedAt），
+ *    且距上次推送不足 4h、距上次位置上报也不足 4h —— 说明人一直还在
+ *    （页面关闭期间无法记录 exit，用「4h 无上报」兜底判定离开过）。
+ * 离开后再次进入（有 exit 记录）或长时间缺席后回来 → 视为新一次到达，正常提醒。
+ * 返回 { pushed: boolean, topTasks, skippedReason? }；跳过时 topTasks 置空，调用方不弹守护卡。
  */
-export async function maybeSendArrivalReminder(user, location, topTasks) {
+export async function maybeSendArrivalReminder(user, location, topTasks, lastReportAt = null) {
   const now = new Date();
   const quietMs = (location.quietMinutes ?? 30) * 60 * 1000;
+  const STAY_ABSENCE_MS = 4 * 3600 * 1000; // 4h 无上报视为中间离开过（页面关闭期间无 exit 的兜底）
   const lastEnter = location.lastEnteredAt ? new Date(location.lastEnteredAt) : null;
   if (lastEnter && !isNaN(lastEnter.getTime()) && now.getTime() - lastEnter.getTime() < quietMs) {
-    return { pushed: false, topTasks, skippedReason: "quiet_period" };
+    return { pushed: false, topTasks: [], skippedReason: "quiet_period" };
+  }
+
+  // 同一次停留只提醒一次
+  if (lastEnter && !isNaN(lastEnter.getTime())) {
+    const lastExit = location.lastExitedAt ? new Date(location.lastExitedAt) : null;
+    const noExitSinceEnter = !lastExit || isNaN(lastExit.getTime()) || lastEnter.getTime() > lastExit.getTime();
+    if (noExitSinceEnter) {
+      const sinceEnterMs = now.getTime() - lastEnter.getTime();
+      const sinceLastReportMs = lastReportAt ? now.getTime() - new Date(lastReportAt).getTime() : Infinity;
+      if (sinceEnterMs < STAY_ABSENCE_MS || sinceLastReportMs < STAY_ABSENCE_MS) {
+        return { pushed: false, topTasks: [], skippedReason: "same_stay_once" };
+      }
+    }
   }
 
   // 更新进入时间（无论是否有相关约定，都记录本次到达，安静期以此为锚）

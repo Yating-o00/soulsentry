@@ -2105,7 +2105,7 @@ functionsRouter.post("/:name", async (req, res) => {
         // ========== 3) SavedLocation 到达 Top3：dwell 确认后才开口（防路过误触） ==========
         if (hitLocation && hitDwellOk && remindersEnabled && userWithPrefs) {
           const topTasks = await rankTopTasksForLocation(req.user.id, hitLocation, 3);
-          const arrival = await maybeSendArrivalReminder(userWithPrefs, hitLocation, topTasks);
+          const arrival = await maybeSendArrivalReminder(userWithPrefs, hitLocation, topTasks, lastReport?.at || null);
           if (arrival.topTasks?.length) {
             const hitWay = judgeOnTheWay(prevCoords, coords,
               normalizeToGcj02(hitLocation.latitude, hitLocation.longitude, hitLocation.coordType) || hitLocation);

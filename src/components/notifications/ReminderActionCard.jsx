@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { base44 } from "@/api/base44Client";
 import { Bell, CheckCircle2, Clock, Feather, MapPin, Sparkles, X } from "lucide-react";
+import { useReminderActions } from "@/components/notifications/useReminderActions";
 import {
   getCurrentPositionCached,
   haversineMeters,
@@ -26,10 +24,10 @@ export default function ReminderActionCard({
   distanceText = null,
   compact = false,
 }) {
-  const queryClient = useQueryClient();
   const [computedDistance, setComputedDistance] = useState(null);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const suggestion = suggestSnoozeMinutes(task);
+  const { complete, snooze, dismiss, isPending } = useReminderActions(task, { onAction });
 
   const loc = task?.location_reminder;
   useEffect(() => {
@@ -53,58 +51,6 @@ export default function ReminderActionCard({
       alive = false;
     };
   }, [distanceText, loc?.enabled, loc?.latitude, loc?.longitude, loc?.location_name, loc?.radius]);
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
-  });
-
-  const handleNow = () => {
-    updateMutation.mutate(
-      { id: task.id, data: { status: "completed", completed_at: new Date().toISOString() } },
-      {
-        onSuccess: () => {
-          toast.success(`「${task.title}」已如约处理完成`);
-          onAction?.("completed");
-        },
-        onError: () => toast.error("操作失败，请稍后再试"),
-      }
-    );
-  };
-
-  const handleSnooze = (minutes) => {
-    const until = new Date(Date.now() + minutes * 60000);
-    updateMutation.mutate(
-      {
-        id: task.id,
-        data: {
-          status: "snoozed",
-          snooze_until: until.toISOString(),
-          snooze_count: (task.snooze_count || 0) + 1,
-        },
-      },
-      {
-        onSuccess: () => {
-          toast(`好，${minutes} 分钟后轻轻提醒你「${task.title}」`);
-          onAction?.("snoozed", minutes);
-        },
-        onError: () => toast.error("操作失败，请稍后再试"),
-      }
-    );
-  };
-
-  const handleDismiss = () => {
-    updateMutation.mutate(
-      { id: task.id, data: { gentle_dismiss: true } },
-      {
-        onSuccess: () => {
-          toast("好，这个周期先不提醒它了");
-          onAction?.("dismissed");
-        },
-        onError: () => toast.error("操作失败，请稍后再试"),
-      }
-    );
-  };
 
   const snoozeOptions = [15, 30, 60];
 
@@ -147,8 +93,8 @@ export default function ReminderActionCard({
               {snoozeOptions.map((m) => (
                 <button
                   key={m}
-                  onClick={() => handleSnooze(m)}
-                  disabled={updateMutation.isPending}
+                  onClick={() => snooze(m)}
+                  disabled={isPending}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 ${
                     m === suggestion.minutes
                       ? "bg-purple-50 border-purple-300 text-purple-700"
@@ -171,8 +117,8 @@ export default function ReminderActionCard({
           ) : (
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={handleNow}
-                disabled={updateMutation.isPending}
+                onClick={complete}
+                disabled={isPending}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 transition-colors disabled:opacity-50"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -180,7 +126,7 @@ export default function ReminderActionCard({
               </button>
               <button
                 onClick={() => setSnoozeOpen(true)}
-                disabled={updateMutation.isPending}
+                disabled={isPending}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
                 title={suggestion.reason}
               >
@@ -188,8 +134,8 @@ export default function ReminderActionCard({
                 延后
               </button>
               <button
-                onClick={handleDismiss}
-                disabled={updateMutation.isPending}
+                onClick={dismiss}
+                disabled={isPending}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
                 <Feather className="w-3.5 h-3.5" />

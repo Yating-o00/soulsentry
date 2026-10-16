@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Shield, RefreshCw, Bell, Compass, MapPin, HeartHandshake, Sparkles, AlarmClock, X, Home, Building2 } from "lucide-react";
+import TaskQuickActions from "@/components/notifications/TaskQuickActions";
 
 /**
  * 时空感知守护面板 - 聚合地理感知 + 遗忘拯救两类真实数据卡片
@@ -173,6 +174,14 @@ export default function SentinelGuardPanel() {
     setTaskList({ title, tasks: list });
   };
   const pickTask = (id) => { setTaskList(null); goTask(id); };
+  // 行内三动作处理完后：把该条从弹层里移除，空了就关闭
+  const removeTaskFromList = (id) => {
+    setTaskList((prev) => {
+      if (!prev) return prev;
+      const tasks = prev.tasks.filter((x) => x.id !== id);
+      return tasks.length > 0 ? { ...prev, tasks } : null;
+    });
+  };
 
   const PRIORITY_META = {
     urgent: { label: '紧要', color: '#b45309' },
@@ -288,7 +297,8 @@ export default function SentinelGuardPanel() {
       detail: p.context || '它可能被日子埋住了，轻轻捞起它。',
       basis: `遗忘率 ${p.forget_rate ?? 0}%${p.overdue_days ? ` · 已逾期 ${p.overdue_days} 天` : ''}`,
       extra: others.length > 0 ? `还有 ${others.length} 条在安静等待：${others.slice(0, 3).join('、')}` : null,
-      action: { label: '去看看', onClick: () => goTask(p.id) },
+      // 守护卡直接给三动作（立即处理/延后/轻轻放下），处理完卡片收起
+      quick: p.id ? { id: p.id, title: p.title } : null,
       snooze: () => handleSnooze('forget'),
     });
   }
@@ -368,8 +378,15 @@ export default function SentinelGuardPanel() {
                 ) : (
                   <span />
                 )}
-                {(c.action || c.snooze) && (
+                {(c.action || c.quick || c.snooze) && (
                   <div className="ml-auto flex flex-shrink-0 items-center gap-2">
+                    {c.quick && (
+                      <TaskQuickActions
+                        task={c.quick}
+                        size="xs"
+                        onAction={() => setDismissed((prev) => ({ ...prev, [c.key]: true }))}
+                      />
+                    )}
                     {c.action && (
                       <button
                         onClick={c.action.onClick}
@@ -420,37 +437,46 @@ export default function SentinelGuardPanel() {
                 const pm = PRIORITY_META[t.priority] || PRIORITY_META.medium;
                 const timeText = fmtTaskTime(t.time);
                 return (
-                  <button
+                  <div
                     key={t.id}
-                    onClick={() => pickTask(t.id)}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 transition-colors hover:bg-slate-50"
                   >
-                    <span
-                      className="h-8 w-1 shrink-0 rounded-full"
-                      style={{ background: t.overdue ? '#dc2626' : 'var(--sentinel, #384877)' }}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className={`block truncate text-[13.5px] ${t.overdue ? 'text-red-600' : 'text-slate-800'}`}>
-                        {t.title}
-                      </span>
-                      {timeText && (
-                        <span className="mt-0.5 block text-[11.5px] text-slate-400">
-                          {t.overdue ? '已到期 · ' : ''}{timeText}
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      className="shrink-0 rounded-full border px-2 py-0.5 text-[10.5px]"
-                      style={{ color: pm.color, borderColor: `${pm.color}55`, background: `${pm.color}0f` }}
+                    <button
+                      onClick={() => pickTask(t.id)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
                     >
-                      {pm.label}
-                    </span>
-                  </button>
+                      <span
+                        className="h-8 w-1 shrink-0 rounded-full"
+                        style={{ background: t.overdue ? '#dc2626' : 'var(--sentinel, #384877)' }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className={`block truncate text-[13.5px] ${t.overdue ? 'text-red-600' : 'text-slate-800'}`}>
+                          {t.title}
+                        </span>
+                        {timeText && (
+                          <span className="mt-0.5 block text-[11.5px] text-slate-400">
+                            {t.overdue ? '已到期 · ' : ''}{timeText}
+                          </span>
+                        )}
+                      </span>
+                      <span
+                        className="shrink-0 rounded-full border px-2 py-0.5 text-[10.5px]"
+                        style={{ color: pm.color, borderColor: `${pm.color}55`, background: `${pm.color}0f` }}
+                      >
+                        {pm.label}
+                      </span>
+                    </button>
+                    <TaskQuickActions
+                      task={{ id: t.id, title: t.title }}
+                      size="xs"
+                      onAction={() => removeTaskFromList(t.id)}
+                    />
+                  </div>
                 );
               })}
             </div>
             <div className="border-t border-slate-100 px-5 py-3 text-center text-[11px] text-slate-400">
-              点选一条约定，直接跳转到它
+              点选标题跳转约定；右侧可直接处理、延后或轻轻放下
             </div>
           </div>
         </div>

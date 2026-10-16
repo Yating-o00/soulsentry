@@ -29,6 +29,7 @@ import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
 import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
 import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
 import PriorityQuickMenu from "@/components/tasks/PriorityQuickMenu";
+import CheckinWidget from "@/components/checkins/CheckinWidget";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
 
@@ -714,11 +715,6 @@ export default function LifeTaskCard({
                                      <Navigation className="w-3.5 h-3.5" />
                                      回家顺路
                                  </span>
-                             ) : task.repeat_rule !== 'none' ? (
-                                 <span className="flex items-center gap-1.5 text-rose-500 font-medium">
-                                     <Heart className="w-3.5 h-3.5" />
-                                     已坚持 {Math.floor(Math.random() * 20) + 1} 天
-                                 </span>
                              ) : null}
 
                              {/* Duration/Estimate */}
@@ -742,20 +738,22 @@ export default function LifeTaskCard({
 
                 {/* Completion Check & Time */}
                 <div className="flex flex-col items-center justify-start gap-1 min-w-[3.5rem]">
-                    <button 
+                    <button
                         onClick={handleComplete}
                         className={cn(
                             "w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300 group relative",
-                            completed 
-                                ? "border-stone-200 bg-stone-50 text-stone-400" 
+                            completed
+                                ? "border-stone-200 bg-stone-50 text-stone-400"
                                 : "border-stone-200 bg-white hover:border-green-500 hover:bg-green-50/30 text-stone-300 hover:text-green-600"
                         )}
                     >
                          <Check className={cn(
-                             "w-5 h-5 transition-all duration-300", 
+                             "w-5 h-5 transition-all duration-300",
                              completed ? "opacity-100 scale-100" : "opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100"
                          )} />
                     </button>
+                    {/* 打卡：同一个约定每做到一次点一次，累计次数与赴约记录 */}
+                    <CheckinWidget task={task} completed={completed} />
                     <span className={cn(
                         "text-[10px] whitespace-nowrap text-center",
                         timeStatus.color

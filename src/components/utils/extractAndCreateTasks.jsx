@@ -80,7 +80,7 @@ async function doExtractAndCreate(inputText, contextDateStr) {
       "7. 全天任务时 reminder_time 使用 YYYY-MM-DD 且 is_all_day: true",
       `8. 无法推断具体时间时，默认 ${contextDate} 09:00`,
       "9. priority: low/medium/high/urgent",
-      "10. category: work/personal/health/study/family/shopping/finance/other",
+      "10. category: work/personal/health/study/family/shopping/finance/checkin/other",
     ].join("\n"),
     response_json_schema: {
       type: "object",
@@ -94,7 +94,7 @@ async function doExtractAndCreate(inputText, contextDateStr) {
             end_time: { type: "string" },
             is_all_day: { type: "boolean" },
             priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] },
           },
           required: ["title"],
         },

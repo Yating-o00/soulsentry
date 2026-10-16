@@ -177,7 +177,7 @@ export default function Notes() {
                 "title": "简明扼要的任务标题",
                 "description": "详细的任务描述，可以包含笔记原文或整理后的要点",
                 "priority": "low/medium/high/urgent",
-                "category": "work/personal/health/study/family/shopping/finance/other",
+                "category": "work/personal/health/study/family/shopping/finance/checkin/other",
                 "reminder_time": "ISO 8601格式的时间字符串，如果笔记中没有明确时间，则留空或设为null"
             }`,
             response_json_schema: {
@@ -186,7 +186,7 @@ export default function Notes() {
                     title: { type: "string" },
                     description: { type: "string" },
                     priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-                    category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                    category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] },
                     reminder_time: { type: "string", format: "date-time" }
                 },
                 required: ["title", "description", "priority", "category"]

@@ -15,6 +15,7 @@ const CATEGORY_STYLES = {
   family: "bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100",
   shopping: "bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100",
   finance: "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200",
+  checkin: "bg-[#EEF2FF] text-[#384877] border-[#dbe3f7] hover:bg-[#e0e7fb]",
   other: "bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100",
 };
 

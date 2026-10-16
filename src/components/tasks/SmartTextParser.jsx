@@ -112,6 +112,7 @@ ${text}
 - family: 家庭相关
 - shopping: 购物相关
 - finance: 财务相关
+- checkin: 打卡类约定（多次打卡履约）
 - other: 其他
 
 当前时间：${new Date().toISOString()}
@@ -133,7 +134,7 @@ ${text}
                   },
                   category: { 
                     type: "string",
-                    enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"]
+                    enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"]
                   },
                   participants: {
                     type: "array",
@@ -438,6 +439,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
     family: { label: "家庭", color: "bg-[#fce7f3] text-[#db2777]" },
     shopping: { label: "购物", color: "bg-[#fed7aa] text-[#ea580c]" },
     finance: { label: "财务", color: "bg-[#ffe4e6] text-[#d5495f]" },
+    checkin: { label: "打卡", color: "bg-[#EEF2FF] text-[#384877]" },
     other: { label: "其他", color: "bg-[#f4f6f8] text-[#52525b]" },
   };
 

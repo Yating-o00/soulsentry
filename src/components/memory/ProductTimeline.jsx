@@ -29,7 +29,7 @@ const MEMORY_TYPE_CONFIG = {
 
 const CATEGORY_MAP = {
   work: "工作", personal: "个人", health: "健康", study: "学习",
-  family: "家庭", shopping: "购物", finance: "理财", other: "其他"
+  family: "家庭", shopping: "购物", finance: "理财", checkin: "打卡", other: "其他"
 };
 
 // Infer emotion from task context — more nuanced

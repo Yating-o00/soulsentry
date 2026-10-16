@@ -25,6 +25,7 @@ const CATEGORIES = [
 { value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦" },
 { value: "shopping", label: "购物", icon: "🛒" },
 { value: "finance", label: "财务", icon: "💰" },
+{ value: "checkin", label: "打卡", icon: "👣" },
 { value: "other", label: "其他", icon: "📌" }];
 
 
@@ -180,7 +181,7 @@ ${templatesInfo}
 
 请分析并提供以下JSON格式的建议：
 1. 完善的约定描述：经过生成、润色和纠错后的详细内容。
-2. 推荐分类：work/personal/health/study/family/shopping/finance/other。
+2. 推荐分类：work/personal/health/study/family/shopping/finance/checkin/other。
 3. 推荐优先级：low/medium/high/urgent。
 4. 建议标签：3-5个。
 5. 推荐子约定：按执行顺序。**如果任务可以分解，请务必提供详细的子约定列表，每个子约定应包含标题、优先级、类别和建议时间（格式 HH:mm）。即使是简单任务，也请尝试拆分出2-3个具体步骤。**
@@ -202,7 +203,7 @@ ${templatesInfo}
             description: { type: "string" },
             category: {
               type: "string",
-              enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"]
+              enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"]
             },
             priority: {
               type: "string",
@@ -219,7 +220,7 @@ ${templatesInfo}
                 properties: {
                   title: { type: "string" },
                   priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] },
                   time: { type: "string", description: "建议执行时间，格式 HH:mm" }
                 },
                 required: ["title"]

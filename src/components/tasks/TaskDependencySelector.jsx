@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 const CATEGORY_LABELS = {
     work: "工作", personal: "个人", health: "健康", study: "学习",
-    family: "家庭", shopping: "购物", finance: "财务", other: "其他"
+    family: "家庭", shopping: "购物", finance: "财务", checkin: "打卡", other: "其他"
 };
 
 function TaskRow({ task, isSelected, isChild, parentTitle, onToggle, disabled }) {

@@ -90,6 +90,15 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
           icon: "💰",
           label: "财务"
         };
+      case "checkin":
+        return {
+          border: "border-l-[#384877]",
+          iconBg: "bg-[#384877]/10",
+          iconColor: "text-[#384877]",
+          lightBg: "bg-[#EEF2FF]",
+          icon: "👣",
+          label: "打卡"
+        };
       default: // personal/other
         return {
           border: "border-l-green-400",

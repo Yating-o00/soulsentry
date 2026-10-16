@@ -228,7 +228,7 @@ ${timeCtx.promptSnippet}
             end_time: { type: "string", description: "可选，带 +08:00 的 ISO 时间" },
             is_all_day: { type: "boolean", description: "是否为全天事件" },
             priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] }
+            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] }
           },
           required: ["title", "reminder_time"]
         }

@@ -33,6 +33,7 @@ const CATEGORY_COLORS = {
   family: { accent: THEME_PRIMARY, bg: THEME_TINT },
   shopping: { accent: THEME_PRIMARY, bg: THEME_TINT },
   finance: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  checkin: { accent: THEME_PRIMARY, bg: THEME_TINT },
   other: { accent: THEME_PRIMARY, bg: THEME_TINT },
 };
 
@@ -44,6 +45,7 @@ const CATEGORY_LABELS = {
   family: { zh: "家庭", en: "Family" },
   shopping: { zh: "购物", en: "Shopping" },
   finance: { zh: "财务", en: "Finance" },
+  checkin: { zh: "打卡", en: "Check-in" },
   other: { zh: "其他", en: "Other" },
 };
 

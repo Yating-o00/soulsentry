@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import html2canvas from "html2canvas";
-import { X, Check, Footprints, Camera, Download } from "lucide-react";
+import { X, Check, Footprints, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildApiUrl } from "@/api/httpClient";
 import {
@@ -12,6 +11,13 @@ import {
   usePatchCheckin,
   uploadCheckinPhoto,
 } from "@/components/checkins/useCheckins";
+import CheckinShareCard, {
+  CHECKIN_BRAND_PRIMARY,
+  CHECKIN_BRAND_SECONDARY,
+  CHECKIN_BRAND_TINT,
+  CHECKIN_MILESTONES,
+  MILESTONE_QUOTES,
+} from "@/components/checkins/CheckinShareCard";
 
 /**
  * 约定打卡小组件：同一个约定，每多做到一次就点一次。
@@ -19,16 +25,6 @@ import {
  * - 累计次数实时翻转，里程碑（1/7/21/50/100/365 次）弹出成就卡，可生成分享卡
  * - 「赴约记录」抽屉：每一次打卡的时间、附言、照片
  */
-export const CHECKIN_MILESTONES = [1, 7, 21, 50, 100, 365];
-
-const MILESTONE_QUOTES = {
-  1: "第一次赴约，从这里开始。",
-  7: "7 次了。这一周的自己，都被认真度过。",
-  21: "21 次，习惯已成。你已经是那个会赴约的人。",
-  50: "50 次奔赴。这件事，已经长在你身上。",
-  100: "100 次。百次之约，万次也不远。",
-  365: "365 次。一整年的约定，你都兑现了。",
-};
 
 function checkinReply(total, note) {
   const withNote = [
@@ -133,15 +129,15 @@ export default function CheckinWidget({ task, completed = false }) {
           completed
             ? "border-stone-100 bg-stone-50 text-stone-300 cursor-not-allowed"
             : justDone
-              ? "border-transparent bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-500/30"
-              : "border-amber-200 bg-white text-amber-500 hover:border-amber-400 hover:bg-amber-50"
+              ? "border-transparent bg-gradient-to-br from-[#3b5aa2] to-[#384877] text-white shadow-lg shadow-[#384877]/30"
+              : "border-[#c9d5ef] bg-white text-[#384877] hover:border-[#384877] hover:bg-[#EEF2FF]"
         )}
       >
         <Footprints className={cn("w-5 h-5", justDone && "hidden")} />
         <Check className={cn("w-5 h-5", !justDone && "hidden")} />
         {!justDone && !completed && (
           <span
-            className="absolute inset-0 rounded-full border-2 border-amber-300 animate-ping opacity-30 pointer-events-none"
+            className="absolute inset-0 rounded-full border-2 border-[#8fa3cf] animate-ping opacity-30 pointer-events-none"
             style={{ animationDuration: "2.8s" }}
           />
         )}
@@ -150,7 +146,7 @@ export default function CheckinWidget({ task, completed = false }) {
         <button
           onClick={() => setTimelineOpen(true)}
           title="查看赴约记录"
-          className="text-[10px] whitespace-nowrap text-center text-amber-600 hover:text-amber-700 underline-offset-2 hover:underline"
+          className="text-[10px] whitespace-nowrap text-center text-[#384877] hover:text-[#2d3a5f] underline-offset-2 hover:underline"
         >
           {metaText}
         </button>
@@ -184,11 +180,11 @@ export default function CheckinWidget({ task, completed = false }) {
                 onChange={(e) => setNote(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && finishPending(true)}
                 placeholder="一句话就好…"
-                className="flex-1 border-[1.5px] border-stone-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-amber-400 bg-[#FDFBF8]"
+                className="flex-1 border-[1.5px] border-stone-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-[#384877] bg-[#F8F9FD]"
               />
               <label
                 className={cn(
-                  "w-11 rounded-xl border-[1.5px] border-stone-200 bg-[#FDFBF8] flex items-center justify-center cursor-pointer transition-colors hover:border-amber-400 hover:bg-amber-50",
+                  "w-11 rounded-xl border-[1.5px] border-stone-200 bg-[#F8F9FD] flex items-center justify-center cursor-pointer transition-colors hover:border-[#384877] hover:bg-[#EEF2FF]",
                   uploading && "opacity-50 pointer-events-none"
                 )}
                 title="加一张照片"
@@ -207,7 +203,7 @@ export default function CheckinWidget({ task, completed = false }) {
               <button
                 onClick={() => finishPending(true)}
                 disabled={patchMut.isPending || uploading}
-                className="bg-stone-800 text-white rounded-full px-5 py-2 text-[13px] hover:bg-orange-600 transition-colors disabled:opacity-50"
+                className="bg-stone-800 text-white rounded-full px-5 py-2 text-[13px] hover:bg-[#384877] transition-colors disabled:opacity-50"
               >
                 {patchMut.isPending || uploading ? "收好…" : "收下这句话"}
               </button>
@@ -220,7 +216,7 @@ export default function CheckinWidget({ task, completed = false }) {
       {timelineOpen && (
         <>
           <div className="fixed inset-0 bg-slate-900/30 z-40" onClick={() => setTimelineOpen(false)} />
-          <aside className="fixed top-0 right-0 bottom-0 w-[min(420px,92vw)] bg-[#FDFBF8] z-50 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+          <aside className="fixed top-0 right-0 bottom-0 w-[min(420px,92vw)] bg-[#F8F9FD] z-50 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
             <div className="relative px-6 pt-7 pb-4 border-b border-stone-100">
               <button
                 onClick={() => setTimelineOpen(false)}
@@ -230,7 +226,7 @@ export default function CheckinWidget({ task, completed = false }) {
               </button>
               <h3 className="text-[16px] font-semibold text-stone-800 pr-8 truncate">{task.title}</h3>
               <p className="text-xs text-stone-400 mt-1.5">
-                已赴约 <span className="text-orange-600 font-bold">{total}</span> 次
+                已赴约 <span className="font-bold" style={{ color: CHECKIN_BRAND_PRIMARY }}>{total}</span> 次
                 {firstAt && ` · 从 ${format(new Date(firstAt), "yyyy年M月d日", { locale: zhCN })} 开始`}
               </p>
             </div>
@@ -239,11 +235,11 @@ export default function CheckinWidget({ task, completed = false }) {
                 <p className="text-center text-stone-400 text-sm py-10">还没有记录，点上方小脚印开始第一次打卡</p>
               ) : (
                 <div className="relative">
-                  <div className="absolute left-[7px] top-3 bottom-3 w-px bg-orange-100" />
+                  <div className="absolute left-[7px] top-3 bottom-3 w-px" style={{ background: CHECKIN_BRAND_TINT }} />
                   {items.map((c) => (
                     <div key={c.id} className="relative pl-8 pb-6">
-                      <span className="absolute left-0 top-1 w-[15px] h-[15px] rounded-full bg-white border-2 border-orange-400 flex items-center justify-center">
-                        <span className="w-[5px] h-[5px] rounded-full bg-orange-400" />
+                      <span className="absolute left-0 top-1 w-[15px] h-[15px] rounded-full bg-white border-2 flex items-center justify-center" style={{ borderColor: CHECKIN_BRAND_SECONDARY }}>
+                        <span className="w-[5px] h-[5px] rounded-full" style={{ background: CHECKIN_BRAND_SECONDARY }} />
                       </span>
                       <p className="text-[11px] text-stone-400">
                         {format(new Date(c.created_at), "M月d日 HH:mm", { locale: zhCN })}
@@ -275,7 +271,7 @@ export default function CheckinWidget({ task, completed = false }) {
         >
           <div
             className="relative w-full max-w-[400px] rounded-[28px] px-8 pt-12 pb-8 text-center overflow-hidden shadow-2xl"
-            style={{ background: "linear-gradient(160deg,#FFF9F4,#FDF1EA)" }}
+            style={{ background: "linear-gradient(160deg,#F5F7FD,#EEF2FF)" }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -286,19 +282,19 @@ export default function CheckinWidget({ task, completed = false }) {
             </button>
             <div
               className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full pointer-events-none"
-              style={{ background: "radial-gradient(circle,rgba(232,131,107,.22),transparent 65%)" }}
+              style={{ background: "radial-gradient(circle,rgba(56,72,119,.18),transparent 65%)" }}
             />
-            <p className="text-[12px] tracking-[.3em] text-orange-600 mb-3">里 程 碑</p>
+            <p className="text-[12px] tracking-[.3em] mb-3" style={{ color: CHECKIN_BRAND_PRIMARY }}>里 程 碑</p>
             <MilestoneCount target={milestone} />
             <p className="text-[15px] text-stone-500 mt-2">次，你都赴约了</p>
-            <p className="text-[15px] leading-loose text-stone-700 mt-5 pt-4 border-t border-orange-100">
-              <span className="text-orange-600 font-medium">——心栈记 · </span>
+            <p className="text-[15px] leading-loose text-stone-700 mt-5 pt-4 border-t" style={{ borderColor: CHECKIN_BRAND_TINT }}>
+              <span className="font-medium" style={{ color: CHECKIN_BRAND_PRIMARY }}>——心栈记 · </span>
               {MILESTONE_QUOTES[milestone]}
             </p>
             <div className="flex items-center justify-center gap-3 mt-7">
               <button
                 onClick={() => { setShareOpen(true); }}
-                className="rounded-full px-6 py-3 text-sm text-white bg-gradient-to-r from-orange-400 to-rose-500 shadow-lg shadow-orange-500/40 hover:-translate-y-0.5 transition-transform"
+                className="rounded-full px-6 py-3 text-sm text-white bg-gradient-to-r from-[#3b5aa2] to-[#384877] shadow-lg shadow-[#384877]/40 hover:-translate-y-0.5 transition-transform"
               >
                 生成分享卡
               </button>
@@ -312,12 +308,8 @@ export default function CheckinWidget({ task, completed = false }) {
 
       {/* 分享卡 */}
       {shareOpen && (
-        <ShareCardOverlay
+        <CheckinShareCard
           task={task}
-          total={total}
-          firstAt={firstAt}
-          bestNote={items.find((c) => c.note)?.note || null}
-          bestPhoto={items.find((c) => c.photo_url)?.photo_url || null}
           onClose={() => { setShareOpen(false); setMilestone(null); }}
         />
       )}
@@ -339,80 +331,5 @@ function MilestoneCount({ target }) {
   }, [target]);
   return (
     <span className="text-[68px] leading-none font-extrabold text-stone-800 tabular-nums">{n}</span>
-  );
-}
-
-function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, onClose }) {
-  const cardRef = useRef(null);
-  const [exporting, setExporting] = useState(false);
-  const range = firstAt
-    ? `${format(new Date(firstAt), "yyyy.MM")} — ${format(new Date(), "yyyy.MM")}`
-    : format(new Date(), "yyyy.MM");
-
-  const saveImage = async () => {
-    if (!cardRef.current || exporting) return;
-    setExporting(true);
-    try {
-      const canvas = await html2canvas(cardRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-      const a = document.createElement("a");
-      a.download = `心栈打卡-${task.title}-${total}次.png`;
-      a.href = canvas.toDataURL("image/png");
-      a.click();
-      toast.success("分享卡已保存到本地");
-    } catch {
-      toast.error("生成图片失败，请稍后再试");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-stone-900/50 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
-      <div ref={cardRef} onClick={(e) => e.stopPropagation()} className="w-[320px] rounded-3xl overflow-hidden bg-white text-left shadow-2xl">
-        <div
-          className="h-44 relative flex items-center justify-center"
-          style={{ background: "linear-gradient(135deg,#F2B28D 0%,#E8836B 45%,#9C93C9 100%)" }}
-        >
-          {bestPhoto ? (
-            <img src={buildApiUrl(bestPhoto)} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
-          ) : (
-            <span className="text-5xl" style={{ filter: "drop-shadow(0 6px 16px rgba(0,0,0,.25))" }}>🌟</span>
-          )}
-          <span className="absolute bottom-3 left-4 text-white text-[11px] tracking-[.16em] opacity-90">
-            第 {total} 次 · {format(new Date(), "M月d日")}
-          </span>
-        </div>
-        <div className="px-6 pt-6 pb-4">
-          <h4 className="text-[21px] font-bold leading-snug text-stone-800">{total} 次，你都赴约了。</h4>
-          <p className="text-xs text-stone-400 mt-2 tracking-wider">{range}</p>
-          {bestNote && (
-            <p className="mt-4 pl-3 border-l-[3px] border-orange-100 text-[13.5px] text-stone-500 leading-relaxed">
-              「{bestNote}」
-            </p>
-          )}
-          <p className="mt-3 text-[13.5px] text-orange-600 font-medium">——心栈记 · {MILESTONE_QUOTES[total] || "每一次都算数。"}</p>
-        </div>
-        <div className="flex items-center justify-between px-6 py-3 border-t border-stone-100 bg-[#FDFBF8]">
-          <small className="text-[11px] text-stone-400 tracking-wider">约定 · {task.title}</small>
-          <small className="text-[11px] text-stone-300">心栈 SOULSENTRY</small>
-        </div>
-      </div>
-      <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={saveImage}
-          disabled={exporting}
-          className="inline-flex items-center gap-1.5 rounded-full px-6 py-3 text-sm text-white bg-gradient-to-r from-orange-400 to-rose-500 shadow-lg shadow-orange-500/40 hover:-translate-y-0.5 transition-transform disabled:opacity-60"
-        >
-          <Download className="w-4 h-4" />
-          {exporting ? "生成中…" : "保存图片"}
-        </button>
-        <button onClick={onClose} className="text-[13px] text-stone-300 hover:text-stone-100 px-2 py-3">
-          关闭
-        </button>
-      </div>
-    </div>
   );
 }

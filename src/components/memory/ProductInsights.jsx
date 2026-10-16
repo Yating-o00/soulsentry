@@ -65,7 +65,7 @@ export default function ProductInsights({ tasks, notes, behaviors, executions, r
     const catCount = {};
     last30Tasks.forEach(t => { catCount[t.category || "other"] = (catCount[t.category || "other"] || 0) + 1; });
     const topCategory = Object.entries(catCount).sort((a, b) => b[1] - a[1])[0];
-    const catMap = { work: "工作", personal: "个人", health: "健康", study: "学习", family: "家庭", shopping: "购物", finance: "理财", other: "其他" };
+    const catMap = { work: "工作", personal: "个人", health: "健康", study: "学习", family: "家庭", shopping: "购物", finance: "理财", checkin: "打卡", other: "其他" };
 
     let streak = 0;
     for (let i = 0; i < 30; i++) {

@@ -154,6 +154,7 @@ ${transcript}
 - family: 家庭相关
 - shopping: 购物相关
 - finance: 财务相关
+- checkin: 打卡类约定（多次打卡履约）
 - other: 其他
 
 当前时间：${new Date().toISOString()}`,
@@ -174,7 +175,7 @@ ${transcript}
                   },
                   category: { 
                     type: "string",
-                    enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"]
+                    enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"]
                   },
                   subtasks: {
                     type: "array",

@@ -25,7 +25,7 @@ const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗" };
 const HEART_TYPE_LABEL = { emotion: "情绪签", inspiration: "灵感签", material: "资料签", memo: "备忘录", share: "分享签", ledger: "账本签" };
 const CATEGORY_LABEL = {
   work: "工作", personal: "个人", health: "健康", study: "学习",
-  family: "家庭", shopping: "购物", finance: "财务", other: "其他"
+  family: "家庭", shopping: "购物", finance: "财务", checkin: "打卡", other: "其他"
 };
 
 // 示例引路：exec=可实际交办的事（浏览器小助手直接出发去办），其余为约定/心签类

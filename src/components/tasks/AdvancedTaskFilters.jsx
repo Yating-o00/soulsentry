@@ -17,6 +17,7 @@ import {
     Users,
     ShoppingCart,
     Wallet,
+    Footprints,
     MoreHorizontal
 } from "lucide-react";
 import { format } from "date-fns";
@@ -146,6 +147,11 @@ export default function AdvancedTaskFilters({ filters, onChange, onClear, childr
                             <SelectItem value="finance">
                                 <div className="flex items-center gap-2">
                                     <Wallet className="w-3.5 h-3.5" /> 财务
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="checkin">
+                                <div className="flex items-center gap-2">
+                                    <Footprints className="w-3.5 h-3.5 text-[#384877]" /> 打卡
                                 </div>
                             </SelectItem>
                             <SelectItem value="other">

@@ -37,6 +37,7 @@ import { composeShanghaiISO, formatShanghai, formatShanghaiDateTime, formatShang
 import AIText from "@/components/AIText";
 
 const CATEGORIES = [
+  { value: "checkin", label: "打卡", icon: "👣", color: "bg-[#EEF2FF] text-[#384877] border-[#c9d5ef]" },
   { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
   { value: "personal", label: "个人", icon: "👤", color: "bg-purple-50 text-purple-700 border-purple-200" },
   { value: "health", label: "健康", icon: "❤️", color: "bg-green-50 text-green-700 border-green-200" },
@@ -313,7 +314,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
 提取：标题、描述、时间、优先级、类别、子约定。
 时间规则：具体时间转ISO格式，相对时间（明天/下周）计算日期，默认明天9点。
 优先级：urgent/high/medium/low
-类别：work/personal/health/study/family/shopping/finance/other
+类别：work/personal/health/study/family/shopping/finance/checkin/other
 
 当前时间：${new Date().toISOString()}`,
         response_json_schema: {
@@ -328,7 +329,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                   description: { type: "string" },
                   reminder_time: { type: "string" },
                   priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] },
                   subtasks: {
                     type: "array",
                     items: {

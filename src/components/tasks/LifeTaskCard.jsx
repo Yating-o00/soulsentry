@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
 import { 
   Check, Clock, MapPin, Repeat, MoreHorizontal, 
-  ShoppingBag, Zap, Navigation, 
+  ShoppingBag, Zap, Navigation, Footprints,
   Briefcase, Heart, Package, Sun, Moon, Sunrise, Sunset,
   Droplets, Leaf, Flower, Coffee, Utensils,
   Car, Store, Home, AlertCircle, Timer,
@@ -52,6 +52,8 @@ export default function LifeTaskCard({
   autoExec
 }) {
   const isRecurringTask = task.repeat_rule && task.repeat_rule !== 'none';
+  // 打卡类约定：卡片唯一的圈就是打卡（CheckinWidget），不再渲染「完成」打勾圈
+  const isCheckinTask = task.category === 'checkin';
   // 重复约定：完成 = 今天已打卡（done_today），约定状态保持活跃、系列继续
   const serverDone = isRecurringTask ? !!task.done_today : task.status === 'completed';
   const [completed, setCompleted] = useState(serverDone);
@@ -299,6 +301,8 @@ export default function LifeTaskCard({
         emoji = '📝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
     } else if (/提醒|备忘/.test(title)) {
         emoji = '🔔'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+    } else if (cat === 'checkin') {
+        emoji = '👣'; bgGradient = "from-[#E7EDFB] to-[#F5F8FF]"; iconColor = "text-[#384877]";
     } else if (cat === 'work') {
         emoji = '📝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
     } else if (cat === 'study') {
@@ -443,6 +447,7 @@ export default function LifeTaskCard({
             task.category === 'work' ? "bg-blue-100" :
             task.category === 'health' ? "bg-rose-100" :
             task.category === 'family' ? "bg-purple-100" :
+            task.category === 'checkin' ? "bg-[#EEF2FF]" :
             "bg-green-100"
         )} />
 
@@ -456,13 +461,16 @@ export default function LifeTaskCard({
                         "px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border",
                         task.category === 'work' ? "bg-blue-50 text-blue-700 border-blue-100" :
                         task.category === 'health' ? "bg-rose-50 text-rose-700 border-rose-100" :
+                        task.category === 'checkin' ? "bg-[#EEF2FF] text-[#384877] border-[#dbe3f7]" :
                         "bg-stone-50 text-stone-600 border-stone-100"
                     )}>
                         {task.category === 'work' ? <Briefcase className="w-3 h-3" /> :
                          task.category === 'health' ? <Heart className="w-3 h-3" /> :
+                         task.category === 'checkin' ? <Footprints className="w-3 h-3" /> :
                          <Zap className="w-3 h-3" />}
                         {task.category === 'work' ? '工作' : 
-                         task.category === 'health' ? '健康' : '生活'}
+                         task.category === 'health' ? '健康' :
+                         task.category === 'checkin' ? '打卡' : '生活'}
                     </span>
 
                     {/* Dynamic Context Badges */}
@@ -736,24 +744,27 @@ export default function LifeTaskCard({
                     )}
                 </div>
 
-                {/* Completion Check & Time */}
+                {/* Completion Check & Time：打卡卡唯一的圈即打卡；其余卡保持原「完成」打勾圈，互斥不并存 */}
                 <div className="flex flex-col items-center justify-start gap-1 min-w-[3.5rem]">
-                    <button
-                        onClick={handleComplete}
-                        className={cn(
-                            "w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300 group relative",
-                            completed
-                                ? "border-stone-200 bg-stone-50 text-stone-400"
-                                : "border-stone-200 bg-white hover:border-green-500 hover:bg-green-50/30 text-stone-300 hover:text-green-600"
-                        )}
-                    >
-                         <Check className={cn(
-                             "w-5 h-5 transition-all duration-300",
-                             completed ? "opacity-100 scale-100" : "opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100"
-                         )} />
-                    </button>
-                    {/* 打卡：同一个约定每做到一次点一次，累计次数与赴约记录 */}
-                    <CheckinWidget task={task} completed={completed} />
+                    {isCheckinTask ? (
+                        /* 打卡：同一个约定每做到一次点一次，累计次数与赴约记录 */
+                        <CheckinWidget task={task} completed={completed} />
+                    ) : (
+                        <button
+                            onClick={handleComplete}
+                            className={cn(
+                                "w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300 group relative",
+                                completed
+                                    ? "border-stone-200 bg-stone-50 text-stone-400"
+                                    : "border-stone-200 bg-white hover:border-green-500 hover:bg-green-50/30 text-stone-300 hover:text-green-600"
+                            )}
+                        >
+                             <Check className={cn(
+                                 "w-5 h-5 transition-all duration-300",
+                                 completed ? "opacity-100 scale-100" : "opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100"
+                             )} />
+                        </button>
+                    )}
                     <span className={cn(
                         "text-[10px] whitespace-nowrap text-center",
                         timeStatus.color

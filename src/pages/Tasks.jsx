@@ -20,6 +20,7 @@ import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import TaskShareCard from "../components/tasks/TaskShareCard";
+import CheckinShareCard from "../components/checkins/CheckinShareCard";
 import GlobalSearch from "../components/search/GlobalSearch";
 import SmartGroupSection from "../components/tasks/SmartGroupSection";
 import CombineParentDialog from "../components/tasks/CombineParentDialog";
@@ -1044,14 +1045,19 @@ export default function Tasks() {
       {/* Global Search */}
       <GlobalSearch open={globalSearchOpen} onOpenChange={setGlobalSearchOpen} initialQuery={searchQuery} />
 
-      {/* Share Task Card */}
-      {sharingTask && (
+      {/* Share Task Card：打卡类约定用专属打卡分享卡（含打卡内容、品牌色调） */}
+      {sharingTask && sharingTask.category === 'checkin' ? (
+        <CheckinShareCard
+          task={sharingTask}
+          onClose={() => setSharingTask(null)}
+        />
+      ) : sharingTask ? (
         <TaskShareCard 
           task={sharingTask} 
           open={!!sharingTask} 
           onClose={() => setSharingTask(null)} 
         />
-      )}
+      ) : null}
 
       {/* Combine into new parent dialog */}
       <CombineParentDialog

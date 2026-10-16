@@ -61,7 +61,7 @@ ${locationBlock}${semanticContext}
     "title": "任务标题（使用上游优化标题或自行优化）",
     "description": "任务描述（补充上下文信息）",
     "priority": "low/medium/high/urgent",
-    "category": "work/personal/health/study/family/shopping/finance/other",
+    "category": "work/personal/health/study/family/shopping/finance/checkin/other",
     "reminder_time": "ISO格式的提醒时间（优先使用上游解析的时间实体）",
     "end_time": "ISO格式的结束时间（如果是会议等有时长的任务）",
     "is_all_day": false,

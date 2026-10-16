@@ -48,6 +48,7 @@ import AIText from "@/components/AIText";
 import { invokeAI } from "@/components/utils/aiHelper";
 
 const CATEGORIES = [
+  { value: "checkin", label: "打卡", icon: "👣", color: "bg-[#EEF2FF] text-[#384877] border-[#c9d5ef]" },
   { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
   { value: "personal", label: "个人", icon: "👤", color: "bg-purple-50 text-purple-700 border-purple-200" },
   { value: "health", label: "健康", icon: "❤️", color: "bg-green-50 text-green-700 border-green-200" },
@@ -318,7 +319,7 @@ Return JSON.`,
             description: { type: "string", description: "详细描述" },
             reminder_time: { type: "string", description: "ISO格式时间，如无则返回明天9点" },
             priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+            category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] },
             extracted_text: { type: "string", description: "从文件中提取的原始文字" },
             subtasks: {
               type: "array",
@@ -327,7 +328,7 @@ Return JSON.`,
                 properties: {
                   title: { type: "string" },
                   priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+                  category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] },
                   time: { type: "string", description: "建议执行时间，格式 HH:mm" }
                 },
                 required: ["title"]

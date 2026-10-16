@@ -22,6 +22,7 @@ const CATEGORIES = [
   { value: "family", label: "家庭" },
   { value: "shopping", label: "购物" },
   { value: "finance", label: "财务" },
+  { value: "checkin", label: "打卡" },
   { value: "other", label: "其他" },
 ];
 

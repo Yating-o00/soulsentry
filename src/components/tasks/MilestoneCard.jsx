@@ -120,6 +120,7 @@ export default function MilestoneCard({
       case 'family': return '家庭';
       case 'shopping': return '购物';
       case 'finance': return '财务';
+      case 'checkin': return '打卡';
       default: return '生活';
     }
   };
@@ -133,6 +134,7 @@ export default function MilestoneCard({
       case 'family': return '👨\u200d👩\u200d👧';
       case 'shopping': return '🛒';
       case 'finance': return '💰';
+      case 'checkin': return '👣';
       default: // personal/other - smart icon based on title
         if (/书|阅读|读|看书/.test(title)) return '📚';
         if (/跑步|运动|健身/.test(title)) return '🏃';

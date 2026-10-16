@@ -161,7 +161,7 @@ ${recentContext}
         refined_title: { type: "string", description: "优化后的标题" },
         refined_description: { type: "string", description: "补充的描述信息" },
         priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-        category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+        category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] },
         tags: { type: "array", items: { type: "string" } }
       },
       required: ["primary_intent", "intent_confidence", "time_entities", "smart_suggestions", "refined_title"]

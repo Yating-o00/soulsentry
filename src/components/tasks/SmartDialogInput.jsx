@@ -19,7 +19,7 @@ import { getCurrentLocationContext } from "@/lib/locationContext";
 
 const CATEGORY_LABELS = {
   work: "💼 工作", personal: "👤 个人", health: "❤️ 健康", study: "📚 学习",
-  family: "👨‍👩‍👧‍👦 家庭", shopping: "🛒 购物", finance: "💰 财务", other: "📌 其他"
+  family: "👨‍👩‍👧‍👦 家庭", shopping: "🛒 购物", finance: "💰 财务", checkin: "👣 打卡", other: "📌 其他"
 };
 const PRIORITY_LABELS = {
   low: "低", medium: "中", high: "高", urgent: "紧急"
@@ -258,7 +258,7 @@ ${timeCtx.promptSnippet}
               location_type: { type: "string", enum: ["office", "home", "hospital", "school", "gym", "shopping", "restaurant", "transit", "unknown", "other"], description: "地点类型" },
               event_type: { type: "string", enum: ["会议", "用餐", "就医", "出行", "生活", "工作", "学习", "运动", "社交", "其他"], description: "事件类型" },
               priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-              category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"] },
+              category: { type: "string", enum: ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"] },
               tags: { type: "array", items: { type: "string" } },
               subtasks: {
                 type: "array",

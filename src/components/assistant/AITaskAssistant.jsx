@@ -1074,6 +1074,7 @@ import React, { useState, useEffect, useRef } from "react";
         family: "👨‍👩‍👧",
         shopping: "🛒",
         finance: "💰",
+        checkin: "👣",
         other: "📌"
       };
 

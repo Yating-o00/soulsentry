@@ -28,6 +28,7 @@ const CATEGORY_STYLES = {
   family: "bg-rose-50 text-rose-700 border-l-4 border-l-rose-500",
   shopping: "bg-orange-50 text-orange-700 border-l-4 border-l-orange-500",
   finance: "bg-slate-100 text-slate-700 border-l-4 border-l-slate-500",
+  checkin: "bg-[#EEF2FF] text-[#384877] border-l-4 border-l-[#384877]",
   other: "bg-slate-50 text-slate-600 border-l-4 border-l-slate-400",
 };
 

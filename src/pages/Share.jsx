@@ -43,6 +43,7 @@ const CATEGORY_LABELS = {
   family: "家庭",
   shopping: "购物",
   finance: "财务",
+  checkin: "打卡",
   other: "其他"
 };
 

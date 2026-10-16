@@ -1,3 +1,5 @@
 export default {
-  navigationBarTitleText: "心签"
+  navigationBarTitleText: "心签",
+  enableShareAppMessage: true,
+  enableShareTimeline: true
 };

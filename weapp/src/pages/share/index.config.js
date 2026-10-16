@@ -1,4 +1,5 @@
 export default {
   navigationBarTitleText: "分享参与",
-  enableShareAppMessage: true
+  enableShareAppMessage: true,
+  enableShareTimeline: true
 };

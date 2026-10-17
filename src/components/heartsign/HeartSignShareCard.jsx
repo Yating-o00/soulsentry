@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import QRCode from "qrcode";
 import { httpRequest } from "@/api/httpClient";
 import { base44 } from "@/api/base44Client";
-import { getNoteType, TYPE_META } from "@/components/heartsign/heartSignMeta";
+import { getNoteType, noteFirstImage, TYPE_META } from "@/components/heartsign/heartSignMeta";
 
 const W = 1080;
 const H = 1350;
@@ -44,6 +44,15 @@ function wrapLines(ctx, text, maxW, maxLines) {
   }
   return lines;
 }
+
+// 远程图片载到 canvas：失败返回 null，不阻塞签卡主体
+const loadImage = (url) => new Promise((resolve) => {
+  if (!url) return resolve(null);
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => resolve(null);
+  img.src = url;
+});
 
 // 分享签卡：原生 Canvas 绘制（1080×1350，小程序品牌风 + 五类签色）
 export default function HeartSignShareCard({ note, text, open, onClose }) {
@@ -115,6 +124,8 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   const conv = note?.metadata?.conversation || [];
   const lastReply = [...conv].reverse().find((m) => m.role === "other" && m.text && !m.typing);
   const replyText = ai.emotional_response || lastReply?.text || "";
+  // 签卡配图（取第一张）：有图时画在签文与 AI 回应之间
+  const noteImgUrl = note ? noteFirstImage(note) : "";
 
   // 打开卡片时确保存在公开分享 token：
   // 二维码指向 /share/<token> 公开页，扫码者不用登录就能看签文、留评论
@@ -159,6 +170,8 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     if (!ctx) return;
 
     const draw = async () => {
+      const noteImg = await loadImage(noteImgUrl);
+
       // —— 先排版测量：内容长时自动加高画布，避免签文与 AI 回应/底栏重叠 ——
       const fontSize = 34;
       const lineHeight = Math.round(fontSize * 1.9);
@@ -172,10 +185,15 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       const textTop = 470;
       const metaY = textTop + lines.length * lineHeight + 30;
 
+      // 配图占位：760×300 圆角图，位于签文信息与 AI 回应之间
+      const hasNoteImg = !!noteImg;
+      const noteImgW = 760, noteImgH = 300;
+      const noteImgY = metaY + 40;
+
       ctx.font = `italic 400 26px ${SERIF}`;
       const rl = replyText ? wrapLines(ctx, replyText, 680, 10) : [];
-      const replyTop = metaY + 90;
-      const contentBottom = rl.length ? replyTop + (rl.length - 1) * 48 + 30 : metaY;
+      const replyTop = (hasNoteImg ? noteImgY + noteImgH : metaY) + 90;
+      const contentBottom = rl.length ? replyTop + (rl.length - 1) * 48 + 30 : (hasNoteImg ? noteImgY + noteImgH : metaY);
       const canvasH = Math.max(H, contentBottom + 260);
       if (canvas.height !== canvasH) canvas.height = canvasH;
 
@@ -237,6 +255,32 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       ctx.fillStyle = "#8e8e93";
       ctx.fillText(typeLabel, mx, metaY);
 
+      // 配图：圆角裁切 + cover 填充，紧贴签文信息下方
+      if (hasNoteImg) {
+        const imgX = (W - noteImgW) / 2;
+        const radius = 16;
+        const roundedPath = () => {
+          ctx.beginPath();
+          ctx.moveTo(imgX + radius, noteImgY);
+          ctx.arcTo(imgX + noteImgW, noteImgY, imgX + noteImgW, noteImgY + noteImgH, radius);
+          ctx.arcTo(imgX + noteImgW, noteImgY + noteImgH, imgX, noteImgY + noteImgH, radius);
+          ctx.arcTo(imgX, noteImgY + noteImgH, imgX, noteImgY, radius);
+          ctx.arcTo(imgX, noteImgY, imgX + noteImgW, noteImgY, radius);
+          ctx.closePath();
+        };
+        ctx.save();
+        roundedPath();
+        ctx.clip();
+        const scale = Math.max(noteImgW / noteImg.width, noteImgH / noteImg.height);
+        const dw = noteImg.width * scale, dh = noteImg.height * scale;
+        ctx.drawImage(noteImg, imgX + (noteImgW - dw) / 2, noteImgY + (noteImgH - dh) / 2, dw, dh);
+        ctx.restore();
+        ctx.strokeStyle = "rgba(56,72,119,0.14)";
+        ctx.lineWidth = 2;
+        roundedPath();
+        ctx.stroke();
+      }
+
       // AI 回应（另一个你）：细线分隔后小字斜体灰蓝，位置随签文长度下移
       if (replyText && rl.length) {
         ctx.strokeStyle = "rgba(56,72,119,0.16)";
@@ -294,7 +338,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     };
 
     draw().catch(() => {});
-  }, [open, note, content, replyText, noteUrl, dateStr, typeColor, avatar]);
+  }, [open, note, content, replyText, noteUrl, dateStr, typeColor, avatar, noteImgUrl]);
 
   const handleDownload = async () => {
     if (!canvasRef.current) return;

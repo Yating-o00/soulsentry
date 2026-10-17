@@ -27,6 +27,7 @@ import {
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { httpRequest } from "@/api/httpClient";
+import { noteFirstImage } from "@/components/heartsign/heartSignMeta";
 import {
   Dialog,
   DialogContent,
@@ -454,6 +455,8 @@ export default function Share() {
 
   const isTask = data?.type === "task";
   const item = data?.item;
+  // 心签配图：分享落地页随签文一并展示
+  const noteImage = !isTask && item ? noteFirstImage(item) : "";
   const comments = data?.comments || [];
   // 拥有者本人（登录后访问自己的分享链接）：可删除/回复任何评论
   const isOwnerView = data?.is_owner === true;
@@ -610,6 +613,13 @@ export default function Share() {
               <CardDescription className="text-sm text-slate-600 whitespace-pre-line mt-2">
                 {item.plain_text || item.content?.replace?.(/<[^>]+>/g, "") || ""}
               </CardDescription>
+            )}
+            {!isTask && noteImage && (
+              <img
+                src={noteImage}
+                alt="心签配图"
+                className="mt-3 w-full max-h-80 object-cover rounded-xl border border-slate-100"
+              />
             )}
           </CardHeader>
 

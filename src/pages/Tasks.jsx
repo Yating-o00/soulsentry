@@ -706,7 +706,7 @@ export default function Tasks() {
                 onToggleSelection={toggleSelection}
                 onToggleSubtask={handleToggleSubtask}
                 onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
+                onEdit={(task) => setEditingTask(task)}
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
@@ -729,7 +729,7 @@ export default function Tasks() {
                 onToggleSelection={toggleSelection}
                 onToggleSubtask={handleToggleSubtask}
                 onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
+                onEdit={(task) => setEditingTask(task)}
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
@@ -752,7 +752,7 @@ export default function Tasks() {
                 onToggleSelection={toggleSelection}
                 onToggleSubtask={handleToggleSubtask}
                 onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
+                onEdit={(task) => setEditingTask(task)}
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
@@ -775,7 +775,7 @@ export default function Tasks() {
                 onToggleSelection={toggleSelection}
                 onToggleSubtask={handleToggleSubtask}
                 onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={(task) => { setSelectedTask(task); setSelectedTab(null); }}
+                onEdit={(task) => setEditingTask(task)}
                 onShare={(task) => setSharingTask(task)}
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}

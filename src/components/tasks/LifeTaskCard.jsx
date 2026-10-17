@@ -413,6 +413,7 @@ export default function LifeTaskCard({
         "group bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1",
         dragEnabled && "cursor-grab active:cursor-grabbing",
         completed && "opacity-60",
+        isCheckinTask && "border-[#c9d5ef]/80 bg-gradient-to-br from-[#f8faff] via-white to-white",
         isSelected && "ring-2 ring-blue-500 bg-blue-50/10",
         isDragOver && "ring-2 ring-[#384877] ring-offset-2 bg-[#eef2ff]/50 scale-[1.01]"
       )}
@@ -472,6 +473,17 @@ export default function LifeTaskCard({
                          task.category === 'health' ? '健康' :
                          task.category === 'checkin' ? '打卡' : '生活'}
                     </span>
+
+                    {/* 如约印章：打卡卡专属标识 */}
+                    {isCheckinTask && (
+                        <span
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-full border-2 border-[#384877]/25 border-double text-[#384877]/45 text-[10px] font-bold rotate-[-12deg] select-none"
+                            style={{ writingMode: "vertical-rl", letterSpacing: "0.15em" }}
+                            title="如约"
+                        >
+                            如约
+                        </span>
+                    )}
 
                     {/* Dynamic Context Badges */}
                     {badges.map((badge, idx) => (

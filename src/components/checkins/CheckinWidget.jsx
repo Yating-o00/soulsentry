@@ -114,6 +114,13 @@ export default function CheckinWidget({ task, completed = false }) {
     }
   };
 
+  const nextMilestone = CHECKIN_MILESTONES.find((m) => total < m);
+  const checkinTitle = completed
+    ? "约定已完成"
+    : nextMilestone
+      ? `打卡：记录这次赴约（距 ${nextMilestone} 次里程碑还差 ${nextMilestone - total} 次）`
+      : "打卡：记录这次赴约（已集齐全部里程碑，继续！）";
+
   const metaText = total > 0
     ? `已打卡 ${total} 次${firstAt ? ` · 从 ${format(new Date(firstAt), "M月d日", { locale: zhCN })} 开始` : ""}`
     : null;
@@ -123,14 +130,14 @@ export default function CheckinWidget({ task, completed = false }) {
       <button
         onClick={doCheckin}
         disabled={completed || createMut.isPending}
-        title={completed ? "约定已完成" : "打卡：记录这次赴约"}
+        title={checkinTitle}
         className={cn(
           "relative w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300",
           completed
             ? "border-stone-100 bg-stone-50 text-stone-300 cursor-not-allowed"
             : justDone
               ? "border-transparent bg-gradient-to-br from-[#3b5aa2] to-[#384877] text-white shadow-lg shadow-[#384877]/30"
-              : "border-[#c9d5ef] bg-white text-[#384877] hover:border-[#384877] hover:bg-[#EEF2FF]"
+              : "border-[#c9d5ef] bg-white text-[#384877] hover:border-[#384877] hover:bg-[#EEF2FF] hover:shadow-lg hover:shadow-[#384877]/15 hover:-translate-y-0.5"
         )}
       >
         <Footprints className={cn("w-5 h-5", justDone && "hidden")} />
@@ -165,6 +172,14 @@ export default function CheckinWidget({ task, completed = false }) {
             <p className="text-[13px] text-stone-500 mb-1">
               这是第 <b className="text-stone-800">{pending.total}</b> 次赴约。
             </p>
+            {(() => {
+              const nm = CHECKIN_MILESTONES.find((m) => pending.total < m);
+              return nm ? (
+                <p className="text-[11px] mb-2" style={{ color: CHECKIN_BRAND_SECONDARY }}>
+                  再赴约 {nm - pending.total} 次，就到 {nm} 次里程碑。
+                </p>
+              ) : null;
+            })()}
             <p className="text-sm text-stone-800 font-medium mb-3">
               这次想留点什么吗？<span className="text-stone-400 font-normal">也可以什么都不留。</span>
             </p>

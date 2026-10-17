@@ -89,7 +89,7 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, onClose }
             <span className="text-5xl" style={{ filter: "drop-shadow(0 6px 16px rgba(0,0,0,.25))" }}>👣</span>
           )}
           <span className="absolute bottom-3 left-4 text-white text-[11px] tracking-[.16em] opacity-90">
-            第 {total} 次 · {format(new Date(), "M月d日")}
+            {total > 0 ? `第 ${total} 次 · ` : "从第一次开始 · "}{format(new Date(), "M月d日")}
           </span>
           <span
             className="absolute top-3 right-3 text-white text-[10px] tracking-[.2em] px-2 py-1 rounded-full"
@@ -99,7 +99,17 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, onClose }
           </span>
         </div>
         <div className="px-6 pt-6 pb-4">
-          <h4 className="text-[21px] font-bold leading-snug text-stone-800">{total} 次，你都赴约了。</h4>
+          {total > 0 && CHECKIN_MILESTONES.includes(total) && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-wider mb-3"
+              style={{ background: CHECKIN_BRAND_TINT, color: CHECKIN_BRAND_PRIMARY }}
+            >
+              🏅 {total} 次里程碑达成
+            </span>
+          )}
+          <h4 className="text-[21px] font-bold leading-snug text-stone-800">
+            {total > 0 ? `${total} 次，你都赴约了。` : "这一份约定，才刚刚开始。"}
+          </h4>
           <p className="text-xs text-stone-400 mt-2 tracking-wider">{range}</p>
           {bestNote && (
             <p className="mt-4 pl-3 border-l-[3px] text-[13.5px] text-stone-500 leading-relaxed" style={{ borderColor: CHECKIN_BRAND_TINT }}>

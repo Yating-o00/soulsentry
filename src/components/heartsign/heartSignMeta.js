@@ -69,6 +69,27 @@ export function normalizeNote(n) {
   };
 }
 
+// 签卡配图（取第一张）：metadata.image_url（小程序写入，字符串或数组）+ content 内嵌 <img>；
+// 相对路径补全为当前源的同源绝对地址，保证 canvas 绘制导出不被跨域污染
+export function noteFirstImage(note) {
+  const urls = [];
+  const raw = note?.metadata?.image_url;
+  (Array.isArray(raw) ? raw : [raw]).forEach((u) => {
+    if (typeof u === "string" && u.trim()) urls.push(u.trim());
+  });
+  const html = note?.content || "";
+  const imgRe = /<img[^>]+src=["']([^"']+)["']/gi;
+  let m;
+  while ((m = imgRe.exec(html)) !== null) {
+    if (m[1]) urls.push(m[1]);
+  }
+  const first = [...new Set(urls)][0];
+  if (!first) return "";
+  return /^(https?:|data:|blob:)/i.test(first)
+    ? first
+    : `${window.location.origin}${first.startsWith("/") ? "" : "/"}${first}`;
+}
+
 // 签文纯文本（供抽签/关键词回顾/签卡使用）：去 HTML 标签并解码常见实体
 export function notePlainText(note) {
   const decode = (s) => String(s || "")

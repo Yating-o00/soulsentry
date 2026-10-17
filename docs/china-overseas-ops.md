@@ -201,14 +201,14 @@ curl https://www.xinzhan-soulsentry.cn/api/health
 
 ### 6.1 代码更新
 
-如果 `china-standalone` 已有新代码，服务器执行。
+如果 `china-standalone` 已有新代码，在服务器执行（`china-app` 是 git 克隆，直接 pull）。
 
 注意：
 
-- 可以删除并重建 `china-app` 代码目录
-- 但数据库必须在 `/opt/soulsentry/data/china.db`
+- 数据库必须在 `/opt/soulsentry/data/china.db`（deploy.sh 自动备份，更新前也可手动备份）
 - `.env` 必须先备份在 `/opt/soulsentry/config/backend.env`
-- 更新前先做一次数据库备份
+- 服务器是轻量应用服务器（SWAS，3.4G 内存），不是 ECS；控制台入口在「轻量应用服务器」，防火墙规则也在该控制台配置
+- 本机 SSH 连不上 22 端口时（防火墙限源 IP），用控制台的「远程连接（Workbench）」网页终端；网页终端对多行粘贴支持差（`\` 续行会被拆开），命令尽量单行执行，长时间任务务必用 nohup 后台跑
 
 先备份：
 
@@ -218,50 +218,61 @@ cp /opt/soulsentry/data/china.db /opt/soulsentry/backups/china-$(date +%F-%H%M%S
 cp /opt/soulsentry/config/backend.env /opt/soulsentry/backups/backend-$(date +%F-%H%M%S).env
 ```
 
-再更新代码：
-
-```bash
-cd /opt/soulsentry
-rm -rf china-app soulsentry-china.tar.gz soulsentry-china-standalone
-curl -L -o soulsentry-china.tar.gz https://codeload.github.com/Yating-o00/soulsentry/tar.gz/refs/heads/china-standalone
-tar -xzf soulsentry-china.tar.gz
-mv soulsentry-china-standalone china-app
-```
-
-### 6.2 后端更新
-
-```bash
-cp /opt/soulsentry/config/backend.env /opt/soulsentry/china-app/backend/.env
-cd /opt/soulsentry/china-app/backend
-npm install --no-audit --no-fund --registry=https://registry.npmmirror.com
-# 只有 schema 真的变化时，才执行下面这条
-# npx prisma db push --accept-data-loss
-sudo systemctl restart soulsentry-backend
-sudo systemctl status soulsentry-backend --no-pager
-```
-
-如果这次后端 schema 有改动，建议先备份数据库再执行：
-
-```bash
-cp /opt/soulsentry/data/china.db /opt/soulsentry/backups/china-before-schema-$(date +%F-%H%M%S).db
-npx prisma db push --accept-data-loss
-```
-
-### 6.3 前端更新
+再更新代码并部署（deploy.sh 会自动完成：建 release、装依赖、Prisma 检查/迁移、切换软链、发布前端到 `/var/www/soulsentry`、重启后端、三步健康校验、失败自动回滚）：
 
 ```bash
 cd /opt/soulsentry/china-app
-cat > .env.production <<EOF
-VITE_API_MODE=standalone
-VITE_API_BASE_URL=
-EOF
-
-npm install --no-audit --no-fund --registry=https://registry.npmmirror.com
-npm run build
-sudo rm -rf /var/www/soulsentry/*
-sudo cp -r dist/* /var/www/soulsentry/
-sudo systemctl reload nginx
+git pull
+sudo ./deploy.sh
 ```
+
+> 注意：`deploy.sh` 默认 `SKIP_FRONTEND_BUILD=1`，即不构建前端、直接用仓库里的 `dist/` 发布。前端有改动时必须按 6.3 处理，否则页面不会变化。
+
+### 6.2 后端更新
+
+常规后端代码更新走 6.1 的 `deploy.sh` 即可（已包含依赖安装、Prisma diff 检查与拦截、服务重启、失败回滚）。
+
+只有需要单独处理时才手动执行：
+
+```bash
+# 修改 /opt/soulsentry/config/backend.env 后同步进运行目录并重启
+cp /opt/soulsentry/config/backend.env /opt/soulsentry/china-app/backend/.env
+sudo systemctl restart soulsentry-backend
+
+# 仅当 schema 确有变化（deploy.sh 会自动检查并应用，危险变更需 ALLOW_DESTRUCTIVE_SCHEMA=1）
+cd /opt/soulsentry/china-app/backend
+npx prisma db push --accept-data-loss
+```
+
+### 6.3 前端更新（重点）
+
+`deploy.sh` 默认 `SKIP_FRONTEND_BUILD=1`：不在服务器构建前端，直接使用 `china-app/dist/` 发布到 `/var/www/soulsentry`。而 `dist` 在 `.gitignore` 里、不进 git——**只改前端代码时，照 6.1 部署完页面不会变化**（2026-10-17 曾因默认参数部署导致前端无更新）。前端有改动时，二选一：
+
+**方式 A（推荐）：本机构建，上传产物。** 服务器内存小，本机构建快且不会压垮机器：
+
+```bash
+# 本地（仓库根目录，.env.production 已是 VITE_API_MODE=standalone / VITE_API_BASE_URL= 空）
+npm run build
+tar -czf /tmp/soulsentry-dist.tar.gz -C dist .
+# 传到服务器：优先 scp；22 端口不通时，可推一个只含产物的临时 git 分支让服务器 fetch 中转
+scp /tmp/soulsentry-dist.tar.gz admin@<服务器IP>:/tmp/
+
+# 服务器
+cd /opt/soulsentry/china-app
+rm -rf dist && mkdir -p dist && tar -xzf /tmp/soulsentry-dist.tar.gz -C dist
+ls dist   # 必须确认有 index.html / assets / sw.js 再部署；dist 为空会清空线上站点！
+sudo ./deploy.sh
+```
+
+**方式 B：服务器构建（慢，约 15~25 分钟，需 swap）。** 网页终端易掉线，务必用 nohup：
+
+```bash
+cd /opt/soulsentry/china-app
+sudo env SKIP_FRONTEND_BUILD=0 NODE_OPTIONS=--max-old-space-size=3072 nohup ./deploy.sh > /tmp/deploy.log 2>&1 &
+tail -f /tmp/deploy.log   # 终端断开后重连，再执行这条接着看；Deploy succeeded 即完成
+```
+
+说明：服务器 3.4G 内存 + 4G swap，Node 默认堆（约 1.7G）在 `vite build` 的 rendering chunks 阶段必然 OOM，必须加 `--max-old-space-size=3072`；构建期间网站会变慢甚至短暂打不开，属正常现象，构建完成即恢复。
 
 ### 6.4 更新后检查
 

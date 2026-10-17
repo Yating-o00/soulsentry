@@ -7,6 +7,7 @@ import { base44 } from "@/api/base44Client";
 import ChatPasteRecognizer from "@/components/heartsign/ChatPasteRecognizer";
 import AgentLiveWindow from "@/components/automation/AgentLiveWindow";
 import { looksLikeChatLog } from "@/components/utils/processPastedContent";
+import { detectCheckinIntent } from "@/components/tasks/checkinIntent";
 
 // 对话配色全部内联，不依赖 .today-page 作用域的 CSS 变量，避免白底白字。
 const C = {
@@ -246,7 +247,13 @@ export default function SmartInputBar() {
       }));
       const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
       setMessages([...msgs, { role: "assistant", content: reply }]);
-      setPending(res?.extracted || null);
+      // 打卡意图兜底：用户原话明确要打卡/签到时，约定提案直接归为打卡类别（与 AI 分类结果无关）
+      const extracted = res?.extracted || null;
+      const lastUserText = [...msgs].reverse().find((m) => m.role === "user")?.content || "";
+      if (extracted?.type === "task" && detectCheckinIntent(lastUserText)) {
+        extracted.category = "checkin";
+      }
+      setPending(extracted);
       // 后端派出了浏览器小助手：进入 Agent 模式轮询
       if (res?.agent?.executionId && res.agent.executionId !== agentExecId) {
         startAgent(res.agent.executionId);

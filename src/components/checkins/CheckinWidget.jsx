@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { X, Check, Footprints, Camera } from "lucide-react";
+import { X, Footprints, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildApiUrl } from "@/api/httpClient";
 import {
@@ -141,7 +141,13 @@ export default function CheckinWidget({ task, completed = false }) {
         )}
       >
         <Footprints className={cn("w-5 h-5", justDone && "hidden")} />
-        <Check className={cn("w-5 h-5", !justDone && "hidden")} />
+        {/* 打卡完成 = 盖下一枚「如约」印记，而非普通对勾 */}
+        <span
+          className={cn("hidden text-[8px] font-bold leading-none text-white select-none", justDone && "inline-flex")}
+          style={{ writingMode: "vertical-rl", letterSpacing: "0.1em" }}
+        >
+          如约
+        </span>
         {!justDone && !completed && (
           <span
             className="absolute inset-0 rounded-full border-2 border-[#8fa3cf] animate-ping opacity-30 pointer-events-none"

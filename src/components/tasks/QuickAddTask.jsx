@@ -23,6 +23,7 @@ import TaskAssignment from "./TaskAssignment";
 import SmartReminderSuggestion from "./SmartReminderSuggestion";
 import AITaskEnhancer from "./AITaskEnhancer";
 import SmartTextParser from "./SmartTextParser";
+import { detectCheckinIntent } from "./checkinIntent";
 import TaskDependencySelector from "./TaskDependencySelector";
 import {
   Dialog,
@@ -352,6 +353,11 @@ ${task.description ? `描述: "${task.description}"` : ''}
           required: ["tasks"]
         }
       });
+
+      // 打卡意图兜底：内容里明确要「打卡/签到/坚持N天」时，主约定直接归为打卡类别（AI 分类可能不识别的词）
+      if (response.tasks?.length && detectCheckinIntent(inputText)) {
+        response.tasks[0].category = "checkin";
+      }
 
       if (response.tasks && response.tasks.length > 0) {
         setShowVoiceDialog(false);

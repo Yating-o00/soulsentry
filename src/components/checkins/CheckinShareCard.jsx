@@ -1,11 +1,12 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import html2canvas from "html2canvas";
-import { Download } from "lucide-react";
-import { buildApiUrl } from "@/api/httpClient";
+import { Download, Copy } from "lucide-react";
+import { buildApiUrl, httpRequest } from "@/api/httpClient";
 import { useCheckins } from "@/components/checkins/useCheckins";
+import QRCodeImage from "@/components/ui/QRCode";
 
 // 品牌主色（与 TaskShareCard 保持一致）
 export const CHECKIN_BRAND_PRIMARY = "#384877";
@@ -24,8 +25,8 @@ export const MILESTONE_QUOTES = {
 };
 
 /**
- * 打卡分享卡：包含打卡内容（累计次数、时间区间、最佳附言、最佳照片），
- * 使用品牌主色 (#384877)，给打卡人成就感。
+ * 打卡分享卡：品牌蓝极简设计，大数字成就陈述 + 最佳附言/照片 + 公开二维码（扫码匿名留言）。
+ * 支持保存图片与复制图片（剪贴板不可用时自动降级为下载）。
  * 自取自打数据，分享菜单与里程碑弹层共用。
  */
 export default function CheckinShareCard({ task, onClose }) {
@@ -36,6 +37,32 @@ export default function CheckinShareCard({ task, onClose }) {
   const bestNote = items.find((c) => c.note)?.note || null;
   const bestPhoto = items.find((c) => c.photo_url)?.photo_url || null;
 
+  // 公开分享二维码：扫码进 /share/<token> 公开协作页，无需登录即可匿名留言
+  const [shareUrl, setShareUrl] = useState(
+    task?.share_token && typeof window !== "undefined"
+      ? `${window.location.origin}/share/${task.share_token}`
+      : ""
+  );
+  useEffect(() => {
+    if (!task?.id || shareUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await httpRequest(`/api/public/share/generate/task/${task.id}`, {
+          method: "POST",
+          body: { enabled: true },
+        });
+        if (cancelled) return;
+        if (result?.enabled && result.url) {
+          setShareUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
+        }
+      } catch {
+        // 二维码生成失败不阻塞卡片展示
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [task?.id, shareUrl]);
+
   return (
     <ShareCardOverlay
       task={task}
@@ -43,17 +70,19 @@ export default function CheckinShareCard({ task, onClose }) {
       firstAt={firstAt}
       bestNote={bestNote}
       bestPhoto={bestPhoto}
+      shareUrl={shareUrl}
       onClose={onClose}
     />
   );
 }
 
-function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, onClose }) {
+function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl, onClose }) {
   const cardRef = useRef(null);
   const [exporting, setExporting] = useState(false);
   const range = firstAt
     ? `${format(new Date(firstAt), "yyyy.MM")} — ${format(new Date(), "yyyy.MM")}`
     : format(new Date(), "yyyy.MM");
+  const isMilestone = total > 0 && CHECKIN_MILESTONES.includes(total);
 
   const saveImage = async () => {
     if (!cardRef.current || exporting) return;
@@ -64,7 +93,7 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, onClose }
       a.download = `心栈打卡-${task.title}-${total}次.png`;
       a.href = canvas.toDataURL("image/png");
       a.click();
-      toast.success("分享卡已保存到本地");
+      toast.success("打卡分享卡已保存到本地");
     } catch {
       toast.error("生成图片失败，请稍后再试");
     } finally {
@@ -72,70 +101,164 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, onClose }
     }
   };
 
+  const copyImage = async () => {
+    if (!cardRef.current || exporting) return;
+    setExporting(true);
+    let blob = null;
+    try {
+      const canvas = await html2canvas(cardRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+      if (!blob) throw new Error("图片生成失败");
+      if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        toast.success("打卡分享卡已复制到剪贴板");
+      } else {
+        throw new Error("UNSUPPORTED");
+      }
+    } catch {
+      // Safari/部分浏览器拒绝图片剪贴板权限：自动降级为下载 PNG
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `心栈打卡-${task.title}-${total}次.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        toast.success("浏览器限制了图片复制，已改为下载到本地");
+      } else {
+        toast.error("生成图片失败，请稍后再试");
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportBtnClass =
+    "inline-flex items-center gap-1.5 rounded-full px-5 py-3 text-sm text-white shadow-lg hover:-translate-y-0.5 transition-transform disabled:opacity-60";
+
   return (
     <div
       className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-stone-900/50 backdrop-blur-sm p-4"
       onClick={onClose}
     >
-      <div ref={cardRef} onClick={(e) => e.stopPropagation()} className="w-[320px] rounded-3xl overflow-hidden bg-white text-left shadow-2xl">
-        {/* 头部：品牌蓝渐变 + 最佳打卡照片 */}
+      <div
+        ref={cardRef}
+        onClick={(e) => e.stopPropagation()}
+        className="w-[320px] overflow-hidden rounded-[24px] bg-white text-left shadow-2xl"
+        style={{ fontFamily: "inherit" }}
+      >
+        {/* 头部：品牌深蓝渐变 + 大数字成就陈述 */}
         <div
-          className="h-44 relative flex items-center justify-center"
-          style={{ background: `linear-gradient(135deg, ${CHECKIN_BRAND_PRIMARY} 0%, ${CHECKIN_BRAND_SECONDARY} 55%, #7288b8 100%)` }}
+          className="relative px-6 pt-5 pb-7"
+          style={{ background: `linear-gradient(155deg, #2d3a5f 0%, ${CHECKIN_BRAND_PRIMARY} 48%, ${CHECKIN_BRAND_SECONDARY} 100%)` }}
         >
-          {bestPhoto ? (
-            <img src={buildApiUrl(bestPhoto)} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
-          ) : (
-            <span className="text-5xl" style={{ filter: "drop-shadow(0 6px 16px rgba(0,0,0,.25))" }}>👣</span>
-          )}
-          <span className="absolute bottom-3 left-4 text-white text-[11px] tracking-[.16em] opacity-90">
-            {total > 0 ? `第 ${total} 次 · ` : "从第一次开始 · "}{format(new Date(), "M月d日")}
-          </span>
-          <span
-            className="absolute top-3 right-3 text-white text-[10px] tracking-[.2em] px-2 py-1 rounded-full"
-            style={{ background: "rgba(255,255,255,.18)", backdropFilter: "blur(4px)" }}
-          >
-            如 约
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] tracking-[.3em] text-white/70">心栈 SOULSENTRY</span>
+            <span
+              className="inline-flex h-8 w-8 rotate-[-12deg] items-center justify-center rounded-full border text-[8px] font-bold text-white/60 select-none"
+              style={{ borderColor: "rgba(255,255,255,.3)", writingMode: "vertical-rl", letterSpacing: "0.12em" }}
+            >
+              如约
+            </span>
+          </div>
+
+          <div className="mt-5 text-center">
+            {total > 0 ? (
+              <>
+                <div className="text-[64px] font-extrabold leading-none text-white tabular-nums">{total}</div>
+                <div className="mt-2 text-[11px] tracking-[.5em] text-white/75">次 赴 约</div>
+              </>
+            ) : (
+              <>
+                <div className="text-[34px] font-extrabold leading-tight text-white">第一次</div>
+                <div className="mt-2 text-[11px] tracking-[.4em] text-white/75">赴 约 · 从 这 里 开 始</div>
+              </>
+            )}
+          </div>
+
+          <span className="absolute bottom-3 left-6 text-[10px] tracking-[.16em] text-white/60">
+            {total > 0 ? `第 ${total} 次 · ` : ""}{format(new Date(), "yyyy年M月d日", { locale: zhCN })}
           </span>
         </div>
-        <div className="px-6 pt-6 pb-4">
-          {total > 0 && CHECKIN_MILESTONES.includes(total) && (
+
+        {/* 主体 */}
+        <div className="px-6 pt-5 pb-5">
+          {bestPhoto && (
+            <div className="mb-4 overflow-hidden rounded-2xl border-4 border-white shadow-md ring-1 ring-stone-100">
+              <img src={buildApiUrl(bestPhoto)} alt="" className="h-36 w-full object-cover" crossOrigin="anonymous" />
+            </div>
+          )}
+
+          {isMilestone && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-wider mb-3"
+              className="mb-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-wider"
               style={{ background: CHECKIN_BRAND_TINT, color: CHECKIN_BRAND_PRIMARY }}
             >
               🏅 {total} 次里程碑达成
             </span>
           )}
-          <h4 className="text-[21px] font-bold leading-snug text-stone-800">
-            {total > 0 ? `${total} 次，你都赴约了。` : "这一份约定，才刚刚开始。"}
+
+          <p className="text-[11px] tracking-wider text-stone-400">约定 · {task.title}</p>
+          <h4 className="mt-1 text-[19px] font-bold leading-snug text-stone-800">
+            {total > 0 ? "每一次，都算数。" : "这一份约定，才刚刚开始。"}
           </h4>
-          <p className="text-xs text-stone-400 mt-2 tracking-wider">{range}</p>
+          <p className="mt-1.5 text-[11px] tracking-wider text-stone-400">{range}</p>
+
           {bestNote && (
-            <p className="mt-4 pl-3 border-l-[3px] text-[13.5px] text-stone-500 leading-relaxed" style={{ borderColor: CHECKIN_BRAND_TINT }}>
+            <p
+              className="mt-4 border-l-2 pl-3 text-[13px] leading-relaxed text-stone-500"
+              style={{ borderColor: CHECKIN_BRAND_TINT }}
+            >
               「{bestNote}」
             </p>
           )}
-          <p className="mt-3 text-[13.5px] font-medium" style={{ color: CHECKIN_BRAND_PRIMARY }}>
+          <p className="mt-3 text-[13px] font-medium" style={{ color: CHECKIN_BRAND_PRIMARY }}>
             ——心栈记 · {MILESTONE_QUOTES[total] || "每一次都算数。"}
           </p>
         </div>
-        <div className="flex items-center justify-between px-6 py-3 border-t" style={{ borderColor: CHECKIN_BRAND_TINT, background: "#F7F9FE" }}>
-          <small className="text-[11px] text-stone-400 tracking-wider">约定 · {task.title}</small>
-          <small className="text-[11px] text-stone-300">心栈 SOULSENTRY</small>
+
+        {/* 底部：二维码（扫码匿名留言）+ 品牌 */}
+        <div
+          className="flex items-center justify-between border-t px-6 py-4"
+          style={{ borderColor: CHECKIN_BRAND_TINT, background: "#F7F9FE" }}
+        >
+          <div className="flex items-center gap-3">
+            {shareUrl ? (
+              <div className="rounded-lg border bg-white p-1.5" style={{ borderColor: CHECKIN_BRAND_TINT }}>
+                <QRCodeImage value={shareUrl} size={176} alt="扫码匿名留言" className="h-[72px] w-[72px]" />
+              </div>
+            ) : null}
+            <div>
+              <p className="text-[11px] font-semibold text-stone-600">扫码赴约</p>
+              <p className="mt-0.5 text-[10px] text-stone-400">无需登录 · 匿名留言</p>
+            </div>
+          </div>
+          <small className="text-[10px] tracking-[.2em] text-stone-300">SOULSENTRY</small>
         </div>
       </div>
+
       <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={saveImage}
           disabled={exporting}
-          className="inline-flex items-center gap-1.5 rounded-full px-6 py-3 text-sm text-white shadow-lg hover:-translate-y-0.5 transition-transform disabled:opacity-60"
+          className={exportBtnClass}
           style={{ background: `linear-gradient(90deg, ${CHECKIN_BRAND_PRIMARY}, ${CHECKIN_BRAND_SECONDARY})`, boxShadow: "0 10px 24px -8px rgba(56,72,119,.5)" }}
         >
-          <Download className="w-4 h-4" />
+          <Download className="h-4 w-4" />
           {exporting ? "生成中…" : "保存图片"}
         </button>
-        <button onClick={onClose} className="text-[13px] text-stone-300 hover:text-stone-100 px-2 py-3">
+        <button
+          onClick={copyImage}
+          disabled={exporting}
+          className={exportBtnClass}
+          style={{ background: "linear-gradient(90deg, #4a5f94, #6b83b8)", boxShadow: "0 10px 24px -8px rgba(56,72,119,.4)" }}
+        >
+          <Copy className="h-4 w-4" />
+          {exporting ? "生成中…" : "复制图片"}
+        </button>
+        <button onClick={onClose} className="px-2 py-3 text-[13px] text-stone-300 hover:text-stone-100">
           关闭
         </button>
       </div>
